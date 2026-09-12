@@ -169,36 +169,39 @@ public sealed record ShaderPipelineDefinition(
     /// <summary>Creates the minimal single-pass definition for a file-backed shader source.</summary>
     /// <param name="name">The pipeline name.</param>
     /// <param name="sourcePath">The shader source path.</param>
-    /// <param name="kind">The pass kind.</param>
+    /// <param name="kind">The pass kind; when omitted, the source extension infers compute for .hlsl/.comp/.glsl and fullscreen for .frag.</param>
     /// <param name="entryPoint">The compiler entry point.</param>
     public static ShaderPipelineDefinition FromShaderSource(
         string name,
         string sourcePath,
-        ShaderPipelinePassKind kind = ShaderPipelinePassKind.Compute,
+        ShaderPipelinePassKind? kind = null,
         string entryPoint = "main"
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
+        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+        var (language, inferredKind) = extension switch {
+            ".hlsl" => (ShaderSourceLanguage.Hlsl, ShaderPipelinePassKind.Compute),
+            ".comp" => (ShaderSourceLanguage.Glsl, ShaderPipelinePassKind.Compute),
+            ".glsl" => (ShaderSourceLanguage.ShadertoyGlsl, ShaderPipelinePassKind.Compute),
+            ".frag" => (ShaderSourceLanguage.Glsl, ShaderPipelinePassKind.Fullscreen),
+            ".vert" => throw new ArgumentException("A vertex-only source cannot form the one-off pipeline; use a JSON pipeline with a fullscreen pass.", nameof(sourcePath)),
+            _ => throw new ArgumentException($"Shader source extension '{extension}' is unsupported; use .hlsl, .comp, .frag, or .glsl.", nameof(sourcePath)),
+        };
+        if ((language == ShaderSourceLanguage.ShadertoyGlsl) && (entryPoint == "main")) {
+            entryPoint = "mainImage";
+        }
         var output = new ShaderPipelineResource(
             Name: "output",
             Kind: ShaderPipelineResourceKind.Image,
             Format: "R8G8B8A8Unorm",
             Dimensions: ShaderPipelineDimensions.Relative());
-        var language = Path.GetExtension(sourcePath).ToLowerInvariant() switch {
-            ".hlsl" => ShaderSourceLanguage.Hlsl,
-            ".vert" or ".frag" => ShaderSourceLanguage.Glsl,
-            ".glsl" => ShaderSourceLanguage.ShadertoyGlsl,
-            _ => ShaderSourceLanguage.ShadertoyGlsl,
-        };
-        if ((language == ShaderSourceLanguage.ShadertoyGlsl) && (entryPoint == "main")) {
-            entryPoint = "mainImage";
-        }
         var pass = new ShaderPipelinePass(
             Name: name,
             Source: Path.GetFullPath(sourcePath),
             Language: language,
             EntryPoint: entryPoint,
-            Kind: kind,
+            Kind: kind ?? inferredKind,
             Outputs: [new ResourceReference(Name: output.Name)]);
         return new ShaderPipelineDefinition(name: name, resources: [output], passes: [pass], outputs: [(ShaderPipelineOutput)"output"]);
     }
@@ -209,7 +212,12 @@ public sealed record ShaderPipelineLimits(
     int MaxResources = 128,
     int MaxPasses = 128,
     int MaxInputsPerPass = 32,
-    int MaxOutputsPerPass = 8
+    int MaxOutputsPerPass = 8,
+    uint MaxConfigConstantBytes = 16,
+    uint MaxComputeWorkGroupSizeX = 128,
+    uint MaxComputeWorkGroupSizeY = 128,
+    uint MaxComputeWorkGroupSizeZ = 64,
+    uint MaxComputeWorkGroupInvocations = 128
 );
 
 /// <summary>A planner diagnostic with an actionable code and optional pass/resource name.</summary>

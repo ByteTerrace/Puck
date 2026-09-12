@@ -498,6 +498,8 @@ internal static partial class CanaryCommand {
         }
     }
     private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
+        var machineCatalog = CliWorldVocabulary.EnsureInstalled();
+        var catalogFingerprint = CliWorldVocabulary.Fingerprint(machineCatalog);
         var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
         var staged = StageFederatedWorlds(
             federatedDirectory: federatedDirectory,
@@ -518,7 +520,7 @@ internal static partial class CanaryCommand {
         var composedNetworkPlayers = 4;
         var composedAdmission = new JsonArray();
 
-        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: authorityTarget, reason: out _, tree: out var composed)) {
+        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: authorityTarget, reason: out _, tree: out var composed, catalogFingerprint: catalogFingerprint, catalog: machineCatalog)) {
             if (composed![WorldBodiesSectionName] is JsonObject composedPopulation) {
                 composedCapacity = Math.Max(val1: composedCapacity, val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity));
                 composedNetworkPlayers = Math.Max(val1: composedNetworkPlayers, val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers));
@@ -723,13 +725,15 @@ internal static partial class CanaryCommand {
     // single companion row above. Reads the pristine composed document (basis + this authority's own delta) BEFORE
     // any of these edits land, so an authored capacity/admission floor the basis already carries is kept, not lost.
     private static void PatchMeshAuthorityDocument(string targetPath, string selfId, IReadOnlyDictionary<string, string> endpoints, IReadOnlyDictionary<string, FederationIdentity> identities) {
+        var machineCatalog = CliWorldVocabulary.EnsureInstalled();
+        var catalogFingerprint = CliWorldVocabulary.Fingerprint(machineCatalog);
         var root = (JsonNode.Parse(json: File.ReadAllText(path: targetPath))?.AsObject()
             ?? throw new InvalidOperationException(message: $"authority world '{targetPath}' is not a JSON object"));
         var composedCapacity = 8;
         var composedNetworkPlayers = 4;
         var composedAdmission = new JsonArray();
 
-        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: targetPath, reason: out _, tree: out var composed)) {
+        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: targetPath, reason: out _, tree: out var composed, catalogFingerprint: catalogFingerprint, catalog: machineCatalog)) {
             if (composed![WorldBodiesSectionName] is JsonObject composedPopulation) {
                 composedCapacity = Math.Max(val1: composedCapacity, val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity));
                 composedNetworkPlayers = Math.Max(val1: composedNetworkPlayers, val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers));

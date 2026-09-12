@@ -14,4 +14,8 @@ public enum GpuComputeAccess : uint {
     /// <summary>A read of indirect dispatch/draw arguments by the GPU command processor (Vulkan
     /// <c>INDIRECT_COMMAND_READ</c>; Direct3D 12 <c>INDIRECT_ARGUMENT</c>). Pair with <see cref="GpuComputeStage.DrawIndirect"/>.</summary>
     IndirectCommandRead = 0x4,
+    /// <summary>A transfer operation writes the resource.</summary>
+    TransferWrite = 0x8,
+    /// <summary>A color attachment writes the resource.</summary>
+    ColorAttachmentWrite = 0x10,
 }

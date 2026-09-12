@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
@@ -18,7 +19,6 @@ using Puck.Platform.Audio;
 using Puck.Platform.Linux;
 using Puck.Platform.Windows;
 using Puck.SdfVm;
-using Puck.Shaders;
 using Puck.Shaders;
 using Puck.World.Addons;
 using Puck.World.Audio;
@@ -50,11 +50,62 @@ namespace Puck.World;
 /// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
 /// </summary>
 internal static class WorldBootComposition {
+    /// <summary>Builds the immutable machine catalog once for this host, before its world document composes.</summary>
+    /// <returns>The host-local catalog containing static and optional machine extensions.</returns>
+    public static WorldMachineCatalog BuildMachineCatalog() {
+        // Static bundles and installed extensions use the same host-local registration path.
+        var machineRegistry = new WorldMachineExtensionRegistry();
+        new Puck.HumbleGamingBrick.Forge.HumbleGamingBrickExtension().Initialize(machineRegistry);
+        new Puck.AdvancedGamingBrick.Forge.AdvancedGamingBrickExtension().Initialize(machineRegistry);
+
+        // Discover optional dynamic extensions.
+        var appExtensions = Path.Combine(AppContext.BaseDirectory, "extensions");
+
+        if (Directory.Exists(path: appExtensions)) {
+            var serverRegistry = new DesktopWorldExtensionRegistry();
+
+            WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: appExtensions,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
+                        brickExtension.Initialize(registry: machineRegistry);
+                    }
+                });
+        }
+
+        return machineRegistry.Build();
+    }
+
+    /// <summary>Computes the stable metadata fingerprint for one host-local catalog.</summary>
+    public static string MachineCatalogFingerprint(WorldMachineCatalog machineCatalog) {
+        ArgumentNullException.ThrowIfNull(argument: machineCatalog);
+        return machineCatalog.CompositionFingerprint;
+    }
+
+    /// <summary>Registers one already-built host catalog and its typed engine/provider services.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="machineCatalog">The immutable catalog selected before world composition.</param>
+    /// <returns>The same service collection.</returns>
+    public static IServiceCollection AddWorldMachineCatalog(this IServiceCollection services, WorldMachineCatalog machineCatalog) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+        ArgumentNullException.ThrowIfNull(argument: machineCatalog);
+        services.AddSingleton(implementationInstance: machineCatalog);
+        services.TryAddSingleton<IMachineContentAdmissionPolicy>(MachineContentAdmissionPolicy.Open(MachineAssetAdmission.Allow));
+        foreach (var engine in machineCatalog.Engines.Values) {
+            services.AddSingleton(engine);
+        }
+        foreach (var provider in machineCatalog.ContentProviders.Values) {
+            services.AddSingleton(provider);
+            if (provider is ICartridgeCompiler compiler) {
+                services.AddSingleton(compiler);
+            }
+        }
+        return services;
+    }
+
     /// <summary>
-    /// The authoritative core: profiles, roster, server, grants, population, addon runtime, replay tape, the
-    /// submission/output hub (via <see cref="WorldServer"/>), the console's tick barrier, every server-safe
-    /// console module, and the whole editor verb surface (command-vocabulary parity — see the class remarks).
-    /// Registered in every boot shape.
+    /// The authoritative core registers every server-safe service in every boot shape.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
@@ -256,39 +307,6 @@ internal static class WorldBootComposition {
         // faults by name (no camera GPU tier) while a parameter binding finds no composed pass to write.
         services.AddWorldProbes();
 
-        // Static bundles and installed extensions use the same host-local registration path.
-        var machineRegistry = new WorldMachineExtensionRegistry();
-        new Puck.HumbleGamingBrick.Forge.HumbleGamingBrickExtension().Initialize(machineRegistry);
-        new Puck.AdvancedGamingBrick.Forge.AdvancedGamingBrickExtension().Initialize(machineRegistry);
-
-        // Discover optional dynamic extensions.
-        var appExtensions = Path.Combine(AppContext.BaseDirectory, "extensions");
-
-        if (Directory.Exists(path: appExtensions)) {
-            var serverRegistry = new DesktopWorldExtensionRegistry();
-
-            WorldExtensionLoader.LoadFromDirectory(
-                directoryPath: appExtensions,
-                serverRegistry: serverRegistry,
-                onExtensionLoaded: ext => {
-                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
-                        brickExtension.Initialize(registry: machineRegistry);
-                    }
-                });
-        }
-
-        var machineCatalog = machineRegistry.Build();
-        services.AddSingleton(machineCatalog);
-        foreach (var engine in machineCatalog.Engines.Values) {
-            services.AddSingleton(engine);
-        }
-        foreach (var provider in machineCatalog.ContentProviders.Values) {
-            services.AddSingleton(provider);
-            if (provider is ICartridgeCompiler compiler) {
-                services.AddSingleton(compiler);
-            }
-        }
-
         // The reserved derived-face slot range (None-sourced placeholders, so a creation FACE appearing at a later
         // delivery re-points a slot that already exists — the render provider key set is frozen at boot) —
         // shared by WorldMachineHost and WorldScreenBinder below so BOTH see the identical index set.
@@ -320,7 +338,8 @@ internal static class WorldBootComposition {
             screens: ExpandedScreens(definition: sp.GetRequiredService<WorldDefinition>()),
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
-            narrationHub: sp.GetRequiredService<WorldOutputHub>()
+            narrationHub: sp.GetRequiredService<WorldOutputHub>(),
+            contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
         // WorldServer's own constructor asks the container for IWorldMachineHost (its parameter type — Server
         // carries no reference to the concrete host); this shares the SAME peer singleton the line above registers,
@@ -330,11 +349,12 @@ internal static class WorldBootComposition {
         // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
         // Puck.World.Server carries no reference to Puck.World.Machines' WorldMachineHost, so it cannot build
         // one itself. Mirrors the addon seam's identical factory shape (below).
-        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationInstance: (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
+        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationFactory: static sp => (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
             screens: screens,
-            catalog: machineCatalog,
+            catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             documentPath: documentPath,
-            narrationHub: narrationHub
+            narrationHub: narrationHub,
+            contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
 
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
@@ -578,7 +598,9 @@ internal static class WorldBootComposition {
                 stateRoot: WorldStateRoot.Resolve(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
                 machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
-                admitsSpawn: true
+                admitsSpawn: true,
+                catalogFingerprint: MachineCatalogFingerprint(sp.GetRequiredService<WorldMachineCatalog>()),
+                machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
@@ -593,7 +615,7 @@ internal static class WorldBootComposition {
                     Subject: bootServer.AuthorityIdentity,
                     Network: sp.GetRequiredService<WorldPeerNetwork>()
                 ),
-                documentOrigin: new WorldFileOrigin(resolvedPath: bootOrigin.SourcePath)
+                documentOrigin: new WorldFileOrigin(resolvedPath: bootOrigin.SourcePath, catalogFingerprint: MachineCatalogFingerprint(sp.GetRequiredService<WorldMachineCatalog>()), catalog: sp.GetRequiredService<WorldMachineCatalog>())
             ) {
                 Tape = sp.GetRequiredService<WorldReplayTape>(),
             };
@@ -1407,7 +1429,7 @@ internal static class WorldBootComposition {
             graphics: WorldPostRenderExtensionServices.Build(sp)
         );
 
-        runtime.Report = (name, message) => Console.Error.WriteLine($"[pipeline.compile: {name} {message}]");
+        runtime.Report = (name, message) => Console.Error.WriteLine($"[pipeline: {name} {message}]");
         runtime.RegisterNode = (name, node) => sp.GetRequiredService<WorldRenderProbe>().Node?.RegisterChild(name, node);
         runtime.RemoveNode = name => sp.GetRequiredService<WorldRenderProbe>().Node?.RemoveChild(name);
         runtime.Reconcile(definition.Views.Pipelines);

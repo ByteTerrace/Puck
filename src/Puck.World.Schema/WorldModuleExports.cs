@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
@@ -121,9 +122,10 @@ public static class WorldModuleExports {
     /// exports record, in list order; two entries describing the same module share one surface.</param>
     /// <param name="surfaces">Each distinct module's surface on success.</param>
     /// <param name="reason">The one-line refusal, or empty on success.</param>
+    /// <param name="catalog">The selected machine catalog used to walk provider metadata fields.</param>
     /// <returns><see langword="true"/> when every export names a declaration and every layer binds only what its
     /// modules export.</returns>
-    public static bool TryCheckLayers(string hostPath, JsonObject ownBody, JsonObject basis, IReadOnlyList<(string Name, JsonObject Tree, WorldExports Exports)> imports, out IReadOnlyList<WorldModuleSurface> surfaces, out string reason) {
+    public static bool TryCheckLayers(string hostPath, JsonObject ownBody, JsonObject basis, IReadOnlyList<(string Name, JsonObject Tree, WorldExports Exports)> imports, out IReadOnlyList<WorldModuleSurface> surfaces, out string reason, IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: ownBody);
         ArgumentNullException.ThrowIfNull(argument: basis);
         ArgumentNullException.ThrowIfNull(argument: imports);
@@ -133,7 +135,7 @@ public static class WorldModuleExports {
         var layers = new List<(Layer Layer, WorldModuleSurface? Own)>(capacity: (imports.Count + 2));
 
         foreach (var (name, tree, exports) in imports) {
-            var layer = Walk(tree: tree, name: name, probe: probe);
+            var layer = Walk(tree: tree, name: name, probe: probe, catalog: catalog);
 
             if (!exports.TryValidate(declared: layer.Declared, reason: out var exportsReason)) {
                 surfaces = [];
@@ -150,10 +152,10 @@ public static class WorldModuleExports {
             layers.Add(item: (layer, surface));
         }
 
-        layers.Add(item: (Walk(tree: ownBody, name: hostPath, probe: probe), null));
+        layers.Add(item: (Walk(tree: ownBody, name: hostPath, probe: probe, catalog: catalog), null));
 
         if (basis.Count > 0) {
-            layers.Add(item: (Walk(tree: basis, name: $"the basis of {hostPath}", probe: probe), null));
+            layers.Add(item: (Walk(tree: basis, name: $"the basis of {hostPath}", probe: probe, catalog: catalog), null));
         }
 
         var modules = byName.Values.ToArray();
@@ -183,7 +185,7 @@ public static class WorldModuleExports {
         return true;
     }
 
-    private static Layer Walk(JsonObject tree, string name, NameProbe probe) {
+    private static Layer Walk(JsonObject tree, string name, NameProbe probe, IMachineValidationCatalog? catalog) {
         var layer = new Layer(name: name);
 
         WorldModuleNamespace.Visit(node: tree, type: typeof(WorldDefinition), visitor: (_, _, value, field) => {
@@ -211,7 +213,42 @@ public static class WorldModuleExports {
             }
         });
 
+        if (catalog is not null) {
+            CollectMachineReferences(tree, catalog, layer);
+        }
+
         return layer;
+    }
+    private static void CollectMachineReferences(JsonObject tree, IMachineValidationCatalog catalog, Layer layer) {
+        if (tree["machines"] is not JsonArray machines) {
+            return;
+        }
+
+        foreach (var node in machines) {
+            if (node is not JsonObject machine ||
+                machine["engine"] is not JsonValue engineValue ||
+                !engineValue.TryGetValue<string>(out var engineId) ||
+                machine["configuration"] is not JsonObject configuration ||
+                !catalog.TryDescriptor(engineId, out var descriptor)) {
+                continue;
+            }
+
+            var descriptorErrors = new List<string>();
+            if (!MachineConfigurationFields.TryValidateDescriptor(descriptor.Configuration, descriptorErrors)) {
+                continue;
+            }
+
+            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
+                if (site.Field.Role is not (MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference) ||
+                    site.Value is not JsonValue value ||
+                    !value.TryGetValue<string>(out var text) ||
+                    text.Length == 0) {
+                    return;
+                }
+
+                layer.References.Add((text, WorldExportFacet.Read, site.Value!));
+            });
+        }
     }
     private static void Collect(NameProbe probe, string text, WorldNameField field, JsonNode site, Layer layer) {
         probe.Seen.Clear();

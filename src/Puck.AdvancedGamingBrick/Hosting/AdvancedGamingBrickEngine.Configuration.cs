@@ -18,7 +18,15 @@ public sealed partial class AdvancedGamingBrickEngine {
         [new("video", "puck.machine.video.v1", "The native 240 by 160 display.")],
         [new("audio", "puck.machine.audio.v1", "The machine's stereo audio stream.")],
         [new("controls", "puck.machine.pad.v1", "Buttons and supported cartridge sensors.")],
-        [], AdvancedGamingBrickCore.HardwareSpaces
+        [
+            new("content.insert", "Mounts prepared content through the host's replacement transaction.", new("puck.advanced-gaming-brick.content-insert.v1", [
+                new("content", MachineFieldKind.Object, "The prepared cartridge source.", Required: true, Fields: [
+                    new("path", MachineFieldKind.String, "Content path prepared by the host.", Required: true, Role: MachineFieldRole.ContentPath)
+                ])
+            ])),
+            new("content.eject", "Removes mounted content through the host's replacement transaction.", new("puck.advanced-gaming-brick.content-eject.v1", [])),
+            new("machine.reset", "Recreates the current machine configuration through the host's replacement transaction.", new("puck.advanced-gaming-brick.machine-reset.v1", []))
+        ], AdvancedGamingBrickCore.HardwareSpaces
     );
 
     /// <inheritdoc/>

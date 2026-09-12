@@ -14,7 +14,7 @@ namespace Puck.HumbleGamingBrick.Forge.Tune;
 /// other screen machine, plus <see cref="Puck.Abstractions.Machines.IInstrumentClockSource"/> — the tempo capability
 /// no other engine here reports.
 /// </summary>
-public sealed partial class TuneInstrumentEngine : IMachineEngine {
+public sealed partial class TuneInstrumentEngine : IMachineEngine, IMachineOperationProvider {
     /// <inheritdoc/>
     public string Id => "tune-instrument";
 

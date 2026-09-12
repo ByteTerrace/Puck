@@ -403,22 +403,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
     /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
     public bool AnyMachineEverPumped => m_machines.AnyEverPumped;
-    /// <summary>Gets a value indicating whether any screen op has ever applied (changed host state — <c>ok</c> from
-    /// <see cref="TryApplyScreenOp"/>, never merely attempted) this session — a third boot-anchored replay arm
-    /// predicate beside <see cref="AnyAddonEverPumped"/>/<see cref="AnyMachineEverPumped"/>. Screen ops apply
-    /// synchronously, between fixed steps, not inside <see cref="Step"/> — so a
-    /// <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/<c>.unlink</c> that lands
-    /// before <c>replay.record</c> arms (even with zero steps run since) changes live host state
-    /// (<see cref="IWorldMachineHost"/>'s slots/links) that the tape's record-start definition snapshot never
-    /// reflects — these ops are not document mutations, so nothing about them exists in
-    /// <see cref="WorldDefinition"/> for the snapshot to capture, and they are only ever added to the tape's own
-    /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time onward) — never
-    /// retroactively. Left ungated, offline replay reconstruction (a fresh
-    /// <see cref="IWorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
-    /// entirely, a divergence the population hash cannot see. Latched the instant any op applies and never cleared,
-    /// mirroring <see cref="AnyMachineEverPumped"/>'s own shape exactly. Only ever added to a recording's own
-    /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time) onward — never
-    /// retroactively for an op that already applied before that.</summary>
+    /// <summary>Gets whether a screen operation reached host dispatch or a named provider operation reached its
+    /// runtime commit barrier. This conservative, irreversible latch closes boot-only replay and checkpoint
+    /// reconstruction even when a runtime operation faults after changing hardware. Screen operations before
+    /// recording are absent from its authority tape; generic provider operations have no entry in the current
+    /// replay format and are refused while its screen-operation tap is attached.</summary>
     public bool AnyScreenOpEverApplied { get; private set; }
     /// <summary>Gets the namespace used by durable entity addresses emitted by this authority. A federated
     /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>
@@ -609,14 +598,16 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_journal.Clear();
     }
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
+    /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        lock (m_authorityGate) { return operation(); }
+        lock (m_authorityGate) { ThrowIfAuthorityRetiring(); return operation(); }
     }
     /// <summary>Executes a void authority operation under the same gate.</summary>
+    /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public void ExecuteAuthorityOperation(Action operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        lock (m_authorityGate) { operation(); }
+        lock (m_authorityGate) { ThrowIfAuthorityRetiring(); operation(); }
     }
 
     /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>

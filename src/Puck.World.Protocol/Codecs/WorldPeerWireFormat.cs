@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Puck.Abstractions.Machines;
 using System.Text;
 using Puck.Networking;
 using Puck.World.Server;
@@ -12,7 +14,7 @@ namespace Puck.World.Protocol;
 /// ride <see cref="HandshakeWireFormat"/> directly. Downstream (server → client) is this type's own, deliberately
 /// small v1 grammar: a Hello verdict once, then one completion per submitted frame (this v1 socket is strictly
 /// request-then-response per connection, so no correlation id travels on the wire) — not one of
-/// <see cref="WorldSubmissionCodec"/>'s twelve leaf kinds, since v1 carries only the Completion lane (streamed
+/// <see cref="WorldSubmissionCodec"/>'s submission leaf kinds, since v1 carries only the Completion lane (streamed
 /// snapshots/definitions/compositions/levers are not carried here).
 /// </summary>
 public static class WorldPeerWireFormat {
@@ -57,7 +59,10 @@ public static class WorldPeerWireFormat {
 
         /// <summary><see cref="WorldSubmissionResult.Mutation"/> carrying the applied/refused decision and its
         /// independent persistence status.</summary>
-        MutationOutcome,
+        MutationOutcome = 8,
+
+        /// <summary>The typed provider outcome of a named-machine operation.</summary>
+        MachineOperationOutcome = 9,
     }
 
     private static byte[] EncodeText(string text) => Encoding.UTF8.GetBytes(s: (text ?? string.Empty));
@@ -237,6 +242,13 @@ public static class WorldPeerWireFormat {
                         stream: stream
                     );
                 }
+            case WorldSubmissionResult.MachineOperation machineOperation:
+                return WriteDownstreamAsync(
+                    stream: stream,
+                    kind: DownstreamKind.MachineOperationOutcome,
+                    body: EncodeMachineOperationResult(machineOperation.Result),
+                    ct: ct
+                );
             case WorldSubmissionResult.Mutation mutation: {
                     if (!mutation.Outcome.IsValid) {
                         return WriteDownstreamAsync(
@@ -287,8 +299,15 @@ public static class WorldPeerWireFormat {
                             body: EncodeText(text: $"mutation outcome is not encodable: {exception.Message}"),
                             ct: ct
                         );
-                    }
                 }
+            }
+            case WorldSubmissionResult.Refusal refusal:
+                return WriteDownstreamAsync(
+                    stream: stream,
+                    kind: DownstreamKind.Refusal,
+                    body: EncodeText(text: $"{refusal.Code}: {refusal.Detail}"),
+                    ct: ct
+                );
             default:
                 return WriteDownstreamAsync(
                     stream: stream,
@@ -432,6 +451,40 @@ public static class WorldPeerWireFormat {
 
                     return true;
                 }
+            case DownstreamKind.MachineOperationOutcome: {
+                    if (body.Length > MaxDownstreamBodyBytes) {
+                        result = null;
+                        reason = $"machine operation completion carries {body.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+                        return false;
+                    }
+                    var reader = new WireReader(bytes: body);
+                    var status = (MachineOperationStatus)reader.ReadByte();
+                    var operationReason = reader.ReadString(field: "machine operation completion reason");
+                    var hasValue = reader.ReadBoolean();
+                    JsonElement? value = null;
+                    if (hasValue) {
+                        var valueBytes = reader.ReadBlock(field: "machine operation completion value", maxBytes: WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation));
+                        try {
+                            using var document = JsonDocument.Parse(valueBytes);
+                            value = document.RootElement.Clone();
+                        } catch (JsonException exception) {
+                            result = null;
+                            reason = $"remote authority returned invalid machine operation value: {exception.Message}";
+                            return false;
+                        }
+                    }
+                    var finished = reader.TryFinish(failure: out var wireFailure);
+                    if (!Enum.IsDefined(status) || !finished) {
+                        result = null;
+                        reason = (!Enum.IsDefined(status)
+                            ? $"remote authority returned unknown machine operation status {(byte)status}"
+                            : wireFailure.Detail);
+                        return false;
+                    }
+                    result = new WorldSubmissionResult.MachineOperation(Result: new MachineOperationResult(status, value, operationReason));
+                    reason = string.Empty;
+                    return true;
+                }
             case DownstreamKind.MutationOutcome: {
                     var reader = new WireReader(bytes: body);
                     var operationText = reader.ReadRequiredString(field: "mutation operation id", maxBytes: 64);
@@ -513,6 +566,50 @@ public static class WorldPeerWireFormat {
     private const int MaxDownstreamBodyBytes = MaxDownstreamFrameBytes - sizeof(uint) - sizeof(byte);
     private const int MaxProposalMetadataItems = 256;
 
+    private static byte[] EncodeMachineOperationResult(MachineOperationResult result) {
+        var reason = result.Reason ?? string.Empty;
+        var valueBytes = result.Value is { } value ? Encoding.UTF8.GetBytes(value.GetRawText()) : null;
+        var includeValue = valueBytes is not null && valueBytes.Length <= WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation);
+        if (valueBytes is not null && !includeValue) {
+            reason = $"{reason} machine operation result value omitted because it exceeds the downstream frame budget.";
+        }
+
+        var writer = new WireWriter();
+        writer.WriteByte(value: (byte)result.Status);
+        writer.WriteString(value: BoundWireString(reason));
+        writer.WriteBoolean(value: includeValue);
+        if (includeValue) {
+            writer.WriteBlock(value: valueBytes!);
+        }
+        if (writer.Length > MaxDownstreamBodyBytes && includeValue) {
+            writer = new WireWriter();
+            writer.WriteByte(value: (byte)result.Status);
+            writer.WriteString(value: BoundWireString($"{reason} machine operation result value omitted to fit the downstream frame budget."));
+            writer.WriteBoolean(value: false);
+        }
+
+        return writer.ToArray();
+    }
+
+    private static string BoundWireString(string value) {
+        if (Encoding.UTF8.GetByteCount(value) <= WireLimits.MaxStringBytes) {
+            return value;
+        }
+        var low = 0;
+        var high = value.Length;
+        while (low < high) {
+            var middle = low + ((high - low + 1) / 2);
+            if (Encoding.UTF8.GetByteCount(value.AsSpan(0, middle)) <= (WireLimits.MaxStringBytes - 3)) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        if (low > 0 && char.IsHighSurrogate(value[low - 1])) {
+            low--;
+        }
+        return $"{value[..low]}...";
+    }
     private static bool TryEncodePlacementProposalAnswer(QueryAnswer answer, out byte[] body, out string reason) {
         body = [];
         reason = string.Empty;

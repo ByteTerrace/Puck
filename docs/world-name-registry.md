@@ -32,6 +32,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
 | `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
+| `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
 | `screens[].memory[].key` | State | Key | Read | `WorldScreenMemory.Key` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
@@ -165,6 +167,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -292,6 +295,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -419,6 +423,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -472,6 +477,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].when.key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
 | `bindingOverlays[].when.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
 | `bindingOverlays[].when.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `placements.rows[].faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `placements.rows[].respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `placements.rows[].respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `placements.rows[].respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -487,6 +493,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `placements.rows[].deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `placements.rows[].deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][fixed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][anchored].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][bed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.seatRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
@@ -717,6 +727,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -851,6 +862,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -997,6 +1009,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1114,6 +1127,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1170,6 +1184,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].best` | State | Names | Action | `WorldSearchRow.Best` |
 | `search.jobs[].chance.row` | State | Names | Read | `WorldSearchChance.Row` |
 | `search.jobs[].scores` | State | Names | Read | `WorldSearchRow.Scores` |
+| `machines[].name` | Machine | Declares |  | `WorldMachine.Name` |
+| `machines[].memory[].name` | MachineBinding | Declares |  | `WorldMachineMemory.Name` |
+| `machines[].memory[].row` | State | Names | Read | `WorldMachineMemory.Row` |
+| `machines[].memory[].key` | State | Key | Read | `WorldMachineMemory.Key` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -1180,9 +1198,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
 | `render.extensions[].id` | `WorldRenderExtensionEntry.Id` | a post-render extension id |
-| `screens[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
-| `screens[].magazine.entries[][machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `screens[].magazine.entries[][probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `cameras[].name` | `WorldCamera.Name` | a camera name |
 | `cameras[].rig.name` | `WorldCameraProgram.Name` | a camera program name |
@@ -1225,7 +1241,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1246,7 +1261,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1267,7 +1281,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1295,7 +1308,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `placements.rows[].inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `placements.rows[].faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `placements.rows[].faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `placements.rows[].deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1373,7 +1385,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1395,7 +1406,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1417,7 +1427,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1433,7 +1442,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `identity.facts.state` | `WorldIdentityFacts.State` | an identity-lane row name |
 | `groups.kinds[].name` | `WorldGroupKind.Name` | a group kind name |
 | `groups.kinds[].roles[].name` | `WorldGroupRole.Name` | a group role name |
-| `groups.kinds[].sharedStateScope` | `WorldGroupKind.SharedStateScope` | a group scope token |
 | `groups.ownership[].subject.id` | `OwnershipSubject.Id` | an ownership subject id |
 | `properties.names` | `WorldPropertyRegistrySection.Names` | property names are the properties section's own namespace |
 | `interactions.interactions[].name` | `WorldInteraction.Name` | an interaction name is the interactions section's own namespace |
@@ -1450,7 +1458,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1487,3 +1494,4 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].name` | `WorldSearchRow.Name` | a search job name is the search section's own namespace |
 | `search.jobs[].shapes[][jump].over` | `WorldSearchShape.Jump.Over` | direction names are local to the board's topology |
 | `search.jobs[].shapes[][pair].with` | `WorldSearchShape.Paired.With` | a cell key of the job's token row |
+| `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |

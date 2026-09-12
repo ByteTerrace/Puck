@@ -5,6 +5,8 @@ namespace Puck.Abstractions.Machines;
 /// <summary>The machine vocabulary selected by a host for document admission. Offline tools may carry no catalog;
 /// they must report the resulting deferred provider checks instead of claiming semantic validation.</summary>
 public interface IMachineValidationCatalog {
+    /// <summary>Gets the stable metadata fingerprint for cache-partitioned composition, when this catalog can provide one.</summary>
+    string CompositionFingerprint => string.Empty;
     /// <summary>Resolves the same provider descriptor used by runtime construction and authoring tools.</summary>
     /// <param name="engineId">The registered engine identifier.</param>
     /// <param name="descriptor">The selected provider description, or null when unavailable.</param>

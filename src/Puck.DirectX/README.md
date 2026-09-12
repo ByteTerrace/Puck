@@ -21,6 +21,13 @@ submission, and timestamp pools. Swapchains and the frame loop live in
 `Puck.DirectX.Presentation`, mirroring the split between `Puck.Vulkan` and
 `Puck.Vulkan.Presentation`.
 
+Compute, graphics, and readback use one legacy resource-barrier model on the
+same direct queue. Resource owners register their initial state and remove it
+on disposal; command recorders share that state across compute/fullscreen
+passes. Sampled images permit both pixel and compute shader reads. UAV barriers
+order repeated writes, and raw UAV views clear storage buffers. Temporary clear
+descriptors retire with their fenced command buffers, including reload and reset.
+
 ## ✨ Key features
 
 - *Source-generated bindings, not hand-written P/Invoke:* CsWin32 emits the

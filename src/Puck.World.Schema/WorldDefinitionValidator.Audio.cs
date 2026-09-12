@@ -1,3 +1,5 @@
+using Puck.Abstractions.Machines;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -189,7 +191,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateFeed(WorldSpeakerFeed? feed, HashSet<int> screenIndices, HashSet<string> tuneIds, HashSet<string> patchIds, string path, List<string> errors) {
+    private static void ValidateFeed(WorldDefinition definition, WorldSpeakerFeed? feed, IReadOnlySet<string> machineNames, IMachineValidationCatalog? machines, HashSet<string> tuneIds, HashSet<string> patchIds, string path, List<string> errors) {
         if (feed is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -213,8 +215,23 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.source is required.");
 
                 break;
-            case WorldSpeakerSource.Machine machine when !screenIndices.Contains(item: machine.ScreenIndex):
-                errors.Add(item: $"{path}.source.screenIndex {machine.ScreenIndex} names no declared screen.");
+            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(machine.Instance):
+                errors.Add(item: $"{path}.source.instance is required.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when !machineNames.Contains(machine.Instance):
+                errors.Add(item: $"{path}.source.instance '{machine.Instance}' names no declared machine.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(machine.Output):
+                errors.Add(item: $"{path}.source.output is required.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when machines is { } catalog &&
+                definition.Machines.FirstOrDefault(candidate => candidate is not null && string.Equals(candidate.Name, machine.Instance, StringComparison.Ordinal)) is { } declaration &&
+                catalog.TryDescriptor(declaration.Engine, out var descriptor) &&
+                !descriptor.AudioOutputs.Any(port => string.Equals(port.Name, machine.Output, StringComparison.Ordinal)):
+                errors.Add(item: $"{path}.source.output '{machine.Output}' is not declared by machine '{machine.Instance}'.");
 
                 break;
             case WorldSpeakerSource.Tune tune when (string.IsNullOrWhiteSpace(value: tune.TuneId) || !tuneIds.Contains(item: tune.TuneId)):
@@ -226,13 +243,14 @@ public static partial class WorldDefinitionValidator {
 
                 break;
         }
+
     }
     // The speaker rows (PRESENTATION-ONLY — audio never enters sim state): name presence/uniqueness, the per-kind
     // pose/extent invariants, the feed (source resolution, channel token, the gain ceiling), and the attenuation
     // policy. A Machine source checks only that the screen row EXISTS — never its declared source kind (runtime
     // inserts overlay declared sources; no live machine at drain time is silence, not a reject). Returns the name
     // set (the cue table's emitter placements resolve against it).
-    private static HashSet<string> ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, List<string> errors) {
+    private static HashSet<string> ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, IMachineValidationCatalog? machines, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (definition.Speakers is not { } speakers) {
@@ -321,8 +339,10 @@ public static partial class WorldDefinitionValidator {
             }
 
             ValidateFeed(
+                definition: definition,
                 feed: speaker.Feed,
-                screenIndices: screenIndices,
+                machineNames: definition.Machines.Where(machine => machine is not null).Select(machine => machine!.Name).ToHashSet(StringComparer.Ordinal),
+                machines: machines,
                 tuneIds: tuneIds,
                 patchIds: patchIds,
                 path: $"{path}.feed",

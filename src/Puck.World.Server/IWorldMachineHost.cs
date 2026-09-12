@@ -60,6 +60,13 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="instance">The authored instance name.</param>
     /// <param name="output">The provider's output name.</param>
     IAudioMachine? AudioOutput(string instance, string output);
+    /// <summary>Captures the host-owned current named declarations in stable instance order.</summary>
+    IReadOnlyList<WorldMachine> CaptureInstances();
+    /// <summary>Stages one provider operation without changing the live runtime or declaration.</summary>
+    bool TryPrepareOperation(string instance, ulong expectedGeneration, MachineOperationRequest request,
+        out IWorldMachineOperationPreparedPlan? plan, out MachineOperationResult refusal);
+    /// <summary>Applies a prepared operation at the host barrier and adopts its canonical declaration on success.</summary>
+    MachineOperationResult TryCommitOperation(IWorldMachineOperationPreparedPlan plan);
     /// <summary>Observes coherent hardware state with explicit availability and no side effects.</summary>
     /// <param name="instance">The authored instance name.</param>
     /// <param name="address">The provider space, unsigned address, and access width.</param>
@@ -69,6 +76,12 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="binding">The named binding within the instance.</param>
     /// <param name="address">The resolved scalar address, on success.</param>
     bool TryBindingAddress(string instance, string binding, out MachineMemoryAddress address);
+    /// <summary>Resolves a prepared content symbol on a named machine to its bus address.</summary>
+    /// <param name="instance">The named machine instance.</param>
+    /// <param name="symbol">The exported content symbol.</param>
+    /// <param name="address">The resolved bus address.</param>
+    /// <returns><see langword="true"/> when the symbol is available on the live instance.</returns>
+    bool TryResolveSymbol(string instance, string symbol, out int address);
     /// <summary>Applies an already authorized write, refusing stale instance generations. External callers must
     /// use the ordered authority door; the server's deterministic bindings use this execution seam directly.</summary>
     /// <param name="instance">The target instance.</param>
@@ -105,8 +118,8 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="stepTicks">The exact engine-tick budget of one fixed simulation step.</param>
     /// <param name="pads">This tick's per-screen merged engagement pad lane.</param>
     void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads);
-    /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> when the slot
-    /// carries no machine (or one without the capability).</summary>
+    /// <summary>Returns the live machine resolved from a screen's named producer or legacy slot as its audio drain seam,
+    /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     IAudioMachine? AudioMachine(int index);
     /// <summary>Returns the live cable-link set as derived groups (cable order preserved) — the <c>world.save</c>
@@ -121,7 +134,7 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Determines whether a screen-machine engine is registered under <paramref name="engineId"/>.</summary>
     /// <param name="engineId">The candidate engine id.</param>
     bool HasEngine(string engineId);
-    /// <summary>Determines whether a machine is currently booted on the screen index.</summary>
+    /// <summary>Determines whether the screen index resolves to a live named producer or legacy screen-owned machine.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     bool HasMachine(int index);
     /// <summary>Returns the live machine's authored tempo, in engine ticks per beat, when the screen slot carries a
@@ -129,6 +142,10 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// slot, a machine without the capability, or a capability reporting zero (no content loaded).</summary>
     /// <param name="index">The engine screen-surface index.</param>
     long? InstrumentTicksPerBeat(int index);
+    /// <summary>Returns the live named machine's authored tempo, in engine ticks per beat, when it exposes the
+    /// <see cref="IInstrumentClockSource"/> capability. The lookup is independent of display consumers.</summary>
+    /// <param name="instance">The authored machine instance name.</param>
+    long? InstrumentTicksPerBeat(string instance);
     /// <summary>Returns the room light a booted machine emits (its framebuffer average), or zero for no machine — the
     /// presentation read.</summary>
     /// <param name="index">The engine screen-surface index.</param>

@@ -130,8 +130,8 @@
       "default": null,
       "title": "WorldCameraProgram"
     },
-    "studyToolchain": {
-      "description": "The directory holding the study compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
+    "shaderToolchain": {
+      "description": "The directory holding the pipeline compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
       "type": [
         "string",
         "null"
@@ -168,7 +168,7 @@
             "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
             "type": "array",
             "items": {
-              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Study are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named study (a WorldViewStudy row) renders that compiled Shadertoy-dialect study into the rect instead \u2014 a slot names at most one of the two (the validator refuses both authored together).",
+              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Pipeline are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) renders its selected image output into the rect \u2014 a slot names at most one of the two (the validator refuses both authored together).",
               "type": "object",
               "properties": {
                 "x": {
@@ -188,14 +188,14 @@
                   "type": "number"
                 },
                 "camera": {
-                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the study named by Study).",
+                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).",
                   "type": [
                     "string",
                     "null"
                   ]
                 },
-                "study": {
-                  "description": "The authored views.studies row name filling this slot with a compiled shader study, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
+                "pipeline": {
+                  "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
                   "type": [
                     "string",
                     "null"
@@ -218,29 +218,29 @@
         "title": "WorldViewLayout"
       }
     },
-    "studies": {
-      "description": "Gets the authored views.studies rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
+    "pipelines": {
+      "description": "Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "One views.studies row \u2014 an authored Shadertoy-dialect fragment shader, compiled and rendered as a paired-camera child view a Study names (see the study push-constant/toolchain contract in AGENTS.md and the Puck.Shaders.Study family). This record is the authored intent only \u2014 compiling the source, swapping the live pipeline, and driving the per-frame push constants are console/composition-root concerns, not schema ones.",
+        "description": "One named shader-pipeline instance displayed by a Pipeline slot. Its source declares connected GPU passes, or is a single shader adapted into a one-pass pipeline. The row carries authored intent; compilation, resource ownership, history, and presentation inputs belong to the shader runtime and its host.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
           "name": {
-            "description": "The study\u0027s stable name (a SafeName, unique within the section) \u2014 what a Study names and a study.* console verb addresses.",
+            "description": "The pipeline\u0027s stable name (a SafeName, unique within the section) \u2014 what a Pipeline names and a pipeline.* console verb addresses.",
             "type": "string"
           },
           "source": {
-            "description": "The study\u0027s GLSL source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
+            "description": "The pipeline document or shader source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
             "type": "string"
           },
           "camera": {
-            "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_STUDY, or null for the study\u0027s own iMouse orbit (the Shadertoy-dialect default).",
+            "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_SHADERTOY, or null for the pipeline\u0027s own iMouse orbit (the Shadertoy-dialect default).",
             "type": [
               "string",
               "null"
@@ -248,7 +248,7 @@
             "default": null
           },
           "timeScale": {
-            "description": "The study clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+            "description": "The pipeline clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
             "type": "number",
             "default": 1
           }
@@ -258,7 +258,7 @@
           "source"
         ],
         "additionalProperties": false,
-        "title": "WorldViewStudy"
+        "title": "WorldViewPipeline"
       },
       "default": null
     }

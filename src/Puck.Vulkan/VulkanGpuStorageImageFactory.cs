@@ -4,7 +4,7 @@ using Puck.Vulkan.Messages;
 namespace Puck.Vulkan;
 
 /// <summary>
-/// Implements <see cref="IGpuStorageImageFactory"/> for Vulkan: it creates a STORAGE + SAMPLED + TRANSFER_SRC color
+/// Implements <see cref="IGpuStorageImageFactory"/> for Vulkan: it creates a STORAGE + SAMPLED + TRANSFER_SRC + TRANSFER_DST color
 /// image (so a compute shader writes it, a compositor samples it, and a readback copies it) plus a 2D view,
 /// converting the <see cref="GpuPixelFormat"/> to a <c>VkFormat</c>.
 /// </summary>
@@ -23,7 +23,7 @@ public sealed class VulkanGpuStorageImageFactory(IVulkanOffscreenImageApi offscr
             Height: height,
             InstanceHandle: vkContext.Instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
+            UsageFlags: VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination,
             Width: width
         ));
 

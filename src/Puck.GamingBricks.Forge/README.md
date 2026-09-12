@@ -10,8 +10,9 @@ game interpreter. There are no embedded sample games.
 
 `ICartridgeCompiler` implements the neutral `IMachineContentProvider` contract
 from `Puck.Abstractions.Machines`. The adapter recognizes cartridge document
-paths, validates and compiles their bytes, and exports source identity and named
-bus addresses. Generic machine hosts consume `PreparedMachineContent` without
+paths, validates and compiles their bytes, and exports source identity, named
+bus addresses, and the `puck.cartridge.v1` format marker only after successful
+preparation. Generic machine hosts consume `PreparedMachineContent` without
 referencing this package or its cartridge schema. Static and dynamic machine
 registration use `IMachineExtension` from the same neutral contract layer.
 

@@ -49,66 +49,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} '{channel}' must be non-empty kebab-case.");
         }
     }
-    // The machine cable groups, derived from the declared screens rows' machine-source cable ports: each port's name
-    // kebab-case, each cable plugged by two or more ports, positions unique and contiguous from 0 (cable order is the
-    // linking engine's player order, so a gap or duplicate is a lie about who runs when). A screen carries at most one
-    // port by construction (one Cable member per source). NOT validated: engine identity of the members — that is a
-    // RUNTIME fact (a screen.insert changes it), so the binder reports a dormant group with a reason rather than the
-    // validator rejecting the port.
-    private static void ValidateMachineCables(IReadOnlyList<WorldScreen> screens, List<string> errors) {
-        var cables = new Dictionary<string, List<(int Position, int Screen, string Path)>>(comparer: StringComparer.Ordinal);
-
-        foreach (var screen in screens) {
-            if (screen?.Source is not WorldScreenSource.Machine { Cable: { } cable }) {
-                continue;
-            }
-
-            var path = $"screens[{screen.Index}].source.machine.cable";
-
-            if (
-                string.IsNullOrWhiteSpace(value: cable.Name) ||
-                !IsKebabCase(value: cable.Name)
-            ) {
-                errors.Add(item: $"{path}.name '{cable.Name}' must be non-empty kebab-case.");
-
-                continue;
-            }
-
-            if (cable.Position < 0) {
-                errors.Add(item: $"{path}.position {cable.Position} must be non-negative.");
-
-                continue;
-            }
-
-            if (!cables.TryGetValue(
-                key: cable.Name,
-                value: out var members
-            )) {
-                members = [];
-                cables[cable.Name] = members;
-            }
-
-            members.Add(item: (cable.Position, screen.Index, path));
-        }
-
-        foreach (var (name, members) in cables) {
-            if (members.Count < 2) {
-                errors.Add(item: $"cable '{name}' has one plugged port (screen {members[0].Screen}) — a cable links two or more machines; plug another declared machine source into it or drop the port.");
-
-                continue;
-            }
-
-            var positions = new HashSet<int>();
-
-            foreach (var member in members) {
-                if (!positions.Add(item: member.Position)) {
-                    errors.Add(item: $"{member.Path}.position {member.Position} is already taken on cable '{name}' — cable order needs one machine per position.");
-                } else if (member.Position >= members.Count) {
-                    errors.Add(item: $"{member.Path}.position {member.Position} leaves a gap on cable '{name}' — positions are contiguous 0..{(members.Count - 1)}.");
-                }
-            }
-        }
-    }
     // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
     // gate as a declared source.
     private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, ValidationScope scope, List<string> errors, ICollection<string>? deferred) {
@@ -862,30 +802,20 @@ public static partial class WorldDefinitionValidator {
 
                 return false;
             case WorldScreenSource.Machine machine:
-                // A cable port is a standing physical connection of the machine that owns the slot — a declared
-                // screens row's own source. A magazine entry rotates content through the slot and a placement face's
-                // source has no stable screen identity to fold a group back onto, so a port there is refused.
-                if (
-                    !cablePermitted &&
-                    (machine.Cable is not null)
-                ) {
-                    errors.Add(item: $"{path}.machine.cable is only legal on a declared screens row's own source — a magazine entry or face source cannot plug a cable.");
+                if (string.IsNullOrWhiteSpace(value: machine.Instance)) {
+                    errors.Add(item: $"{path}.machine.instance is required.");
+                } else if (!definition.Machines.Any(candidate => candidate is not null && string.Equals(candidate.Name, machine.Instance, StringComparison.Ordinal))) {
+                    errors.Add(item: $"{path}.machine.instance '{machine.Instance}' names no declared machine.");
                 }
 
-                if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
-                    errors.Add(item: $"{path}.machine.engine is required.");
-                } else {
-                    if (scope.Machines is not { } machines) {
-                        deferred?.Add($"{path}.machine.engine: validation of engine '{machine.Engine}' is deferred because no machine catalog was supplied.");
-                    } else if (!machines.IsRegistered(machine.Engine)) {
-                        errors.Add($"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
-                    } else if (machines.RequiresPreparation(machine.ContentPath) && !machines.CanPrepare(machine.Engine, machine.ContentPath)) {
-                        errors.Add($"{path}.machine.contentPath '{machine.ContentPath}' requires a content provider, but engine '{machine.Engine}' recognizes none.");
-                    }
+                if (string.IsNullOrWhiteSpace(value: machine.Output)) {
+                    errors.Add(item: $"{path}.machine.output is required.");
+                } else if (scope.Machines is { } machines && definition.Machines.FirstOrDefault(candidate => candidate is not null && string.Equals(candidate.Name, machine.Instance, StringComparison.Ordinal)) is { } declaration && machines.TryDescriptor(declaration.Engine, out var descriptor) && !descriptor.VideoOutputs.Any(port => string.Equals(port.Name, machine.Output, StringComparison.Ordinal))) {
+                    errors.Add(item: $"{path}.machine.output '{machine.Output}' is not declared by machine '{machine.Instance}'.");
+                } else if (scope.Machines is null) {
+                    deferred?.Add($"{path}.machine.output: validation of output '{machine.Output}' is deferred because no machine catalog was supplied.");
                 }
-                // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
-                // A present-but-missing file is a runtime fact, not a structural authoring error, and so is a cartridge
-                // document the forge refuses — the bind faults with the forge's own message.
+
                 return false;
             case WorldScreenSource.TestPattern pattern:
                 if (

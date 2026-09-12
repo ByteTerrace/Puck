@@ -34,7 +34,7 @@ public enum DirectXExportableImageAccess {
 /// <para>
 /// A private <see cref="DirectXExportableImageAccess.ComputeWrite"/> texture starts in
 /// <c>UNORDERED_ACCESS</c>, matching <see cref="DirectXGpuStorageImage"/>. Both simultaneous-access shapes start and
-/// rest in <c>COMMON</c>, the immutable enhanced-barrier layout and cross-device handoff state their foreign device
+/// rest in <c>COMMON</c>, the cross-device handoff state their foreign device
 /// expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a
 /// compute-written texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and
 /// <see cref="FinalizeForExport"/> only blocks on a fence until that submitted work completes.
@@ -104,7 +104,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         void* resource;
         var resourceIid = ID3D12Resource.IID_Guid;
 
-        // Both simultaneous-access shapes rest in COMMON — the only enhanced-barrier layout they use and the
+        // Both simultaneous-access shapes begin in COMMON — the
         // cross-API handoff state their foreign device expects. A private compute-write texture starts in
         // UNORDERED_ACCESS (the compute recorder's seeded state).
         device->CreateCommittedResource(
@@ -117,6 +117,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
             riidResource: in resourceIid
         );
         m_resource = ((nint)resource);
+        DirectXResourceStates.Register(m_resource, UsesCommonInitialState(access) ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         if (access != DirectXExportableImageAccess.ComputeWrite) {
             DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
@@ -202,6 +203,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         }
 
         m_disposed = true;
+        DirectXResourceStates.Forget(m_resource);
         DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
 
         // Drain the producer queue only while the device context is still alive: at host shutdown the DI container

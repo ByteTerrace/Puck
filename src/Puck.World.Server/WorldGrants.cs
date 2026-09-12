@@ -57,7 +57,7 @@ namespace Puck.World.Server;
 /// federation operations and the transfer host reach it only through <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>,
 /// which serializes those narrow operations against the fixed-step fold.</para>
 /// </remarks>
-public sealed class WorldGrants : IWorldGrantsView {
+public sealed partial class WorldGrants : IWorldGrantsView {
     private static readonly long DefaultHoldCeiling = Puck.Maths.FixedQ4816.FromDouble(value: WorldGrant.DefaultHoldSeconds).Value;
     // The per-body-index own-body default sets, minted on first read and never mutated afterward — every
     // uncomposed participant shares its index's instance.
@@ -102,8 +102,14 @@ public sealed class WorldGrants : IWorldGrantsView {
     // WorldServer.Install — never incrementally patched, so Allows always reads this tick's settled document.
     //
     // m_groupMembership: principal -> the group ids it currently belongs to. Consulted by Allows' group-expansion
-    // step. Flat only — never itself keyed by a group principal on the value side.
+    // step's legacy checkpoint/disclosure shape. Authority reads the role-scoped projection below, never this
+    // role-less compatibility list. Flat only — never itself keyed by a group principal on the value side.
     private readonly Dictionary<WorldPrincipal, List<string>> m_groupMembership = new();
+    // principal -> the group ids and declared capability reach of the exact role each current membership row carries.
+    // Null or unknown roles have no entry, so malformed/role-less rows cannot widen authority. This is derived from
+    // the live document and deliberately is not checkpointed; WorldServer rehydrates it after restoring that
+    // document, while a direct WorldGrants.Restore remains fail-closed until its caller supplies the same sync.
+    private readonly Dictionary<WorldPrincipal, List<GroupRoleReach>> m_groupRoleMembership = new();
     // m_groupReach: group id -> the capabilities at least one of its kind's declared roles reaches. Consulted by
     // TryGrant's reachability check so a group grant that no role could ever exercise is refused.
     private readonly Dictionary<string, HashSet<WorldCapability>> m_groupReach = new();
@@ -111,6 +117,10 @@ public sealed class WorldGrants : IWorldGrantsView {
     // ownership-expansion fallback. A group-owns-group row resolves one level at sync time against the owning
     // group's current roster — flat, never recursive.
     private readonly Dictionary<WorldPrincipal, List<string>> m_ownedGroups = new();
+    // principal -> groups reached through a GROUP owner row, carrying the owning group's member-role reach. Direct
+    // principal ownership stays in m_ownedGroups and is intentionally unrestricted; these two sources must never
+    // collapse, or a group-owned subject would bypass its owning member's role.
+    private readonly Dictionary<WorldPrincipal, List<GroupRoleReach>> m_ownedGroupRoleReach = new();
     // m_driveGates: 0-based body entity index -> the name of the first-in-document-order WorldStateRow declaring
     // GatesDrive whose per-body cell currently reads nonzero. Resynced wholesale by SyncState, alongside SyncGroups.
     // Consulted by WorldServer.ApplyIntentSubmission and world.why, never folded into Allows: a drive gate SUBTRACTS
@@ -131,8 +141,11 @@ public sealed class WorldGrants : IWorldGrantsView {
     private readonly int m_population;
     private readonly Action<WorldPrincipal, GrantSubject?, GrantSubject?> m_routeTransition;
 
-    // Bumped on every change to a principal's held subject sets — TryGrant, a removing Revoke, and the
-    // engagement-route helpers below. A WorldHandleTable compares this against the revision it last rebuilt from.
+    private readonly record struct GroupRoleReach(string GroupId, HashSet<WorldCapability> Reach);
+
+    // Bumped on every change to effective authority — TryGrant, a removing Revoke, the engagement-route helpers
+    // below, and SyncGroups' roster/role/ownership rebuild. A WorldHandleTable compares this against the revision it
+    // last rebuilt from.
     private int m_revision;
 
     /// <summary>Seeds the permissive local-play defaults so boot behavior is unchanged until someone revokes: every seat
@@ -729,6 +742,7 @@ public sealed class WorldGrants : IWorldGrantsView {
                 // population exactly like Drive/Observe's own body subjects.
                 ((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind == GrantSubjectKind.Composition) && trustedWildcard) ||
+                ((subject.Kind == GrantSubjectKind.Machine) && !string.IsNullOrWhiteSpace(subject.Id)) ||
                 ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Peer)))),
             // Mutate additionally admits the two ROW-SCOPED dispatch subjects — one creations row, one placements
             // row — for any principal. They are an alternative to the section hold, never a narrowing beneath it,
@@ -954,7 +968,7 @@ public sealed class WorldGrants : IWorldGrantsView {
             WorldCapability.Observe => (trusted
             ? "observe must name a concrete body or state row (observe body:<n> | observe state:<name>) or the wildcard 'all' — screen/region/seat/adjacency are event-only subjects with no trusted-principal consumer"
             : "observe must name a concrete body, state row, screen, region, seat, or adjacency (observe body:<n> | observe state:<name> | observe screen:<n> | observe region:<name> | observe seat:<n> | observe adjacency:<name>)"),
-            WorldCapability.Control => $"control must name a concrete screen or body (control screen:<n> | control body:<n>){((trusted || (principal.Kind == PrincipalKind.Peer))
+            WorldCapability.Control => $"control must name a concrete screen, body, or machine (control screen:<n> | control body:<n> | control machine:<name>){((trusted || (principal.Kind == PrincipalKind.Peer))
             ? " or the wildcard 'all'"
             : "")}",
             WorldCapability.Mutate => $"mutate must name a document section (mutate section:<name>), one creations or placements row (mutate creation:<id> | mutate placement:<id>), or a concrete state row for the cross-document write-back channel (mutate state:<name>){(trusted
@@ -984,8 +998,9 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// <remarks>Membership expansion — grown into this one predicate rather than duplicated at each door, per the
     /// group+binding substrate's own design rule. Checked last, after the principal's own concrete/wildcard rows
     /// miss: a principal's own hold always wins first, and a group's hold is a fallback, never an override. Flat
-    /// only means this never recurses — a group entry in <see cref="m_groupMembership"/>'s value list is itself
-    /// checked by looking up its own rows only, never by treating the group as a further member of anything.
+    /// only means this never recurses — an entry in the role-scoped <see cref="m_groupRoleMembership"/> projection
+    /// is checked by looking up that group's own rows only, never by treating the group as a further member of
+    /// anything.
     /// <para>Ownership consult (composition-core): the same fallback shape, grown a second way, checked after
     /// membership — an ownership binding is a deciding fact this door consults, never a grant row
     /// <see cref="WorldGrants"/> mints; <c>Puck.World.WorldOwnership</c> seeds/implies authority, it never is a
@@ -1025,11 +1040,12 @@ public sealed class WorldGrants : IWorldGrantsView {
             }
         }
 
-        // Group-expansion fallback: does a group `principal` is currently a member of hold this (capability,
-        // subject)? Read fresh from m_groupMembership each call, so a departed member's hold evaporates immediately.
-        if (TryGroupExpansion(
+        // Group-expansion fallback: a current member reaches a group row only when that row's exact declared role
+        // reaches this capability. Read fresh from the role projection each call, so a departed, null-role, or
+        // differently-roled member cannot retain authority.
+        if (TryRoleGroupExpansion(
             capability: capability,
-            groups: m_groupMembership,
+            groups: m_groupRoleMembership,
             principal: principal,
             rule: GrantRule.GroupHold,
             subject: subject,
@@ -1038,8 +1054,7 @@ public sealed class WorldGrants : IWorldGrantsView {
             return membershipVerdict;
         }
 
-        // Ownership-expansion fallback: does a group `principal` currently owns (direct or transitive, resolved at
-        // sync time into m_ownedGroups) hold this (capability, subject)? Read fresh, same as the membership fallback.
+        // Direct principal ownership is an explicit ownership fact and carries no membership-role restriction.
         if (TryGroupExpansion(
             capability: capability,
             groups: m_ownedGroups,
@@ -1051,13 +1066,24 @@ public sealed class WorldGrants : IWorldGrantsView {
             return ownershipVerdict;
         }
 
+        // A group-owned subject is reached through the OWNER group's current member role, not the subject group's
+        // roster or kind. This remains one-level and non-recursive, as the ownership contract requires.
+        if (TryRoleGroupExpansion(
+            capability: capability,
+            groups: m_ownedGroupRoleReach,
+            principal: principal,
+            rule: GrantRule.OwnershipHold,
+            subject: subject,
+            verdict: out ownershipVerdict
+        )) {
+            return ownershipVerdict;
+        }
+
         return new GrantVerdict(Rule: GrantRule.NoHold);
     }
 
-    // The shared body of the group-membership and group-ownership expansion fallbacks above: does any group listed
-    // for `principal` in `groups` hold (capability, subject) or its All wildcard, itself resolved fresh through
-    // m_byPrincipal on every call (never cached). `rule` names which fallback is calling, so the returned verdict
-    // still distinguishes GroupHold from OwnershipHold.
+    // Direct ownership expansion: does any explicitly-owned group listed for `principal` hold (capability, subject)
+    // or its All wildcard, itself resolved fresh through m_byPrincipal on every call (never cached).
     private bool TryGroupExpansion(Dictionary<WorldPrincipal, List<string>> groups, WorldPrincipal principal, WorldCapability capability, GrantSubject subject, GrantRule rule, out GrantVerdict verdict) {
         if (groups.TryGetValue(
             key: principal,
@@ -1350,18 +1376,14 @@ public sealed class WorldGrants : IWorldGrantsView {
     }
     /// <inheritdoc/>
     public long HoldCeiling(WorldPrincipal principal, GrantSubject subject) {
-        var verdict = Allows(
+        return (TryResolveDecidingGrant(
             capability: WorldCapability.Drive,
             principal: principal,
-            subject: subject
-        );
-        var decidingSubject = ((verdict.Rule == GrantRule.WildcardHold)
-            ? GrantSubject.All
-            : subject
-        );
-
-        return (m_holdCeilings.TryGetValue(
-            key: (principal, WorldCapability.Drive, decidingSubject),
+            subject: subject,
+            grantPrincipal: out var grantPrincipal,
+            grantSubject: out var grantSubject
+        ) && m_holdCeilings.TryGetValue(
+            key: (grantPrincipal, WorldCapability.Drive, grantSubject),
             value: out var ceiling
         )
             ? ceiling
@@ -1493,32 +1515,48 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// boot-seeded <c>Control</c>/<c>all</c> route, a seat's <c>Control</c>/<c>composition</c>) — it is refused only
     /// from projection, never from the grant table itself.</para></remarks>
     public GrantSubject[] ProjectSubjects(WorldPrincipal principal, WorldCapability capability) {
+        var projectedSet = new HashSet<GrantSubject>();
+
         if (
-            !m_byPrincipal.TryGetValue(
+            m_byPrincipal.TryGetValue(
             key: principal,
             value: out var grants
-        ) ||
-            (grants.For(capability: capability) is not { } subjects)
+        ) &&
+            (grants.For(capability: capability) is { } subjects)
         ) {
-            return [];
-        }
-
-        var projectableCount = 0;
-
-        foreach (var subject in subjects) {
-            if (IsProjectable(subject: subject)) {
-                projectableCount++;
+            foreach (var subject in subjects) {
+                if (IsProjectable(subject: subject)) {
+                    _ = projectedSet.Add(item: subject);
+                }
             }
         }
 
-        var projected = new GrantSubject[projectableCount];
-        var next = 0;
+        if (m_groupRoleMembership.TryGetValue(
+            key: principal,
+            value: out var groupRows
+        )) {
+            foreach (var groupRow in groupRows) {
+                if (!groupRow.Reach.Contains(item: capability)) {
+                    continue;
+                }
 
-        foreach (var subject in subjects) {
-            if (IsProjectable(subject: subject)) {
-                projected[next++] = subject;
+                if (
+                    m_byPrincipal.TryGetValue(
+                    key: WorldPrincipal.Group(id: groupRow.GroupId),
+                    value: out var groupGrants
+                ) &&
+                    (groupGrants.For(capability: capability) is { } groupSubjects)
+                ) {
+                    foreach (var subject in groupSubjects) {
+                        if (IsProjectable(subject: subject)) {
+                            _ = projectedSet.Add(item: subject);
+                        }
+                    }
+                }
             }
         }
+
+        var projected = projectedSet.ToArray();
 
         Array.Sort(
             array: projected,
@@ -1560,6 +1598,11 @@ public sealed class WorldGrants : IWorldGrantsView {
         m_writeMasks.Clear();
         m_seededSections.Clear();
         m_handleTables.Clear();
+        m_groupMembership.Clear();
+        m_groupRoleMembership.Clear();
+        m_groupReach.Clear();
+        m_ownedGroups.Clear();
+        m_ownedGroupRoleReach.Clear();
 
         foreach (var (principal, target) in droppedApplications) {
             NotifyApplicationTransition(
@@ -1797,107 +1840,6 @@ public sealed class WorldGrants : IWorldGrantsView {
 
         return stale;
     }
-    /// <summary>Resyncs the group+membership+ownership index wholesale from the live document's <c>groups</c>
-    /// section — called unconditionally by <c>WorldServer</c> on every construction and every <c>Install</c> (boot,
-    /// every mutation, every rebuild/undo), the one choke point every document swap already passes through. Cheap:
-    /// group, per-kind member, and ownership counts are all capacity-bounded (<c>WorldGroupCapacity</c>).</summary>
-    /// <param name="groups">The live document's group roster rows.</param>
-    /// <param name="kinds">The live document's declared group-kind catalog.</param>
-    /// <param name="ownership">The live document's ownership bindings.</param>
-    public void SyncGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership) {
-        m_groupMembership.Clear();
-        m_groupReach.Clear();
-        m_ownedGroups.Clear();
-
-        var reachByKindName = new Dictionary<string, HashSet<WorldCapability>>(comparer: StringComparer.Ordinal);
-
-        foreach (var kind in kinds) {
-            var reach = new HashSet<WorldCapability>();
-
-            foreach (var role in kind.Roles) {
-                foreach (var capability in role.Capabilities) {
-                    _ = reach.Add(item: capability);
-                }
-            }
-
-            reachByKindName[kind.Name] = reach;
-        }
-
-        var groupsById = new Dictionary<string, WorldGroup>(comparer: StringComparer.Ordinal);
-
-        foreach (var group in groups) {
-            m_groupReach[group.Id] = (reachByKindName.TryGetValue(
-                key: group.KindName,
-                value: out var reach
-            )
-                ? reach
-                : new HashSet<WorldCapability>()
-            );
-            groupsById[group.Id] = group;
-
-            foreach (var memberRow in group.Members) {
-                if ((memberRow.Ref.Kind != MemberRefKind.Local) || (memberRow.Ref.Principal is not { } member)) {
-                    // Verified identities are retained in the document roster but cannot impersonate a local
-                    // WorldPrincipal in this local grant index; the federation/consent lane owns that projection.
-                    continue;
-                }
-
-                if (!m_groupMembership.TryGetValue(
-                    key: member,
-                    value: out var memberOf
-                )) {
-                    memberOf = new List<string>();
-                    m_groupMembership[member] = memberOf;
-                }
-
-                memberOf.Add(item: group.Id);
-            }
-        }
-
-        // Ownership is not a grant — a fact this door consults (GrantRule.OwnershipHold). Only Subject.Kind Group
-        // exists today; a later subject-kind widening adds its own case here.
-        foreach (var row in ownership) {
-            if (row.Subject.Kind != OwnershipSubjectKind.Group) {
-                continue;
-            }
-
-            switch (row.Owner.Kind) {
-                case OwnershipOwnerKind.Principal:
-                    if (row.Owner.Principal is { } ownerPrincipal) {
-                        AddOwnedGroup(
-                            owner: ownerPrincipal,
-                            groupId: row.Subject.Id
-                        );
-                    }
-
-                    break;
-                case OwnershipOwnerKind.Group:
-                    // A group owns a group: every CURRENT member of the owning group reaches the SUBJECT group's own
-                    // rows too — one level, resolved here against this same pass's roster, never recursively (a
-                    // member is never itself a group).
-                    if (
-                        (row.Owner.GroupId is { } ownerGroupId) &&
-                        groupsById.TryGetValue(
-                        key: ownerGroupId,
-                        value: out var ownerGroup
-                    )
-                    ) {
-                        foreach (var memberRow in ownerGroup.Members) {
-                            if ((memberRow.Ref.Kind != MemberRefKind.Local) || (memberRow.Ref.Principal is not { } member)) {
-                                continue;
-                            }
-
-                            AddOwnedGroup(
-                                owner: member,
-                                groupId: row.Subject.Id
-                            );
-                        }
-                    }
-
-                    break;
-            }
-        }
-    }
     /// <summary>Resyncs the drive-admission gate index wholesale from the live document's <c>state</c> section —
     /// called alongside <see cref="SyncGroups"/> at the same choke points (construction, every <c>Install</c>), so a
     /// live <c>world.state.cell.set</c> that flips a gate row's cell is settled before the next tick's intent drain
@@ -1958,17 +1900,43 @@ public sealed class WorldGrants : IWorldGrantsView {
         }
     }
     /// <inheritdoc/>
-    public bool TryGetBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
-        m_budgets.TryGetValue(
-            key: (principal, capability, subject),
-            value: out budget
-        );
+    public bool TryGetBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
+        if (TryResolveDecidingGrant(
+            capability: capability,
+            principal: principal,
+            subject: subject,
+            grantPrincipal: out var grantPrincipal,
+            grantSubject: out var grantSubject
+        )) {
+            return m_budgets.TryGetValue(
+                key: (grantPrincipal, capability, grantSubject),
+                value: out budget
+            );
+        }
+
+        budget = default;
+
+        return false;
+    }
     /// <inheritdoc/>
-    public bool TryGetChannelReach(WorldPrincipal principal, GrantSubject subject, out ChannelReachMask mask) =>
-        m_channelReach.TryGetValue(
-            key: (principal, WorldCapability.Drive, subject),
-            value: out mask
-        );
+    public bool TryGetChannelReach(WorldPrincipal principal, GrantSubject subject, out ChannelReachMask mask) {
+        if (TryResolveDecidingGrant(
+            capability: WorldCapability.Drive,
+            principal: principal,
+            subject: subject,
+            grantPrincipal: out var grantPrincipal,
+            grantSubject: out var grantSubject
+        )) {
+            return m_channelReach.TryGetValue(
+                key: (grantPrincipal, WorldCapability.Drive, grantSubject),
+                value: out mask
+            );
+        }
+
+        mask = default;
+
+        return false;
+    }
     /// <summary>Determines whether <paramref name="bodyIndex"/> is currently drive-gated — carries a nonzero cell on a state row
     /// declaring <see cref="WorldStateRow.GatesDrive"/> — and, when it is, which row decided it. Checked fresh every
     /// call against the index <see cref="SyncState"/> last resynced; never latched.</summary>
@@ -1990,23 +1958,62 @@ public sealed class WorldGrants : IWorldGrantsView {
         return false;
     }
     /// <inheritdoc/>
-    public bool TryGetEventBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
-        m_eventBudgets.TryGetValue(
-            key: (principal, capability, subject),
-            value: out budget
-        );
+    public bool TryGetEventBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
+        if (TryResolveDecidingGrant(
+            capability: capability,
+            principal: principal,
+            subject: subject,
+            grantPrincipal: out var grantPrincipal,
+            grantSubject: out var grantSubject
+        )) {
+            return m_eventBudgets.TryGetValue(
+                key: (grantPrincipal, capability, grantSubject),
+                value: out budget
+            );
+        }
+
+        budget = default;
+
+        return false;
+    }
     /// <inheritdoc/>
-    public bool TryGetKindMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out MutationKindMask mask) =>
-        m_kindMasks.TryGetValue(
-            key: (principal, capability, subject),
-            value: out mask
-        );
+    public bool TryGetKindMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out MutationKindMask mask) {
+        if (TryResolveDecidingGrant(
+            capability: capability,
+            principal: principal,
+            subject: subject,
+            grantPrincipal: out var grantPrincipal,
+            grantSubject: out var grantSubject
+        )) {
+            return m_kindMasks.TryGetValue(
+                key: (grantPrincipal, capability, grantSubject),
+                value: out mask
+            );
+        }
+
+        mask = default;
+
+        return false;
+    }
     /// <inheritdoc/>
-    public bool TryGetWriteMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask) =>
-        m_writeMasks.TryGetValue(
-            key: (principal, capability, subject),
-            value: out mask
-        );
+    public bool TryGetWriteMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask) {
+        if (TryResolveDecidingGrant(
+            capability: capability,
+            principal: principal,
+            subject: subject,
+            grantPrincipal: out var grantPrincipal,
+            grantSubject: out var grantSubject
+        )) {
+            return m_writeMasks.TryGetValue(
+                key: (grantPrincipal, capability, grantSubject),
+                value: out mask
+            );
+        }
+
+        mask = default;
+
+        return false;
+    }
     /// <summary>Adds a grant, enforcing exclusivity in both orders. An incoming exclusive grant over the wildcard
     /// <see cref="GrantSubject.All"/> is rejected outright (an exclusive reservation must name a concrete subject). A
     /// grant is rejected outright when its subject is not one its capability legitimately admits (see
@@ -2232,8 +2239,10 @@ public sealed class WorldGrants : IWorldGrantsView {
         m_seededSections.Clear();
         m_handleTables.Clear();
         m_groupMembership.Clear();
+        m_groupRoleMembership.Clear();
         m_groupReach.Clear();
         m_ownedGroups.Clear();
+        m_ownedGroupRoleReach.Clear();
         m_driveGates.Clear();
 
         foreach (var row in checkpoint.Principals) {
@@ -2296,15 +2305,9 @@ public sealed class WorldGrants : IWorldGrantsView {
                 Subject: row.Subject
             ));
         }
-        foreach (var row in checkpoint.GroupMembership) {
-            m_groupMembership[row.Principal] = [.. row.Groups];
-        }
-        foreach (var row in checkpoint.GroupReach) {
-            m_groupReach[row.Group] = [.. row.Reach];
-        }
-        foreach (var row in checkpoint.OwnedGroups) {
-            m_ownedGroups[row.Principal] = [.. row.Groups];
-        }
+        // Group membership, kind reach, and ownership rows in the checkpoint are legacy derived projections kept
+        // for wire compatibility. Do not restore them as authority: role reach must be rebuilt from the restored
+        // definition, and until WorldServer calls RestoreGroups every group-derived check remains deny-by-default.
         foreach (var row in checkpoint.DriveGates) {
             m_driveGates[row.BodyIndex] = row.Reason;
         }

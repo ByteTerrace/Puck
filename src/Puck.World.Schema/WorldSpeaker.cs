@@ -23,12 +23,11 @@ public abstract record WorldSpeakerSource {
     /// <summary>No signal is bound — honest silence (the emitter holds its place; <c>audio.emitters</c> reads the
     /// state).</summary>
     public sealed record None() : WorldSpeakerSource;
-    /// <summary>A live screen-hosted machine's audio, identified by screen slot — screen index is machine identity
-    /// for screen-hosted machines. The validator checks only that the screen row exists, never that its declared
-    /// source is <c>$type machine</c> (runtime inserts overlay declared sources); no live machine at drain time is
-    /// silence plus a state echo, never a reject.</summary>
-    /// <param name="ScreenIndex">The declared <see cref="WorldScreen.Index"/> whose hosted machine feeds this source.</param>
-    public sealed record Machine(int ScreenIndex) : WorldSpeakerSource;
+    /// <summary>A named machine audio output. The source is a consumer reference only: the named machine host owns
+    /// preparation, advancement, and the single drain shared by every speaker feed that names this output.</summary>
+    /// <param name="Instance">The declared <see cref="WorldMachine.Name"/> instance.</param>
+    /// <param name="Output">The provider audio output name exposed by that instance.</param>
+    public sealed record Machine(string Instance, string Output) : WorldSpeakerSource;
     /// <summary>A tune asset (<see cref="WorldTune"/>) played through a headless machine host — acquired while any
     /// speaker references it, released when orphaned (a runtime derivation, never a data concept).</summary>
     /// <param name="TuneId">The referenced <see cref="WorldTune.Name"/> (must resolve).</param>

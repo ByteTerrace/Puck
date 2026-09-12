@@ -11,6 +11,11 @@ namespace Puck.DirectX;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXCommandBufferState {
+    internal List<IDisposable> RetainedResources { get; } = [];
+    internal void ReleaseRetainedResources() {
+        foreach (var resource in RetainedResources) { resource.Dispose(); }
+        RetainedResources.Clear();
+    }
     public nint Allocator;
     public nint CommandList;
     public nint CurrentRenderTargetHandle;

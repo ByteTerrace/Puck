@@ -181,12 +181,13 @@ public sealed class WorldPeerHost : IDisposable {
     // The one decode step both submission ingress paths share (the interactive frame loop and a federated peer's
     // forwarded submission, once unwrapped): a live payload, or a named WorldCodecFailure — each caller writes its
     // own dialect's refusal frame from it.
-    private static bool TryDecodeSubmissionFrame(ReadOnlySpan<byte> frame, out WorldSubmissionPayload payload, out WorldCodecFailure failure) {
+    private static bool TryDecodeSubmissionFrame(ReadOnlySpan<byte> frame, out WorldSubmissionPayload payload, out Guid operationId, out WorldCodecFailure failure) {
         if (
             !Puck.World.Protocol.WorldFrameCodec.TryDecode(
             failure: out failure,
             frame: frame,
-            payload: out var decoded
+            payload: out var decoded,
+            operationId: out operationId
         ) ||
             (decoded is null)
         ) {
@@ -220,7 +221,8 @@ public sealed class WorldPeerHost : IDisposable {
             if (!TryDecodeSubmissionFrame(
                 failure: out var failure,
                 frame: frame,
-                payload: out var payload
+                payload: out var payload,
+                operationId: out var operationId
             )) {
                 await WorldPeerWireFormat.WriteRefusalAsync(
                     stream: connection.Stream,
@@ -235,6 +237,14 @@ public sealed class WorldPeerHost : IDisposable {
             // Principal (Command/Session/Mutation each read it directly rather than the envelope's copy — see
             // ApplyEnvelope's own remarks) — a handler reads the identity the door resolved, never the one the
             // client's bytes claimed.
+            if (payload is WorldSubmissionPayload.Mutation claimed && claimed.Value.Principal != connection.Principal) {
+                await WorldPeerWireFormat.WriteRefusalAsync(
+                    stream: connection.Stream,
+                    reason: "world.mutation.actor_mismatch: mutation actor does not match authenticated connection",
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                continue;
+            }
             var stamped = WorldLocalForwardedAuthority.StampPrincipal(
                 payload: payload,
                 principal: connection.Principal
@@ -245,33 +255,27 @@ public sealed class WorldPeerHost : IDisposable {
                 Sequence: connection.NextSequence(),
                 CorrelationId: connection.NextCorrelation(),
                 Principal: connection.Principal,
-                Payload: stamped
+                Payload: stamped,
+                OperationId: operationId
             );
 
-            var result = await RunOnTickThreadAsync(work: () => {
-                WorldSubmissionResult? captured = null;
-
+            var completion = new TaskCompletionSource<WorldSubmissionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await RunOnTickThreadAsync(work: () => {
                 m_server.Submit(
                     envelope: envelope,
-                    completion: r => captured = r
+                    completion: r => completion.TrySetResult(result: r)
                 );
+                return true;
+            }, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-                return captured;
-            }).ConfigureAwait(continueOnCapturedContext: false);
-
-            if (result is null) {
-                await WorldPeerWireFormat.WriteRefusalAsync(
-                    stream: connection.Stream,
-                    reason: "the envelope drained with no completion",
-                    ct: ct
-                ).ConfigureAwait(continueOnCapturedContext: false);
-            } else {
-                await WorldPeerWireFormat.WriteResultAsync(
-                    stream: connection.Stream,
-                    result: result,
-                    ct: ct
-                ).ConfigureAwait(continueOnCapturedContext: false);
-            }
+            // Mutation completion is intentionally awaited past ordered admission until the next tick drains the
+            // pending operation. Cancelling this wait only abandons the response; it cannot withdraw accepted work.
+            var result = await completion.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+            await WorldPeerWireFormat.WriteResultAsync(
+                stream: connection.Stream,
+                result: result,
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
         }
     }
     private async Task HandleConnectionAsync(PeerStream client, CancellationToken ct) {
@@ -635,10 +639,11 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // sourceAuthority is the namespace THIS CONNECTION authenticated as, which is what the credential table is keyed
     // by — never the traveller's origin authority carried inside its incarnation.
-    private async Task<(WorldSubmissionResult? Result, string Reason)> ResolveForwardedSubmissionAsync(string sourceAuthority, WorldMobilityIdentity mobility, WorldSubmissionPayload payload, CancellationToken ct) {
+    private async Task<(WorldSubmissionResult? Result, string Reason)> ResolveForwardedSubmissionAsync(string sourceAuthority, WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, CancellationToken ct) {
         if (WorldLocalForwardedAuthority.TryApplySubmission(
             mobility: in mobility,
             payload: payload,
+            operationId: operationId,
             reason: out _,
             result: out var applied,
             server: m_server,
@@ -660,6 +665,7 @@ public sealed class WorldPeerHost : IDisposable {
             if (forwarder.TryForwardSubmission(
                 mobility: in mobility,
                 payload: payload,
+                operationId: operationId,
                 reason: out reason,
                 result: out var forwarded,
                 source: m_server
@@ -1100,7 +1106,8 @@ public sealed class WorldPeerHost : IDisposable {
         if (!TryDecodeSubmissionFrame(
             failure: out var codecFailure,
             frame: submittedFrame,
-            payload: out var payload
+            payload: out var payload,
+            operationId: out var operationId
         )) {
             await WriteFederationRefusal(
                 ct: ct,
@@ -1127,10 +1134,20 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
+        if (payload is WorldSubmissionPayload.Mutation claimed && claimed.Value.Principal != principal) {
+            await WriteFederationRefusal(
+                stream: stream,
+                refusal: WorldFederationRefusal.SubmissionRefused,
+                detail: "world.mutation.actor_mismatch: mutation actor does not match authenticated credential",
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            return true;
+        }
         var (result, forwardReason) = await ResolveForwardedSubmissionAsync(
             ct: ct,
             mobility: mobility,
             payload: payload,
+            operationId: operationId,
             sourceAuthority: sourceAuthority
         ).ConfigureAwait(continueOnCapturedContext: false);
 

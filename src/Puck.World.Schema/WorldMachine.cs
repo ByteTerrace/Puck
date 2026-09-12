@@ -9,5 +9,7 @@ namespace Puck.World;
 /// <param name="Configuration">The provider's versioned configuration, validated through its descriptor.</param>
 /// <param name="Running">Whether the host advances this instance. A stopped instance retains its hardware state.</param>
 /// <param name="Memory">Ordered hardware bindings, independent of any display.</param>
+/// <param name="Cable">The optional standing cable endpoint owned by this machine instance.</param>
 public sealed record WorldMachine(string Name, string Engine, JsonElement Configuration, bool Running = true,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachineMemory>? Memory = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachineMemory>? Memory = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null);

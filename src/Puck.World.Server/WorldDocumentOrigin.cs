@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.Storage;
 
 namespace Puck.World.Server;
@@ -29,18 +30,29 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
 
     /// <summary>Initializes the origin over an already-resolved canonical path.</summary>
     /// <param name="resolvedPath">The canonical full path this row's document was loaded from.</param>
-    public WorldFileOrigin(string resolvedPath) {
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for this host's selected machine catalog.</param>
+    /// <param name="catalog">The selected host machine catalog, or null for structural-only callers.</param>
+    public WorldFileOrigin(string resolvedPath, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: resolvedPath);
 
         Identity = resolvedPath;
+        m_catalogFingerprint = catalogFingerprint;
+        m_catalog = catalog;
     }
+
+    private readonly string m_catalogFingerprint;
+    private readonly IMachineValidationCatalog? m_catalog;
 
     /// <inheritdoc/>
     public override string Identity { get; }
     /// <inheritdoc/>
-    public override IWorldNeighbourResolver Neighbours => new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: Identity) is { Length: > 0 } directory)
-        ? directory
-        : AppContext.BaseDirectory));
+    public override IWorldNeighbourResolver Neighbours => new WorldFileNeighbourResolver(
+        baseDirectory: () => ((Path.GetDirectoryName(path: Identity) is { Length: > 0 } directory)
+            ? directory
+            : AppContext.BaseDirectory),
+        catalogFingerprint: m_catalogFingerprint,
+        catalog: m_catalog
+    );
 
     /// <inheritdoc/>
     public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) =>
@@ -49,7 +61,9 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
             instanceIdentity: instanceIdentity,
             neighbours: Neighbours,
             path: Identity,
-            reason: out reason
+            reason: out reason,
+            catalogFingerprint: m_catalogFingerprint,
+            catalog: m_catalog
         );
     /// <inheritdoc/>
     public override bool TryResolveReference(string document, out WorldDocumentOrigin? sibling, out string reason) {
@@ -82,7 +96,7 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
             return false;
         }
 
-        sibling = new WorldFileOrigin(resolvedPath: canonical);
+        sibling = new WorldFileOrigin(resolvedPath: canonical, catalogFingerprint: m_catalogFingerprint, catalog: m_catalog);
         reason = string.Empty;
 
         return true;

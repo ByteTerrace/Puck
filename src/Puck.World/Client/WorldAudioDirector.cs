@@ -45,7 +45,7 @@ namespace Puck.World.Client;
 /// publishes. Machine sources bind through <see cref="MachineSourceResolver"/>: each <see cref="Publish"/> diffs the
 /// binder's live machines by reference for every machine-fed plan row, so a boot/eject/live-swap rebinds the mixer
 /// source and a machine booting late into a referenced slot self-heals — the keys
-/// (<see cref="AudioSourceKey.Machine"/> by slot) stay stable across swaps.</para>
+/// (<see cref="AudioSourceKey.Machine(string, string)"/>) stay stable across swaps.</para>
 /// <para><b>Threading:</b> derivation and publishing stay on the window-pump thread, and the resolver is only
 /// ever invoked there (it reads the binder's pump-owned slot table). The device pump adds two cross-thread callers —
 /// <see cref="AttachMixer"/>/<see cref="DetachMixer"/> from the render service's governor and
@@ -121,10 +121,10 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private readonly List<(string Id, VoicePatch Patch)> m_patchSet = new();
     // The headless tune hosts, by tune id (live only while a mixer is attached).
     private readonly Dictionary<string, TuneHost> m_tuneHosts = new(comparer: StringComparer.Ordinal);
-    // The live machine bindings by screen slot: which IAudioMachine each Machine-source key currently drains.
+    // The live machine bindings by named output: each distinct key drains once per mix block.
     // Gate-guarded (Publish syncs it, DetachMixer clears it); the RESOLVER is only invoked from Publish.
-    private readonly Dictionary<int, MachineBinding> m_machineBindings = new();
-    private readonly List<int> m_machineBindingScratch = new();
+    private readonly Dictionary<AudioSourceKey, MachineBinding> m_machineBindings = new();
+    private readonly List<AudioSourceKey> m_machineBindingScratch = new();
     // THE serialization gate (see the type remarks): reentrant, so Admit's SubmitTrigger nests under ReconcileSpeakers.
     private readonly Lock m_gate = new();
     // THE CUE TABLE, derived at reconcile: event token → its cue rows (gain in Q16, placement resolved to a
@@ -194,7 +194,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     /// <see langword="null"/> for an empty (or capability-less) slot. Wired once by the frame source to
     /// <see cref="WorldScreenBinder.AudioMachine"/>; invoked only from <see cref="Publish"/> (the pump thread) —
     /// it reads pump-owned binder state. Null headless: machine-fed emitters then render honest silence.</summary>
-    public Func<int, IAudioMachine?>? MachineSourceResolver { get; set; }
+    public Func<string, string, IAudioMachine?>? MachineSourceResolver { get; set; }
     /// <summary>Whether the session lever has been engaged (the drift hint's cheap discriminator).</summary>
     public bool MasterVolumeLeverEngaged {
         get {
@@ -1129,7 +1129,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         }
     }
     private static AudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
-        WorldSpeakerSource.Machine machine => AudioSourceKey.Machine(slot: machine.ScreenIndex),
+        WorldSpeakerSource.Machine machine => AudioSourceKey.Machine(instance: machine.Instance, output: machine.Output),
         WorldSpeakerSource.Tune tune => AudioSourceKey.Tune(id: tune.TuneId),
         WorldSpeakerSource.Synth synth => AudioSourceKey.Synth(patchId: synth.PatchId),
         _ => AudioSourceKey.None,
@@ -1137,7 +1137,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     // The source half of an emitter's identity signature: the source shape plus the referenced asset's content HASH
     // (the restart discriminator — a tune/patch content change re-keys the emitter; a gain edit does not).
     private static string SourceSignature(WorldSpeakerSource source, WorldDefinition definition) => source switch {
-        WorldSpeakerSource.Machine machine => $"machine:{machine.ScreenIndex}",
+        WorldSpeakerSource.Machine machine => $"machine:{machine.Instance}:{machine.Output}",
         WorldSpeakerSource.Tune tune => $"tune:{tune.TuneId}:{FindTune(
         definition: definition,
         tuneId: tune.TuneId
@@ -1150,7 +1150,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     };
     // One speaker row's live binding status: what its source identity resolves to RIGHT NOW (under the gate).
     private string SourceStatus(in AudioSourceKey source) => source.Kind switch {
-        AudioSourceKind.Machine => (m_machineBindings.ContainsKey(key: source.Slot)
+        AudioSourceKind.Machine => (m_machineBindings.ContainsKey(key: source)
         ? "bound"
         : "silent(no-machine)"),
         AudioSourceKind.Tune => (((source.Id is { } tuneId) && m_tuneHosts.ContainsKey(key: tuneId))
@@ -1196,17 +1196,20 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 continue;
             }
 
-            var slot = plan.Source.Slot;
-            var live = resolver(arg: slot);
+            if (plan.Source.MachineInstance is not { } instance || plan.Source.MachineOutput is not { } output) {
+                continue;
+            }
+
+            var live = resolver(instance, output);
             var bound = m_machineBindings.TryGetValue(
-                key: slot,
+                key: plan.Source,
                 value: out var binding
             );
 
             if (live is null) {
                 if (bound) {
-                    mixer.RemoveSource(key: AudioSourceKey.Machine(slot: slot));
-                    _ = m_machineBindings.Remove(key: slot);
+                    mixer.RemoveSource(key: plan.Source);
+                    _ = m_machineBindings.Remove(key: plan.Source);
                 }
             } else if (
                 !bound ||
@@ -1217,17 +1220,17 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             ) {
                 var source = new MachineBlockSource(machine: live);
 
-                m_machineBindings[slot] = new MachineBinding(
+                m_machineBindings[plan.Source] = new MachineBinding(
                     Machine: live,
                     Source: source
                 );
                 mixer.SetSource(
-                    key: AudioSourceKey.Machine(slot: slot),
+                    key: plan.Source,
                     source: source
                 );
             } else if (m_machineBindingsDirty) {
                 mixer.SetSource(
-                    key: AudioSourceKey.Machine(slot: slot),
+                    key: plan.Source,
                     source: binding.Source
                 );
             }
@@ -1242,7 +1245,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             foreach (var plan in m_plan) {
                 if (
                     (plan.Source.Kind == AudioSourceKind.Machine) &&
-                    (plan.Source.Slot == slot)
+                    (plan.Source == slot)
                 ) {
                     referenced = true;
 
@@ -1256,7 +1259,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         }
 
         foreach (var slot in m_machineBindingScratch) {
-            mixer.RemoveSource(key: AudioSourceKey.Machine(slot: slot));
+            mixer.RemoveSource(key: slot);
             _ = m_machineBindings.Remove(key: slot);
         }
 
@@ -1545,7 +1548,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             m_tuneHosts.Clear();
 
             foreach (var slot in m_machineBindings.Keys) {
-                m_mixer?.RemoveSource(key: AudioSourceKey.Machine(slot: slot));
+                m_mixer?.RemoveSource(key: slot);
             }
 
             m_machineBindings.Clear();

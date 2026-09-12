@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -26,6 +27,8 @@ public sealed class WorldOwnedWorlds {
     private static readonly CellName TurnSpeedState = CellName.Parse(candidate: "identity-turn-speed");
 
     private readonly string m_directory;
+    private readonly IMachineValidationCatalog? m_machineCatalog;
+    private readonly string m_catalogFingerprint;
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
     private readonly List<WorldIdentity> m_identities;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
@@ -44,10 +47,14 @@ public sealed class WorldOwnedWorlds {
     /// to leave it undelivered — this catalog carries no single owning server of its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="template"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/> or whitespace.</exception>
-    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null) {
+    /// <param name="machineCatalog">The host-selected provider metadata for owned-world loads and saves.</param>
+    /// <param name="catalogFingerprint">The selected catalog's composition identity.</param>
+    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null, IMachineValidationCatalog? machineCatalog = null, string catalogFingerprint = "") {
         ArgumentNullException.ThrowIfNull(argument: template);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         m_narrationHub = narrationHub;
+        m_machineCatalog = machineCatalog;
+        m_catalogFingerprint = catalogFingerprint;
         m_template = IdentityBase(fallback: template);
         m_directory = directory;
         MachineId = machineId;
@@ -76,7 +83,9 @@ public sealed class WorldOwnedWorlds {
                 definition: out var document,
                 neighbours: neighbours,
                 path: path,
-                reason: out var reason
+                reason: out var reason,
+                catalog: m_machineCatalog,
+                catalogFingerprint: m_catalogFingerprint
             ) ||
                 (document?.Identity is null)
             ) {
@@ -903,7 +912,9 @@ public sealed class WorldOwnedWorlds {
             definition: document,
             imports: out _,
             note: out var note,
-            path: path
+            path: path,
+            catalog: m_machineCatalog,
+            catalogFingerprint: m_catalogFingerprint
         );
 
         if (note.Length > 0) {

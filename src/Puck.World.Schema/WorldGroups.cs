@@ -4,10 +4,6 @@ using Puck.World.Protocol;
 
 namespace Puck.World;
 
-/// <summary>How a group of a kind distributes ownership of something it collectively acquires — the loot/ownership-
-/// distribution policy slot every <see cref="WorldGroupKind"/> declares. Consulted by a later lane once an ownable
-/// subject exists (<see cref="WorldOwnership"/> is the type that lane consumes); this head establishes the vocabulary
-/// and validates it, and does not yet distribute anything.</summary>
 /// <summary>Whether a runtime group of a kind survives losing its last member — the lifetime/persistence policy slot
 /// every <see cref="WorldGroupKind"/> declares. Never consulted for the authored roster: an authored row is re-seeded
 /// from the document on every boot/<c>world.reset</c> regardless of this field, so it can never dissolve out from
@@ -35,10 +31,11 @@ public enum WorldGroupEvictionPolicy : byte {
     Disband,
 }
 /// <summary>One named role a <see cref="WorldGroupKind"/> declares — the role→capability half of the kind's policy
-/// bundle. A role names nothing about membership (this head keeps a membership row role-less; see
-/// <see cref="WorldGroup.Members"/>); it exists so <c>world.grant</c> can refuse, at the door, a hold over a group
-/// principal that no role of its kind could ever exercise (the addon-reachability-honesty analog: an admitted-but-
-/// unreachable grant is a grant that lies).</summary>
+/// bundle. <see cref="WorldGroupMember.Role"/> assigns this name to an individual membership row. The catalog lets
+/// <c>world.grant</c> refuse a hold over a group principal that no declared role could exercise. During live permission
+/// expansion, only a current local member whose exact assigned role reaches the capability receives that group's row;
+/// a null or unknown role receives no capability. The catalog-wide admission check and this per-member projection are
+/// deliberately separate.</summary>
 /// <param name="Name">The role's stable name, unique within its kind.</param>
 /// <param name="Capabilities">The capabilities a member acting under this role may be granted through the group
 /// principal. Never empty — a role reaching nothing is a role that could not exist without lying about what it is

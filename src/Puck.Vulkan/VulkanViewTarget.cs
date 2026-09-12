@@ -58,7 +58,7 @@ public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
             Height: height,
             InstanceHandle: instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.TransferSource,
+            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination,
             Width: width
         ));
 

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Assets.Qr;
@@ -10,9 +9,9 @@ using Puck.World.Machines;
 namespace Puck.World;
 
 /// <summary>
-/// The diegetic screens' console surface — the wire verbs that boot, eject, and inspect the deterministic machines
-/// behind the world's screens. <c>screen.insert</c> and <c>screen.eject</c> are authoritative command macros
-/// submitting <see cref="WorldMutation.UpsertScreen"/> through the ordered submission domain;
+/// The diegetic screens' console surface — the wire verbs that insert content, detach displays, and inspect machines
+/// behind the world's screens. Named <c>screen.insert</c> submits the provider's content operation;
+/// <c>screen.eject</c> detaches the display through <see cref="WorldMutation.UpsertScreen"/>. Both use the ordered domain;
 /// <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> stays genuinely presentation, calling
 /// <see cref="WorldScreenBinder"/> directly (never a machine, never tape-covered).
 /// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c>/<c>world.machines</c> are read-only queries that make the
@@ -36,20 +35,20 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
-            description: "Boots content onto a declared screen, live: screen.insert <index> <contentPath> [engine] [options…] — <index> the engine screen index, <contentPath> a content file (a cartridge ROM, or a puck.cartridge.v1 document whose path ends in .cartridge.json, compiled through the engine's forge at bind), the optional [engine] a registered screen-machine engine id, and the trailing tokens the engine's own options string. Submits a WorldMutation.UpsertScreen through the ordered submission domain. Errors on an undeclared screen with no default geometry, an unresolved engine, an unreadable file, or rejected options.",
+            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine. The machine retains its authored configuration. Empty legacy slots additionally accept [engine] [options…] through the screen-operation protocol.",
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Genuinely presentation for every kind (never a machine, never tape-covered) — a booted machine on the slot is ejected FIRST, through the ordered domain, exactly as each former verb did. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
             handler: SourceHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.eject",
-            description: "Ejects a screen's live source, live: screen.eject <index>. A booted machine ejects through a WorldMutation.UpsertScreen submission setting the source to None; a presentation source ejects directly through the binder. Errors on an undeclared screen or a slot with no live source.",
+            description: "Ejects a screen's live source, live: screen.eject <index>. A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive; a legacy screen-owned machine uses the same source removal, while a presentation source ejects directly through the binder.",
             handler: EjectHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -125,8 +124,9 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             );
         }
 
-        if (m_server.Machines.HasMachine(index: index)) {
-            if (DeclaredScreen(index: index) is { } existing) {
+        if (DeclaredScreen(index: index) is { } existing &&
+            (m_server.Machines.HasMachine(index: index) || existing.Source is WorldScreenSource.Machine)) {
+            if (existing.Source is WorldScreenSource.Machine) {
                 var updated = existing with { Source = new WorldScreenSource.None() };
 
                 return m_link.Submit(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: updated));
@@ -142,7 +142,8 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
     }
 
     private void EjectMachineFirst(int index, WorldPrincipal principal) {
-        if (m_server.Machines.HasMachine(index: index)) {
+        if (m_server.Machines.HasMachine(index: index) &&
+            DeclaredScreen(index: index)?.Source is not WorldScreenSource.Machine) {
             if (DeclaredScreen(index: index) is { } existing) {
                 var updated = existing with { Source = new WorldScreenSource.None() };
                 _ = m_link.Submit(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: updated));
@@ -205,9 +206,23 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         var existing = DeclaredScreen(index: index);
 
+        if (existing?.Source is WorldScreenSource.Machine named) {
+            if (m_server.Machines.InstanceState(named.Instance) is not { } state) {
+                return CommandResult.Error($"[screen.insert: named machine '{named.Instance}' is unavailable]");
+            }
+            if ((engineId is not null && engineId != state.Engine) || !string.IsNullOrWhiteSpace(options)) {
+                return CommandResult.Error($"[screen.insert: '{named.Instance}' keeps its authored engine and configuration; use machine.operation for provider changes]");
+            }
+            return WorldMachineCommandModule.InsertContent(m_link, m_server.Machines, principal,
+                named.Instance, contentPath, verb: "screen.insert");
+        }
+
         if (engineId is null) {
-            if (existing?.Source is WorldScreenSource.Machine m && !string.IsNullOrEmpty(m.Engine)) {
-                engineId = m.Engine;
+            if (
+                (existing?.Source is WorldScreenSource.Machine m) &&
+                (m_server.Machines.InstanceState(m.Instance) is { } state)
+            ) {
+                engineId = state.Engine;
             } else {
                 var allEngines = machines.Engines.Values.ToArray();
 
@@ -223,29 +238,17 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             return CommandResult.Error(output: $"[screen.insert: no screen-machine engine '{engineId ?? "unspecified"}' registered]");
         }
 
-        var source = new WorldScreenSource.Machine(
-            Engine: engineId,
-            ContentPath: contentPath,
-            Options: options,
-            Cable: (existing?.Source is WorldScreenSource.Machine prevMachine ? prevMachine.Cable : null)
+        m_link.SubmitScreenOp(
+            op: new WorldScreenOp.Insert(
+                Index: index,
+                ContentPath: contentPath,
+                EngineId: engineId,
+                Options: options
+            ),
+            principal: principal
         );
 
-        var updated = (existing is not null)
-            ? existing with { Source = source }
-            : new WorldScreen(
-                HalfDepth: 0.05f,
-                HalfHeight: 0.45f,
-                HalfWidth: 0.8f,
-                Index: index,
-                Origin: new DocumentVector3(0f, 1.5f, 0f),
-                Right: new DocumentVector3(1f, 0f, 0f),
-                Round: 0.02f,
-                Route: WorldScreenRoute.Passive,
-                Source: source,
-                Up: new DocumentVector3(0f, 1f, 0f)
-            );
-
-        return m_link.Submit(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: updated));
+        return CommandResult.None;
     }
 
     private CommandResult LinksHandler(CommandContext context, WireArgs args) {

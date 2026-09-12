@@ -51,4 +51,8 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
         if (Volatile.Read(ref m_current) is { } current) { return current.TryForwardSubmission(payload, out result, out reason); }
         result = null; reason = Unavailable; return false;
     }
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
+        if (Volatile.Read(ref m_current) is { } current) { return current.TryForwardSubmission(payload, operationId, out result, out reason); }
+        result = new WorldSubmissionResult.Refusal("world.forwarding.unavailable", Unavailable); reason = Unavailable; return false;
+    }
 }

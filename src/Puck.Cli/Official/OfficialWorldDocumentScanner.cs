@@ -29,6 +29,7 @@ internal static class OfficialWorldDocumentScanner {
         composedDefinition = null;
 
         var machines = CliWorldVocabulary.EnsureInstalled();
+        var catalogFingerprint = CliWorldVocabulary.Fingerprint(machines);
 
         var full = Path.GetFullPath(path: worldsDirectory);
         var rootPath = Path.Combine(path1: full, path2: RootDocumentName);
@@ -72,13 +73,13 @@ internal static class OfficialWorldDocumentScanner {
             entries.Add(item: entry!);
         }
 
-        if (!WorldDefinitionFileSource.TryComposeDocumentTree(path: rootPath, tree: out var tree, reason: out reason)) {
+        if (!WorldDefinitionFileSource.TryComposeDocumentTree(path: rootPath, tree: out var tree, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: machines)) {
             reason = $"composing {RootDocumentName}: {reason}";
 
             return false;
         }
 
-        if (!WorldDefinitionFileSource.TryParseComposed(definition: out var definition, json: tree!.ToJsonString(), neighbours: null, reason: out reason, sourceName: rootPath, validateAdjacencyClaims: false)) {
+        if (!WorldDefinitionFileSource.TryParseComposed(definition: out var definition, json: tree!.ToJsonString(), neighbours: null, reason: out reason, sourceName: rootPath, validateAdjacencyClaims: false, catalog: machines)) {
             reason = $"parsing composed {RootDocumentName}: {reason}";
 
             return false;

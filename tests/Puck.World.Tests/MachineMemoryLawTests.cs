@@ -1,9 +1,12 @@
 using System.Numerics;
+using System.Text.Json;
+using Puck.Abstractions.Machines;
 
 using Xunit;
 
 using Puck.GamingBricks.Forge;
 using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World.Tests;
 
@@ -63,6 +66,16 @@ public sealed class MachineMemoryLawTests {
     }
     private static WorldDefinition WithMachineScreen(IReadOnlyList<WorldScreenMemory>? memory) {
         var document = Fixtures.BuildDocument();
+        var namedMemory = memory?.Select((binding, index) => new WorldMachineMemory(
+            Name: $"binding{index}",
+            Direction: binding.Direction == WorldScreenMemoryDirection.Read ? WorldMachineMemoryDirection.Read : WorldMachineMemoryDirection.Write,
+            Space: "bus",
+            Format: binding.Width == 1 ? "u8" : "u16",
+            Row: binding.Row,
+            Address: checked((ulong)binding.Address),
+            Key: binding.Key,
+            Access: binding.Direction == WorldScreenMemoryDirection.Read ? "inspect" : "patch"
+        )).ToArray();
 
         document = document.WithWorldState(rows: [
             .. document.State,
@@ -71,6 +84,9 @@ public sealed class MachineMemoryLawTests {
         ]);
 
         return document with {
+            MachinesRaw = [.. document.Machines, new WorldMachine("cabinet", CgbEngine,
+                JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = "fast", content = new { path = CartridgePath() } }),
+                Memory: namedMemory)],
             ScreensRaw = [
                 .. document.Screens,
                 new WorldScreen(
@@ -82,9 +98,9 @@ public sealed class MachineMemoryLawTests {
                     HalfHeight: 0.27f,
                     HalfDepth: 0.03f,
                     Round: 0f,
-                    Source: new WorldScreenSource.Machine(Engine: CgbEngine, ContentPath: CartridgePath(), Options: "cgb fast"),
+                    Source: new WorldScreenSource.Machine("cabinet", "video"),
                     Route: WorldScreenRoute.Passive,
-                    Memory: memory
+                    Memory: null
                 ),
             ],
         };
@@ -114,7 +130,7 @@ public sealed class MachineMemoryLawTests {
         ]);
         using var fixture = Fixtures.FreshServer(definition: document, machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
-        Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen), userMessage: fixture.Server.Machines.State(index: MachineScreen)?.Fault);
+        Assert.NotNull(fixture.Server.Machines.InstanceState("cabinet"));
 
         for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
@@ -123,10 +139,9 @@ public sealed class MachineMemoryLawTests {
         Assert.Equal(expected: (long)readInitial, actual: Slot(definition: fixture.Server.Definition, name: "pipX"));
 
         // The control: peeking the same address directly agrees with the mirror — the binding did not invent a value.
-        var (ok, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: xAddress, value: out var direct);
-
-        Assert.True(condition: ok);
-        Assert.Equal(expected: readInitial, actual: direct);
+        var direct = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)xAddress), 1));
+        Assert.Equal(MachineAccessStatus.Available, direct.Status);
+        Assert.Equal(expected: readInitial, actual: (byte)direct.Value);
     }
     [Fact]
     public void AWriteBindingsPokeIsVisibleToTheCartridgeOnItsNextFrame() {
@@ -137,34 +152,31 @@ public sealed class MachineMemoryLawTests {
         ]);
         using var fixture = Fixtures.FreshServer(definition: document, machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
-        Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen), userMessage: fixture.Server.Machines.State(index: MachineScreen)?.Fault);
+        Assert.NotNull(fixture.Server.Machines.InstanceState("cabinet"));
 
         for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
         }
 
         // Before the poke the variable still carries its own boot-initialized value, never the console-side row.
-        var (beforeOk, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: yAddress, value: out var before);
-
-        Assert.True(condition: beforeOk);
-        Assert.Equal(expected: writeInitial, actual: before);
+        var beforeResult = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)yAddress), 1));
+        Assert.Equal(MachineAccessStatus.Available, beforeResult.Status);
+        Assert.Equal(expected: writeInitial, actual: (byte)beforeResult.Value);
 
         // wall-north/wall-south clamp y to 8..128, so 50 rides through untouched by the cartridge's own rules.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "pipY", Key: WorldStateRow.SlotKey.Value, Value: 50, Kind: WorldDocumentWriteKind.Set));
         fixture.Step();
 
-        var (afterOk, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: yAddress, value: out var after);
-
-        Assert.True(condition: afterOk);
-        Assert.Equal(expected: (byte)50, actual: after);
+        var afterResult = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)yAddress), 1));
+        Assert.Equal(MachineAccessStatus.Available, afterResult.Status);
+        Assert.Equal(expected: (byte)50, actual: (byte)afterResult.Value);
 
         // A second quiet tick: the poke already landed, so the byte holds — nothing re-pokes it away.
         fixture.Step();
 
-        var (stillOk, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: yAddress, value: out var still);
-
-        Assert.True(condition: stillOk);
-        Assert.Equal(expected: (byte)50, actual: still);
+        var stillResult = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)yAddress), 1));
+        Assert.Equal(MachineAccessStatus.Available, stillResult.Status);
+        Assert.Equal(expected: (byte)50, actual: (byte)stillResult.Value);
     }
     [Fact]
     public void AnAddressOutsideTheEnginesMemoryRefusesByName() {
@@ -175,9 +187,11 @@ public sealed class MachineMemoryLawTests {
             new WorldScreenMemory(Address: 0xFFFE, Width: 2, Row: "pipX", Key: null, Direction: WorldScreenMemoryDirection.Read),
         ]);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
-        Assert.Contains(expectedSubstring: "is outside the engine's memory", actualString: deniedReason, comparisonType: StringComparison.Ordinal);
-        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var controlReason), userMessage: controlReason);
+        using var host = new WorldMachineHost([], TestHookInstaller.CreateMachineCatalog());
+        Assert.False(condition: host.TryPrepare(null, denied, out _, out var deniedReason));
+        Assert.Contains(expectedSubstring: "outside space", actualString: deniedReason, comparisonType: StringComparison.Ordinal);
+        Assert.True(condition: host.TryPrepare(null, admitted, out var plan, out var controlReason), userMessage: controlReason);
+        plan!.Dispose();
     }
     // A Read binding must peek every tick to know whether the byte moved at all — that peek's own marshaled round
     // trip through the machine's worker thread (Puck.GamingBricks.QueuedMachineWorker.RunMemoryAccess) is a real,

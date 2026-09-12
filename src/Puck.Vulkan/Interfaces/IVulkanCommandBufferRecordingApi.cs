@@ -181,6 +181,8 @@ public interface IVulkanCommandBufferRecordingApi {
         float blue,
         float alpha
     );
+    /// <summary>Records vkCmdFillBuffer with a zero pattern.</summary>
+    void FillBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes);
     /// <summary>Records a copy of a width × height region between two 2D, single-layer color images, from origin to origin.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>

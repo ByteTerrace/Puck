@@ -18,6 +18,15 @@ public interface IWorldTransferForwarder {
     bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason);
     /// <summary>Forwards one typed submission addressed to a departed traveler incarnation.</summary>
     bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason);
+    /// <summary>Forwards a typed submission while preserving its caller operation id.</summary>
+    bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
+        if (operationId == Guid.Empty && payload is WorldSubmissionPayload.Mutation) {
+            result = new WorldSubmissionResult.Refusal("world.mutation.operation_id_missing", "mutation operation id is required");
+            reason = "mutation operation id is required";
+            return false;
+        }
+        return TryForwardSubmission(source, in mobility, payload, out result, out reason);
+    }
     /// <summary>Resolves the final observable authority epoch behind a departed traveler incarnation.</summary>
     bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription route, out string reason);
     /// <summary>Streams the current owner's projection for an already authenticated departed traveler.</summary>

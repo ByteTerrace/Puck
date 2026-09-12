@@ -17,6 +17,11 @@
         <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
     </ItemGroup>
     <ItemGroup>
+        <VertexShaderSource Include="Assets\Runtime\pipeline-preview.vert.hlsl" />
+        <FragmentShaderSource Include="Assets\Runtime\pipeline-preview.frag.hlsl" />
+        <Content Include="Assets\Runtime\pipeline-preview.vert.hlsl;Assets\Runtime\pipeline-preview.frag.hlsl;Assets\Runtime\pipeline-preview.vert.spv;Assets\Runtime\pipeline-preview.frag.spv;Assets\Runtime\pipeline-preview.vert.dxil;Assets\Runtime\pipeline-preview.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources: plain content, never fed to the
              HLSL-to-SPIR-V/DXIL recipe (build/Shaders.targets), since a kernel compiles at cs_5_0 on its own device
              at run time (Win32D3D11ProbeKernelRunner), not ahead of time. -->

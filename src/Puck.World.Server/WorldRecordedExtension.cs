@@ -40,7 +40,9 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
     /// <inheritdoc/>
     public WorldExtensionReplayPolicy ReplayPolicy => WorldExtensionReplayPolicy.Recorded;
 
-    /// <summary>Submits an immutable contribution. Returns its correlation id; the next edit drain decides acceptance.</summary>
+    /// <summary>Submits an immutable contribution. Returns its correlation id; the next edit drain decides acceptance.
+    /// The trusted extension mints a distinct operation id when the contribution is admitted, and the id remains on
+    /// the recorded envelope through replay.</summary>
     /// <param name="mutation">A mutation bearing this provider's identity.</param>
     /// <exception cref="InvalidOperationException">The identity, requested scope, or timeline does not admit submission.</exception>
     /// <exception cref="ObjectDisposedException">This runtime instance was retired.</exception>

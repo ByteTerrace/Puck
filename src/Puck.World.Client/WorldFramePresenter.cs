@@ -244,7 +244,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // reference each produced frame, so a boot/eject/live-swap rebinds the mixer source and a machine booting
         // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
         // invoked from the director's pump-thread Publish.
-        audio.MachineSourceResolver = binder.AudioMachine;
+        audio.MachineSourceResolver = binder.AudioOutput;
         m_frameRate = frameRate;
         m_client = client;
         m_anchor = anchor;

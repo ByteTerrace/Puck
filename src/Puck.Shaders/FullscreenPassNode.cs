@@ -6,447 +6,209 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>
-/// A shader set run as one fullscreen-triangle graphics pass over an inner render node's output, driven entirely
-/// by the set's <see cref="ShaderSetManifest"/>: the pipeline is built from the manifest's stages and bindings, the
-/// inner surface is bound at the manifest's one <c>sampledImage</c> binding, and the push-constant block is filled
-/// field by field from the manifest's declared sources — a bound config value, the fixed-step simulation clock
-/// (quantized to an authored rate, so a frame carries the value of the period its <c>ElapsedTicks</c> falls in on
-/// every run, machine, and backend), the pass's resolution, or its own frame counter. The pass owns its render
-/// target, fence, pipeline, and descriptor set, and disposes the inner node with itself.
-/// </summary>
+/// <summary>Adapts a shipped <see cref="ShaderSetManifest"/> fullscreen effect to the canonical shader pipeline executor.</summary>
+/// <remarks>The inner node produces the source surface; the adapter preserves its capture and device-lifetime semantics.</remarks>
 public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
-    private readonly IGpuCommandRecorder m_commandRecorder;
-    private readonly Func<uint, uint, IGpuRenderTarget> m_createRenderTarget;
     private readonly NodeDescriptor m_descriptor;
-    private readonly IGpuDescriptorAllocator m_descriptorAllocator;
-    private readonly IGpuDeviceContext m_deviceContext;
-    private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
-    private readonly uint m_height;
     private readonly IRenderNode m_inner;
     private readonly ShaderSetManifest m_manifest;
-    private readonly IGpuPipelineFactory m_pipelineFactory;
-    private readonly byte[] m_pushConstantData;
-    private readonly ShaderPushConstantLayout? m_pushConstantLayout;
-    private readonly IGpuQueueSubmitter m_queueSubmitter;
-    private readonly uint m_sampledImageBinding;
-    private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
-    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
-    private readonly IGpuVertexBufferFactory m_vertexBufferFactory;
-    private readonly ReadOnlyMemory<byte> m_vertexBytecode;
     private readonly uint m_width;
-
-    private readonly CaptureRequestSlot m_capture = new();
-    private readonly CapturePngWriter m_capturePng = new();
-
+    private readonly uint m_height;
+    private readonly bool m_hostsOnDirectX;
+    private readonly IFullscreenPassServices m_services;
+    private ShaderPipelineRenderNode? m_executor;
+    private readonly IGpuComputeServices? m_compute;
+    private GpuPixelFormat? m_inputFormat;
+    private uint m_inputWidth;
+    private uint m_inputHeight;
+    private readonly ShaderPushConstantLayout? m_layout;
+    private readonly byte[] m_constants;
     private ShaderConfigValues m_config;
-    private nint m_descriptorPool;
-    private nint m_descriptorSet;
-    private bool m_disposed;
-    private uint m_frameCounter;
-    private IGpuSubmissionFence? m_frameFence;
-    private IGpuShaderModule? m_fragmentShader;
-    private nint m_lastImageViewHandle;
     private Dictionary<string, ShaderConfigValue>? m_liveConfig;
     private Dictionary<string, byte[]>? m_liveConfigBytes;
-    private IGpuPipeline? m_pipeline;
-    private IGpuSurfaceReadback? m_readback;
-    private IGpuRenderTarget? m_renderTarget;
-    private bool m_resourcesReady;
-    private nint m_sampler;
-    private IGpuVertexBuffer? m_vertexBuffer;
-    private IGpuShaderModule? m_vertexShader;
+    private bool m_disposed;
+    private readonly CaptureRequestSlot m_capture = new();
 
-    /// <summary>Initializes a new instance of the <see cref="FullscreenPassNode"/> class.</summary>
-    /// <param name="inner">The producer whose output this pass samples; disposed with this node.</param>
-    /// <param name="manifest">The loaded shader set: a graphics set with exactly one <c>sampledImage</c> binding and no
-    /// other bindings.</param>
-    /// <param name="config">The set's bound configuration (<see cref="ShaderSetManifest.BindConfig"/>).</param>
-    /// <param name="services">The GPU services, on the same device as <paramref name="inner"/>.</param>
-    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 — selects the bytecode.</param>
-    /// <param name="width">The pass width in pixels, fixed for the node's life.</param>
-    /// <param name="height">The pass height in pixels.</param>
-    /// <exception cref="InvalidDataException"><paramref name="manifest"/> is not a graphics set, or its bindings are
-    /// not exactly one <c>sampledImage</c>.</exception>
-    public FullscreenPassNode(IRenderNode inner, ShaderSetManifest manifest, ShaderConfigValues config, IFullscreenPassServices services, bool hostsOnDirectX, uint width, uint height) {
-        ArgumentNullException.ThrowIfNull(argument: inner);
-        ArgumentNullException.ThrowIfNull(argument: manifest);
-        ArgumentNullException.ThrowIfNull(argument: config);
-        ArgumentNullException.ThrowIfNull(argument: services);
-
+    public FullscreenPassNode(IRenderNode inner, ShaderSetManifest manifest, ShaderConfigValues config,
+        IFullscreenPassServices services, bool hostsOnDirectX, uint width, uint height) {
+        ArgumentNullException.ThrowIfNull(inner);
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentOutOfRangeException.ThrowIfZero(width);
+        ArgumentOutOfRangeException.ThrowIfZero(height);
         if (!manifest.IsGraphics) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' is a compute set; a fullscreen pass needs a vertex+fragment set.");
-        }
-        if ((manifest.Bindings.Count != 1) || (manifest.Bindings[0].Kind != ShaderSetManifestBindingKind.SampledImage) || (manifest.Bindings[0].Count != 1)) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' must declare exactly one sampledImage binding (the inner surface) and nothing else to run as a fullscreen pass.");
+            throw new InvalidDataException($"'{manifest.Name}' is a compute set; a fullscreen pass needs vertex and fragment stages.");
         }
 
-        var bytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX);
+        if (manifest.Bindings.Count != 1 || manifest.Bindings[0].Kind != ShaderSetManifestBindingKind.SampledImage || manifest.Bindings[0].Count != 1) {
+            throw new InvalidDataException($"'{manifest.Name}' must declare exactly one sampledImage binding (the inner surface) and nothing else to run as a fullscreen pass.");
+        }
 
-        m_commandRecorder = services.CommandRecorder;
-        m_config = config;
-        m_createRenderTarget = services.CreateRenderTarget;
-        m_descriptor = new NodeDescriptor(Name: manifest.Name, SurfaceId: SurfaceId.New());
-        m_descriptorAllocator = services.DescriptorAllocator;
-        m_deviceContext = services.DeviceContext;
-        m_fragmentBytecode = File.ReadAllBytes(path: manifest.BytecodePath(stem: manifest.Stages.Fragment!, bytecodeExtension: bytecodeExtension));
-        m_height = height;
-        m_inner = inner;
-        m_manifest = manifest;
-        m_pipelineFactory = services.PipelineFactory;
-        m_pushConstantLayout = manifest.PushConstantLayout;
-        m_pushConstantData = new byte[(m_pushConstantLayout?.SizeBytes ?? 0)];
-        m_queueSubmitter = services.QueueSubmitter;
-        m_sampledImageBinding = manifest.Bindings[0].VulkanBinding;
-        m_shaderModuleFactory = services.ShaderModuleFactory;
-        m_surfaceTransferFactory = services.SurfaceTransferFactory;
-        m_vertexBufferFactory = services.VertexBufferFactory;
-        m_vertexBytecode = File.ReadAllBytes(path: manifest.BytecodePath(stem: manifest.Stages.Vertex!, bytecodeExtension: bytecodeExtension));
-        m_width = width;
-
-        FillStaticPushConstants();
+        m_descriptor = new NodeDescriptor(manifest.Name, SurfaceId.New());
+        m_inner = inner; m_manifest = manifest; m_config = config;
+        m_layout = manifest.PushConstantLayout; m_constants = new byte[m_layout?.SizeBytes ?? 0];
+        m_width = width; m_height = height; m_hostsOnDirectX = hostsOnDirectX; m_services = services;
+        FillStaticConstants();
+        if (services.ComputeServices is not null) {
+            m_compute = services.ComputeServices;
+        }
     }
 
-    /// <summary>Gets the pass's live config values — the manifest's bound config, as overwritten by any
-    /// <see cref="TrySetConfig"/> call since.</summary>
+    /// <summary>Gets the live configuration values applied to the manifest constants.</summary>
     public ShaderConfigValues Config => m_config;
-    /// <inheritdoc/>
+    /// <summary>Gets this adapter node descriptor.</summary>
     public NodeDescriptor Descriptor => m_descriptor;
-    /// <inheritdoc/>
-    public string? PendingCapturePath => (m_capture.PendingPath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
+    public string? PendingCapturePath => m_capture.PendingPath ?? m_executor?.PendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath;
 
-    /// <inheritdoc/>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_capture.Refuse(error: new ObjectDisposedException(objectName: GetType().Name));
-        try {
-            ReleaseGpuResources();
-        } finally {
-            m_inner.Dispose();
-        }
-    }
-    /// <inheritdoc/>
-    public void OnDeviceLost() {
-        ReleaseGpuResources();
-        m_inner.OnDeviceLost();
-    }
-    /// <inheritdoc/>
+    /// <summary>Produces one adapted frame from the inner node.</summary>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {
             return default;
         }
 
-        // Same queue, same device: the inner producer's output is already shader-readable for the fragment stage
-        // before its submit, so this pass samples it with no CPU wait.
-        var inner = m_inner.ProduceFrame(context: context);
-
-        if (inner.IsEmpty || (0 == inner.ImageViewHandle)) {
-            ForwardPendingCapture();
-
-            return inner;
+        var surface = m_inner.ProduceFrame(context);
+        if (surface.IsEmpty || surface.ImageViewHandle == 0) {
+            m_capture.Forward(m_inner as ICaptureRequestTarget);
+            return surface;
         }
-
-        EnsureResources();
-        m_frameFence!.Wait();
-
-        if (inner.ImageViewHandle != m_lastImageViewHandle) {
-            m_descriptorAllocator.WriteCombinedImageSampler(
-                arrayElement: 0,
-                binding: m_sampledImageBinding,
-                descriptorSetHandle: m_descriptorSet,
-                deviceHandle: m_deviceContext.DeviceHandle,
-                imageViewHandle: inner.ImageViewHandle,
-                samplerHandle: m_sampler
-            );
-
-            m_lastImageViewHandle = inner.ImageViewHandle;
+        var format = ToGpuFormat(surface.Format);
+        var executor = m_executor;
+        if (executor is null || m_inputFormat != format || m_inputWidth != surface.Width || m_inputHeight != surface.Height) {
+            executor?.Dispose();
+            executor = m_executor = CreateExecutor(m_compute ?? throw new InvalidOperationException("Fullscreen pass services do not provide compute services."), format, surface.Width, surface.Height);
+            m_inputFormat = format;
+            m_inputWidth = surface.Width;
+            m_inputHeight = surface.Height;
         }
-
-        FillPerFramePushConstants(elapsedTicks: context.ElapsedTicks);
-        m_frameCounter++;
-
-        Span<nint> commandBuffers = [RecordPass()];
-
-        m_queueSubmitter.Submit(commandBufferHandles: commandBuffers, deviceContext: m_deviceContext, fence: m_frameFence!);
-        CaptureIfPending();
-
-        return Surface.SameDeviceImage(
-            imageHandle: m_renderTarget!.ImageHandle,
-            imageViewHandle: m_renderTarget!.ImageViewHandle,
-            width: m_width,
-            height: m_height,
-            format: SurfaceFormat.R8G8B8A8Unorm
-        );
+        executor.BindImage("input", new ShaderPipelineExternalImage(surface.ImageHandle, surface.ImageViewHandle, surface.Width, surface.Height,
+            format, GpuImageLayout.ShaderReadOnly));
+        m_capture.Forward(executor);
+        return executor.ProduceFrame(context);
     }
-    /// <inheritdoc/>
+
+    /// <summary>Arms a capture that is forwarded to the current executor when available.</summary>
     public void RequestCapture(FrameCaptureRequest request) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        m_capture.Arm(
-            pendingPath: PendingCapturePath,
-            request: request
-        );
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        m_capture.Arm(request, PendingCapturePath);
     }
-    /// <summary>Overwrites one scalar-float config field's live value, and — when a push-constant slot sources it —
-    /// the slot's bytes for the next frame. The write a presentation binding drives per frame; the manifest's
-    /// originally bound config is unaffected. Allocates only on a field's first write; later writes to the same
-    /// field update the live bytes in place.</summary>
-    /// <param name="field">The config field's name.</param>
-    /// <param name="value">The new value; must be finite and inside the field's declared range.</param>
-    /// <returns><see langword="true"/> when <paramref name="field"/> names a <c>float</c>-typed config field of this
-    /// pass's manifest and <paramref name="value"/> satisfies its schema; <see langword="false"/> for an unknown
-    /// field, any other type (a vector, <c>uint</c>, or <c>int</c> field), or a value the field's own
-    /// <c>min</c>/<c>max</c> would refuse at bind time.</returns>
+
+    /// <summary>Updates a declared floating-point manifest parameter.</summary>
     public bool TrySetConfig(string field, float value) {
-        if ((m_manifest.Config is not { } schema) || !schema.TryGetValue(key: field, value: out var declared) || (declared.Type != ShaderValueType.Float)) {
-            return false;
-        }
-        if (!float.IsFinite(f: value) || !ShaderConfigBinding.InRange(field: declared, value: value)) {
+        if (m_manifest.Config is not { } schema || !schema.TryGetValue(field, out var declared) ||
+            declared.Type != ShaderValueType.Float || !float.IsFinite(value) || !ShaderConfigBinding.InRange(declared, value)) {
             return false;
         }
 
         if (m_liveConfig is not { } live) {
-            live = new Dictionary<string, ShaderConfigValue>(comparer: StringComparer.Ordinal);
-
+            live = new Dictionary<string, ShaderConfigValue>(StringComparer.Ordinal);
             foreach (var name in m_config.Names) {
                 live[name] = m_config[name];
             }
 
-            m_liveConfig = live;
-            m_liveConfigBytes = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal);
-            m_config = new ShaderConfigValues(values: live);
+            m_liveConfig = live; m_liveConfigBytes = new Dictionary<string, byte[]>(StringComparer.Ordinal); m_config = new ShaderConfigValues(live);
         }
-
-        if (!m_liveConfigBytes!.TryGetValue(key: field, value: out var bytes)) {
-            bytes = new byte[ShaderValueTypes.ComponentBytes];
-            m_liveConfigBytes[field] = bytes;
-            live[field] = new ShaderConfigValue(Bytes: bytes, Type: ShaderValueType.Float);
+        if (!m_liveConfigBytes!.TryGetValue(field, out var bytes)) {
+            bytes = new byte[ShaderValueTypes.ComponentBytes]; m_liveConfigBytes[field] = bytes; live[field] = new ShaderConfigValue(ShaderValueType.Float, bytes);
         }
-
-        BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: value);
-
-        if (m_pushConstantLayout is { } layout) {
-            foreach (var slot in layout.Slots) {
-                if ((slot.Kind == ShaderPushConstantSourceKind.Config) && string.Equals(a: slot.ConfigField, b: field, comparisonType: StringComparison.Ordinal)) {
-                    bytes.CopyTo(destination: m_pushConstantData.AsSpan(start: ((int)slot.Offset)));
-                }
+        BinaryPrimitives.WriteSingleLittleEndian(bytes, value);
+        if (m_layout is { } layout) {
+            foreach (var slot in layout.Slots.Where(slot => slot.Kind == ShaderPushConstantSourceKind.Config && slot.ConfigField == field)) {
+                bytes.CopyTo(m_constants.AsSpan((int)slot.Offset));
             }
         }
 
         return true;
     }
 
-    // Reads back this pass's own render target (the composed result — what the player sees when nothing draws over
-    // it) and writes it as a PNG.
-    private void CaptureIfPending() =>
-        m_capture.Serve(
-            failureLabel: "[capture] failed",
-            writer: WriteCapture
-        );
-    private void WriteCapture(string path) {
-        m_capturePng.ThrowIfUnavailable(path: path);
+    /// <summary>Forwards device loss to the active executor and inner node.</summary>
+    public void OnDeviceLost() { m_executor?.OnDeviceLost(); m_inner.OnDeviceLost(); }
 
-        m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
-
-        var pixels = m_readback.Read(
-            bytesPerPixel: 4,
-            deviceContext: m_deviceContext,
-            format: GpuPixelFormat.R8G8B8A8Unorm,
-            height: m_height,
-            sourceImageHandle: m_renderTarget!.ImageHandle,
-            sourceLayout: GpuImageLayout.ShaderReadOnly,
-            width: m_width
-        );
-
-        if (!m_capturePng.TryWrite(
-            height: ((int)m_height),
-            path: path,
-            rgba: pixels,
-            width: ((int)m_width)
-        )) {
-            throw new NotSupportedException(message: "PNG capture is unavailable.");
-        }
-
-        Console.Error.WriteLine(value: $"[capture] {m_manifest.Name} -> {path}");
-    }
-    // Passing the inner frame through untouched: hand a pending capture down so the readback lands on whatever
-    // actually produced the shown frame. Keeping it armed when the inner cannot serve it is what stops a request
-    // from vanishing silently — the request remains armed until a node serves it or disposal fails it.
-    private void ForwardPendingCapture() => m_capture.Forward(target: (m_inner as ICaptureRequestTarget));
-    private void EnsureResources() {
-        if (m_resourcesReady) {
+    /// <summary>Releases the active executor and inner node.</summary>
+    public void Dispose() {
+        if (m_disposed) {
             return;
         }
 
-        m_renderTarget = m_createRenderTarget(m_width, m_height);
-        m_frameFence = m_queueSubmitter.CreateSubmissionFence(deviceContext: m_deviceContext);
-        m_vertexShader = m_shaderModuleFactory.Create(bytecode: m_vertexBytecode, deviceContext: m_deviceContext, stage: GpuShaderStage.Vertex);
-        m_fragmentShader = m_shaderModuleFactory.Create(bytecode: m_fragmentBytecode, deviceContext: m_deviceContext, stage: GpuShaderStage.Fragment);
-        m_vertexBuffer = m_vertexBufferFactory.Create(deviceContext: m_deviceContext, strideBytes: FullscreenTriangle.StrideBytes, vertexData: FullscreenTriangle.CreateVertexData());
-
-        var description = new GpuGraphicsPipelineDescription(
-            Name: m_manifest.Name,
-            VertexInput: new GpuVertexInputLayout(
-                StrideBytes: FullscreenTriangle.StrideBytes,
-                Attributes: [new GpuVertexAttribute(Format: GpuVertexFormat.R32G32Float, Location: 0, OffsetBytes: 0)]
-            ),
-            TextureSamplerCount: 1,
-            EnableStorageBuffer: false,
-            PushConstantBinding: ((m_pushConstantLayout is { } layout)
-                ? new GpuPushConstantBinding(data: new byte[layout.SizeBytes], offset: 0, stageFlags: layout.Stages)
-                : null)
-        );
-
-        m_manifest.ValidateBindings(description: description);
-        m_pipeline = m_pipelineFactory.Create(
-            description: description,
-            deviceContext: m_deviceContext,
-            fragmentShaderModule: m_fragmentShader,
-            height: m_height,
-            renderTarget: m_renderTarget,
-            vertexShaderModule: m_vertexShader,
-            width: m_width
-        );
-
-        var deviceHandle = m_deviceContext.DeviceHandle;
-
-        m_descriptorPool = m_descriptorAllocator.CreatePool(
-            deviceHandle: deviceHandle,
-            sizes: new GpuDescriptorPoolSizes(AccelerationStructureCount: 0, CombinedImageSamplerCount: 1, MaxSets: 1, StorageBufferCount: 0, StorageImageCount: 0)
-        );
-        m_descriptorSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
-        m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
-        m_resourcesReady = true;
+        m_disposed = true;
+        m_capture.Refuse(new ObjectDisposedException(nameof(FullscreenPassNode)));
+        try { m_executor?.Dispose(); } finally { m_inner.Dispose(); }
     }
-    private void FillPerFramePushConstants(ulong elapsedTicks) {
-        if (m_pushConstantLayout is not { } layout) {
+
+    private ShaderPipelineRenderNode CreateExecutor(IGpuComputeServices compute, GpuPixelFormat inputFormat, uint inputWidth, uint inputHeight) {
+        var input = new ShaderPipelineResource("input", ShaderPipelineResourceKind.Image, inputFormat.ToString(), ShaderPipelineDimensions.Absolute(inputWidth, inputHeight), Initialization: ShaderPipelineInitialization.External);
+        var output = new ShaderPipelineResource("output", ShaderPipelineResourceKind.Image, "R8G8B8A8Unorm", ShaderPipelineDimensions.Relative());
+        var pass = new ShaderPipelinePass(Name: m_manifest.Name, Source: Path.Combine(m_manifest.Directory, m_manifest.Stages.Fragment! + ".hlsl"),
+            Language: ShaderSourceLanguage.Hlsl, EntryPoint: "PSMain", Kind: ShaderPipelinePassKind.Fullscreen,
+            Inputs: [new ResourceReference("input", Binding: m_manifest.Bindings[0].VulkanBinding)], Outputs: [new ResourceReference("output")]);
+        var definition = new ShaderPipelineDefinition(m_manifest.Name, [input, output], [pass], [(ShaderPipelineOutput)"output"]);
+        var plan = ShaderPipelineCompiler.Plan(definition);
+       var spirv = new Dictionary<ShaderStage, ReadOnlyMemory<byte>> {
+            [ShaderStage.Vertex] = File.ReadAllBytes(m_manifest.BytecodePath(m_manifest.Stages.Vertex!, ".spv")),
+            [ShaderStage.Fragment] = File.ReadAllBytes(m_manifest.BytecodePath(m_manifest.Stages.Fragment!, ".spv")),
+        };
+        var dxil = new Dictionary<ShaderStage, ReadOnlyMemory<byte>> {
+            [ShaderStage.Vertex] = File.ReadAllBytes(m_manifest.BytecodePath(m_manifest.Stages.Vertex!, ".dxil")),
+            [ShaderStage.Fragment] = File.ReadAllBytes(m_manifest.BytecodePath(m_manifest.Stages.Fragment!, ".dxil")),
+        };
+        var compiled = new CompiledShader(m_manifest.Name, Path.Combine(m_manifest.Directory, m_manifest.Name + ShaderSetManifest.FileSuffix), "manifest", spirv, dxil, []);
+        var candidate = new CompiledShaderPipeline(plan, new Dictionary<string, CompiledShader> { [m_manifest.Name] = compiled });
+        var constants = new Dictionary<string, IShaderPipelinePassConstants>(StringComparer.Ordinal) {
+            [m_manifest.Name] = new ManifestPassConstants(m_layout, () => m_config, m_constants),
+        };
+        return new ShaderPipelineRenderNode(candidate, compute, m_services.DeviceContext, m_hostsOnDirectX,
+            m_width, m_height, m_services, passConstants: constants, outputLayout: GpuImageLayout.ShaderReadOnly,
+            positionVertexPasses: new HashSet<string>(StringComparer.Ordinal) { m_manifest.Name });
+    }
+
+    private void FillStaticConstants() {
+        if (m_layout is not { } layout) {
             return;
         }
 
         foreach (var slot in layout.Slots) {
-            var destination = m_pushConstantData.AsSpan(start: ((int)slot.Offset), length: ((int)slot.Type.SizeBytes()));
-
+            var destination = m_constants.AsSpan((int)slot.Offset, (int)slot.Type.SizeBytes());
             switch (slot.Kind) {
-                case ShaderPushConstantSourceKind.Tick: {
-                        var period = QuantizationPeriodTicks(slot: slot);
-                        var value = (elapsedTicks / period);
+                case ShaderPushConstantSourceKind.Config: m_config[slot.ConfigField!].Bytes.Span.CopyTo(destination); break;
+                case ShaderPushConstantSourceKind.Resolution:
+                    if (slot.Type == ShaderValueType.Float2) { BinaryPrimitives.WriteSingleLittleEndian(destination, m_width); BinaryPrimitives.WriteSingleLittleEndian(destination[4..], m_height); } else { BinaryPrimitives.WriteUInt32LittleEndian(destination, m_width); BinaryPrimitives.WriteUInt32LittleEndian(destination[4..], m_height); }
+                    break;
+            }
+        }
+    }
 
-                        BinaryPrimitives.WriteUInt32LittleEndian(destination: destination, value: ((uint)value));
+    private static GpuPixelFormat ToGpuFormat(SurfaceFormat format) {
+        return format switch {
+            SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
+            SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
+            _ => throw new InvalidDataException($"Fullscreen input surface format '{format}' is unsupported."),
+        };
+    }
 
+    private sealed class ManifestPassConstants(ShaderPushConstantLayout? layout, Func<ShaderConfigValues> config, byte[] constants) : IShaderPipelinePassConstants {
+        public uint SizeBytes => (uint)constants.Length;
+        public GpuShaderStage Stages => layout?.Stages ?? GpuShaderStage.None;
+        public void Write(in FrameContext context, in ShaderFrameInput input, uint passWidth, uint passHeight, ulong frameCounter, Span<byte> destination) {
+            constants.AsSpan().CopyTo(destination);
+            if (layout is not { } resolved) {
+                return;
+            }
+
+            foreach (var slot in resolved.Slots) {
+                var target = destination[(int)slot.Offset..];
+                switch (slot.Kind) {
+                    case ShaderPushConstantSourceKind.Tick:
+                        var period = slot.QuantizeHzLiteral is { } literal ? EngineTicks.PerRate(literal) : slot.QuantizeHzConfigField is { } field ? EngineTicks.PerRate(config()[field].ComponentBits(0)) : 1;
+                        var value = context.ElapsedTicks / period;
+                        BinaryPrimitives.WriteUInt32LittleEndian(target, (uint)value);
                         if (slot.Type == ShaderValueType.Uint2) {
-                            BinaryPrimitives.WriteUInt32LittleEndian(destination: destination[4..], value: ((uint)(value >> 32)));
+                            BinaryPrimitives.WriteUInt32LittleEndian(target[4..], (uint)(value >> 32));
                         }
 
                         break;
-                    }
-                case ShaderPushConstantSourceKind.Frame:
-                    BinaryPrimitives.WriteUInt32LittleEndian(destination: destination, value: m_frameCounter);
-
-                    break;
-                default:
-                    break;
+                    case ShaderPushConstantSourceKind.Frame: BinaryPrimitives.WriteUInt32LittleEndian(target, (uint)frameCounter); break;
+                }
             }
         }
-    }
-    private void FillStaticPushConstants() {
-        if (m_pushConstantLayout is not { } layout) {
-            return;
-        }
-
-        foreach (var slot in layout.Slots) {
-            var destination = m_pushConstantData.AsSpan(start: ((int)slot.Offset), length: ((int)slot.Type.SizeBytes()));
-
-            switch (slot.Kind) {
-                case ShaderPushConstantSourceKind.Config:
-                    m_config[slot.ConfigField!].Bytes.Span.CopyTo(destination: destination);
-
-                    break;
-                case ShaderPushConstantSourceKind.Resolution:
-                    if (slot.Type == ShaderValueType.Float2) {
-                        BinaryPrimitives.WriteSingleLittleEndian(destination: destination, value: m_width);
-                        BinaryPrimitives.WriteSingleLittleEndian(destination: destination[4..], value: m_height);
-                    } else {
-                        BinaryPrimitives.WriteUInt32LittleEndian(destination: destination, value: m_width);
-                        BinaryPrimitives.WriteUInt32LittleEndian(destination: destination[4..], value: m_height);
-                    }
-
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-    private ulong QuantizationPeriodTicks(ShaderPushConstantSlot slot) {
-        if (slot.QuantizeHzLiteral is { } literal) {
-            return EngineTicks.PerRate(ratePerSecond: literal);
-        }
-        if (slot.QuantizeHzConfigField is { } configField) {
-            return EngineTicks.PerRate(ratePerSecond: m_config[configField].ComponentBits(index: 0));
-        }
-
-        return 1;
-    }
-    private nint RecordPass() {
-        var deviceHandle = m_deviceContext.DeviceHandle;
-        var commandBufferHandle = m_renderTarget!.CommandBufferHandle;
-
-        m_commandRecorder.BeginCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
-        m_commandRecorder.BeginDebugGroup(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, label: m_manifest.Name);
-        m_commandRecorder.BeginRenderPass(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            framebufferHandle: m_renderTarget.FramebufferHandle,
-            height: m_renderTarget.Height,
-            renderPassHandle: m_renderTarget.RenderPassHandle,
-            width: m_renderTarget.Width
-        );
-        m_commandRecorder.SetScissor(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, height: m_renderTarget.Height, width: m_renderTarget.Width, x: 0, y: 0);
-        m_commandRecorder.BindGraphicsPipeline(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, pipelineHandle: m_pipeline!.Handle);
-        m_commandRecorder.BindVertexBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, vertexBufferHandle: m_vertexBuffer!.BufferHandle);
-
-        if (m_pushConstantLayout is { } layout) {
-            m_commandRecorder.PushConstants(
-                commandBufferHandle: commandBufferHandle,
-                data: m_pushConstantData,
-                deviceHandle: deviceHandle,
-                offset: 0,
-                pipelineLayoutHandle: m_pipeline.LayoutHandle,
-                stageFlags: layout.Stages
-            );
-        }
-
-        m_commandRecorder.BindDescriptorSet(commandBufferHandle: commandBufferHandle, descriptorSetHandle: m_descriptorSet, deviceHandle: deviceHandle, pipelineLayoutHandle: m_pipeline.LayoutHandle);
-        m_commandRecorder.Draw(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, parameters: new GpuDrawParameters(vertexCount: FullscreenTriangle.VertexCount, instanceCount: 1));
-        m_commandRecorder.EndRenderPass(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
-        m_commandRecorder.EndDebugGroup(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
-        m_commandRecorder.EndCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
-
-        return commandBufferHandle;
-    }
-    private void ReleaseGpuResources() {
-        if (!m_resourcesReady) {
-            return;
-        }
-
-        m_frameFence?.Wait();
-        m_readback?.Dispose();
-        m_readback = null;
-        m_vertexBuffer?.Dispose();
-        m_vertexBuffer = null;
-        m_pipeline?.Dispose();
-        m_pipeline = null;
-        m_vertexShader?.Dispose();
-        m_vertexShader = null;
-        m_fragmentShader?.Dispose();
-        m_fragmentShader = null;
-        m_frameFence?.Dispose();
-        m_frameFence = null;
-        m_renderTarget?.Dispose();
-        m_renderTarget = null;
-        m_lastImageViewHandle = 0;
-        m_resourcesReady = false;
     }
 }

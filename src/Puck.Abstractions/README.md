@@ -64,7 +64,7 @@ graph TD
 |---|---|---|
 | **Presentation** | `ISurfacePresenter`, `Surface`, `SurfaceFormat`, `PresentMode`, `PresentationOptions`, present-timing and device-lost feedback, `OffscreenRenderBudget` (the one per-produced-frame offscreen-submit budget the view stack's refresh share and the world validator's window ceiling both read) | the GPU backends and their presentation projects |
 | **Windowing** | `INativeWindow`, `INativeWindowFactory`, `IClipboardService`, per-platform `NativeSurfaceBinding` (Win32, Wayland, Xcb, Vi) | `Puck.Platform` |
-| **Machines** | `IMachineRuntime`, `IMachineEngine`; optional `IMachineVideoOutputs`, `IMachineAudioOutputs`, `IMachineInputPorts`, `IMachineContentSlot`, `IMachineLink`, `ITimeTravelMachine`, `IReconfigurableMachine` | the GamingBrick emulators and other hosted machines |
+| **Machines** | `IMachineRuntime`, `IMachineEngine`; optional `IMachineVideoOutputs`, `IMachineAudioOutputs`, `IMachineInputPorts`, `IMachineContentSlot`, `IMachineLink`, `ITimeTravelMachine`, `IReconfigurableMachine`, and descriptor-validated `IMachineOperationProvider` | the GamingBrick emulators and other hosted machines |
 | **Gpu** | `IGpuComputeServices` | the GPU backends |
 | **Capture / Recording** | `IFrameCaptureSource`, `ICaptureSink`, `IVideoEncoder`, `IAudioCaptureSource`, `RecordedPacket` | `Puck.Platform` and `Puck.Recording` |
 | **Lighting** | `ILampArrayDevice`, `LampColor`, `LampInfo`, `LampPurposes` | `Puck.Platform` |

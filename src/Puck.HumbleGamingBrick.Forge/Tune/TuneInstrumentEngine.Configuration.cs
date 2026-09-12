@@ -14,7 +14,15 @@ public sealed partial class TuneInstrumentEngine {
         [new("video", "puck.machine.video.v1", "The instrument's transport display.")],
         [new("audio", "puck.machine.audio.v1", "The instrument's stereo audio stream.")],
         [new("controls", "puck.machine.pad.v1", "The instrument's transport controls.")],
-        [], []
+        [
+            new("content.insert", "Mounts prepared content through the host's replacement transaction.", new("puck.tune-instrument.content-insert.v1", [
+                new("content", MachineFieldKind.Object, "The prepared instrument source.", Required: true, Fields: [
+                    new("path", MachineFieldKind.String, "Content path prepared by the host.", Required: true, Role: MachineFieldRole.ContentPath)
+                ])
+            ])),
+            new("content.eject", "Removes mounted content through the host's replacement transaction.", new("puck.tune-instrument.content-eject.v1", [])),
+            new("machine.reset", "Recreates the current machine configuration through the host's replacement transaction.", new("puck.tune-instrument.machine-reset.v1", []))
+        ], []
     );
 
     /// <inheritdoc/>

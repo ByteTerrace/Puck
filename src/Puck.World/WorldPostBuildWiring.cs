@@ -8,6 +8,7 @@ using Puck.Overlays;
 using Puck.World.Addons;
 using Puck.World.Client;
 using Puck.World.Protocol;
+using Puck.World.Machines;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -53,6 +54,9 @@ internal static class WorldPostBuildWiring {
     /// <c>IHost.RunAsync</c>.</returns>
     public static bool Install(IServiceProvider services) {
         ArgumentNullException.ThrowIfNull(argument: services);
+
+        var machineCatalog = services.GetRequiredService<WorldMachineCatalog>();
+        var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog);
 
         // The addon runtime resolves lazily as a DI singleton (WorldBootComposition), and WorldAddonCommandModule —
         // one of the modules CommandRegistry aggregates below — takes it as a constructor dependency, so resolving
@@ -160,9 +164,7 @@ internal static class WorldPostBuildWiring {
         // WorldDefinitionSource.SourcePath's own remarks). WorldCompositeNeighbourResolver.Compose returns null only
         // when NEITHER transport is present, in which case an authored adjacency refuses by
         // name rather than passing unproven — unreachable, not this method's own choice.
-        var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory)
-            ? directory
-            : AppContext.BaseDirectory));
+        var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory) ? directory : AppContext.BaseDirectory), catalogFingerprint: machineCatalogFingerprint, catalog: machineCatalog);
         var storageNeighbours = services.GetRequiredService<WorldStorageSyncHandle>().Neighbours;
         var neighbours = WorldCompositeNeighbourResolver.Compose(
             fileNeighbours,
@@ -172,7 +174,8 @@ internal static class WorldPostBuildWiring {
         if (!WorldDefinitionValidator.TryValidate(
             definition: worldSource.Definition,
             reason: out var vocabularyReason,
-            neighbours: neighbours
+            neighbours: neighbours,
+            machines: machineCatalog
         )) {
             Console.Error.WriteLine(value: $"[world] definition refused once its command vocabulary composed: {vocabularyReason}");
 
@@ -185,9 +188,7 @@ internal static class WorldPostBuildWiring {
 
         server.Neighbours = neighbours;
         server.RebuildNeighbours = candidatePath => WorldCompositeNeighbourResolver.Compose(
-            new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory)
-            ? directory
-            : AppContext.BaseDirectory)),
+            new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory) ? directory : AppContext.BaseDirectory), catalogFingerprint: machineCatalogFingerprint, catalog: machineCatalog),
             storageNeighbours
         );
 
@@ -348,7 +349,9 @@ internal static class WorldPostBuildWiring {
                     definition: snapshot,
                     imports: out var preservedImports,
                     note: out var note,
-                    path: target
+                    path: target,
+                    catalogFingerprint: machineCatalogFingerprint,
+                    catalog: machineCatalog
                 );
 
                 worldServer.Compact();

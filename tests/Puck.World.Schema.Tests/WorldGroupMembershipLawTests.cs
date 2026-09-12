@@ -96,6 +96,203 @@ public sealed class WorldGroupMembershipLawTests {
     }
 
     [Fact]
+    public void SocialKinds_FullDefinitionValidationAcceptsDistinctKindsAndRosters() {
+        // These names and role labels are test vocabulary only: the engine ships no social-kind catalog or finder.
+        // This law proves that one complete authored groups section can carry the intended relationship shapes.
+        var definition = SocialDefinition();
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason),
+            userMessage: reason
+        );
+
+        var groups = definition.Groups!;
+        Assert.Equal(expected: 5, actual: groups.Kinds.Count);
+        Assert.Equal(expected: 6, actual: groups.Groups.Count);
+        Assert.Equal(expected: groups.Groups[0].Members[0].Ref, actual: groups.Groups[1].Members[0].Ref);
+        Assert.Equal(expected: "friend", actual: groups.Groups[0].Members[0].Role);
+        Assert.Equal(expected: "friend", actual: groups.Groups[1].Members[0].Role);
+        Assert.NotEqual(expected: groups.Groups[0].Members[0].Ref, actual: groups.Groups[2].Members[0].Ref);
+        Assert.Null(@object: groups.Groups[0].Members[1].Role);
+    }
+
+    [Fact]
+    public void SocialKinds_FullDefinitionValidationRefusesUndeclaredRoleAndOverCapacity() {
+        var definition = SocialDefinition();
+        var groups = definition.Groups!;
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var validReason),
+            userMessage: validReason
+        );
+
+        var wrongRole = groups.Groups[0] with {
+            Members = [groups.Groups[0].Members[0] with { Role = "not-declared" }, groups.Groups[0].Members[1]]
+        };
+        var wrongRoleGroups = groups.Groups.ToArray();
+        wrongRoleGroups[0] = wrongRole;
+        var wrongRoleDefinition = definition with { Groups = groups with { Groups = wrongRoleGroups } };
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidateLocally(definition: wrongRoleDefinition, reason: out var roleReason)
+        );
+        Assert.Contains(expectedSubstring: "names no role declared", actualString: roleReason);
+
+        var friendship = groups.Groups[0];
+        var overCapacity = friendship with {
+            Members = [
+                ..friendship.Members,
+                new WorldGroupMember(
+                    Ref: WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 2)),
+                    Role: "friend",
+                    JoinOrdinal: 2
+                )
+            ],
+            NextJoinOrdinal = 3
+        };
+        var overCapacityGroups = groups.Groups.ToArray();
+        overCapacityGroups[0] = overCapacity;
+        var overCapacityDefinition = definition with { Groups = groups with { Groups = overCapacityGroups } };
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidateLocally(definition: overCapacityDefinition, reason: out var capacityReason)
+        );
+        Assert.Contains(expectedSubstring: "exceeding capacity", actualString: capacityReason);
+    }
+
+    private static WorldDefinition SocialDefinition() {
+        var identity = new WorldMemberIdentity(
+            Issuer: "issuer.example",
+            Subject: "subject-42",
+            World: SafeName.Parse(candidate: "social-world")
+        );
+        var qualified = WorldMemberRef.VerifiedIdentity(identity: identity);
+        var seat0 = WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0));
+        var seat1 = WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1));
+        var console = WorldMemberRef.Local(principal: WorldPrincipal.Console);
+
+        var section = new WorldGroupsSection(
+            Kinds: [
+                new WorldGroupKind(
+                    Name: "friendship",
+                    Roles: [new WorldGroupRole(Name: "friend", Capabilities: [WorldCapability.Observe])],
+                    Lifetime: WorldGroupLifetime.Persistent,
+                    EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+                    Capacity: 2
+                ),
+                new WorldGroupKind(
+                    Name: "partnership",
+                    Roles: [new WorldGroupRole(Name: "partner", Capabilities: [WorldCapability.Control])],
+                    Lifetime: WorldGroupLifetime.Persistent,
+                    EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+                    Capacity: 2
+                ),
+                new WorldGroupKind(
+                    Name: "family",
+                    Roles: [
+                        new WorldGroupRole(Name: "guardian", Capabilities: [WorldCapability.Control]),
+                        new WorldGroupRole(Name: "adult", Capabilities: [WorldCapability.Observe]),
+                        new WorldGroupRole(Name: "child", Capabilities: [WorldCapability.Drive])
+                    ],
+                    Lifetime: WorldGroupLifetime.Persistent,
+                    EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+                    Capacity: 3
+                ),
+                new WorldGroupKind(
+                    Name: "guild",
+                    Roles: [
+                        new WorldGroupRole(Name: "leader", Capabilities: [WorldCapability.Control]),
+                        new WorldGroupRole(Name: "officer", Capabilities: [WorldCapability.Mutate]),
+                        new WorldGroupRole(Name: "member", Capabilities: [WorldCapability.Observe])
+                    ],
+                    Lifetime: WorldGroupLifetime.Persistent,
+                    EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+                    Capacity: 3
+                ),
+                new WorldGroupKind(
+                    Name: "party",
+                    Roles: [
+                        new WorldGroupRole(Name: "leader", Capabilities: [WorldCapability.Drive]),
+                        new WorldGroupRole(Name: "member", Capabilities: [WorldCapability.Observe]),
+                        new WorldGroupRole(Name: "activity", Capabilities: [WorldCapability.Control])
+                    ],
+                    Lifetime: WorldGroupLifetime.Ephemeral,
+                    EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+                    Capacity: 3
+                )
+            ],
+            Groups: [
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "friendship-one"),
+                    KindName: "friendship",
+                    Members: [
+                        new WorldGroupMember(Ref: qualified, Role: "friend", JoinOrdinal: 0),
+                        new WorldGroupMember(Ref: seat0, Role: null, JoinOrdinal: 1)
+                    ],
+                    NextJoinOrdinal: 2
+                ),
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "friendship-two"),
+                    KindName: "friendship",
+                    Members: [
+                        new WorldGroupMember(Ref: qualified, Role: "friend", JoinOrdinal: 0),
+                        new WorldGroupMember(Ref: seat1, Role: "friend", JoinOrdinal: 1)
+                    ],
+                    NextJoinOrdinal: 2
+                ),
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "partnership-one"),
+                    KindName: "partnership",
+                    Members: [new WorldGroupMember(Ref: seat0, Role: "partner", JoinOrdinal: 0)],
+                    NextJoinOrdinal: 1
+                ),
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "family-one"),
+                    KindName: "family",
+                    Members: [
+                        new WorldGroupMember(Ref: seat0, Role: "guardian", JoinOrdinal: 0),
+                        new WorldGroupMember(Ref: qualified, Role: "adult", JoinOrdinal: 1),
+                        new WorldGroupMember(Ref: seat1, Role: "child", JoinOrdinal: 2)
+                    ],
+                    NextJoinOrdinal: 3
+                ),
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "guild-one"),
+                    KindName: "guild",
+                    Members: [
+                        new WorldGroupMember(Ref: console, Role: "leader", JoinOrdinal: 0),
+                        new WorldGroupMember(Ref: seat0, Role: "officer", JoinOrdinal: 1),
+                        new WorldGroupMember(Ref: qualified, Role: "member", JoinOrdinal: 2)
+                    ],
+                    NextJoinOrdinal: 3
+                ),
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "party-one"),
+                    KindName: "party",
+                    Members: [
+                        new WorldGroupMember(Ref: console, Role: "leader", JoinOrdinal: 0),
+                        new WorldGroupMember(Ref: qualified, Role: "member", JoinOrdinal: 1),
+                        new WorldGroupMember(Ref: seat1, Role: "activity", JoinOrdinal: 2)
+                    ],
+                    NextJoinOrdinal: 3
+                )
+            ],
+            Ownership: []
+        );
+
+        var baseDefinition = WorldDefinitionSerialization.Deserialize(
+            utf8Json: System.Text.Encoding.UTF8.GetBytes(s: """
+                {
+                  "schema": "puck.world.def.v1",
+                  "documentId": "null"
+                }
+                """)
+        );
+
+        return baseDefinition with { Groups = section };
+    }
+
+    [Fact]
     public void Roster_DuplicateAndCapacityRefuse_AndDistinctMembersPass() {
         var first = new WorldGroupMember(
             Ref: WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)),

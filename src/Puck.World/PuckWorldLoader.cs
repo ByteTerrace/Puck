@@ -1,4 +1,5 @@
 using System.Text;
+using Puck.Abstractions.Machines;
 using Puck.World.Transpiler.Composition;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
@@ -9,7 +10,12 @@ namespace Puck.World;
 /// <summary>Transparent runtime boot loader and compiler for Puck DSL (.puck) files.</summary>
 internal static class PuckWorldLoader {
     /// <summary>Resolves a world definition from a .puck or .world.json file, transparently compiling .puck sources in-memory.</summary>
-    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure) {
+    /// <param name="explicitPath">The authored world path, or null for the shipped default.</param>
+    /// <param name="source">The loaded definition and source path.</param>
+    /// <param name="failure">The named refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider composition and validation.</param>
+    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
         string path;
 
@@ -25,7 +31,7 @@ internal static class PuckWorldLoader {
         }
 
         if (!path.EndsWith(".puck", StringComparison.OrdinalIgnoreCase)) {
-            return WorldDefinitionLoader.TryResolve(explicitPath: explicitPath, failure: out failure, source: out source);
+            return WorldDefinitionLoader.TryResolve(explicitPath: explicitPath, failure: out failure, source: out source, catalogFingerprint: catalogFingerprint, catalog: catalog);
         }
 
         if (!File.Exists(path: path)) {
@@ -74,7 +80,9 @@ internal static class PuckWorldLoader {
             rootBytes: rawBytes,
             composed: out var composed,
             chainBytes: out _,
-            reason: out var composeReason
+            reason: out var composeReason,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             source = null!;
             failure = $"[world] definition refused: {path} composition refused: {composeReason}";
@@ -86,7 +94,7 @@ internal static class PuckWorldLoader {
         }
 
         var directory = (Path.GetDirectoryName(path: path) is { Length: > 0 } dir ? dir : AppContext.BaseDirectory);
-        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory);
+        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory, catalogFingerprint: catalogFingerprint, catalog: catalog);
 
         if (!WorldDefinitionLoader.TryLoad(
             definition: out var loadedDef,
@@ -94,7 +102,9 @@ internal static class PuckWorldLoader {
             neighbours: neighbours,
             reason: out var loadReason,
             sourceName: path,
-            utf8: finalBytes
+            utf8: finalBytes,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             source = null!;
             failure = $"[world] definition refused: {loadReason}";

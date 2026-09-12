@@ -7,6 +7,6 @@ void mainImage(out vec4 color, in vec2 pixel) {
     vec2 pen = 0.5 + 0.27 * vec2(cos(iTime * 0.91), sin(iTime * 1.17));
     if (iMouse.z > 0.0) { pen = iMouse.xy / iResolution.xy; }
     float ink = exp(-dot(uv - pen, uv - pen) * 1700.0);
-    float value = max(previous.r * 0.987, ink);
+    float value = max(previous.r * decay, ink);
     color = vec4(value, previous.r, 0, 1);
 }

@@ -1729,55 +1729,23 @@
                 "title": "WorldScreenSourceTestPattern"
               },
               {
-                "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
+                "description": "A named machine output. The source is a consumer reference only: the named machine is prepared, advanced, and retired by the world\u0027s machine host independently of every display that samples it.",
                 "properties": {
                   "$type": {
                     "const": "machine"
                   },
-                  "engine": {
-                    "description": "The screen-machine engine id (e.g. gaming-brick).",
+                  "instance": {
+                    "description": "The declared Name instance.",
                     "type": "string"
                   },
-                  "contentPath": {
-                    "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+                  "output": {
+                    "description": "The provider video output name exposed by that instance.",
                     "type": "string"
-                  },
-                  "options": {
-                    "description": "The engine-specific options string, or null for the engine\u0027s defaults.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "cable": {
-                    "description": "This machine\u0027s cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row\u0027s own source \u2014 a magazine entry or a placement face\u0027s source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "name": {
-                        "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
-                        "type": "string"
-                      },
-                      "position": {
-                        "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "position"
-                    ],
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "WorldMachineCable"
                   }
                 },
                 "required": [
-                  "engine",
-                  "contentPath",
-                  "options"
+                  "instance",
+                  "output"
                 ],
                 "additionalProperties": false,
                 "title": "WorldScreenSourceMachine"
@@ -2343,35 +2311,23 @@
                       "title": "WorldScreenSourceTestPattern"
                     },
                     {
-                      "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
+                      "description": "A named machine output. The source is a consumer reference only: the named machine is prepared, advanced, and retired by the world\u0027s machine host independently of every display that samples it.",
                       "properties": {
                         "$type": {
                           "const": "machine"
                         },
-                        "engine": {
-                          "description": "The screen-machine engine id (e.g. gaming-brick).",
+                        "instance": {
+                          "description": "The declared Name instance.",
                           "type": "string"
                         },
-                        "contentPath": {
-                          "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+                        "output": {
+                          "description": "The provider video output name exposed by that instance.",
                           "type": "string"
-                        },
-                        "options": {
-                          "description": "The engine-specific options string, or null for the engine\u0027s defaults.",
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "cable": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/cable",
-                          "default": null
                         }
                       },
                       "required": [
-                        "engine",
-                        "contentPath",
-                        "options"
+                        "instance",
+                        "output"
                       ],
                       "additionalProperties": false,
                       "title": "WorldScreenSourceMachine"
@@ -12018,35 +11974,23 @@
                       "title": "WorldScreenSourceTestPattern"
                     },
                     {
-                      "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
+                      "description": "A named machine output. The source is a consumer reference only: the named machine is prepared, advanced, and retired by the world\u0027s machine host independently of every display that samples it.",
                       "properties": {
                         "$type": {
                           "const": "machine"
                         },
-                        "engine": {
-                          "description": "The screen-machine engine id (e.g. gaming-brick).",
+                        "instance": {
+                          "description": "The declared Name instance.",
                           "type": "string"
                         },
-                        "contentPath": {
-                          "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+                        "output": {
+                          "description": "The provider video output name exposed by that instance.",
                           "type": "string"
-                        },
-                        "options": {
-                          "description": "The engine-specific options string, or null for the engine\u0027s defaults.",
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "cable": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/cable",
-                          "default": null
                         }
                       },
                       "required": [
-                        "engine",
-                        "contentPath",
-                        "options"
+                        "instance",
+                        "output"
                       ],
                       "additionalProperties": false,
                       "title": "WorldScreenSourceMachine"
@@ -13038,18 +12982,23 @@
                         "title": "WorldSpeakerSourceNone"
                       },
                       {
-                        "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index is machine identity for screen-hosted machines. The validator checks only that the screen row exists, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
+                        "description": "A named machine audio output. The source is a consumer reference only: the named machine host owns preparation, advancement, and the single drain shared by every speaker feed that names this output.",
                         "properties": {
                           "$type": {
                             "const": "machine"
                           },
-                          "screenIndex": {
-                            "description": "The declared Index whose hosted machine feeds this source.",
-                            "type": "integer"
+                          "instance": {
+                            "description": "The declared Name instance.",
+                            "type": "string"
+                          },
+                          "output": {
+                            "description": "The provider audio output name exposed by that instance.",
+                            "type": "string"
                           }
                         },
                         "required": [
-                          "screenIndex"
+                          "instance",
+                          "output"
                         ],
                         "additionalProperties": false,
                         "title": "WorldSpeakerSourceMachine"
@@ -13944,8 +13893,8 @@
           "default": null,
           "title": "WorldCameraProgram"
         },
-        "studyToolchain": {
-          "description": "The directory holding the study compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
+        "shaderToolchain": {
+          "description": "The directory holding the pipeline compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
           "type": [
             "string",
             "null"
@@ -13982,7 +13931,7 @@
                 "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
                 "type": "array",
                 "items": {
-                  "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Study are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named study (a WorldViewStudy row) renders that compiled Shadertoy-dialect study into the rect instead \u2014 a slot names at most one of the two (the validator refuses both authored together).",
+                  "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Pipeline are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) renders its selected image output into the rect \u2014 a slot names at most one of the two (the validator refuses both authored together).",
                   "type": "object",
                   "properties": {
                     "x": {
@@ -14002,14 +13951,14 @@
                       "type": "number"
                     },
                     "camera": {
-                      "description": "The authored camera name filling this slot, or null for the seat that owns it (or the study named by Study).",
+                      "description": "The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).",
                       "type": [
                         "string",
                         "null"
                       ]
                     },
-                    "study": {
-                      "description": "The authored views.studies row name filling this slot with a compiled shader study, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
+                    "pipeline": {
+                      "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
                       "type": [
                         "string",
                         "null"
@@ -14032,29 +13981,29 @@
             "title": "WorldViewLayout"
           }
         },
-        "studies": {
-          "description": "Gets the authored views.studies rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
+        "pipelines": {
+          "description": "Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "description": "One views.studies row \u2014 an authored Shadertoy-dialect fragment shader, compiled and rendered as a paired-camera child view a Study names (see the study push-constant/toolchain contract in AGENTS.md and the Puck.Shaders.Study family). This record is the authored intent only \u2014 compiling the source, swapping the live pipeline, and driving the per-frame push constants are console/composition-root concerns, not schema ones.",
+            "description": "One named shader-pipeline instance displayed by a Pipeline slot. Its source declares connected GPU passes, or is a single shader adapted into a one-pass pipeline. The row carries authored intent; compilation, resource ownership, history, and presentation inputs belong to the shader runtime and its host.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "name": {
-                "description": "The study\u0027s stable name (a SafeName, unique within the section) \u2014 what a Study names and a study.* console verb addresses.",
+                "description": "The pipeline\u0027s stable name (a SafeName, unique within the section) \u2014 what a Pipeline names and a pipeline.* console verb addresses.",
                 "type": "string"
               },
               "source": {
-                "description": "The study\u0027s GLSL source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
+                "description": "The pipeline document or shader source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
                 "type": "string"
               },
               "camera": {
-                "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_STUDY, or null for the study\u0027s own iMouse orbit (the Shadertoy-dialect default).",
+                "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_SHADERTOY, or null for the pipeline\u0027s own iMouse orbit (the Shadertoy-dialect default).",
                 "type": [
                   "string",
                   "null"
@@ -14062,7 +14011,7 @@
                 "default": null
               },
               "timeScale": {
-                "description": "The study clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+                "description": "The pipeline clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
                 "type": "number",
                 "default": 1
               }
@@ -14072,7 +14021,7 @@
               "source"
             ],
             "additionalProperties": false,
-            "title": "WorldViewStudy"
+            "title": "WorldViewPipeline"
           },
           "default": null
         }

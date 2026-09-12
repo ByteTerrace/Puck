@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Commands;
+using Puck.Abstractions.Machines;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.World.Machines;
@@ -83,7 +84,9 @@ public static class WorldSiloApplication {
             definition: sp.GetRequiredService<WorldSiloDefinition>(),
             routing: sp.GetRequiredService<SiloConsoleRouting>(),
             storageTarget: sp.GetRequiredService<Puck.Storage.ObjectStorageTarget>(),
-            authentication: WorldSiloExtensions.Authenticate
+            machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
+            authentication: WorldSiloExtensions.Authenticate,
+            contentAdmissionPolicy: sp.GetService<IMachineContentAdmissionPolicy>()
         ));
         builder.Services.AddSingleton<IWorldWaitGateResolver>(implementationFactory: static sp => sp.GetRequiredService<WorldSiloHost>());
         builder.Services.AddHostedService<WorldSiloActivations>();

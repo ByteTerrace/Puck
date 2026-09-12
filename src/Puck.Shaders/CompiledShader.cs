@@ -18,9 +18,9 @@ public sealed record CompiledShader
         SourcePath = sourcePath;
         SourceHash = sourceHash;
         SpirvByStage = new ReadOnlyDictionary<ShaderStage, ReadOnlyMemory<byte>>(
-            new Dictionary<ShaderStage, ReadOnlyMemory<byte>>(spirv));
+            spirv.ToDictionary(static pair => pair.Key, static pair => (ReadOnlyMemory<byte>)pair.Value.ToArray()));
         DxilByStage = new ReadOnlyDictionary<ShaderStage, ReadOnlyMemory<byte>>(
-            new Dictionary<ShaderStage, ReadOnlyMemory<byte>>(dxil));
+            dxil.ToDictionary(static pair => pair.Key, static pair => (ReadOnlyMemory<byte>)pair.Value.ToArray()));
         Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
         Dependencies = Array.AsReadOnly((dependencies ?? []).ToArray());
     }

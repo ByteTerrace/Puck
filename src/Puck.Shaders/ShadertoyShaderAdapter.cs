@@ -29,7 +29,7 @@ public static partial class ShadertoyShaderAdapter
 
         var names = new SortedDictionary<string, uint>(StringComparer.Ordinal);
         var undeclared = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match match in ChannelReferencePattern().Matches(source))
+        foreach (Match match in ChannelReferencePattern().Matches(RemoveComments(source)))
         {
             var name = match.Value;
             if (channelBindings is not null)
@@ -98,7 +98,10 @@ public static partial class ShadertoyShaderAdapter
     private static (string Declarations, string Macros) ConfigDeclarations(IReadOnlyDictionary<string, ShaderConfigField>? config)
     {
         if (config is null || config.Count == 0) { return (string.Empty, string.Empty); }
-        var fields = config.ToArray();
+        // The shared HLSL packing rule may place a vector at a non-16-byte offset.
+        // std430 requires vector members to be naturally aligned, so emit scalar
+        // members at the exact shared offsets and reconstruct vectors with macros.
+        var fields = config.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToArray();
         var offsets = ShaderPushConstantLayout.ComputeOffsets(fields.Select(static pair => pair.Value.Type).ToArray(), out _);
         var declarations = new StringBuilder();
         var macros = new StringBuilder();
@@ -106,21 +109,49 @@ public static partial class ShadertoyShaderAdapter
         {
             var (name, field) = fields[index];
             var offset = ShaderPipelineParameterLayout.FramePrefixBytes + offsets[index];
-            declarations.Append("    layout(offset = ").Append(offset).Append(") ")
-                .Append(GlslType(field.Type)).Append(' ').Append(name).AppendLine(";");
-            macros.Append("#define ").Append(name).Append(" puck.").AppendLine(name);
+            var components = field.Type.ComponentCount();
+            var scalarType = GlslScalarType(field.Type);
+            if (components == 1)
+            {
+                declarations.Append("    layout(offset = ").Append(offset).Append(") ")
+                    .Append(scalarType).Append(' ').Append(name).AppendLine(";");
+                macros.Append("#define ").Append(name).Append(" puck.").AppendLine(name);
+                continue;
+            }
+
+            for (var component = 0u; component < components; component++)
+            {
+                declarations.Append("    layout(offset = ").Append(offset + (component * ShaderValueTypes.ComponentBytes)).Append(") ")
+                    .Append(scalarType).Append(' ').Append(ConfigMemberName(name, component)).AppendLine(";");
+            }
+            macros.Append("#define ").Append(name).Append(' ').Append(GlslVectorType(field.Type)).Append('(');
+            for (var component = 0u; component < components; component++)
+            {
+                if (component != 0) { macros.Append(", "); }
+                macros.Append("puck.").Append(ConfigMemberName(name, component));
+            }
+            macros.AppendLine(")");
         }
         return (declarations.ToString(), macros.ToString());
     }
 
-    private static string GlslType(ShaderValueType type) => type switch
+    private static string ConfigMemberName(string name, uint component) => $"puck_{name}_{component}";
+
+    private static string GlslScalarType(ShaderValueType type) => type.ScalarKind() switch
     {
-        ShaderValueType.Float => "float", ShaderValueType.Float2 => "vec2", ShaderValueType.Float3 => "vec3", ShaderValueType.Float4 => "vec4",
-        ShaderValueType.Uint => "uint", ShaderValueType.Uint2 => "uvec2", ShaderValueType.Uint3 => "uvec3", ShaderValueType.Uint4 => "uvec4",
-        ShaderValueType.Int => "int", ShaderValueType.Int2 => "ivec2", ShaderValueType.Int3 => "ivec3", ShaderValueType.Int4 => "ivec4",
+        ShaderScalarKind.Float => "float",
+        ShaderScalarKind.Uint => "uint",
+        ShaderScalarKind.Int => "int",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "The value type is not defined.")
     };
 
+    private static string GlslVectorType(ShaderValueType type) => type.ScalarKind() switch
+    {
+        ShaderScalarKind.Float => $"vec{type.ComponentCount()}",
+        ShaderScalarKind.Uint => $"uvec{type.ComponentCount()}",
+        ShaderScalarKind.Int => $"ivec{type.ComponentCount()}",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "The value type is not defined.")
+    };
     private static string ImageFormatQualifier(GpuPixelFormat format) => format switch {
         GpuPixelFormat.R8G8B8A8Unorm => "rgba8", GpuPixelFormat.R16G16B16A16Float => "rgba16f", GpuPixelFormat.R32G32B32A32Float => "rgba32f",
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Shadertoy output requires an RGBA image format.")
@@ -128,6 +159,9 @@ public static partial class ShadertoyShaderAdapter
 
     [GeneratedRegex(@"\biChannel(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+)\b")]
     private static partial Regex ChannelReferencePattern();
+    private static string RemoveComments(string source) => CommentPattern().Replace(source, string.Empty);
+    [GeneratedRegex(@"//[^\r\n]*|/\*[\s\S]*?\*/")]
+    private static partial Regex CommentPattern();
     [GeneratedRegex(@"^iChannel(\d+)$")]
     private static partial Regex NumericChannelPattern();
     [GeneratedRegex(@"\bsampler2D\s+iChannel[A-Za-z_][A-Za-z0-9_]*\b")]

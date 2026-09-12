@@ -22,6 +22,7 @@ public sealed partial class WorldSiloHost {
 
             foreach (var world in m_definition.Worlds.Where(predicate: static row => row.Pinned)) {
                 if (!m_rows.TryGetValue(key: world.World.Value, value: out var row)) { completion.TrySetResult(result: $"{world.World}: inactive"); return; }
+                if (row.PersistenceBlocked || row.Released || row.Initializing) { completion.TrySetResult($"{world.World}: authority activation is not ready"); return; }
                 if ((row.LastCheckpointOrdinal < 0) || (m_clock.GetElapsedTime(startingTimestamp: row.CheckpointTimestamp) > TimeSpan.FromSeconds((policy?.CheckpointTimeoutSeconds ?? 180)))) {
                     completion.TrySetResult(result: $"{world.World}: checkpoint overdue"); return;
                 }

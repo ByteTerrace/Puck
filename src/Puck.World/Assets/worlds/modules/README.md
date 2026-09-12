@@ -483,7 +483,8 @@ Import it under the alias `arcade`:
 | `placements` | `arcadeCourt` | The court: a floor and a back wall with a lit strip, at local origin; every other row is its child. |
 | `placements` | `cabinetCgb`, `cabinetAgb` | The two cabinets, solid, facing +Z toward the court. |
 | `placements` | `handheldStand`, `handheld` | The stand and the handheld cradled on it. |
-| `screens` | indices 8, 9, 10 | The CGB cabinet's face, the AGB cabinet's face, the handheld's face. |
+| `machines` | `cgb-screen`, `agb-screen`, `handheld-screen` | Independent cartridge runtimes; the AGB row starts at cartridge handoff with bundled firmware. |
+| `screens` | indices 8, 9, 10 | Display the corresponding named machine's `video` output. |
 | `kits` | `arcadePad` | A pad map over the island's channels: forward and strafe to the left stick, turn to the right stick, jump to South, rise to East. Never worn by a body. |
 | `bodyMotionPrograms` | `arcadePad` | The kit's required program. |
 | `state.world` | `cgbScreen`, `agbScreen`, `handheldScreen` | Int slots holding the three screen indices; exported as reads and bindings. |
@@ -492,8 +493,9 @@ Import it under the alias `arcade`:
 | `navigation.domains` | `arcadeFloor` | A `Surface` domain over the court floor. |
 | `rules` | `handheld-pickup`, `handheld-release` | Toggle the handheld's `attach` facet onto/off seat 1's body — see "The handheld" below. |
 
-Placement ids, kit names, spawn points, screens, and domains keep their bare
-spellings under the alias; only the state rows compose as `arcade_<name>`.
+Declared names and their registered references receive the import alias, including
+machine instances. Screen indices stay numeric; state rows holding those indices
+compose as `arcade_<name>`.
 
 ## How a cabinet is engaged
 
@@ -510,15 +512,14 @@ A `screens` row is a world-space slab, not a placement: the row's `origin`
 is the cabinet's screen face, authored to sit in the cabinet prototype's bezel
 with the court at the origin. The island restates the three rows' `origin`s
 beside `arcadeCourt`'s `position` and `yawDegrees` whenever it moves the court.
-The cabinet prototypes declare no creation face, since a face's own source would
-boot a second machine at a derived index with no engage route. The arcade takes
-indices 8 through 10; the island's own screens stay below 8, and every index
-stays below the derived-face band.
+The cabinet prototypes use these explicit screen rows for engagement. Another
+screen or creation face may display the same named output without booting another
+machine. The arcade takes indices 8 through 10; the island's own screens stay
+below 8, and every index stays below the derived-face band.
 
-Content paths inside the module are spelled relative to the importing
-document's directory (`../cartridges/hgb-mirror.cgb.cartridge.json` from
-`Assets/worlds`), as every asset row's path is; a host elsewhere mirrors that
-layout.
+Machine content paths are relative to the module that declares them:
+`../../cartridges/hgb-mirror.cgb.cartridge.json` from `Assets/worlds/modules`.
+Composition relocates provider-declared asset paths when the module is imported.
 
 ## The handheld
 

@@ -20,4 +20,9 @@ public static class CliWorldVocabulary {
             probeKindCheck: WorldProbeKinds.IsShipped);
         return catalog;
     }
+    /// <summary>Computes the stable metadata fingerprint for the selected invocation catalog.</summary>
+    public static string Fingerprint(WorldMachineCatalog catalog) {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return catalog.CompositionFingerprint;
+    }
 }

@@ -57,6 +57,30 @@
     "timing": false,
     "width": 1280
   },
+  "machines": [
+    {
+      "configuration": {
+        "content": {
+          "path": "../../../../../roms/tetris-world-rev1.gb"
+        },
+        "model": "cgb",
+        "schema": "puck.gaming-brick.config.v1"
+      },
+      "engine": "gaming-brick",
+      "name": "reference"
+    },
+    {
+      "configuration": {
+        "content": {
+          "path": "../../cartridges/tetris.cgb.cartridge.json"
+        },
+        "model": "cgb",
+        "schema": "puck.gaming-brick.config.v1"
+      },
+      "engine": "gaming-brick",
+      "name": "authored"
+    }
+  ],
   "schema": "puck.world.def.v1",
   "screens": [
     {
@@ -81,9 +105,8 @@
       },
       "source": {
         "$type": "machine",
-        "contentPath": "../../../../../roms/tetris-world-rev1.gb",
-        "engine": "gaming-brick",
-        "options": "cgb"
+        "instance": "reference",
+        "output": "video"
       },
       "up": [
         0,
@@ -113,9 +136,8 @@
       },
       "source": {
         "$type": "machine",
-        "contentPath": "../../cartridges/tetris.cgb.cartridge.json",
-        "engine": "gaming-brick",
-        "options": "cgb"
+        "instance": "authored",
+        "output": "video"
       },
       "up": [
         0,

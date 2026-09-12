@@ -189,6 +189,9 @@
     "search": {
       "$ref": "./schema/search.schema.json"
     },
+    "machines": {
+      "$ref": "./schema/machines.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

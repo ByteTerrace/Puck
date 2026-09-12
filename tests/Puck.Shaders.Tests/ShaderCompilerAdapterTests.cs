@@ -20,6 +20,14 @@ public sealed class ShaderCompilerAdapterTests
     }
 
     [Fact]
+    public void Comments_do_not_create_channel_bindings()
+    {
+        var adapted = ShadertoyShaderAdapter.Adapt("// iChannel0 is documentation\nvoid mainImage(out vec4 c, in vec2 p) { c = vec4(1); }");
+        Assert.Empty(adapted.Channels);
+        Assert.DoesNotContain("sampler2D iChannel0", adapted.Text);
+    }
+
+    [Fact]
     public void Explicit_channel_map_refuses_an_undeclared_channel()
     {
         var ex = Assert.Throws<InvalidDataException>(() =>
@@ -49,10 +57,35 @@ public sealed class ShaderCompilerAdapterTests
         var adapted = ShadertoyShaderAdapter.Adapt(
             "void mainImage(out vec4 c, in vec2 p) { c = vec4(gain, float(count), 1); }",
             config: config);
-        Assert.Contains("layout(offset = 112) vec2 gain;", adapted.Text);
-        Assert.Contains("layout(offset = 120) uint count;", adapted.Text);
-        Assert.Contains("#define gain puck.gain", adapted.Text);
+        Assert.Contains("layout(offset = 112) uint count;", adapted.Text);
+        Assert.Contains("layout(offset = 116) float puck_gain_0;", adapted.Text);
+        Assert.Contains("layout(offset = 120) float puck_gain_1;", adapted.Text);
+        Assert.Contains("#define gain vec2(puck.puck_gain_0, puck.puck_gain_1)", adapted.Text);
     }
+    [Fact]
+    public void Config_fields_use_canonical_ordinal_order_for_vector_packing()
+    {
+        var config = new Dictionary<string, ShaderConfigField>
+        {
+            ["zVector"] = new(ShaderValueType.Float2),
+            ["aScalar"] = new(ShaderValueType.Float),
+            ["mVector"] = new(ShaderValueType.Float3),
+        };
+
+        var adapted = ShadertoyShaderAdapter.Adapt(
+            "void mainImage(out vec4 c, in vec2 p) { c = vec4(zVector, aScalar, mVector.x); }",
+            config: config);
+
+        Assert.Contains("layout(offset = 112) float aScalar;", adapted.Text);
+        Assert.Contains("layout(offset = 116) float puck_mVector_0;", adapted.Text);
+        Assert.Contains("layout(offset = 120) float puck_mVector_1;", adapted.Text);
+        Assert.Contains("layout(offset = 124) float puck_mVector_2;", adapted.Text);
+        Assert.Contains("layout(offset = 128) float puck_zVector_0;", adapted.Text);
+        Assert.Contains("layout(offset = 132) float puck_zVector_1;", adapted.Text);
+        Assert.True(adapted.Text.IndexOf("float aScalar", StringComparison.Ordinal) < adapted.Text.IndexOf("float puck_mVector_0", StringComparison.Ordinal));
+        Assert.True(adapted.Text.IndexOf("float puck_mVector_0", StringComparison.Ordinal) < adapted.Text.IndexOf("float puck_zVector_0", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Frame_constants_keep_the_cross_backend_wire_size()
     {

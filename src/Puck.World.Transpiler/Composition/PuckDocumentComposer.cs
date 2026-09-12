@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Machines;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 
@@ -68,13 +69,17 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// <param name="composed">The composed tree (basis/imports members stripped) on success.</param>
     /// <param name="chainBytes">The bytes of every file touched composing the root.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider rewriting, or null for structural composition.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
     public static bool TryComposeWorldDocument(
         string rootResolvedPath,
         byte[] rootBytes,
         out JsonObject? composed,
         out IReadOnlyList<byte[]> chainBytes,
-        out string reason
+        out string reason,
+        string catalogFingerprint = "",
+        IMachineValidationCatalog? catalog = null
     ) {
         var source = new PuckDocumentComposer();
 
@@ -84,7 +89,9 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             reason: out reason,
             rootBytes: rootBytes,
             rootResolvedName: rootResolvedPath,
-            source: source
+            source: source,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         );
     }
 }

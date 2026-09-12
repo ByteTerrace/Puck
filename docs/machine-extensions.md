@@ -1,12 +1,25 @@
 # Screens and machine extensions
 
-This is the agreed cross-project design and implementation plan. The runtime
-implements part of it; the complete DSL examples below still describe the target
-contract. The parallel implementation schedule at the end defines the remaining
-work, worker briefs, integration boundaries, and acceptance gates.
-The objective is to make the Gaming Bricks ordinary extensions while preserving
-physical screens, convenient cabinet authoring, and gameplay that directly
-observes and controls machine hardware.
+This is the authoritative status summary and agreed implementation plan for
+making the Gaming Bricks ordinary extensions while preserving physical screens,
+convenient cabinet authoring, and gameplay that directly observes and controls
+machine hardware. It is intended to let a new contributor resume the work
+without reconstructing the conversation or relying on temporary worktrees.
+
+**Status recorded on 2026-09-12:** the first integrated milestone is complete
+and validated. The full extraction is unfinished. The three Luna implementation
+workers are stopped, and the audit task has the integrated changes for
+checkpointing. This summary records the state before that new checkpoint;
+`070dc6581921b0df25f82eef94a7b1d186303fa4` was the shared HEAD when it was written.
+No later commit is claimed here. Implementation remains paused at that milestone.
+
+Read the [implemented behavior](#what-the-current-implementation-establishes),
+[remaining work](#remaining-work-and-recommended-order),
+[verification record](#verification-record-and-reproduction), and
+[resumption notes](#integration-and-resumption-notes) first. The later design
+sections and worker briefs retain the complete target contract. In particular,
+the complete DSL examples describe the target: authored screen names, explicit
+control routes, and full replay behavior are not all available today.
 
 ## The decision
 
@@ -55,23 +68,292 @@ the affected tests against the integration base supplied to each worker.
   state, staged replacement, removal, undo, and memory bindings. The existing
   [lifetime laws](../tests/Puck.World.Tests/NamedMachineLifetimeLawTests.cs) and
   [memory laws](../tests/Puck.World.Tests/NamedMachineMemoryLawTests.cs) exercise
-  this path. They do not establish completion of the display migration.
+  this path, including shared-display lifetime and neutral headless input.
 - Both brick hosting adapters expose coherent hardware inspection and explicit
   patch/bus semantics, including Advanced addresses above 0xFFFF. Retain the
   existing worker barriers and synchronous embedding APIs.
-- [Screen sources](../src/Puck.World.Schema/WorldScreen.cs) still carry engine,
-  content, options, and cable declarations. The host still has screen-indexed
-  runtime slots alongside named instances, and
-  [speaker sources](../src/Puck.World.Schema/WorldSpeaker.cs) still identify
-  machine audio through a screen. This coexistence is the principal unfinished
-  migration, not an intended second authoring model.
+- [Screen sources](../src/Puck.World.Schema/WorldScreen.cs) and
+  [speaker sources](../src/Puck.World.Schema/WorldSpeaker.cs) now reference a
+  named machine instance and output. The shared-output lifetime laws pass, and
+  a headless application run removed both displays while their one machine
+  retained its generation and continued advancing. Display input folds into the
+  instance's single port, and screen-index cable commands resolve named devices.
+  Authored screen names and explicit control/link routing remain below.
 - [Screen operations](../src/Puck.World.Protocol/Protocol/WorldScreenOp.cs)
   still form a closed, screen-indexed lifecycle union. Direct rule observations,
   control routes, links, and replay must move with instance identity.
-- Provider field metadata exists, but its import, relocation, author-tool, and
-  complete execution-receipt consumers still need integration. The World
-  executable also retains direct bundled brick/forge references; optional
-  distribution needs a build-and-run proof.
+- Generic provider operations travel through the ordered authority domain with
+  expected generation and named-machine Control checks. Provider preparation,
+  complete candidate validation, runtime commit, and canonical declaration adoption
+  are separate. The console reports typed outcomes; screen/forge insertion resolves
+  the named producer through the same executor. Provider operations refuse during
+  recording and close boot-only replay/checkpoint capture after runtime execution;
+  full machine receipts and snapshots remain unimplemented.
+- Provider field metadata now drives nested configuration validation, aliased
+  references, declaring-document asset relocation, and author tools. Desktop,
+  CLI, browser, Silo, saves, transfers, and neighbour loading carry the selected
+  catalog and its composition fingerprint. Complete execution receipts remain
+  unimplemented. The World executable retains direct bundled brick/forge
+  references; optional distribution still needs a build-and-run proof.
+
+### What the completed milestone means
+
+A world can declare a machine independently, display its output in several
+places, read and write its hardware through named memory bindings, and submit
+provider operations against its current generation. Removing a display does
+not destroy its producer. The ordinary author still works with world rows,
+imports, screens, speakers, and the existing DSL.
+
+This resolves the first architectural problem that prompted the work. Screens
+are a valid physical concept; owning a CPU, cartridge, execution lifetime, and
+hardware vocabulary merely because something displays pixels was the excessive
+coupling. The neutral host is legitimate engine infrastructure. The remaining
+extraction removes the older ownership paths and completes every consumer of
+the new identity, including reproduction and optional distribution.
+
+The delivered slices do not close every item in the original A/B/C packets:
+
+| Lane | Integrated work | What its original packet still includes |
+|---|---|---|
+| Luna A: machines and displays | Named screen/speaker sources, shared producer lifetime, input folding for one compatible port, safe existing cable routing, named inspection, save capture, arcade and comparison/mirror data migration | Authored screen names and derived slots, explicit multiport controls and named link authoring, complete cabinet UX, and removal of old screen-owned execution |
+| Luna B: operations and hardware | Neutral operation capability, brick/Tune handlers, ordered server execution, typed outcomes, machine authority, canonical configuration adoption, and link/replacement refusals | Generic rule effects, direct observations and addon watches using instance identity, complete work/resource admission, and adversarial final integration |
+| Luna C: authoring and reproduction | Recursive metadata validation, alias/reference rewriting, declaring-document asset relocation, catalog-sensitive composition caches, and catalog propagation through actual callers | Execution receipts, verified machine replay/state evidence, optional distribution without bricks, and remaining editor/generated consumers |
+| Coordinator integration | Combined source reconciliation, actual console/forge forwarding, selected content-policy propagation, owned-world load/save propagation, source alias registration, checkpoint restore repair, and final executable verification | Review the next bounded slices and the complete acceptance matrix after implementation resumes |
+
+The [mirror source](../src/Puck.World/Assets/worlds/tools/hgb-mirror.puck) is the
+current worked hardware example: five machine-owned bindings write world state
+into cartridge variables, and a sixth reads the cartridge's derived tile back
+into world state. These bindings survive removal of its machine display. The
+[arcade module](../src/Puck.World/Assets/worlds/modules/arcade.world.json) now
+declares three named producers. The
+[comparison source](../src/Puck.World/Assets/worlds/tools/hgb-compare.puck) uses
+the same named-source model. Companion JSON was regenerated from `.puck`;
+the JSON-only arcade module remains authored JSON.
+
+### Current limitations and compatibility boundaries
+
+- Screens still have authored indices. A machine is named; a screen is not yet
+  fully addressed by an authored name throughout rendering, commands, or grants.
+- Display input can resolve one compatible normalized input port. A multiport
+  machine can run headlessly, but ambiguous display control refuses until the
+  explicit route model exists.
+- Existing cable commands resolve their screen endpoints to named machines and
+  step a coupled group once. This is not yet the complete named, display-free
+  link authoring contract. Unlink before operating on, replacing, pausing, or
+  removing a linked machine; preparation and commit guard the live topology.
+- `screen.insert` and `forge.play` resolve a named producer and use the ordered
+  operation executor. `screen.eject` detaches the display source. Provider
+  `content.eject` is the operation that changes the machine's mounted content.
+  The generic executor supports typed Applied, Unsupported, Refused, and Faulted
+  outcomes. JSON payloads include the operation descriptor's schema identifier.
+- Machine operations require Control over the named machine and an expected
+  generation. Their canonical wire leaf is bounded to 64 KiB. Oversized optional
+  result data cannot erase the operation's actual status. Complete instance,
+  guest-memory, queued-work, watch, and link admission remains unfinished.
+- A local host defaults to the permissive content-admission policy. A restricted
+  host supplies its immutable policy at construction. Admission sees exact
+  source and executable bytes and provider-verified provenance; a filename or
+  an unverified format label is insufficient.
+- Generic operations refuse while recording. Crossing their runtime commit
+  barrier closes boot-only replay/checkpoint capture, including a possible
+  partial runtime fault. These refusals preserve correctness while complete
+  receipts and reproduction are absent; they are not replay support.
+- Live definition capture and save preserve the canonical machine configuration.
+  A document save is not a CPU/guest-memory snapshot or a general resume save.
+  Catalog fingerprints partition composition caches; they are not receipts
+  proving the exact code that executed.
+- Wider/raw hardware access, coherent inspection, patches, bus semantics, and
+  named bindings exist. Migrating every direct rule predicate and addon watch
+  remains work. World-tick observations do not promise detection of every
+  transient within a guest step.
+- The neutral machine host references no brick core or forge. The World
+  executable still bundles concrete brick/forge references, and the older
+  screen-owned runtime/operation paths have not all been deleted. A complete
+  distribution without Gaming Bricks has not been proved.
+
+The development world format remains v1. Provider configuration/operation tags
+are separate contracts. New shapes replace retired development shapes; do not
+add compatibility readers or a second authoring model to complete this work.
+The retained runtime compatibility code is migration debt to remove, not a
+promise to support historical world documents.
+
+## Remaining work and recommended order
+
+No unanswered product question blocks the next implementation slice. The
+architectural choices are settled: keep screens, give machines independent
+identity, preserve direct hardware gameplay, and keep provider-specific
+knowledge behind extension contracts. What remains is implementation and
+acceptance evidence, with a few local UX choices to exercise in a worked cabinet.
+This is substantial work, not just polishing.
+
+| Priority | Work to close | Required evidence |
+|---|---|---|
+| 1 | Finish display identity, explicit controls, and named links. Replace authored screen indices with names; derive rendering slots through one catalog, including creation faces and authoring headroom. Release held input on retarget. | Two aliased cabinets with independent controls and state; passive monitors grant no control; slot reuse cannot retarget a command; a coupled group advances with no display. |
+| 2 | Finish the hardware gameplay consumers. Move direct predicates, generic rule operations, addon watches, and availability reporting to named instances. Complete independent work/resource bounds. | Raw and symbolic reads/writes, an Advanced address above 0xFFFF, a real device side effect, failed-read versus valid-zero behavior, generation replacement, and capacity refusal before allocation or commit. |
+| 3 | Complete boot-anchored reproduction. Pin code/dependency closure, configuration, firmware/content, compiler/output identity, and host deterministic state; record external operations once and re-execute derived work once. | Mismatches refuse before advancement; changing a guest register fails verification even when world population matches; named links and bindings replay correctly. Keep mid-run checkpoint refusal unless full restoration is actually implemented. |
+| 4 | Finish ordinary cabinet authoring and player/author UX across the corpus. Separate feed selection from cartridge changes, complete read-back and save/reload, and update editor/generated consumers. | A reusable module/template is easy to place; two aliases work; insert/reset/eject and source selection have explicit effects; failed content, empty content, stopped execution, missing signal, and faults are distinguishable. |
+| 5 | Complete optional distribution and remove the old ownership path. Move remaining concrete composition/forge/Tune dependencies behind registration, then delete retired slots, options requirements, and screen-specific lifecycle protocol arms. | A build with no bundled brick dependencies boots ordinary sources and a non-brick provider; resolved dependency closure is checked; compiler references prove retired APIs have no callers; final acceptance matrix passes. |
+
+These priorities describe dependencies, not five mandatory serial jobs. On
+resumption, Luna A can own display/control/link completion while Luna B completes
+named gameplay consumers and bounds. Luna C can begin receipt design/implementation
+against agreed operation and asset contracts, with the coordinator reserving
+shared serializers and composition files. Cabinet migration follows the relevant
+identity contract; optional packaging can proceed when those contracts are stable.
+Do not make a worker wait for an API that exists only in another worker's brief.
+
+Use the [parallel schedule](#parallel-implementation-schedule) as the detailed
+brief library, but assign only the remaining bounded slice. Reuse the delivered
+implementation and its tests. Do not restart A1/B1/C1 from scratch or describe a
+partial historical packet as complete merely because its smaller delivered
+slice passed.
+
+General mid-run machine snapshots are optional beyond the initial boot-anchored
+replay strategy. A universal object graph, graph editor, extension marketplace,
+unrelated performance work, and full cycle-level event capture without a
+selected gameplay requirement remain outside the extraction. If gameplay needs
+a short-lived hardware condition, specify that scenario and its timing precision
+before adding bounded provider-side event capture; do not silently approximate it.
+
+## Verification record and reproduction
+
+The following results were obtained against the integrated shared source on
+2026-09-12. They are evidence for this milestone, not a claim that the remaining
+acceptance cases passed or that all repository tests were run.
+
+| Check | Recorded result |
+|---|---|
+| Focused machine, lifecycle, retirement, group-role, and checkpoint laws | 133 passed, 0 failed, 0 skipped |
+| World Debug, CLI Release, and World.Browser Release builds | Each passed with 0 warnings and 0 errors |
+| Fresh Release CLI `schema --check` | Root world, projection, Silo, and 66 section schemas matched, including `machines.schema.json` |
+| Fresh Release CLI `registry --check` | 1177 name sites matched; the registry was regenerated from the combined model |
+| Actual default-world startup | All three aliased arcade machines reported Running with no fault; 25 imported documents composed; exit 0 |
+| Actual mirror world | World `ax=76` matched machine byte `0x4C`; read binding and byte observation agreed. Removing display 0 retained generation 1 and increased completed segments from 8 to 14; read-driven world mutations continued; exit 0 |
+| Actual named-operation fixture | Reset, insertion, and forge playback Applied, advancing generations 1 through 4. A stale generation was Refused. After both displays were removed, generation 4 remained Running and completed segments reached 24; exit 0 |
+| Patch hygiene | `git diff --check` passed; the machine coordinator did not stage or commit |
+
+The default world's timed three-tick probe did not reach its post-barrier
+queries, so the separate successful startup queries prove admission/composition,
+not default-world performance or advancement. The mirror and operation runs
+provide the advancement evidence. These checks were headless and make no image
+parity, audio-listening, or GPU performance claim. The separate shader task owns
+its rendered/backend evidence. A new hosting/clock/link change still owes the
+current emulator gates; this milestone's focused tests do not substitute for them.
+
+The final integration also repaired specific regressions worth preserving:
+
+- JSON command payloads retain quotes before descriptor validation.
+- Aliased screen and speaker feeds rewrite their producer names, while provider
+  asset paths resolve relative to the declaring imported document.
+- Named screen inspection, output selection, symbol lookup, and memory access
+  resolve the named runtime rather than reading an empty legacy slot.
+- Link membership prevents unsafe replacement at both preparation and commit.
+- Checkpoint restoration clears both role-derived authority maps and rebuilds
+  them without incrementing the captured revision. Live document installation
+  still invalidates authority projections. The law covers fresh and previously
+  populated grant tables, including group-owned reach; checkpoint recapture is
+  byte-identical. This is an integrated foundation fix, not machine snapshot support.
+
+From the repository root, the focused verification commands were:
+
+```powershell
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj --no-restore --nologo -v:q --filter 'FullyQualifiedName~Machine|FullyQualifiedName~WorldSiloLifecycleLawTests|FullyQualifiedName~WorldAuthorityRetirementLawTests|FullyQualifiedName~WorldGroupRoleAuthorityLawTests|FullyQualifiedName~WorldAuthorityCheckpointCodecLawTests'
+dotnet build src/Puck.World/Puck.World.csproj --no-restore --nologo -v:q
+dotnet build src/Puck.Cli/Puck.Cli.csproj -c Release --no-restore --nologo -v:q
+dotnet build src/Puck.World.Browser/Puck.World.Browser.csproj -c Release --no-restore --nologo -v:q
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll schema --check
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll registry --check
+```
+
+These commands assume dependencies have already been restored. To inspect the
+checked-in mirror world interactively, create an isolated state directory and
+launch the built application from the repository root:
+
+```powershell
+$machineStateDirectory = Join-Path ([IO.Path]::GetTempPath()) ('puck-machine-review-' + [Guid]::NewGuid().ToString('N'))
+dotnet src/Puck.World/bin/Debug/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/tools/hgb-mirror.world.json --state-dir $machineStateDirectory --headless
+```
+
+Send these lines through its console/stdin. For automated runs, use BOM-less
+UTF-8 and the normal [stdin barrier contract](../.agents/skills/puck-world/references/console.md);
+wall-clock sleeps do not establish completed machine/world ticks.
+
+```text
+world.wait 8
+machine.state mirror
+world.state ax
+screen.peek 0 0xC200
+world.state wtEcho
+screen.peek 0 0xC205
+world.row.remove screens 0
+world.wait 3
+machine.state mirror
+world.state wtEcho
+world.status
+```
+
+The machine must retain its generation and keep advancing after display removal.
+The mirror's other, camera-fed display remains. Bindings must report availability,
+and world-to-machine `ax` must agree with the observed byte. A changing guest-derived
+value may advance between observations; the recorded sample above is not a
+promise that every independent run samples the same phase. Changes in this
+isolated session do not edit the checked-in `.puck` source. For the rendered
+experience, omit `--headless`; that launch is an interaction recipe, not new
+rendered validation evidence.
+
+## Integration and resumption notes
+
+The integrated shared checkout is the source to resume from after the audit
+checkpoint, not the old worker branches. Work was split across three
+`gpt-5.6-luna` workers at reasoning effort `high`, with the coordinator handling
+shared interfaces, integration, and verification. All workers stopped at the
+completed milestone. No implementation agent is currently assigned a next wave.
+
+The audit handoff enumerated 121 shared paths with machine work or integration
+hunks and full-file hashes. Several also contain firmware/foundation or shader
+work. The audit task owns the combined checkpoint and must preserve those hunks.
+This user-requested summary is a subsequent documentation-only change to this
+file, so its old handoff hash is superseded. User-owned skill edits are outside
+the coordinated code checkpoint. No code implementation resumed for this summary.
+
+The preserved worker references are recovery records, not recommended merge bases:
+
+| Lane | Branch | Preserved HEAD |
+|---|---|---|
+| A | `codex/machine-displays-implementation-20260912` | `f6b385de68ab6c927406110296120d386e207bbb` |
+| B | `codex/machine-operations-implementation-20260912` | `9202419606f5563ea843ad4954c9dcefe76aabe1` |
+| C | `codex/machine-authoring-implementation-20260912` | `98c1394b4e96bc6483c0f44bc0ec2095ada5af77` |
+
+Those worktrees include uncommitted changes and overlapping prerequisite
+patches. A's final host corrections were made by B in A's checkout. B's older
+host/schema state is superseded. C's metadata work was integrated, then parent
+fixes completed owned-world load/save catalog propagation, policy selection,
+and machine-source alias registration. Do not cherry-pick or copy any worker
+checkout wholesale over the integrated result. Parent corrections need no
+backport into the preserved copies.
+
+For local recovery only, the historical handoff directory is
+`D:/kittoes0124/AppData/Local/Temp/puck-machine-handoff-0f722a740e9743518aecb7cd5b5ecaa3`;
+it contains `shared-machine-paths.txt`, hashes, exact isolated inventories,
+and original snapshot locations. Actual app logs are under
+`D:/kittoes0124/AppData/Local/Temp/puck-machine-final-a687d7166d2a44c1a39f767e7bdfe2f7`.
+These temporary artifacts may disappear; the status, evidence, commands, and
+remaining acceptance work are deliberately recorded here without depending on them.
+
+When implementation resumes:
+
+1. Verify the audit checkpoint and current dirty work. Refresh the integration
+   base; preserve user skill work and other tasks' source changes.
+2. Choose one concrete remaining acceptance case per lane and reserve exact
+   files, including shared schema, serializer, command, and composition edits.
+3. Give each Luna worker the relevant brief below, current signatures/base,
+   prerequisite changes, and focused test commands. Use fresh context with
+   the agreed high effort; do not repeat the original architecture investigation.
+4. Integrate a complete behavior slice, run its necessary checks and an actual
+   app case, then update this status and the owning project documentation.
+5. Close the full extraction only after the decisive acceptance cases pass and
+   the old ownership path is removed. A green build or this milestone's 133 tests
+   alone cannot close it.
 
 ## Authoring: separate identity, keep the physical vocabulary
 
@@ -398,8 +680,8 @@ Follow the [development-version ruling](../.agents/skills/puck-world/references/
 World remains v1 during development. Change the current schema and tape shape
 directly, regenerate documents, and re-record affected evidence. Do not add old
 readers, compatibility aliases, automatic fallback to retired shapes, or a v2
-ceremony for this work. Provider configuration tags in the example are proposed
-contracts; they do not imply support for multiple historical implementations.
+ceremony for this work. Provider configuration tags belong to their providers;
+their presence does not imply support for multiple historical implementations.
 
 Even while the public development tag stays v1, replay needs exact execution
 identity. Record deterministic digests of the provider artifact closure,
@@ -433,6 +715,10 @@ authority by recreating the machine locally. Provider installation never implies
 transporting arbitrary native machine state across authorities.
 
 ## Implementation sequence and closure
+
+These stages describe the complete design, including work already delivered.
+Use the status and remaining-work table above to choose the next slice; this
+sequence is not an instruction to repeat completed characterization or extraction.
 
 Each stage lands with its affected human, API, generated-source, and agent
 documentation synchronized. Keep unrelated dirty source work out of this change.
@@ -526,17 +812,21 @@ general extension marketplace are outside this plan.
 
 ## Decisions to settle through the first worked module
 
-The recommended defaults above are concrete enough to implement a prototype.
-Before migrating the corpus, demonstrate three remaining choices in that
-prototype: that composing a cabinet requires no repetitive wiring; that a
-source switch releases or retargets an existing control application explicitly
-without leaving held input on the old machine; and that unconfigured content,
-failed content, and intentionally stopped execution remain distinct in the
-player and author interfaces. Exact field and command spellings may change in
-that exercise. Independent machine identity, retained screens, direct hardware
-access, and explicit execution/replay semantics are the invariants it must meet.
+The core architecture is settled, and the first corpus migration has landed.
+The remaining worked-cabinet exercise must close three UX acceptance details:
+composing a cabinet should require no repetitive wiring; a source switch should
+release or explicitly retarget held control; and empty content, failed content,
+and intentionally stopped execution should remain distinct in player and author
+interfaces. These are local implementation/UX checks, not pending permission to
+continue the extraction. Exact field and command spellings can be settled in
+that exercise while preserving independent machine identity, retained screens,
+direct hardware access, and explicit execution/replay semantics.
 
 ## Parallel implementation schedule
+
+This is the dispatch plan for future implementation. All three workers are
+stopped at the milestone recorded above; this section does not authorize an
+automatic restart or imply that the original waves have all passed.
 
 Use three implementation workers, each running `gpt-5.6-luna` with reasoning
 effort `high`. The coordinator is the fourth active agent. Start workers with
@@ -552,8 +842,8 @@ separates implementation work while giving shared contracts one decision maker.
 ### Dispatch preparation and shared contracts
 
 Before dispatch, resolve the current integration commit, inspect dirty files,
-and reserve ownership with the other active tasks. `DSL Refinement` is now
-working on the shader pipeline, including shared World schema/emitter glue;
+and reserve ownership with any other active tasks. At this milestone, `DSL Refinement` was
+responsible for the shader pipeline, including shared World schema/emitter glue;
 agree machine-specific edits before assigning those files. Coordinate hosting
 and authority changes with `Gaming Brick Firmware`, which also owns the
 membership/group foundation and server cartridge-admission policy. Its BIOS

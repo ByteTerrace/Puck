@@ -28,9 +28,10 @@ public enum WorldMutationPersistenceStatus : byte {
 
 /// <summary>The coherent authority publication watermark associated with a durable mutation completion.</summary>
 /// <param name="RootSequence">The root publication sequence.</param>
-/// <param name="CheckpointOrdinal">The checkpoint ordinal named by the publication, when one exists.</param>
-/// <param name="JournalSequence">The captured journal sequence, or <see langword="null"/> for a durable refusal
-/// that changed no journal state.</param>
+/// <param name="CheckpointOrdinal">The checkpoint ordinal named by the published root, or <see langword="null"/>
+/// when the authority has not captured a checkpoint.</param>
+/// <param name="JournalSequence">The published root's journal sequence, or <see langword="null"/> when this durable
+/// receipt changed no journal state. This is distinct from <paramref name="RootSequence"/>.</param>
 /// <param name="Tick">The simulation tick covered by the durable publication.</param>
 public readonly record struct WorldDurableWatermark(
     long RootSequence,
@@ -170,7 +171,9 @@ public readonly record struct WorldMutationOutcome(
         if (!Enum.IsDefined(persistenceStatus)) {
             throw new ArgumentOutOfRangeException(nameof(persistenceStatus));
         }
-        if ((affectedGroupRevision is < 0) || (durableWatermark is { IsValid: false })) {
+        if ((affectedGroupRevision is < 0) || (durableWatermark is { IsValid: false }) ||
+            (persistenceStatus == WorldMutationPersistenceStatus.Durable && durableWatermark is null) ||
+            (persistenceStatus is WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending && durableWatermark is not null)) {
             throw new ArgumentException("Outcome durability and revision facts are malformed.", nameof(durableWatermark));
         }
 

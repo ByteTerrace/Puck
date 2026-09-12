@@ -4,6 +4,7 @@ using Puck.Commands;
 using Puck.Launcher;
 using Puck.Audio.Mixing;
 using Puck.World.Protocol;
+using Puck.World.Machines;
 using Puck.World.Server;
 using static Puck.World.WorldCommandDefinition;
 
@@ -28,7 +29,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -369,7 +370,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         definition: snapshot,
                         imports: out var preservedImports,
                         note: out var note,
-                        path: target
+                        path: target,
+                        catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog),
+                        catalog: machineCatalog
                     );
 
                     server.Compact();

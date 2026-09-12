@@ -28,6 +28,15 @@ public interface IWorldForwardedAuthority {
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the submission reached a typed result.</returns>
     bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason);
+    /// <summary>Forwards a submission while preserving its caller operation id.</summary>
+    bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
+        if (operationId == Guid.Empty && payload is WorldSubmissionPayload.Mutation) {
+            result = new WorldSubmissionResult.Refusal("world.mutation.operation_id_missing", "mutation operation id is required");
+            reason = "mutation operation id is required";
+            return false;
+        }
+        return TryForwardSubmission(payload, out result, out reason);
+    }
     /// <summary>Resolves the traveler's current observable authority epoch.</summary>
     /// <param name="route">The route description on success.</param>
     /// <param name="reason">The named refusal on failure.</param>
@@ -209,7 +218,10 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the body was live here; <see langword="false"/> leaves the caller to
     /// follow the traveler's onward route.</returns>
-    public static bool TryApplySubmission(WorldServer server, string sourceAuthority, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+    public static bool TryApplySubmission(WorldServer server, string sourceAuthority, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
+        TryApplySubmission(server, sourceAuthority, in mobility, payload, Guid.Empty, out result, out reason);
+
+    public static bool TryApplySubmission(WorldServer server, string sourceAuthority, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         result = null;
@@ -232,10 +244,13 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
                 return (Live: false, Result: ((WorldSubmissionResult?)null));
             }
 
-            var stamped = StampPrincipal(
-                payload: payload,
-                principal: principal
-            );
+            if (payload is WorldSubmissionPayload.Mutation mutation && mutation.Value.Principal != principal) {
+                return (Live: true, Result: ((WorldSubmissionResult?)new WorldSubmissionResult.Refusal(
+                    "world.mutation.actor_mismatch",
+                    "mutation actor does not match the authenticated transferred principal"
+                )));
+            }
+            var stamped = StampPrincipal(payload: payload, principal: principal);
 
             if (
                 (stamped is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
@@ -263,7 +278,8 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
                     Sequence: 0,
                     CorrelationId: 0,
                     Principal: principal,
-                    Payload: stamped
+                    Payload: stamped,
+                    OperationId: operationId
                 ),
                 completion: value => captured = value
             );
@@ -366,15 +382,18 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
         return accepted.Accepted;
     }
     /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) => TryForwardSubmission(payload, Guid.Empty, out result, out reason);
+
+    /// <inheritdoc/>
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
         result = null;
         if (!WorldForwardingScope.TryEnter(out var scope, out reason)) { return false; }
         using (scope) {
             // A missing credential must not become permission to follow a known incarnation's route.
             if (!TryResolvePrincipal(out _, out reason)) { return false; }
-            var accepted = TryApplySubmission(m_server, m_sourceAuthority, in m_mobility, payload, out result, out reason);
+            var accepted = TryApplySubmission(m_server, m_sourceAuthority, in m_mobility, payload, operationId, out result, out reason);
             if (!accepted && m_server.TransferForwarder is { } forwarder) {
-                accepted = forwarder.TryForwardSubmission(m_server, in m_mobility, payload, out result, out reason);
+                accepted = forwarder.TryForwardSubmission(m_server, in m_mobility, payload, operationId, out result, out reason);
             }
             if (accepted && payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave } &&
                 result is WorldSubmissionResult.Session { Reply.Accepted: true }) {

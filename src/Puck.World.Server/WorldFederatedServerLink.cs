@@ -18,7 +18,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             }
         }
     }
-    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
+    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload, Guid operationId = default) {
         if (!m_authority.TryCredential(
             bodyIndex: bodyIndex,
             mobility: out var mobility,
@@ -33,7 +33,8 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
         if (!WorldFrameCodec.TryEncode(
             failure: out var failure,
             frame: out var canonical,
-            payload: payload
+            payload: payload,
+            operationId: operationId
         )) {
             NoteUnavailable(
                 bodyIndex: bodyIndex,
@@ -75,9 +76,10 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             : null
         );
     }
-    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
+    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload, Guid operationId = default) => Submit(
         bodyIndex: -1,
-        payload: payload
+        payload: payload,
+        operationId: operationId
     );
 
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
@@ -128,18 +130,50 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     // committed body ("any"). principal is unused here — it never rode this transport; the interface parameter
     // exists for the loopback side, which routes on it for real. Returns 0: the remote authority mints the envelope,
     // so no local correlation exists for a deferred verdict to address.
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
-        _ = (payload switch {
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(payload, principal, Guid.Empty);
+
+    /// <inheritdoc/>
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(payload, principal, operationId, null);
+
+    /// <inheritdoc/>
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+        var reply = (payload switch {
             WorldSubmissionPayload.Command command => Submit(
                 bodyIndex: command.Value.EntityIndex,
-                payload: payload
+                payload: payload,
+                operationId: operationId
             ),
             WorldSubmissionPayload.Designation designation => Submit(
                 bodyIndex: designation.Value.EntityIndex,
-                payload: payload
+                payload: payload,
+                operationId: operationId
             ),
-            _ => SubmitAny(payload: payload),
+            _ => SubmitAny(payload: payload, operationId: operationId),
         });
+
+        // Fire-and-forget submissions retain their historical return shape. A typed caller can use the additive
+        // callback overload; the response was already decoded by Submit and is intentionally not reconstructed here
+        // until the server link's response routing is moved to the shared completion owner.
+        if (completion is not null) {
+            var completionReason = "remote authority did not return a completion";
+            WorldSubmissionResult? result = null;
+            var reason = string.Empty;
+            var decoded = reply is { } completed && WorldPeerWireFormat.TryReadResult(
+                body: completed.Body.Span,
+                kind: completed.Kind,
+                result: out result,
+                reason: out reason
+            );
+            if (decoded) {
+                completion(result!);
+            } else {
+                if (reply is { }) { completionReason = reason; }
+                completion(new WorldSubmissionResult.Refusal(
+                    Code: "world.transport.completion_unavailable",
+                    Detail: completionReason
+                ));
+            }
+        }
 
         return 0;
     }

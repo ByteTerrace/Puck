@@ -457,6 +457,14 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    public void FillBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        if (sizeBytes == 0 || (sizeBytes & 3) != 0) {
+            throw new ArgumentOutOfRangeException(nameof(sizeBytes), sizeBytes, "Vulkan buffer fills require a positive size divisible by four.");
+        }
+        var fillBuffer = GetPointers(deviceHandle).CmdFillBuffer;
+        fillBuffer(commandBufferHandle, bufferHandle, 0, sizeBytes, 0);
+    }
+    /// <inheritdoc/>
     public void CopyImageToImage(
         nint deviceHandle,
         nint commandBufferHandle,
@@ -898,6 +906,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         public delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void> CmdSetScissor;
         public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void> CmdPipelineBarrier;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdClearColorImage;
+        public delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void> CmdFillBuffer;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdCopyImageToBuffer;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void> CmdCopyBufferToImage;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void> CmdCopyImage;
@@ -928,6 +937,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdSetScissor"u8)),
                 CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPipelineBarrier"u8)),
                 CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdClearColorImage"u8)),
+                CmdFillBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdFillBuffer"u8)),
                 CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImageToBuffer"u8)),
                 CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyBufferToImage"u8)),
                 CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImage"u8)),

@@ -71,7 +71,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
                 _ => "fixed",
             });
             var source = (speaker.Feed.Source switch {
-                WorldSpeakerSource.Machine machine => $"machine:{machine.ScreenIndex}",
+                WorldSpeakerSource.Machine machine => $"machine:{machine.Instance}:{machine.Output}",
                 WorldSpeakerSource.Tune tune => $"tune:{tune.TuneId}",
                 WorldSpeakerSource.Synth synth => $"synth:{synth.PatchId}",
                 _ => "none",

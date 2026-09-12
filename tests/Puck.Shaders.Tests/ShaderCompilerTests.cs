@@ -6,6 +6,23 @@ namespace Puck.Shaders.Tests;
 public sealed class ShaderCompilerTests
 {
     [Fact]
+    public void Translated_shadertoy_registers_follow_dense_descriptor_order_and_keep_unused_slots()
+    {
+        const string translated = "RWTexture2D<float4> puckShaderImage : register(u0, space0); Texture2D<float4> iChannel0 : register(t1, space0); SamplerState s0 : register(s1, space0); Texture2D<float4> iChannel1 : register(t3, space0); SamplerState s1 : register(s3, space0);";
+        var remapped = ShaderCompiler.RemapTranslatedHlslRegisters(translated, new Dictionary<string, uint>
+        {
+            ["iChannel0"] = 1,
+            ["iChannel1"] = 3,
+            ["iChannelUnused"] = 5,
+        });
+
+        Assert.Contains("register(t0, space0)", remapped);
+        Assert.Contains("register(s0, space0)", remapped);
+        Assert.Contains("register(t1, space0)", remapped);
+        Assert.Contains("register(s1, space0)", remapped);
+        Assert.Contains("register(u0, space0)", remapped);
+    }
+    [Fact]
     public async Task Hlsl_compute_and_graphics_stages_compile_to_both_backends()
     {
         using var fixture = new Fixture();
@@ -93,6 +110,26 @@ public sealed class ShaderCompilerTests
     }
 
     [Fact]
+    public async Task Separate_compiler_instances_publish_only_complete_shared_cache_entries()
+    {
+        using var fixture = new Fixture();
+        var firstRunner = new FakeRunner();
+        var secondRunner = new FakeRunner();
+        var firstCompiler = new ShaderCompiler(fixture.Path, firstRunner);
+        var secondCompiler = new ShaderCompiler(fixture.Path, secondRunner);
+        var request = new ShaderCompilationRequest("shared", [
+            new ShaderStageSource(ShaderStage.Compute, Path.Combine(fixture.Path, "shared.hlsl"), "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }")
+        ]);
+
+        var results = await Task.WhenAll(
+            firstCompiler.CompileAsync(request, TestContext.Current.CancellationToken),
+            secondCompiler.CompileAsync(request, TestContext.Current.CancellationToken));
+
+        Assert.All(results, result => Assert.True(result.IsSuccess));
+        Assert.Empty(Directory.GetFiles(fixture.Path, "*.tmp", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetDirectories(fixture.Path, ".build-*", SearchOption.TopDirectoryOnly));
+    }
+    [Fact]
     public async Task Cancellation_is_forwarded_to_the_tool_process()
     {
         using var fixture = new Fixture();
@@ -148,5 +185,28 @@ public sealed class ShaderCompilerTests
             }
             return null;
         }
+    }
+    [Fact]
+    public async Task Compiler_returns_channel_validation_as_a_failed_candidate()
+    {
+        using var fixture = new Fixture();
+        var request = ShaderCompilationRequest.Compute("bad-channel", Path.Combine(fixture.Path, "bad.glsl"), "void mainImage(out vec4 c, in vec2 p) { c = texture(iChannel0, p); }", channels: new Dictionary<string, uint>());
+        var result = await new ShaderCompiler(fixture.Path, new FakeRunner()).CompileAsync(request, TestContext.Current.CancellationToken);
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.IsError && diagnostic.Message.Contains("iChannel0", StringComparison.Ordinal));
+    }
+    [Fact]
+    public void Translated_native_glsl_registers_follow_descriptor_kind_and_order()
+    {
+        const string translated = "Texture2D<float4> source : register(t7, space0); SamplerState sourceSampler : register(s7, space0); RWStructuredBuffer<float4> output : register(u9, space0);";
+        var remapped = ShaderCompiler.RemapTranslatedHlslRegisters(translated, [
+            new ShaderDescriptorBinding(7, GpuComputeBindingKind.SampledImage),
+            new ShaderDescriptorBinding(3, GpuComputeBindingKind.StorageBufferRead),
+            new ShaderDescriptorBinding(9, GpuComputeBindingKind.StorageImage),
+        ]);
+
+        Assert.Contains("register(t0, space0)", remapped);
+        Assert.Contains("register(s0, space0)", remapped);
+        Assert.Contains("register(u0, space0)", remapped);
     }
 }

@@ -28,7 +28,16 @@ public readonly record struct MachineContentSymbol(string Space, ulong Address);
 /// <param name="Image">The complete native executable image; callers must not modify it while mounted.</param>
 /// <param name="SourceHash">The provider's canonical source identity.</param>
 /// <param name="Symbols">Named addresses exported by the provider.</param>
-public sealed record PreparedMachineContent(byte[] Image, string SourceHash, IReadOnlyDictionary<string, MachineContentSymbol> Symbols);
+/// <param name="VerifiedSourceFormat">The provider-stamped source format identifier, or null when no format assertion was made.
+/// <para>A non-null value may be emitted only by a trusted registered provider after successful recognition, validation,
+/// and preparation (including parse and compile where applicable); paths, headers, and client claims are not provenance.
+/// This marker is metadata, not authentication.</para></param>
+public sealed record PreparedMachineContent(
+    byte[] Image,
+    string SourceHash,
+    IReadOnlyDictionary<string, MachineContentSymbol> Symbols,
+    string? VerifiedSourceFormat = null
+);
 
 /// <summary>A provider's content validation or preparation refusal.</summary>
 public sealed class MachineContentException : Exception {

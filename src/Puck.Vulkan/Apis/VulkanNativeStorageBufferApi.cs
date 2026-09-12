@@ -13,6 +13,7 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
     private const uint BufferUsageStorageBufferBit = 0x00000020;
     // Also a transfer source so a host-visible storage buffer can stage uploads (e.g. CPU pixels into an image).
     private const uint BufferUsageTransferSourceBit = 0x00000001;
+    private const uint BufferUsageTransferDestinationBit = 0x00000002;
     // Lets the buffer back vkCmdDispatchIndirect / vkCmdDrawIndirect (the GPU reads the group/draw counts from it).
     private const uint BufferUsageIndirectBufferBit = 0x00000100;
     private const uint DeviceLocalMemoryPropertyBit = 0x00000001;
@@ -193,7 +194,7 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
             createBuffer: createBuffer,
             deviceHandle: deviceHandle,
             size: size,
-            usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit | extraUsage
+            usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit | BufferUsageTransferDestinationBit | extraUsage
         );
     }
 }

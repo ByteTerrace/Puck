@@ -16,6 +16,7 @@ public interface IVulkanGraphicsPipelineFactory {
     /// <param name="pushConstantBinding">The push constant range to expose, or <see langword="null"/> for none.</param>
     /// <param name="textureSamplerCount">The number of combined image-sampler descriptors in the texture array binding.</param>
     /// <param name="enableStorageBuffer">Whether to include a storage buffer binding in the descriptor set layout.</param>
+    /// <param name="vertexInput">The explicit vertex input layout; an empty layout is used for SV_VertexID shaders.</param>
     /// <returns>A new, owning <see cref="VulkanGraphicsPipeline"/>.</returns>
     VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
@@ -25,7 +26,8 @@ public interface IVulkanGraphicsPipelineFactory {
         VulkanShaderModule fragmentShaderModule,
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
-        bool enableStorageBuffer = true
+        bool enableStorageBuffer = true,
+        GpuVertexInputLayout? vertexInput = null
     );
     /// <summary>Creates a graphics pipeline whose viewport and scissor are sized to an explicit width and height (for offscreen targets).</summary>
     /// <param name="logicalDevice">The logical device the pipeline is created on.</param>
@@ -37,6 +39,7 @@ public interface IVulkanGraphicsPipelineFactory {
     /// <param name="pushConstantBinding">The push constant range to expose, or <see langword="null"/> for none.</param>
     /// <param name="textureSamplerCount">The number of combined image-sampler descriptors in the texture array binding.</param>
     /// <param name="enableStorageBuffer">Whether to include a storage buffer binding in the descriptor set layout.</param>
+    /// <param name="vertexInput">The explicit vertex input layout; an empty layout is used for SV_VertexID shaders.</param>
     /// <returns>A new, owning <see cref="VulkanGraphicsPipeline"/>.</returns>
     VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
@@ -47,6 +50,7 @@ public interface IVulkanGraphicsPipelineFactory {
         VulkanShaderModule fragmentShaderModule,
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
-        bool enableStorageBuffer = true
+        bool enableStorageBuffer = true,
+        GpuVertexInputLayout? vertexInput = null
     );
 }

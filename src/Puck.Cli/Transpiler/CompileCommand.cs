@@ -156,12 +156,14 @@ internal static class CompileCommand {
 
         if (validate && !diagnostics.HasErrors && !isCartridge && WorldSemanticValidator.IsRootDocument(jsonObject)) {
             var machineCatalog = CliWorldVocabulary.EnsureInstalled();
+            var catalogFingerprint = CliWorldVocabulary.Fingerprint(machineCatalog);
             WorldSemanticValidator.ValidateComposedWorld(
                 machines: machineCatalog,
                 diagnostics: diagnostics,
                 loweredJson: jsonObject,
                 sourceMap: sourceMap,
-                sourcePath: sourcePath
+                sourcePath: sourcePath,
+                catalogFingerprint: catalogFingerprint
             );
         }
 

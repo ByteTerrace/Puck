@@ -145,10 +145,10 @@ over a plain record or a parameter the caller supplies:
   handshake verified against a document's own `admission` trust list
   (`WorldAdmissionEntry`, in `Puck.World.Schema`), never a shared secret.
   `LocalKeySigningOracle` is the offline, locally-held-key oracle shape.
-- `WorldAuthorityStoreWireCodec.cs` — the two small shapes
-  `Puck.World.Server.WorldAuthorityBlobStore` frames beside the checkpoint
-  blob itself: the `checkpoints/latest` pointer, and one journal page's
-  `WorldMutationJournalEntry` sequence.
+- `WorldAuthorityStoreWireCodec.cs` — the legacy checkpoint-pointer and
+  whole-page `WorldMutationJournalEntry` shapes retained as migration inputs;
+  the authoritative private root and its immutable content-addressed metadata
+  are owned by `Puck.World.Server` and do not redesign these payloads.
 - `WorldReplayCodecException.cs` — the tape codec's own host-bug exception
   type, deliberately not derived from `InvalidOperationException` so no
   existing broad catch absorbs it by accident.

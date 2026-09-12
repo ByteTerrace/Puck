@@ -8,6 +8,8 @@ namespace Puck.World;
 /// registers exactly one backend and both draw a fullscreen graphics pass over an existing render target.</summary>
 internal sealed record WorldPostRenderExtensionServices : IFullscreenPassServices {
     /// <inheritdoc/>
+    public required IGpuComputeServices ComputeServices { get; init; }
+    /// <inheritdoc/>
     public required IGpuCommandRecorder CommandRecorder { get; init; }
     /// <inheritdoc/>
     public required Func<uint, uint, IGpuRenderTarget> CreateRenderTarget { get; init; }
@@ -38,6 +40,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
         var renderTargetFactory = Resolve<IGpuRenderTargetFactory>();
 
         return new WorldPostRenderExtensionServices {
+            ComputeServices = Resolve<IGpuComputeServices>(),
             CommandRecorder = Resolve<IGpuCommandRecorder>(),
             CreateRenderTarget = (width, height) => renderTargetFactory.Create(
             deviceContext: deviceContext,

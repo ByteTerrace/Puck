@@ -13,7 +13,7 @@ namespace Puck.DirectX.Interop;
 /// <see cref="ImageViewHandle"/>), and a command allocator/list pair packed as a GCHandle token for
 /// <see cref="CommandBufferHandle"/>. The initial resource state is
 /// <c>D3D12_RESOURCE_STATE_RENDER_TARGET</c>; <c>BeginRenderPass</c> transitions back from
-/// <c>PIXEL_SHADER_RESOURCE</c> on frames after the first.
+/// <c>PIXEL_SHADER_RESOURCE | NON_PIXEL_SHADER_RESOURCE</c> on frames after the first.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
@@ -143,6 +143,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
             riidResource: in resourceIid
         );
         m_renderTarget = ((nint)renderTarget);
+        DirectXResourceStates.Register(m_renderTarget, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET);
 
         var rtvHeapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             NumDescriptors = 1,
@@ -170,6 +171,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         }
 
         m_disposed = true;
+        DirectXResourceStates.Forget(m_renderTarget);
 
         if (m_commandBufferToken.IsAllocated) {
             var state = ((DirectXCommandBufferState)m_commandBufferToken.Target!);

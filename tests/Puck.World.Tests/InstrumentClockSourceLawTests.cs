@@ -1,4 +1,5 @@
 using Xunit;
+using System.Text.Json;
 
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
@@ -120,13 +121,17 @@ public sealed class InstrumentClockSourceLawTests {
             HalfHeight: 1f,
             HalfDepth: 0.1f,
             Round: 0f,
-            Source: new WorldScreenSource.Machine(Engine: "tune-instrument", ContentPath: instrumentPath, Options: null),
+            Source: new WorldScreenSource.Machine("instrument", "video"),
             Route: new WorldScreenRoute(Engageable: true, EngageRadius: 1000f)
         );
         var document = Fixtures.BuildDocument();
 
         return document with {
             Music = [new WorldMusicRow(Name: "instrument-clock-law", Source: musicPath, Hash: music.Hash)],
+            MachinesRaw = [.. document.Machines, new WorldMachine("instrument", "tune-instrument",
+                JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.config.v1", content = new { path = instrumentPath } }))],
+            SpeakersRaw = [new WorldSpeaker.Fixed("instrument-speaker", new DocumentVector3(0f, 0f, 0f),
+                new WorldSpeakerFeed(new WorldSpeakerSource.Machine("instrument", "audio"), WorldSpeakerFeed.ChannelMix, 1f))],
             ScreensRaw = [.. document.Screens, instrumentScreen],
         };
     }

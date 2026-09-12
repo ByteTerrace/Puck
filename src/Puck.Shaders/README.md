@@ -113,6 +113,31 @@ checks only that each stage's `.spv` exists and that every present bytecode
 file is well-formed (`ShaderBytecode.ValidateFormat`); the sidecars do not
 ship, and a runtime re-check would duplicate the build's gate.
 
+## Multi-pass shader pipelines
+
+`ShaderPipelineDefinition` describes a connected compute/fullscreen graph. Each
+pass declares its source language, entry point, workgroup, resource inputs and
+outputs, and optional per-pass config. `ShaderPipelineCompiler` validates the
+immutable graph before `ShaderPipelineLoader` snapshots sources/includes and
+compiles every live pass to both SPIR-V and DXIL. A failed pass refuses the
+whole candidate so a running renderer can keep its last installed graph.
+
+One-off source loading infers `.hlsl` as native HLSL compute, `.comp` as native
+GLSL compute, `.glsl` as Shadertoy GLSL compute, and `.frag` as native GLSL
+fullscreen. Vertex-only and unknown extensions require an explicit JSON
+pipeline. Pipeline-level `config` is currently rejected; declare fields on
+each pass so the packed parameter block has one unambiguous ABI.
+
+Image formats are validated against `GpuPixelFormat`. Fullscreen passes use the
+composition service's `R8G8B8A8Unorm` render target. Shadertoy output supports
+RGBA8, RGBA16F, and RGBA32F compute images; channel bindings must be declared
+by the pipeline when a channel map is supplied. The loader forwards the ordered
+logical descriptor list, including resource kinds and array counts, so native GLSL
+resources are remapped to the DirectX dense SRV/UAV ABI without dropping unused
+bindings. Planner defaults admit the Vulkan portable minimums: 128 total push
+constant bytes (112 bytes are frame constants, leaving 16 config bytes) and
+workgroups of at most 128x128x64 with 128 invocations; hosts with larger limits
+may supply an explicitly verified `ShaderPipelineLimits` policy.
 ## 🚀 API
 
 ```csharp
@@ -131,7 +156,7 @@ IRenderNode pass = new FullscreenPassNode(
 its one registered backend (command recorder, render-target factory,
 descriptor allocator, device context, graphics pipeline factory, queue
 submitter, shader-module factory, surface-transfer factory, vertex-buffer
-factory). The pass is an `ICaptureRequestTarget`: an armed capture reads
+factory, and cohesive compute services). The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
 back the pass's own render target — the composed result — and prints
 `[capture] <set name> -> <path>` on stderr; a frame the pass passes through
 untouched forwards the same request to its inner node instead. The request
@@ -272,6 +297,14 @@ A pass input names a resource; `previousFrame: true` explicitly reads history.
 Current-frame connections must be acyclic. History resources declare their
 initial contents, so the first frame never samples uninitialized memory.
 Named outputs can expose intermediate results as well as the final image.
+The planner reserves explicit descriptor bindings, then assigns omitted
+compute outputs before inputs using the lowest free binding numbers.
+Fullscreen outputs are attachments; only their inputs consume descriptors.
+Fullscreen input bindings must be consecutive in input order, starting at zero;
+color outputs have no descriptor binding. Compute bindings may be sparse.
+The Shadertoy adapter uses image output binding 0 and image input bindings
+from 1. The planned references carry the resolved numbers for both the
+compiler and executor.
 
 See the [three-pass ink pipeline](../Puck.World/Assets/pipelines/ink.pipeline.json)
 for a complete example: a floating-point feedback simulation feeds a color
@@ -281,13 +314,27 @@ document; the world's path to the pipeline resolves relative to the world.
 
 The loader compiles the whole candidate before the host installs it. A failed
 pass leaves the last successful pipeline running. Watched editing includes
-the pipeline document, shader files and includes. Pause holds time and history;
+the pipeline document, shader files and includes. A candidate captures each
+source revision, and a source edit during compilation triggers a debounced
+whole-pipeline retry. Superseded compiler tasks are canceled and retired after
+their native processes finish. Pause holds time and history;
 step advances one logical frame; reset initializes history and resets time.
+A ready paused instance holds a reload candidate until the next step or resume.
+Compatible history and unchanged parameter schemas retain their live values;
+changed schemas bind their new defaults.
 Resizing invalidates history whose dimensions change.
 
 `ShaderPipelineCompiler` validates the document without creating GPU objects.
 It checks resources, bindings and initialization and produces a stable
-topological execution order. `ShaderPipelineLoader` resolves source and invokes
+topological execution order. Execution retains every pass needed by a named
+output, including writers reached through previous-frame inputs; other branches
+are excluded. Resource entries report first and last pass access, with public
+outputs and persistent state retained through publication. Allocation remains
+straightforward: lifetime metadata does not imply transient-memory aliasing.
+The allocation budget includes owned image/buffer rings and float-preview targets;
+host-owned inputs are reported separately. GPU timings currently report unavailable.
+Both active and paused capture complete against the selected output.
+`ShaderPipelineLoader` resolves source and invokes
 `ShaderCompiler` for both backend bytecodes. `ShaderPipelineRenderNode` owns
 execution and GPU resources. World supplies inputs and routes named instances
 to layout slots; it does not compile individual passes itself.

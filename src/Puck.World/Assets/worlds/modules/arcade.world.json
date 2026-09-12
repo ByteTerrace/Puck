@@ -982,6 +982,41 @@
       "name": "handheld-release"
     }
   ],
+  "machines": [
+    {
+      "name": "cgb-screen",
+      "engine": "gaming-brick",
+      "configuration": {
+        "schema": "puck.gaming-brick.config.v1",
+        "model": "cgb",
+        "content": {
+          "path": "../../cartridges/hgb-mirror.cgb.cartridge.json"
+        }
+      }
+    },
+    {
+      "name": "agb-screen",
+      "engine": "advanced-gaming-brick",
+      "configuration": {
+        "schema": "puck.advanced-gaming-brick.config.v1",
+        "boot": "fast",
+        "content": {
+          "path": "../../cartridges/pip.agb.cartridge.json"
+        }
+      }
+    },
+    {
+      "name": "handheld-screen",
+      "engine": "gaming-brick",
+      "configuration": {
+        "schema": "puck.gaming-brick.config.v1",
+        "model": "cgb",
+        "content": {
+          "path": "../../cartridges/hgb-mirror.cgb.cartridge.json"
+        }
+      }
+    }
+  ],
   "screens": [
     {
       "index": 8,
@@ -1006,9 +1041,8 @@
       "round": 0.005,
       "source": {
         "$type": "machine",
-        "engine": "gaming-brick",
-        "contentPath": "../cartridges/hgb-mirror.cgb.cartridge.json",
-        "options": "cgb"
+        "instance": "cgb-screen",
+        "output": "video"
       },
       "route": {
         "engageable": true,
@@ -1040,9 +1074,8 @@
       "round": 0.005,
       "source": {
         "$type": "machine",
-        "engine": "advanced-gaming-brick",
-        "contentPath": "../cartridges/pip.agb.cartridge.json",
-        "options": "stub"
+        "instance": "agb-screen",
+        "output": "video"
       },
       "route": {
         "engageable": true,
@@ -1074,9 +1107,8 @@
       "round": 0.005,
       "source": {
         "$type": "machine",
-        "engine": "gaming-brick",
-        "contentPath": "../cartridges/hgb-mirror.cgb.cartridge.json",
-        "options": "cgb"
+        "instance": "handheld-screen",
+        "output": "video"
       },
       "route": {
         "engageable": true,

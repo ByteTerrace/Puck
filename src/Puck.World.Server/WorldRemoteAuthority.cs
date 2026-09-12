@@ -40,11 +40,16 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
     }
     /// <inheritdoc/>
     public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+        return TryForwardSubmission(payload, Guid.Empty, out result, out reason);
+    }
+    /// <inheritdoc/>
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
         var held = credential;
 
         return authority.TryForwardSubmission(
             credential: in held,
             payload: payload,
+            operationId: operationId,
             reason: out reason,
             result: out result
         );
@@ -402,7 +407,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         reason = string.Empty;
         return true;
     }
-    internal bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+    internal bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
+        TryForwardSubmission(bodyIndex, payload, Guid.Empty, out result, out reason);
+
+    internal bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
         if (!TryRouteCredential(
             bodyIndex: bodyIndex,
             credential: out var credential
@@ -415,16 +423,21 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         return TryForwardSubmission(
             credential: in credential,
             payload: payload,
+            operationId: operationId,
             reason: out reason,
             result: out result
         );
     }
-    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
+        TryForwardSubmission(in credential, payload, Guid.Empty, out result, out reason);
+
+    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
         result = null;
         if (!Puck.World.Protocol.WorldFrameCodec.TryEncode(
             failure: out var failure,
             frame: out var canonical,
-            payload: payload
+            payload: payload,
+            operationId: operationId
         )) {
             reason = $"forwarded submission could not be encoded — {failure.Detail}";
             return false;

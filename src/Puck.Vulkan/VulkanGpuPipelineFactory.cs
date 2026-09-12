@@ -42,6 +42,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
             pushConstantBinding: vkPushConstant,
             renderPass: renderPass,
             textureSamplerCount: description.TextureSamplerCount,
+            vertexInput: description.VertexInput,
             vertexShaderModule: vertexShader,
             width: width
         );

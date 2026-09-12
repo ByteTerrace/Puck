@@ -158,6 +158,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly HashSet<int> m_bootScreenIndices = new();
     private readonly Dictionary<int, Func<SdfScreenSourceFrame>> m_sources = new();
     private readonly Dictionary<int, Func<Vector3>> m_lights = new();
+    // One publication per named producer output, even when several screens fan out from it.
+    private readonly HashSet<(string Instance, string Output)> m_publishedMachineOutputs = new();
     // SdfEngineNode copies m_sources/m_lights into its own dictionary once, at construction, and never re-reads
     // these dictionaries again — writing a new delegate into m_sources[index] after boot is invisible to the
     // renderer. Each boot index's cell is instead a stable, never-replaced delegate target; only the cell's own
@@ -244,7 +246,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
 
-            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, Machines = m_machines };
+            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, Machines = m_machines, MachineSource = screen.Source as WorldScreenSource.Machine };
 
             switch (screen.Source) {
                 case WorldScreenSource.TestPattern pattern:
@@ -388,6 +390,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // when no surviving slot films it; a View->View re-point releases the previously-registered camera inside
     // TryView. A slot that no longer names a QR drops the rasterized one the same way.
     private (bool Ok, string Message) ApplySource(int index, ScreenSlot slot, WorldScreenSource source) {
+        slot.MachineSource = source as WorldScreenSource.Machine;
+
         var outcome = source switch {
             WorldScreenSource.None => (slot.HasLive
             ? TryEject(index: index)
@@ -598,8 +602,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return;
         }
 
+        m_publishedMachineOutputs.Clear();
         foreach (var slot in m_slots.Values) {
-            m_machines.VideoOutput(index: slot.Index)?.NotifyDeviceLost();
+            if (slot.MachineSource is { } machine && m_machines.VideoOutput(machine.Instance, machine.Output) is { } output && m_publishedMachineOutputs.Add((machine.Instance, machine.Output))) {
+                output.NotifyDeviceLost();
+            }
             slot.Pattern?.Surface.NotifyDeviceLost();
 
             if (slot.Qr is { } qr) {
@@ -837,6 +844,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // The WorldScreenSource this slot currently reflects — set at construction and updated by ReconcileScreens, so a
         // live UpsertScreen only re-applies its source through the runtime machinery when the source actually changed.
         public WorldScreenSource? DeclaredSource { get; set; }
+        public WorldScreenSource.Machine? MachineSource { get; set; }
         // Whether a live (ejectable) local producer is bound — the webcam, a probe output, or a window capture (a
         // machine is never local state on this slot).
         public bool HasLive => ((CameraSeat is not null) || (Capture is not null) || (Probe is not null));
@@ -914,8 +922,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // The current source for one submitted frame: the host's machine (if this index has one), else the highest-
         // precedence local producer's, else the declared jumbotron view's, authored QR, declared test pattern, or 0.
         // Only the shared-camera branch carries a retirement callback; every engine-owned/stable source is handle-only.
-        public SdfScreenSourceFrame AcquireFrame() => (Machines.HasMachine(index: Index)
-            ? Machines.Handle(index: Index)
+        public SdfScreenSourceFrame AcquireFrame() => (MachineOutput() is { } machine
+            ? machine.NativeImageViewHandle
             : ((CameraSeat is { } cameraSeat)
                 ? Binder.AcquireCameraFrame(seat: cameraSeat, sensor: CameraSensorKind!.Value)
                 : ((Probe is { } probe)
@@ -932,44 +940,36 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         )))))));
         // Diagnostic handle lookup only; unlike AcquireFrame it never submits GPU work and therefore does not acquire
         // an asynchronously-written camera slot.
-        public nint Handle() => (Machines.HasMachine(index: Index)
-            ? Machines.Handle(index: Index)
-            : ((CameraSeat is { } cameraSeat)
-                ? Binder.CameraHandleFor(seat: cameraSeat, sensor: CameraSensorKind!.Value)
-                : ((Probe is { } probe)
-                    ? probe.Handle()
-                    : ((Capture is { } capture)
-                        ? capture.Handle()
-                        : ((View is { } view)
-                            ? view.Handle()
-                            : ((Session is { } session)
-                                ? session.Handle()
-                                : ((Qr is { } qr)
-                                    ? qr.Surface.CurrentHandle
-                                    : (Pattern?.Surface.CurrentHandle ?? 0)
-        )))))));
+        public nint Handle() {
+            if (MachineOutput() is { } machine) { return machine.NativeImageViewHandle; }
+            if (CameraSeat is { } cameraSeat) { return Binder.CameraHandleFor(seat: cameraSeat, sensor: CameraSensorKind!.Value); }
+            if (Probe is { } probe) { return probe.Handle(); }
+            if (Capture is { } capture) { return capture.Handle(); }
+            if (View is { } view) { return view.Handle(); }
+            if (Session is { } session) { return session.Handle(); }
+            if (Qr is { } qr) { return qr.Surface.CurrentHandle; }
+            return Pattern?.Surface.CurrentHandle ?? 0;
+        }
         // The current emitted light, in the same precedence as Handle.
-        public Vector3 Light() => (Machines.HasMachine(index: Index)
-            ? Machines.Light(index: Index)
-            : ((CameraSeat is { } cameraSeat)
-                ? Binder.CameraLightFor(seat: cameraSeat, sensor: CameraSensorKind!.Value)
-                : ((Probe is { } probe)
-                    ? probe.Light
-                    : ((Capture is { } capture)
-                        ? capture.Light
-                        : ((View is { } view)
-                            ? view.Light()
-                            : ((Session is { } session)
-                                ? session.Light()
-                                : ((Qr is { } qr)
-                                    ? qr.Light
-                                    : (Pattern?.Light ?? Vector3.Zero)
-        )))))));
+        public Vector3 Light() {
+            if (MachineOutput() is { } machine) { return machine.EmittedLight; }
+            if (CameraSeat is { } cameraSeat) { return Binder.CameraLightFor(seat: cameraSeat, sensor: CameraSensorKind!.Value); }
+            if (Probe is { } probe) { return probe.Light; }
+            if (Capture is { } capture) { return capture.Light; }
+            if (View is { } view) { return view.Light(); }
+            if (Session is { } session) { return session.Light(); }
+            if (Qr is { } qr) { return qr.Light; }
+            return Pattern?.Light ?? Vector3.Zero;
+        }
         // Drops the authored QR and disposes the upload surface it owns — the symmetric half of TryQr's acquire, run
         // whenever the slot stops showing that code (a re-author, or a declared source that no longer names one).
         public void ReleaseQr() {
             Qr?.Surface.Dispose();
             Qr = null;
         }
+
+        private IMachineVideoOutput? MachineOutput() => MachineSource is { } source
+            ? Machines.VideoOutput(source.Instance, source.Output)
+            : null;
     }
 }

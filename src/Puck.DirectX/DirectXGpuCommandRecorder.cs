@@ -58,6 +58,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var renderTarget = ((ID3D12Resource*)renderPassHandle);
 
+        state.RenderTargetState = DirectXResourceStates.Get(renderPassHandle, state.RenderTargetState);
         if (D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET != state.RenderTargetState) {
             var barrier = CreateTransition(
                 after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -69,6 +70,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
             state.RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
         }
 
+        DirectXResourceStates.Set(renderPassHandle, state.RenderTargetState);
         var rtvHandle = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = ((nuint)framebufferHandle) };
         var clearColor = stackalloc float[4] { 0f, 0f, 0f, 1f };
 
@@ -122,13 +124,14 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         }
 
         var barrier = CreateTransition(
-            after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            after: DirectXResourceStates.ShaderRead,
             before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
             resource: ((ID3D12Resource*)state.CurrentRenderTargetHandle)
         );
 
         commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
-        state.RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        state.RenderTargetState = DirectXResourceStates.ShaderRead;
+        DirectXResourceStates.Set(state.CurrentRenderTargetHandle, state.RenderTargetState);
     }
     /// <inheritdoc/>
     public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {

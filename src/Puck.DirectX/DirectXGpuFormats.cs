@@ -15,12 +15,12 @@ internal static class DirectXGpuFormats {
             paramName: nameof(gpuPixelFormat)
         ),
     };
-    // The three GpuImageLayout cases every caller agrees map to a fixed D3D12_RESOURCE_STATES value. A caller
+    // The concrete GpuImageLayout cases share a fixed D3D12_RESOURCE_STATES value. A caller
     // supplies its own behavior for anything else (Undefined included) — a fallback state or a thrown exception.
     internal static bool TryToResourceState(GpuImageLayout layout, out D3D12_RESOURCE_STATES resourceState) {
         switch (layout) {
             case GpuImageLayout.ShaderReadOnly:
-                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                resourceState = DirectXResourceStates.ShaderRead;
                 return true;
             case GpuImageLayout.External:
                 resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;

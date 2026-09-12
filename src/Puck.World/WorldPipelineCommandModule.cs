@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -112,17 +113,42 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 return CommandResult.Error($"[pipeline.set: {exception.Message}]");
             }
         });
+        yield return Immediate("pipeline.capture", "pipeline.capture <name> <path> — capture the selected output on the next produced frame, including a paused frame.", (_, args) => {
+            if (args.Count != 2) { return CommandResult.Usage("pipeline.capture", "<name> <path>"); }
+            var name = args[0].ToString();
+            if (FindEntry(name) is not { } entry) { return Missing("pipeline.capture", name); }
+            if (!entry.Node.IsReady) { return CommandResult.Error($"[pipeline.capture: {name} has no active graph]"); }
+            if (entry.Node.PendingCapturePath is { } pending) {
+                return CommandResult.Error($"[pipeline.capture: a capture of {pending} is still pending]");
+            }
+            try {
+                var path = Path.GetFullPath(args[1].ToString());
+                if (Path.GetDirectoryName(path) is { Length: > 0 } directory) { Directory.CreateDirectory(directory); }
+                var request = new FrameCaptureRequest(path);
+                entry.Node.RequestCapture(request);
+                entry.Capture = request;
+                return new CommandResult($"[pipeline.capture: {name} pending {path}]");
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidOperationException) {
+                return CommandResult.Error($"[pipeline.capture: {exception.Message}]");
+            }
+        });
         yield return Immediate("pipeline.inspect", "pipeline.inspect <name> — show ordered passes, typed resources and named outputs of the active graph.", (_, args) => {
             if (args.Count != 1) { return CommandResult.Usage("pipeline.inspect", "<name>"); }
             var name = args[0].ToString();
             if (FindEntry(name) is not { } entry) { return Missing("pipeline.inspect", name); }
             if (entry.Node.Plan is not { } plan) { return CommandResult.Error($"[pipeline.inspect: {name} has no active graph]"); }
-            var result = new StringBuilder($"[pipeline.inspect: {name}");
+            var result = new StringBuilder($"[pipeline.inspect: {name}; allocated={entry.Node.AllocationBytes} bytes; budget={entry.Node.AllocationBudgetBytes} bytes");
             foreach (var pass in plan.Passes) {
                 result.Append($"\n  {pass.Name}: {pass.Declaration.Kind}; reads={string.Join(",", pass.Declaration.InputReferences.Select(input => input.Name + (input.PreviousFrame ? "@previous" : string.Empty)))}; writes={string.Join(",", pass.Declaration.OutputReferences.Select(output => output.Name))}");
             }
             foreach (var resource in plan.Resources) {
-                result.Append($"\n  resource {resource.Name}: {resource.Declaration.Kind} {resource.Declaration.Format}; history={resource.Declaration.History}; initialization={resource.Declaration.Initialization}");
+                result.Append($"\n  resource {resource.Name}: {resource.Declaration.Kind} {resource.Declaration.Format}; history={resource.Declaration.History}; initialization={resource.Declaration.Initialization}; lifetime={resource.FirstUsePassIndex}..{resource.LastUsePassIndex}");
+            }
+            foreach (var resource in entry.Node.ResourceStatus) {
+                result.Append($"\n  allocated {resource.Name}: {resource.Width}x{resource.Height}; bytes={resource.AllocationBytes}; external={resource.External}");
+            }
+            foreach (var pass in entry.Node.PassStatus) {
+                result.Append($"\n  GPU {pass.Name}: {(pass.LastGpuMilliseconds is { } milliseconds ? milliseconds.ToString("0.###", CultureInfo.InvariantCulture) + " ms" : "timing unavailable")}");
             }
             foreach (var output in plan.Outputs) { result.Append($"\n  output {output.Name} -> {output.Resource.Name}"); }
             return new CommandResult(result.Append(']').ToString());
@@ -133,7 +159,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             foreach (var row in server.Definition.Views.Pipelines) {
                 result.Append($"\n  {row.Name} source={row.Source}");
                 if (FindEntry(row.Name) is not { } entry) { result.Append(" unrendered"); continue; }
-                result.Append($" {(entry.IsCompiling ? "compiling" : "idle")} {Clock(entry)} watch={(entry.WatchPath is null ? "off" : "on")} changes={entry.SourceChangeCount}");
+                result.Append($" {(entry.IsCompiling ? "compiling" : "idle")} ready={entry.Node.IsReady.ToString().ToLowerInvariant()} frames={entry.Node.FrameCounter} {Clock(entry)} watch={(entry.WatchPath is null ? "off" : "on")} changes={entry.SourceChangeCount}");
                 result.Append($"\n    {entry.LastCompile?.Message ?? "no completed compilation"}");
                 if (entry.Node.LastSwapError is { } error) { result.Append($"\n    GPU candidate refused: {error.Message}"); }
             }

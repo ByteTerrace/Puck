@@ -3,6 +3,49 @@ using Puck.Abstractions.Machines;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    private static void ValidateMachineCables(IReadOnlyList<WorldMachine> machines, IReadOnlyList<WorldScreen> screens, List<string> errors) {
+        var cables = new Dictionary<string, List<(int Position, int Screen, string Path)>>(StringComparer.Ordinal);
+        for (var index = 0; index < machines.Count; index++) {
+            var machine = machines[index];
+            if (machine?.Cable is not { } cable) {
+                continue;
+            }
+            var screen = screens.FirstOrDefault(candidate => candidate?.Source is WorldScreenSource.Machine source && string.Equals(source.Instance, machine.Name, StringComparison.Ordinal));
+            var path = $"machines[{index}].cable";
+            if (string.IsNullOrWhiteSpace(cable.Name) || !IsKebabCase(cable.Name)) {
+                errors.Add($"{path}.name '{cable.Name}' must be non-empty kebab-case.");
+                continue;
+            }
+            if (cable.Position < 0) {
+                errors.Add($"{path}.position {cable.Position} must be non-negative.");
+                continue;
+            }
+            if (screen is null) {
+                errors.Add($"{path}: machine '{machine.Name}' has a cable but no display source consumes it.");
+                continue;
+            }
+            if (!cables.TryGetValue(cable.Name, out var members)) {
+                members = [];
+                cables.Add(cable.Name, members);
+            }
+            members.Add((cable.Position, screen.Index, path));
+        }
+        foreach (var (name, members) in cables) {
+            if (members.Count < 2) {
+                errors.Add($"cable '{name}' has one plugged port (screen {members[0].Screen}) — a cable links two or more machines.");
+                continue;
+            }
+            var positions = new HashSet<int>();
+            foreach (var member in members) {
+                if (!positions.Add(member.Position)) {
+                    errors.Add($"{member.Path}.position {member.Position} is already taken on cable '{name}'.");
+                } else if (member.Position >= members.Count) {
+                    errors.Add($"{member.Path}.position {member.Position} leaves a gap on cable '{name}'.");
+                }
+            }
+        }
+    }
+
     private static void ValidateMachines(WorldDefinition definition, IMachineValidationCatalog? catalog,
         List<string> errors, ICollection<string>? deferred) {
         var names = new HashSet<string>(StringComparer.Ordinal);

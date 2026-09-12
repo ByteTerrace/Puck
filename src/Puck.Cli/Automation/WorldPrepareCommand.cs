@@ -18,6 +18,7 @@ internal static class WorldPrepareCommand {
     private static int Run(string output, string root) {
 
         var machines = CliWorldVocabulary.EnsureInstalled();
+        var catalogFingerprint = CliWorldVocabulary.Fingerprint(machines);
         Directory.CreateDirectory(path: output);
         var pending = new Queue<string>();
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -39,7 +40,7 @@ internal static class WorldPrepareCommand {
                 throw new InvalidDataException(message: $"Hosted world name collision: {previous} and {path}");
             }
             names[name] = path;
-            if (!WorldDefinitionFileSource.TryComposeDocumentTree(path: path, reason: out var reason, tree: out var tree)) {
+            if (!WorldDefinitionFileSource.TryComposeDocumentTree(path: path, reason: out var reason, tree: out var tree, catalogFingerprint: catalogFingerprint, catalog: machines)) {
                 throw new InvalidDataException(message: $"Cannot compose {relative}: {reason}");
             }
             if (tree!["references"] is JsonArray references) {
@@ -55,7 +56,7 @@ internal static class WorldPrepareCommand {
             }
             if (!WorldDefinitionFileSource.TryParseComposed(
                 definition: out var definition, json: tree.ToJsonString(), neighbours: null,
-                reason: out reason, sourceName: path, validateAdjacencyClaims: false
+                reason: out reason, sourceName: path, validateAdjacencyClaims: false, catalog: machines
             )) {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }

@@ -96,6 +96,13 @@ definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write — see `Puck.World.Protocol`'s
 `IClientSink`.
 
+`FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
+authority gate it drains accepted edits without stepping simulation, then closes
+admission. `Step`, `Advance`, and the administrative drain cannot advance a retired
+activation; external authority closures refuse by name. Its checkpoint remains
+capturable so a failed final save can retry the same frozen state. A fresh server
+must be activated to resume. This is distinct from a player-visible pause.
+
 ## Rule effects land on a frame (`WorldServer.RuleHost.cs`, `WorldServer.RuleFrame.cs`)
 
 `EvaluateWorldRules` loads a `StateFrame` (`Puck.State`) from the installed
@@ -1639,26 +1646,27 @@ is scoped to, never who is playing.
 
 ## Hosted worlds and the authority store
 
-A hosted world's blobs live in a namespace sibling to, and never overlapping
-with, the owned-worlds catalog above: `puck/hosted/{world}/…` for its
-checkpoint/journal (never published), `private/puck/hosted/{world}/definition.json`
-and `.../projection.json` for the pair the platform's public content edge
-serves anonymously. One key writer, `WorldOwnedWorldSync.HostedAddressFor`,
-computes both roots so a reader can never drift from it.
+A hosted authority's root and every candidate it names live privately under
+`private/puck/hosted/{world}/authority/`: one mutable `root` plus immutable,
+content-addressed definition, checkpoint, journal, receipt, and receipt-index
+blobs. The old `puck/hosted/{world}/…` pointers are migration inputs only; once
+the private root exists, readers never consult them. No authority state is
+published through the public content edge.
 
 `IWorldAuthorityStore` (`WorldAuthorityBlobStore` over `IObjectBlobStore`) is
-programmed against opaque encoded bytes throughout — `LoadLatestAsync` returns
-the checkpoint blob's raw, hash-verified bytes plus its ordinal and tick, never
-a decoded record; `WorldAuthorityCheckpointCodec` decodes what this store
-hands back. A checkpoint write is content-addressed and
-create-only (an identical retry is idempotent, verified by byte comparison on
-a create-only loss), then the `checkpoints/latest` pointer moves under its own
-if-match compare-and-swap; a journal page is a read-modify-write append under
-the same discipline, relative to whichever checkpoint ordinal `checkpoints/latest`
-currently names. `WorldAuthorityCheckpointCadenceCounter` counts master-step
-engine ticks toward `WorldAuthorityCheckpointCadence.EngineTicks` and arms a
-capture request a caller honours at its own next boundary; it never decides
-whether a capture may proceed and never takes a row's own gate itself.
+programmed against opaque encoded bytes throughout. `AcquireActivationAsync`
+advances the epoch and unique fence token in the one root CAS; every writer
+operation is bound to that fence, so a paused writer cannot publish after a
+takeover. `WriteCheckpointAsync` accepts the caller's captured absolute journal
+sequence and preserves the newer suffix when publishing; an omitted or stale
+watermark refuses rather than resetting later appends. Successful writes expose
+the committed root snapshot and watermark through `PublishedRoot`.
+`LoadRecoveryAsync` verifies the root, its immutable checkpoint/journal blobs,
+and its root-qualified validated definition as one coherent view. Receipt nodes
+retain actor/payload-bound operation ids, while a rooted immutable index makes
+replay lookup bounded; applied and refused receipts use the same durable chain.
+`WorldAuthorityCheckpointCodec` still owns decoding the unchanged checkpoint
+payload bytes.
 
 `WorldHostedOrigin` (a `WorldDocumentOrigin` arm beside `WorldFileOrigin`)
 awaits hosted definition and neighbour reads through `LoadAsync` and

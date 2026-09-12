@@ -1,0 +1,153 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "A named deterministic device whose lifetime is independent of its output consumers.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The instance identity used by displays, controls, and hardware operations.",
+        "type": "string"
+      },
+      "engine": {
+        "description": "The registered provider identifier.",
+        "type": "string"
+      },
+      "configuration": {
+        "description": "The provider\u0027s versioned configuration, validated through its descriptor.",
+        "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+      },
+      "running": {
+        "description": "Whether the host advances this instance. A stopped instance retains its hardware state.",
+        "type": "boolean",
+        "default": true
+      },
+      "memory": {
+        "description": "Ordered hardware bindings, independent of any display.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "An ordered scalar binding between a named device and an Int world-state cell.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The binding identity within its machine.",
+              "type": "string"
+            },
+            "direction": {
+              "description": "Whether values enter or leave world state.",
+              "enum": [
+                "Read",
+                "Write"
+              ],
+              "title": "WorldMachineMemoryDirection"
+            },
+            "space": {
+              "description": "The provider\u0027s hardware address space.",
+              "type": "string"
+            },
+            "format": {
+              "description": "The signed or unsigned scalar format: i8/u8, i16/u16, i32/u32, or i64/u64.",
+              "type": "string"
+            },
+            "row": {
+              "description": "The world-state row.",
+              "type": "string"
+            },
+            "address": {
+              "description": "An unsigned raw address; mutually exclusive with Symbol.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null
+            },
+            "symbol": {
+              "description": "An exported content symbol; mutually exclusive with Address.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "key": {
+              "description": "The key of a table-shaped state row, or null for a slot.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "access": {
+              "description": "inspect for reads; patch or bus for writes.",
+              "type": "string",
+              "default": "inspect"
+            },
+            "update": {
+              "description": "onChange or everyTick. Repeating a hardware-visible write requires explicit everyTick authoring.",
+              "type": "string",
+              "default": "onChange"
+            },
+            "conversion": {
+              "description": "checked by default; truncate explicitly admits narrowing and bit reinterpretation.",
+              "type": "string",
+              "default": "checked"
+            }
+          },
+          "required": [
+            "name",
+            "direction",
+            "space",
+            "format",
+            "row"
+          ],
+          "additionalProperties": false,
+          "title": "WorldMachineMemory"
+        },
+        "default": null
+      },
+      "cable": {
+        "description": "The optional standing cable endpoint owned by this machine instance.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
+            "type": "string"
+          },
+          "position": {
+            "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "position"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldMachineCable"
+      }
+    },
+    "required": [
+      "name",
+      "engine",
+      "configuration"
+    ],
+    "additionalProperties": false,
+    "title": "WorldMachine"
+  },
+  "default": null
+}

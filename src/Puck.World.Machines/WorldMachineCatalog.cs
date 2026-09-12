@@ -43,7 +43,11 @@ public sealed class WorldMachineCatalog : IMachineValidationCatalog {
         }
         Engines = factories.ToFrozenDictionary(StringComparer.Ordinal);
         ContentProviders = providers.ToFrozenDictionary(StringComparer.Ordinal);
+        CompositionFingerprint = MachineConfigurationFields.CatalogFingerprint(factories.Select(static pair => (EngineId: pair.Key, Descriptor: (MachineEngineDescriptor?)pair.Value.Descriptor)));
     }
+
+    /// <summary>Gets the stable descriptor fingerprint used to partition composed document images.</summary>
+    public string CompositionFingerprint { get; }
 
     /// <summary>Returns whether this host can construct the named engine.</summary>
     /// <param name="engineId">The ordinal engine identifier.</param>

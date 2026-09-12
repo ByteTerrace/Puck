@@ -15,7 +15,7 @@ namespace Puck.World.Protocol;
 /// before intents (they are tick-aligned edits, not synchronous commands) — the envelope model does not change that
 /// timing, only how the submission reaches it. Every fire-and-forget non-completion submission
 /// (<c>Submit*</c> beside <see cref="SubmitSession"/>) is a <see cref="ServerLinkSubmissions"/> extension method over
-/// <see cref="SubmitEnvelope"/> — the ONE member an implementation actually writes for all of them — rather than a
+/// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, WorldPrincipal)"/> — the ONE member an implementation actually writes for all of them — rather than a
 /// member of this interface: a default interface method resolves only through an <see cref="IServerLink"/>-typed
 /// reference, never through a variable declared as the concrete implementing type, and callers throughout this
 /// codebase hold the concrete type. An extension method resolves either way.</summary>
@@ -34,6 +34,32 @@ public interface IServerLink {
     /// <c>WorldEditEcho</c> carries back — or <c>0</c> when none exists (a codec refusal, a link whose envelope is
     /// minted remotely).</returns>
     long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal);
+
+    /// <summary>Submits one payload while carrying a caller-preserved operation id for a mutation. Implementations
+    /// that predate operation metadata retain the two-argument path for non-mutations; a mutation with an empty id is
+    /// refused by the canonical frame codec.</summary>
+    /// <param name="payload">The submission payload.</param>
+    /// <param name="principal">The stamped acting identity.</param>
+    /// <param name="operationId">The caller's retry identity.</param>
+    long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) =>
+        payload is WorldSubmissionPayload.Mutation
+            ? 0L
+            : SubmitEnvelope(payload, principal);
+
+    /// <summary>Submits a payload with an operation id and receives its eventual typed result. Cancellation of the
+    /// caller's wait does not withdraw a mutation already admitted to the ordered domain.</summary>
+    long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+        if (payload is WorldSubmissionPayload.Mutation) {
+            completion?.Invoke(new WorldSubmissionResult.Refusal(
+                "world.transport.operation_metadata_unsupported",
+                "the server link does not implement caller-preserved mutation operation IDs"
+            ));
+            return 0L;
+        }
+        var correlation = SubmitEnvelope(payload, principal, operationId);
+        completion?.Invoke(WorldSubmissionResult.Ack.Instance);
+        return correlation;
+    }
     /// <summary>Submits a session/identity request. <paramref name="completion"/> receives the server's reply (assigned
     /// index / rejection / roster echo) — for a local submitter it fires inline, before this call returns, so a
     /// caller may format its console echo entirely inside the callback with no observable difference from a
@@ -60,7 +86,7 @@ public interface IPrincipalServerLink : IServerLink {
     void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion);
 }
 /// <summary>The ten fire-and-forget <see cref="IServerLink"/> submission members — every one a thin
-/// <see cref="IServerLink.SubmitEnvelope"/> wrapper that differs from the next only in which
+/// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, WorldPrincipal)"/> wrapper that differs from the next only in which
 /// <see cref="WorldSubmissionPayload"/> leaf it wraps its argument in and which of its parameters is the acting
 /// principal.</summary>
 public static class ServerLinkSubmissions {
@@ -101,10 +127,14 @@ public static class ServerLinkSubmissions {
     /// deliver the new definition to the client.</summary>
     /// <param name="link">The link.</param>
     /// <param name="mutation">The world mutation to apply.</param>
-    /// <returns>The minted correlation id (see <see cref="IServerLink.SubmitEnvelope"/>).</returns>
-    public static long SubmitWorldMutation(this IServerLink link, WorldMutation mutation) => link.SubmitEnvelope(
+    /// <param name="operationId">The caller-preserved retry identity, or empty to mint one for this submission.</param>
+    /// <param name="completion">The eventual typed result, including a named ingress refusal.</param>
+    /// <returns>The minted correlation id (see <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, WorldPrincipal, System.Guid)"/>).</returns>
+    public static long SubmitWorldMutation(this IServerLink link, WorldMutation mutation, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Mutation(Value: mutation),
-        principal: mutation.Principal
+        principal: mutation.Principal,
+        operationId: operationId == Guid.Empty ? Guid.NewGuid() : operationId,
+        completion: completion
     );
     /// <summary>Requests a journal undo of the last <paramref name="count"/> applied mutations (the undo engine is
     /// replay: restore the loaded base and deterministically replay the journal minus its tail through the same apply
@@ -178,6 +208,15 @@ public static class ServerLinkSubmissions {
     /// <param name="principal">The acting identity the op is checked against.</param>
     public static void SubmitScreenOp(this IServerLink link, WorldScreenOp op, WorldPrincipal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.ScreenOp(Value: op),
+        principal: principal
+    );
+    /// <summary>Submits one generic machine operation through the ordered authority domain.</summary>
+    /// <param name="link">The server link.</param>
+    /// <param name="operation">The named instance, expected generation, operation id, and detached payload.</param>
+    /// <param name="principal">The acting identity checked for Control over the named machine.</param>
+    /// <returns>The ordered submission correlation id.</returns>
+    public static long SubmitMachineOperation(this IServerLink link, WorldMachineOperation operation, WorldPrincipal principal) => link.SubmitEnvelope(
+        payload: new WorldSubmissionPayload.Operation(Value: operation),
         principal: principal
     );
     /// <summary>Submits a live world edit exactly like <see cref="SubmitWorldMutation"/>, for a console handler whose

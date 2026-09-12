@@ -3,9 +3,15 @@ using System.Collections.ObjectModel;
 namespace Puck.Shaders;
 
 /// <summary>A resource entry in an immutable shader execution plan.</summary>
+/// <param name="Declaration">The immutable resource declaration.</param>
+/// <param name="WriterPassIndex">Its producing pass, or -1 for an initialized or external resource.</param>
+/// <param name="FirstUsePassIndex">Its first pass access, or -1 when only published.</param>
+/// <param name="LastUsePassIndex">Its final pass access; the pass count denotes publication or cross-frame retention.</param>
 public sealed record ShaderPipelinePlannedResource(
     ShaderPipelineResource Declaration,
-    int WriterPassIndex
+    int WriterPassIndex,
+    int FirstUsePassIndex = -1,
+    int LastUsePassIndex = -1
 ) {
     /// <summary>Gets the name used by pass bindings.</summary>
     public string Name => Declaration.Name;
@@ -34,9 +40,9 @@ public sealed class ShaderPipelinePlan {
         var passesByName = Definition.Passes.ToDictionary(static pass => pass.Name, StringComparer.Ordinal);
         var resourcesByName = Definition.Resources.ToDictionary(static resource => resource.Name, StringComparer.Ordinal);
         Resources = new ReadOnlyCollection<ShaderPipelinePlannedResource>(resources.Select(resource =>
-            new ShaderPipelinePlannedResource(resourcesByName[resource.Name], resource.WriterPassIndex)).ToList());
+            new ShaderPipelinePlannedResource(resourcesByName[resource.Name], resource.WriterPassIndex, resource.FirstUsePassIndex, resource.LastUsePassIndex)).ToList());
         Passes = new ReadOnlyCollection<ShaderPipelinePlannedPass>(passes.Select(pass =>
-            new ShaderPipelinePlannedPass(passesByName[pass.Name], pass.Index, new ReadOnlyCollection<int>(pass.Dependencies.ToArray()), ShaderPipelineParameterLayout.Resolve(passesByName[pass.Name]))).ToList());
+            new ShaderPipelinePlannedPass(passesByName[pass.Name], pass.Index, new ReadOnlyCollection<int>(pass.Dependencies.ToArray()), pass.Parameters)).ToList());
         Outputs = new ReadOnlyCollection<ShaderPipelineOutput>(Definition.Outputs.ToList());
     }
 

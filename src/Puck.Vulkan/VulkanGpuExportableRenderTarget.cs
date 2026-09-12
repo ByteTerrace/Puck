@@ -90,7 +90,7 @@ public sealed partial class VulkanGpuExportableRenderTarget : IGpuExportableRend
             Height: height,
             InstanceHandle: instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
+            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination,
             Width: width
         ));
 

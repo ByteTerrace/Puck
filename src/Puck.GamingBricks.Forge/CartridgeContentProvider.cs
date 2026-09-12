@@ -18,7 +18,11 @@ internal static class CartridgeContentProvider {
                 symbols.Add(key: name, value: new MachineContentSymbol(Space: "bus", Address: address));
             }
 
-            return new PreparedMachineContent(Image: compilation.Rom, SourceHash: compilation.SourceHash, Symbols: symbols);
+            return new PreparedMachineContent(
+                Image: compilation.Rom,
+                SourceHash: compilation.SourceHash,
+                Symbols: symbols,
+                VerifiedSourceFormat: CartridgeDocument.SchemaId);
         } catch (Exception exception) when (exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException or CartridgeCapacityException) {
             throw new MachineContentException(message: exception.Message.ReplaceLineEndings(replacementText: " "), innerException: exception);
         }

@@ -35,8 +35,9 @@ public static class WorldSemanticValidator {
     /// <param name="sourceMap">The SourceMap linking JSON pointer paths to source AST spans.</param>
     /// <param name="diagnostics">The DiagnosticBag to report semantic errors into.</param>
     /// <param name="machines">The deployment's machine vocabulary; unavailable provider checks are reported as errors.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
     /// <returns>True if the world passed semantic validation without errors.</returns>
-    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null) {
+    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "") {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -73,21 +74,22 @@ public static class WorldSemanticValidator {
     /// <param name="sourcePath">The <c>.puck</c> source file's own resolved path — basis and import references
     /// resolve relative to its directory.</param>
     /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
     /// <returns>True if the composed world passed semantic validation without errors.</returns>
-    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null) {
+    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "") {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
 
         var rootBytes = Encoding.UTF8.GetBytes(loweredJson.ToJsonString());
 
-        if (!PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var composeReason)) {
+        if (!PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var composeReason, catalogFingerprint, machines)) {
             var span = (sourceMap is not null && sourceMap.TryGetSpan("/basis", out var basisSpan)) ? basisSpan : SourceSpan.None;
             diagnostics.ReportError(PuckDiagnosticCodes.CompositionRefused, $"Basis/import composition refused: {composeReason}", span);
             return false;
         }
 
-        return ValidateWorld(composed ?? loweredJson, sourceMap, diagnostics, machines);
+        return ValidateWorld(composed ?? loweredJson, sourceMap, diagnostics, machines, catalogFingerprint);
     }
 
     private static SourceSpan ExtractSpanFromError(string error, SourceMap? sourceMap) {

@@ -6,13 +6,12 @@ using Puck.World.Machines;
 namespace Puck.World.Server;
 
 /// <summary>
-/// Owns every declared screen's live machine: booting, stepping, cable-linking, memory-peeking, and reconfiguring a
-/// deterministic <see cref="IMachineRuntime"/> are all server-side, so ROM state is sim state and a headless boot's
-/// cabinets run exactly like a windowed one's. Camera/capture/window-capture/jumbotron-view/test-pattern screen
-/// sources are deliberately outside this type's concern — they stay genuinely presentation, composed by
-/// <c>Puck.World.WorldScreenBinder</c>, which reads this type's machine outputs (framebuffer handle, light, audio)
-/// as a pure reader, not an owner of machine state. Screen index is machine identity for screen-hosted machines,
-/// matching the current document convention. Engines and content providers come from this host's
+/// Owns every declared named machine's live runtime: booting, stepping, memory-peeking, and provider operations are
+/// server-side, so machine state is simulation state and a headless boot runs exactly like a windowed one. Physical
+/// screens are consumers only: camera/capture/window-capture/jumbotron-view/test-pattern sources remain genuinely
+/// presentation, composed by <c>Puck.World.WorldScreenBinder</c>, which reads this type's named machine outputs
+/// (framebuffer handle, light, audio) as a pure reader. Screen-indexed operation slots remain only as a temporary
+/// forwarding seam for the subsequent operations migration. Engines and content providers come from this host's
 /// <see cref="WorldMachineCatalog"/>; the host carries no dependency on their implementations.
 /// <see cref="WorldServer"/> and every other <c>Puck.World.Server</c> type reach a booted machine only through
 /// <see cref="IWorldMachineHost"/>.
@@ -33,6 +32,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
     private readonly WorldExtensionRegistry<IMachineEngine> m_engines;
     private readonly WorldExtensionRegistry<IMachineContentProvider> m_compilers;
+    private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
 
     /// <summary>Gets this host's immutable registration catalog.</summary>
     public WorldMachineCatalog Catalog { get; }
@@ -49,42 +49,52 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     private readonly WorldOutputHub? m_narrationHub;
 
     /// <summary>Initializes the host over the world's declared screens using the registered engines.</summary>
-    /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
+    /// <param name="screens">The world's diegetic screens, retained for temporary screen-operation forwarding.</param>
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
     /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null)
-        : this(screens: screens, engines: engines, compilers: null, documentPath: documentPath, narrationHub: narrationHub) { }
+    /// <param name="contentAdmissionPolicy">The host-selected policy for prepared content and auxiliary assets, or
+    /// <see langword="null"/> to use the local open policy.</param>
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null,
+        IMachineContentAdmissionPolicy? contentAdmissionPolicy = null)
+        : this(screens: screens, engines: engines, compilers: null, documentPath: documentPath, narrationHub: narrationHub,
+            contentAdmissionPolicy: contentAdmissionPolicy) { }
 
-    /// <summary>Initializes the host over the world's declared screens: a booted machine for each declared machine
-    /// screen whose content file exists and whose engine resolves (a missing file or unknown engine leaves the slot
-    /// unbound with a visible fault — loud data, no crash).</summary>
-    /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
+    /// <summary>Initializes the host over the world's declared screens and the named machine catalog. Named machine
+    /// rows are prepared by <see cref="TryPrepare"/>; screen consumers do not construct runtimes.</summary>
+    /// <param name="screens">The world's diegetic screens, retained for temporary screen-operation forwarding.</param>
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
     /// <param name="compilers">The content providers selected for this host, or null for none.</param>
     /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
+    /// <param name="contentAdmissionPolicy">The host-selected policy for prepared content and auxiliary assets, or
+    /// <see langword="null"/> to use the local open policy.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two engines register one id — a composition-root error, thrown at boot
     /// rather than resolved last-writer-wins.</exception>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, IEnumerable<IMachineContentProvider>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null)
-        : this(screens, new WorldMachineCatalog(engines, compilers), documentPath, narrationHub) { }
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, IEnumerable<IMachineContentProvider>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null,
+        IMachineContentAdmissionPolicy? contentAdmissionPolicy = null)
+        : this(screens, new WorldMachineCatalog(engines, compilers), documentPath, narrationHub, contentAdmissionPolicy) { }
 
     /// <summary>Initializes a host with the exact catalog selected by its composition root.</summary>
     /// <param name="screens">The authored screen declarations.</param>
     /// <param name="catalog">The immutable engine and content-provider registrations.</param>
     /// <param name="documentPath">The document origin for relative content paths.</param>
     /// <param name="narrationHub">The optional diagnostic output hub.</param>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, WorldMachineCatalog catalog, string? documentPath = null, WorldOutputHub? narrationHub = null) {
+    /// <param name="contentAdmissionPolicy">The host-selected policy for prepared content and auxiliary assets, or
+    /// <see langword="null"/> to use the local open policy.</param>
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, WorldMachineCatalog catalog, string? documentPath = null, WorldOutputHub? narrationHub = null,
+        IMachineContentAdmissionPolicy? contentAdmissionPolicy = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: catalog);
 
         Catalog = catalog;
         m_narrationHub = narrationHub;
+        m_contentAdmissionPolicy = contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(MachineAssetAdmission.Allow);
 
         m_engines = new WorldExtensionRegistry<IMachineEngine>(
             extensions: catalog.Engines.Values,
@@ -99,92 +109,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         foreach (var screen in screens) {
             var slot = new MachineSlot { DeclaredSource = screen.Source, Index = screen.Index, Magazine = screen.Magazine, SelectedEntry = (screen.Magazine?.Selected ?? 0) };
 
-            if (screen.Source is WorldScreenSource.Machine machine) {
-                BootDeclaredMachine(
-                    machine: machine,
-                    slot: slot
-                );
-            }
-
             m_slots[screen.Index] = slot;
-        }
-    }
-
-    private void BootDeclaredMachine(MachineSlot slot, WorldScreenSource.Machine machine) {
-        if (!m_engines.TryGet(
-            key: machine.Engine,
-            extension: out var engine
-        )) {
-            slot.DeclaredFault = $"no screen-machine engine '{machine.Engine}'";
-            if (m_narrationHub is { HasNarrationSink: true }) {
-                m_narrationHub?.Narrate(
-                    channel: "world.screen",
-                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-                );
-            }
-
-            return;
-        }
-
-        if (!TryReadContent(
-            contentPath: machine.ContentPath,
-            documentRelative: true,
-            content: out var content,
-            fault: out var fault
-        )) {
-            slot.DeclaredFault = fault;
-            if (m_narrationHub is { HasNarrationSink: true }) {
-                m_narrationHub?.Narrate(
-                    channel: "world.screen",
-                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-                );
-            }
-
-            return;
-        }
-
-        if (!TryResolveContent(
-            engine: engine,
-            contentPath: machine.ContentPath,
-            content: content,
-            bytes: out var bytes,
-            cartridge: out var cartridge,
-            compilation: out var compilation,
-            fault: out var resolveFault
-        )) {
-            slot.DeclaredFault = resolveFault;
-            if (m_narrationHub is { HasNarrationSink: true }) {
-                m_narrationHub?.Narrate(
-                    channel: "world.screen",
-                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-                );
-            }
-
-            return;
-        }
-
-        try {
-            slot.Machine = engine.Create(
-                options: machine.Options,
-                contentBytes: bytes,
-                savePath: null,
-                audioSampleRate: MachineAudioRate.SampleRate
-            );
-            slot.MachineEngine = engine.Id;
-            slot.MachineContentPath = machine.ContentPath;
-            slot.MachineSourceEngine = machine.Engine;
-            slot.MachineOptions = machine.Options;
-            slot.MachineContentHash = WorldDefinitionFileSource.ComputeContentHash(content: content);
-            slot.Cartridge = cartridge;
-            slot.Compilation = compilation;
-        } catch (ArgumentException exception) {
-            slot.DeclaredFault = exception.Message;
-            if (m_narrationHub is { HasNarrationSink: true }) {
-                m_narrationHub?.Narrate(
-                    channel: "world.screen",
-                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-                );
-            }
         }
     }
     private static bool DeclaresIndex(IReadOnlyList<WorldScreen> screens, int index) {
@@ -253,7 +178,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         foreach (var entry in m_links.Values) {
-            if (entry.Link is not { } link) {
+            if (entry.Link is not { } link || !LinkCanAdvance(entry)) {
                 continue;
             }
 
@@ -274,6 +199,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             );
 
             foreach (var member in entry.Members) {
+                if (m_slots.TryGetValue(member, out var namedSlot) &&
+                    namedSlot.DeclaredSource is WorldScreenSource.Machine source &&
+                    m_instances.TryGetValue(source.Instance, out var instance)) {
+                    instance.Lease.CompletedSteps++;
+                }
                 if (
                     m_slots.TryGetValue(
                     key: member,
@@ -490,13 +420,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         string? engineId = null;
 
         foreach (var member in members) {
-            var slot = m_slots[member];
-
-            if (slot.Machine is not { } machine) {
+            var (machine, id) = ResolveMachine(member);
+            if (machine is null) {
                 return (Link: null, Reason: $"screen {member} has no machine");
             }
-
-            if (slot.MachineEngine is not { } id) {
+            if (id is null) {
                 return (Link: null, Reason: $"screen {member}'s machine has no engine identity");
             }
 
@@ -533,6 +461,84 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             ? (Link: link, Reason: null)
             : (Link: null, Reason: reason)
         );
+    }
+
+    private (IMachineRuntime? Runtime, string? Engine) ResolveMachine(int screenIndex) {
+        if (!m_slots.TryGetValue(screenIndex, out var slot)) {
+            return (null, null);
+        }
+        if (slot.DeclaredSource is WorldScreenSource.Machine source) {
+            return m_instances.TryGetValue(source.Instance, out var instance)
+                ? (instance.Lease.Runtime, instance.Declaration.Engine)
+                : (null, null);
+        }
+        return (slot.Machine, slot.MachineEngine);
+    }
+
+    private HashSet<string> LinkedInstances() {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in m_links.Values) {
+            if (entry.Link is null) {
+                continue;
+            }
+            foreach (var member in entry.Members) {
+                if (m_slots.TryGetValue(member, out var slot) && slot.DeclaredSource is WorldScreenSource.Machine source) {
+                    result.Add(source.Instance);
+                }
+            }
+        }
+        return result;
+    }
+
+    private bool TryGetLiveLinkForInstance(string instance, out string linkName) {
+        foreach (var entry in m_links.Values) {
+            if (entry.Link is null) {
+                continue;
+            }
+            foreach (var member in entry.Members) {
+                if (m_slots.TryGetValue(member, out var slot) &&
+                    slot.DeclaredSource is WorldScreenSource.Machine source &&
+                    string.Equals(source.Instance, instance, StringComparison.Ordinal)) {
+                    linkName = entry.Name;
+                    return true;
+                }
+            }
+        }
+        linkName = string.Empty;
+        return false;
+    }
+    private bool LinkCanAdvance(LinkEntry entry) {
+        foreach (var member in entry.Members) {
+            if (m_slots.TryGetValue(member, out var slot) &&
+                slot.DeclaredSource is WorldScreenSource.Machine source &&
+                m_instances.TryGetValue(source.Instance, out var instance) &&
+                !instance.Declaration.Running) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private (bool Ok, string Message) ValidateLinkMembers(string name, IReadOnlyList<int> members) {
+        var named = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var member in members) {
+            if (!m_slots.TryGetValue(member, out var slot)) {
+                return (false, $"no screen {member} declared");
+            }
+            if (slot.DeclaredSource is not WorldScreenSource.Machine source) {
+                continue;
+            }
+            if (!named.Add(source.Instance)) {
+                return (false, $"machine '{source.Instance}' is named more than once in link '{name}'");
+            }
+            if (!m_instances.TryGetValue(source.Instance, out var instance)) {
+                return (false, $"machine '{source.Instance}' is not live");
+            }
+            if (!instance.Declaration.Running) {
+                return (false, $"machine '{source.Instance}' is stopped and cannot join link '{name}'");
+            }
+        }
+        return (true, string.Empty);
     }
     private bool TryReadContent(string contentPath, bool documentRelative, out byte[] content, out string? fault) {
         if (string.IsNullOrEmpty(value: contentPath)) {
@@ -621,11 +627,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return;
         }
 
-        AdvanceInstances(stepTicks);
         StepLiveLinks(
             stepTicks: stepTicks,
             pads: pads.Span
         );
+        AdvanceInstances(stepTicks, pads.Span, LinkedInstances());
 
         foreach (var slot in m_slots.Values) {
             if (slot.Machine is not { } machine) {
@@ -684,10 +690,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
     /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>
-        ((m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) && (slot.Machine is IMachineAudioOutputs outputs) && outputs.AudioOutputs.TryGetValue("audio", out var audio))
+        ((ResolveMachine(index).Runtime is IMachineAudioOutputs outputs) && outputs.AudioOutputs.TryGetValue("audio", out var audio)
             ? audio
             : null
         );
@@ -700,6 +703,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             ? instrument.TicksPerBeat
             : null
         );
+    /// <inheritdoc/>
+    public long? InstrumentTicksPerBeat(string instance) =>
+        m_instances.TryGetValue(instance, out var entry) && entry.Lease.Runtime is IInstrumentClockSource instrument && instrument.TicksPerBeat > 0
+            ? instrument.TicksPerBeat
+            : null;
     /// <inheritdoc/>
     public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() {
         if (m_links.Count == 0) {
@@ -753,16 +761,21 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <inheritdoc/>
     public bool HasEngine(string engineId) => m_engines.IsRegistered(key: engineId);
     /// <inheritdoc/>
-    public bool HasMachine(int index) => (m_slots.TryGetValue(
-        key: index,
-        value: out var slot
-    ) && (slot.Machine is not null));
+    public bool HasMachine(int index) => ResolveMachine(index).Runtime is not null;
     /// <inheritdoc/>
     public Vector3 Light(int index) => VideoOutput(index)?.EmittedLight ?? Vector3.Zero;
     /// <inheritdoc/>
-    public IMachineVideoOutput? VideoOutput(int index) =>
-        MachineAt(index) is IMachineVideoOutputs outputs && outputs.VideoOutputs.TryGetValue("video", out var output)
-            ? output : null;
+    public IMachineVideoOutput? VideoOutput(int index) {
+        if (!m_slots.TryGetValue(index, out var slot)) {
+            return null;
+        }
+        if (slot.DeclaredSource is WorldScreenSource.Machine source) {
+            return VideoOutput(instance: source.Instance, output: source.Output);
+        }
+        return slot.Machine is IMachineVideoOutputs outputs && outputs.VideoOutputs.TryGetValue("video", out var output)
+            ? output
+            : null;
+    }
     /// <inheritdoc/>
     public string? LinkOf(int index) => (m_slots.TryGetValue(
         key: index,
@@ -772,13 +785,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         : null
     );
     /// <inheritdoc/>
-    public IMachineRuntime? MachineAt(int index) => (m_slots.TryGetValue(
-        key: index,
-        value: out var slot
-    )
-        ? slot.Machine
-        : null
-    );
+    public IMachineRuntime? MachineAt(int index) => ResolveMachine(index).Runtime;
     /// <summary>Reconciles the declared cable links to a mutated <c>links</c> section — two-phase, atomic per call:
     /// every stale-or-member-changed declared link tears down first, in full, before anything is (re-)established.
     /// Tearing down every stale/changed row before establishing anything means a member a changed link is
@@ -793,12 +800,21 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         var declaredNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var refusedNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var toTeardown = new List<string>();
 
         foreach (var link in links) {
             _ = declaredNames.Add(item: link.Name);
+            var validation = ValidateLinkMembers(link.Name, link.Screens);
+            if (!validation.Ok) {
+                refusedNames.Add(link.Name);
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub.Narrate(channel: "world.link", text: $"[world.link: '{link.Name}' refused — {validation.Message}]");
+                }
+            }
 
             if (
+                !refusedNames.Contains(link.Name) &&
                 m_links.TryGetValue(
                 key: link.Name,
                 value: out var existing
@@ -825,10 +841,15 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         // Phase 1, complete before phase 2 starts: every stale-or-changed declared link is gone, so no established
         // link can be silently blocking a screen a phase-2 TryLink call legitimately needs.
         foreach (var name in toTeardown) {
-            TeardownLink(name: name);
+            if (!refusedNames.Contains(name)) {
+                TeardownLink(name: name);
+            }
         }
 
         foreach (var link in links) {
+            if (refusedNames.Contains(link.Name)) {
+                continue;
+            }
             if (
                 m_links.TryGetValue(
                 key: link.Name,
@@ -947,33 +968,18 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 continue;
             }
 
+            if (slot.DeclaredSource is WorldScreenSource.Machine &&
+                !Equals(slot.DeclaredSource, screen.Source)) {
+                // A named display retarget leaves the cable's old runtime before the new source is published.
+                LeaveLink(index: screen.Index);
+            }
+
             slot.DeclaredSource = screen.Source;
 
             switch (screen.Source) {
-                case WorldScreenSource.Machine { ContentPath: { Length: > 0 } path } machine:
-                    var (ok, message, _) = TryBootMachine(
-                        index: screen.Index,
-                        slot: slot,
-                        contentPath: path,
-                        engineId: machine.Engine,
-                        options: machine.Options,
-                        expectedContentHash: null,
-                        documentRelative: true
-                    );
-
-                    if (m_narrationHub is { HasNarrationSink: true }) {
-                        m_narrationHub?.Narrate(
-                            channel: "world.screen",
-                            text: $"[world.screen: {(ok
-                                ? message
-                                : $"{screen.Index} {message}")}]"
-                        );
-                    }
-
-                    break;
                 case WorldScreenSource.Machine:
-                    // Unconfigured machine row (no content path) — applies at next boot, matching TryInsert's own
-                    // "no content path" refusal shape for a bare declared row.
+                    // Named machine sources are presentation consumers. The named instance plan above owns boot,
+                    // replacement, generation, and retirement; changing a display reference never touches it.
                     break;
                 default:
                     // A non-machine declared source: if this slot carried a machine, eject it (the declared source no
@@ -1019,6 +1025,24 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             value: out var slot
         ) is false) {
             return null;
+        }
+
+        if (slot.DeclaredSource is WorldScreenSource.Machine source &&
+            m_instances.TryGetValue(source.Instance, out var instance)) {
+            var lease = instance.Lease;
+            var namedQueued = lease.Runtime as IQueuedMachineRuntime;
+            WorldMachineCartridge? cartridge = null;
+            foreach (var asset in lease.Assets.Values) {
+                if (asset.PreparedContent is { } content) {
+                    cartridge = new WorldMachineCartridge(asset.Path, content.SourceHash,
+                        WorldDefinitionFileSource.ComputeContentHash(asset.Image.Span));
+                    break;
+                }
+            }
+            return new WorldMachineState(true, instance.Declaration.Engine,
+                namedQueued?.CompletedSteps ?? lease.CompletedSteps, namedQueued?.PendingSteps ?? 0,
+                namedQueued?.MaximumPendingSteps ?? 0, namedQueued?.BackpressureEvents ?? 0,
+                namedQueued?.QueueFault, cartridge);
         }
 
         var queued = (slot.Machine as IQueuedMachineRuntime);
@@ -1087,6 +1111,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             (members.Count < 2)
         ) {
             return (Ok: false, Message: $"link '{name}' needs two or more screens");
+        }
+
+        var memberValidation = ValidateLinkMembers(name, members);
+        if (!memberValidation.Ok) {
+            return memberValidation;
         }
 
         var seen = new HashSet<int>();
@@ -1169,7 +1198,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (slot.Machine is not { } machine) {
+        var machine = ResolveMachine(index).Runtime;
+        if (machine is null) {
             return (Ok: false, Message: $"screen {index} has no machine to read");
         }
 
@@ -1190,7 +1220,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (slot.Machine is not { } machine) {
+        var machine = ResolveMachine(index).Runtime;
+        if (machine is null) {
             return (Ok: false, Message: $"screen {index} has no machine to write");
         }
 
@@ -1328,22 +1359,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         slot.SelectedEntry = entry;
 
-        if (source is WorldScreenSource.Machine { ContentPath: { Length: > 0 } path } machine) {
-            var (ok, message, contentHash) = TryBootMachine(
-                index: index,
-                slot: slot,
-                contentPath: path,
-                engineId: machine.Engine,
-                options: machine.Options,
-                expectedContentHash: expectedContentHash,
-                documentRelative: true
-            );
-
-            // A failed boot is a failed Select — never a disguised success. The selector POINTER still moves
-            // (above) regardless: the pointer-always-moves contract holds independent of boot outcome.
-            return (Ok: ok, Message: $"{index} entry {entry}/{magazine.Entries.Count} {(ok
-                ? message
-                : $"selected (boot failed — {message})")}", ContentHash: contentHash);
+        if (source is WorldScreenSource.Machine machine) {
+            // A named source selects an existing producer. Selection never boots, replaces, or ejects the named
+            // instance; the subsequent source migration updates the presentation consumer through its normal path.
+            return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} selected machine {machine.Instance}:{machine.Output}", ContentHash: null);
         }
 
         // Non-machine entry (or an unconfigured machine row): the selector moved; any existing machine on the slot
@@ -1370,6 +1389,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <inheritdoc/>
     public bool TryResolveSymbol(int index, string symbol, out int address) {
         if (m_slots.TryGetValue(key: index, value: out var slot) &&
+            slot.DeclaredSource is WorldScreenSource.Machine source &&
+            TryResolveSymbol(source.Instance, symbol, out address)) {
+            return true;
+        }
+        if (m_slots.TryGetValue(key: index, value: out slot) &&
             (slot.Compilation is { } comp) &&
             comp.Symbols.TryGetValue(key: symbol, value: out var exported) &&
             string.Equals(a: exported.Space, b: "bus", comparisonType: StringComparison.Ordinal) &&
@@ -1411,30 +1435,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return false;
         }
 
-        foreach (var screen in candidate.Screens) {
-            if (screen.Source is WorldScreenSource.Machine machine) {
-                if (!m_engines.TryGet(key: machine.Engine, extension: out _)) {
-                    plan = null;
-                    reason = $"no screen-machine engine '{machine.Engine}'";
-
-                    return false;
-                }
-            }
-        }
-
-        var machineCount = 0;
-
-        foreach (var screen in candidate.Screens) {
-            if (screen.Source is WorldScreenSource.Machine) {
-                machineCount++;
-            }
-        }
-
         if (!TryPrepareInstances(current, candidate, out var instances, out reason)) {
             plan = null;
             return false;
         }
-        plan = new PreparedMachinePlan(candidateScreens: candidate.Screens, machineCount: machineCount, instances!);
+        plan = new PreparedMachinePlan(candidateScreens: candidate.Screens, machineCount: 0, instances!);
         reason = null;
 
         return true;
@@ -1466,7 +1471,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     public IEnumerable<int> MachineScreenIndices {
         get {
             foreach (var (index, slot) in m_slots) {
-                if (slot.Machine is not null) {
+                if (ResolveMachine(index).Runtime is not null) {
                     yield return index;
                 }
             }

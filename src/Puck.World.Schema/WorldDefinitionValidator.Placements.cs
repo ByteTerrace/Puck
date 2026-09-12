@@ -869,11 +869,6 @@ public static partial class WorldDefinitionValidator {
 
             if (source.Source is null) {
                 errors.Add(item: $"{facePath}.source is required.");
-            } else if (source.Source is WorldScreenSource.Machine { Cable: not null }) {
-                // The same rule ValidateScreenSource applies to magazine entries: a cable port rides a declared
-                // screens row's own source, never a face's — a face-hosted machine has no stable screen identity
-                // for a cable group to fold back onto.
-                errors.Add(item: $"{facePath}.source.machine.cable is only legal on a declared screens row's own source — a face source cannot plug a cable.");
             } else if (source.Source is WorldScreenSource.Session session) {
                 ValidateSessionSource(
                     session: session,

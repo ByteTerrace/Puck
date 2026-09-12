@@ -57,10 +57,15 @@ public sealed partial class WorldServer {
         return true;
     }
     private void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
-        if (ordered) {
-            EnqueueOrdered(entry: new OrderedEntry.ServerEvent(Value: serverEvent));
-        } else {
-            ApplyServerEvent(serverEvent: serverEvent);
+        lock (m_authorityGate) {
+            if (m_authorityRetiring) {
+                return;
+            }
+            if (ordered) {
+                EnqueueOrdered(entry: new OrderedEntry.ServerEvent(Value: serverEvent));
+            } else {
+                ApplyServerEvent(serverEvent: serverEvent);
+            }
         }
     }
     // Drains the ordered domain FIFO until empty, applying each envelope through the same per-kind apply methods the
@@ -78,9 +83,11 @@ public sealed partial class WorldServer {
             while (m_ordered.TryDequeue(result: out var entry)) {
                 switch (entry) {
                     case OrderedEntry.Submission submission:
-                        var result = ApplyEnvelope(envelope: submission.Envelope);
+                        var result = ApplyEnvelope(envelope: submission.Envelope, completion: submission.Completion);
 
-                        submission.Completion?.Invoke(obj: result);
+                        if (result is not null) {
+                            submission.Completion?.Invoke(obj: result);
+                        }
                         break;
                     case OrderedEntry.ServerEvent serverEvent:
                         ApplyServerEvent(serverEvent: serverEvent.Value);
@@ -131,6 +138,13 @@ public sealed partial class WorldServer {
                 outcomeObserved(obj: ok);
             }
 
+            if (op is PendingOp.Mutate { Binding: { } binding, Completion: { } completion }) {
+                var outcome = ok
+                    ? WorldMutationOutcome.AppliedOutcome(binding, "world.mutation.applied")
+                    : WorldMutationOutcome.RefusedOutcome(binding, "world.mutation.refused", m_lastMutationFailureDetail ?? "mutation was refused");
+                completion(new WorldSubmissionResult.Mutation(outcome));
+            }
+
             // The addon mutation seam's I2: an addon-sourced Mutate op's OUTCOME — never its application, which
             // just ran above through the identical machinery a console mutation runs through — routes back to the
             // originating guest's RESERVED answer cell here, at drain time (same Step, before intents). The cell
@@ -174,6 +188,13 @@ public sealed partial class WorldServer {
     // dispatches from inside the gate re-enters here without deadlocking.
     private void EnqueueOrdered(OrderedEntry entry) {
         lock (m_authorityGate) {
+            if (entry is OrderedEntry.Submission retiringSubmission && m_authorityRetiring) {
+                retiringSubmission.Completion?.Invoke(new WorldSubmissionResult.Refusal(
+                    "world.authority.retiring",
+                    "authority is retiring and no longer admits submissions"
+                ));
+                return;
+            }
             m_ordered.Enqueue(item: entry);
             DrainOrdered();
         }
@@ -1267,6 +1288,7 @@ public sealed partial class WorldServer {
     /// <returns><see langword="true"/> when anything applied (a definition delivery occurred).</returns>
     public bool DrainAdministrative() {
         lock (m_authorityGate) {
+            if (m_authorityRetiring) { return false; }
             m_mutationBudget.BeginTick();
             DrainRecordedExtensions();
             return DrainPendingOps(tick: m_lastCompletedTick);
@@ -1275,7 +1297,9 @@ public sealed partial class WorldServer {
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
     /// <param name="submission">The tick, entity index, and merged intent.</param>
     public void EnqueueIntent(in IntentSubmission submission) {
-        m_intents.Enqueue(item: submission);
+        lock (m_authorityGate) {
+            if (!m_authorityRetiring) { m_intents.Enqueue(item: submission); }
+        }
     }
     /// <summary>Advances the authoritative world by one exact host tick: run every mounted addon's guest code first (see
     /// <see cref="IWorldAddonHost.TickAddons"/>, which applies nothing) → drain the buffered live edits (mutations,
@@ -1302,6 +1326,7 @@ public sealed partial class WorldServer {
     /// use <see cref="Advance"/> to derive these from the authority's own checkpointed clock.</param>
     public void Step(in FixedStepContext context) {
         lock (m_authorityGate) {
+            if (m_authorityRetiring) { return; }
             StepCore(context: in context);
         }
     }
@@ -1311,6 +1336,7 @@ public sealed partial class WorldServer {
     /// <exception cref="OverflowException">The completed tick or engine-time coordinate would overflow.</exception>
     public void Advance(ulong stepTicks) {
         lock (m_authorityGate) {
+            if (m_authorityRetiring) { return; }
             _ = checked(m_lastCompletedTick + 1UL);
             var context = new FixedStepContext(
                 ElapsedTicks: checked(m_lastCompletedEngineTicks + stepTicks),
@@ -1346,7 +1372,7 @@ public sealed partial class WorldServer {
         // guest used to. OutcomeObserved is the tape's own completion field (see EnqueueMutation's own remarks):
         // non-null only for the one dispatch point (ApplyEnvelope) MutationTap already covers, invoked exactly
         // once, right after this op's own TryApplyMutation outcome is known.
-        public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId = -1L, ushort ActOrdinal = 0, Action<bool>? OutcomeObserved = null) : PendingOp;
+        public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId = -1L, ushort ActOrdinal = 0, Action<bool>? OutcomeObserved = null, WorldMutationBinding? Binding = null, Action<WorldSubmissionResult>? Completion = null) : PendingOp;
         public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : PendingOp;
         public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
     }

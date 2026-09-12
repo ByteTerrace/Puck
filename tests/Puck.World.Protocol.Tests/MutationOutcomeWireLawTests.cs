@@ -147,6 +147,26 @@ public sealed class MutationOutcomeWireLawTests {
         Assert.Contains("operation id", detail, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MutationFramePreservesCallerOperationId() {
+        var operationId = Guid.Parse("11223344-5566-7788-99aa-bbccddeeff00");
+        var payload = new WorldSubmissionPayload.Mutation(new WorldMutation.RemoveKit(WorldPrincipal.Console, "kit"));
+
+        Assert.True(WorldFrameCodec.TryEncode(payload, operationId, out var frame, out var encodeFailure), encodeFailure.ToString());
+        Assert.True(WorldFrameCodec.TryDecode(frame, out var decoded, out var carriedId, out var decodeFailure), decodeFailure.ToString());
+        Assert.Equal(operationId, carriedId);
+        Assert.Equal(payload, decoded);
+    }
+
+    [Fact]
+    public void MutationFrameRejectsMissingOperationIdMetadata() {
+        var payload = new WorldSubmissionPayload.Mutation(new WorldMutation.RemoveKit(WorldPrincipal.Console, "kit"));
+
+        Assert.False(WorldFrameCodec.TryEncode(payload, out _, out var failure));
+        Assert.Equal(WorldCodecRefusal.PayloadMalformed, failure.Refusal);
+        Assert.Contains("operation id", failure.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static byte[] WriteResultSync(WorldSubmissionResult result) {
         using var stream = new MemoryStream();
         WorldPeerWireFormat.WriteResultAsync(stream, result, CancellationToken.None).GetAwaiter().GetResult();

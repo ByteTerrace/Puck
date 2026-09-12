@@ -339,7 +339,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     }
     // Render each hosted child viewport's surface at its slot's pixel rect. Children resolve the same shared device
     // from the forwarded host context; the parent passes each the slot's pixel extent (matching the SDF source
-    // sizing) so Stage 2's 1:1 copy lands in bounds. Their submits are enqueued ahead of the compositor's.
+    // sizing); Stage 2 reconstructs the actual image extent into each region. Their submits precede the compositor.
     private void ProduceChildren(in FrameContext context, SdfFrame frame) {
         if (m_children.Count == 0) {
             return;
@@ -651,6 +651,16 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             context: in context,
             frame: frame
         );
+        // Empty is a valid result while an asynchronous child is waiting for its first successful compile.
+        // Keep that slot on the initialized SDF path until it publishes an image; never bind a null GPU view.
+        for (var slot = 0; slot < frame.Views.Count; slot++) {
+            if ((m_childSlotMask & (1u << slot)) == 0) { continue; }
+            if (m_childSurfaces[slot].IsEmpty) {
+                m_childSlotMask &= ~(1u << slot);
+            } else if (!m_childSurfaces[slot].IsSameDeviceImage) {
+                throw new InvalidOperationException($"Child viewport {slot} must publish a same-device image surface.");
+            }
+        }
         EnsureEngine(
             frame: frame,
             gpuDevice: gpuDevice

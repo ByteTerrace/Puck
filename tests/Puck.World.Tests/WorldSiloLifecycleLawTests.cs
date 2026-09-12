@@ -10,6 +10,43 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class WorldSiloLifecycleLawTests {
+    [Fact]
+    public async Task DuplicateActivationKeepsItsFenceAndReplacementRejectsTheOldWriter() {
+        using var directory = new TempWorldDirectory();
+        using var output = new BufferedConsoleOutput();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var keyFile = Path.Combine(directory.RootPath, "world.key");
+        File.WriteAllBytes(keyFile, key.ExportPkcs8PrivateKey());
+        var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("row"));
+        var store = PuckStorageTestComposition.BuildStore();
+        var backend = new WorldAuthorityBlobStore(store, new DirectoryObjectStorageTarget(directory.RootPath));
+        var definition = Fixtures.BuildDocument() with {
+            HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None }
+        };
+        Assert.True((await backend.PublishDefinitionAsync(identity, definition, TestContext.Current.CancellationToken)).Ok);
+        var original = Host(directory.RootPath, store, output, [new(identity.Owner, identity.World, new(KeyFile: keyFile))]);
+        using var originalInstances = original.Instances;
+        await PumpAsync(original, original.ActivateAsync(identity, TestContext.Current.CancellationToken));
+        var first = (await backend.LoadRootAsync(identity, TestContext.Current.CancellationToken))!.Value;
+        Assert.NotNull(await backend.LoadLatestAsync(identity, TestContext.Current.CancellationToken));
+        await PumpAsync(original, original.ActivateAsync(identity, TestContext.Current.CancellationToken));
+        Assert.Equal(first.Root.Epoch, (await backend.LoadRootAsync(identity, TestContext.Current.CancellationToken))!.Value.Root.Epoch);
+
+        var replacement = Host(directory.RootPath, store, output, [new(identity.Owner, identity.World, new(KeyFile: keyFile))]);
+        using var replacementInstances = replacement.Instances;
+        await PumpAsync(replacement, replacement.ActivateAsync(identity, TestContext.Current.CancellationToken));
+        var current = (await backend.LoadRootAsync(identity, TestContext.Current.CancellationToken))!.Value;
+        Assert.True(current.Root.Epoch > first.Root.Epoch);
+        var stale = original.CheckpointNowAsync(identity, TestContext.Current.CancellationToken);
+        await PumpAsync(original, stale);
+        Assert.False(await stale);
+        Assert.Equal(current, (await backend.LoadRootAsync(identity, TestContext.Current.CancellationToken))!.Value);
+        var live = replacement.CheckpointNowAsync(identity, TestContext.Current.CancellationToken);
+        await PumpAsync(replacement, live);
+        Assert.True(await live);
+        await PumpAsync(replacement, replacement.DrainAsync(TestContext.Current.CancellationToken));
+    }
+
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -95,7 +132,7 @@ public sealed class WorldSiloLifecycleLawTests {
         Assert.Equal(first.Value.Ordinal, (await backend.LoadLatestAsync(identity, TestContext.Current.CancellationToken))!.Value.Ordinal);
         var changed = definition with { Metadata = new(Title: "Published update") };
 
-        Assert.True(condition: (await backend.PublishDefinitionAsync(identity, changed, TestContext.Current.CancellationToken)).Ok);
+        await PublishAsync(host, identity, changed);
         Assert.True(condition: host.Instances.TryGet(identity.World.Value, out var active));
         var rebuilds = 0;
 
@@ -122,11 +159,11 @@ public sealed class WorldSiloLifecycleLawTests {
 
         var refused = changed with { HostRaw = changed.Host with { Authority = "another-host:7825" } };
 
-        Assert.True(condition: (await backend.PublishDefinitionAsync(identity, refused, TestContext.Current.CancellationToken)).Ok);
+        await PublishAsync(host, identity, refused);
         await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => PumpAsync(host, host.ReloadAsync(identity, TestContext.Current.CancellationToken), step: true));
         Assert.Equal(saved.Ordinal, (await backend.LoadLatestAsync(identity, TestContext.Current.CancellationToken))!.Value.Ordinal);
         // Simulate losing the release-marker write after the rebuilt checkpoint became durable.
-        Assert.True(condition: (await backend.PublishDefinitionAsync(identity, changed, TestContext.Current.CancellationToken)).Ok);
+        await PublishAsync(host, identity, changed);
         await store.WriteAsync(target, WorldOwnedWorldSync.HostedAddressFor(identity.Owner, identity.World, "release"),
             System.Text.Encoding.UTF8.GetBytes(s: hash), ObjectBlobWriteMode.Overwrite, cancellationToken: TestContext.Current.CancellationToken);
         await PumpAsync(host, host.DrainAsync(ct: TestContext.Current.CancellationToken));
@@ -221,6 +258,12 @@ public sealed class WorldSiloLifecycleLawTests {
 
         return new(new(worlds, new(Budget: 1), new("directory", JsonElement.Parse("{}")), directory, new("Localhost")), store,
             new(source: () => source, tagging: new SiloConsoleTagging(output: output)), new DirectoryObjectStorageTarget(directory));
+    }
+    private static async Task PublishAsync(WorldSiloHost host, WorldAuthorityIdentity identity, WorldDefinition definition) {
+        var publication = host.PublishDefinitionAsync(identity, definition, TestContext.Current.CancellationToken);
+        await PumpAsync(host, publication);
+        var result = await publication;
+        Assert.True(result.Ok, result.Detail);
     }
     private static async Task PumpAsync(WorldSiloHost host, Task operation, bool step = false) {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);

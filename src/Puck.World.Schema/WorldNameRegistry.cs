@@ -27,6 +27,8 @@ public enum WorldNameKind : byte {
     Dynamics,
     /// <summary>A named machine instance.</summary>
     Machine,
+    /// <summary>A named screen declaration.</summary>
+    Screen,
     /// <summary>A hardware binding local to a machine instance.</summary>
     MachineBinding,
     /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
@@ -85,6 +87,8 @@ public static partial class WorldNameRegistry {
     private static readonly WorldNameField[] Fields = [
         // Declarations.
         new(typeof(WorldMachine), nameof(WorldMachine.Name), WorldNameKind.Machine, WorldNameRole.Declares),
+        new(typeof(WorldScreenSource.Machine), nameof(WorldScreenSource.Machine.Instance), WorldNameKind.Machine, WorldNameRole.Names),
+        new(typeof(WorldSpeakerSource.Machine), nameof(WorldSpeakerSource.Machine.Instance), WorldNameKind.Machine, WorldNameRole.Names),
         new(typeof(WorldMachineMemory), nameof(WorldMachineMemory.Name), WorldNameKind.MachineBinding, WorldNameRole.Declares),
         new(typeof(WorldMachineMemory), nameof(WorldMachineMemory.Row), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldMachineMemory), nameof(WorldMachineMemory.Key), WorldNameKind.State, WorldNameRole.Key),

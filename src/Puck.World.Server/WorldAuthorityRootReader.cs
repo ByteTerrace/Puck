@@ -5,7 +5,7 @@ namespace Puck.World.Server;
 /// <summary>Read-only root projection used by hosted document consumers that only receive the byte-store seam. A
 /// present root is authoritative; the legacy definition is consulted only before root initialization.</summary>
 internal static class WorldAuthorityRootReader {
-    private static ObjectBlobAddress PrivateAddress(Guid owner, SafeName world, string leaf) => new(WorldOwnedWorldSync.HostedPrivateNamespace + "/" + world.Value + "/" + leaf, owner);
+    private static ObjectBlobAddress PrivateAddress(Guid owner, SafeName world, string leaf) => new(ObjectId: owner, Key: WorldOwnedWorldSync.HostedPrivateNamespace + "/" + world.Value + "/" + leaf);
     private static ObjectBlobAddress RootAddress(Guid owner, SafeName world) => PrivateAddress(owner, world, "authority/root");
     private static ObjectBlobAddress DefinitionAddress(Guid owner, SafeName world, string hash) => PrivateAddress(owner, world, $"authority/definitions/{ExtractHex(hash)}.json");
 

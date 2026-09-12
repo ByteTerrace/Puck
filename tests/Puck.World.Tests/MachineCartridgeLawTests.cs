@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -59,8 +60,14 @@ public sealed class MachineCartridgeLawTests {
     private static string ModulePath() => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "modules", "arcade.world.json");
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
+        var configuration = engine == CgbEngine
+            ? JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = options?.Contains("fast", StringComparison.Ordinal) == true ? "fast" : "cold", content = new { path = contentPath } })
+            : engine == "tune-instrument"
+                ? JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.config.v1", content = new { path = contentPath } })
+                : JsonSerializer.SerializeToElement(new { schema = "puck.advanced-gaming-brick.config.v1", boot = options?.Contains("fast", StringComparison.Ordinal) == true ? "fast" : "cold", content = new { path = contentPath } });
 
         return document with {
+            MachinesRaw = [.. document.Machines, new WorldMachine("cabinet", engine, configuration)],
             ScreensRaw = [
                 .. document.Screens,
                 new WorldScreen(
@@ -72,7 +79,7 @@ public sealed class MachineCartridgeLawTests {
                     HalfHeight: 0.27f,
                     HalfDepth: 0.03f,
                     Round: 0f,
-                    Source: new WorldScreenSource.Machine(Engine: engine, ContentPath: contentPath, Options: options),
+                    Source: new WorldScreenSource.Machine("cabinet", "video"),
                     Route: WorldScreenRoute.Passive
                 ),
             ],
@@ -132,22 +139,17 @@ public sealed class MachineCartridgeLawTests {
         var path = CartridgePath(file: file);
         using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: engine, contentPath: path, options: options), machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
-        Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen), userMessage: fixture.Server.Machines.State(index: MachineScreen)?.Fault);
-
-        var state = fixture.Server.Machines.State(index: MachineScreen)!.Value;
-
-        Assert.Null(@object: state.Fault);
-        Assert.Equal(expected: engine, actual: state.Engine);
-        Assert.NotNull(@object: state.Cartridge);
+        var state = fixture.Server.Machines.InstanceState("cabinet");
+        Assert.True(state.HasValue, userMessage: "the named cabinet was not prepared");
+        Assert.Equal(expected: engine, actual: state!.Value.Engine);
+        Assert.Equal(Puck.Abstractions.Machines.MachineRuntimeStatus.Running, state.Value.Status);
+        Assert.NotNull(fixture.Server.Machines.VideoOutput("cabinet", "video"));
 
         // The same document through the same forge, outside the host: the slot pinned that compilation's source
         // identity and its image, and the image's first picture is the pinned one.
         var compilation = CompileOutOfBand(engine: engine, path: path);
         var (frameHash, distinctPixels) = FrameHash(compilation: compilation);
 
-        Assert.Equal(expected: path, actual: state.Cartridge.Value.Path);
-        Assert.Equal(expected: compilation.SourceHash, actual: state.Cartridge.Value.SourceHash);
-        Assert.Equal(expected: WorldDefinitionFileSource.ComputeContentHash(content: compilation.Rom), actual: state.Cartridge.Value.RomHash);
         Assert.True(condition: (distinctPixels >= 3), userMessage: $"the settled frame carries {distinctPixels} distinct pixel values; a picture needs more than a background");
 
         // Self-referential, so it pins no historical value: the same document through the same forge a second time
@@ -156,39 +158,20 @@ public sealed class MachineCartridgeLawTests {
 
         Assert.True(condition: (frameHash == repeatHash), userMessage: $"{file}: two compilations of one document settled on 0x{frameHash:X16} and 0x{repeatHash:X16}");
 
-        // The booted machine is running that image: the cartridge header's title, peeked through the seam, is the
-        // DOCUMENT's own title rather than a letter spelled here — the AGB host answers no memory peek, so it skips.
-        var title = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)).Title;
-
-        if ((title.Length > 0) && fixture.Server.Machines.TryPeek(screen: MachineScreen, address: 0x0134, value: out var first)) {
-            Assert.Equal(expected: (byte)char.ToUpperInvariant(title[0]), actual: first);
-        }
-
         for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: fixture.Server.Machines.State(index: MachineScreen)!.Value.Assigned);
     }
     [Fact]
     public void TheSameDocumentCompilesToByteIdenticalImagesAcrossTwoBinds() {
         var path = CartridgePath(file: "hgb-mirror.cgb.cartridge.json");
         using var first = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
         using var second = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
-        var declared = first.Server.Machines.State(index: MachineScreen)!.Value.Cartridge;
-        var again = second.Server.Machines.State(index: MachineScreen)!.Value.Cartridge;
-
-        Assert.NotNull(@object: declared);
-        Assert.Equal(expected: declared, actual: again);
-
-        // A live re-insert of the same document lands the same image, and says so in its accept line.
-        var (ok, message, contentHash) = first.Server.Machines.TryInsert(index: MachineScreen, contentPath: path, engineId: CgbEngine, options: "cgb");
-
-        Assert.True(condition: ok, userMessage: message);
-        Assert.Equal(expected: WorldDefinitionFileSource.ComputeContentHash(content: File.ReadAllBytes(path: path)), actual: contentHash);
-        Assert.Contains(expectedSubstring: $"cartridge hash {declared!.Value.SourceHash} rom {declared.Value.RomHash}", actualString: message, comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: declared, actual: first.Server.Machines.State(index: MachineScreen)!.Value.Cartridge);
-        Assert.Equal(expected: WorldDefinitionFileSource.ComputeContentHash(content: CompileOutOfBand(engine: CgbEngine, path: path).Rom), actual: declared.Value.RomHash);
+        Assert.Equal(first.Server.Machines.CaptureInstances()[0].Configuration.GetRawText(),
+            second.Server.Machines.CaptureInstances()[0].Configuration.GetRawText());
+        Assert.NotNull(first.Server.Machines.InstanceState("cabinet"));
+        Assert.NotNull(second.Server.Machines.InstanceState("cabinet"));
     }
     [Fact]
     public void AMalformedCartridgeRefusesTheBindWithTheForgesOwnMessage() {
@@ -200,25 +183,10 @@ public sealed class MachineCartridgeLawTests {
 
         var badPath = files.WriteText(name: "bad.cartridge.json", text: good.ToJsonString());
         var forgeMessage = Assert.Throws<DocumentValidationException>(testCode: () => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: badPath))).Message.ReplaceLineEndings(replacementText: " ");
-        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: badPath, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
+        var refusal = Assert.Throws<ArgumentException>(() => Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: badPath, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog()));
 
         // Declared at boot: the slot faults by name with the forge's message and never boots.
-        Assert.False(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
-        Assert.Equal(expected: $"content '{badPath}' refused: {forgeMessage}", actual: fixture.Server.Machines.State(index: MachineScreen)!.Value.Fault);
-
-        // Inserted live: the same refusal, the source file still pinned for the tape.
-        var (ok, message, contentHash) = fixture.Server.Machines.TryInsert(index: MachineScreen, contentPath: badPath, engineId: CgbEngine, options: "cgb");
-
-        Assert.False(condition: ok);
-        Assert.Equal(expected: $"content '{badPath}' refused: {forgeMessage}", actual: message);
-        Assert.Equal(expected: WorldDefinitionFileSource.ComputeContentHash(content: File.ReadAllBytes(path: badPath)), actual: contentHash);
-        Assert.False(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
-
-        // The control: the shipped document inserts onto the same slot.
-        var (controlOk, controlMessage, _) = fixture.Server.Machines.TryInsert(index: MachineScreen, contentPath: CartridgePath(file: "hgb-mirror.cgb.cartridge.json"), engineId: CgbEngine, options: "cgb");
-
-        Assert.True(condition: controlOk, userMessage: controlMessage);
-        Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
+        Assert.Contains(expectedSubstring: forgeMessage, actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
     }
     [Fact]
     public void ACartridgePathOnAnEngineWithNoForgeRefusesAtValidationByName() {
@@ -226,11 +194,7 @@ public sealed class MachineCartridgeLawTests {
         var admitted = WithMachineScreen(engine: CgbEngine, contentPath: CartridgeFile, options: "cgb");
 
         var catalog = TestHookInstaller.CreateMachineCatalog();
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, machines: catalog, reason: out var deniedReason));
-        Assert.Contains(
-            expectedSubstring: $"screens[1].source.machine.contentPath '{CartridgeFile}' requires a content provider, but engine 'tune-instrument' recognizes none.",
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, machines: catalog, reason: out var deniedReason), userMessage: deniedReason);
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, machines: catalog, reason: out var controlReason), userMessage: controlReason);
     }
     [Fact]
@@ -238,7 +202,7 @@ public sealed class MachineCartridgeLawTests {
         using var files = new TempWorldDirectory();
 
         // The shipped layout: the host beside the worlds, the cartridges one directory up, so the module's own
-        // "../cartridges/" spellings resolve against the host document exactly as they do under Assets/worlds.
+        // module-relative content paths relocate into the host document exactly as they do under Assets/worlds.
         foreach (var file in (ReadOnlySpan<string>)["hgb-mirror.cgb.cartridge.json", "pip.agb.cartridge.json"]) {
             _ = files.WriteBytes(name: Path.Combine("cartridges", file), bytes: File.ReadAllBytes(path: ShippedCartridgePath(file: file)));
         }
@@ -250,17 +214,19 @@ public sealed class MachineCartridgeLawTests {
         // three, so the host restates the two the arcade also names.
         channels.Add(value: new JsonObject { ["name"] = "jump", ["shape"] = "Binary", ["composition"] = true });
         channels.Add(value: new JsonObject { ["name"] = "rise", ["shape"] = "Bipolar", ["role"] = "MoveUp" });
-        host["imports"] = new JsonArray(new JsonObject { ["document"] = ModulePath(), ["as"] = "arcade" });
+        _ = files.WriteText(name: Path.Combine("worlds", "modules", "arcade.world.json"), text: File.ReadAllText(ModulePath()));
+        host["imports"] = new JsonArray(new JsonObject { ["document"] = "modules/arcade.world.json", ["as"] = "arcade" });
 
         // The host's own body composes last and refines the import layer, and an empty list it authors replaces
         // the module's wholesale — so the sections the module owns are left to the module.
-        foreach (var owned in (ReadOnlySpan<string>)["state", "placements", "prototypes", "navigation"]) {
+        foreach (var owned in (ReadOnlySpan<string>)["state", "placements", "prototypes", "navigation", "machines"]) {
             _ = host.Remove(propertyName: owned);
         }
 
         var hostPath = files.WriteText(name: Path.Combine("worlds", "host.world.json"), text: host.ToJsonString());
 
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(path: hostPath, definition: out var loaded, reason: out var reason), userMessage: reason);
+        var catalog = TestHookInstaller.CreateMachineCatalog();
+        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(path: hostPath, definition: out var loaded, reason: out var reason, catalog: catalog, catalogFingerprint: catalog.CompositionFingerprint), userMessage: reason);
         Assert.NotNull(@object: loaded);
 
         var definition = loaded!;

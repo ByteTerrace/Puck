@@ -10,7 +10,7 @@ public sealed partial class WorldServer {
     private long m_extensionSequence;
     private readonly Queue<RecordedContribution> m_recordedContributions = new();
 
-    private sealed record RecordedContribution(WorldRecordedExtension Owner, WorldMutation Mutation, long Sequence);
+    private sealed record RecordedContribution(WorldRecordedExtension Owner, WorldMutation Mutation, long Sequence, Guid OperationId);
 
     /// <summary>Captures a versioned causal checkpoint for a trusted host to commit alongside an external operation.
     /// This is authority-private recovery data; never disclose it to a provider as an observation.</summary>
@@ -100,7 +100,7 @@ public sealed partial class WorldServer {
     internal long EnqueueRecordedExtension(WorldRecordedExtension owner, long epoch, WorldMutation mutation) => ExecuteAuthorityOperation(() => {
         CheckRecordedExtension(epoch);
         var sequence = checked(++m_extensionSequence);
-        m_recordedContributions.Enqueue(new(owner, mutation, sequence));
+        m_recordedContributions.Enqueue(new(owner, mutation, sequence, Guid.NewGuid()));
         return sequence;
     });
 
@@ -119,7 +119,8 @@ public sealed partial class WorldServer {
                 Sequence: sequence,
                 CorrelationId: sequence,
                 Principal: mutation.Principal,
-                Payload: new WorldSubmissionPayload.Mutation(mutation)));
+                Payload: new WorldSubmissionPayload.Mutation(mutation),
+                OperationId: contribution.OperationId));
         }
     }
 }

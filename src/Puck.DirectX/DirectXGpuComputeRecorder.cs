@@ -2,44 +2,20 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D12;
+using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuComputeRecorder"/> for Direct3D 12 by recording into the
-/// <c>ID3D12GraphicsCommandList</c> extracted from a <see cref="DirectXCommandBufferState"/> GCHandle token (a
-/// DIRECT list carries both the graphics and compute verbs, so no compute-specific interface is needed).
-/// <para>
-/// Bind/dispatch map straight across: <c>BindComputePipeline</c> = <c>SetComputeRootSignature</c> +
-/// <c>SetPipelineState</c>; <c>BindComputeDescriptorSet</c> = <c>SetDescriptorHeaps</c> +
-/// <c>SetComputeRootDescriptorTable</c>; <c>PushConstants</c> = <c>SetComputeRoot32BitConstants</c>;
-/// <c>Dispatch</c> = <c>Dispatch</c>.
-/// </para>
-/// <para>
-/// The neutral synchronization primitives map to D3D12 as follows. <c>TransitionImageLayout</c> emits a TRANSITION
-/// barrier on the storage-image resource: <see cref="GpuImageLayout.General"/> → <c>UNORDERED_ACCESS</c>,
-/// <see cref="GpuImageLayout.ShaderReadOnly"/> → <c>PIXEL_SHADER_RESOURCE</c> (the layout the readback and the
-/// compositor sample read require). Because the neutral <c>oldLayout</c> is <see cref="GpuImageLayout.Undefined"/>
-/// on the first frame, the legacy fallback's actual <c>StateBefore</c> is taken from per-resource tracking:
-/// private compute-write images begin in <c>UNORDERED_ACCESS</c>, while simultaneous-access images begin in
-/// <c>COMMON</c> and may implicitly promote on their first UAV use. Enhanced barriers instead keep simultaneous
-/// resources in <c>COMMON</c> and express ordering through sync/access scopes. <c>MemoryBarrier</c> emits a UAV
-/// barrier on the legacy fallback (a global one with a null resource).
-/// </para>
+/// Records compute work on Direct3D 12 direct command lists. Resource transitions use the same legacy
+/// barrier model as graphics and readback; enhanced and legacy texture barriers cannot be mixed without
+/// an explicit COMMON handoff. Shared resource-state tracking keeps compute, fullscreen draws, and
+/// reused frame slots consistent. UAV barriers order repeated writes, including zero initialization.
+/// Temporary clear descriptors belong to the fenced command buffer and retire when it is reused or disposed.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDisposable {
-    // The current D3D12 resource state of each storage image, keyed by its ID3D12Resource* — used ONLY by the classic
-    // (legacy) barrier fallback. Seeded lazily at UNORDERED_ACCESS: private compute-write images are created there,
-    // while a simultaneous-access image rests in COMMON, for which UNORDERED_ACCESS is a legal promotable
-    // BeforeState. The enhanced-barrier path needs no such tracking — it honors the neutral oldLayout directly
-    // (mapping Undefined to D3D12_BARRIER_LAYOUT_UNDEFINED + a discard), exactly like a Vulkan image-layout transition.
-    private readonly ConcurrentDictionary<nint, D3D12_RESOURCE_STATES> m_imageStates = new();
-    // Whether each device supports Enhanced Barriers (D3D12_FEATURE_D3D12_OPTIONS12), cached per ID3D12Device*. When
-    // supported, transitions/memory barriers carry real sync + access scopes and first-class layouts (the Vulkan-barrier
-    // peer); otherwise the legacy resource-state barriers are used.
-    private readonly ConcurrentDictionary<nint, bool> m_enhancedBarriers = new();
+public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpuImageInitializationRecorder, IGpuBufferInitializationRecorder, IDisposable {
     // The DISPATCH command signature for ExecuteIndirect, cached per ID3D12Device* (one signature serves every
     // indirect dispatch on a device). Released on Dispose; the service provider disposes this recorder singleton.
     private readonly ConcurrentDictionary<nint, nint> m_dispatchSignatures = new();
@@ -50,6 +26,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         var allocator = ((ID3D12CommandAllocator*)state.Allocator);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
 
+        state.ReleaseRetainedResources();
         allocator->Reset();
         commandList->Reset(pAllocator: allocator, pInitialState: null);
     }
@@ -150,6 +127,53 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         );
     }
     /// <inheritdoc/>
+    public void ClearStorageImage(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
+        ArgumentOutOfRangeException.ThrowIfZero(deviceHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(imageHandle);
+        var descriptors = DirectXClearImageDescriptors.Create(deviceHandle: deviceHandle, imageHandle: imageHandle, format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format));
+        DecodeState(commandBufferHandle).RetainedResources.Add(descriptors);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+        var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
+        var descriptorHeap = ((ID3D12DescriptorHeap*)descriptors.GpuHeapHandle);
+        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &descriptorHeap);
+        var clearColor = stackalloc float[4] { 0f, 0f, 0f, 0f };
+        commandList->ClearUnorderedAccessViewFloat(
+            descriptors.GpuHandle,
+            descriptors.CpuHandle,
+            ((ID3D12Resource*)imageHandle),
+            clearColor,
+            0,
+            null);
+
+    }
+    /// <inheritdoc/>
+    public void ClearStorageBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        ArgumentOutOfRangeException.ThrowIfZero(deviceHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
+        if (sizeBytes == 0 || (sizeBytes & 3) != 0 || sizeBytes / 4 > uint.MaxValue) {
+            throw new ArgumentOutOfRangeException(nameof(sizeBytes), sizeBytes, "Direct3D 12 buffer clears require a positive size divisible by four and representable by a raw UAV.");
+        }
+
+        var descriptors = DirectXClearBufferDescriptors.Create(deviceHandle: deviceHandle, bufferHandle: bufferHandle, sizeBytes: sizeBytes);
+        DecodeState(commandBufferHandle).RetainedResources.Add(descriptors);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+        var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
+        var descriptorHeap = ((ID3D12DescriptorHeap*)descriptors.GpuHeapHandle);
+        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &descriptorHeap);
+        var clearValues = stackalloc uint[4] { 0U, 0U, 0U, 0U };
+        commandList->ClearUnorderedAccessViewUint(
+            descriptors.GpuHandle,
+            descriptors.CpuHandle,
+            ((ID3D12Resource*)bufferHandle),
+            clearValues,
+            0,
+            null);
+        // ClearUnorderedAccessViewUint is a UAV write. Order it before the first shader access even when the
+        // neutral transition remains UAV -> UAV (which correctly elides a state transition).
+        // Buffer clear ordering is supplied by the following runtime buffer transition.
+    }
     public void TransitionImageLayout(
         nint deviceHandle,
         nint commandBufferHandle,
@@ -163,40 +187,11 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
-        // Enhanced Barriers (the Vulkan-barrier peer): a texture barrier carrying real sync + access scopes (from the
-        // neutral stage/access masks) and first-class layouts. The neutral oldLayout is honored directly — Undefined
-        // maps to LAYOUT_UNDEFINED with a discard, so no per-resource state tracking is needed.
-        if (UseEnhancedBarriers(deviceHandle: deviceHandle)) {
-            // A simultaneous-access texture (one a foreign device opens) only ever holds the COMMON layout, which
-            // admits every access; its layout never moves, so no discard either.
-            var simultaneous = DirectXSimultaneousAccessResources.Contains(resourceHandle: imageHandle);
-            var textureBarrier = new D3D12_TEXTURE_BARRIER {
-                AccessAfter = ToTextureAccess(layout: newLayout),
-                AccessBefore = ToTextureAccess(layout: oldLayout),
-                Flags = (((oldLayout == GpuImageLayout.Undefined) && !simultaneous) ? D3D12_TEXTURE_BARRIER_FLAGS.D3D12_TEXTURE_BARRIER_FLAG_DISCARD : D3D12_TEXTURE_BARRIER_FLAGS.D3D12_TEXTURE_BARRIER_FLAG_NONE),
-                LayoutAfter = (simultaneous ? D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON : ToBarrierLayout(layout: newLayout)),
-                LayoutBefore = (simultaneous ? D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON : ToBarrierLayout(layout: oldLayout)),
-                pResource = ((ID3D12Resource*)imageHandle),
-                Subresources = new D3D12_BARRIER_SUBRESOURCE_RANGE { IndexOrFirstMipLevel = DirectXConstants.AllSubresources, },
-                SyncAfter = ToBarrierSync(stageMask: destinationStageMask),
-                SyncBefore = ToBarrierSync(stageMask: sourceStageMask),
-            };
-            var textureGroup = new D3D12_BARRIER_GROUP {
-                NumBarriers = 1,
-                Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_TEXTURE,
-            };
-
-            textureGroup.Anonymous.pTextureBarriers = &textureBarrier;
-            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(NumBarrierGroups: 1, pBarrierGroups: &textureGroup);
-
-            return;
-        }
-
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
-        // Legacy fallback: the neutral oldLayout is Undefined on the first frame, so the prior state comes from
+        // Shared legacy state: the neutral oldLayout is Undefined on the first frame, so the prior state comes from
         // tracking. UNORDERED_ACCESS is both the private texture's creation state and a legal promotable BeforeState
         // while a simultaneous-access texture rests in COMMON.
-        var before = m_imageStates.GetOrAdd(key: imageHandle, value: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        var before = DirectXResourceStates.Get(imageHandle, ToResourceState(oldLayout));
         var after = ToResourceState(layout: newLayout);
 
         if (before == after) {
@@ -215,7 +210,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         };
 
         commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
-        m_imageStates[imageHandle] = after;
+        DirectXResourceStates.Set(imageHandle, after);
     }
     /// <inheritdoc/>
     public void MemoryBarrier(
@@ -228,28 +223,8 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
-        // Enhanced Barriers: a global memory barrier carrying real sync + access scopes from the neutral masks (the
-        // Vulkan VkMemoryBarrier peer), instead of the scopeless legacy UAV barrier.
-        if (UseEnhancedBarriers(deviceHandle: deviceHandle)) {
-            var globalBarrier = new D3D12_GLOBAL_BARRIER {
-                AccessAfter = ToGlobalAccess(accessMask: destinationAccessMask),
-                AccessBefore = ToGlobalAccess(accessMask: sourceAccessMask),
-                SyncAfter = ToBarrierSync(stageMask: destinationStageMask),
-                SyncBefore = ToBarrierSync(stageMask: sourceStageMask),
-            };
-            var globalGroup = new D3D12_BARRIER_GROUP {
-                NumBarriers = 1,
-                Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_GLOBAL,
-            };
-
-            globalGroup.Anonymous.pGlobalBarriers = &globalBarrier;
-            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(NumBarrierGroups: 1, pBarrierGroups: &globalGroup);
-
-            return;
-        }
-
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
-        // Legacy fallback: a global UAV barrier (null resource) ordering the prior UAV writes before the next reads.
+        // Shared legacy state: a global UAV barrier (null resource) ordering the prior UAV writes before the next reads.
         // Legacy D3D12 UAV barriers carry no access/stage scope, so the neutral masks are unused here.
         var barrier = new D3D12_RESOURCE_BARRIER {
             Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_UAV,
@@ -273,43 +248,18 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
-        // Enhanced Barriers: a per-RESOURCE buffer barrier. ExecuteIndirect requires the argument buffer in the
-        // INDIRECT_ARGUMENT access state; a global barrier does not prepare a specific buffer for it, so the GPU-written
-        // args (a UAV write) are transitioned to INDIRECT_ARGUMENT here. The barrier covers the whole resource
-        // (Offset 0, Size = max): the conservative, always-correct scope. D3D12 does permit a sub-range, but the neutral
-        // TransitionBuffer verb deliberately syncs the whole buffer — sub-range scoping would only be an optimization
-        // for a large, partially-written buffer, which no current consumer needs.
-        if (UseEnhancedBarriers(deviceHandle: deviceHandle)) {
-            var bufferBarrier = new D3D12_BUFFER_BARRIER {
-                AccessAfter = ToGlobalAccess(accessMask: destinationAccessMask),
-                AccessBefore = ToGlobalAccess(accessMask: sourceAccessMask),
-                Offset = 0,
-                Size = ulong.MaxValue,
-                SyncAfter = ToBarrierSync(stageMask: destinationStageMask),
-                SyncBefore = ToBarrierSync(stageMask: sourceStageMask),
-                pResource = ((ID3D12Resource*)bufferHandle),
-            };
-            var bufferGroup = new D3D12_BARRIER_GROUP {
-                NumBarriers = 1,
-                Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_BUFFER,
-            };
-
-            bufferGroup.Anonymous.pBufferBarriers = &bufferBarrier;
-            ((ID3D12GraphicsCommandList7*)state.CommandList)->Barrier(NumBarrierGroups: 1, pBarrierGroups: &bufferGroup);
-
-            return;
-        }
-
-        // Legacy fallback: a per-resource TRANSITION barrier between the access states (e.g. UNORDERED_ACCESS ->
+        // Shared legacy state: a per-resource TRANSITION barrier between the access states (e.g. UNORDERED_ACCESS ->
         // INDIRECT_ARGUMENT). Buffers have no subresources, so transition the whole resource.
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
-        var before = ToBufferResourceState(accessMask: sourceAccessMask);
+        var before = DirectXResourceStates.Get(bufferHandle, ToBufferResourceState(accessMask: sourceAccessMask));
         var after = ToBufferResourceState(accessMask: destinationAccessMask);
 
-        if (before == after) {
+        if (before == after || (after != D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS && (before & after) == after)) {
+            if ((after & D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0) {
+                MemoryBarrier(deviceHandle, commandBufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask);
+            }
             return;
         }
-
         var transition = new D3D12_RESOURCE_BARRIER {
             Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         };
@@ -322,10 +272,14 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         };
 
         commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &transition);
+        DirectXResourceStates.Set(bufferHandle, after);
     }
 
-    // Access mask -> the legacy buffer resource state (used only when Enhanced Barriers are unavailable).
+    // Access mask -> the resource state required by the next buffer use.
     private static D3D12_RESOURCE_STATES ToBufferResourceState(GpuComputeAccess accessMask) {
+        if (0 != (accessMask & GpuComputeAccess.TransferWrite)) {
+            return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        }
         if (0 != (accessMask & GpuComputeAccess.IndirectCommandRead)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         }
@@ -340,35 +294,9 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
 
         return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
     }
-    // Whether the device supports Enhanced Barriers, cached per device. CsWin32's CheckFeatureSupport is the throwing
-    // void overload, so an unsupported query (older device/OS) is treated as "not supported" and falls back to legacy.
-    private bool UseEnhancedBarriers(nint deviceHandle) {
-        if (m_enhancedBarriers.TryGetValue(key: deviceHandle, value: out var supported)) {
-            return supported;
-        }
-
-        var device = ((ID3D12Device*)deviceHandle);
-        D3D12_FEATURE_DATA_D3D12_OPTIONS12 options = default;
-
-        try {
-            device->CheckFeatureSupport(
-                Feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12,
-                FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12)),
-                pFeatureSupportData: &options
-            );
-        } catch {
-            options.EnhancedBarriersSupported = false;
-        }
-
-        var result = ((bool)options.EnhancedBarriersSupported);
-
-        m_enhancedBarriers[deviceHandle] = result;
-
-        return result;
-    }
     // The cached one-argument DISPATCH command signature for a device (ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS),
     // a single DISPATCH argument, no root signature — a pure-dispatch signature binds nothing). Same per-device cache
-    // shape as UseEnhancedBarriers; a concurrent loser releases its duplicate so exactly one signature is kept.
+    // a concurrent loser releases its duplicate so exactly one signature is kept.
     private nint GetOrCreateDispatchSignature(nint deviceHandle) {
         if (m_dispatchSignatures.TryGetValue(key: deviceHandle, value: out var existing)) {
             return existing;
@@ -414,66 +342,124 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         m_dispatchSignatures.Clear();
     }
 
-    // Stage mask → barrier sync scope. TopOfPipe (no prior work) contributes nothing, so a source-only TopOfPipe maps
-    // to SYNC_NONE; the compute and pixel stages map to their shading sync scopes.
-    private static D3D12_BARRIER_SYNC ToBarrierSync(GpuComputeStage stageMask) {
-        var sync = D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE;
+    private sealed unsafe class DirectXClearImageDescriptors : IDisposable {
+        private nint m_cpuHeap;
+        private nint m_gpuHeap;
+        public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle { get; private set; }
+        public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle { get; private set; }
+        public nint GpuHeapHandle => m_gpuHeap;
 
-        if (0 != (stageMask & GpuComputeStage.ComputeShader)) {
-            sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING;
+        public static DirectXClearImageDescriptors Create(nint deviceHandle, nint imageHandle, DXGI_FORMAT format) {
+            var device = ((ID3D12Device*)deviceHandle);
+            var cpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+            ID3D12DescriptorHeap* gpuHeap;
+            try { gpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE); }
+            catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
+            var result = new DirectXClearImageDescriptors {
+                m_cpuHeap = ((nint)cpuHeap),
+                m_gpuHeap = ((nint)gpuHeap),
+                CpuHandle = DirectXConstants.GetCpuHeapStart(heap: cpuHeap),
+                GpuHandle = DirectXConstants.GetGpuHeapStart(heap: gpuHeap),
+            };
+            var uav = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
+                Format = format,
+                ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D,
+            };
+            uav.Anonymous.Texture2D = new D3D12_TEX2D_UAV { MipSlice = 0, PlaneSlice = 0, };
+            device->CreateUnorderedAccessView(
+                DestDescriptor: result.CpuHandle,
+                pCounterResource: null,
+                pDesc: &uav,
+                pResource: ((ID3D12Resource*)imageHandle));
+            device->CreateUnorderedAccessView(
+                DestDescriptor: DirectXConstants.GetCpuHeapStart(heap: gpuHeap),
+                pCounterResource: null,
+                pDesc: &uav,
+                pResource: ((ID3D12Resource*)imageHandle));
+            return result;
         }
 
-        if (0 != (stageMask & GpuComputeStage.FragmentShader)) {
-            sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_PIXEL_SHADING;
+        public void Dispose() {
+            DirectXConstants.Release(ref m_cpuHeap);
+            DirectXConstants.Release(ref m_gpuHeap);
         }
 
-        if (0 != (stageMask & GpuComputeStage.DrawIndirect)) {
-            sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_EXECUTE_INDIRECT;
+        private static ID3D12DescriptorHeap* CreateHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_FLAGS flags) {
+            var description = new D3D12_DESCRIPTOR_HEAP_DESC {
+                Flags = flags,
+                NodeMask = 0,
+                NumDescriptors = 1,
+                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            };
+            device->CreateDescriptorHeap(
+                pDescriptorHeapDesc: in description,
+                ppvHeap: out var heap,
+                riid: ID3D12DescriptorHeap.IID_Guid);
+            return (ID3D12DescriptorHeap*)heap;
         }
-
-        return sync;
     }
-    // Image layout → the access compatible with it (the access a texture barrier carries must match its layout).
-    private static D3D12_BARRIER_ACCESS ToTextureAccess(GpuImageLayout layout) {
-        return layout switch {
-            GpuImageLayout.General => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-            GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-            // Undefined has no access; External rests in COMMON (any access compatible with the shared handoff).
-            GpuImageLayout.Undefined => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS,
-            _ => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COMMON,
-        };
-    }
-    // Image layout → first-class barrier layout (the Vulkan image-layout peer).
-    private static D3D12_BARRIER_LAYOUT ToBarrierLayout(GpuImageLayout layout) {
-        return layout switch {
-            GpuImageLayout.General => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
-            GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_SHADER_RESOURCE,
-            GpuImageLayout.External => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON,
-            GpuImageLayout.RenderTarget => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_RENDER_TARGET,
-            _ => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNDEFINED,
-        };
-    }
-    // Access mask → global-barrier access scope. A shader read may be a UAV read or a sampled read, so it spans both.
-    private static D3D12_BARRIER_ACCESS ToGlobalAccess(GpuComputeAccess accessMask) {
-        if (accessMask == GpuComputeAccess.None) {
-            return D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS;
+
+    private sealed unsafe class DirectXClearBufferDescriptors : IDisposable {
+        private nint m_cpuHeap;
+        private nint m_gpuHeap;
+        public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle { get; private set; }
+        public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle { get; private set; }
+        public nint GpuHeapHandle => m_gpuHeap;
+
+        public static DirectXClearBufferDescriptors Create(nint deviceHandle, nint bufferHandle, ulong sizeBytes) {
+            var device = ((ID3D12Device*)deviceHandle);
+            var cpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+            ID3D12DescriptorHeap* gpuHeap;
+            try { gpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE); }
+            catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
+            var result = new DirectXClearBufferDescriptors {
+                m_cpuHeap = ((nint)cpuHeap),
+                m_gpuHeap = ((nint)gpuHeap),
+                CpuHandle = DirectXConstants.GetCpuHeapStart(heap: cpuHeap),
+                GpuHandle = DirectXConstants.GetGpuHeapStart(heap: gpuHeap),
+            };
+            var uav = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
+                Format = DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS,
+                ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,
+            };
+            uav.Anonymous.Buffer = new D3D12_BUFFER_UAV {
+                CounterOffsetInBytes = 0,
+                FirstElement = 0,
+                Flags = D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_RAW,
+                NumElements = checked((uint)(sizeBytes / 4)),
+                StructureByteStride = 0,
+            };
+            device->CreateUnorderedAccessView(
+                DestDescriptor: result.CpuHandle,
+                pCounterResource: null,
+                pDesc: &uav,
+                pResource: ((ID3D12Resource*)bufferHandle));
+            device->CreateUnorderedAccessView(
+                DestDescriptor: DirectXConstants.GetCpuHeapStart(heap: gpuHeap),
+                pCounterResource: null,
+                pDesc: &uav,
+                pResource: ((ID3D12Resource*)bufferHandle));
+            return result;
         }
 
-        var access = D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COMMON;
-
-        if (0 != (accessMask & GpuComputeAccess.ShaderWrite)) {
-            access |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
+        public void Dispose() {
+            DirectXConstants.Release(ref m_cpuHeap);
+            DirectXConstants.Release(ref m_gpuHeap);
         }
 
-        if (0 != (accessMask & GpuComputeAccess.ShaderRead)) {
-            access |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
+        private static ID3D12DescriptorHeap* CreateHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_FLAGS flags) {
+            var description = new D3D12_DESCRIPTOR_HEAP_DESC {
+                Flags = flags,
+                NodeMask = 0,
+                NumDescriptors = 1,
+                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            };
+            device->CreateDescriptorHeap(
+                pDescriptorHeapDesc: in description,
+                ppvHeap: out var heap,
+                riid: ID3D12DescriptorHeap.IID_Guid);
+            return (ID3D12DescriptorHeap*)heap;
         }
-
-        if (0 != (accessMask & GpuComputeAccess.IndirectCommandRead)) {
-            access |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_INDIRECT_ARGUMENT;
-        }
-
-        return access;
     }
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!);

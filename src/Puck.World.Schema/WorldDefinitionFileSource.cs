@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Machines;
 
 namespace Puck.World;
 
@@ -15,14 +16,14 @@ namespace Puck.World;
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static class WorldDefinitionFileSource {
-    // A composed image, held per resolved document path, so a second reach for the same document merges nothing.
+    // A composed image, held per resolved document path and catalog fingerprint, so a second reach for the same document merges nothing.
     // One quilt shard names the island as its own basis and again as an adjacency neighbour, and each derived
     // corner reaches it once more, so a single boot used to ask for the same twenty-one-document merge scores of
     // times and pay for it every time. An image records every file its composition read and the exact bytes it read
     // from each, and it is offered again only when all of them still hold those bytes, so an edit to the document
     // itself, to a basis several hops above it, or to any import recomposes rather than serving a stale merge, and
-    // a file that has since vanished or turned unreadable does the same. Identity is the resolved path, freshness
-    // is content: no clock takes part in either.
+    // a file that has since vanished or turned unreadable does the same. Identity is the resolved path plus the catalog
+    // fingerprint, freshness is content: no clock takes part in either.
     private static readonly ConcurrentDictionary<string, ComposedDocument> s_composedDocuments = new(comparer: StringComparer.OrdinalIgnoreCase);
 
     private static long s_documentsComposed;
@@ -30,6 +31,7 @@ public static class WorldDefinitionFileSource {
 
     // One file a composition read, with the bytes it read from it.
     private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
+    private static string CacheKey(string path, string fingerprint) => path + "\0" + fingerprint;
     // A held image: the chain it composed from, its final tree as UTF-8 JSON (parsed on every reuse, so no reader
     // is ever handed a tree an earlier reader may have edited), and `Reach` — how many further ancestor slots the
     // subtree beneath this document occupies. Reach is what stops reuse from quietly widening the composition-depth
@@ -44,8 +46,8 @@ public static class WorldDefinitionFileSource {
     /// <summary>Gets how many document compositions this process answered from an image it had already composed,
     /// rather than merging the same tree again.</summary>
     public static long DocumentCompositionsShared => Interlocked.Read(location: ref s_documentCompositionsShared);
-    /// <summary>Gets how many distinct document paths this process currently holds a composed image of. The store
-    /// is not capped: it holds one image per distinct document path a directory composition has completed in this
+    /// <summary>Gets how many distinct path/catalog identities this process currently holds a composed image of. The store
+    /// is not capped: it holds one image per distinct document path and catalog fingerprint a directory composition has completed in this
     /// process, so it grows with the documents the process actually composes and never with how long it runs. What
     /// that costs is <see cref="ComposedDocumentBytes"/>, which the boot narration and <c>world.status</c> both
     /// read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
@@ -70,17 +72,18 @@ public static class WorldDefinitionFileSource {
         }
     }
 
-    /// <summary>Whether this process already holds a composed image of <paramref name="resolvedPath"/> whose whole
+    /// <summary>Whether this process already holds a composed image for <paramref name="resolvedPath"/> and the selected catalog fingerprint whose whole
     /// chain still carries the bytes it composed from — so the next composition of that path is answered from the
     /// image instead of merging again. The fact a read-back names per neighbour: asked before a load, it says
     /// whether that load's document will be shared or composed fresh.</summary>
     /// <param name="resolvedPath">The absolute, normalized path a composition would resolve against.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to select the host-specific image.</param>
     /// <returns><see langword="true"/> when a held image stands for the path.</returns>
-    public static bool HoldsComposedDocument(string resolvedPath) {
+    public static bool HoldsComposedDocument(string resolvedPath, string catalogFingerprint = "") {
         if (
             string.IsNullOrEmpty(value: resolvedPath) ||
             !s_composedDocuments.TryGetValue(
-            key: resolvedPath,
+            key: CacheKey(resolvedPath, catalogFingerprint),
             value: out var image
         )
         ) {
@@ -153,7 +156,7 @@ public static class WorldDefinitionFileSource {
     // stay usable for the next reader. Only a directory composition is answered, matching what HoldComposedImage
     // records: every other source names its documents in a space of its own (an in-memory pair calls them "host"
     // and "fragment"), and nothing else may resolve one of those names onto a file image.
-    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach) {
+    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach) {
         composed = null;
         touched = [];
         touchedPaths = [];
@@ -162,7 +165,7 @@ public static class WorldDefinitionFileSource {
         if (
             (source is not DirectoryDocumentSource) ||
             !s_composedDocuments.TryGetValue(
-            key: resolvedPath,
+            key: CacheKey(resolvedPath, catalogFingerprint),
             value: out var image
         )
         ) {
@@ -189,7 +192,7 @@ public static class WorldDefinitionFileSource {
 
         if (tree is null) {
             _ = s_composedDocuments.TryRemove(
-                key: resolvedPath,
+                key: CacheKey(resolvedPath, catalogFingerprint),
                 value: out _
             );
 
@@ -211,7 +214,7 @@ public static class WorldDefinitionFileSource {
     // return, so the next reader of the same path meets an image recorded together with the chain it was composed
     // from. A composition over any byte source other than the directory one is never held — its names are not paths
     // this class could re-read to prove the image still stands.
-    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach) {
+    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach) {
         if (source is not DirectoryDocumentSource) {
             return;
         }
@@ -225,7 +228,7 @@ public static class WorldDefinitionFileSource {
             ));
         }
 
-        s_composedDocuments[resolvedPath] = new ComposedDocument(
+        s_composedDocuments[CacheKey(resolvedPath, catalogFingerprint)] = new ComposedDocument(
             Chain: chain,
             ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
             Reach: reach
@@ -275,7 +278,7 @@ public static class WorldDefinitionFileSource {
 
     /// <summary>Resolves one document name — already combined against its referrer's directory and normalized (see
     /// <see cref="ResolverDocumentSource"/>) — to its raw bytes, for the resolver-taking
-    /// <see cref="TryComposeDocumentTree(string,ReadOnlyMemory{byte},WorldDocumentResolver,out JsonObject?,out string)"/>
+    /// <c>TryComposeDocumentTree</c>
     /// overload. Used by a caller with no filesystem of its own (a browser runtime holding every document of an
     /// import tree in memory, keyed by its worlds-relative name).</summary>
     /// <param name="resolvedName">The already-resolved document name.</param>
@@ -360,7 +363,7 @@ public static class WorldDefinitionFileSource {
 
         return reader.ReadToEnd();
     }
-    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims) {
+    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog) {
         definition = null;
         contentHash = string.Empty;
 
@@ -426,7 +429,9 @@ public static class WorldDefinitionFileSource {
                 rootBytes: bytes,
                 composed: out var composed,
                 chainBytes: out var chainBytes,
-                reason: out var composeReason
+                reason: out var composeReason,
+                catalogFingerprint: catalogFingerprint,
+                catalog: catalog
             )) {
                 reason = $"{path} composition refused: {composeReason}";
 
@@ -449,7 +454,8 @@ public static class WorldDefinitionFileSource {
                 neighbours: neighbours,
                 reason: out reason,
                 sourceName: path,
-                validateAdjacencyClaims: validateAdjacencyClaims
+                validateAdjacencyClaims: validateAdjacencyClaims,
+                catalog: catalog
             )) {
                 return false;
             }
@@ -471,7 +477,7 @@ public static class WorldDefinitionFileSource {
     /// <summary>Parses, migrates, and validates an already-decoded, already-composed document string — the shared
     /// middle of every load path once its own bytes/basis handling has produced flat JSON: a directory load
     /// (composed above) and a bytes-only load with no directory to resolve a chain against
-    /// (<see cref="WorldDefinitionLoader.TryLoad(ReadOnlyMemory{byte},string,out WorldDefinition?,out string,string,IWorldNeighbourResolver?)"/>,
+    /// (<c>WorldDefinitionLoader.TryLoad</c>,
     /// which refuses a <c>basis</c> member outright rather than composing one). The validation class answers under
     /// its own wording, never the strict parse's: a validation refusal can rest on facts outside this call — an
     /// adjacency claim resolved through <paramref name="neighbours"/> against documents this caller may itself be
@@ -486,15 +492,17 @@ public static class WorldDefinitionFileSource {
     /// (<see cref="WorldDefinitionValidator.TryValidateLocally(WorldDefinition, out string)"/>).</param>
     /// <param name="definition">The parsed, migrated, validated definition on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider validation, or null for structural parsing.</param>
     /// <returns><see langword="true"/> when the document parsed, migrated, and validated.</returns>
-    public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason) {
+    public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason, IMachineValidationCatalog? catalog = null) {
         definition = null;
         if (!TryParseDocument(definition: out var parsed, json: json, reason: out reason, sourceName: sourceName)) { return false; }
         var validated = (validateAdjacencyClaims
             ? WorldDefinitionValidator.TryValidate(
             definition: parsed!,
             neighbours: neighbours,
-            reason: out var refusal
+            reason: out var refusal,
+            machines: catalog
         )
             : WorldDefinitionValidator.TryValidateLocally(
             definition: parsed!,
@@ -869,12 +877,27 @@ public static class WorldDefinitionFileSource {
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
-    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason) {
+    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         stack = null;
         composed = null;
         touched = [bytes];
         touchedPaths = [resolvedPath];
         reach = 0;
+
+        if (catalog is not null) {
+            if (catalog.CompositionFingerprint is { Length: > 0 } selectedFingerprint) {
+                if (catalogFingerprint is { Length: > 0 } suppliedFingerprint &&
+                    !string.Equals(suppliedFingerprint, selectedFingerprint, StringComparison.Ordinal)) {
+                    reason = $"{resolvedPath} composition received catalog fingerprint '{suppliedFingerprint}', but the selected catalog is '{selectedFingerprint}'.";
+                    return false;
+                }
+
+                catalogFingerprint = selectedFingerprint;
+            } else if (string.IsNullOrWhiteSpace(catalogFingerprint)) {
+                reason = $"{resolvedPath} composition requires the explicit machine catalog fingerprint.";
+                return false;
+            }
+        }
 
         if (ancestors.Contains(
             value: resolvedPath,
@@ -905,6 +928,7 @@ public static class WorldDefinitionFileSource {
             reach: out var heldReach,
             resolvedPath: resolvedPath,
             source: source,
+            catalogFingerprint: catalogFingerprint,
             touched: out var heldTouched,
             touchedPaths: out var heldTouchedPaths
         )) {
@@ -950,6 +974,7 @@ public static class WorldDefinitionFileSource {
                 reach: reach,
                 resolvedPath: resolvedPath,
                 source: source,
+                catalogFingerprint: catalogFingerprint,
                 touched: touched,
                 touchedPaths: touchedPaths
             );
@@ -993,6 +1018,8 @@ public static class WorldDefinitionFileSource {
                 resolvedPath: basisResolvedName,
                 serveHeldImage: true,
                 source: source,
+                catalogFingerprint: catalogFingerprint,
+                catalog: catalog,
                 stack: out _,
                 touched: out var basisTouched,
                 touchedPaths: out var basisTouchedPaths
@@ -1001,6 +1028,16 @@ public static class WorldDefinitionFileSource {
             }
 
             basisComposed = basisResult!;
+            if ((catalog is not null) && !WorldModuleNamespace.TryRelocateConfigurationAssets(
+                module: basisComposed,
+                catalog: catalog,
+                sourceDocumentPath: basisResolvedName,
+                targetDocumentPath: resolvedPath,
+                reason: out var basisMetadataReason
+            )) {
+                reason = $"{resolvedPath} basis {basisResolvedName}: {basisMetadataReason}";
+                return false;
+            }
             reach = Math.Max(
                 val1: reach,
                 val2: (basisReach + 1)
@@ -1059,6 +1096,8 @@ public static class WorldDefinitionFileSource {
                     resolvedPath: importResolvedName,
                     serveHeldImage: true,
                     source: source,
+                    catalogFingerprint: catalogFingerprint,
+                    catalog: catalog,
                     stack: out _,
                     touched: out var importTouched,
                     touchedPaths: out var importTouchedPaths
@@ -1071,13 +1110,33 @@ public static class WorldDefinitionFileSource {
                     val2: (importReach + 1)
                 );
 
-                if ((importAlias is not null) && !WorldModuleNamespace.TryApply(
-                    alias: importAlias,
-                    module: importResult!,
-                    reason: out var aliasReason
-                )) {
+                if ((importAlias is not null) && !((catalog is not null)
+                    ? WorldModuleNamespace.TryApply(
+                        alias: importAlias,
+                        module: importResult!,
+                        catalog: catalog,
+                        sourceDocumentPath: importResolvedName,
+                        targetDocumentPath: resolvedPath,
+                        reason: out var aliasReason
+                    )
+                    : WorldModuleNamespace.TryApply(
+                        alias: importAlias,
+                        module: importResult!,
+                        reason: out aliasReason
+                    ))) {
                     reason = $"{resolvedPath} imports {importResolvedName} as '{importAlias}': {aliasReason}";
 
+                    return false;
+                }
+
+                if ((catalog is not null) && (importAlias is null) && !WorldModuleNamespace.TryRelocateConfigurationAssets(
+                    module: importResult!,
+                    catalog: catalog,
+                    sourceDocumentPath: importResolvedName,
+                    targetDocumentPath: resolvedPath,
+                    reason: out var importMetadataReason
+                )) {
+                    reason = $"{resolvedPath} imports {importResolvedName}: {importMetadataReason}";
                     return false;
                 }
 
@@ -1106,7 +1165,8 @@ public static class WorldDefinitionFileSource {
                 imports: modules,
                 ownBody: ownBody,
                 reason: out var surfaceReason,
-                surfaces: out _
+                surfaces: out _,
+                catalog: catalog
             )) {
                 reason = surfaceReason;
 
@@ -1159,6 +1219,7 @@ public static class WorldDefinitionFileSource {
             reach: reach,
             resolvedPath: resolvedPath,
             source: source,
+            catalogFingerprint: catalogFingerprint,
             touched: touched,
             touchedPaths: touchedPaths
         );
@@ -1181,8 +1242,10 @@ public static class WorldDefinitionFileSource {
     /// chain, then each import's own touched bytes in authored order; a single-element list (just the root) whenever
     /// <paramref name="composed"/> is <see langword="null"/>.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
-    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason) {
+    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         composed = null;
@@ -1217,6 +1280,8 @@ public static class WorldDefinitionFileSource {
             resolvedPath: rootResolvedName,
             serveHeldImage: true,
             source: source,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog,
             stack: out _,
             touched: out var touched,
             touchedPaths: out _
@@ -1236,8 +1301,10 @@ public static class WorldDefinitionFileSource {
     /// <param name="path">The document file to compose.</param>
     /// <param name="stack">The composed basis-plus-imports layer on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
     /// <returns><see langword="true"/> when the file was readable and its basis/imports graph composed.</returns>
-    public static bool TryComposeStackTree(string path, out JsonObject? stack, out string reason) {
+    public static bool TryComposeStackTree(string path, out JsonObject? stack, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         stack = null;
 
         try {
@@ -1252,6 +1319,8 @@ public static class WorldDefinitionFileSource {
                 resolvedPath: Path.GetFullPath(path: path),
                 serveHeldImage: false,
                 source: new DirectoryDocumentSource(),
+                catalogFingerprint: catalogFingerprint,
+                catalog: catalog,
                 stack: out var result,
                 touched: out _,
                 touchedPaths: out _
@@ -1277,8 +1346,10 @@ public static class WorldDefinitionFileSource {
     /// <param name="path">The document file to compose.</param>
     /// <param name="tree">The composed tree on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph composed.</returns>
-    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason) {
+    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         tree = null;
 
         try {
@@ -1289,7 +1360,9 @@ public static class WorldDefinitionFileSource {
                 reason: out reason,
                 resolvedPath: Path.GetFullPath(path: path),
                 source: new DirectoryDocumentSource(),
-                tree: out tree
+                tree: out tree,
+                catalogFingerprint: catalogFingerprint,
+                catalog: catalog
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             tree = null;
@@ -1300,7 +1373,7 @@ public static class WorldDefinitionFileSource {
     }
     /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph purely from memory —
     /// <paramref name="resolver"/> answers every reference instead of a real filesystem, resolved by the SAME
-    /// relative-combination rule <see cref="TryComposeDocumentTree(string,out JsonObject?,out string)"/> applies on
+    /// relative-combination rule <c>TryComposeDocumentTree</c> applies on
     /// disk (a reference is combined against its referrer's own directory and "."/".." segments are collapsed), so a
     /// caller holding an import tree's documents keyed by their worlds-relative names (<c>"puck.world.json"</c>,
     /// <c>"games/tictactoe.world.json"</c>) composes identically to a directory load of the same tree.</summary>
@@ -1310,8 +1383,10 @@ public static class WorldDefinitionFileSource {
     /// <param name="resolver">Resolves every basis/imports reference the root's graph names, by its resolved name.</param>
     /// <param name="tree">The composed tree (basis/imports members stripped) on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
-    public static bool TryComposeDocumentTree(string rootName, ReadOnlyMemory<byte> rootBytes, WorldDocumentResolver resolver, out JsonObject? tree, out string reason) {
+    public static bool TryComposeDocumentTree(string rootName, ReadOnlyMemory<byte> rootBytes, WorldDocumentResolver resolver, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: resolver);
 
         return TryComposeDocumentTreeCore(
@@ -1319,14 +1394,16 @@ public static class WorldDefinitionFileSource {
             reason: out reason,
             resolvedPath: NormalizeRelativeDocumentName(path: rootName),
             source: new ResolverDocumentSource(resolver: resolver),
-            tree: out tree
+            tree: out tree,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         );
     }
 
     // The shared core both TryComposeDocumentTree overloads call: compose the graph over whichever
     // IWorldDocumentSource the caller supplied (disk-backed or resolver-backed), never duplicating
     // TryComposeLayers' walk itself.
-    private static bool TryComposeDocumentTreeCore(byte[] bytes, string resolvedPath, IWorldDocumentSource source, out JsonObject? tree, out string reason) {
+    private static bool TryComposeDocumentTreeCore(byte[] bytes, string resolvedPath, IWorldDocumentSource source, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         tree = null;
 
         if (!TryComposeLayers(
@@ -1338,6 +1415,8 @@ public static class WorldDefinitionFileSource {
             resolvedPath: resolvedPath,
             serveHeldImage: true,
             source: source,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog,
             stack: out _,
             touched: out _,
             touchedPaths: out _
@@ -1557,15 +1636,19 @@ public static class WorldDefinitionFileSource {
     /// for purposes that mostly have nothing to do with adjacency (catalog scans, replay re-reads, tests), so
     /// <see langword="null"/> (the default) is the ordinary case. A caller that does have a reachable resolver at
     /// hand should pass it.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider rewriting and semantic validation, or null for structural composition.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null) =>
+    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) =>
         TryLoadCore(
             contentHash: out contentHash,
             definition: out definition,
             neighbours: neighbours,
             path: path,
             reason: out reason,
-            validateAdjacencyClaims: true
+            validateAdjacencyClaims: true,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         );
     /// <summary>Loads a file while validating only the facts owned by that document. Used before the composition root
     /// can supply a neighbour resolver, and by replay to obtain the bytes whose recorded content hash is compared by
@@ -1574,15 +1657,19 @@ public static class WorldDefinitionFileSource {
     /// <param name="definition">The loaded definition on success; <see langword="null"/> on failure.</param>
     /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider rewriting and semantic validation, or null for structural composition.</param>
     /// <returns><see langword="true"/> when the file loaded and its document-local facts validated.</returns>
-    public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason) =>
+    public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) =>
         TryLoadCore(
             contentHash: out contentHash,
             definition: out definition,
             neighbours: null,
             path: path,
             reason: out reason,
-            validateAdjacencyClaims: false
+            validateAdjacencyClaims: false,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         );
 
     // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below
@@ -1615,7 +1702,7 @@ public static class WorldDefinitionFileSource {
 
     /// <summary>Composes <paramref name="fragmentBytes"/> under <paramref name="hostBytes"/> entirely in memory —
     /// no file system read — the way a directory load composes an aliased <c>imports</c> entry
-    /// (<see cref="WorldModuleNamespace.TryApply"/> renames the fragment's own rows under
+    /// (<c>WorldModuleNamespace.TryApply</c> renames the fragment's own rows under
     /// <c>&lt;alias&gt;_&lt;name&gt;</c>, <see cref="WorldModuleExports.TryTake"/> and
     /// <see cref="WorldModuleExports.TryCheckLayers"/> enforce its declared <c>exports</c>), so a fragment fetched as
     /// bytes over the network composes identically to one loaded from a <c>games/*.world.json</c> file. Neither
@@ -1630,8 +1717,10 @@ public static class WorldDefinitionFileSource {
     /// <c>&lt;alias&gt;_&lt;name&gt;</c>.</param>
     /// <param name="composed">The composed tree (host plus the aliased fragment) on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
     /// <returns><see langword="true"/> when the fragment composed under the host.</returns>
-    public static bool TryComposeFragmentBytes(byte[] hostBytes, byte[] fragmentBytes, string alias, out JsonObject? composed, out string reason) {
+    public static bool TryComposeFragmentBytes(byte[] hostBytes, byte[] fragmentBytes, string alias, out JsonObject? composed, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: hostBytes);
         ArgumentNullException.ThrowIfNull(argument: fragmentBytes);
         ArgumentException.ThrowIfNullOrEmpty(argument: alias);
@@ -1655,6 +1744,8 @@ public static class WorldDefinitionFileSource {
             resolvedPath: "(in-memory fragment composition)",
             serveHeldImage: true,
             source: new InMemoryDocumentSource(fragment: fragmentBytes, host: hostBytes),
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog,
             stack: out _,
             touched: out _,
             touchedPaths: out _

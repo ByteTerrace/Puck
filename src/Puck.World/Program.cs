@@ -183,6 +183,10 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
     false => WorldHostPresentation.Windowed,
     null => null,
 });
+// Build the host-local extension snapshot before loading the world: composition and semantic validation must use the same
+// immutable catalog that runtime machine construction receives, including optional installed extensions.
+var machineCatalog = WorldBootComposition.BuildMachineCatalog();
+var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog);
 // The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
@@ -192,7 +196,9 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
 if (!PuckWorldLoader.TryResolveWorld(
     explicitPath: parseResult.GetValue(option: worldOption),
     failure: out var worldFailure,
-    source: out var worldSource
+    source: out var worldSource,
+    catalogFingerprint: machineCatalogFingerprint,
+    catalog: machineCatalog
 )) {
     Console.Error.WriteLine(value: worldFailure);
 
@@ -289,6 +295,7 @@ var height = ((uint)hostSettings.Height);
 GpuTimingControl.Shared.TrySeed(armed: hostSettings.Timing);
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
+services.AddWorldMachineCatalog(machineCatalog);
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
 services.AddSingleton<Puck.Networking.IAuthenticator>(implementationInstance: authenticator);

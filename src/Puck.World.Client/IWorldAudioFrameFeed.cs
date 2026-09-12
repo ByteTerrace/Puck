@@ -16,7 +16,7 @@ namespace Puck.World.Client;
 public interface IWorldAudioFrameFeed : IWorldAudioCueSink {
     /// <summary>Gets or sets the per-screen audio-machine source resolver a frame source binds once, at composition,
     /// so a booted/ejected/live-swapped machine self-heals the next published snapshot.</summary>
-    Func<int, IAudioMachine?>? MachineSourceResolver { get; set; }
+    Func<string, string, IAudioMachine?>? MachineSourceResolver { get; set; }
 
     /// <summary>Resolves this frame's listener and emitter poses and publishes one mixed snapshot.</summary>
     /// <param name="transforms">The frame's packed dynamic transforms.</param>

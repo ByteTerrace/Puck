@@ -57,6 +57,7 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
             riidResource: in resourceIid
         );
         m_resource = ((nint)resource);
+        DirectXResourceStates.Register(m_resource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
             Format = format,
@@ -80,6 +81,7 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
         }
 
         m_disposed = true;
+        DirectXResourceStates.Forget(m_resource);
 
         if (m_imageViewToken.IsAllocated) {
             m_imageViewToken.Free();

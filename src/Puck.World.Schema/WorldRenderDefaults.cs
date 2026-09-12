@@ -58,7 +58,7 @@ public static class WorldApplicationDefaults {
     /// (the "durable config lives in the data file" doctrine); the <c>puck.world.def.v1</c> loader
     /// (<c>Puck.World.WorldDefinitionLoader</c>) reads one, but the checked-in default file authors an empty content
     /// path, so the native-AGB screen boots unconfigured (a graceful fault, never a crash) until a real deployment
-    /// supplies <see cref="WorldScreenSource.Machine.ContentPath"/>.</summary>
+    /// supplies a named <see cref="WorldScreenSource.Machine"/> output.</summary>
     public const string DefaultAgbCartridgePath = "";
     public const string WindowTitle = "Puck: World";
 }

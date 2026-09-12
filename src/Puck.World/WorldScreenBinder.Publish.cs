@@ -160,9 +160,14 @@ internal sealed partial class WorldScreenBinder {
         var machineTicks = 0L;
         var windowCaptureTicks = 0L;
         var patternTicks = 0L;
+        m_publishedMachineOutputs.Clear();
 
         foreach (var slot in m_slots.Values) {
-            if (m_machines.VideoOutput(index: slot.Index) is { } machine) {
+            if (slot.MachineSource is { } source) {
+                if (
+                    (m_machines.VideoOutput(source.Instance, source.Output) is { } machine) &&
+                    m_publishedMachineOutputs.Add((source.Instance, source.Output))
+                ) {
                 phaseStart = (timingEnabled
                     ? Stopwatch.GetTimestamp()
                     : 0L
@@ -176,6 +181,10 @@ internal sealed partial class WorldScreenBinder {
                     : 0L
                 );
 
+                }
+
+                // A named output is one producer shared by every display that references it. Once the first
+                // consumer has published the current frame, the remaining consumers only resolve that same handle.
                 continue;
             }
 

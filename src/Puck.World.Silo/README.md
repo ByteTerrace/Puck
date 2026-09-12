@@ -79,6 +79,21 @@ persistence tasks are observed and reported, and the final frozen checkpoint
 supersedes them. A successful `POST /drain` completes its response and stops the
 host. Physical retirement is a live host operation, outside gameplay and replay.
 
+Row deactivation also freezes its server before the final capture. This is not
+`world.rate pause`: paused worlds keep draining administrative edits; retiring
+activations drain their accepted edits once, then stop simulation and reject new
+authority operations. A failed save retains the frozen row for a retry, not for
+resumed play. Buffered intents are saved without inventing an extra tick.
+
+Activation acquires its storage fence before reading one coherent recovery root.
+A new world writes its initial checkpoint before opening socket or console
+admission. Each activation serializes checkpoints, journal appends and hosted
+definition publication in one queue; a checkpoint takes its queue position at
+capture time and covers only the preceding journal prefix. Async status updates
+name the exact activation, not merely a reusable world name. Final saves precede
+fence release. A stale or uncertain publication cannot adopt a replacement
+activation's fence and requires recovery.
+
 ## Types
 
 - `WorldSiloHost : IWorldAuthorityHost` — one boot-free `WorldInstanceHost`

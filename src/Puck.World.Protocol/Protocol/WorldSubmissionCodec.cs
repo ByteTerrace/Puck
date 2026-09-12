@@ -7,7 +7,7 @@ using Puck.Maths;
 
 namespace Puck.World.Protocol;
 
-/// <summary>The declared wire discriminants for the twelve submission payload leaves. Ordinal 11 (the retired
+/// <summary>The declared wire discriminants for the submission payload leaves. Ordinal 11 (the retired
 /// addon-lifecycle leaf — mount/unmount now travel as document rows, <c>UpsertAddon</c>/<c>RemoveAddon</c>, through
 /// the ordinary <see cref="WorldSubmissionKind.Mutation"/> leaf) is unassigned and never reused, matching
 /// <c>WorldMutationKindCatalog</c>'s own retired-ordinal precedent.</summary>
@@ -36,6 +36,8 @@ public enum WorldSubmissionKind : byte {
     ScreenOp = 12,
     /// <summary>A subject-bearing target-register write.</summary>
     Designation = 13,
+    /// <summary>A generic operation on one named machine instance.</summary>
+    Operation = 14,
 }
 /// <summary>A stable leaf/frame codec refusal. Both encoder and decoder return these by name; neither treats malformed
 /// caller state or untrusted bytes as an invariant exception.</summary>
@@ -72,7 +74,7 @@ public readonly record struct WorldCodecFailure(WorldCodecRefusal Refusal, strin
     public override string ToString() => $"{Refusal}: {Detail}";
 }
 /// <summary>
-/// The one canonical encoder/decoder pair for each of the twelve <see cref="WorldSubmissionPayload"/> leaves. The
+/// The one canonical encoder/decoder pair for each declared <see cref="WorldSubmissionPayload"/> leaf. The
 /// wire framer, loopback, and replay tape all call these methods; none owns a second command/grant vocabulary.
 /// </summary>
 public static class WorldSubmissionCodec {
@@ -493,6 +495,34 @@ public static class WorldSubmissionCodec {
         }
 
         return value;
+    }
+    private static WorldMachineOperation ReadMachineOperation(BinaryReader reader) {
+        var instance = ReadRequiredString(reader: reader, field: "MachineOperation.Instance");
+        var generation = reader.ReadUInt64();
+        var operationId = ReadRequiredString(reader: reader, field: "MachineOperation.OperationId");
+        var payloadLength = reader.ReadInt32();
+        if (payloadLength < 0 || payloadLength > WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)) {
+            throw new LeafCodecException(failure: Fail(
+                detail: $"machine operation payload length {payloadLength} is outside 0..{WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)}",
+                refusal: WorldCodecRefusal.PayloadTooLarge
+            ));
+        }
+        var payloadBytes = reader.ReadBytes(count: payloadLength);
+        if (payloadBytes.Length != payloadLength) {
+            throw new LeafCodecException(failure: Fail(
+                detail: "machine operation payload is truncated",
+                refusal: WorldCodecRefusal.PayloadTruncated
+            ));
+        }
+        try {
+            using var document = JsonDocument.Parse(payloadBytes);
+            return new WorldMachineOperation(instance, generation, operationId, document.RootElement);
+        } catch (JsonException exception) {
+            throw new LeafCodecException(failure: Fail(
+                detail: $"machine operation payload is not valid JSON: {exception.Message}",
+                refusal: WorldCodecRefusal.PayloadMalformed
+            ));
+        }
     }
     private static WorldScreenOp ReadScreenOp(BinaryReader reader) {
         return reader.ReadByte() switch {
@@ -1191,6 +1221,28 @@ public static class WorldSubmissionCodec {
     // addon-lifecycle leaf's shape (small, fixed, binary, no reflection-serialization debt). Insert never carries a
     // content hash on this wire — the receiving server reads and hashes ContentPath itself, at apply time, exactly
     // like a Reset request's base hash (see WorldServer.ApplyRebuild's own remarks).
+    private static void WriteMachineOperation(BinaryWriter writer, WorldMachineOperation operation) {
+        if (operation is null) {
+            throw new LeafCodecException(failure: Fail(WorldCodecRefusal.PayloadMissing, "machine operation is null"));
+        }
+        WriteRequiredString(writer: writer, value: operation.Instance, field: "MachineOperation.Instance");
+        writer.Write(value: operation.ExpectedGeneration);
+        WriteRequiredString(writer: writer, value: operation.OperationId, field: "MachineOperation.OperationId");
+        byte[] payload;
+        try {
+            payload = Encoding.UTF8.GetBytes(operation.Payload.GetRawText());
+        } catch (InvalidOperationException exception) {
+            throw new LeafCodecException(failure: Fail(WorldCodecRefusal.PayloadMalformed, exception.Message));
+        }
+        if (payload.Length > WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.PayloadTooLarge,
+                $"machine operation payload length {payload.Length} exceeds {WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)}"
+            ));
+        }
+        writer.Write(value: payload.Length);
+        writer.Write(buffer: payload);
+    }
     private static void WriteScreenOp(BinaryWriter writer, WorldScreenOp op) {
         if (op is null) {
             throw new LeafCodecException(failure: Fail(
@@ -1433,6 +1485,17 @@ public static class WorldSubmissionCodec {
                     return true;
                 }
                 return false;
+            case WorldSubmissionKind.Operation:
+                if (TryDecodeMachineOperation(
+                    bytes: bytes,
+                    operation: out var operation,
+                    failure: out failure
+                )) {
+                    payload = new WorldSubmissionPayload.Operation(Value: operation!);
+                    return true;
+                }
+                payload = null;
+                return false;
             default:
                 failure = Fail(
                     detail: $"submission wire kind {((byte)kind)} is not declared",
@@ -1565,6 +1628,15 @@ public static class WorldSubmissionCodec {
             read: ReadScreenOp,
             value: out screenOp
         );
+    /// <summary>Decodes the generic named-machine operation leaf.</summary>
+    public static bool TryDecodeMachineOperation(ReadOnlySpan<byte> bytes, out WorldMachineOperation? operation, out WorldCodecFailure failure) =>
+        TryRead(
+            bytes: bytes,
+            failure: out failure,
+            read: ReadMachineOperation,
+            value: out operation
+        );
+
     /// <summary>Decodes the session leaf.</summary>
     public static bool TryDecodeSession(ReadOnlySpan<byte> bytes, out SessionRequest? request, out WorldCodecFailure failure) {
         if (
@@ -1698,6 +1770,13 @@ public static class WorldSubmissionCodec {
                 kind = WorldSubmissionKind.Designation;
                 return TryEncodeDesignation(
                     designation.Value,
+                    out bytes,
+                    out failure
+                );
+            case WorldSubmissionPayload.Operation operation:
+                kind = WorldSubmissionKind.Operation;
+                return TryEncodeMachineOperation(
+                    operation.Value,
                     out bytes,
                     out failure
                 );
@@ -1878,6 +1957,14 @@ public static class WorldSubmissionCodec {
             out bytes,
             out failure
         );
+    /// <summary>Encodes the generic named-machine operation leaf.</summary>
+    public static bool TryEncodeMachineOperation(WorldMachineOperation operation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryWrite(
+            writer => WriteMachineOperation(writer: writer, operation: operation),
+            out bytes,
+            out failure
+        );
+
     /// <summary>Encodes the session leaf.</summary>
     public static bool TryEncodeSession(SessionRequest request, out byte[] bytes, out WorldCodecFailure failure) {
         if (request is null) {

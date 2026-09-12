@@ -2,14 +2,135 @@
   "$schema": "puck.shader.pipeline.v1",
   "name": "ink",
   "resources": [
-    { "name": "ink", "kind": "Image", "format": "R32G32B32A32Float", "dimensions": { "mode": "Relative", "width": 1, "height": 1 }, "persistent": true, "history": true, "initialization": "Zero" },
-    { "name": "color", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
-    { "name": "finished", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } }
+    {
+      "name": "ink",
+      "kind": "Image",
+      "format": "R32G32B32A32Float",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      },
+      "persistent": true,
+      "history": true,
+      "initialization": "Zero"
+    },
+    {
+      "name": "color",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "name": "finished",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      }
+    }
   ],
   "passes": [
-    { "name": "simulation", "source": "ink-simulation.glsl", "language": "ShadertoyGlsl", "entryPoint": "mainImage", "kind": "Compute", "inputs": [{ "name": "ink", "previousFrame": true, "binding": 1 }], "outputs": [{ "name": "ink", "binding": 0 }] },
-    { "name": "visualize", "source": "ink-visualize.glsl", "language": "ShadertoyGlsl", "entryPoint": "mainImage", "kind": "Compute", "inputs": [{ "name": "ink", "binding": 1 }], "outputs": [{ "name": "color", "binding": 0 }] },
-    { "name": "finish", "source": "ink-finish.hlsl", "language": "Hlsl", "entryPoint": "main", "kind": "Fullscreen", "inputs": [{ "name": "color", "binding": 0 }], "outputs": [{ "name": "finished" }] }
+    {
+      "name": "simulation",
+      "source": "ink-simulation.glsl",
+      "language": "ShadertoyGlsl",
+      "entryPoint": "mainImage",
+      "kind": "Compute",
+      "inputs": [
+        {
+          "name": "ink",
+          "previousFrame": true,
+          "binding": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "ink",
+          "binding": 0
+        }
+      ],
+      "config": {
+        "decay": {
+          "default": 0.987,
+          "max": 1,
+          "description": "Fraction of ink retained per pipeline frame.",
+          "min": 0,
+          "type": "float"
+        }
+      }
+    },
+    {
+      "name": "visualize",
+      "source": "ink-visualize.glsl",
+      "language": "ShadertoyGlsl",
+      "entryPoint": "mainImage",
+      "kind": "Compute",
+      "inputs": [
+        {
+          "name": "ink",
+          "binding": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "color",
+          "binding": 0
+        }
+      ],
+      "config": {
+        "exposure": {
+          "default": 1,
+          "max": 4,
+          "description": "Visualized pigment intensity.",
+          "min": 0,
+          "type": "float"
+        }
+      }
+    },
+    {
+      "name": "finish",
+      "source": "ink-finish.hlsl",
+      "language": "Hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "inputs": [
+        {
+          "name": "color",
+          "binding": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "finished"
+        }
+      ]
+    }
   ],
-  "outputs": [ { "name": "image", "resource": { "name": "finished" } }, { "name": "simulation", "resource": { "name": "ink" } }, { "name": "color", "resource": { "name": "color" } } ]
+  "outputs": [
+    {
+      "name": "image",
+      "resource": {
+        "name": "finished"
+      }
+    },
+    {
+      "name": "simulation",
+      "resource": {
+        "name": "ink"
+      }
+    },
+    {
+      "name": "color",
+      "resource": {
+        "name": "color"
+      }
+    }
+  ]
 }

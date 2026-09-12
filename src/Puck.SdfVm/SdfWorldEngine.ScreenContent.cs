@@ -33,7 +33,7 @@ public sealed partial class SdfWorldEngine {
         m_decalRevision++;
     }
     /// <summary>Sets which viewport slots show a hosted child's surface THIS frame (bit <c>v</c> set = viewport
-    /// <c>v</c>): the beam prepass and Stage 1 skip those slots, Stage 2 copies their host-bound source 1:1, and
+    /// <c>v</c>): the beam prepass and Stage 1 skip those slots, Stage 2 reconstructs their host-bound source into the slot, and
     /// <see cref="SetChildSource"/> accepts exactly those slots. Per frame, never frozen — the host derives it from the
     /// frame's own view bindings, so a layout switch can turn any slot into a child or back. Call it before this
     /// frame's <see cref="SetChildSource"/> calls.</summary>

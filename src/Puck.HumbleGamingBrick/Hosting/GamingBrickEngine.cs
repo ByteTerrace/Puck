@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick;
 /// <see cref="LinkedMachineGroup"/>, which takes ownership of both cores and advances them over the deterministic
 /// <see cref="SerialLinkSession"/> interleave until the link is disposed.
 /// </summary>
-public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingEngine {
+public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingEngine, IMachineOperationProvider {
     /// <summary>The <c>dmgspeed</c> option token — the fairness speed pin (a fixed per-tick cycle budget regardless of the
     /// KEY1 double-speed latch).</summary>
     internal const string DmgSpeedToken = "dmgspeed";

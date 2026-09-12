@@ -4,7 +4,7 @@
 // sampling a second camera pointed at an SDF diorama that sits far behind the compare
 // camera, out of its frustum. Both pictures read the SAME authoritative position, so a
 // step is a step in either: the world integrates (ax, ay, hy) from the seat's channels,
-// screens[0].memory POKES that into the cartridge's own variables, and the diorama's
+// the named mirror machine's memory bindings write that into the cartridge's variables, and the diorama's
 // figure is carried by creation slides reading the identical cells.
 //
 // EVERY length here is derived from the machine's own picture. Author in picture pixels
@@ -129,6 +129,89 @@ metadata {
     title: "hgb-mirror"
     description: "One brook rendered twice, side by side: a forged Color cartridge and an SDF diorama, sharing one authoritative position at 0.25 world units per picture pixel."
 }
+
+machines [
+    {
+        name: "mirror"
+        engine: "gaming-brick"
+        configuration {
+            schema: "puck.gaming-brick.config.v1"
+            model: "cgb"
+            content { path: "../../cartridges/hgb-mirror.cgb.cartridge.json" }
+        }
+        // The campfire seam, both ways: five Write bindings poke the canonical position
+        // and the two phases into the machine's own variables, and one Read binding
+        // mirrors the tile the cartridge derived from them back into world state.
+        memory [
+            {
+                name: "ax"
+                direction: "Write"
+                space: "bus"
+                format: "u8"
+                row: "ax"
+                address: busAx
+                access: "patch"
+                update: "onChange"
+                conversion: "truncate"
+            }
+            {
+                name: "ay"
+                direction: "Write"
+                space: "bus"
+                format: "u8"
+                row: "ay"
+                address: busAy
+                access: "patch"
+                update: "onChange"
+                conversion: "truncate"
+            }
+            {
+                name: "wp"
+                direction: "Write"
+                space: "bus"
+                format: "u8"
+                row: "wp"
+                address: busWp
+                access: "patch"
+                update: "onChange"
+                conversion: "truncate"
+            }
+            {
+                name: "lp"
+                direction: "Write"
+                space: "bus"
+                format: "u8"
+                row: "lp"
+                address: busLp
+                access: "patch"
+                update: "onChange"
+                conversion: "truncate"
+            }
+            {
+                name: "af"
+                direction: "Write"
+                space: "bus"
+                format: "u8"
+                row: "af"
+                address: busAf
+                access: "patch"
+                update: "onChange"
+                conversion: "truncate"
+            }
+            {
+                name: "wtEcho"
+                direction: "Read"
+                space: "bus"
+                format: "u8"
+                row: "wtEcho"
+                address: busWt
+                access: "inspect"
+                update: "onChange"
+                conversion: "checked"
+            }
+        ]
+    }
+]
 
 host {
     authority: null
@@ -467,20 +550,8 @@ screens [
         halfHeight: panelHalfHeight
         halfDepth: 0.01
         round: 0
-        source: machine(engine: "gaming-brick", contentPath: "../../cartridges/hgb-mirror.cgb.cartridge.json", options: "cgb")
+        source: machine(instance: "mirror", output: "video")
         route { engageable: false, engageRadius: 0 }
-        // The campfire seam, both ways: five Write bindings poke the canonical position
-        // and the two phases into the machine's own variables, and one Read binding
-        // mirrors the tile the cartridge derived from them back into world state, which
-        // is what `screen.state 0` echoes.
-        memory [
-            { address: busAx, width: 1, row: "ax", direction: "Write" }
-            { address: busAy, width: 1, row: "ay", direction: "Write" }
-            { address: busWp, width: 1, row: "wp", direction: "Write" }
-            { address: busLp, width: 1, row: "lp", direction: "Write" }
-            { address: busAf, width: 1, row: "af", direction: "Write" }
-            { address: busWt, width: 1, row: "wtEcho", direction: "Read" }
-        ]
     }
     {
         index: 1

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -51,7 +52,9 @@ public static partial class PuckLinter {
     /// resolves relative to its directory. Required even for a document with no basis, for parity with
     /// <see cref="WorldSemanticValidator.ValidateComposedWorld"/>'s contract; unused when there is nothing to
     /// compose.</param>
-    public static void LintReferences(JsonObject document, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath) {
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="machines">The selected host machine catalog used for provider composition.</param>
+    public static void LintReferences(JsonObject document, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, string catalogFingerprint = "", IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -62,7 +65,7 @@ public static partial class PuckLinter {
         if (document["basis"] is not null || document["imports"] is not null) {
             var rootBytes = Encoding.UTF8.GetBytes(document.ToJsonString());
 
-            if (PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var reason)) {
+            if (PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var reason, catalogFingerprint, machines)) {
                 catalogSource = composed ?? document;
             } else {
                 var span = (sourceMap is not null && sourceMap.TryGetSpan("/basis", out var basisSpan)) ? basisSpan : SourceSpan.None;

@@ -1,3 +1,4 @@
+using Puck.World.Machines;
 using System.CommandLine;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
@@ -66,7 +67,8 @@ internal static class LintCommand {
         return 2;
     }
 
-    private static int LintFile(string filePath, bool strict, Puck.Abstractions.Machines.IMachineValidationCatalog machines) {
+    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines) {
+        var catalogFingerprint = Puck.Cli.CliWorldVocabulary.Fingerprint(machines);
         string sourceText;
         try {
             sourceText = File.ReadAllText(filePath);
@@ -98,9 +100,9 @@ internal static class LintCommand {
                 // Only a root composes to a full engine schema; validating a module as one reports as missing
                 // every field whichever root imports it supplies.
                 if (WorldSemanticValidator.IsRootDocument(loweringResult.Value)) {
-                    WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath, machines: machines);
+                    WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath, machines: machines, catalogFingerprint: catalogFingerprint);
                 }
-                PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath);
+                PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath, catalogFingerprint: catalogFingerprint, machines: machines);
             }
         }
 

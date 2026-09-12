@@ -34,7 +34,7 @@ public enum AudioChannel {
 public enum AudioSourceKind {
     /// <summary>Honest silence — the emitter holds its place with no signal.</summary>
     None,
-    /// <summary>A live screen-hosted machine, identified by screen slot.</summary>
+    /// <summary>A live named machine output.</summary>
     Machine,
     /// <summary>A tune asset played through a headless machine host, identified by tune id.</summary>
     Tune,
@@ -45,9 +45,11 @@ public enum AudioSourceKind {
 /// binds to. <see cref="Slot"/> carries machine identity; <see cref="Id"/> carries tune/patch identity;
 /// the unused member is zero/null so value equality is exact.</summary>
 /// <param name="Kind">The source kind.</param>
-/// <param name="Slot">The screen slot for <see cref="AudioSourceKind.Machine"/>; 0 otherwise.</param>
+/// <param name="Slot">The legacy screen slot, retained for non-machine callers; 0 for named machine outputs.</param>
 /// <param name="Id">The tune/patch id for <see cref="AudioSourceKind.Tune"/>/<see cref="AudioSourceKind.Synth"/>; null otherwise.</param>
-public readonly record struct AudioSourceKey(AudioSourceKind Kind, int Slot, string? Id) {
+/// <param name="MachineInstance">The named machine instance for <see cref="AudioSourceKind.Machine"/>.</param>
+/// <param name="MachineOutput">The named machine output for <see cref="AudioSourceKind.Machine"/>.</param>
+public readonly record struct AudioSourceKey(AudioSourceKind Kind, int Slot, string? Id, string? MachineInstance = null, string? MachineOutput = null) {
     /// <summary>Creates a machine-source key.</summary>
     /// <param name="slot">The screen slot hosting the machine.</param>
     /// <returns>The key.</returns>
@@ -55,6 +57,14 @@ public readonly record struct AudioSourceKey(AudioSourceKind Kind, int Slot, str
         Id: null,
         Kind: AudioSourceKind.Machine,
         Slot: slot
+    );
+    /// <summary>Creates a named machine-output key.</summary>
+    public static AudioSourceKey Machine(string instance, string output) => new(
+        Id: null,
+        Kind: AudioSourceKind.Machine,
+        MachineInstance: instance,
+        MachineOutput: output,
+        Slot: 0
     );
     /// <summary>Creates a synth-source key.</summary>
     /// <param name="patchId">The patch id voices on this emitter default to.</param>

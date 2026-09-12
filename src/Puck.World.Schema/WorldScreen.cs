@@ -37,28 +37,11 @@ public abstract record WorldScreenSource {
     /// <param name="Width">The pattern framebuffer width in pixels.</param>
     /// <param name="Height">The pattern framebuffer height in pixels.</param>
     public sealed record TestPattern(int Width, int Height) : WorldScreenSource;
-    /// <summary>An arbitrary deterministic machine's unresampled framebuffer — resolved against a registered
-    /// <see cref="Puck.Abstractions.Machines.IMachineEngine"/> by <paramref name="Engine"/> id. The world never
-    /// names a concrete machine: the engine owns its <paramref name="Options"/> vocabulary (a GamingBrick reads a
-    /// dmg/cgb/agb model + a dmgspeed pin).</summary>
-    /// <param name="Engine">The screen-machine engine id (e.g. <c>gaming-brick</c>).</param>
-    /// <param name="ContentPath">The content the machine boots, resolved against the document's own directory.
-    /// The host's content providers own source-format recognition and preparation; the screen schema does not
-    /// classify cartridge documents. Prepared content carries source identity and symbols beside the image pin.
-    /// Empty when the screen is unconfigured — the binder faults the slot gracefully (no crash, no-signal card)
-    /// rather than booting.</param>
-    /// <param name="Options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
-    /// <param name="Cable">This machine's cable port (see <see cref="WorldMachineCable"/>), or <see langword="null"/>
-    /// for an unlinked machine. Legal only on a declared <c>screens</c> row's own source — a magazine entry or a
-    /// placement face's source is refused one (validated), because a cable is a standing physical connection of the
-    /// machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when
-    /// null, so every machine source authored before cables existed round-trips unchanged.</param>
-    public sealed record Machine(
-        string Engine,
-        string ContentPath,
-        string? Options,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null
-    ) : WorldScreenSource;
+    /// <summary>A named machine output. The source is a consumer reference only: the named machine is prepared,
+    /// advanced, and retired by the world's machine host independently of every display that samples it.</summary>
+    /// <param name="Instance">The declared <see cref="WorldMachine.Name"/> instance.</param>
+    /// <param name="Output">The provider video output name exposed by that instance.</param>
+    public sealed record Machine(string Instance, string Output) : WorldScreenSource;
     /// <summary>The platform's default live camera feed. The platform may negotiate a nearby extent; every screen
     /// and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row
     /// requests.</summary>

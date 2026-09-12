@@ -22,6 +22,27 @@ let colorOptions = "cgb"
 let reference = "../../../../../roms/tetris-world-rev1.gb"
 let authored = "../../cartridges/tetris.cgb.cartridge.json"
 
+machines [
+    {
+        name: "reference"
+        engine: brick
+        configuration {
+            schema: "puck.gaming-brick.config.v1"
+            model: "cgb"
+            content { path: reference }
+        }
+    }
+    {
+        name: "authored"
+        engine: brick
+        configuration {
+            schema: "puck.gaming-brick.config.v1"
+            model: "cgb"
+            content { path: authored }
+        }
+    }
+]
+
 host {
     authority: null
     backend: "auto"
@@ -50,7 +71,7 @@ screens [
         halfHeight: screenHalfHeight
         halfDepth: screenHalfDepth
         round: 0
-        source: machine(engine: brick, contentPath: reference, options: colorOptions)
+        source: machine(instance: "reference", output: "video")
         route { engageable: false, engageRadius: 0 }
     }
     {
@@ -62,7 +83,7 @@ screens [
         halfHeight: screenHalfHeight
         halfDepth: screenHalfDepth
         round: 0
-        source: machine(engine: brick, contentPath: authored, options: colorOptions)
+        source: machine(instance: "authored", output: "video")
         route { engageable: false, engageRadius: 0 }
     }
 ]

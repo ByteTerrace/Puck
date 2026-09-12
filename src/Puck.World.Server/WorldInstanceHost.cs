@@ -84,6 +84,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // `destinations` row can never mint a doorless, keyless row Orleans never placed.
     private readonly bool m_admitsSpawn;
     private readonly CancellationToken m_applicationStopping;
+    // The host-selected machine metadata used by every live instance load, neighbour composition, and reload.
+    private readonly string m_catalogFingerprint;
+    private readonly IMachineValidationCatalog? m_machineCatalog;
     // Every instance shares the host's own persisted id — it identifies the MACHINE/PROCESS, not a world, so minting
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
@@ -600,7 +603,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             // A restored row held pending its adjacency mirrors banks no ticks and drains nothing administrative —
             // it is not yet part of the stepping engine at all, exactly like a row this host has not admitted.
             // ReleaseHold clears this and starts the door on the boundary the caller proves every mirror primed.
-            if (instance.AwaitingMirrors) {
+            // Retirement is a separate permanent hold; it must not bank ticks or run the paused-world edit drain.
+            if (instance.AwaitingMirrors || instance.Server.IsRetiring) {
                 continue;
             }
 
@@ -951,11 +955,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // the cloud refuses by name like any other unreachable resolver.
         var instanceNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } instanceDirectory)
             ? instanceDirectory
-            : AppContext.BaseDirectory));
+            : AppContext.BaseDirectory), catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog);
 
         // Asked before the load, which is when the answer is still a prediction of what the load will do rather
         // than a trace of what it did: a held image standing for this path is what the load is about to compose from.
-        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: resolvedPath);
+        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: resolvedPath, catalogFingerprint: m_catalogFingerprint);
 
         // The instance's own NAME is the seed ladder's instance rung, so two instances of one document draw
         // independently while each stays reproducible from (document, instance name, draw history).
@@ -964,7 +968,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             instanceIdentity: name,
             neighbours: instanceNeighbours,
             path: resolvedPath,
-            reason: out reason
+            reason: out reason,
+            catalogFingerprint: m_catalogFingerprint,
+            catalog: m_machineCatalog
         )) {
             return false;
         }
@@ -991,8 +997,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     template: definition!,
                     directory: ownedWorlds,
                     machineId: m_machineId,
-                    neighbours: new WorldFileNeighbourResolver(baseDirectory: () => ownedWorlds),
-                    narrationHub: m_narration
+                    neighbours: new WorldFileNeighbourResolver(baseDirectory: () => ownedWorlds, catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog),
+                    narrationHub: m_narration,
+                    machineCatalog: m_machineCatalog,
+                    catalogFingerprint: m_catalogFingerprint
                 ),
                 envelope: new WorldRenderEnvelope(),
                 machines: machines,
@@ -1018,7 +1026,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 ownedMachines: machines,
                 link: new LoopbackTransport(server: server),
                 federation: Boot!.Federation,
-                documentOrigin: new WorldFileOrigin(resolvedPath: resolvedPath),
+                documentOrigin: new WorldFileOrigin(resolvedPath: resolvedPath, catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog),
                 ownedAdjacencies: adjacencies
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.SecurityException)) {
@@ -1135,7 +1143,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// desktop's own spawn/resolve arms need this; a hosted silo refuses it by name, since a row there exists only
     /// through the activation door.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true) {
+    /// <param name="catalogFingerprint">The stable fingerprint of the selected host machine catalog.</param>
+    /// <param name="machineCatalog">The selected host machine catalog, or null for structural-only test hosts.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateRoot);
@@ -1146,6 +1156,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_machineId = machineId;
         m_stateRoot = stateRoot;
         m_applicationStopping = applicationStopping;
+        m_catalogFingerprint = catalogFingerprint;
+        m_machineCatalog = machineCatalog;
         m_machineHostFactory = machineHostFactory;
         m_admitsSpawn = admitsSpawn;
     }

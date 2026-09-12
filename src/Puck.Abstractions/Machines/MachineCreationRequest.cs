@@ -6,9 +6,11 @@ namespace Puck.Abstractions.Machines;
 /// <param name="Path">The logical authored path, used for diagnostics rather than runtime file reads.</param>
 /// <param name="Image">The native bytes to consume, after content preparation when required.</param>
 /// <param name="ContentHash">The digest of the exact source bytes read by the host.</param>
+/// <param name="SourceBytes">The exact immutable bytes read by the host before any provider preparation. The host owns their lifetime and pinning.</param>
 /// <param name="PreparedContent">Optional canonical source identity and symbols produced by a content provider.</param>
 public sealed record PreparedMachineAsset(
-    string Path, ReadOnlyMemory<byte> Image, string ContentHash, PreparedMachineContent? PreparedContent = null
+    string Path, ReadOnlyMemory<byte> Image, string ContentHash, ReadOnlyMemory<byte> SourceBytes,
+    PreparedMachineContent? PreparedContent = null
 );
 
 /// <summary>A complete construction request. Configuration paths refer to the supplied immutable asset set;

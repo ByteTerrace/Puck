@@ -14,6 +14,13 @@ public static class MachineConfigurationValidation {
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(errors);
         var before = errors.Count;
+        var descriptorErrors = new List<string>();
+        if (!MachineConfigurationFields.TryValidateDescriptor(descriptor, descriptorErrors)) {
+            foreach (var descriptorError in descriptorErrors) {
+                errors.Add("descriptor: " + descriptorError);
+            }
+            return false;
+        }
         if (value.ValueKind != JsonValueKind.Object) {
             errors.Add("configuration: expected an object.");
             return false;

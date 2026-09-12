@@ -22,7 +22,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
         yield return Command(name: "build", grammar: "", detail: "Compiles native ROM bytes and prints the source hash and variable addresses.");
         yield return Command(name: "save", grammar: "<source-path>", detail: "Writes canonical validated source JSON atomically.");
         yield return Command(name: "export", grammar: "<rom-path>", detail: "Compiles and atomically writes a standalone cartridge ROM.");
-        yield return Command(name: "play", grammar: "<screen-index> <source.cartridge.json>", detail: "Saves canonical source and submits an authoritative insert through the machine's content provider. The machine uses its bundled firmware default.");
+        yield return Command(name: "play", grammar: "<screen-index> <source.cartridge.json>", detail: "Saves canonical source and inserts it into the screen's named machine through its versioned provider operation. Requires matching engines and Control over the screen and machine; retains the authored machine configuration.");
     }
 
     private CommandDefinition Command(string name, string grammar, string detail) => CommandDefinition.WithWireArgs(
@@ -96,29 +96,26 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                         }
                         path = Write(path: outputPath, bytes: name == "play" ? CartridgeDocuments.Canonicalize(document).Bytes : result.Rom);
                     }
+                    if (name == "play" && server.Definition.Screens.FirstOrDefault(screen => screen.Index == index)?.Source is WorldScreenSource.Machine named) {
+                        if (server.Machines.InstanceState(named.Instance) is not { } state) {
+                            return CommandResult.Error($"[forge.play: named machine '{named.Instance}' is unavailable; source saved to {path}]");
+                        }
+                        if (state.Engine != compiler.EngineId) {
+                            return CommandResult.Error($"[forge.play: '{named.Instance}' uses '{state.Engine}', but this cartridge requires '{compiler.EngineId}'; source saved to {path}]");
+                        }
+                        return WorldMachineCommandModule.InsertContent(link, server.Machines, principal,
+                            named.Instance, path!, verb: "forge.play");
+                    }
                     if (name == "play") {
-                        var existing = server.Definition.Screens.FirstOrDefault(s => s.Index == index);
-                        var source = new WorldScreenSource.Machine(
-                            Engine: compiler.EngineId,
-                            ContentPath: path!,
-                            Options: result.Target == "agb" ? null : "cgb",
-                            Cable: (existing?.Source is WorldScreenSource.Machine prevMachine ? prevMachine.Cable : null)
-                        );
-                        var screen = (existing is not null)
-                            ? existing with { Source = source }
-                            : new WorldScreen(
-                                HalfDepth: 0.05f,
-                                HalfHeight: 0.45f,
-                                HalfWidth: 0.8f,
+                        link.SubmitScreenOp(
+                            op: new WorldScreenOp.Insert(
                                 Index: index,
-                                Origin: new DocumentVector3(0f, 1.5f, 0f),
-                                Right: new DocumentVector3(1f, 0f, 0f),
-                                Round: 0.02f,
-                                Route: WorldScreenRoute.Passive,
-                                Source: source,
-                                Up: new DocumentVector3(0f, 1f, 0f)
-                            );
-                        link.Submit(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: screen));
+                                ContentPath: path!,
+                                EngineId: compiler.EngineId,
+                                Options: result.Target == "agb" ? null : "cgb"
+                            ),
+                            principal: principal
+                        );
                     }
                     var symbols = string.Join(separator: ", ", values: result.Variables.Select(selector: pair => $"{pair.Key}=0x{pair.Value:X8}"));
                     return new CommandResult(Output: $"[forge.{name}: {result.Target} {result.Rom.Length} bytes; source={result.SourceHash}; variables={symbols}{(path is null ? "" : $"; file={path}")}{(name == "play" ? "; insert submitted (server reports acceptance)" : "")}]");

@@ -91,7 +91,7 @@ public sealed class ShaderPipelineTests {
         var definition = new ShaderPipelineDefinition(
             name: "typed",
             resources: [
-                new ShaderPipelineResource("input", ShaderPipelineResourceKind.Buffer, Initialization: ShaderPipelineInitialization.External, SizeBytes: 64, ElementType: ShaderValueType.Float4, StrideBytes: 16),
+                new ShaderPipelineResource("input", ShaderPipelineResourceKind.Buffer, Initialization: ShaderPipelineInitialization.External, SizeBytes: 64),
                 Image("color"),
                 Image("velocity"),
             ],
@@ -100,7 +100,7 @@ public sealed class ShaderPipelineTests {
 
         var plan = new ShaderPipelineCompiler().Compile(definition);
         Assert.Equal(expected: 2, actual: plan.Passes[0].Declaration.OutputReferences.Count);
-        Assert.Equal(expected: 16u, actual: plan.Resources.Single(resource => resource.Name == "input").Declaration.StrideBytes);
+        Assert.Equal(expected: 64ul, actual: plan.Resources.Single(resource => resource.Name == "input").Declaration.SizeBytes);
     }
 
     [Fact]
@@ -230,5 +230,133 @@ public sealed class ShaderPipelineTests {
             outputs: ["out"]);
         var bufferError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(fullscreenBuffer));
         Assert.Contains(bufferError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_UNSUPPORTED_FULLSCREEN_BUFFER");
+    }
+    [Fact]
+    public void Global_config_is_rejected_until_pipeline_scope_is_runtime_bound()
+    {
+        var definition = new ShaderPipelineDefinition(
+            name: "global",
+            resources: [Image("out")],
+            passes: [Pass("draw", [], ["out"])],
+            outputs: ["out"])
+        {
+            Config = new Dictionary<string, ShaderConfigField> {
+                ["gain"] = new(ShaderValueType.Float),
+            },
+        };
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(definition));
+        Assert.Contains(error.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_GLOBAL_CONFIG_UNSUPPORTED");
+    }
+
+    [Fact]
+    public void Initialized_only_graphs_are_rejected_without_live_passes()
+    {
+        var definition = new ShaderPipelineDefinition("initialized", [Image("out", ShaderPipelineInitialization.External)], [], ["out"]);
+        var error = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(definition));
+        Assert.Contains(error.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_NO_LIVE_PASSES");
+    }
+
+    [Fact]
+    public void Passes_without_outputs_are_rejected()
+    {
+        var definition = new ShaderPipelineDefinition("no-output", [Image("out", ShaderPipelineInitialization.External)], [Pass("draw", ["out"], [])], ["out"]);
+        var error = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(definition));
+        Assert.Contains(error.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_PASS_OUTPUTS");
+    }
+
+    [Fact]
+    public void Direct_construction_rejects_invalid_initialization_dimension_and_format_values()
+    {
+        var invalidInitialization = new ShaderPipelineDefinition("init", [Image("out") with { Initialization = (ShaderPipelineInitialization)99 }], [Pass("draw", [], ["out"])], ["out"]);
+        var initError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(invalidInitialization));
+        Assert.Contains(initError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_INITIALIZATION");
+
+        var invalidDimensions = new ShaderPipelineDefinition("dimensions", [Image("out") with { Dimensions = new ShaderPipelineDimensions((ShaderPipelineDimensionMode)99, 1, 1) }], [Pass("draw", [], ["out"])], ["out"]);
+        var dimensionsError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(invalidDimensions));
+        Assert.Contains(dimensionsError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_DIMENSION_MODE");
+
+        var invalidFormat = new ShaderPipelineDefinition("format", [new ShaderPipelineResource("out", Format: "UnknownFormat", Dimensions: ShaderPipelineDimensions.Relative())], [Pass("draw", [], ["out"])], ["out"]);
+        var formatError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(invalidFormat));
+        Assert.Contains(formatError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_RESOURCE_FORMAT");
+    }
+
+    [Fact]
+    public void Incompatible_resource_kind_fields_and_typed_buffers_are_rejected()
+    {
+        var definition = new ShaderPipelineDefinition("fields", [
+            new ShaderPipelineResource("image", Format: "R8G8B8A8Unorm", Dimensions: ShaderPipelineDimensions.Relative(), SizeBytes: 4),
+            new ShaderPipelineResource("buffer", ShaderPipelineResourceKind.Buffer, Initialization: ShaderPipelineInitialization.External, SizeBytes: 64, ElementType: ShaderValueType.Float4, StrideBytes: 16)],
+            [Pass("draw", [], ["image"])], ["image"]);
+        var error = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(definition));
+        Assert.Contains(error.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_RESOURCE_KIND_FIELDS");
+        Assert.Contains(error.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_UNSUPPORTED_TYPED_BUFFER");
+    }
+
+    [Fact]
+    public void Fullscreen_and_shadertoy_reject_runtime_unsupported_output_formats()
+    {
+        var fullscreen = new ShaderPipelineDefinition("fullscreen-format", [new ShaderPipelineResource("out", Format: "R16G16B16A16Float", Dimensions: ShaderPipelineDimensions.Relative())], [Pass("draw", [], ["out"], ShaderPipelinePassKind.Fullscreen)], ["out"]);
+        var fullscreenError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(fullscreen));
+        Assert.Contains(fullscreenError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_FULLSCREEN_FORMAT");
+
+        var shadertoy = new ShaderPipelineDefinition("toy-format", [new ShaderPipelineResource("out", Format: "B8G8R8A8Unorm", Dimensions: ShaderPipelineDimensions.Relative())], [Pass("draw", [], ["out"]) with { Language = ShaderSourceLanguage.ShadertoyGlsl }], ["out"]);
+        var shadertoyError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(shadertoy));
+        Assert.Contains(shadertoyError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_SHADERTOY_FORMAT");
+    }
+
+    [Fact]
+    public void Same_resource_current_and_previous_inputs_get_distinct_bindings()
+    {
+        var state = Image("state", ShaderPipelineInitialization.Zero, persistent: true, history: true);
+        var definition = new ShaderPipelineDefinition("dual-read", [state, Image("out")], [
+            Pass("display", [new ResourceReference("state"), new ResourceReference("state", PreviousFrame: true)], ["out"]),
+            Pass("simulate", [], ["state"])], ["out"]);
+        var display = new ShaderPipelineCompiler().Compile(definition).Passes.Single(pass => pass.Name == "display").Declaration;
+        Assert.Equal(2, display.InputReferences.Count);
+        Assert.NotEqual(display.InputReferences[0].Binding, display.InputReferences[1].Binding);
+    }
+
+    [Fact]
+    public void One_off_source_inference_rejects_ambiguous_extensions()
+    {
+        var compute = ShaderPipelineDefinition.FromShaderSource("compute", "effect.comp");
+        Assert.Equal(ShaderSourceLanguage.Glsl, compute.Passes[0].Language);
+        Assert.Equal(ShaderPipelinePassKind.Compute, compute.Passes[0].Kind);
+        var fragment = ShaderPipelineDefinition.FromShaderSource("fragment", "effect.frag");
+        Assert.Equal(ShaderSourceLanguage.Glsl, fragment.Passes[0].Language);
+        Assert.Equal(ShaderPipelinePassKind.Fullscreen, fragment.Passes[0].Kind);
+        Assert.Throws<ArgumentException>(() => ShaderPipelineDefinition.FromShaderSource("vertex", "effect.vert"));
+        Assert.Throws<ArgumentException>(() => ShaderPipelineDefinition.FromShaderSource("unknown", "effect.shader"));
+    }
+
+    [Fact]
+    public void Planner_rejects_config_blocks_that_exceed_portable_push_constant_budget()
+    {
+        var definition = new ShaderPipelineDefinition(
+            "large-config",
+            [Image("out")],
+            [Pass("draw", [], ["out"]) with {
+                Config = new Dictionary<string, ShaderConfigField> {
+                    ["a"] = new(ShaderValueType.Float4),
+                    ["b"] = new(ShaderValueType.Float4),
+                }
+            }],
+            ["out"]);
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(definition));
+        Assert.Contains(error.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_PUSH_CONSTANT_LIMIT");
+    }
+
+    [Fact]
+    public void Planner_rejects_nonportable_workgroup_dimensions_and_invocations()
+    {
+        var oversizedDimension = new ShaderPipelineDefinition("group-dimension", [Image("out")], [Pass("draw", [], ["out"]) with { GroupSizeX = 256 }], ["out"]);
+        var dimensionError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(oversizedDimension));
+        Assert.Contains(dimensionError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_WORKGROUP_LIMIT");
+
+        var oversizedProduct = new ShaderPipelineDefinition("group-product", [Image("out")], [Pass("draw", [], ["out"]) with { GroupSizeX = 16, GroupSizeY = 16 }], ["out"]);
+        var productError = Assert.Throws<ShaderPipelineCompilationException>(() => new ShaderPipelineCompiler().Compile(oversizedProduct));
+        Assert.Contains(productError.Diagnostics, diagnostic => diagnostic.Code == "SHADERPIPE_WORKGROUP_INVOCATIONS");
     }
 }

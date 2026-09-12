@@ -6,6 +6,7 @@ using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Maths;
@@ -1139,10 +1140,12 @@ public static class WorldDefinitionSerialization {
     /// <param name="imports">The absolute import paths the write preserved, in authored order, or empty when the
     /// target declares none or the save degraded to flat.</param>
     /// <param name="note">The one-line reason a derived target degraded to a flat save, or empty.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint used when recomposing the preserved derivation.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider rewriting and validation, or null for structural composition.</param>
     /// <returns>The number of bytes written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    public static long SavePreservingBasis(WorldDefinition definition, string path, out string? basisPath, out IReadOnlyList<string> imports, out string note) {
+    public static long SavePreservingBasis(WorldDefinition definition, string path, out string? basisPath, out IReadOnlyList<string> imports, out string note, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
@@ -1196,7 +1199,9 @@ public static class WorldDefinitionSerialization {
         if (!WorldDefinitionFileSource.TryComposeStackTree(
             path: path,
             reason: out var composeReason,
-            stack: out var stackTree
+            stack: out var stackTree,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             note = $"saved flat: {composeReason}";
 

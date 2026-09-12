@@ -347,7 +347,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     private static string ScreenSourceKind(WorldScreenSource source) {
         return source switch {
             WorldScreenSource.TestPattern => "test-pattern",
-            WorldScreenSource.Machine machine => $"machine:{machine.Engine}",
+            WorldScreenSource.Machine machine => $"machine:{machine.Instance}:{machine.Output}",
             WorldScreenSource.Camera => "camera",
             WorldScreenSource.View => "view",
             WorldScreenSource.Capture => "capture",

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.World.Client;
@@ -8,8 +9,8 @@ namespace Puck.World;
 /// <summary>
 /// The <c>world.save</c> session-capture fold. A running world holds live session state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
-/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), the machines a
-/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>), and the forced
+/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), the host-owned
+/// named machine declarations (<see cref="WorldMachineHost.CaptureInstances"/>), and the forced
 /// binding-bar visibility the <c>world.binding-bar</c> lever writes (<see cref="WorldBindingBarVisibility"/>). The live census count
 /// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately not folded — <c>networkPlayers</c> is a durable
 /// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
@@ -108,25 +109,6 @@ internal static class WorldSessionCapture {
     // boot-only field is preserved as authored.
     private static WorldHostDefaults CaptureHost(WorldHostDefaults host, PresentPacingControl pacing) =>
         (host with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
-    // The cable port each screen should carry after a save, from the binder's link table — the authoritative set
-    // (declared groups reconcile into it, dormant included, and screen.link/.unlink edit it): a member screen folds
-    // its (name, position) home onto its row's machine source, and a screen in no link folds null (an unlink clears
-    // the port). A link over a screen whose folded source is not a machine is unrepresentable in the document and is
-    // left out — the runtime group simply does not survive the save.
-    private static Dictionary<int, WorldMachineCable> BuildCableMap(WorldScreenBinder binder) {
-        var map = new Dictionary<int, WorldMachineCable>();
-
-        foreach (var group in binder.CaptureLinks()) {
-            for (var position = 0; (position < group.Screens.Count); position++) {
-                map[group.Screens[position]] = new WorldMachineCable(
-                    Name: group.Name,
-                    Position: position
-                );
-            }
-        }
-
-        return map;
-    }
     // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
     // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
     // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
@@ -143,38 +125,13 @@ internal static class WorldSessionCapture {
         RenderScale = NearestRenderScaleTier(scale: render.RenderScale),
         UpscaleSharpness = render.UpscaleSharpness,
     });
-    // Fold a live machine insert on each declared screen back into that row's Machine source, the live cable-link
-    // table back into each machine source's cable port, and the live magazine selector back into that row's
-    // Magazine.Selected; a screen with no live insert / no link / no magazine keeps its declared row untouched.
+    // Screen capture folds only presentation state. Named machine declarations and their runtime configuration are
+    // captured from the host below, so a display consumer never becomes the persistence owner of a machine.
     private static IReadOnlyList<WorldScreen> CaptureScreens(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         var captured = new List<WorldScreen>(capacity: screens.Count);
-        var cables = BuildCableMap(binder: binder);
 
         foreach (var screen in screens) {
-            var row = (binder.TryReadMachineInsert(
-                index: screen.Index,
-                engine: out var engine,
-                contentPath: out var contentPath,
-                options: out var options
-            )
-                ? (screen with {
-                    Source = new WorldScreenSource.Machine(
-                    ContentPath: contentPath,
-                    Engine: engine,
-                    Options: options,
-                    Cable: (screen.Source as WorldScreenSource.Machine)?.Cable
-                ),
-                })
-                : screen
-            );
-
-            if (row.Source is WorldScreenSource.Machine machine) {
-                var cable = cables.GetValueOrDefault(key: screen.Index);
-
-                if (machine.Cable != cable) {
-                    row = (row with { Source = (machine with { Cable = cable }) });
-                }
-            }
+            var row = screen;
 
             if (
                 (row.Magazine is { } magazine) &&
@@ -192,6 +149,29 @@ internal static class WorldSessionCapture {
         }
 
         return captured;
+    }
+    private static bool MachinesDrifted(IReadOnlyList<WorldMachine> authored, WorldScreenBinder binder) {
+        var current = binder.CaptureInstances();
+        if (current.Count != authored.Count) {
+            return true;
+        }
+
+        for (var index = 0; index < authored.Count; index++) {
+            var expected = authored[index];
+            var actual = current[index];
+            if (
+                !string.Equals(expected.Name, actual.Name, StringComparison.Ordinal) ||
+                !string.Equals(expected.Engine, actual.Engine, StringComparison.Ordinal) ||
+                expected.Running != actual.Running ||
+                !JsonElement.DeepEquals(expected.Configuration, actual.Configuration) ||
+                !Equals(expected.Memory, actual.Memory) ||
+                !Equals(expected.Cable, actual.Cable)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // The save-time settle: a row declaring its OWN Advance (a slot-shaped row) gets its one cell rebased to the live
     // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (StateCell.Advance)
@@ -253,45 +233,7 @@ internal static class WorldSessionCapture {
         return best;
     }
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
-        var cables = BuildCableMap(binder: binder);
-
         foreach (var screen in screens) {
-            if (
-                binder.TryReadMachineInsert(
-                index: screen.Index,
-                engine: out var engine,
-                contentPath: out var contentPath,
-                options: out var options
-            ) &&
-                ((screen.Source is not WorldScreenSource.Machine machine) ||
-                 !string.Equals(
-                a: machine.Engine,
-                b: engine,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                 !string.Equals(
-                a: machine.ContentPath,
-                b: contentPath,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                 !string.Equals(
-                a: machine.Options,
-                b: options,
-                comparisonType: StringComparison.Ordinal
-            ))
-            ) {
-                return true;
-            }
-
-            // Cable drift: the live link table's port for this screen differs from the declared machine source's —
-            // a runtime screen.link, an unlink, or a member/order change (the same comparison the save's fold makes).
-            if (
-                (screen.Source is WorldScreenSource.Machine declaredMachine) &&
-                (declaredMachine.Cable != cables.GetValueOrDefault(key: screen.Index))
-            ) {
-                return true;
-            }
-
             // Selector drift: the live magazine pointer moved off the row's authored Selected.
             if (
                 (screen.Magazine is { } magazine) &&
@@ -427,7 +369,7 @@ internal static class WorldSessionCapture {
     }
 
     /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
-    /// peer-source default, screen inserts, the master-volume lever, the primary seat's forced binding-bar
+    /// peer-source default, named machine declarations, the master-volume lever, the primary seat's forced binding-bar
     /// visibility) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
     /// <see cref="WorldDefinition.Audio"/>'s master gain, <see cref="WorldDefinition.BindingOverlays"/>'s first row,
@@ -464,6 +406,7 @@ internal static class WorldSessionCapture {
             population: population,
             defaults: definition.Population
         ),
+            MachinesRaw = binder.CaptureInstances(),
             ScreensRaw = CaptureScreens(
             screens: definition.Screens,
             binder: binder
@@ -511,6 +454,10 @@ internal static class WorldSessionCapture {
             defaults: definition.Population
         ) != definition.Population) {
             drifted.Add(item: "population");
+        }
+
+        if (MachinesDrifted(authored: definition.Machines, binder: binder)) {
+            drifted.Add(item: "machines");
         }
 
         if (ScreensDrifted(

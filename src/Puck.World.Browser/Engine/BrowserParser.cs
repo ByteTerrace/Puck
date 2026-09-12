@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using System.Text;
 
 namespace Puck.World.Browser.Engine;
@@ -56,8 +57,10 @@ public static class BrowserParser {
     /// <param name="fragmentUtf8">The fragment's UTF-8 JSON bytes (a document carrying <c>exports</c>).</param>
     /// <param name="hostUtf8">The host document's UTF-8 JSON bytes (the basis the fragment composes under).</param>
     /// <param name="alias">The alias the fragment composes under.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider composition and validation, or null for structural browser composition.</param>
     /// <returns>The parse result.</returns>
-    public static BrowserParseResult ParseFragment(byte[] fragmentUtf8, byte[] hostUtf8, string alias) {
+    public static BrowserParseResult ParseFragment(byte[] fragmentUtf8, byte[] hostUtf8, string alias, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: fragmentUtf8);
         ArgumentNullException.ThrowIfNull(argument: hostUtf8);
         ArgumentException.ThrowIfNullOrEmpty(argument: alias);
@@ -67,7 +70,9 @@ public static class BrowserParser {
             composed: out var composed,
             fragmentBytes: fragmentUtf8,
             hostBytes: hostUtf8,
-            reason: out var composeReason
+            reason: out var composeReason,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             return new BrowserParseResult(Ok: false, Document: null, Errors: [BrowserErrorPaths.Split(message: composeReason)], Deferred: null);
         }
@@ -81,7 +86,8 @@ public static class BrowserParser {
             definition: out var definition,
             deferred: deferred,
             errors: errors,
-            utf8Json: composedBytes
+            utf8Json: composedBytes,
+            machines: catalog
         )) {
             return new BrowserParseResult(Ok: false, Document: null, Errors: BrowserErrorPaths.SplitFragment(messages: errors, alias: alias), Deferred: null);
         }
@@ -107,7 +113,7 @@ public static class BrowserParser {
     // deferred), schema check, migrate, resolve draw sites, then validate — the same order
     // WorldDefinitionFileSource.TryParseComposed runs for a file load, minus the file-load boundary's own basis/
     // imports composition (the caller already composed a fragment, or is parsing a flat standalone document).
-    internal static bool TryParseAndValidate(byte[] utf8Json, ICollection<string> errors, ICollection<string> deferred, out WorldDefinition? definition, out WorldRuleCompilation? compilation) {
+    internal static bool TryParseAndValidate(byte[] utf8Json, ICollection<string> errors, ICollection<string> deferred, out WorldDefinition? definition, out WorldRuleCompilation? compilation, IMachineValidationCatalog? machines = null) {
         definition = null;
         compilation = null;
 
@@ -174,7 +180,8 @@ public static class BrowserParser {
             compilation: out compilation,
             definition: drawn,
             deferred: deferred,
-            errors: errors
+            errors: errors,
+            machines: machines
         );
 
         definition = (ok ? drawn : null);

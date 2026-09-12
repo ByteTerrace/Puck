@@ -300,6 +300,87 @@
       }
     ]
   },
+  "machines": [
+    {
+      "configuration": {
+        "content": {
+          "path": "../../cartridges/hgb-mirror.cgb.cartridge.json"
+        },
+        "model": "cgb",
+        "schema": "puck.gaming-brick.config.v1"
+      },
+      "engine": "gaming-brick",
+      "memory": [
+        {
+          "access": "patch",
+          "address": 49664,
+          "conversion": "truncate",
+          "direction": "Write",
+          "format": "u8",
+          "name": "ax",
+          "row": "ax",
+          "space": "bus",
+          "update": "onChange"
+        },
+        {
+          "access": "patch",
+          "address": 49665,
+          "conversion": "truncate",
+          "direction": "Write",
+          "format": "u8",
+          "name": "ay",
+          "row": "ay",
+          "space": "bus",
+          "update": "onChange"
+        },
+        {
+          "access": "patch",
+          "address": 49666,
+          "conversion": "truncate",
+          "direction": "Write",
+          "format": "u8",
+          "name": "wp",
+          "row": "wp",
+          "space": "bus",
+          "update": "onChange"
+        },
+        {
+          "access": "patch",
+          "address": 49667,
+          "conversion": "truncate",
+          "direction": "Write",
+          "format": "u8",
+          "name": "lp",
+          "row": "lp",
+          "space": "bus",
+          "update": "onChange"
+        },
+        {
+          "access": "patch",
+          "address": 49668,
+          "conversion": "truncate",
+          "direction": "Write",
+          "format": "u8",
+          "name": "af",
+          "row": "af",
+          "space": "bus",
+          "update": "onChange"
+        },
+        {
+          "access": "inspect",
+          "address": 49669,
+          "conversion": "checked",
+          "direction": "Read",
+          "format": "u8",
+          "name": "wtEcho",
+          "row": "wtEcho",
+          "space": "bus",
+          "update": "onChange"
+        }
+      ],
+      "name": "mirror"
+    }
+  ],
   "metadata": {
     "description": "One brook rendered twice, side by side: a forged Color cartridge and an SDF diorama, sharing one authoritative position at 0.25 world units per picture pixel.",
     "title": "hgb-mirror"
@@ -1963,44 +2044,6 @@
       "halfHeight": 1.44,
       "halfWidth": 1.6,
       "index": 0,
-      "memory": [
-        {
-          "address": 49664,
-          "direction": "Write",
-          "row": "ax",
-          "width": 1
-        },
-        {
-          "address": 49665,
-          "direction": "Write",
-          "row": "ay",
-          "width": 1
-        },
-        {
-          "address": 49666,
-          "direction": "Write",
-          "row": "wp",
-          "width": 1
-        },
-        {
-          "address": 49667,
-          "direction": "Write",
-          "row": "lp",
-          "width": 1
-        },
-        {
-          "address": 49668,
-          "direction": "Write",
-          "row": "af",
-          "width": 1
-        },
-        {
-          "address": 49669,
-          "direction": "Read",
-          "row": "wtEcho",
-          "width": 1
-        }
-      ],
       "origin": [
         1.8,
         1.5,
@@ -2018,9 +2061,8 @@
       },
       "source": {
         "$type": "machine",
-        "contentPath": "../../cartridges/hgb-mirror.cgb.cartridge.json",
-        "engine": "gaming-brick",
-        "options": "cgb"
+        "instance": "mirror",
+        "output": "video"
       },
       "up": [
         0,

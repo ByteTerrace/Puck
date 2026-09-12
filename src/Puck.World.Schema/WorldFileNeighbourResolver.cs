@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 
+using Puck.Abstractions.Machines;
+
 namespace Puck.World;
 
 /// <summary>
@@ -32,15 +34,21 @@ namespace Puck.World;
 /// </remarks>
 public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
     private readonly Func<string> m_baseDirectory;
+    private readonly string m_catalogFingerprint;
+    private readonly IMachineValidationCatalog? m_catalog;
 
     /// <summary>Initializes the resolver.</summary>
     /// <param name="baseDirectory">Resolves the directory a bare <see cref="WorldReference.Document"/> file name is
     /// combined against, evaluated fresh on every <see cref="Resolve"/> call.</param>
     /// <exception cref="ArgumentNullException"><paramref name="baseDirectory"/> is <see langword="null"/>.</exception>
-    public WorldFileNeighbourResolver(Func<string> baseDirectory) {
+    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed neighbour images.</param>
+    /// <param name="catalog">The selected host machine catalog used while composing neighbour documents, or null for structural composition.</param>
+    public WorldFileNeighbourResolver(Func<string> baseDirectory, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: baseDirectory);
 
         m_baseDirectory = baseDirectory;
+        m_catalogFingerprint = catalogFingerprint;
+        m_catalog = catalog;
     }
 
     /// <inheritdoc/>
@@ -68,14 +76,16 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
 
         // Asked before the composition, never after: a held image that still stands for this path is exactly what
         // the composition below is about to answer from, so this reads the outcome rather than a record of one.
-        var shared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path);
+        var shared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path, catalogFingerprint: m_catalogFingerprint);
 
         // Composes the neighbour's basis chain (a flat file passes through untouched), so a neighbour authored as a
         // delta proves its border with the same composed document it boots as.
         if (!WorldDefinitionFileSource.TryComposeDocumentTree(
             path: path,
             reason: out var composeReason,
-            tree: out var tree
+            tree: out var tree,
+            catalogFingerprint: m_catalogFingerprint,
+            catalog: m_catalog
         )) {
             return WorldNeighbourResolution.Unavailable(reason: $"'{path}' could not be read — {composeReason}");
         }

@@ -20,7 +20,18 @@ public sealed partial class GamingBrickEngine {
         [new("video", "puck.machine.video.v1", "The native 160 by 144 display.")],
         [new("audio", "puck.machine.audio.v1", "The machine's stereo audio stream.")],
         [new("controls", "puck.machine.pad.v1", "Buttons and supported cartridge sensors.")],
-        [], HumbleGamingBrickCore.HardwareSpaces
+        [
+            new("content.insert", "Mounts prepared content through the host's replacement transaction.", new("puck.gaming-brick.content-insert.v1", [
+                new("content", MachineFieldKind.Object, "The prepared cartridge source.", Required: true, Fields: [
+                    new("path", MachineFieldKind.String, "Content path prepared by the host.", Required: true, Role: MachineFieldRole.ContentPath)
+                ])
+            ])),
+            new("content.eject", "Removes mounted content through the host's replacement transaction.", new("puck.gaming-brick.content-eject.v1", [])),
+            new("machine.reset", "Recreates the current machine configuration through the host's replacement transaction.", new("puck.gaming-brick.machine-reset.v1", [])),
+            new("device.model", "Retargets the live hardware revision when the runtime supports it.", new("puck.gaming-brick.device-model.v1", [
+                new("model", MachineFieldKind.String, "Hardware family or revision.", Required: true, Choices: [.. ModelTokens.Keys])
+            ]))
+        ], HumbleGamingBrickCore.HardwareSpaces
     );
 
     /// <inheritdoc/>

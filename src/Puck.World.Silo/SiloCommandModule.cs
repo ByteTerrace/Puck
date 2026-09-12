@@ -86,7 +86,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
                     return CommandResult.Error(output: $"[silo.publish: no file at '{args[1]}']");
                 }
 
-                var origin = new WorldFileOrigin(resolvedPath: resolvedPath);
+                var origin = new WorldFileOrigin(resolvedPath: resolvedPath, catalogFingerprint: host.MachineCatalogFingerprint, catalog: host.MachineCatalog);
 
                 if (!origin.TryLoad(
                     definition: out var definition,

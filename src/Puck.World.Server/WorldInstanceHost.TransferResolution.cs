@@ -556,7 +556,7 @@ public sealed partial class WorldInstanceHost {
         ) {
             var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
                 ? directory
-                : AppContext.BaseDirectory));
+                : AppContext.BaseDirectory), catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog);
 
             if (
                 WorldDefinitionLoader.TryLoadFile(
@@ -564,7 +564,9 @@ public sealed partial class WorldInstanceHost {
                 definition: out var definition,
                 reason: out var loadReason,
                 instanceIdentity: (transfer.Destination.Name ?? (transfer.Destination.Site ?? "remote")),
-                neighbours: neighbours
+                neighbours: neighbours,
+                catalogFingerprint: m_catalogFingerprint,
+                catalog: m_machineCatalog
             ) &&
                 (definition is not null) &&
                 ((transfer.Destination.Authority ?? definition.Host.Authority) is { Length: > 0 } endpoint)
@@ -880,7 +882,7 @@ public sealed partial class WorldInstanceHost {
 
         var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
             ? directory
-            : AppContext.BaseDirectory));
+            : AppContext.BaseDirectory), catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog);
 
         if (
             !WorldDefinitionLoader.TryLoadFile(
@@ -888,7 +890,9 @@ public sealed partial class WorldInstanceHost {
             instanceIdentity: instanceName,
             neighbours: neighbours,
             path: resolvedPath,
-            reason: out reason
+            reason: out reason,
+            catalogFingerprint: m_catalogFingerprint,
+            catalog: m_machineCatalog
         ) ||
             (loaded is null)
         ) {

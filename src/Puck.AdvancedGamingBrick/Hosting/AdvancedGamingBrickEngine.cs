@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick;
 /// <c>fast</c> skips startup without discarding BIOS services; a final <c>bios=&lt;path&gt;</c> selects an external image.
 /// <c>stub</c> explicitly selects a zeroed image for diagnostics that never call BIOS services or dispatch IRQs.
 /// </summary>
-public sealed partial class AdvancedGamingBrickEngine : IMachineEngine {
+public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachineOperationProvider {
     /// <inheritdoc/>
     public string Id => "advanced-gaming-brick";
 

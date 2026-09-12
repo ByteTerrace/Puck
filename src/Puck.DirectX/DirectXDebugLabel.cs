@@ -12,8 +12,10 @@ namespace Puck.DirectX;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public static unsafe class DirectXDebugLabel {
-    // PIX_EVENT_UNICODE_VERSION: pData is a null-terminated UTF-16 string, Size its byte length INCLUDING the null.
-    private const uint PixEventUnicodeVersion = 2;
+    // WINPIX_EVENT_UNICODE_VERSION is 0; 2 identifies an encoded PIX3 blob, not a UTF-16 string.
+    // https://github.com/microsoft/PixEvents/blob/main/include/pix3_win.h
+    // pData is a null-terminated UTF-16 string; Size includes the null.
+    private const uint PixEventUnicodeVersion = 0;
 
     public static void Begin(ID3D12GraphicsCommandList* commandList, string label) {
         // .NET strings are internally null-terminated, so the pinned pointer + (Length + 1) chars covers the null.

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Presentation;
 using Puck.Shaders;
 
 namespace Puck.World.Client;
@@ -10,18 +11,24 @@ public readonly record struct WorldPipelinePointerSample(Vector2 ClientPosition,
 /// <summary>Hosts named shader-pipeline instances. Compilation runs in the background; completed candidates
 /// are installed by the frame presenter before producing a frame. Clocks and history are presentation state.</summary>
 public sealed class WorldPipelineRuntime : IDisposable {
+    private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     /// <summary>One instance's presentation controls, pending compilation, and dependency watch.</summary>
     public sealed class Entry {
-        private readonly Dictionary<string, (DateTime Time, long Length)> m_stamps = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (DateTime Time, long Length)> m_stamps = new(PathComparer);
         private long m_changedAt;
+        private long m_retryAt;
+        private long m_lastPolledAt;
         internal CancellationTokenSource? Cancellation { get; set; }
         internal Task<ShaderPipelineLoadResult>? Pending { get; set; }
         internal int PendingSteps { get; set; }
+        internal Exception? ReportedSwapError { get; set; }
         internal float AuthoredTimeScale { get; set; } = 1f;
         /// <summary>The GPU executor, owned by the hosting render tree.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
         /// <summary>The most recently completed compilation, including any diagnostics.</summary>
         public ShaderPipelineLoadResult? LastCompile { get; internal set; }
+        /// <summary>The latest console capture awaiting a completion report on the presentation pump.</summary>
+        public FrameCaptureRequest? Capture { get; set; }
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
         /// <summary>Whether time and feedback advancement are paused.</summary>
@@ -52,11 +59,12 @@ public sealed class WorldPipelineRuntime : IDisposable {
         public void Unwatch() {
             WatchPath = null;
             m_stamps.Clear();
+            m_lastPolledAt = 0;
             m_changedAt = 0;
         }
         internal void RefreshDependencies() {
             if (WatchPath is not { } root) { return; }
-            var retained = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { root };
+            var retained = new HashSet<string>(PathComparer) { root };
             if (LastCompile is { } compiled) { retained.UnionWith(compiled.Dependencies); }
             foreach (var path in retained) { m_stamps.TryAdd(path, ReadStamp(path)); }
             foreach (var path in m_stamps.Keys.ToArray()) {
@@ -64,19 +72,45 @@ public sealed class WorldPipelineRuntime : IDisposable {
             }
             // Preserve existing stamps and debounce state: an edit during compilation must schedule another load.
         }
-        internal bool PollWatch(long debounceTicks) {
-            if (WatchPath is null) { return false; }
-            // Replacing values is safe while enumerating Dictionary on the supported runtime.
-            foreach (var (path, before) in m_stamps) {
-                var after = ReadStamp(path);
-                if (before == after) { continue; }
-                m_stamps[path] = after;
-                SourceChangeCount++;
-                m_changedAt = Stopwatch.GetTimestamp();
+        internal bool PollWatch(long debounceTicks, long pollTicks) {
+            var now = Stopwatch.GetTimestamp();
+            if (now - m_lastPolledAt >= pollTicks) {
+                m_lastPolledAt = now;
+                // Bound filesystem metadata reads independently of the host's presentation frame rate.
+                // Replacing values is safe while enumerating Dictionary on the supported runtime.
+                foreach (var (path, before) in m_stamps) {
+                    var after = ReadStamp(path);
+                    if (before == after) { continue; }
+                    m_stamps[path] = after;
+                    SourceChangeCount++;
+                    m_changedAt = now;
+                }
             }
-            if (m_changedAt == 0 || Stopwatch.GetTimestamp() - m_changedAt < debounceTicks) { return false; }
+            var queuedAt = Math.Max(m_changedAt, m_retryAt);
+            if (queuedAt == 0 || now - queuedAt < debounceTicks) { return false; }
+            m_retryAt = 0;
             m_changedAt = 0;
             return true;
+        }
+        internal void ScheduleRetry() => m_retryAt = Stopwatch.GetTimestamp();
+        internal void CancelPending() {
+            var cancellation = Cancellation;
+            var pending = Pending;
+            Cancellation = null;
+            Pending = null;
+            if (cancellation is null) { return; }
+            cancellation.Cancel();
+            if (pending is null || pending.IsCompleted) {
+                _ = pending?.Exception;
+                cancellation.Dispose();
+                return;
+            }
+            // Retain the cancellation source until native compiler cleanup has finished, and observe
+            // faults from superseded tasks that will never be installed by PumpWatches.
+            _ = pending.ContinueWith(static (task, state) => {
+                _ = task.Exception;
+                ((CancellationTokenSource)state!).Dispose();
+            }, cancellation, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
         private static (DateTime, long) ReadStamp(string path) {
             try {
@@ -102,6 +136,7 @@ public sealed class WorldPipelineRuntime : IDisposable {
         /// <summary>Advances this instance once for a produced host frame and returns its shader time delta.</summary>
         public double AdvanceClock(double deltaSeconds) {
             Node.Paused = ClockPaused || ClockScale == 0;
+            if (!Node.IsReady) { return 0; }
             double delta;
             if (PendingSteps > 0) {
                 PendingSteps--;
@@ -117,6 +152,8 @@ public sealed class WorldPipelineRuntime : IDisposable {
 
     /// <summary>The source watch's quiet period before requesting compilation.</summary>
     public const int WatchDebounceMilliseconds = 150;
+    /// <summary>The minimum interval between dependency metadata polls, independent of presentation cadence.</summary>
+    public const int WatchPollMilliseconds = 50;
     private readonly Dictionary<string, Entry> m_entries = new(StringComparer.Ordinal);
     private bool m_disposed;
     private IReadOnlyList<WorldViewPipeline>? m_lastRows;
@@ -126,7 +163,7 @@ public sealed class WorldPipelineRuntime : IDisposable {
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
         Loader = loader;
-        DocumentDirectory = documentDirectory;
+        DocumentDirectory = Path.GetFullPath(documentDirectory);
     }
     /// <summary>The source loader used by both boot and live authoring.</summary>
     public ShaderPipelineLoader Loader { get; }
@@ -176,8 +213,7 @@ public sealed class WorldPipelineRuntime : IDisposable {
         foreach (var name in m_entries.Keys.ToArray()) {
             if (desiredNames.Contains(name)) { continue; }
             var entry = m_entries[name];
-            entry.Cancellation?.Cancel();
-            entry.Cancellation?.Dispose();
+            entry.CancelPending();
             RemoveNode?.Invoke(name);
             m_entries.Remove(name);
         }
@@ -186,12 +222,18 @@ public sealed class WorldPipelineRuntime : IDisposable {
     public void QueueCompile(string name, string source) {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         var entry = m_entries[name];
-        entry.Cancellation?.Cancel();
-        entry.Cancellation?.Dispose();
+        entry.CancelPending();
+        entry.Source = source;
+        string resolved;
+        try { resolved = Path.GetFullPath(source, DocumentDirectory); }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException) {
+            entry.LastCompile = new ShaderPipelineLoadResult(null, [], exception.Message);
+            Report?.Invoke(name, exception.Message);
+            return;
+        }
         var cancellation = new CancellationTokenSource();
         entry.Cancellation = cancellation;
-        entry.Source = source;
-        var resolved = Path.GetFullPath(source, DocumentDirectory);
+        if (entry.WatchPath is { } watched && !string.Equals(watched, resolved, StringComparison.OrdinalIgnoreCase)) { entry.Watch(resolved); }
         var token = cancellation.Token;
         entry.Pending = Task.Run(() => {
             try {
@@ -207,9 +249,21 @@ public sealed class WorldPipelineRuntime : IDisposable {
     public void PumpWatches() {
         if (m_disposed) { return; }
         var debounce = Stopwatch.Frequency * WatchDebounceMilliseconds / 1000;
+        var poll = Stopwatch.Frequency * WatchPollMilliseconds / 1000;
         foreach (var (name, entry) in m_entries) {
+            if (entry.Capture is { Completion.IsCompleted: true } capture) {
+                entry.Capture = null;
+                var result = capture.Completion.GetAwaiter().GetResult();
+                Report?.Invoke(name, result.Succeeded ? $"captured {result.Path}" : $"capture failed: {result.Error!.Message}");
+            }
+            if (!ReferenceEquals(entry.ReportedSwapError, entry.Node.LastSwapError)) {
+                entry.ReportedSwapError = entry.Node.LastSwapError;
+                if (entry.ReportedSwapError is { } error) { Report?.Invoke(name, $"GPU candidate refused: {error.Message}"); }
+            }
             if (entry.Pending is { IsCompleted: true } pending) {
                 entry.Pending = null;
+                entry.Cancellation?.Dispose();
+                entry.Cancellation = null;
                 ShaderPipelineLoadResult result;
                 try { result = pending.GetAwaiter().GetResult(); }
                 catch (Exception exception) { result = new ShaderPipelineLoadResult(null, [], exception.Message); }
@@ -222,9 +276,10 @@ public sealed class WorldPipelineRuntime : IDisposable {
                     }
                 }
                 entry.RefreshDependencies();
+                if (result.RetryRecommended) { entry.ScheduleRetry(); }
                 Report?.Invoke(name, result.Message);
             }
-            if (entry.PollWatch(debounce)) { QueueCompile(name, entry.Source); }
+            if (entry.PollWatch(debounce, poll)) { QueueCompile(name, entry.Source); }
         }
     }
     /// <summary>Looks up a registered instance without creating one.</summary>
@@ -234,8 +289,7 @@ public sealed class WorldPipelineRuntime : IDisposable {
         if (m_disposed) { return; }
         m_disposed = true;
         foreach (var entry in m_entries.Values) {
-            entry.Cancellation?.Cancel();
-            entry.Cancellation?.Dispose();
+            entry.CancelPending();
         }
     }
 }

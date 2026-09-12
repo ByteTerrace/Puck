@@ -1981,8 +1981,9 @@ public static partial class WorldDefinitionValidator {
 
         ValidateMachines(definition, scope.Machines, errors, deferredSink);
 
-        // The machine cable groups derive from the declared screens rows' own machine sources, validated beside them.
+        // The machine cable groups derive from named machine rows and their display consumers.
         ValidateMachineCables(
+            machines: definition.Machines,
             screens: definition.Screens,
             errors: errors
         );
@@ -1996,7 +1997,8 @@ public static partial class WorldDefinitionValidator {
             patchIds: patchIds,
             placementIds: placementIds,
             screenIndices: screenIndices,
-            tuneIds: tuneIds
+            tuneIds: tuneIds,
+            machines: scope.Machines
         );
 
         // Only an AUTHORED audio section validates: absence reads the inert WorldAudioDefaults.Absent (silent),
@@ -2111,13 +2113,19 @@ public static partial class WorldDefinitionValidator {
     /// neighbour rather than silently opting out; <see langword="null"/> remains a legitimate, explicit answer for a
     /// call site that must refuse an unprovable claim. It is consulted only when a document authors a
     /// <see cref="WorldDefinition.Adjacencies"/>.</param>
+    /// <param name="machines">The selected machine catalog, or null to defer provider validation.</param>
     /// <returns><see langword="true"/> when the candidate is valid.</returns>
-    public static bool TryValidate(WorldDefinition definition, out string reason, IWorldNeighbourResolver? neighbours) {
+    public static bool TryValidate(WorldDefinition definition, out string reason, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? machines = null) {
         try {
             ValidateCore(
                 definition: definition,
                 neighbours: neighbours,
-                validateAdjacencyClaims: true
+                validateAdjacencyClaims: true,
+                retainCompilation: false,
+                throwOnErrors: true,
+                errorSink: null,
+                deferredSink: null,
+                machines: machines
             );
             reason = string.Empty;
 

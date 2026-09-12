@@ -17,4 +17,8 @@ public enum GpuComputeStage : uint {
     /// (Vulkan <c>DRAW_INDIRECT</c>; Direct3D 12 <c>EXECUTE_INDIRECT</c>). Use as a barrier's destination stage after a
     /// shader writes an indirect-args buffer it then dispatches from.</summary>
     DrawIndirect = 0x8,
+    /// <summary>Transfer/clear operations that write resource memory.</summary>
+    Transfer = 0x10,
+    /// <summary>Color attachment output writes from a graphics pass.</summary>
+    ColorAttachmentOutput = 0x20,
 }

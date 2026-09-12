@@ -244,9 +244,13 @@ to draw. From the console:
 ```text
 pipeline.status
 pipeline.watch ink on
+pipeline.inspect ink
+pipeline.set ink simulation {"decay":0.995}
+pipeline.set ink visualize {"exposure":1.4}
 pipeline.time ink pause
 pipeline.step ink
 pipeline.output ink simulation
+pipeline.capture ink artifacts/pipeline/simulation.png
 pipeline.output ink image
 pipeline.reset ink
 pipeline.time ink resume
@@ -257,11 +261,20 @@ Compilation happens in the background. A typo reports a source diagnostic and
 keeps the complete last successful pipeline running. Saving a correction
 installs a new candidate at a frame boundary. `pipeline.reload ink` requests
 compilation explicitly. A step advances time by 1/60 second and leaves the
-instance paused; reset clears feedback and time.
+instance paused; reset clears feedback and time. `pipeline.inspect` shows the
+ordered passes, resource lifetimes, resolved image sizes and allocation bytes;
+GPU timings are marked unavailable when the backend supplies no timing data.
+`pipeline.capture` queues a PNG of the selected output, including while paused.
+The completion report says when the file has been written.
 
 `pipeline.load <name> <source> [camera]` authors a row through normal world
 validation. The rendered host creates it only after the mutation is accepted.
-Loading a row does not change the active layout: select its name in a layout
+To try a one-off shader in the example's existing slot, run
+`pipeline.load ink ../pipelines/moth.glsl`; it replaces that instance's source
+through the same background compilation path. Return with
+`pipeline.load ink ../pipelines/ink.pipeline.json`.
+
+Loading a new row does not change the active layout: select its name in a layout
 slot. The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
 owns the pipeline document and source-language contracts.
 
@@ -936,16 +949,16 @@ on the next demand, exactly like the first open).
 
 **A booted MACHINE is authoritative server state, not presentation-fed**
 (owner ruling, 2026-08-03). `Puck.World.Server.WorldMachineHost` owns
-boot/step/cable-link/reconfigure/memory-peek for every declared screen's
-machine, in every boot shape (headless included); `screen.insert`/`.eject`/
-`.select`/`.options`/`.link`/`.unlink` submit a `WorldScreenOp` through the
-ordered submission domain (`IServerLink.SubmitScreenOp`, CAS-pinned and
-tape-covered for BOTH `Insert` and a Machine-magazine `Select` — a failed
-boot is a failed op, never a disguised success) rather than calling a
-presentation binder directly. `WorldScreenBinder.cs` is a PURE READER for a
-machine-owning index (its framebuffer handle/light,
+boot, exact-tick advancement, links, and hardware access for named machines in
+every boot shape, including headless. Screens and speakers consume their named
+outputs. `machine.operation` carries expected generation and named-machine Control
+authority; `screen.insert` and `forge.play` use that executor for named producers,
+while `screen.eject` detaches the display. Legacy screen operations remain in the
+protocol. Generic provider operations are refused during recording until the tape
+can capture their execution. `WorldScreenBinder.cs` reads a machine output's
+framebuffer handle and light and calls
 `IMachineVideoOutput.PublishFrame` each produced frame — the one GPU call this
-project still makes on a machine's behalf), recreates its own slot for a
+project still makes on a machine's behalf. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to indices the render engine's boot-frozen
 provider key set already names). A recreate re-points a `ScreenSourceCell`'s

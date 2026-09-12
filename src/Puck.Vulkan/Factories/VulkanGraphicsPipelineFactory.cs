@@ -57,6 +57,10 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
     // Puck.SdfVm's screen-source kernels declare 32 separate bindings rather than one array of 32). The storage
     // buffer, when present, follows immediately after at binding textureSamplerCount — matching the Direct3D 12
     // factory's identity slot map (DirectXGpuPipelineFactory.BuildLayout), so both backends agree on binding numbers.
+    private static uint ToVkVertexFormat(GpuVertexFormat format) => format switch {
+        GpuVertexFormat.R32G32Float => FormatR32G32Sfloat,
+        _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The Vulkan graphics pipeline supports only R32G32Float vertex attributes."),
+    };
     private static IReadOnlyList<VkDescriptorSetLayoutBinding> BuildDescriptorBindings(uint textureSamplerCount, bool enableStorageBuffer) {
         var bindings = new List<VkDescriptorSetLayoutBinding>();
 
@@ -90,7 +94,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         VulkanShaderModule fragmentShaderModule,
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
-        bool enableStorageBuffer = true
+        bool enableStorageBuffer = true,
+        GpuVertexInputLayout? vertexInput = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: swapchain);
 
@@ -102,6 +107,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             pushConstantBinding: pushConstantBinding,
             renderPass: renderPass,
             textureSamplerCount: textureSamplerCount,
+            vertexInput: vertexInput,
             vertexShaderModule: vertexShaderModule,
             width: swapchain.ImageExtentWidth
         );
@@ -116,7 +122,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         VulkanShaderModule fragmentShaderModule,
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
-        bool enableStorageBuffer = true
+        bool enableStorageBuffer = true,
+        GpuVertexInputLayout? vertexInput = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
         ArgumentNullException.ThrowIfNull(argument: renderPass);
@@ -131,6 +138,26 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             throw new InvalidOperationException(message: "Graphics-pipeline creation requires a fragment shader module.");
         }
 
+        var layout = vertexInput ?? new GpuVertexInputLayout(VertexPositionStride, [new GpuVertexAttribute(0, GpuVertexFormat.R32G32Float, 0)]);
+        if (layout.Attributes.Count > 0 && layout.StrideBytes == 0) {
+            throw new ArgumentException("A vertex input layout with attributes requires a non-zero stride.", nameof(vertexInput));
+        }
+        var vertexAttributes = new List<VkVertexInputAttributeDescription>(layout.Attributes.Count);
+        foreach (var attribute in layout.Attributes) {
+            vertexAttributes.Add(new VkVertexInputAttributeDescription {
+                Binding = 0,
+                Format = ToVkVertexFormat(attribute.Format),
+                Location = attribute.Location,
+                Offset = attribute.OffsetBytes,
+            });
+        }
+        IReadOnlyList<VkVertexInputBindingDescription> vertexBindings = layout.Attributes.Count == 0
+            ? []
+            : [new VkVertexInputBindingDescription {
+                Binding = 0,
+                InputRate = VertexInputRateVertex,
+                Stride = layout.StrideBytes,
+            }];
         var request = new VulkanGraphicsPipelineCreateRequest(
             ColorBlendAttachments: [
                 new VkPipelineColorBlendAttachmentState(
@@ -172,21 +199,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             },
             RenderPassHandle: renderPass.Handle,
             Topology: PrimitiveTopologyTriangleList,
-            VertexAttributes: [
-                new VkVertexInputAttributeDescription {
-                    Binding = 0,
-                    Format = FormatR32G32Sfloat,
-                    Location = 0,
-                    Offset = 0,
-                },
-            ],
-            VertexBindings: [
-                new VkVertexInputBindingDescription {
-                    Binding = 0,
-                    InputRate = VertexInputRateVertex,
-                    Stride = VertexPositionStride,
-                },
-            ],
+            VertexAttributes: vertexAttributes,
+            VertexBindings: vertexBindings,
             VertexShaderModuleHandle: vertexShaderModule.Handle,
             Width: width
         );

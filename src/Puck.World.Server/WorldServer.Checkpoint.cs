@@ -633,6 +633,14 @@ public sealed partial class WorldServer {
         // so this reads the SAME cells the live server had when it captured.
         m_population.SyncBodyScale(definition: m_definition);
         m_grants.Restore(checkpoint: checkpoint.Grants);
+        // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
+        // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership
+        // cannot remain empty (deny-all) or fall back to a stale role-less projection.
+        m_grants.RestoreGroups(
+            groups: (m_definition.Groups ?? WorldGroupsSection.Empty).Groups,
+            kinds: (m_definition.Groups ?? WorldGroupsSection.Empty).Kinds,
+            ownership: (m_definition.Groups ?? WorldGroupsSection.Empty).Ownership
+        );
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
         // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the

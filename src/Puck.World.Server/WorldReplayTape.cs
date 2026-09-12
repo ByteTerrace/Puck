@@ -631,7 +631,7 @@ public sealed partial class WorldReplayTape {
         }
 
         if (m_liveServer.AnyScreenOpEverApplied) {
-            refusal = "a screen op (insert/eject/select/options/link/unlink) has already applied this session — screen ops are not document mutations, so the recording's own definition snapshot cannot capture whichever one already landed, and offline replay reconstructs a FRESH WorldMachineHost from that snapshot alone; a pre-record insert/select can leave the live session running a machine replay never even creates, and the population hash covers no machine state to catch it; record from a fresh boot, before any screen op applies";
+            refusal = "a screen or machine operation has already reached runtime execution this session; the current replay format cannot reconstruct its prior hardware state from the definition alone; record from a fresh boot before any operation executes";
             return false;
         }
 

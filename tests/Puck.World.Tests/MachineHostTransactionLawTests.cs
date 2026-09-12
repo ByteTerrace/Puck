@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using Puck.GamingBricks.Forge;
 using Puck.World.Server;
 using Xunit;
@@ -36,8 +37,10 @@ public sealed class MachineHostTransactionLawTests {
 
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
+        var configuration = JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = "fast", content = new { path = contentPath } });
 
         return document with {
+            MachinesRaw = [.. document.Machines, new WorldMachine("cabinet", engine, configuration)],
             ScreensRaw = [
                 .. document.Screens,
                 new WorldScreen(
@@ -49,7 +52,7 @@ public sealed class MachineHostTransactionLawTests {
                     HalfHeight: 0.27f,
                     HalfDepth: 0.03f,
                     Round: 0f,
-                    Source: new WorldScreenSource.Machine(Engine: engine, ContentPath: contentPath, Options: options),
+                    Source: new WorldScreenSource.Machine("cabinet", "video"),
                     Route: WorldScreenRoute.Passive
                 ),
             ],
@@ -86,13 +89,13 @@ public sealed class MachineHostTransactionLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb fast"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
-        Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
+        Assert.NotNull(fixture.Server.Machines.InstanceState("cabinet"));
 
         var addresses = new Dictionary<string, int>(StringComparer.Ordinal);
 
         foreach (var variable in declared) {
             Assert.True(
-                condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: variable.Name, address: out var address),
+                condition: fixture.Server.Machines.TryResolveSymbol("cabinet", variable.Name, out var address),
                 userMessage: $"'{variable.Name}' is declared but did not resolve");
             Assert.True(condition: (address > 0), userMessage: $"'{variable.Name}' resolved to {address}");
 
@@ -103,18 +106,19 @@ public sealed class MachineHostTransactionLawTests {
         Assert.Equal(expected: declared.Length, actual: addresses.Values.Distinct().Count());
 
         // A name the cartridge does not declare resolves to nothing.
-        Assert.False(condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: "nonexistent_variable", address: out _));
+        Assert.False(condition: fixture.Server.Machines.TryResolveSymbol("cabinet", "nonexistent_variable", out _));
 
         // Fast boot skips firmware presentation, but the cartridge still runs its own initialization.
         _ = Fixtures.StepUntil(fixture, ceiling: 120, settled: () => declared.All(variable =>
-            fixture.Server.Machines.TryPeek(MachineScreen, addresses[variable.Name], out var value) && value == variable.Initial));
+            fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)addresses[variable.Name]), 1)).Status == Puck.Abstractions.Machines.MachineAccessStatus.Available &&
+            fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)addresses[variable.Name]), 1)).Value == (ulong)variable.Initial));
 
         // Once the reset code has run, each byte carries the value the document authored for it.
         foreach (var variable in declared) {
             Assert.True(
-                condition: fixture.Server.Machines.TryPeek(screen: MachineScreen, address: addresses[variable.Name], value: out var value),
+                condition: fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)addresses[variable.Name]), 1)).Status == Puck.Abstractions.Machines.MachineAccessStatus.Available,
                 userMessage: $"'{variable.Name}' could not be peeked");
-            Assert.Equal(expected: variable.Initial, actual: value);
+            Assert.Equal(expected: variable.Initial, actual: (byte)fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)addresses[variable.Name]), 1)).Value);
         }
     }
 
@@ -125,22 +129,22 @@ public sealed class MachineHostTransactionLawTests {
         var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb fast");
         var host = new WorldMachineHost(screens: [], catalog: TestHookInstaller.CreateMachineCatalog(), documentPath: path);
 
-        Assert.False(condition: host.HasMachine(index: MachineScreen));
+        Assert.Null(host.InstanceState("cabinet"));
 
         // Phase 1: Prepare
         Assert.True(condition: host.TryPrepare(current: baseDef, candidate: candidateDef, plan: out var plan, reason: out var reason), userMessage: reason);
         Assert.NotNull(@object: plan);
 
         // Before commit, screen is not yet active
-        Assert.False(condition: host.HasMachine(index: MachineScreen));
+        Assert.Null(host.InstanceState("cabinet"));
 
         // Phase 2: Commit & Finish
         host.Commit(plan: plan!);
         host.Finish(plan: plan!);
 
         // After commit, screen is active
-        Assert.True(condition: host.HasMachine(index: MachineScreen));
-        var state = host.State(index: MachineScreen);
+        Assert.NotNull(host.InstanceState("cabinet"));
+        var state = host.InstanceState("cabinet");
         Assert.NotNull(@object: state);
         Assert.Equal(expected: CgbEngine, actual: state!.Value.Engine);
     }
@@ -159,6 +163,7 @@ public sealed class MachineHostTransactionLawTests {
         plan!.Dispose();
 
         // Screen was never activated
-        Assert.False(condition: host.HasMachine(index: MachineScreen));
+        Assert.Null(host.InstanceState("cabinet"));
     }
+
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using Puck.Abstractions.Machines;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
@@ -68,8 +69,202 @@ public static class WorldModuleNamespace {
 
         return true;
     }
+    /// <summary>Applies provider metadata to an imported module.</summary>
+    public static bool TryApply(JsonObject module, string alias, IMachineValidationCatalog catalog,
+        string sourceDocumentPath, string targetDocumentPath, out string reason) {
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        var declared = CollectDeclaredNames(module, alias);
+        if (!TryApply(module, alias, out reason)) {
+            return false;
+        }
+
+        return TryRewriteMachineMetadata(
+            module,
+            alias,
+            catalog,
+            sourceDocumentPath,
+            targetDocumentPath,
+            declared,
+            out reason
+        );
+    }
+
+    /// <summary>Rebases provider content and asset fields from one document origin to another.</summary>
+    public static bool TryRelocateConfigurationAssets(JsonObject module, IMachineValidationCatalog catalog,
+        string sourceDocumentPath, string targetDocumentPath, out string reason) {
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        if (module["machines"] is not JsonArray machines) {
+            reason = string.Empty;
+            return true;
+        }
+
+        foreach (var node in machines) {
+            if (node is not JsonObject machine ||
+                machine["engine"] is not JsonValue engineValue ||
+                !engineValue.TryGetValue<string>(out var engineId) ||
+                machine["configuration"] is not JsonObject configuration ||
+                !catalog.TryDescriptor(engineId, out var descriptor)) {
+                continue;
+            }
+
+            var descriptorErrors = new List<string>();
+            if (!MachineConfigurationFields.TryValidateDescriptor(descriptor.Configuration, descriptorErrors)) {
+                reason = "machine '" + (machine["name"]?.ToString() ?? "(unnamed)") +
+                    "' has invalid provider descriptor: " + string.Join(" ", descriptorErrors);
+                return false;
+            }
+
+            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
+                if (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath) ||
+                    site.Value is not JsonValue pathValue ||
+                    !pathValue.TryGetValue<string>(out var path) ||
+                    path.Length == 0) {
+                    return;
+                }
+
+                site.Value = JsonValue.Create(RelocateAssetPath(path, sourceDocumentPath, targetDocumentPath));
+            });
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    private static bool TryRewriteMachineMetadata(JsonObject module, string alias, IMachineValidationCatalog catalog,
+        string sourceDocumentPath, string targetDocumentPath, IReadOnlyDictionary<(WorldNameKind Kind, string Name), string> declared, out string reason) {
+        if (!TryRelocateConfigurationAssets(module, catalog, sourceDocumentPath, targetDocumentPath, out reason)) {
+            return false;
+        }
+
+        if (module["machines"] is not JsonArray machines) {
+            reason = string.Empty;
+            return true;
+        }
+
+        foreach (var node in machines) {
+            if (node is not JsonObject machine ||
+                machine["engine"] is not JsonValue engineValue ||
+                !engineValue.TryGetValue<string>(out var engineId) ||
+                machine["configuration"] is not JsonObject configuration ||
+                !catalog.TryDescriptor(engineId, out var descriptor)) {
+                continue;
+            }
+
+            var descriptorErrors = new List<string>();
+            if (!MachineConfigurationFields.TryValidateDescriptor(descriptor.Configuration, descriptorErrors)) {
+                reason = "machine '" + (machine["name"]?.ToString() ?? "(unnamed)") +
+                    "' has invalid provider descriptor: " + string.Join(" ", descriptorErrors);
+                return false;
+            }
+
+            var local = new Dictionary<string, string>(StringComparer.Ordinal);
+            var localError = string.Empty;
+            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
+                if (site.Field.Role != MachineFieldRole.Declaration ||
+                    site.Value is not JsonValue value ||
+                    !value.TryGetValue<string>(out var name) ||
+                    name.Length == 0) {
+                    return;
+                }
+
+                if (!local.TryAdd(name, alias + WorldNameRegistry.AliasSeparator + name)) {
+                    localError = "machine '" + (machine["name"]?.ToString() ?? "(unnamed)") +
+                        "' declares duplicate provider-local name '" + name + "'.";
+                }
+            });
+
+            if (localError.Length != 0) {
+                reason = localError;
+                return false;
+            }
+
+            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
+                if (site.Value is not JsonValue value ||
+                    !value.TryGetValue<string>(out var textValue)) {
+                    return;
+                }
+
+                var rewritten = site.Field.Role switch {
+                    MachineFieldRole.Declaration or MachineFieldRole.LocalReference =>
+                        local.TryGetValue(textValue, out var localName) ? localName : textValue,
+                    MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference =>
+                        declared.TryGetValue((ProviderReferenceKind(site.Field.Role), textValue), out var worldName) ? worldName : textValue,
+                    _ => textValue
+                };
+
+                if (rewritten != textValue) {
+                    site.Value = JsonValue.Create(rewritten);
+                }
+            });
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    private static string RelocateAssetPath(string path, string sourceDocumentPath, string targetDocumentPath) {
+        if (Path.IsPathRooted(path)) {
+            return path;
+        }
+
+        if (Path.IsPathRooted(sourceDocumentPath) || Path.IsPathRooted(targetDocumentPath)) {
+            var source = Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(Path.GetFullPath(sourceDocumentPath)) ?? ".",
+                path
+            ));
+            var target = Path.GetDirectoryName(Path.GetFullPath(targetDocumentPath)) ?? ".";
+            return Path.GetRelativePath(target, source).Replace('\\', '/');
+        }
+
+        var sourceAsset = WorldDefinitionFileSource.CombineRelativeDocumentName(sourceDocumentPath, path);
+        var targetDirectory = targetDocumentPath.Replace('\\', '/');
+        var slash = targetDirectory.LastIndexOf('/');
+        targetDirectory = slash >= 0 ? targetDirectory[..slash] : string.Empty;
+        var from = targetDirectory.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var to = sourceAsset.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var common = 0;
+        while (common < from.Length &&
+            common < to.Length &&
+            string.Equals(from[common], to[common], StringComparison.OrdinalIgnoreCase)) {
+            common++;
+        }
+
+        var segments = new List<string>();
+        for (var i = common; i < from.Length; i++) {
+            segments.Add("..");
+        }
+
+        for (var i = common; i < to.Length; i++) {
+            segments.Add(to[i]);
+        }
+
+        return segments.Count == 0 ? "." : string.Join("/", segments);
+    }
+
+    private static WorldNameKind ProviderReferenceKind(MachineFieldRole role) => role switch {
+        MachineFieldRole.StateReference => WorldNameKind.State,
+        MachineFieldRole.MachineReference => WorldNameKind.Machine,
+        MachineFieldRole.ScreenReference => WorldNameKind.Screen,
+        _ => WorldNameKind.Any
+    };
+
+    private static Dictionary<(WorldNameKind Kind, string Name), string> CollectDeclaredNames(JsonObject module, string alias) {
+        var declared = new Dictionary<(WorldNameKind Kind, string Name), string>();
+        Visit(module, typeof(WorldDefinition), (parent, name, value, field) => {
+            if (field.Role == WorldNameRole.Declares &&
+                value is JsonValue leaf &&
+                leaf.TryGetValue<string>(out var textValue) &&
+                textValue.Length > 0) {
+                declared[(field.Kind, textValue)] = alias + WorldNameRegistry.AliasSeparator + textValue;
+            }
+        });
+        return declared;
+    }
+
     /// <summary>Rewrites one value of a registered role against a declared-name map — the unit
-    /// <see cref="TryApply"/> applies at every site, exposed so a law can hold each spelling on its own.</summary>
+    /// <c>TryApply</c> applies at every site, exposed so a law can hold each spelling on its own.</summary>
     /// <param name="text">The authored value.</param>
     /// <param name="role">How the value carries names.</param>
     /// <param name="declared">Each declared name paired with its prefixed spelling.</param>

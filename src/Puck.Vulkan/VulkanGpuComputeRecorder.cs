@@ -7,7 +7,7 @@ namespace Puck.Vulkan;
 /// <see cref="IVulkanCommandBufferRecordingApi"/>, mapping the neutral <see cref="GpuImageLayout"/>,
 /// <see cref="GpuComputeStage"/>, and <see cref="GpuComputeAccess"/> values to their Vulkan flags.
 /// </summary>
-public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi recordingApi) : IGpuComputeRecorder, IGpuImageInitializationRecorder {
+public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi recordingApi) : IGpuComputeRecorder, IGpuImageInitializationRecorder, IGpuBufferInitializationRecorder {
     /// <inheritdoc/>
     public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
         recordingApi.BeginCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle).ThrowIfFailed(operation: "vkBeginCommandBuffer");
@@ -44,6 +44,41 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) =>
         recordingApi.DispatchIndirect(bufferHandle: argumentBufferHandle, commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, offset: argumentBufferOffset);
     /// <inheritdoc/>
+    public void ClearStorageImage(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
+        if (format is not (GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float)) {
+            throw new ArgumentOutOfRangeException(nameof(format), format, "Storage-image clear requires a supported color format.");
+        }
+        recordingApi.ClearColorImage(
+            deviceHandle: deviceHandle,
+            commandBufferHandle: commandBufferHandle,
+            imageHandle: imageHandle,
+            imageLayout: ToVulkanLayout(GpuImageLayout.General),
+            red: 0f,
+            green: 0f,
+            blue: 0f,
+            alpha: 0f);
+    }
+
+    /// <inheritdoc/>
+    public void ClearStorageBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        ArgumentOutOfRangeException.ThrowIfZero(deviceHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
+        if (sizeBytes == 0 || (sizeBytes & 3) != 0) {
+            throw new ArgumentOutOfRangeException(nameof(sizeBytes), sizeBytes, "Vulkan buffer fills require a positive size divisible by four.");
+        }
+
+        recordingApi.FillBuffer(deviceHandle, commandBufferHandle, bufferHandle, sizeBytes);
+        // vkCmdFillBuffer writes in the transfer stage. The neutral compute barrier vocabulary has no transfer
+        // stage, so make this backend handoff explicit before the first compute shader access.
+        recordingApi.PipelineMemoryBarrier(
+            commandBufferHandle: commandBufferHandle,
+            destinationAccessMask: VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
+            destinationStageMask: VulkanPipelineStageFlags.ComputeShader,
+            deviceHandle: deviceHandle,
+            sourceAccessMask: VulkanAccessFlags.TransferWrite,
+            sourceStageMask: VulkanPipelineStageFlags.Transfer);
+    }
     public void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
         recordingApi.TransitionImageLayout(
             baseMipLevel: 0,
@@ -97,6 +132,14 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             result |= VulkanAccessFlags.IndirectCommandRead;
         }
 
+        if (0 != (access & GpuComputeAccess.TransferWrite)) {
+            result |= VulkanAccessFlags.TransferWrite;
+        }
+
+        if (0 != (access & GpuComputeAccess.ColorAttachmentWrite)) {
+            result |= VulkanAccessFlags.ColorAttachmentWrite;
+        }
+
         return result;
     }
     private static uint ToVulkanLayout(GpuImageLayout layout) {
@@ -126,6 +169,14 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
 
         if (0 != (stage & GpuComputeStage.DrawIndirect)) {
             result |= VulkanPipelineStageFlags.DrawIndirect;
+        }
+
+        if (0 != (stage & GpuComputeStage.Transfer)) {
+            result |= VulkanPipelineStageFlags.Transfer;
+        }
+
+        if (0 != (stage & GpuComputeStage.ColorAttachmentOutput)) {
+            result |= VulkanPipelineStageFlags.ColorAttachmentOutput;
         }
 
         return result;

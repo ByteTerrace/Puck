@@ -143,6 +143,30 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     }
 
     [Fact]
+    public void MachineControlGrantSurvivesCheckpointEncodeDecodeAndRestore() {
+        using var source = Fixtures.FreshServer();
+        var tool = WorldPrincipal.Addon("cabinet-tool");
+        source.Server.Grant(
+            grant: new WorldGrant(tool, WorldCapability.Control, GrantSubject.Machine("cabinet"), Exclusive: false),
+            actor: WorldPrincipal.Console
+        );
+        Assert.True(source.Server.Grants.Allows(tool, WorldCapability.Control, GrantSubject.Machine("cabinet")).IsAllowed);
+
+        Assert.True(source.Server.TryCaptureCheckpoint(
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var captured,
+            reason: out var captureReason
+        ), captureReason);
+        var encoded = WorldAuthorityCheckpointCodec.Encode(captured!);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(encoded, out var decoded, out var decodeReason), decodeReason);
+
+        using var restored = Fixtures.FreshServer();
+        restored.Server.RestoreCheckpoint(decoded!);
+
+        Assert.True(restored.Server.Grants.Allows(tool, WorldCapability.Control, GrantSubject.Machine("cabinet")).IsAllowed);
+        Assert.False(restored.Server.Grants.Allows(tool, WorldCapability.Control, GrantSubject.Machine("other")).IsAllowed);
+    }
+    [Fact]
     public void Decode_of_Encode_is_structurally_equal() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
@@ -547,6 +571,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         ), userMessage: secondReason);
 
         var secondEncoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: secondCheckpoint!);
+        Assert.Equal(decoded!.Grants.Revision, secondCheckpoint!.Grants.Revision);
 
         Assert.Equal(
             actual: secondEncoded,

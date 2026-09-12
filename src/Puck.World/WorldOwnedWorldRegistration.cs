@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Puck.World.Machines;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -41,18 +42,22 @@ internal static class WorldOwnedWorldRegistration {
         ArgumentNullException.ThrowIfNull(argument: services);
         services.AddSingleton(implementationFactory: static serviceProvider => {
             var definition = serviceProvider.GetRequiredService<WorldDefinitionSource>().Definition;
+            var catalog = serviceProvider.GetRequiredService<WorldMachineCatalog>();
+            var catalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(catalog);
             var root = WorldStateRoot.Resolve();
             var directory = Path.Combine(
                 path1: root,
                 path2: "owned-worlds"
             );
             var machineId = ResolveMachineId(root: root);
-            var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory);
+            var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory, catalogFingerprint: catalogFingerprint, catalog: catalog);
             var worlds = new WorldOwnedWorlds(
                 directory: directory,
                 machineId: machineId,
                 neighbours: neighbours,
-                template: definition
+                template: definition,
+                machineCatalog: catalog,
+                catalogFingerprint: catalogFingerprint
             );
 
             Console.Error.WriteLine(value: $"[identity] loaded {worlds.All.Count} owned worlds from {directory}");

@@ -68,7 +68,7 @@ internal static class WorldAddonMutationDecoder {
     // member list includes "$type" itself, since UniqueMembers keeps it in the same dictionary the field reads walk.
     private static readonly string[] ScreenSourceNoneMembers = ["$type"];
     private static readonly string[] ScreenSourceTestPatternMembers = ["$type", "width", "height"];
-    private static readonly string[] ScreenSourceMachineMembers = ["$type", "engine", "contentPath", "options"];
+    private static readonly string[] ScreenSourceMachineMembers = ["$type", "instance", "output"];
     private static readonly string[] ScreenSourceCameraMembers = ["$type", "profile"];
     private static readonly string[] ScreenSourceViewMembers = ["$type", "cameraName"];
     private static readonly string[] ScreenSourceCaptureMembers = ["$type", "windowTitle", "profile", "monitorIndex"];
@@ -902,33 +902,16 @@ internal static class WorldAddonMutationDecoder {
             members: members
         );
 
-        var engine = RequireString(
+        var instance = RequireString(
             context: context,
             members: members,
-            name: "engine"
+            name: "instance"
         );
-        var contentPath = RequireString(
-            context: context,
-            members: members,
-            name: "contentPath"
-        );
-        string? options = null;
-
-        if (members.TryGetValue(
-            key: "options",
-            value: out var optionsElement
-        )) {
-            if (optionsElement.ValueKind != JsonValueKind.String) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'options' must be a string");
-            }
-
-            options = optionsElement.GetString();
-        }
+        var output = RequireString(context: context, members: members, name: "output");
 
         return new WorldScreenSource.Machine(
-            ContentPath: contentPath,
-            Engine: engine,
-            Options: options
+            Instance: instance,
+            Output: output
         );
     }
     private static WorldScreenSource DecodeScreenSourceNone(Dictionary<string, JsonElement> members, string context) {

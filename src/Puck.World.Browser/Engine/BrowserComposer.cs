@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -30,8 +31,10 @@ public static class BrowserComposer {
     /// composition, or <see langword="null"/> to compose <paramref name="documents"/> unmodified.</param>
     /// <param name="editedUtf8">The edited document's candidate UTF-8 JSON text; ignored when
     /// <paramref name="editedName"/> is <see langword="null"/>.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider composition and validation, or null for structural browser composition.</param>
     /// <returns>The compose result.</returns>
-    public static BrowserComposeResult ComposeTree(string rootName, IReadOnlyDictionary<string, byte[]> documents, string? editedName, byte[]? editedUtf8) {
+    public static BrowserComposeResult ComposeTree(string rootName, IReadOnlyDictionary<string, byte[]> documents, string? editedName, byte[]? editedUtf8, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: rootName);
         ArgumentNullException.ThrowIfNull(argument: documents);
 
@@ -62,7 +65,9 @@ public static class BrowserComposer {
             rootBytes: rootBytes,
             rootName: rootName,
             tree: out var tree,
-            reason: out var composeReason
+            reason: out var composeReason,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             return BrowserComposeResult.Failure(message: composeReason);
         }
@@ -76,7 +81,8 @@ public static class BrowserComposer {
             definition: out var definition,
             deferred: deferred,
             errors: errors,
-            utf8Json: Encoding.UTF8.GetBytes(s: composedJson)
+            utf8Json: Encoding.UTF8.GetBytes(s: composedJson),
+            machines: catalog
         )) {
             return new BrowserComposeResult(
                 Composed: null,

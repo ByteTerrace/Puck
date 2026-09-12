@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.System.Com;
+using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX.Interop;
 
@@ -23,6 +24,7 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         }
 
         m_buffer = bufferHandle;
+        DirectXResourceStates.Register(m_buffer, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
         m_mapped = mapped;
         SizeBytes = sizeBytes;
     }
@@ -63,6 +65,7 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         m_mapped = null;
 
         if (0 != m_buffer) {
+            DirectXResourceStates.Forget(m_buffer);
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;
         }
@@ -77,6 +80,7 @@ public sealed unsafe class DirectXGpuDeviceBuffer : IGpuBuffer {
     public DirectXGpuDeviceBuffer(nint bufferHandle, ulong sizeBytes) {
         ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
         m_buffer = bufferHandle;
+        DirectXResourceStates.Register(m_buffer, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         SizeBytes = sizeBytes;
     }
 
@@ -88,6 +92,7 @@ public sealed unsafe class DirectXGpuDeviceBuffer : IGpuBuffer {
     /// <inheritdoc/>
     public void Dispose() {
         if (0 != m_buffer) {
+            DirectXResourceStates.Forget(m_buffer);
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;
         }

@@ -26,7 +26,7 @@ public sealed partial class WorldServer {
         for (var slot = 0; (slot < Population.LocalSeatCount); slot++) {
             if (
                 (ResolveEngagedScreenIndex(seatSlot: slot) is { } screenIndex) &&
-                (m_machines.InstrumentTicksPerBeat(index: screenIndex) is { } ticksPerBeat)
+                (InstrumentTicksPerBeat(screenIndex: screenIndex) is { } ticksPerBeat)
             ) {
                 var previousRow = (previousElapsedTicks / ((ulong)ticksPerBeat));
                 var currentRow = (currentElapsedTicks / ((ulong)ticksPerBeat));
@@ -67,10 +67,17 @@ public sealed partial class WorldServer {
             return "[instrument.state: none engaged]";
         }
 
-        if (m_machines.InstrumentTicksPerBeat(index: screenIndex) is not { } ticksPerBeat) {
+        if (InstrumentTicksPerBeat(screenIndex: screenIndex) is not { } ticksPerBeat) {
             return $"[instrument.state: screen={screenIndex} instrument=no]";
         }
 
         return $"[instrument.state: screen={screenIndex} instrument=yes ticksPerBeat={ticksPerBeat} driving=y]";
+    }
+
+    private long? InstrumentTicksPerBeat(int screenIndex) {
+        var screen = m_definition.Screens.FirstOrDefault(candidate => candidate?.Index == screenIndex);
+        return screen?.Source is WorldScreenSource.Machine machine
+            ? m_machines.InstrumentTicksPerBeat(instance: machine.Instance)
+            : m_machines.InstrumentTicksPerBeat(index: screenIndex);
     }
 }
