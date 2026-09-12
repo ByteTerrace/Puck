@@ -57,14 +57,9 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 _ = echo.Head(head: "kind")
                     .Field(key: "name", value: kind.Name)
                     .Field(key: "roles", value: $"[{roles}]")
-                    .Field(key: "ownership", value: kind.OwnershipPolicy.ToString())
                     .Field(key: "lifetime", value: kind.Lifetime.ToString())
                     .Field(key: "eviction", value: kind.EvictionPolicy.ToString())
                     .Field(key: "cap", value: kind.Capacity);
-
-                if (kind.SharedStateScope is { } scope) {
-                    _ = echo.Field(key: "sharedState", value: scope.ToString());
-                }
 
                 _ = echo.Segment();
             }
@@ -112,9 +107,11 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
 
         return echo.Close();
     }
-    private static IEnumerable<string> DescribeMembers(IReadOnlyList<WorldPrincipal> members) {
+    private static IEnumerable<string> DescribeMembers(IReadOnlyList<WorldGroupMember> members) {
         foreach (var member in members) {
-            yield return member.Describe();
+            yield return (member.Role is { } role)
+                ? $"{member.Ref.Describe()}@{role}#{member.JoinOrdinal}"
+                : $"{member.Ref.Describe()}#{member.JoinOrdinal}";
         }
     }
 
@@ -193,7 +190,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.groups",
-            description: "Echoes the group+membership binding substrate (Immediate; the stdin barrier makes it read the settled table after any pending group mutation): world.groups [group-id]. With a group id, echoes only that group's row. Lists declared kinds (name, roles, ownershipPolicy, lifetime, evictionPolicy, capacity, sharedStateScope), every live group row (id, kind, members), and every ownership binding — including an escrowed row's offerer/recipient/deadline.",
+            description: "Echoes the group+membership binding substrate (Immediate; the stdin barrier makes it read the settled table after any pending group mutation): world.groups [group-id]. With a group id, echoes only that group's row. Lists declared kinds (name, roles, lifetime, evictionPolicy, capacity), every live group row (id, kind, typed members), and every ownership binding — including an escrowed row's offerer/recipient/deadline.",
             handler: (context, args) => {
                 if (args.Count > 1) {
                     return CommandResult.Usage(

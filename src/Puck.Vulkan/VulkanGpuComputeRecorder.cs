@@ -7,7 +7,7 @@ namespace Puck.Vulkan;
 /// <see cref="IVulkanCommandBufferRecordingApi"/>, mapping the neutral <see cref="GpuImageLayout"/>,
 /// <see cref="GpuComputeStage"/>, and <see cref="GpuComputeAccess"/> values to their Vulkan flags.
 /// </summary>
-public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi recordingApi) : IGpuComputeRecorder {
+public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi recordingApi) : IGpuComputeRecorder, IGpuImageInitializationRecorder {
     /// <inheritdoc/>
     public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
         recordingApi.BeginCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle).ThrowIfFailed(operation: "vkBeginCommandBuffer");
@@ -103,6 +103,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         return layout switch {
             GpuImageLayout.General => VulkanImageLayout.General,
             GpuImageLayout.ShaderReadOnly => VulkanImageLayout.ShaderReadOnlyOptimal,
+            GpuImageLayout.RenderTarget => VulkanImageLayout.ColorAttachmentOptimal,
             // The cross-Vulkan external handoff layout an importing instance re-transitions from.
             GpuImageLayout.External => VulkanImageLayout.General,
             _ => VulkanImageLayout.Undefined,

@@ -1,16 +1,16 @@
 # Moth flight studio
 
 [moth.world.json](moth.world.json) contains a playable SDF character rebuilt from
-[the Moth Study](../../studies/moth.glsl). The creation starts with new shape IDs,
+[the Moth Pipeline](../../pipelines/moth.glsl). The creation starts with new shape IDs,
 directly authored dimensions and a new rig. The earlier character's geometry,
 pose frames and `mothScale` / `mothRot` / `mothJoints` bindings are retired.
 
-The Study remains the visual standard. Both render inside Puck. The native model
+The Pipeline remains the visual standard. Both render inside Puck. The native model
 uses curved ivory shin shells with lilac arch trim, swept shoulder plates, an
 open hood, a compact collar, inset eyes and a braid rooted in the front opening.
 Exactly two curved flight pods carry two ivory bands and a recessed nozzle each.
 The materials include a modest clear coat, studio reflections and restrained
-edge weathering. Fine sculpting and surface finish still differ from the Study.
+edge weathering. Fine sculpting and surface finish still differ from the Pipeline.
 
 ## Open the studio
 
@@ -30,13 +30,13 @@ The initial view is the native model's three-quarter inspection. In the running
 Puck console, open the live comparison:
 
 ```text
-view.override layout study
-study.watch moth-study on
+view.override layout pipeline
+pipeline.watch moth-pipeline on
 ```
 
-The Study is on the left and the native SDF creation is on the right. Both read
-the `three-quarter` camera. `study.status` reports the compile and watch state;
-`study.reload moth-study` recompiles the Study when needed. Inspection layouts
+The Pipeline is on the left and the native SDF creation is on the right. Both read
+the `three-quarter` camera. `pipeline.status` reports the compile and watch state;
+`pipeline.reload moth-pipeline` recompiles the Pipeline when needed. Inspection layouts
 switch immediately so a close-up does not render overlapping camera transitions.
 
 ## Controls
@@ -59,14 +59,14 @@ switch immediately so a close-up does not render overlapping camera transitions.
 Releasing Space holds altitude. Inspection cameras stay at the studio origin;
 use **5** when moving away from it. A gamepad uses the left stick to move, the
 right stick to steer, the south face button to rise and the east face button to
-descend. Return to the comparison with `view.override layout study`.
+descend. Return to the comparison with `view.override layout pipeline`.
 
 ## Edit the native character live
 
 The `moth` creation's `document.shapes`, `palette`, `drivers`, `frames` and
 `volumes` are the authoring surface. Shape positions and pivots use a common
 rest frame: +Y up, +Z forward, with the sole near Y=0 and the hood crown near
-Y=2.06. Most Study dimensions are halved; the head also follows the Study's
+Y=2.06. Most Pipeline dimensions are halved; the head also follows the Pipeline's
 smaller, seated head transform. Parent names carry animation deltas, so child
 positions are authored in the common frame rather than relative to a parent.
 
@@ -102,9 +102,9 @@ camera-program names are refused. Reload the world to restore the saved view.
 Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `boots`,
 `boots-side` and `boots-rear` layouts remain available through `view.override`.
 
-The [Study workflow](../../../README.md#shader-studies) describes shader edits and
+The [Pipeline workflow](../../../README.md#shader-pipelines) describes shader edits and
 its pose controls. The native rig responds to the world body independently of
-the Study's selected pose.
+the Pipeline's selected pose.
 
 ## Geometry and motion
 
@@ -157,11 +157,11 @@ body.fly 0 0 -1 0 0 0 1.4
 world.wait 50
 body.where
 body.hold
-view.override layout study
+view.override layout pipeline
 ```
 
 The first readback should report `airborne` with `hold=air`; the final readback
 should report `grounded` with `hold=ground`. Capture the rear during a low hover
-to inspect exhaust clearance and pod deployment. Keep native and Study cameras
+to inspect exhaust clearance and pod deployment. Keep native and Pipeline cameras
 matched when judging proportions, and distinguish a pose difference from a
 geometry difference.

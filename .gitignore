@@ -88,4 +88,5 @@ forged-avatars/
 # Engine benchmark (puck.bench) reports — puck.bench.v1 JSON written under the cwd by --bench / bench.run
 # (plan §8). Machine-specific measurements, never a committed artifact.
 bench-reports/
+.codex
 .tmp

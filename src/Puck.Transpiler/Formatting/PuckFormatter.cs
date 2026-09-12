@@ -12,8 +12,7 @@ public static class PuckFormatter {
     public static string Format(string source) {
         ArgumentNullException.ThrowIfNull(source);
 
-        var marker = "__puck_literal_";
-        while (source.Contains(marker, StringComparison.Ordinal)) { marker += "_"; }
+        var marker = LiteralMarker(source);
         var literals = new List<string>();
         var protectedSource = new StringBuilder(source.Length);
         for (var index = 0; index < source.Length;) {
@@ -40,6 +39,29 @@ public static class PuckFormatter {
         }
         restored.Append(formatted.AsSpan(copied));
         return restored.ToString();
+    }
+
+    private static string LiteralMarker(string source) {
+        const string Prefix = "__puck_literal_";
+        var occupied = new HashSet<int>();
+        var offset = 0;
+        while (source.IndexOf(Prefix, offset, StringComparison.Ordinal) is var start && start >= 0) {
+            var digits = start + Prefix.Length;
+            var end = digits;
+            while (end < source.Length && source[end] is >= '0' and <= '9') { end++; }
+            if (end < source.Length && source[end] == '_'
+                && int.TryParse(source.AsSpan(digits, end - digits), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var value)) {
+                occupied.Add(value);
+            }
+            // The final underscore can also start the next prefix when no digits followed this one.
+            offset = end > digits ? end : digits - 1;
+        }
+        // A single source scan keeps collision selection linear; a numeric suffix also keeps every
+        // protected literal short even when authored text contains a very long underscore run.
+        var ordinal = 0;
+        while (occupied.Contains(ordinal)) { ordinal++; }
+        return Prefix + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture) + "_";
     }
 
     private static string FormatCore(string source) {

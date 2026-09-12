@@ -179,7 +179,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
 
         timeout.CancelAfter(delay: OperationTimeout);
         try {
-            var content = await m_store.ReadAsync(m_target, address, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
+            var content = await WorldAuthorityRootReader.ReadDefinitionAsync(m_owner, m_world, m_store, m_target, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
 
             cancellationToken.ThrowIfCancellationRequested();
             if (content is not { } found) { return WorldNeighbourResolution.Unavailable(reason: $"no cloud copy at '{address.Key}'"); }

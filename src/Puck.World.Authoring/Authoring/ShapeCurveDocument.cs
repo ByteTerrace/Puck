@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 namespace Puck.World.Authoring;
 
 /// <summary>The authored form of a <see cref="SdfProgramBuilder.Sweep"/> — a quadratic Bezier curve swept with a
-/// tapering, optionally bulging radius, optionally as helical strands orbiting the curve (the study's hair locks and
+/// tapering, optionally bulging radius, optionally as helical strands orbiting the curve (the pipeline's hair locks and
 /// braid). Admitted only on <see cref="ShapeDocument.Type"/> <see cref="SdfSolidPrimitive.Sweep"/> (refused
 /// elsewhere, by name), and required there (a Sweep with no curve is refused, by name). Not a closed solid: refused
 /// alongside <see cref="ShapeDocument.Panel"/>, <see cref="ShapeDocument.Trims"/>, <see cref="ShapeDocument.Flare"/>,

@@ -101,6 +101,52 @@ a never-reused local id. Mutable membership has a revision; authority takeover
 has a fencing epoch. Neither is interchangeable with a dungeon generation or a
 peer connection generation.
 
+### Social kinds exercise one foundation
+
+The membership foundation must support more than parties without shipping a
+finder or a social-management system. Friendship, partnership, family, guild
+and party are illustrative authored kinds, not new engine sections or reserved
+kind names. A family is a group row held by an issuing authority world; its home
+is a separate group-scoped destination, just as a party is distinct from its
+dungeon. The foundation does not allocate one world per relationship.
+
+Use test-only authored kinds to exercise the shared contracts before building
+their management experiences:
+
+| Relationship | Foundation case to prove |
+| --- | --- |
+| Friendship or partnership | Each participant's own authenticated consent; an invitation alone proves no membership. A friends list can derive from the relationships a participant holds. |
+| Family | Several roles under one roster, without treating a role named `guardian` as permission to impersonate another member or manufacture consent. |
+| Guild | Persistent membership and management permissions survive the founder's departure and an authority restart. |
+| Party | An authored ephemeral lifecycle and activity roles coexist with separate destination identity and admission. |
+
+A participant may belong to several flat groups at once, including several of
+the same kind or with the same role. A role can constrain eligibility but cannot
+uniquely select a group: destination resolution needs an unambiguous qualified
+group reference. Grant subjects and destination selectors remain distinct
+contracts. Blocks are separate trust/refusal decisions, not another group kind.
+
+The issuing authority owns the live roster. An identity-world membership claim
+is a projection of that authority's durable decision, not a second writable
+source of truth. Remote admission must check issuer trust and the claim's
+freshness and revocation rules; copying a claim, changing a display name, or
+editing an identity-world document cannot establish membership. Do not promise
+instant remote revocation from an unchecked cached claim.
+
+Group administration, group lifetime and ownership of shared resources are
+different concerns. Persistent groups must not require their founder to remain
+a member, but that does not imply self-ownership or implement a guild bank.
+Shared-property access and distribution need concrete resource doors and
+settlement rules; unused kind fields are not evidence of those behaviors.
+Dependent-account provisioning, guardian delegation and eventual account-control
+handoff require an explicit authority design. They are not exceptions to consent
+introduced by this membership foundation.
+
+These are direction-setting acceptance cases, not scale claims or additional
+shipped content. The foundation retains the existing ceilings of 128 groups and
+64 members per group; larger service envelopes require separate measurements
+and corresponding admission, storage and wire budgets.
+
 ### Leadership is policy and grants
 
 Give a manually created party's founder the leader role. For an automatically

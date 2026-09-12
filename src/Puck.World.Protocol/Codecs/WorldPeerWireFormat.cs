@@ -54,6 +54,10 @@ public static class WorldPeerWireFormat {
         /// <summary><see cref="WorldSubmissionResult.Query"/> carrying a typed
         /// <see cref="WorldPlacementProposal"/> beside its review text.</summary>
         QueryPlacementProposal,
+
+        /// <summary><see cref="WorldSubmissionResult.Mutation"/> carrying the applied/refused decision and its
+        /// independent persistence status.</summary>
+        MutationOutcome,
     }
 
     private static byte[] EncodeText(string text) => Encoding.UTF8.GetBytes(s: (text ?? string.Empty));
@@ -233,6 +237,58 @@ public static class WorldPeerWireFormat {
                         stream: stream
                     );
                 }
+            case WorldSubmissionResult.Mutation mutation: {
+                    if (!mutation.Outcome.IsValid) {
+                        return WriteDownstreamAsync(
+                            stream: stream,
+                            kind: DownstreamKind.Refusal,
+                            body: EncodeText(text: "mutation outcome is malformed"),
+                            ct: ct
+                        );
+                    }
+
+                    try {
+                        var writer = new WireWriter();
+                        writer.WriteString(value: mutation.Outcome.OperationId.ToString("D"));
+                        writer.WriteString(value: mutation.Outcome.Actor.Describe());
+                        writer.WriteString(value: mutation.Outcome.PayloadDigest);
+                        writer.WriteByte(value: (byte)mutation.Outcome.Decision);
+                        writer.WriteByte(value: (byte)mutation.Outcome.PersistenceStatus);
+                        writer.WriteString(value: mutation.Outcome.Code);
+                        writer.WriteString(value: mutation.Outcome.Detail);
+                        writer.WriteBoolean(value: mutation.Outcome.AffectedGroupRevision.HasValue);
+                        if (mutation.Outcome.AffectedGroupRevision is { } groupRevision) {
+                            writer.WriteInt64(value: groupRevision);
+                        }
+                        writer.WriteBoolean(value: mutation.Outcome.DurableWatermark.HasValue);
+                        if (mutation.Outcome.DurableWatermark is { } watermark) {
+                            writer.WriteInt64(value: watermark.RootSequence);
+                            writer.WriteBoolean(value: watermark.CheckpointOrdinal.HasValue);
+                            if (watermark.CheckpointOrdinal is { } checkpointOrdinal) {
+                                writer.WriteInt64(value: checkpointOrdinal);
+                            }
+                            writer.WriteBoolean(value: watermark.JournalSequence.HasValue);
+                            if (watermark.JournalSequence is { } journalSequence) {
+                                writer.WriteInt64(value: journalSequence);
+                            }
+                            writer.WriteUInt64(value: watermark.Tick);
+                        }
+
+                        return WriteDownstreamAsync(
+                            body: writer.WrittenMemory,
+                            ct: ct,
+                            kind: DownstreamKind.MutationOutcome,
+                            stream: stream
+                        );
+                    } catch (ArgumentException exception) {
+                        return WriteDownstreamAsync(
+                            stream: stream,
+                            kind: DownstreamKind.Refusal,
+                            body: EncodeText(text: $"mutation outcome is not encodable: {exception.Message}"),
+                            ct: ct
+                        );
+                    }
+                }
             default:
                 return WriteDownstreamAsync(
                     stream: stream,
@@ -374,6 +430,71 @@ public static class WorldPeerWireFormat {
                     ));
                     reason = string.Empty;
 
+                    return true;
+                }
+            case DownstreamKind.MutationOutcome: {
+                    var reader = new WireReader(bytes: body);
+                    var operationText = reader.ReadRequiredString(field: "mutation operation id", maxBytes: 64);
+                    var actorText = reader.ReadRequiredString(field: "mutation actor", maxBytes: 256);
+                    var payloadDigest = reader.ReadRequiredString(field: "mutation payload digest", maxBytes: 128);
+                    var decision = (WorldMutationDecision)reader.ReadByte();
+                    var persistence = (WorldMutationPersistenceStatus)reader.ReadByte();
+                    var code = reader.ReadRequiredString(field: "mutation decision code", maxBytes: 256);
+                    var detail = reader.ReadString(field: "mutation decision detail", maxBytes: 4096);
+                    var hasGroupRevision = reader.ReadBoolean();
+                    var groupRevision = (hasGroupRevision ? reader.ReadInt64() : (long?)null);
+                    var hasWatermark = reader.ReadBoolean();
+                    var watermark = (hasWatermark
+                        ? new WorldDurableWatermark(
+                            RootSequence: reader.ReadInt64(),
+                            CheckpointOrdinal: (reader.ReadBoolean() ? reader.ReadInt64() : (long?)null),
+                            JournalSequence: (reader.ReadBoolean() ? reader.ReadInt64() : (long?)null),
+                            Tick: reader.ReadUInt64()
+                        )
+                        : (WorldDurableWatermark?)null);
+
+                    if (!reader.TryFinish(failure: out var wireFailure)) {
+                        result = null;
+                        reason = wireFailure.Detail;
+                        return false;
+                    }
+                    if (!Guid.TryParseExact(operationText, "D", out var operationId) || operationId == Guid.Empty) {
+                        result = null;
+                        reason = "mutation operation id is not a canonical GUID";
+                        return false;
+                    }
+                    if (!WorldPrincipal.TryParse(actorText, out var actor) || !actor.IsCanonical()) {
+                        result = null;
+                        reason = "mutation actor is not a canonical principal";
+                        return false;
+                    }
+                    if (!Enum.IsDefined(decision) || !Enum.IsDefined(persistence) ||
+                        !WorldMutationBinding.IsSha256Hex(payloadDigest) ||
+                        groupRevision is < 0 || watermark is { IsValid: false }) {
+                        result = null;
+                        reason = "mutation outcome carries an invalid enum, digest, revision, or watermark";
+                        return false;
+                    }
+
+                    var outcome = new WorldMutationOutcome(
+                        operationId,
+                        actor,
+                        payloadDigest,
+                        decision,
+                        code,
+                        detail,
+                        groupRevision,
+                        persistence,
+                        watermark
+                    );
+                    if (!outcome.IsValid) {
+                        result = null;
+                        reason = "mutation outcome is malformed";
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Mutation(Outcome: outcome);
+                    reason = string.Empty;
                     return true;
                 }
             case DownstreamKind.Refusal:

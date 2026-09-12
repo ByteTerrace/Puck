@@ -5040,12 +5040,12 @@ views {
         transitionSeconds: 0
     }
 
-    layout "study" {
+    layout "pipeline" {
         seatCount: 0
         slots [
             {
                 height: 1
-                study: "moth-study"
+                pipeline: "moth-pipeline"
                 width: 0.5
                 x: 0
                 y: 0
@@ -5095,9 +5095,9 @@ views {
         }
     }
 
-    study "moth-study" {
+    pipeline "moth-pipeline" {
         camera: "three-quarter"
-        source: "../studies/moth.glsl"
+        source: "../pipelines/moth.glsl"
         timeScale: 1
     }
 }

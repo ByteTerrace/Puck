@@ -798,7 +798,7 @@ float worldShadowPenumbraChord() { return (3.0 * worldShadowPenumbraSlope()); }
 // The gradient probe's finite-difference offset. Small enough that the tetrahedron's O(eps) curvature error is
 // sub-LSB, large enough to stay clear of the field's own float noise.
 static const float NormalProbeEpsilon = 0.0006;
-// GRADIENT-SCALED PENUMBRA/AO (secondary-ray posture, src/Puck.World/Assets/studies/moth.glsl's surfaceGradient/shadow/ambientOcclusion).
+// GRADIENT-SCALED PENUMBRA/AO (secondary-ray posture, src/Puck.World/Assets/pipelines/moth.glsl's surfaceGradient/shadow/ambientOcclusion).
 // mapCore/mapGradCore's per-program stepScale (sdfStepScale) is a single GLOBAL, WORST-CASE Lipschitz bound for the
 // whole program/scope — it keeps the march SOUND but says nothing about how far a given shape's own formula departs
 // from a unit SDF AT THE HIT (an approximate Ellipsoid's directional gradient, AxialProfile's y-varying shear, the study's
@@ -809,7 +809,7 @@ static const float NormalProbeEpsilon = 0.0006;
 // compose multiplicatively into one effective de-scale factor (see shadingStepScale at the softShadowVisibility/
 // calcAO call sites below) — never folded into stepScale itself, which must stay the program's own march-soundness
 // bound. GradientMagnitudeFloor keeps a near-degenerate local gradient (a cusp, a blend seam) from blowing the
-// estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/studies/moth.glsl, clamp(magnitude,.12,1.5)).
+// estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/pipelines/moth.glsl, clamp(magnitude,.12,1.5)).
 static const float GradientMagnitudeFloor = 0.12;
 
 // Per-pixel query tally for debug.view.evals, including primary local-part marches and shading probes.
@@ -827,7 +827,7 @@ static float sdfEvalCount = 0.0;
 // exactly as absent from a nearby tap as it is from the hit itself (the beam prepass's tile cone covers the whole
 // tile, taps included at this epsilon). The per-program stepScale is a common factor that cancels under
 // normalize, so the Lipschitz clamp leaves normals untouched.
-// gradientMagnitude (out): the secondary-ray gradient-scaling posture (src/Puck.World/Assets/studies/moth.glsl's surfaceGradient) — the
+// gradientMagnitude (out): the secondary-ray gradient-scaling posture (src/Puck.World/Assets/pipelines/moth.glsl's surfaceGradient) — the
 // tetrahedron sum's own magnitude divided by 4e recovers the RAW field's local gradient magnitude at the hit
 // (BEFORE this normalize), still carrying the taps' own mapDistanceMasked stepScale bake, so it is divided back out
 // by sdfStepScale() to land in the SAME program-stepScale-independent units calculateNormalAnalytic reports (see

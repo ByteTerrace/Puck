@@ -66,6 +66,15 @@ headless admission has no GPU capacity lease.
 > #6 remains the approximate path); shapes join ops on the compiled
 > kernel-variant axis so unused vocabulary costs no register pressure.
 
+A named child render node produces and prepares once per host frame even when
+several view slots reference it. The first slot supplies its render extent;
+the compositor reconstructs that image into each destination slot. Keep
+`BuildCompositePush` word 3 (`childMask`, formerly padding) aligned with
+`CompositeParams2.childMask`: child sources use `GetDimensions`, while SDF
+sources use the valid region derived from render scale. Equal source and
+destination extents retain the exact-copy path. Child images must expose an
+RGBA8 storage view in General layout, including pipeline intermediate previews.
+
 ## The C# ↔ HLSL sync pairs (KEEP IN SYNC — the whole list)
 
 The C# ISA and the shader ISA are ONE contract. These are the live pairs;
@@ -256,7 +265,7 @@ measured march or GPU-time multipliers.
     uses to tell the two apart, e.g. `Puck.World`'s `world.view.state` echo);
     `SdfEngineNode.RegisterChild` adds a child after construction (pump
     thread only). The document-side authoring seam (a `views.layouts` slot's
-    `study` field naming a `views.studies` row) is `puck-world`'s to describe.
+    `pipeline` field naming a `views.pipelines` row) is `puck-world`'s to describe.
   - A **screen source** is program-declared `ScreenSlab` shading: its lit face
     samples the bound image through a CRT glass treatment (barrel curve, rounded
     bezel, scanlines, vignette, fresnel glint, bloom — `sampleScreenSurface`),
@@ -865,7 +874,7 @@ plus the existing instanced==flat stages.
   `stepScale`, so a scaled shape's penumbra/AO term reflects its own local
   steepness instead of only the program-wide bound. Never folds into the
   marching `radius`/step-length logic (unaffected — soundness stays keyed on
-  `stepScale` alone); `src/Puck.World/Assets/studies/moth.glsl`'s `surfaceGradient`/`shadow`/
+  `stepScale` alone); `src/Puck.World/Assets/pipelines/moth.glsl`'s `surfaceGradient`/`shadow`/
   `ambientOcclusion` is the reference posture (the study's `distanceScale`
   correction, computed once at the primary hit and reused for the whole
   secondary march — a deliberate approximation this engine also makes).

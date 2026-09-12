@@ -85,7 +85,7 @@ A shape authored `type: "Sweep"` requires a `curve` (`ShapeCurveDocument`): a
 quadratic Bezier `a`/`b`/`c` (each a literal `[x,y,z]` or a
 `state.<row>[.<key>]` reference) swept with a radius tapering between
 `radiusStart`/`radiusEnd` plus a mid-span `bulge`, optionally 1-4 `strands`
-orbiting the curve at `strandOffset` and rate `twist` — the study's hair locks
+orbiting the curve at `strandOffset` and rate `twist` — the pipeline's hair locks
 (one strand) and braid (three, `twist: 4`). `curve` is admitted only on, and
 required on, this type; the curve's own control points and radii already carry
 creation-unit dimensions, so `scale` must be uniform. Not a closed solid: no

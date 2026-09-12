@@ -45,9 +45,9 @@ public sealed class WorldSafeNameLawTests {
         var resolver = new WorldSessionResolver();
         var longName = new string(c: 'd', count: 150);
         var longGroupId = new string(c: 'g', count: 150);
-        var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
+        var kind = new WorldGroupKind(Name: "party", Roles: [], Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
         var groups = new WorldGroup[] {
-            new(Id: SafeName.Parse(candidate: longGroupId), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+            new(Id: SafeName.Parse(candidate: longGroupId), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)), null, 0)]),
         };
         var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         var destination = new WorldDestination(
@@ -67,12 +67,12 @@ public sealed class WorldSafeNameLawTests {
     }
     [Fact]
     public void TryResolve_ComposedNameExceedsMaxLength_RefusesByName_ControlWithShortNamesResolves() {
-        var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
+        var kind = new WorldGroupKind(Name: "party", Roles: [], Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
 
         bool Resolve(string name, string groupId) {
             var resolver = new WorldSessionResolver();
             var groups = new WorldGroup[] {
-                new(Id: SafeName.Parse(candidate: groupId), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+                new(Id: SafeName.Parse(candidate: groupId), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)), null, 0)]),
             };
             var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
             var destination = new WorldDestination(

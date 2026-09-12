@@ -8,7 +8,8 @@ internal static class ShadersCommand {
     public static Command Create() {
         var command = new Command(description: "Shader authoring verbs.", name: "shaders");
 
-        command.Subcommands.Add(item: StudyCommand.Create());
+        command.Subcommands.Add(item: CompileShaderCommand.Create());
+        command.Subcommands.Add(item: PipelineCommand.Create());
         return command;
     }
 }

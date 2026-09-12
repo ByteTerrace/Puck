@@ -39,8 +39,8 @@ public class EmitterTests {
     }
 
     [Fact]
-    public void TestStudyWorldParity() {
-        const string puckStudy = """
+    public void TestPipelineWorldParity() {
+        const string puckPipeline = """
             schema: "puck.world.def.v1"
 
             host {
@@ -62,13 +62,13 @@ public class EmitterTests {
             }
 
             views {
-                layout "study" {
+                layout "pipeline" {
                     seatCount: 0
                     slots [
                         {
                             camera: null
                             height: 1
-                            study: "moth-study"
+                            pipeline: "moth-pipeline"
                             width: 1
                             x: 0
                             y: 0
@@ -84,7 +84,7 @@ public class EmitterTests {
                     yawReference: "World"
                 }
 
-                seatRig "study" {
+                seatRig "pipeline" {
                     version: "puck.camera.v1"
                     operations [
                         orbit(distance: 0.01, pitch: 0, yaw: 0)
@@ -92,26 +92,26 @@ public class EmitterTests {
                     ]
                 }
 
-                study "moth-study" {
+                pipeline "moth-pipeline" {
                     camera: null
-                    source: "../studies/moth.glsl"
+                    source: "../pipelines/moth.glsl"
                     timeScale: 1
                 }
             }
             """;
 
-        var doc = PuckParser.ParseDocument(puckStudy);
+        var doc = PuckParser.ParseDocument(puckPipeline);
         var lowered = WorldDocumentEmitter.Lower(doc);
 
         var views = Assert.IsType<JsonObject>(lowered["views"]);
         var layouts = Assert.IsType<JsonArray>(views["layouts"]);
         Assert.Single(layouts);
         var layout0 = Assert.IsType<JsonObject>(layouts[0]);
-        Assert.Equal("study", layout0["name"]?.ToString());
+        Assert.Equal("pipeline", layout0["name"]?.ToString());
         Assert.Equal(0.25, layout0["transitionSeconds"]?.GetValue<double>());
 
         var seatRig = Assert.IsType<JsonObject>(views["seatRig"]);
-        Assert.Equal("study", seatRig["name"]?.ToString());
+        Assert.Equal("pipeline", seatRig["name"]?.ToString());
         Assert.Equal("puck.camera.v1", seatRig["version"]?.ToString());
 
         var ops = Assert.IsType<JsonArray>(seatRig["operations"]);

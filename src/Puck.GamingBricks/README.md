@@ -134,6 +134,33 @@ firmware. Machine-specific options, such as HGB's `cgb dmgspeed`, precede the
 path. The [HGB guide](../Puck.HumbleGamingBrick/README.md#firmware-and-startup)
 owns revision-specific startup behavior.
 
+### Host-selected content admission
+
+`GamingBrickContentPolicies.Puck()` creates an immutable policy that admits
+arbitrary user-authored cartridges with the verified `puck.cartridge.v1` source
+format. Authors do not need publisher approval for each cartridge. The generic
+`MachineContentAdmissionPolicy` also supports open admission, other explicitly
+trusted source formats, and exact executable SHA-256 approval. Hashes can be
+exceptions to an authored-format policy or the sole admission rule for a strict
+host.
+
+The host chooses the policy; a cartridge or its metadata cannot change it.
+The host must stamp the source format only after its trusted provider has
+successfully parsed and compiled the source, then evaluate the exact pinned
+source and executable bytes before mounting them. A renamed native ROM has no
+verified source format. A filename, header, or caller-supplied hash is not proof
+of admission. Keep the bytes immutable through use, and apply the current policy
+when creating, replacing, or restoring content. Calling a core constructor
+directly does not invoke this policy for an embedding application.
+
+Auxiliary `AssetPath` fields have a separate, explicit `MachineAssetAdmission`
+choice; the policy defaults to denying them. Hosts that permit native content
+and explicit firmware can select
+`MachineContentAdmissionPolicy.Open(MachineAssetAdmission.Allow)`. Firmware
+selection, privileged hardware access, and configuration authority remain
+separate permissions. Content admission neither establishes copyright status
+nor prevents an authorized program from executing arbitrary instructions.
+
 ## 🎮 Queued screen-machine hosting
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A

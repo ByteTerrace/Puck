@@ -6,7 +6,7 @@ namespace Puck.World.Authoring;
 
 /// <summary>
 /// A second-material band painted onto a <see cref="ShapeDocument"/>'s own surface wherever it sits near another,
-/// earlier-declared shape in the same creation — the study's ivory boot band (<c>max(shin - .003, -ankleCut -
+/// earlier-declared shape in the same creation — the pipeline's ivory boot band (<c>max(shin - .003, -ankleCut -
 /// .095)</c>) generalized: the host's surface where it is within <see cref="Width"/> of the reference shape's own
 /// surface, painted with <see cref="Material"/>. Where <see cref="ShapePanelDocument"/> recesses or raises a copy
 /// of a shape's OWN geometry, a trim colors the host's surface against a REFERENCE shape's geometry instead — a
@@ -40,7 +40,7 @@ namespace Puck.World.Authoring;
 /// <see cref="Inset"/>, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins
 /// only where the reference's own dilated copy does not additionally push the Intersection candidate past it,
 /// i.e. near the reference. Creation units, finite, in <c>[0, MaxInset]</c>; refused by name otherwise. Default
-/// <c>0.003</c> — just enough to clear the plain surface without z-fighting, the study's own shin margin.</param>
+/// <c>0.003</c> — just enough to clear the plain surface without z-fighting, the pipeline's own shin margin.</param>
 public sealed record ShapeTrimDocument(string Shape, float Width, int Material, float Inset = 0.003f) {
     /// <summary>The most entries <see cref="ShapeDocument.Trims"/> carries.</summary>
     public const int MaxTrims = 4;

@@ -49,7 +49,7 @@ public class FormatterSugarTests {
         "games/solitaire.world.json",
         "games/spider.world.json",
         "games/tictactoe.world.json",
-        "study.world.json",
+        "pipeline.world.json",
         "puck.world.json",
     };
 

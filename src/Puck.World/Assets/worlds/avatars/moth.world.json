@@ -12048,12 +12048,12 @@
         "transitionSeconds": 0
       },
       {
-        "name": "study",
+        "name": "pipeline",
         "seatCount": 0,
         "slots": [
           {
             "height": 1,
-            "study": "moth-study",
+            "pipeline": "moth-pipeline",
             "width": 0.5,
             "x": 0,
             "y": 0
@@ -12140,11 +12140,11 @@
       },
       "version": "puck.camera.v1"
     },
-    "studies": [
+    "pipelines": [
       {
         "camera": "three-quarter",
-        "name": "moth-study",
-        "source": "../studies/moth.glsl",
+        "name": "moth-pipeline",
+        "source": "../pipelines/moth.glsl",
         "timeScale": 1
       }
     ]

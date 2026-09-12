@@ -191,7 +191,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         ObjectBlobContent? content;
 
         try {
-            content = await m_store.ReadAsync(m_target, address, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
+            content = await WorldAuthorityRootReader.ReadDefinitionAsync(m_owner, m_world, m_store, m_target, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception error) { return (null, $"could not read '{address.Key}' — {error.Message.ReplaceLineEndings(replacementText: " ")}"); }
         cancellationToken.ThrowIfCancellationRequested();
         if (content is not { } found) { return (null, $"no cloud copy at '{address.Key}'"); }

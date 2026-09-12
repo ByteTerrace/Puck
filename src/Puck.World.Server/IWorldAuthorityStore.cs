@@ -28,6 +28,12 @@ public enum WorldAuthorityStoreOutcomeKind {
     /// <summary>An if-match write lost its precondition — the blob moved since the caller last read it.</summary>
     PreconditionFailed,
 
+    /// <summary>The writer's activation fence is no longer current.</summary>
+    StaleFence,
+
+    /// <summary>The transport outcome is unknown and must be reconciled from the root.</summary>
+    RecoveryRequired,
+
     /// <summary>The write did not land for any other reason (transport, timeout, or a refused compare-and-swap
     /// retry ceiling).</summary>
     Failed,
@@ -68,6 +74,16 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
 /// write through. Programmed against opaque encoded bytes throughout — this seam never decodes a checkpoint or a
 /// mutation leaf, so it lands independently of the record formats those bytes carry.</summary>
 public interface IWorldAuthorityStore {
+    /// <summary>Reads the authoritative root. Once present, legacy mutable pointers are never read as authority.</summary>
+    Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
+    /// <summary>Reads a coherent checkpoint and journal view named by one root publication.</summary>
+    Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
+    /// <summary>Advances the activation epoch using one root CAS and returns the lease bound to that epoch.</summary>
+    Task<WorldAuthorityFence?> AcquireActivationAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
+    /// <summary>Publishes an unowned root with a new epoch, preventing the released lease from being reused.</summary>
+    Task<WorldAuthorityStoreOutcome> ReleaseActivationAsync(WorldAuthorityIdentity identity, WorldAuthorityFence fence, CancellationToken cancellationToken);
+    /// <summary>Finds an operation receipt by walking the immutable receipt chain named by the root.</summary>
+    Task<WorldAuthorityOperationReceipt?> FindOperationReceiptAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken);
     /// <summary>Loads a hosted world's published, composed definition.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="cancellationToken">A token to observe.</param>
@@ -96,7 +112,7 @@ public interface IWorldAuthorityStore {
     /// <param name="tick">The engine tick the checkpoint was captured at.</param>
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The write outcome.</returns>
-    Task<WorldAuthorityStoreOutcome> WriteCheckpointAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, CancellationToken cancellationToken);
+    Task<WorldAuthorityStoreOutcome> WriteCheckpointAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
     /// <summary>Appends one mutation to the journal tail of the CURRENT latest checkpoint (learned from
     /// <c>checkpoints/latest</c>) — a read-modify-write CAS loop against the journal's own if-match token, so two
     /// concurrent appends never silently clobber one another.</summary>
@@ -105,11 +121,13 @@ public interface IWorldAuthorityStore {
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The write outcome; <see cref="WorldAuthorityStoreOutcomeKind.Failed"/> when no checkpoint has ever
     /// been written for this identity (a journal is always relative to one).</returns>
-    Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken);
+    Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
     /// <summary>Publishes a hosted world's composed definition — the one writer of <c>definition.json</c>.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="composed">The composed definition to publish.</param>
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The write outcome.</returns>
-    Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken);
+    Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken, WorldAuthorityFence? fence = null);
+    /// <summary>Publishes a refused or applied operation receipt without changing journal payload bytes.</summary>
+    Task<WorldAuthorityStoreOutcome> RecordReceiptAsync(WorldAuthorityIdentity identity, WorldAuthorityOperationReceipt receipt, CancellationToken cancellationToken, WorldAuthorityFence? fence = null);
 }

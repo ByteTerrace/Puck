@@ -4,7 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Overlays;
 using Puck.SdfVm;
-using Puck.Shaders.Study;
+using Puck.Shaders;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
@@ -92,9 +92,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
     private readonly WorldSdfDocumentEmitter m_sdfDocuments;
-    // Null for a document/host with no live study children (no views.studies row was registered at boot) — every
-    // study slot then falls through to its degenerate camera fallback below, never a null-reference.
-    private readonly WorldStudyRuntime? m_studies;
+    // Null for a document/host with no live pipeline children (no views.pipelines row was registered at boot) — every
+    // pipeline slot then falls through to its degenerate camera fallback below, never a null-reference.
+    private readonly WorldPipelineRuntime? m_pipelines;
+    private readonly HashSet<string> m_fedPipelines = new(StringComparer.Ordinal);
     private readonly WorldRenderSettings m_settings;
 
     private readonly WorldRenderCycleTrack m_cycle = new();
@@ -200,10 +201,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
     /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
     /// <see langword="null"/> (every candidate condition then holds).</param>
-    /// <param name="studies">The shared shader-study runtime, or <see langword="null"/> for a document/host with no
-    /// live study children — every study slot then falls through to its degenerate camera fallback.</param>
+    /// <param name="pipelines">The shared shader-pipeline runtime, or <see langword="null"/> for a document/host with no
+    /// live pipeline children — every pipeline slot then falls through to its degenerate camera fallback.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldStudyRuntime? studies = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldPipelineRuntime? pipelines = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -256,7 +257,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_seatBindings = seatBindings;
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
-        m_studies = studies;
+        m_pipelines = pipelines;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
@@ -1073,13 +1074,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
     // group, or null = world), motion, aim, lens, and group spread. Returns
     // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
-    // A study's iMouse this frame, Shadertoy's stateful convention in the slot's OWN pixel space (origin bottom-left,
+    // A pipeline's iMouse this frame, Shadertoy's stateful convention in the slot's OWN pixel space (origin bottom-left,
     // y up, matching the prelude's fragCoord flip): the pointer's CLIENT position maps to FRAME pixels by the same
     // per-axis frame/client scale WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the
     // whole back buffer), then into the slot by its region's pixel origin. No pointer feed (an offscreen boot) or no
     // reported position yet leaves the value untouched — zero until the first motion.
-    private Vector4 ResolveStudyMouse(WorldStudyRuntime.Entry entry, NormalizedRect region, uint width, uint height) {
-        if (m_studies?.ReadPointer is not { } readPointer) {
+    private Vector4 ResolvePipelineMouse(WorldPipelineRuntime.Entry entry, NormalizedRect region, uint width, uint height) {
+        if (m_pipelines?.ReadPointer is not { } readPointer) {
             return Vector4.Zero;
         }
 
@@ -1393,23 +1394,25 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
-        // Due study.watch reloads run here, on the pump thread, before any study node produces this frame.
-        m_studies?.PumpWatches();
+        // Only accepted rows create instances. Completed whole-pipeline candidates swap before this frame renders.
+        m_pipelines?.Reconcile(m_client.Definition.Views.Pipelines);
+        m_pipelines?.PumpWatches();
+        m_fedPipelines.Clear();
 
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
 
-            if (composed.Study is { } studyName) {
-                // A study slot: the SDF engine skips its own camera march for this slot (see SdfEngineNode's
-                // per-frame child-mask derivation) and shows the named views.studies row's compiled render instead.
+            if (composed.Pipeline is { } pipelineName) {
+                // A pipeline slot: the SDF engine skips its own camera march for this slot (see SdfEngineNode's
+                // per-frame child-mask derivation) and shows the named views.pipelines row's compiled render instead.
                 // The camera here is a degenerate placeholder used ONLY when that name never resolved in the
                 // engine's children map — never a live march (a near-zero field of view keeps it finite/valid
                 // rather than an invalid all-zero default).
                 if (
-                    (m_studies is { } studies) &&
-                    studies.TryGet(
+                    (m_pipelines is { } pipelines) && m_fedPipelines.Add(pipelineName) &&
+                    pipelines.TryGet(
                     entry: out var entry,
-                    name: studyName
+                    name: pipelineName
                 )
                 ) {
                     entry.Node.Resize(
@@ -1423,16 +1426,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                     )
                     );
 
-                    if (!entry.ClockPaused) {
-                        entry.ClockSeconds += (deltaSeconds * entry.ClockScale);
-                    }
+                    var pipelineDeltaSeconds = entry.AdvanceClock(deltaSeconds);
 
-                    var studyRow = WorldDefinitionRows.FindStudy(
-                        name: studyName,
-                        studies: m_client.Definition.Views.Studies
+                    var pipelineRow = WorldDefinitionRows.FindPipeline(
+                        name: pipelineName,
+                        pipelines: m_client.Definition.Views.Pipelines
                     );
                     // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the
-                    // study iCameraFov 0 with zero vectors — the documented "no paired camera" signal a study
+                    // pipeline iCameraFov 0 with zero vectors — the documented "no paired camera" signal a pipeline
                     // branches on to keep its own Shadertoy iMouse orbit — never a made-up default eye.
                     var cameraPos = Vector3.Zero;
                     var cameraTarget = Vector3.Zero;
@@ -1440,28 +1441,26 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                     var cameraFov = 0f;
 
                     if (
-                        (studyRow?.Camera is { } studyCameraName) &&
+                        (pipelineRow?.Camera is { } pipelineCameraName) &&
                         ResolveNamedCamera(
-                        camera: out var studyCamera,
+                        camera: out var pipelineCamera,
                         deltaSeconds: deltaSeconds,
                         height: height,
-                        name: studyCameraName,
+                        name: pipelineCameraName,
                         region: region,
                         width: width
                     )
                     ) {
-                        cameraPos = studyCamera.Position;
-                        cameraTarget = (studyCamera.Position + studyCamera.Forward);
-                        cameraUp = studyCamera.Up;
-                        cameraFov = (2f * MathF.Atan(x: studyCamera.TanHalfFieldOfView));
+                        cameraPos = pipelineCamera.Position;
+                        cameraTarget = (pipelineCamera.Position + pipelineCamera.Forward);
+                        cameraUp = pipelineCamera.Up;
+                        cameraFov = (2f * MathF.Atan(x: pipelineCamera.TanHalfFieldOfView));
                     }
 
-                    entry.Node.Input = new StudyFrameInput(
+                    entry.Node.Input = new ShaderFrameInput(
                         Seconds: entry.ClockSeconds,
-                        DeltaSeconds: (entry.ClockPaused
-                            ? 0.0
-                            : (deltaSeconds * entry.ClockScale)),
-                        Mouse: ResolveStudyMouse(
+                        DeltaSeconds: pipelineDeltaSeconds,
+                        Mouse: ResolvePipelineMouse(
                             entry: entry,
                             region: region,
                             width: width,
@@ -1485,7 +1484,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                     ),
                     Region: region
                 ) {
-                    Child = studyName,
+                    Child = pipelineName,
                     RenderScale = transitionScale,
                     UpscaleSharpness = m_settings.UpscaleSharpness,
                 });

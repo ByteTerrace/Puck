@@ -144,9 +144,15 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: cells)), destination: 0x0600F800, count: 2048);
         }
 
-        var spriteTurns = document.Sprites.Any(predicate: static sprite => sprite.Turn is not null)
-            ? new AgbSpriteTurn(emitter: emitter, tableAddress: Add(bytes: AgbAffineBackground.BuildTurnTable()))
-            : null;
+        // Keep one baked sine table for both turning surfaces. Allocate it at the sprite site when present so
+        // sprite-only and affine-only images retain their established data placement; affine-only allocation stays
+        // beside the affine graphics below.
+        var turnTableAddress = document.Sprites.Any(predicate: static sprite => sprite.Turn is not null)
+            ? Add(bytes: AgbAffineBackground.BuildTurnTable())
+            : 0u;
+        var spriteTurns = turnTableAddress == 0u
+            ? null
+            : new AgbSpriteTurn(emitter: emitter, tableAddress: turnTableAddress);
         AgbRealTimeClock? clock = null;
         if (document.Clock is not null) {
             // The host decides the cartridge carries a clock by scanning the image for this identifier.
@@ -162,7 +168,11 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             // A rotating layer reads one byte per pixel, so it needs its own bank at character block one.
             var wideTiles = CartridgeGraphics.TilesEightBit(document: document);
             Copy(sourceAddress: Add(bytes: wideTiles), destination: 0x06004000, count: wideTiles.Length);
-            affine = new AgbAffineBackground(emitter: emitter, tableAddress: Add(bytes: AgbAffineBackground.BuildTurnTable()));
+            if (turnTableAddress == 0u) {
+                turnTableAddress = Add(bytes: AgbAffineBackground.BuildTurnTable());
+            }
+
+            affine = new AgbAffineBackground(emitter: emitter, tableAddress: turnTableAddress);
             affine.EmitControl(control: AgbAffineBackground.Control(cellCount: turning.Map.Length, screenBlock: 28) | (1u << 2));
         }
 

@@ -86,9 +86,9 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetPopulationDefaults);
-    private static bool ContainsMember(IReadOnlyList<WorldPrincipal> members, WorldPrincipal member) {
+    private static bool ContainsMember(IReadOnlyList<WorldGroupMember> members, WorldPrincipal member) {
         foreach (var existing in members) {
-            if (existing == member) {
+            if ((existing.Ref.Kind == MemberRefKind.Local) && (existing.Ref.Principal == member)) {
                 return true;
             }
         }
@@ -417,10 +417,10 @@ public sealed partial class WorldServer {
     // before (forming an empty group never auto-dissolves it). A null kind (defensive — the validator refuses a
     // dangling kindName before this could be reached live) leaves the group Persistent by default.
     private static IReadOnlyList<WorldGroup> RemoveMemberAndMaybeDissolve(IReadOnlyList<WorldGroup> groups, WorldGroup group, WorldGroupKind? kind, WorldPrincipal member) {
-        var remaining = new List<WorldPrincipal>(capacity: group.Members.Count);
+        var remaining = new List<WorldGroupMember>(capacity: group.Members.Count);
 
         foreach (var existing in group.Members) {
-            if (existing != member) {
+            if ((existing.Ref.Kind != MemberRefKind.Local) || (existing.Ref.Principal != member)) {
                 remaining.Add(item: existing);
             }
         }
@@ -442,7 +442,7 @@ public sealed partial class WorldServer {
 
         return Upsert(
             list: groups,
-            item: (group with { Members = remaining }),
+            item: (group with { Members = remaining, Revision = checked(group.Revision + 1) }),
             keyOf: static (WorldGroup row) => row.Id
         );
     }
@@ -503,7 +503,7 @@ public sealed partial class WorldServer {
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
         WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
-            or WorldMutation.UpsertViewStudy or WorldMutation.RemoveViewStudy => WorldSection.Views,
+            or WorldMutation.UpsertViewPipeline or WorldMutation.RemoveViewPipeline => WorldSection.Views,
         WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
@@ -1335,37 +1335,37 @@ public sealed partial class WorldServer {
 
                     return true;
                 }
-            case WorldMutation.UpsertViewStudy m: {
+            case WorldMutation.UpsertViewPipeline m: {
                     var views = current.Views;
 
                     candidate = (current with {
                         ViewsRaw = (views with {
-                            Studies = Upsert(
-                        list: views.Studies,
-                        item: m.Study,
-                        keyOf: static study => study.Name
+                            Pipelines = Upsert(
+                        list: views.Pipelines,
+                        item: m.Pipeline,
+                        keyOf: static pipeline => pipeline.Name
                     ),
                         }),
                     });
 
                     return true;
                 }
-            case WorldMutation.RemoveViewStudy m: {
+            case WorldMutation.RemoveViewPipeline m: {
                     var views = current.Views;
 
                     if (!Remove(
-                        list: views.Studies,
+                        list: views.Pipelines,
                         key: m.Name,
-                        keyOf: static study => study.Name,
-                        result: out var studies
+                        keyOf: static pipeline => pipeline.Name,
+                        result: out var pipelines
                     )) {
                         candidate = current;
-                        reason = $"no views.studies row named '{m.Name}'";
+                        reason = $"no views.pipelines row named '{m.Name}'";
 
                         return false;
                     }
 
-                    candidate = (current with { ViewsRaw = (views with { Studies = studies }) });
+                    candidate = (current with { ViewsRaw = (views with { Pipelines = pipelines }) });
 
                     return true;
                 }
@@ -1875,13 +1875,30 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
-                    var joined = new List<WorldPrincipal>(collection: group.Members) { m.Member };
+                    if ((group.NextJoinOrdinal < 0) || (group.NextJoinOrdinal == int.MaxValue)) {
+                        candidate = current;
+                        reason = $"group '{m.GroupId}' has exhausted its join ordinal range";
+
+                        return false;
+                    }
+
+                    var joined = new List<WorldGroupMember>(collection: group.Members) {
+                        new(
+                            Ref: WorldMemberRef.Local(principal: m.Member),
+                            Role: null,
+                            JoinOrdinal: group.NextJoinOrdinal
+                        )
+                    };
 
                     candidate = (current with {
                         Groups = (groupsSection with {
                             Groups = Upsert(
                         list: groupsSection.Groups,
-                        item: (group with { Members = joined }),
+                        item: (group with {
+                            Members = joined,
+                            Revision = checked(group.Revision + 1),
+                            NextJoinOrdinal = checked(group.NextJoinOrdinal + 1)
+                        }),
                         keyOf: static (WorldGroup row) => row.Id
                     ),
                         }),

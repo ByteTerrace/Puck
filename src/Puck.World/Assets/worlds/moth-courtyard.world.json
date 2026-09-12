@@ -330778,7 +330778,7 @@
         "transitionSeconds": 0
       }
     ],
-    "studies": [
+    "pipelines": [
       {
         "$replace": true
       }

@@ -5,6 +5,27 @@ namespace Puck.World.Transpiler.Tests;
 
 public class FormatterTests {
     [Fact]
+    public void TestFormatterPreservesPlaceholderCollisions() {
+        var input = "// __puck_literal_0_0\n"
+            + "let text = \"__puck_literal_1_0\"\n"
+            + "let `__puck_literal_2_0` = \"__puck_literal_2147483648_0\"\n"
+            + "// __puck_literal__puck_literal_3_0\n";
+        var formatted = PuckFormatter.Format(input);
+        Assert.Equal(input, formatted);
+        Assert.Equal(formatted, PuckFormatter.Format(formatted));
+    }
+
+    [Fact]
+    public void TestFormatterPreservesLongPlaceholderPrefixWithManyLiterals() {
+        var literal = "__puck_literal_" + new string('_', 100_000);
+        var input = "let longText = \"" + literal + "\"\n"
+            + string.Concat(Enumerable.Range(0, 1_000).Select(index => $"let text{index} = \"value{index}\"\n"));
+        var formatted = PuckFormatter.Format(input);
+        Assert.Equal(input, formatted);
+        Assert.Equal(formatted, PuckFormatter.Format(formatted));
+    }
+
+    [Fact]
     public void TestFormatterBasicIndentationAndBraces() {
         var unformatted = @"
 puck: 1

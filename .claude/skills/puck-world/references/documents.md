@@ -647,34 +647,25 @@ body-motion program's `curve` target source
 arc-length follower feeding the SAME planar target-consuming op vocabulary a
 `designated`/`sensed` target does.
 
-### `views.studies` — the shader study table
+### `views.pipelines` — shader-pipeline instances
 
-`WorldViewStudy` (`WorldViews.cs`): named rows of `{name, source, camera,
-timeScale}`. `source` is a Shadertoy-dialect GLSL shader (`void
-mainImage(out vec4 fragColor, in vec2 fragCoord)`), resolved relative to the
-DOCUMENT'S OWN directory — never the Content-copied `AppContext.BaseDirectory`
-convention the `tunes`/`patches`/music asset rows use, since an author's study
-demo is a `.glsl` beside its `.world.json` and nothing else. `camera`
-(optional) is the authored camera feeding the paired `iCameraPos`/
-`iCameraTarget`/`iCameraUp`/`iCameraFov` push constants a study reads under
-`#define PUCK_STUDY 1`; absent, the study renders through its own Shadertoy
-`iMouse` orbit — the study sees `iCameraFov` 0 (camera vectors zero) and
-branches on it. `timeScale` (default 1; 0 freezes) scales the study's own
-presentation clock — never simulation state, never in `world.state.hash`.
-`views.studyToolchain` (string?, the section-level sibling of `studies`) is
-the directory holding `glslang`/`spirv-cross`/`dxc`; null resolves each by
-bare name on the search path, and nothing reads an environment variable.
-`WorldViewSlot` gains a `study` field (string?) alongside `camera`: a slot
-names AT MOST ONE of the two (the validator refuses both authored on one
-slot), and a `study` slot renders the named row's compiled shader as a child
-view instead of an SDF camera march — see `sdf-world`'s frame-driven
-child-view row for the render-side mechanics. Authored with `world.row.set
-views.studies {"name":"…","source":"…"}` / `world.row.remove views.studies
-<name>`; the `study.load`/`study.reload`/`study.watch`/`study.time`/
-`study.status` console verbs (`references/console.md`) own compiling a row
-and its live clock/watch state. `moth.world.json`'s `study` layout and
-`study.world.json` (a fullscreen-study-only world) are the worked examples.
+`WorldViewPipeline` (`WorldViews.cs`) carries `{name, source, camera,
+timeScale}`. Source is a pipeline JSON document or a one-off shader and
+resolves relative to the world document. The pipeline's own shader paths
+resolve relative to its document. `WorldViewSlot.pipeline` names the instance;
+a slot cannot name both a camera and a pipeline. The row's camera supplies
+optional shader camera inputs, with zero FOV denoting no paired camera.
+`timeScale` seeds presentation time. `views.shaderToolchain` optionally names
+the compiler directory; otherwise executable lookup uses the process path.
 
+Rows use `world.row.set views.pipelines` and `world.row.remove views.pipelines`
+through the same closed mutation vocabulary as `pipeline.load`. The host
+reconciles only accepted document state. The runtime owns resources, history,
+background compilation and frame-boundary installation; none belongs in the
+schema. Use [the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
+for the live three-pass editing workflow. The
+[shader README](../../../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development)
+owns the GPU pipeline document contract.
 ### Kit producer `flock` — bounded local perception
 
 `ProduceFlockIntent` requires `producers.<name>.flock` on the assigned kit:

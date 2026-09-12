@@ -15,6 +15,10 @@ public enum GpuPixelFormat : uint {
     R8G8B8A8Unorm = 1,
     /// <summary>The B8G8R8A8 unsigned normalized format.</summary>
     B8G8R8A8Unorm = 2,
+    /// <summary>Four 16-bit floating-point channels.</summary>
+    R16G16B16A16Float = 3,
+    /// <summary>Four 32-bit floating-point channels.</summary>
+    R32G32B32A32Float = 4,
 }
 /// <summary>
 /// Conversions into the <see cref="GpuPixelFormat"/> vocabulary.

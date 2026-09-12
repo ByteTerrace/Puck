@@ -39,7 +39,7 @@ public class ShapeSugarTests {
     public void PrototypeRowLowersIdFromTheQuotedNameAndDocumentFromTheNestedBlock() {
         var proto = FirstPrototype("""
             prototypes {
-                prototype "studyProp" {
+                prototype "pipelineProp" {
                     document {
                         schema: "puck.creation.v1"
                         shape Box "block" {
@@ -52,7 +52,7 @@ public class ShapeSugarTests {
 
         AssertSameJson("""
             {
-                "id": "studyProp",
+                "id": "pipelineProp",
                 "document": {
                     "schema": "puck.creation.v1",
                     "shapes": [
@@ -76,7 +76,7 @@ public class ShapeSugarTests {
     public void PrototypeShapeStringRotationPassesThroughUntouched() {
         var proto = FirstPrototype("""
             prototypes {
-                prototype "studyProp" {
+                prototype "pipelineProp" {
                     document {
                         shape Box "block" {
                             position [0, 0, 0]
@@ -175,7 +175,7 @@ public class ShapeSugarTests {
             "schema": "puck.world.def.v1",
             "prototypes": [
                 {
-                    "id": "studyProp",
+                    "id": "pipelineProp",
                     "document": {
                         "schema": "puck.creation.v1",
                         "shapes": [
@@ -199,7 +199,7 @@ public class ShapeSugarTests {
         var puck = WorldDecompiler.Decompile(json);
 
         Assert.Contains("prototypes {", puck, StringComparison.Ordinal);
-        Assert.Contains("prototype \"studyProp\" {", puck, StringComparison.Ordinal);
+        Assert.Contains("prototype \"pipelineProp\" {", puck, StringComparison.Ordinal);
         Assert.Contains("document {", puck, StringComparison.Ordinal);
         Assert.Contains("shape Box \"block\" {", puck, StringComparison.Ordinal);
         Assert.DoesNotContain("blend:", puck, StringComparison.Ordinal);

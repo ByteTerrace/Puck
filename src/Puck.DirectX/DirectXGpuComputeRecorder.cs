@@ -449,6 +449,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
             GpuImageLayout.General => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
             GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_SHADER_RESOURCE,
             GpuImageLayout.External => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON,
+            GpuImageLayout.RenderTarget => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_RENDER_TARGET,
             _ => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNDEFINED,
         };
     }

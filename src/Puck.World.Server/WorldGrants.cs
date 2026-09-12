@@ -1835,7 +1835,13 @@ public sealed class WorldGrants : IWorldGrantsView {
             );
             groupsById[group.Id] = group;
 
-            foreach (var member in group.Members) {
+            foreach (var memberRow in group.Members) {
+                if ((memberRow.Ref.Kind != MemberRefKind.Local) || (memberRow.Ref.Principal is not { } member)) {
+                    // Verified identities are retained in the document roster but cannot impersonate a local
+                    // WorldPrincipal in this local grant index; the federation/consent lane owns that projection.
+                    continue;
+                }
+
                 if (!m_groupMembership.TryGetValue(
                     key: member,
                     value: out var memberOf
@@ -1876,7 +1882,11 @@ public sealed class WorldGrants : IWorldGrantsView {
                         value: out var ownerGroup
                     )
                     ) {
-                        foreach (var member in ownerGroup.Members) {
+                        foreach (var memberRow in ownerGroup.Members) {
+                            if ((memberRow.Ref.Kind != MemberRefKind.Local) || (memberRow.Ref.Principal is not { } member)) {
+                                continue;
+                            }
+
                             AddOwnedGroup(
                                 owner: member,
                                 groupId: row.Subject.Id

@@ -137,7 +137,9 @@ public sealed class WorldSessionResolver {
 
             if (
                 carriesTag &&
-                group.Members.Contains(value: principal)
+                group.Members.Any(member =>
+                    (member.Ref.Kind == MemberRefKind.Local) &&
+                    (member.Ref.Principal == principal))
             ) {
                 matches.Add(item: group.Id);
             }
@@ -155,7 +157,9 @@ public sealed class WorldSessionResolver {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                return group.Members.Contains(value: principal);
+                return group.Members.Any(member =>
+                    (member.Ref.Kind == MemberRefKind.Local) &&
+                    (member.Ref.Principal == principal));
             }
         }
 

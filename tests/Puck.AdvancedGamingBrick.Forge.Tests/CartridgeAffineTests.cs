@@ -26,10 +26,14 @@ public sealed class CartridgeAffineTests {
             actual: RenderCentre(visible: 1));
     }
 
+    [Fact]
+    public void TurningSpritesAndBackgroundShareOneTableAndKeepTheirTransforms() {
+        Assert.Equal(expected: Render(angle: 32, scale: 16), actual: Render(angle: 32, scale: 16, turningSprite: true));
+    }
     private static string RenderCentre(int visible) => Render(angle: 0, scale: 16, visible: visible, solid: true, single: (120, 80));
 
     // A wedge of solid cells in one corner, so a turn is visible rather than symmetric.
-    private static string Render(int angle, int scale, int visible = 1, bool solid = false, (int X, int Y)? single = null) {
+    private static string Render(int angle, int scale, int visible = 1, bool solid = false, (int X, int Y)? single = null, bool turningSprite = false) {
         var map = new int[256];
         for (var row = 0; row < 16; ++row) {
             for (var column = 0; column < 16; ++column) {
@@ -50,9 +54,29 @@ public sealed class CartridgeAffineTests {
                 CentreY: CartridgeExpressions.Of(constant: 80),
                 Visible: CartridgeExpressions.Of(constant: visible)),
         };
+        if (turningSprite) {
+            // Put the object outside the visible area so its affine registers can be checked while the
+            // background's pixels remain directly comparable with the background-only cartridge.
+            document = document with {
+                Sprites = [new CartridgeSprite(Name: "turn", Tile: CartridgeExpressions.Of(constant: 1),
+                    X: CartridgeExpressions.Of(constant: 240), Y: CartridgeExpressions.Of(constant: 160),
+                    Visible: CartridgeExpressions.Of(constant: 1), Turn: CartridgeExpressions.Of(constant: 64))],
+            };
+        }
         var result = new AgbCartridgeCompiler().Compile(document: document);
         using var machine = new AgbVerifyMachineDriver(rom: result.Rom, label: "affine");
         machine.RunFrames(keys: AgbKeys.None, frames: 8);
+        if (turningSprite) {
+            var table = AgbAffineBackground.BuildTurnTable();
+            var first = result.Rom.AsSpan().IndexOf(table);
+            Assert.True(condition: first >= 0);
+            Assert.Equal(expected: -1, actual: result.Rom.AsSpan(first + table.Length).IndexOf(table));
+            Assert.Equal(expected: result.Rom, actual: new AgbCartridgeCompiler().Compile(document: document).Rom);
+            Assert.Equal(expected: (ushort)0, actual: machine.ReadHalf(address: 0x07000006));
+            Assert.Equal(expected: unchecked((ushort)-256), actual: machine.ReadHalf(address: 0x0700000E));
+            Assert.Equal(expected: (ushort)256, actual: machine.ReadHalf(address: 0x07000016));
+            Assert.Equal(expected: (ushort)0, actual: machine.ReadHalf(address: 0x0700001E));
+        }
 
         var sample = new System.Text.StringBuilder();
         if (single is { } point) {

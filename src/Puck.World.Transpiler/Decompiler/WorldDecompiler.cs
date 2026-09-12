@@ -188,23 +188,23 @@ public static partial class WorldDecompiler {
             DecompileSeatRigBlock(sb, name, srObj, indentLevel: 1);
         }
 
-        // Studies
-        if (views.TryGetPropertyValue("studies", out var studiesNode) && studiesNode is JsonArray studiesArr) {
-            foreach (var studyItem in studiesArr) {
-                if (studyItem is JsonObject studyObj) {
+        // Pipelines
+        if (views.TryGetPropertyValue("pipelines", out var pipelinesNode) && pipelinesNode is JsonArray pipelinesArr) {
+            foreach (var pipelineItem in pipelinesArr) {
+                if (pipelineItem is JsonObject pipelineObj) {
                     if (!first) {
                         sb.AppendLine();
                     }
                     first = false;
-                    var name = studyObj.TryGetPropertyValue("name", out var n) ? n?.ToString() : null;
-                    DecompileNamedBlock(sb, "study", name, studyObj, indentLevel: 1, excludedKeys: ["name"]);
+                    var name = pipelineObj.TryGetPropertyValue("name", out var n) ? n?.ToString() : null;
+                    DecompileNamedBlock(sb, "pipeline", name, pipelineObj, indentLevel: 1, excludedKeys: ["name"]);
                 }
             }
         }
 
         // Other views properties
         var handledViewsKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-            "layouts", "seatControl", "seatRig", "studies"
+            "layouts", "seatControl", "seatRig", "pipelines"
         };
 
         foreach (var (k, v) in views) {

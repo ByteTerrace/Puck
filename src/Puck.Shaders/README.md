@@ -1,5 +1,10 @@
 # Puck.Shaders
 
+Puck.Shaders compiles shader sources and runs document-authored GPU pipelines.
+A single shader and a connected graph share the same execution model; see
+[shader pipelines and live development](#shader-pipelines-and-live-development).
+The shader-set manifest below describes reusable stages and their configuration.
+
 A shader set is data: one HLSL source (or a vertex+fragment pair) and one
 `puck.shader.v1` manifest beside it. The manifest declares everything the
 engine needs to run the set — its stages, its descriptor bindings, the
@@ -255,73 +260,69 @@ image terms, in `faerie`'s `paintingX0..paintingY3` config order, so a
 `marker` probe's channels bind directly onto a `faerie` probe's painting
 quad — retroreflective tape on a real wall becomes a tracked painting frame.
 
-## 🎨 Studies (`Puck.Shaders.Study`)
+## Shader pipelines and live development
 
-A study is a Shadertoy-dialect source — `void mainImage(out vec4 fragColor,
-in vec2 fragCoord)`, reading `iResolution`/`iTime`/`iTimeDelta`/`iFrame`/
-`iMouse`/`iDate` — compiled against Puck's own toolchain rather than
-`build/Shaders.targets`, since GLSL never reaches `dxc` directly:
-`glslang`/`glslangValidator` (GLSL to SPIR-V), `spirv-cross` (SPIR-V to
-HLSL), then `dxc` (HLSL to DXIL, `cs_6_6`). `StudyPrelude.Text`/`Postlude`
-wrap the author's source into a COMPUTE kernel — 8×8 workgroups writing one
-`rgba8` storage image at binding 0, the same-device general-layout image a
-hosted child owes the world compositor — with a 112-byte `PuckStudy`
-push-constant block (the C# mirror is `StudyPushConstants`; both must move
-together field-for-field), `#define`s that alias the `iXxx` names onto it,
-and a fixed `main()` that calls `mainImage` once per pixel with Shadertoy's
-bottom-left, pixel-centred `fragCoord` (row 0 of the image is the top of the
-pane, so the prelude flips Y). Under `#define PUCK_STUDY 1` a study can also
-read `iCameraPos`/`iCameraTarget`/`iCameraUp`/`iCameraFov` — Puck's own
-paired camera, absent from stock Shadertoy; `iCameraFov` is 0 (vectors zero)
-when the host pairs no camera, the signal a study branches on to keep its
-own `iMouse` orbit. No `iChannelN` texture input in v1;
-`StudyShaderCompiler.Compile` refuses one by name, quoting the source line,
-before any tool runs.
+A shader is source code for a GPU stage. A pass dispatches compute work or
+renders a fullscreen triangle. A pipeline connects those passes through named
+images and buffers. Each running instance owns its clock, parameters and
+feedback history. A one-off shader is a pipeline with one pass.
 
-```csharp
-using Puck.Shaders.Study;
+`puck.shader.pipeline.v1` documents declare resources, passes and named outputs.
+A pass input names a resource; `previousFrame: true` explicitly reads history.
+Current-frame connections must be acyclic. History resources declare their
+initial contents, so the first frame never samples uninitialized memory.
+Named outputs can expose intermediate results as well as the final image.
 
-var compiler = new StudyShaderCompiler(cacheDirectory: cacheDirectory, toolchainDirectory: null);
-StudyProgram program = compiler.Compile(name: "moth-study", sourcePath: glslPath, sourceText: File.ReadAllText(glslPath));
+See the [three-pass ink pipeline](../Puck.World/Assets/pipelines/ink.pipeline.json)
+for a complete example: a floating-point feedback simulation feeds a color
+pass, followed by a fullscreen HLSL finish. Each source file lives beside its
+pipeline document. Source paths in the pipeline resolve relative to that
+document; the world's path to the pipeline resolves relative to the world.
 
-if (program.IsError) {
-    foreach (var diagnostic in program.Diagnostics) { Console.Error.WriteLine($"{glslPath}:{diagnostic.Line}: {diagnostic.Message}"); }
-} else {
-    // program.Spirv / program.Dxil are the compute kernel StudyPassNode dispatches.
-}
+The loader compiles the whole candidate before the host installs it. A failed
+pass leaves the last successful pipeline running. Watched editing includes
+the pipeline document, shader files and includes. Pause holds time and history;
+step advances one logical frame; reset initializes history and resets time.
+Resizing invalidates history whose dimensions change.
+
+`ShaderPipelineCompiler` validates the document without creating GPU objects.
+It checks resources, bindings and initialization and produces a stable
+topological execution order. `ShaderPipelineLoader` resolves source and invokes
+`ShaderCompiler` for both backend bytecodes. `ShaderPipelineRenderNode` owns
+execution and GPU resources. World supplies inputs and routes named instances
+to layout slots; it does not compile individual passes itself.
+
+### One-off shaders
+
+The Shadertoy GLSL adapter accepts `mainImage(out vec4, in vec2)`, supplies
+resolution, time, frame, pointer and paired-camera inputs, and maps `iChannel0`
+and subsequent channels to the pass's declared inputs. The paired-camera
+marker is `PUCK_SHADERTOY`; a zero `iCameraFov` means no camera is paired.
+Native HLSL and GLSL use explicit entry points and shader-stage declarations.
+
+Compile a single source stage from the repository root:
+
+```powershell
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders compile src/Puck.World/Assets/pipelines/moth.glsl --out artifacts/shaders/moth
 ```
 
-`Compile` never throws for a mistake in the author's own source — a failed
-compile comes back as a `StudyProgram` with empty bytecode and at least one
-`StudyDiagnostic` with `IsError` true, `Line` already mapped past the
-prelude back onto the author's file. It throws `StudyToolMissingException`
-only when a tool itself cannot be found. Tool discovery takes an explicit
-directory (constructor argument, or `puck shaders study --toolchain`); with
-none, each tool is looked up by bare name through the OS's own executable
-search — never an environment variable, not even `VULKAN_SDK`. A successful
-compile is cached under `cacheDirectory`, keyed by a hash of the prelude
-plus the author's source, so a repeat `Compile` of byte-identical text skips
-every tool. `puck shaders study <glsl> --out <dir> [--name] [--toolchain]`
-runs the same compiler from the command line, writing `<name>.comp.spv` and
-`<name>.comp.dxil` and printing every diagnostic as `<file>:<line>:
-<message>`; exit 1 on an error diagnostic. `StudyPassNode` is the render-side
-consumer — one compute dispatch per frame over its own storage image through
-`IGpuComputeServices`, holding a placeholder kernel up during the first
-compile so a study slot is never a black pane.
+`--language hlsl|glsl|shadertoy`, `--stage compute|vertex|fragment` and `--entry`
+make the source contract explicit. `--toolchain` selects a directory containing
+DXC and, for GLSL, glslang and SPIRV-Cross. Without it, the compiler resolves
+tools from the process search path. Diagnostics identify the author's file and
+line. Compilation results and dependencies are immutable; shader compilation
+does not mutate a running instance.
 
-## 🧪 Verification
+For live editing, run the [World pipeline example](../Puck.World/README.md#shader-pipelines).
 
-`dotnet test tests/Puck.Shaders.Tests -c Release`: the packing law against
-the compiled fixture, manifest loading and refusals, config binding and
-schema emission, catalog lookup, `FullscreenPassNode.TrySetConfig`, the same
-for `ProbeKindManifest`/`ProbeKindCatalog`, and `StudyShaderCompiler` —
-compiling the shipped Moth study end to end, an undeclared-symbol error
-mapped back to its source line, the `iChannel` refusal, and a cache hit
-invoking no tool. The toolchain-dependent cases skip (naming the tool and
-directory searched) rather than fail when `glslang`/`spirv-cross`/`dxc`
-aren't on the search path. `puck parity` holds the film-grain pass to
-cross-backend agreement on the real windowed game.
+## Verification
 
+Run `dotnet test tests/Puck.Shaders.Tests -c Release` for manifest, compiler,
+packing and pipeline-planning checks. Run the feedback example on both Vulkan
+and Direct3D 12 to verify execution, output selection, reload and temporal
+controls. CPU tests alone do not establish GPU correctness. `puck parity`
+checks its authored rendering cases; it is not blanket coverage of arbitrary
+pipeline documents.
 ## 📦 Packaging
 
 `ByteTerrace.Puck.Shaders` depends on `Puck.Abstractions`, `Puck.Assets`, and

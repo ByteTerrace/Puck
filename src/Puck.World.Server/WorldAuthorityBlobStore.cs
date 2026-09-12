@@ -75,7 +75,9 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
     );
 
     /// <inheritdoc/>
-    public async Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken) {
+    public async Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null) {
+        return await AppendRootAsync(identity, entry, fence, receipt, cancellationToken).ConfigureAwait(false);
+#pragma warning disable CS0162
         var pointerAddress = LatestPointerAddress(
             containerId: identity.Owner,
             world: identity.World
@@ -180,6 +182,8 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
     }
     /// <inheritdoc/>
     public async Task<WorldDefinition?> LoadDefinitionAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
+        var rooted = await WorldAuthorityRootReader.ReadDefinitionAsync(identity.Owner, identity.World, m_store, m_target, cancellationToken).ConfigureAwait(false);
+        if (rooted is null) { return null; }
         var origin = new WorldHostedOrigin(
             owner: identity.Owner,
             store: m_store,
@@ -211,6 +215,8 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
     }
     /// <inheritdoc/>
     public async Task<WorldMutationJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) {
+        var rooted = await LoadRecoveryAsync(identity, cancellationToken).ConfigureAwait(false);
+        if (rooted is { } recovery) { return recovery.Journal with { CheckpointOrdinal = afterOrdinal }; }
         var address = JournalAddress(
             containerId: identity.Owner,
             ordinal: afterOrdinal,
@@ -248,6 +254,8 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
     }
     /// <inheritdoc/>
     public async Task<WorldAuthorityCheckpointBlob?> LoadLatestAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
+        var rooted = await LoadRecoveryAsync(identity, cancellationToken).ConfigureAwait(false);
+        if (rooted is { } recovery) { return recovery.Checkpoint; }
         var pointerAddress = LatestPointerAddress(
             containerId: identity.Owner,
             world: identity.World
@@ -313,7 +321,9 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
         );
     }
     /// <inheritdoc/>
-    public async Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken) {
+    public async Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken, WorldAuthorityFence? fence = null) {
+        return await PublishDefinitionRootAsync(identity, composed, fence, cancellationToken).ConfigureAwait(false);
+#pragma warning restore CS0162
         ArgumentNullException.ThrowIfNull(argument: composed);
 
         var address = WorldOwnedWorldSync.HostedAddressFor(
@@ -344,7 +354,9 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
         }
     }
     /// <inheritdoc/>
-    public async Task<WorldAuthorityStoreOutcome> WriteCheckpointAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, CancellationToken cancellationToken) {
+    public async Task<WorldAuthorityStoreOutcome> WriteCheckpointAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null) {
+        return await WriteCheckpointRootAsync(identity, encoded, tick, fence, receipt, cancellationToken).ConfigureAwait(false);
+#pragma warning disable CS0162
         var hash = WorldDefinitionFileSource.ComputeContentHash(content: encoded.Span);
         var pointerAddress = LatestPointerAddress(
             containerId: identity.Owner,

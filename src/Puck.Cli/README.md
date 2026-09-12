@@ -29,7 +29,7 @@ one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck firmware`](#puck-firmware--bundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
-| [`puck shaders`](#puck-shaders--shader-studies) | `shaders study`: compiles one Shadertoy-dialect study source to both backend compute kernels through `glslang`, `spirv-cross`, and `dxc`. |
+| [`puck shaders`](#puck-shaders--shader-compilation) | `shaders compile` compiles a source stage; `shaders pipeline` validates or compiles connected passes for both GPU backends. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck lengths`](#puck-lengths--file-length-ledger) | checks or regenerates `FileLengths.json`, the ledger the file-length build error (LEN001–LEN004) reads; the ledger only shrinks. |
@@ -202,25 +202,24 @@ generated atlases preserve source glyph IDs for it.
 
 ---
 
-## `puck shaders` — shader studies
+## `puck shaders` — shader compilation
 
 ```sh
-puck shaders study <glsl> --out <directory> [--name <name>] [--toolchain <directory>]
+puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--language hlsl|glsl|shadertoy] [--stage compute|vertex|fragment] [--entry <name>]
+puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <directory>]
 ```
 
-Wraps the source in `StudyPrelude` (`Puck.Shaders.Study`) and runs
-`glslang`/`glslangValidator` (GLSL to SPIR-V), `spirv-cross` (SPIR-V to
-HLSL), then `dxc -T cs_6_6` (HLSL to DXIL), writing `<name>.comp.spv` and
-`<name>.comp.dxil` (`--name` defaults to the source file's stem). Every
-diagnostic prints as `<file>:<line>: <message>` with `<line>` already mapped
-back onto the author's file; exit 1 on an error diagnostic, and on a missing
-tool naming the tool and the directory searched. `--toolchain` is the only
-way to point at a tool directory — with it absent each tool is resolved by
-bare name on the search path; no environment variable is read. The same
-compiler runs inside `Puck.World` for a `views.studies` row (see that
-project's README); successful compiles are cached beside the output under
-`.puck-study-cache`, keyed by prelude plus source.
+`compile` writes SPIR-V and DXIL for one source stage. A `.glsl` file defaults
+to the Shadertoy adapter; HLSL uses an explicit stage entry point. `pipeline`
+loads a pipeline document or synthesizes a one-pass pipeline from a shader,
+validates its resource graph, and compiles every planned pass. `--inspect`
+prints the execution order, dependencies and named outputs without compiling
+shaders or creating a GPU device. Compilation errors return exit code 1 and
+identify the source location.
 
+These commands use the same compiler and loader as live World pipelines.
+The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
+owns the source-language, resource and toolchain contracts.
 ## `puck canary` — real-World behavioral proofs
 
 `puck canary` is deliberately narrow: it runs deterministic stdin-driven

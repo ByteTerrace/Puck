@@ -5,6 +5,10 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    // Ownership rows still address real local actors directly; group membership rows use the typed
+    // WorldMemberRef union and are validated by WorldGroupMembershipValidation below.
+    private static bool IsLegitimateGroupMember(WorldPrincipal member) => (member.Kind is
+        PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer);
     // Document-authored grant rows (WorldDefinition.Grants). Console and Seat principals are already canonical per
     // WorldGrantCommandModule.TryParsePrincipal's grammar. An Addon principal's name is resolved against addonNames;
     // a Peer's index is checked against the reserved peer slice (defense in depth against a programmatically
@@ -13,10 +17,6 @@ public static partial class WorldDefinitionValidator {
     // unlike the ordinary idempotent re-grant a live world.grant tolerates. Whether a legitimate, non-conflicting row
     // is actually held — including Budget legitimacy — is WorldGrants.TryGrant's decision alone, made once at boot;
     // this pass does not re-derive it.
-    // A group member must be a real actor: Seat/Console/Addon/Peer. Group is refused (members are flat, never
-    // nested); World/Document are refused (neither is a real actor).
-    private static bool IsLegitimateGroupMember(WorldPrincipal member) => (member.Kind is
-        PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer);
     // Whether two kinds are identical in every BEHAVIOR-BEARING field — the guard against a "size-only kind": a pair
     // differing ONLY in Capacity is a capacity VALUE, not a kind, and is refused by name below. Roles compares as an
     // ORDERED sequence of (name, capability-set) pairs — two kinds that merely declare their roles in a different
@@ -24,14 +24,8 @@ public static partial class WorldDefinitionValidator {
     private static bool SameBehavior(WorldGroupKind a, WorldGroupKind b) {
         if (
             (a.Roles.Count != b.Roles.Count) ||
-            (a.OwnershipPolicy != b.OwnershipPolicy) ||
             (a.Lifetime != b.Lifetime) ||
-            (a.EvictionPolicy != b.EvictionPolicy) ||
-            !string.Equals(
-            a: a.SharedStateScope,
-            b: b.SharedStateScope,
-            comparisonType: StringComparison.Ordinal
-        )
+            (a.EvictionPolicy != b.EvictionPolicy)
         ) {
             return false;
         }
@@ -457,7 +451,7 @@ public static partial class WorldDefinitionValidator {
     // Returns the declared group-id set so ValidateGrants can check a document-authored group: principal row against
     // it (the SAME forward-threading addonNames already rides). A null section (the document declared no `groups`
     // section at all — OPTIONAL, like `rules`) validates as empty.
-    private static HashSet<string> ValidateGroups(WorldGroupsSection? groups, Dictionary<string, WorldStateRow> stateRows, List<string> errors) {
+    private static HashSet<string> ValidateGroups(WorldGroupsSection? groups, List<string> errors) {
         var groupIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (groups is null) {
@@ -521,12 +515,6 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            if (
-                (kind.SharedStateScope is { } scope) &&
-                !stateRows.ContainsKey(key: scope)
-            ) {
-                errors.Add(item: $"{path}.sharedStateScope '{scope}' names no declared state row.");
-            }
         }
 
         // The size-only-kind guard: every PAIR of declared kinds must differ in at least one behavior-bearing field.
@@ -571,8 +559,7 @@ public static partial class WorldDefinitionValidator {
 
             // A row's own tags — what a scope=group `tagged` destination selector matches against (see
             // ValidateGroupSelector/WorldGroup.Tags). Absent means none; present-but-empty is refused rather than
-            // silently treated as absent, the same "author it or omit it" discipline the section's other optional
-            // lists (kind.SharedStateScope, this section's own Ownership) follow.
+            // silently treated as absent.
             if (row.Tags is { Count: 0 }) {
                 errors.Add(item: $"{path}.tags is present but empty — omit the member instead of authoring an empty list.");
             } else if (row.Tags is { Count: > 0 } tags) {
@@ -601,22 +588,28 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (row.Members.Count > kind.Capacity) {
-                errors.Add(item: $"{path} has {row.Members.Count} member(s), exceeding kind '{kind.Name}''s capacity of {kind.Capacity}.");
+            if (row.Members is null) {
+                errors.Add(item: $"{path}.members is required.");
+
+                continue;
             }
 
-            var seenMembers = new HashSet<WorldPrincipal>();
+            if (!WorldGroupMembershipValidation.TryValidateRoster(
+                members: row.Members,
+                capacity: kind.Capacity,
+                nextJoinOrdinal: row.NextJoinOrdinal,
+                reason: out var rosterReason
+            )) {
+                errors.Add(item: $"{path} membership is invalid: {rosterReason}.");
+            }
 
             for (var memberIndex = 0; (memberIndex < row.Members.Count); memberIndex++) {
                 var member = row.Members[memberIndex];
                 var memberPath = $"{path}.members[{memberIndex}]";
 
-                if (!IsLegitimateGroupMember(member: member)) {
-                    errors.Add(item: ((member.Kind == PrincipalKind.Group)
-                        ? $"{memberPath} is '{member.Describe()}' — FLAT ONLY: a group member is a principal, never a group."
-                        : $"{memberPath} is '{member.Describe()}' — {member.Kind} is not a real actor and cannot hold membership."));
-                } else if (!seenMembers.Add(item: member)) {
-                    errors.Add(item: $"{memberPath} '{member.Describe()}' is duplicated within the group.");
+                if ((member is not null) && (member.Role is not null) && !kind.Roles.Any(role =>
+                    string.Equals(a: role.Name, b: member.Role, comparisonType: StringComparison.Ordinal))) {
+                    errors.Add(item: $"{memberPath}.role '{member.Role}' names no role declared by kind '{kind.Name}'.");
                 }
             }
         }

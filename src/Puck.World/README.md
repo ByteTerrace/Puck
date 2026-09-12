@@ -28,7 +28,7 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 ## Run it
 
 For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/avatars/moth.md).
-It pairs a rebuilt SDF avatar with the Moth Study, with inspection cameras,
+It pairs a rebuilt SDF avatar with the Moth Pipeline, with inspection cameras,
 walking and flight poses, and live document reload.
 
 The [Moth courtyard](Assets/worlds/moth-courtyard.md) imports that model into an
@@ -223,47 +223,52 @@ state, matched group, and precedence winner. A missing row contributes no match,
 which keeps portable profile layers usable across worlds. When the winning group
 changes, held commands and chord/page latches from the old group are cleared.
 
-## Shader studies
+## Shader pipelines
 
-A `views.studies` row (`WorldViewStudy`: `name`, `source`, `camera`, `timeScale`)
-authors a Shadertoy-dialect shader — `void mainImage(out vec4
-fragColor, in vec2 fragCoord)`, `source` resolved relative to the document's
-own directory — as a compiled child view a `views.layouts` slot's `study`
-field names instead of a `camera`. A slot names at most one of the two.
-Under `#define PUCK_STUDY 1` the study additionally reads the paired authored
-camera's `iCameraPos`/`iCameraTarget`/`iCameraUp`/`iCameraFov`, so `camera`
-lets a study render from the same eye as an SDF pane beside it (`camera:
-null` hands the study `iCameraFov` 0 so it keeps its own `iMouse` orbit, fed
-by the window's pointer in the slot's pixel space). `views.studyToolchain`
-names the directory holding `glslang`/`spirv-cross`/`dxc`; null resolves each
-by bare name on the search path. The `study.load`/`study.reload`/
-`study.watch`/`study.time`/`study.status` console verbs (`WorldStudyCommandModule`)
-own the row and its live clock/watch state; `study.world.json` is a
-fullscreen-study demo world and `moth.world.json`'s `study` layout is a
-split-screen pairing beside its `three-quarter` camera.
+A `views.pipelines` row names a pipeline instance and its source document or
+one-off shader. The source resolves relative to the world document. A layout
+slot selects the instance with `pipeline`; it can instead select a `camera`,
+but cannot select both. The row's optional camera supplies shader camera
+inputs, and `timeScale` seeds its presentation clock. `views.shaderToolchain`
+optionally selects the compiler-tools directory.
 
-Edit the Moth study in [Assets/studies/moth.glsl](Assets/studies/moth.glsl).
-It contains the character sculpt, materials and one shared rig for rest, jump,
-hover, flight, braking and landing. Its header selects `POSE` (0–7),
-`ANIMATE_POSE` (the 12-second flight cycle), `CLOSE_UP`, `PACK_VIEW` and `AA`
-(1 for iteration, 2 for four samples per pixel). The two curved pack shells
-open at most six degrees; thrust follows the pose and the boot lights stay idle.
-
-From the repository root, start the full-window study with:
+Start the three-pass feedback example from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/study.world.json --state-dir artifacts/moth-study/state
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.world.json --state-dir artifacts/pipeline/state
 ```
 
-In Puck's console, `study.watch moth-study on` reloads saved shader edits.
-With `ANIMATE_POSE` set to 1, `study.time moth-study pause` and
-`study.time moth-study set 4` hold the hover pose; `study.time moth-study resume`
-continues the cycle. `study.status` reports compilation and watch state.
-The paired camera takes precedence over the shader's orbit and framing switches.
+The ink simulation feeds a color pass and a fullscreen finish. Drag the pointer
+to draw. From the console:
 
-The [concept pack](../../docs/art/moth-concept-pack-2026-09-09/README.md)
-remains the visual target; the study is a procedural approximation.
+```text
+pipeline.status
+pipeline.watch ink on
+pipeline.time ink pause
+pipeline.step ink
+pipeline.output ink simulation
+pipeline.output ink image
+pipeline.reset ink
+pipeline.time ink resume
+```
 
+Edit [the simulation shader](Assets/pipelines/ink-simulation.glsl) while it runs.
+Compilation happens in the background. A typo reports a source diagnostic and
+keeps the complete last successful pipeline running. Saving a correction
+installs a new candidate at a frame boundary. `pipeline.reload ink` requests
+compilation explicitly. A step advances time by 1/60 second and leaves the
+instance paused; reset clears feedback and time.
+
+`pipeline.load <name> <source> [camera]` authors a row through normal world
+validation. The rendered host creates it only after the mutation is accepted.
+Loading a row does not change the active layout: select its name in a layout
+slot. The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
+owns the pipeline document and source-language contracts.
+
+[The Moth shader](Assets/pipelines/moth.glsl) remains a one-pass procedural
+character example; its header controls poses and framing. Its
+[concept pack](../../docs/art/moth-concept-pack-2026-09-09/README.md) is the visual
+reference.
 ## The console
 
 The console is the control plane: process stdin in, results on stdout,

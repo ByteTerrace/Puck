@@ -4,9 +4,8 @@ namespace Puck.World.Protocol;
 /// The closed completion-result union every <see cref="SubmissionEnvelope"/> resolves to — no <c>IServerLink</c>
 /// submission returns a value directly any more; a local submitter gets this inline, on the tick thread, before its
 /// <c>Submit*</c> call returns (a remote submitter will get it as a Completion frame once the wire lands). Most
-/// payload kinds complete with the value-free <see cref="Ack"/>; <see cref="Protocol.WorldSubmissionPayload.Session"/>
-/// and <see cref="Protocol.WorldSubmissionPayload.Query"/> are the two kinds that carry data back, and each gets its
-/// own typed case rather than a shared "object result" box.
+/// payload kinds complete with the value-free <see cref="Ack"/>; mutation, session, and query submissions carry typed
+/// data back, and each gets its own case rather than a shared "object result" box.
 /// </summary>
 public abstract record WorldSubmissionResult {
     private WorldSubmissionResult() {
@@ -25,4 +24,8 @@ public abstract record WorldSubmissionResult {
     /// <summary>The server's composed answer to a <see cref="Protocol.WorldSubmissionPayload.Query"/> submission.</summary>
     /// <param name="Answer">The query answer.</param>
     public sealed record Query(QueryAnswer Answer) : WorldSubmissionResult;
+
+    /// <summary>The typed applied/refused completion for a <see cref="Protocol.WorldSubmissionPayload.Mutation"/>.</summary>
+    /// <param name="Outcome">The actor-bound decision and independent persistence status.</param>
+    public sealed record Mutation(WorldMutationOutcome Outcome) : WorldSubmissionResult;
 }

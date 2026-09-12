@@ -85,9 +85,9 @@ public sealed class AgbAffineBackground {
         // r6 = sine, r7 = cosine, both signed 8.8 and already carrying the zoom.
         angle(LowRegister.R0);
         scale(LowRegister.R5);
-        EmitTurnLookup(destination: LowRegister.R6, quarterTurns: 0);
+        AgbTurnLookup.Emit(emitter: m_emitter, tableAddress: m_tableAddress, destination: LowRegister.R6, quarterTurns: 0);
         angle(LowRegister.R0);
-        EmitTurnLookup(destination: LowRegister.R7, quarterTurns: 64);
+        AgbTurnLookup.Emit(emitter: m_emitter, tableAddress: m_tableAddress, destination: LowRegister.R7, quarterTurns: 64);
         EmitScale(register: LowRegister.R6);
         EmitScale(register: LowRegister.R7);
 
@@ -110,21 +110,6 @@ public sealed class AgbAffineBackground {
         m_emitter.LoadConstant(destination: LowRegister.R0, value: control);
         m_emitter.LoadConstant(destination: LowRegister.R2, value: ControlAddress);
         m_emitter.StoreHalf(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
-    }
-
-    // Reads the turn table a quarter turn along to get cosine from the same sine values.
-    private void EmitTurnLookup(LowRegister destination, int quarterTurns) {
-        if (quarterTurns != 0) {
-            m_emitter.AddImmediate(register: LowRegister.R0, value: (byte)quarterTurns);
-        }
-
-        m_emitter.MoveImmediate(destination: LowRegister.R1, value: 255);
-        m_emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R0, source: LowRegister.R1);
-        m_emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R0, source: LowRegister.R0, amount: 1);
-        m_emitter.LoadConstant(destination: LowRegister.R1, value: m_tableAddress);
-        m_emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1);
-        m_emitter.MoveImmediate(destination: LowRegister.R2, value: 0);
-        m_emitter.LoadSignedHalfRegister(destination: destination, baseRegister: LowRegister.R0, offsetRegister: LowRegister.R2);
     }
 
     private void EmitScale(LowRegister register) {

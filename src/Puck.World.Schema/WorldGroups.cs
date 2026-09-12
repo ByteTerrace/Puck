@@ -8,20 +8,6 @@ namespace Puck.World;
 /// distribution policy slot every <see cref="WorldGroupKind"/> declares. Consulted by a later lane once an ownable
 /// subject exists (<see cref="WorldOwnership"/> is the type that lane consumes); this head establishes the vocabulary
 /// and validates it, and does not yet distribute anything.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldGroupOwnershipPolicy>))]
-public enum WorldGroupOwnershipPolicy : byte {
-    /// <summary>No collective acquisition — a group of this kind never becomes an owner.</summary>
-    None,
-
-    /// <summary>A designated leader role decides distribution.</summary>
-    LeaderDecides,
-
-    /// <summary>Distribution rotates across the current membership in join order.</summary>
-    RoundRobin,
-
-    /// <summary>Any member may claim, first come first served.</summary>
-    FreeForAll,
-}
 /// <summary>Whether a runtime group of a kind survives losing its last member — the lifetime/persistence policy slot
 /// every <see cref="WorldGroupKind"/> declares. Never consulted for the authored roster: an authored row is re-seeded
 /// from the document on every boot/<c>world.reset</c> regardless of this field, so it can never dissolve out from
@@ -70,28 +56,21 @@ public sealed record WorldGroupRole(
 /// cell-existence refusal).</param>
 /// <param name="Roles">The role→capability map (see <see cref="WorldGroupRole"/>). May be empty — a kind with no
 /// roles reaches no capability at all through its group principal, so any grant naming it is refused as unreachable.</param>
-/// <param name="OwnershipPolicy">The loot/ownership-distribution policy slot (see <see cref="WorldGroupOwnershipPolicy"/>).</param>
 /// <param name="Lifetime">The lifetime/persistence policy (see <see cref="WorldGroupLifetime"/>) — runtime groups only.</param>
 /// <param name="EvictionPolicy">What a kick does to the kicked member's row — and, under
 /// <see cref="WorldGroupEvictionPolicy.Disband"/>, to the whole group (see <see cref="WorldGroupEvictionPolicy"/>).</param>
 /// <param name="Capacity">The maximum concurrent members a group of this kind admits — one minor authored field
 /// within <see cref="WorldGroupCapacity.MaxMembersPerGroup"/>, the population ceiling this substrate is bounded
 /// against.</param>
-/// <param name="SharedStateScope">The name of a declared <c>state</c> row this kind's groups share, or
-/// <see langword="null"/> for none. Validated to reference an existing row (refused by name otherwise, the same
-/// cell-existence discipline the world-rules operand walk enforces) — the deeper "every member reads/writes this row
-/// together" semantic belongs to a later lane; this head only pins the reference honest.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGroupKind(
     string Name,
     IReadOnlyList<WorldGroupRole> Roles,
-    WorldGroupOwnershipPolicy OwnershipPolicy,
     WorldGroupLifetime Lifetime,
     WorldGroupEvictionPolicy EvictionPolicy,
-    int Capacity,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SharedStateScope = null
+    int Capacity
 );
-/// <summary>One group row — a roster of principals under a kind. One shape whether the row was boot-authored (present
+/// <summary>One group row — a roster of typed members under a kind. One shape whether the row was boot-authored (present
 /// in the server's own base document — re-seeded on every <c>world.reset</c>/<c>.load</c>/<c>.reload</c>) or formed
 /// live by <c>WorldMutation.FormGroup</c> (never written back to the base, so a whole-document rebuild simply
 /// does not carry it forward — the party-vs-roster split falls out of the ordinary document-swap machinery, not a
@@ -104,22 +83,25 @@ public sealed record WorldGroupKind(
 /// collapse two distinct ids onto one name).</param>
 /// <param name="KindName">The owning kind's name — validated to reference a declared <see cref="WorldGroupKind"/>
 /// (unknown-by-name).</param>
-/// <param name="Members">The current membership — flat only: every entry is a principal, never a group (a
-/// <see cref="PrincipalKind.Group"/> entry is refused by name — a member holding another group's memberships by
-/// proxy is exactly what flat membership forbids), and never <see cref="PrincipalKind.World"/>/
-/// <see cref="PrincipalKind.Document"/> (neither is a real actor a hold could ever reach). Bounded by the kind's own
+/// <param name="Members">The current flat membership rows. Each row is a local actor or verified external identity,
+/// with role, stable join ordinal, and optional tags. Group refs are refused; the roster is bounded by the kind's own
 /// <see cref="WorldGroupKind.Capacity"/>.</param>
 /// <param name="Tags">The row's own tags — what a <see cref="WorldGroupSelector.Tagged"/> destination selector
 /// matches against: a traveler resolving a tagged destination is expected to
 /// hold exactly one membership among rows carrying the selector's tag, never zero or several. Validated non-empty
 /// and distinct when present; <see langword="null"/>/absent means this row carries none, which is not the same as an
 /// authored empty list (refused — omit the member instead).</param>
+/// <param name="Revision">The monotonic revision, incremented by each accepted membership mutation.</param>
+/// <param name="NextJoinOrdinal">The next never-reused join ordinal; it remains advanced after a member leaves and
+/// is not derived from <see cref="Revision"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGroup(
     SafeName Id,
     string KindName,
-    IReadOnlyList<WorldPrincipal> Members,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Tags = null
+    IReadOnlyList<WorldGroupMember> Members,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Tags = null,
+    long Revision = 0,
+    int NextJoinOrdinal = 0
 );
 /// <summary>Which flavor of subject an <see cref="OwnershipSubject"/> addresses. Only <see cref="Group"/> is admitted
 /// today — item/instance subjects are consumed by later lanes, which add their own case here rather than reusing or
@@ -136,8 +118,7 @@ public enum OwnershipOwnerKind : byte {
     /// <summary>A single principal owns the subject.</summary>
     Principal,
 
-    /// <summary>A group owns the subject collectively (its <see cref="WorldGroupKind.OwnershipPolicy"/> is how a
-    /// later lane would distribute an acquisition among members — never consulted by this head).</summary>
+    /// <summary>A group owns the subject collectively; acquisition distribution is a later policy lane.</summary>
     Group,
 
     /// <summary>The subject is held in escrow — the durable intermediate owner a trade parks a subject in between an

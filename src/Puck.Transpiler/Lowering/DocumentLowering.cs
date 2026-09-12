@@ -406,8 +406,10 @@ public static class DocumentLowering {
         ArgumentNullException.ThrowIfNull(key);
 
         if ((target[key] is JsonArray existing) && (value is JsonArray addition)) {
-            foreach (var item in addition.ToList()) {
-                addition.Remove(item);
+            var items = addition.ToList();
+            addition.Clear();
+
+            foreach (var item in items) {
                 existing.AppendNode(item: item);
             }
 

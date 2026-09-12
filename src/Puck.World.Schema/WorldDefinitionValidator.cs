@@ -1512,7 +1512,6 @@ public static partial class WorldDefinitionValidator {
         // stateRows (already built above) is a dependency, so the move changes no other ordering.
         var groupIds = ValidateGroups(
             groups: definition.Groups,
-            stateRows: stateRows,
             errors: errors
         );
 

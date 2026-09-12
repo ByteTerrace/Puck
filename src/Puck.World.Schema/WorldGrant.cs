@@ -113,9 +113,9 @@ public enum WorldSection : byte {
     Host,
 
     /// <summary>The window-composition defaults — the seat rig, the authored named layouts, and the authored shader
-    /// studies (the <c>WorldMutation.SetViewDefaults</c> / <c>WorldMutation.UpsertViewLayout</c> /
-    /// <c>WorldMutation.RemoveViewLayout</c> / <c>WorldMutation.UpsertViewStudy</c> /
-    /// <c>WorldMutation.RemoveViewStudy</c> mutations).</summary>
+    /// pipelines (the <c>WorldMutation.SetViewDefaults</c> / <c>WorldMutation.UpsertViewLayout</c> /
+    /// <c>WorldMutation.RemoveViewLayout</c> / <c>WorldMutation.UpsertViewPipeline</c> /
+    /// <c>WorldMutation.RemoveViewPipeline</c> mutations).</summary>
     Views,
 
     /// <summary>The look rows and the look→entity assignment policy — the appearance peer of <see cref="Kits"/>,

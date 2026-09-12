@@ -27,20 +27,19 @@ public sealed class WorldSessionResolverLawTests {
         var kind = new WorldGroupKind(
             Name: "party",
             Roles: [],
-            OwnershipPolicy: WorldGroupOwnershipPolicy.None,
             Lifetime: WorldGroupLifetime.Persistent,
             EvictionPolicy: WorldGroupEvictionPolicy.Remove,
             Capacity: 8
         );
         var groups = new WorldGroup[] {
             // "alpha" — the `named` law's member (Seat 1) and non-member (Seat 2) control.
-            new(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+            new(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)), null, 0)]),
             // "gamma" — the `tagged` law's UNIQUE match: Seat 3 holds exactly one membership tagged "raiders".
-            new(Id: SafeName.Parse(candidate: "gamma"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 3)], Tags: ["raiders"]),
+            new(Id: SafeName.Parse(candidate: "gamma"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 3)), null, 0)], Tags: ["raiders"]),
             // "delta"/"epsilon" — the `tagged` law's AMBIGUOUS case: Seat 4 holds two memberships both tagged
             // "explorers", so neither should be picked silently.
-            new(Id: SafeName.Parse(candidate: "delta"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
-            new(Id: SafeName.Parse(candidate: "epsilon"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
+            new(Id: SafeName.Parse(candidate: "delta"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 4)), null, 0)], Tags: ["explorers"]),
+            new(Id: SafeName.Parse(candidate: "epsilon"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 4)), null, 0)], Tags: ["explorers"]),
         };
 
         return Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
@@ -166,10 +165,10 @@ public sealed class WorldSessionResolverLawTests {
         var resolver = new WorldSessionResolver();
         // Two independent groups sharing one tag, each with its own single member, so a cohort naming both members
         // resolves to two DIFFERENT group ids under the same tag — the cross-member disagreement this law targets.
-        var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
+        var kind = new WorldGroupKind(Name: "party", Roles: [], Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
         var groups = new WorldGroup[] {
-            new(Id: SafeName.Parse(candidate: "north"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)], Tags: ["shared"]),
-            new(Id: SafeName.Parse(candidate: "south"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)], Tags: ["shared"]),
+            new(Id: SafeName.Parse(candidate: "north"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)), null, 0)], Tags: ["shared"]),
+            new(Id: SafeName.Parse(candidate: "south"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 2)), null, 0)], Tags: ["shared"]),
         };
         var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         var destination = TaggedGroupDestination(name: "lodge-cohort", tag: "shared");
@@ -196,10 +195,10 @@ public sealed class WorldSessionResolverLawTests {
     [Fact]
     public void MintInstanceName_NamesThatWouldHaveCollidedUnderTheOldSanitizer_ResolveToDistinctInstancesWithIndependentCaches() {
         var resolver = new WorldSessionResolver();
-        var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
+        var kind = new WorldGroupKind(Name: "party", Roles: [], Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
         var groups = new WorldGroup[] {
-            new(Id: SafeName.Parse(candidate: "b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
-            new(Id: SafeName.Parse(candidate: "a~group_b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)]),
+            new(Id: SafeName.Parse(candidate: "b"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)), null, 0)]),
+            new(Id: SafeName.Parse(candidate: "a~group_b"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 2)), null, 0)]),
         };
         var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         // PERSISTED — no generation-ordinal suffix, so nothing but the composition itself could keep these apart

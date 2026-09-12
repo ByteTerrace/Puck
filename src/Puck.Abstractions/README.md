@@ -72,6 +72,12 @@ graph TD
 
 ## 🧩 Depending on a contract
 
+Machine content admission is also a host-selected contract:
+`IMachineContentAdmissionPolicy` evaluates pinned bytes and provider-verified
+source formats. `MachineContentAdmissionPolicy` supplies open, format-based,
+and exact executable-hash modes. See the [GamingBrick preset and host
+obligations](../Puck.GamingBricks/README.md#host-selected-content-admission).
+
 Consumers take the interface and stay ignorant of the implementation. A render
 node that needs to present a frame asks for an `ISurfacePresenter`; whichever
 backend the host composed in satisfies it.

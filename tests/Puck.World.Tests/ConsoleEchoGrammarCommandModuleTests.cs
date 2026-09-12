@@ -147,14 +147,13 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
                 new WorldGroupKind(
                     Name: "party",
                     Roles: [new WorldGroupRole(Capabilities: [WorldCapability.Drive], Name: "leader")],
-                    OwnershipPolicy: WorldGroupOwnershipPolicy.LeaderDecides,
                     Lifetime: WorldGroupLifetime.Ephemeral,
                     EvictionPolicy: WorldGroupEvictionPolicy.Remove,
                     Capacity: 4
                 ),
             ],
             Groups: [
-                new WorldGroup(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 0)]),
+                new WorldGroup(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)), null, 0)]),
             ],
             Ownership: [
                 new WorldOwnership(

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>Backend-neutral shader sets as data: a puck.shader.v1 manifest beside compiled HLSL declares a set's stages, bindings, config schema, and push-constant block; the loader validates the manifest and its SPIR-V/DXIL bytecode, binds a document's config against the schema, and FullscreenPassNode runs the set as one fullscreen pass over an inner render node with no per-effect code. Ships the shared HLSL-to-SPIR-V/DXIL build recipe for package consumers; compiles nothing at runtime.</Description>
+        <Description>Backend-neutral shader definitions, connected multi-pass pipelines, and live shader compilation. Documents declare resources, dependencies, history, configuration, and named outputs; the shared compiler targets SPIR-V and DXIL, and the executor uses the registered GPU backend. Includes the build-time HLSL shader packaging recipe.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Shaders</PackageId>
         <PackageTags>bytecode;dxil;manifest;post-process;shaders;spir-v;validation</PackageTags>

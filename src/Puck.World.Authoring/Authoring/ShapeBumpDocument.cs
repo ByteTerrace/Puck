@@ -5,7 +5,7 @@ namespace Puck.World.Authoring;
 
 /// <summary>The authored form of one <see cref="SdfProgramBuilder.GaussianPush"/> bump: a gaussian displacement of
 /// the shape's local point applied before the primitive evaluates — <c>p -= Push · exp(-|(p - Center) / Radii|²)</c>
-/// (see <see cref="ShapeDocument.Bumps"/>). The study's <c>faceOffset</c> cheek/muzzle bumps (pushed along local +Z)
+/// (see <see cref="ShapeDocument.Bumps"/>). The pipeline's <c>faceOffset</c> cheek/muzzle bumps (pushed along local +Z)
 /// are two of these. Render-only, like <see cref="ShapeDocument.Twist"/>/<see cref="ShapeDocument.Bend"/>:
 /// <c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c> does not interpret <see cref="SdfOp.GaussianPush"/>, so a
 /// shape carrying one is unreachable for deterministic field contact.</summary>

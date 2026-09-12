@@ -8,6 +8,8 @@ public static class VulkanGpuFormats {
     public static uint ToVkFormat(GpuPixelFormat gpuPixelFormat) => gpuPixelFormat switch {
         GpuPixelFormat.R8G8B8A8Unorm => VulkanFormat.R8G8B8A8Unorm,
         GpuPixelFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
+        GpuPixelFormat.R16G16B16A16Float => VulkanFormat.R16G16B16A16Sfloat,
+        GpuPixelFormat.R32G32B32A32Float => VulkanFormat.R32G32B32A32Sfloat,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(gpuPixelFormat), actualValue: gpuPixelFormat, message: null),
     };
 }

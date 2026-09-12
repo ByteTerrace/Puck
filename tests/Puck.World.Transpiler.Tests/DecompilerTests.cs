@@ -8,11 +8,11 @@ namespace Puck.World.Transpiler.Tests;
 
 public class DecompilerTests {
     [Fact]
-    public void TestStudyWorldDecompilationAndRoundTrip() {
-        var jsonPath = Path.Combine(AppContext.BaseDirectory, "../../../../../src/Puck.World/Assets/worlds/study.world.json");
+    public void TestPipelineWorldDecompilationAndRoundTrip() {
+        var jsonPath = Path.Combine(AppContext.BaseDirectory, "../../../../../src/Puck.World/Assets/worlds/pipeline.world.json");
         if (!File.Exists(jsonPath)) {
             // Fallback for different working directory
-            jsonPath = "d:/Source/ByteTerrace/Puck/src/Puck.World/Assets/worlds/study.world.json";
+            jsonPath = "d:/Source/ByteTerrace/Puck/src/Puck.World/Assets/worlds/pipeline.world.json";
         }
 
         var originalJson = File.ReadAllText(jsonPath);
@@ -24,10 +24,10 @@ public class DecompilerTests {
         Assert.Contains("schema: \"puck.world.def.v1\"", decompiledPuck);
         Assert.Contains("host {", decompiledPuck);
         Assert.Contains("views {", decompiledPuck);
-        Assert.Contains("layout \"study\" {", decompiledPuck);
+        Assert.Contains("layout \"pipeline\" {", decompiledPuck);
         Assert.Contains("orbit(distance: 0.01, pitch: 0, yaw: 0)", decompiledPuck);
         Assert.Contains("fieldOfView(fieldOfViewRadians: 0.001)", decompiledPuck);
-        Assert.Contains("study \"moth-study\" {", decompiledPuck);
+        Assert.Contains("pipeline \"moth-pipeline\" {", decompiledPuck);
 
         // 2. Parse .puck DSL -> AST
         var ast = PuckParser.ParseDocument(decompiledPuck);

@@ -98,7 +98,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <param name="name">The child name a view binding's <see cref="SdfViewSnapshot.Child"/> may carry.</param>
     public bool HasChild(string name) =>
         m_children.ContainsKey(key: name);
-    /// <summary>Registers <paramref name="node"/> under <paramref name="name"/> AFTER construction — a study a console
+    /// <summary>Registers <paramref name="node"/> under <paramref name="name"/> after construction — a pipeline a console
     /// verb loads mid-session — so a later frame's <see cref="SdfViewSnapshot.Child"/> naming it resolves like a
     /// constructor-supplied child; this node then owns the child's lifetime (<see cref="Dispose"/>,
     /// <see cref="OnDeviceLost"/>) exactly the same way. Pump-thread only: the same thread <see cref="ProduceFrame"/>
@@ -123,6 +123,14 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         )) {
             throw new ArgumentException(message: $"A child named '{name}' is already registered.", paramName: nameof(name));
         }
+    }
+    /// <summary>Removes a named child after retiring submissions that may sample its output. Pump-thread only.</summary>
+    /// <param name="name">The child to remove; an absent name is a no-op.</param>
+    public void RemoveChild(string name) {
+        if (!m_children.TryGetValue(name, out var child)) { return; }
+        m_deviceContext.TryWaitIdle();
+        m_children.Remove(name);
+        child.Dispose();
     }
     /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
     public int ProgramWordCapacity => m_programWordCapacity;
@@ -203,10 +211,12 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         SurfaceId: SurfaceId.New()
     );
     private Surface[] m_childSurfaces = [];
+    private readonly Dictionary<IRenderNode, Surface> m_producedChildren = new(ReferenceEqualityComparer.Instance);
 
     private int m_pendingScreenSourceFrameCount;
 
     private ISteppableRenderNode[] m_steppableChildren = [];
+    private readonly HashSet<IRenderNode> m_preparedChildren = new(ReferenceEqualityComparer.Instance);
 
     private static SdfScreenSourceFrame[][] BuildScreenSourceFrameRing(int capacity) {
         var ring = new SdfScreenSourceFrame[SdfWorldEngine.FrameRingSize][];
@@ -349,6 +359,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             frame: frame
         );
 
+        m_producedChildren.Clear();
+
         for (var slot = 0; (slot < frame.Views.Count); slot++) {
             if (!TryChildForSlot(
                 child: out var child,
@@ -358,6 +370,11 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 continue;
             }
 
+            if (m_producedChildren.TryGetValue(child, out var produced)) {
+                m_childSurfaces[slot] = produced;
+                continue;
+            }
+            // One instance advances once. Its first slot sets the requested extent; later slots reuse the image.
             var region = frame.Views[slot].Region;
 
             m_childSurfaces[slot] = child.ProduceFrame(context: context with {
@@ -370,6 +387,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 val2: ((uint)(region.Width * m_width))
             ),
             });
+            m_producedChildren.Add(child, m_childSurfaces[slot]);
         }
     }
     // A world load may replace (or remove) its immutable atlas without rebuilding this node. Polling the reference is
@@ -466,6 +484,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     // just runs inline — no point paying the fork.
     private void StepChildren(in FrameContext context, SdfFrame frame) {
         var ready = 0;
+        m_preparedChildren.Clear();
 
         // The SAME eligibility as the produce loop (TryChildForSlot): a child whose slot is not this frame's child
         // slot is not produced, so it must not step either — a just-booted pane's machine starts consuming the
@@ -480,7 +499,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             }
 
             if (
-                (child is ISteppableRenderNode steppable) &&
+                (child is ISteppableRenderNode steppable) && m_preparedChildren.Add(child) &&
                 steppable.PrepareStep(context: in context)
             ) {
                 if (m_steppableChildren.Length < m_children.Count) {

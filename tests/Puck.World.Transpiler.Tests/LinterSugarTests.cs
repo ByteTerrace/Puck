@@ -48,7 +48,7 @@ public class LinterSugarTests {
         "games/tictactoe.world.json",
         "games/chinese-checkers.world.json",
         "games/poker.world.json",
-        "study.world.json",
+        "pipeline.world.json",
     };
 
     [Theory]

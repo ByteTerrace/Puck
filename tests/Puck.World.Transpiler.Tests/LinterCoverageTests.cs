@@ -87,7 +87,7 @@ public class LinterCoverageTests {
     }
 
     // A root that declares `schema` and no `basis` is still a root: a basis-shaped discriminator would leave every
-    // standalone world (backgammon, chinese-checkers, moth, study) with neither reference lint nor semantic
+    // standalone world (backgammon, chinese-checkers, moth, pipeline) with neither reference lint nor semantic
     // validation, so a misspelled row inside its own rules would be reported by nothing.
     [Fact]
     public void StandaloneRootWithNoBasisReportsItsOwnMisspelledStateRow() {

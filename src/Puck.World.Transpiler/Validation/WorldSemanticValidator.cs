@@ -95,7 +95,7 @@ public static class WorldSemanticValidator {
             return SourceSpan.None;
         }
 
-        // Error strings frequently begin with path prefix like "views.layouts[0].slots[0].study: ..." or "screens[0].frame"
+        // Error strings frequently begin with path prefix like "views.layouts[0].slots[0].pipeline: ..." or "screens[0].frame"
         var colonIdx = error.IndexOf(':');
         var pathToken = colonIdx > 0 ? error[..colonIdx].Trim() : error.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
 

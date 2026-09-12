@@ -19,7 +19,7 @@ using Puck.Platform.Linux;
 using Puck.Platform.Windows;
 using Puck.SdfVm;
 using Puck.Shaders;
-using Puck.Shaders.Study;
+using Puck.Shaders;
 using Puck.World.Addons;
 using Puck.World.Audio;
 using Puck.World.Client;
@@ -670,11 +670,11 @@ internal static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
 
-        // The shader-study verb surface — study.load/.reload/.watch/.time/.status. CORE-registered for the same
-        // command-vocabulary-parity reason as WorldViewCommandModule above; study.load's row upsert is core so it
+        // The shader-pipeline verb surface — pipeline.load/.reload/.watch/.time/.status. CORE-registered for the same
+        // command-vocabulary-parity reason as WorldViewCommandModule above; pipeline.load's row upsert is core so it
         // genuinely works headless, and WorldRenderProbe is OPTIONAL (default null) so every other verb refuses by
-        // name at use when it is absent (compiling/swapping a study needs a live render tree).
-        services.AddSingleton<ICommandModule, WorldStudyCommandModule>();
+        // name at use when it is absent (compiling/swapping a pipeline needs a live render tree).
+        services.AddSingleton<ICommandModule, WorldPipelineCommandModule>();
 
         return services;
     }
@@ -936,13 +936,13 @@ internal static class WorldBootComposition {
             ? "directx"
             : "vulkan"));
 
-        // The shader-study runtime: one StudyPassNode + boot compile per views.studies row, shared by the frame
+        // The shader-pipeline runtime: one ShaderPipelineRenderNode + boot compile per views.pipelines row, shared by the frame
         // presenter (resizes/feeds each node per produced frame) and the render root below (keys
-        // SdfWorldRenderSpec.Children by the same names) — see BuildStudyRuntime's remarks.
+        // SdfWorldRenderSpec.Children by the same names) — see BuildPipelineRuntime's remarks.
         services.AddSingleton(implementationFactory: sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
 
-            return BuildStudyRuntime(
+            return BuildPipelineRuntime(
                 sp: sp,
                 hostsOnDirectX: hostSettings.HostsOnDirectX,
                 width: ((uint)hostSettings.Width),
@@ -976,7 +976,7 @@ internal static class WorldBootComposition {
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
-            studies: sp.GetRequiredService<WorldStudyRuntime>()
+            pipelines: sp.GetRequiredService<WorldPipelineRuntime>()
         ));
 
         // The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the
@@ -1024,7 +1024,7 @@ internal static class WorldBootComposition {
                     Height: height,
                     Width: width
                 ) {
-                    Children = sp.GetRequiredService<WorldStudyRuntime>().Entries.ToDictionary(
+                    Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
                         keySelector: static entry => entry.Key,
                         elementSelector: static entry => ((IRenderNode)entry.Value.Node)
                     ),
@@ -1258,7 +1258,7 @@ internal static class WorldBootComposition {
         services.AddSingleton(implementationFactory: sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
 
-            return BuildStudyRuntime(
+            return BuildPipelineRuntime(
                 sp: sp,
                 hostsOnDirectX: hostSettings.HostsOnDirectX,
                 width: ((uint)hostSettings.Width),
@@ -1288,7 +1288,7 @@ internal static class WorldBootComposition {
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
-            studies: sp.GetRequiredService<WorldStudyRuntime>()
+            pipelines: sp.GetRequiredService<WorldPipelineRuntime>()
         ));
 
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
@@ -1310,7 +1310,7 @@ internal static class WorldBootComposition {
             var render = SdfWorldRenderBuilder.Build(
                 services: viewGpuServices,
                 spec: new SdfWorldRenderSpec(FrameSource: frameSource, Height: height, Width: width) {
-                    Children = sp.GetRequiredService<WorldStudyRuntime>().Entries.ToDictionary(
+                    Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
                         keySelector: static entry => entry.Key,
                         elementSelector: static entry => ((IRenderNode)entry.Value.Node)
                     ),
@@ -1337,13 +1337,6 @@ internal static class WorldBootComposition {
 
         return services;
     }
-    // Builds and populates the shader-study runtime: one StudyShaderCompiler (cache dir under the world state root,
-    // toolchain from views.studyToolchain — never an environment variable), one StudyPassNode + boot compile per
-    // views.studies row, over the same IGpuComputeServices the SDF engine node itself dispatches through. A row whose
-    // source cannot be read, or whose compile fails, still registers a node (showing StudyPlaceholderShader's flat
-    // grey, or the last-good bytecode on a later successful reload) — never absent, since an absent registration is
-    // what leaves a slot on the camera-path fallback. Shared by both the windowed and offscreen render-tree
-    // factories, each calling this once against their own resolved GPU services.
     // host.icon resolved the way every other document-relative path in this file is: against the world document's own
     // directory, so an author's icon travels beside their world file rather than having to be installed next to the
     // engine. Rooted paths pass through untouched. An unauthored icon stays null all the way down, which is what tells
@@ -1367,21 +1360,21 @@ internal static class WorldBootComposition {
         );
     }
 
-    private static WorldStudyRuntime BuildStudyRuntime(IServiceProvider sp, bool hostsOnDirectX, uint width, uint height) {
+    private static WorldPipelineRuntime BuildPipelineRuntime(IServiceProvider sp, bool hostsOnDirectX, uint width, uint height) {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var documentDirectory = (Path.GetDirectoryName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath) is { Length: > 0 } directory
             ? directory
             : AppContext.BaseDirectory
         );
-        var compiler = new StudyShaderCompiler(
-            cacheDirectory: Path.Combine(path1: WorldStateRoot.Resolve(), path2: "studies"),
-            toolchainDirectory: definition.Views.StudyToolchain
+        var compiler = new ShaderCompiler(
+            cacheDirectory: Path.Combine(path1: WorldStateRoot.Resolve(), path2: "pipelines"),
+            toolchainDirectory: definition.Views.ShaderToolchain
         );
-        var runtime = new WorldStudyRuntime(compiler: compiler, documentDirectory: documentDirectory);
+        var runtime = new WorldPipelineRuntime(loader: new ShaderPipelineLoader(compiler), documentDirectory: documentDirectory);
 
         // The iMouse source: the process's one pointer store, read NON-destructively (position + primary button —
         // never the drained motion/wheel accumulators WorldSeatViewInput owns), on the seat the pointer rides. An
-        // offscreen boot registers no pointer, so its studies see iMouse zero.
+        // offscreen boot registers no pointer, so its pipelines see iMouse zero.
         if (
             (sp.GetService<WorldPointer>() is { } pointer) &&
             (sp.GetService<PlayerRoster>() is { } roster)
@@ -1389,7 +1382,7 @@ internal static class WorldBootComposition {
             runtime.ReadPointer = () => {
                 var slot = WorldPointerSlot.Resolve(roster: roster);
 
-                return new WorldStudyPointerSample(
+                return new WorldPipelinePointerSample(
                     ClientPosition: pointer.Position(slot: slot),
                     HasPosition: pointer.HasPosition(slot: slot),
                     Pressed: pointer.IsButtonDown(
@@ -1403,48 +1396,21 @@ internal static class WorldBootComposition {
         var gpu = sp.GetRequiredService<IGpuComputeServices>();
         var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
 
-        // The same node shape for a study loaded after boot (study.load naming a new row) as for a boot-time row.
-        runtime.CreateNode = name => new StudyPassNode(
+        // The same node shape for a pipeline loaded after boot (pipeline.load naming a new row) as for a boot-time row.
+        runtime.CreateNode = name => new ShaderPipelineRenderNode(
             name: name,
             gpu: gpu,
             deviceContext: deviceContext,
             hostsOnDirectX: hostsOnDirectX,
             width: width,
-            height: height
+            height: height,
+            graphics: WorldPostRenderExtensionServices.Build(sp)
         );
 
-        foreach (var study in definition.Views.Studies) {
-            var node = runtime.CreateNode(study.Name);
-            var resolvedSource = (Path.IsPathRooted(path: study.Source)
-                ? study.Source
-                : Path.Combine(path1: documentDirectory, path2: study.Source)
-            );
-
-            StudyProgram? compiled = null;
-
-            try {
-                var sourceText = File.ReadAllText(path: resolvedSource);
-
-                compiled = compiler.Compile(name: study.Name, sourcePath: resolvedSource, sourceText: sourceText);
-
-                if (compiled.IsError) {
-                    foreach (var diagnostic in compiled.Diagnostics) {
-                        if (diagnostic.IsError) {
-                            Console.Error.WriteLine(value: $"[study.load: {resolvedSource}:{diagnostic.Line}: {diagnostic.Message}]");
-                        }
-                    }
-                } else {
-                    node.Swap(program: compiled);
-                }
-            } catch (IOException exception) {
-                Console.Error.WriteLine(value: $"[study.load: '{study.Name}' source '{resolvedSource}' could not be read: {exception.Message}]");
-            } catch (StudyToolMissingException exception) {
-                Console.Error.WriteLine(value: $"[study.load: '{study.Name}' — {exception.Message}]");
-            }
-
-            runtime.Register(name: study.Name, node: node, compile: compiled);
-        }
-
+        runtime.Report = (name, message) => Console.Error.WriteLine($"[pipeline.compile: {name} {message}]");
+        runtime.RegisterNode = (name, node) => sp.GetRequiredService<WorldRenderProbe>().Node?.RegisterChild(name, node);
+        runtime.RemoveNode = name => sp.GetRequiredService<WorldRenderProbe>().Node?.RemoveChild(name);
+        runtime.Reconcile(definition.Views.Pipelines);
         return runtime;
     }
 

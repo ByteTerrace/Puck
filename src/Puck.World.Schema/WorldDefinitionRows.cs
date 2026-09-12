@@ -63,12 +63,12 @@ public static class WorldDefinitionRows {
         name: name,
         selector: static row => row.Name
     );
-    /// <summary>Finds a <c>views.studies</c> row by stable name.</summary>
-    /// <param name="studies">The section's study rows.</param>
-    /// <param name="name">The study row name to find.</param>
+    /// <summary>Finds a <c>views.pipelines</c> row by stable name.</summary>
+    /// <param name="pipelines">The section's pipeline rows.</param>
+    /// <param name="name">The pipeline row name to find.</param>
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldViewStudy? FindStudy(IReadOnlyList<WorldViewStudy>? studies, string name) => Find(
-        rows: studies,
+    public static WorldViewPipeline? FindPipeline(IReadOnlyList<WorldViewPipeline>? pipelines, string name) => Find(
+        rows: pipelines,
         name: name,
         selector: static row => row.Name
     );

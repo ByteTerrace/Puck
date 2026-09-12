@@ -362,16 +362,16 @@ public static partial class WorldDocumentEmitter {
                     layoutObj["name"] = subBlock.Name;
                 }
                 layoutsArr.AppendNode(layoutObj);
-            } else if (subId is "study" or "studies") {
-                if (viewsObj["studies"] is not JsonArray studiesArr) {
-                    studiesArr = [];
-                    viewsObj["studies"] = studiesArr;
+            } else if (subId is "pipeline" or "pipelines") {
+                if (viewsObj["pipelines"] is not JsonArray pipelinesArr) {
+                    pipelinesArr = [];
+                    viewsObj["pipelines"] = pipelinesArr;
                 }
-                var studyObj = LowerBlockToObject(subBlock, scope);
+                var pipelineObj = LowerBlockToObject(subBlock, scope);
                 if (subBlock.Name is not null) {
-                    studyObj["name"] = subBlock.Name;
+                    pipelineObj["name"] = subBlock.Name;
                 }
-                studiesArr.AppendNode(studyObj);
+                pipelinesArr.AppendNode(pipelineObj);
             } else if (subId is "seatrig") {
                 var seatRigObj = LowerBlockToObject(subBlock, scope);
                 if (subBlock.Name is not null) {

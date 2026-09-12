@@ -122,14 +122,14 @@ public sealed partial class SdfWorldEngine {
             boundViews[element] = view;
         }
     }
-    // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; float4 rects[5]; uint2 scaleQPacked;
-    // uint2 sharpnessQPacked; }: the LIVE regions drive the layout every frame. word[3] is unused (implicit HLSL
+    // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint childMask; float4 rects[5]; uint2 scaleQPacked;
+    // uint2 sharpnessQPacked; }: the LIVE regions drive the layout every frame. word[3] carries the child mask (using the former HLSL
     // cbuffer padding ahead of the float4 rects array — KEEP IN SYNC with sdf-world-composite.comp.hlsl's struct);
     // the final four words carry the byte-packed per-view controls.
     private void BuildCompositePush(SdfFrame frame) {
         var words = MemoryMarshal.Cast<byte, uint>(span: m_compositePush.AsSpan());
 
-        words[0] = m_width; words[1] = m_height; words[2] = ((uint)frame.Views.Count);
+        words[0] = m_width; words[1] = m_height; words[2] = ((uint)frame.Views.Count); words[3] = m_childMask;
 
         var floats = MemoryMarshal.Cast<byte, float>(span: m_compositePush.AsSpan());
 

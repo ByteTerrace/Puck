@@ -4,15 +4,15 @@ using Puck.SdfVm.Views;
 namespace Puck.World.Client;
 
 /// <summary>One resolved window slot this frame — a normalized rect plus its occupant. A <see cref="Camera"/> and
-/// <see cref="Study"/> both <see langword="null"/> shows the seat at <see cref="SeatOrder"/> (its position among the
-/// joined seats); a named camera renders that authored view into the rect; a named study renders a compiled shader
-/// study instead (see <see cref="Puck.World.WorldViewStudy"/>) — the three are mutually exclusive.</summary>
+/// <see cref="Pipeline"/> both <see langword="null"/> shows the seat at <see cref="SeatOrder"/> (its position among the
+/// joined seats); a named camera renders that authored view into the rect; a named pipeline renders a compiled shader
+/// pipeline instead (see <see cref="Puck.World.WorldViewPipeline"/>) — the three are mutually exclusive.</summary>
 /// <param name="Region">The eased normalized rect.</param>
-/// <param name="SeatOrder">The 0-based seat position for a seat slot, or -1 for a camera/study slot.</param>
-/// <param name="Camera">The authored camera name for a camera slot, or <see langword="null"/> for a seat/study slot.</param>
-/// <param name="Study">The authored <c>views.studies</c> row name for a study slot, or <see langword="null"/> for a
+/// <param name="SeatOrder">The 0-based seat position for a seat slot, or -1 for a camera/pipeline slot.</param>
+/// <param name="Camera">The authored camera name for a camera slot, or <see langword="null"/> for a seat/pipeline slot.</param>
+/// <param name="Pipeline">The authored <c>views.pipelines</c> row name for a pipeline slot, or <see langword="null"/> for a
 /// seat/camera slot.</param>
-public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatOrder, string? Camera, string? Study = null);
+public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatOrder, string? Camera, string? Pipeline = null);
 /// <summary>
 /// Owns layout SELECTION and TRANSITION for the main window — the data-side replacement for the compiled layout switch.
 /// Given the session shape and the authored <see cref="WorldViewDefaults"/>, it selects one layout (the live override,
@@ -79,11 +79,11 @@ public sealed class WorldViewComposer {
         into.Clear();
 
         foreach (var slot in slots) {
-            if (slot.Study is { } study) {
+            if (slot.Pipeline is { } pipeline) {
                 into.Add(item: new ViewBinding(
                     View: ViewId.None,
                     Region: slot.Region,
-                    Child: study
+                    Child: pipeline
                 ));
 
                 continue;
@@ -125,12 +125,12 @@ public sealed class WorldViewComposer {
         m_slots.Clear();
 
         foreach (var binding in m_currentBindings) {
-            if (binding.Child is { } study) {
+            if (binding.Child is { } pipeline) {
                 m_slots.Add(item: new WorldComposedSlot(
                     Region: binding.Region,
                     SeatOrder: -1,
                     Camera: null,
-                    Study: study
+                    Pipeline: pipeline
                 ));
 
                 continue;
@@ -206,12 +206,12 @@ public sealed class WorldViewComposer {
                 Height: slot.Height
             );
 
-            if (slot.Study is { } study) {
+            if (slot.Pipeline is { } pipeline) {
                 m_targetSlots.Add(item: new WorldComposedSlot(
                     Region: region,
                     SeatOrder: -1,
                     Camera: null,
-                    Study: study
+                    Pipeline: pipeline
                 ));
             } else if (slot.Camera is null) {
                 m_targetSlots.Add(item: new WorldComposedSlot(
