@@ -8,7 +8,8 @@ namespace Puck.GamingBricks.Forge;
 /// <remarks>
 /// KEEP IN SYNC with both backend state layouts: <c>FrameworkMemoryMap.GameRam</c> upward on CGB and
 /// <c>AgbForgeMemoryMap.GameRam</c> upward on AGB. CGB is the binding constraint — its game-owned work RAM runs
-/// 0xC200..0xCFFF, and the compiler's own held-input byte and index scratch come off the top of it.
+/// 0xC200..0xDFFF, spanning the fixed page and the switchable bank pinned at boot, and the compiler's own held-input
+/// byte, operand spill and discard sink come off the top of the variable window rather than out of the array space.
 /// </remarks>
 public static class CartridgeLimits {
     /// <summary>The maximum number of named byte state slots.</summary>

@@ -99,6 +99,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmRButtonDown = 0x0204;
     private const uint WmRButtonUp = 0x0205;
     private const uint WmSetCursor = 0x0020;
+    private const uint WmSetIcon = 0x0080;
     private const uint WmShowWindow = 0x0018;
     private const uint WmSize = 0x0005;
     private const uint WmSysKeyDown = 0x0104;
@@ -141,6 +142,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
+    // WM_SETICON wParam.
+    private const nint IconBig = 1;
+    private const nint IconSmall = 0;
     private const uint WsOverlappedWindow = 0x00CF0000;
     private const uint WsPopup = 0x80000000;
     private const uint WsVisible = 0x10000000;
@@ -212,7 +216,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         Height = m_options.Height;
         m_selfHandle = GCHandle.Alloc(value: this);
 
-        EnsureWindowClassRegistered();
+        EnsureWindowClassRegistered(options: m_options);
         m_windowHandle = CreateWindow(options: m_options);
     }
 
@@ -390,7 +394,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_disposed = true;
     }
 
-    private static void EnsureWindowClassRegistered() {
+    private static void EnsureWindowClassRegistered(NativeWindowOptions options) {
         lock (RegistrationLock) {
             if (WindowClassRegistered) {
                 return;
@@ -403,11 +407,18 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 throw new InvalidOperationException(message: $"LoadCursorW(IDC_ARROW) failed with Win32 error {Marshal.GetLastWin32Error()}.");
             }
 
+            var icons = Win32IconLoader.GetOrLoadIcons(
+                iconPath: options.IconPath,
+                instanceHandle: InstanceHandleField
+            );
+
             var windowClass = new WindowClassEx {
                 ClassName = WindowClassName,
                 CursorHandle = ArrowCursorHandle,
+                IconHandle = icons.BigIcon,
                 InstanceHandle = InstanceHandleField,
                 Size = ((uint)Marshal.SizeOf<WindowClassEx>()),
+                SmallIconHandle = icons.SmallIcon,
                 WindowProcedure = WndProcDelegate,
             };
 
@@ -495,6 +506,30 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         if (windowHandle == 0) {
             throw new InvalidOperationException(message: $"CreateWindowExW failed with Win32 error {Marshal.GetLastWin32Error()}.");
+        }
+
+        // The class carries only the pair the window that registered it supplied; a later window created against
+        // different options would otherwise wear that one's icon.
+        var icons = Win32IconLoader.GetOrLoadIcons(
+            iconPath: options.IconPath,
+            instanceHandle: InstanceHandleField
+        );
+
+        if (icons.BigIcon != 0) {
+            _ = User32.SendMessage(
+                lParam: icons.BigIcon,
+                message: WmSetIcon,
+                wParam: IconBig,
+                windowHandle: windowHandle
+            );
+        }
+        if (icons.SmallIcon != 0) {
+            _ = User32.SendMessage(
+                lParam: icons.SmallIcon,
+                message: WmSetIcon,
+                wParam: IconSmall,
+                windowHandle: windowHandle
+            );
         }
 
         RegisterRawInput(windowHandle: windowHandle);

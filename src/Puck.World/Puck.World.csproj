@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <!-- Stamps puck.ico into the apphost's Win32 resources at RT_GROUP_ICON 32512 (IDI_APPLICATION), replacing the
+             stock .NET apphost icon. That is the one place a Windows executable's icon can live: Explorer, a pinned
+             shortcut, and Alt+Tab all read it, and it is also what Win32IconLoader loads when a world authors no
+             host.icon of its own. Nothing copies the file to the output directory — it is compiled in. -->
         <ApplicationIcon>puck.ico</ApplicationIcon>
         <IsAotCompatible>false</IsAotCompatible>
         <OutputType>Exe</OutputType>

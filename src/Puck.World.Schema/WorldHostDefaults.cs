@@ -270,6 +270,13 @@ public enum WorldHostPresentation : byte {
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
 /// <see langword="null"/> when <paramref name="BackendRow"/> reads it from a row — omitting both reads as
 /// <see cref="WorldBackendPreference.Auto"/>.</param>
+/// <param name="Title">The window title the OS shows in the caption bar, the taskbar, and Alt+Tab, or
+/// <see langword="null"/> for the engine's own. Shape-only validation (null or non-whitespace).</param>
+/// <param name="Icon">The window and taskbar icon: a <c>.ico</c> path resolved against the world document's own
+/// directory, or an absolute path taken as-is, so an author's icon travels beside their world file.
+/// <see langword="null"/> — and equally a path naming a file this OS cannot read as an icon — wears the host
+/// executable's own icon resource instead, which no world has to ship. Shape-only validation (null or
+/// non-whitespace); the platform window backend is what reads the file.</param>
 /// <param name="JournalDepth">The undo horizon, in journal entries: <c>world.undo</c> can never reach past this many
 /// trailing entries. <c>0</c> is unbounded — every world authored before this field existed keeps growing its journal
 /// for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this
@@ -296,7 +303,9 @@ public sealed record WorldHostDefaults(
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (the capacity-row site needs no such guard — see its own remarks.)
     [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null,
-    int JournalDepth = 0
+    int JournalDepth = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null
 ) {
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
     /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
@@ -317,7 +326,9 @@ public sealed record WorldHostDefaults(
         Genlock: null,
         Listen: null,
         Authority: null,
-        JournalDepth: 0
+        JournalDepth: 0,
+        Title: null,
+        Icon: null
     );
 }
 /// <summary>

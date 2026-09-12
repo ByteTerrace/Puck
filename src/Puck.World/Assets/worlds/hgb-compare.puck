@@ -15,9 +15,8 @@ let screenHalfDepth = 0.01
 // image column zero at the +X end, which reads LEFT, because the eye looks along +Z and its own right hand is -X.
 let screenRight = [-1, 0, 0]
 let screenUp = [0, 1, 0]
-// +X reads left, so the reference takes leftX.
-let leftX = 1.8
-let rightX = -1.8
+// +X reads left, so the reference sits at +spread and the authored cartridge at -spread.
+let spread = 1.8
 let brick = "gaming-brick"
 let colorOptions = "cgb"
 let reference = "../../../../roms/tetris-world-rev1.gb"
@@ -44,7 +43,7 @@ host {
 screens: [
     {
         index: 0
-        origin: [leftX, eyeHeight, 0]
+        origin: [spread, eyeHeight, 0]
         right: screenRight
         up: screenUp
         halfWidth: screenHalfWidth
@@ -56,7 +55,7 @@ screens: [
     }
     {
         index: 1
-        origin: [rightX, eyeHeight, 0]
+        origin: [-spread, eyeHeight, 0]
         right: screenRight
         up: screenUp
         halfWidth: screenHalfWidth

@@ -109,6 +109,22 @@
       "description": "The undo horizon, in journal entries: world.undo can never reach past this many trailing entries. 0 is unbounded \u2014 every world authored before this field existed keeps growing its journal for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level replay WorldServer.ApplyUndo performs, run forward), so a checkpoint restore and a replay from the new base plus the retained tail still reproduce the live definition bit-identically. world.status echoes the authored value; world.undo names it when a requested count reaches past what the horizon has kept.",
       "type": "integer",
       "default": 0
+    },
+    "title": {
+      "description": "The window title the OS shows in the caption bar, the taskbar, and Alt\u002BTab, or null for the engine\u0027s own. Shape-only validation (null or non-whitespace).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "icon": {
+      "description": "The window and taskbar icon: a .ico path resolved against the world document\u0027s own directory, or an absolute path taken as-is, so an author\u0027s icon travels beside their world file. null \u2014 and equally a path naming a file this OS cannot read as an icon \u2014 wears the host executable\u0027s own icon resource instead, which no world has to ship. Shape-only validation (null or non-whitespace); the platform window backend is what reads the file.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     }
   },
   "required": [

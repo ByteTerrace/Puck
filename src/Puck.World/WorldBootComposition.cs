@@ -683,13 +683,14 @@ internal static class WorldBootComposition {
     public static IServiceCollection AddWorldPresentation(this IServiceCollection services, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings>(configureOptions: static (options, hostSettings) => {
+        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
             options.Height = ((uint)hostSettings.Height);
             // The world draws its own pointer (CursorWriter); the OS cursor stays hidden over the client area.
             options.HideMouseCursor = true;
+            options.IconPath = ResolveAuthoredIcon(icon: hostSettings.Icon, documentPath: source.SourcePath);
             options.Mode = NativeWindowMode.PlatformWindow;
             options.StartFullscreen = hostSettings.Fullscreen;
-            options.Title = WorldApplicationDefaults.WindowTitle;
+            options.Title = (hostSettings.Title ?? WorldApplicationDefaults.WindowTitle);
             options.Width = ((uint)hostSettings.Width);
         });
         services.AddSingleton(implementationFactory: static sp => new PresentationOptions {
@@ -1201,10 +1202,11 @@ internal static class WorldBootComposition {
     public static IServiceCollection AddWorldOffscreenPresentation(this IServiceCollection services, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings>(configureOptions: static (options, hostSettings) => {
+        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
             options.Height = ((uint)hostSettings.Height);
+            options.IconPath = ResolveAuthoredIcon(icon: hostSettings.Icon, documentPath: source.SourcePath);
             options.Mode = NativeWindowMode.PlatformWindow;
-            options.Title = WorldApplicationDefaults.WindowTitle;
+            options.Title = (hostSettings.Title ?? WorldApplicationDefaults.WindowTitle);
             options.Width = ((uint)hostSettings.Width);
         });
 
@@ -1331,6 +1333,29 @@ internal static class WorldBootComposition {
     // grey, or the last-good bytecode on a later successful reload) — never absent, since an absent registration is
     // what leaves a slot on the camera-path fallback. Shared by both the windowed and offscreen render-tree
     // factories, each calling this once against their own resolved GPU services.
+    // host.icon resolved the way every other document-relative path in this file is: against the world document's own
+    // directory, so an author's icon travels beside their world file rather than having to be installed next to the
+    // engine. Rooted paths pass through untouched. An unauthored icon stays null all the way down, which is what tells
+    // the platform backend to wear the host executable's own icon resource (Puck.World.csproj's <ApplicationIcon>) —
+    // the same puck.ico Explorer and a pinned shortcut already show, with no file to find at runtime.
+    private static string? ResolveAuthoredIcon(string? icon, string documentPath) {
+        if (string.IsNullOrWhiteSpace(value: icon)) {
+            return null;
+        }
+
+        if (Path.IsPathRooted(path: icon)) {
+            return icon;
+        }
+
+        return Path.Combine(
+            path1: ((Path.GetDirectoryName(path: documentPath) is { Length: > 0 } directory)
+                ? directory
+                : AppContext.BaseDirectory
+            ),
+            path2: icon
+        );
+    }
+
     private static WorldStudyRuntime BuildStudyRuntime(IServiceProvider sp, bool hostsOnDirectX, uint width, uint height) {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var documentDirectory = (Path.GetDirectoryName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath) is { Length: > 0 } directory

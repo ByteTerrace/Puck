@@ -121,6 +121,19 @@ The [Azure authentication provider](../Puck.World.Azure/README.md#silo-hosting)
 owns token validation and group membership policy; those concepts stay outside
 the engine.
 
+**Branding.** `host.title` and `host.icon` are the window's caption and its
+icon. Both are durable document fields with no CLI reflection, so a world
+shipped by someone else wears its own name and mark rather than the engine's.
+`host.icon` resolves against the world document's own directory (an absolute
+path is taken as-is), so the `.ico` travels beside the world file:
+
+```json
+"host": { "title": "Harbour Nine", "icon": "harbour-nine.ico" }
+```
+
+Authoring neither wears the executable's own icon and `Puck: World`. An icon
+this OS cannot read falls back the same way rather than refusing the boot.
+
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device — the
 authoritative server, console, and tape only:

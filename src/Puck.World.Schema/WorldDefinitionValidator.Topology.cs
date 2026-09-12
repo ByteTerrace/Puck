@@ -238,6 +238,24 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        // Branding is SHAPE-only, and deliberately forgiving past that: the title is whatever the author wants in the
+        // caption bar, and the icon is a path the platform backend resolves against the world document at boot. An
+        // icon that does not exist, or that this OS cannot read, degrades to the executable's own icon rather than
+        // refusing — a world must never fail to open over its decoration. Whitespace, though, is always a typo.
+        if (
+            (host.Title is { } title) &&
+            string.IsNullOrWhiteSpace(value: title)
+        ) {
+            errors.Add(item: "host.title must be non-whitespace or null.");
+        }
+
+        if (
+            (host.Icon is { } icon) &&
+            string.IsNullOrWhiteSpace(value: icon)
+        ) {
+            errors.Add(item: "host.icon must be non-whitespace or null.");
+        }
+
         ValidateHostEndpoint(
             value: host.Authority,
             path: "host.authority",
