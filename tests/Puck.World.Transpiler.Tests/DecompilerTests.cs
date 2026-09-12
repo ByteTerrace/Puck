@@ -9,12 +9,7 @@ namespace Puck.World.Transpiler.Tests;
 public class DecompilerTests {
     [Fact]
     public void TestPipelineWorldDecompilationAndRoundTrip() {
-        var jsonPath = Path.Combine(AppContext.BaseDirectory, "../../../../../src/Puck.World/Assets/worlds/pipeline.world.json");
-        if (!File.Exists(jsonPath)) {
-            // Fallback for different working directory
-            jsonPath = "d:/Source/ByteTerrace/Puck/src/Puck.World/Assets/worlds/pipeline.world.json";
-        }
-
+        var jsonPath = Path.Combine(ShippedWorlds.FindDirectory(), "pipeline.world.json");
         var originalJson = File.ReadAllText(jsonPath);
         var originalNode = JsonNode.Parse(originalJson) as JsonObject;
         Assert.NotNull(originalNode);
@@ -27,7 +22,7 @@ public class DecompilerTests {
         Assert.Contains("layout \"pipeline\" {", decompiledPuck);
         Assert.Contains("orbit(distance: 0.01, pitch: 0, yaw: 0)", decompiledPuck);
         Assert.Contains("fieldOfView(fieldOfViewRadians: 0.001)", decompiledPuck);
-        Assert.Contains("pipeline \"moth-pipeline\" {", decompiledPuck);
+        Assert.Contains("pipeline \"ink\" {", decompiledPuck);
 
         // 2. Parse .puck DSL -> AST
         var ast = PuckParser.ParseDocument(decompiledPuck);
@@ -66,11 +61,7 @@ public class DecompilerTests {
 
     [Fact]
     public void TestSolitaireWorldDecompilationAndRoundTrip() {
-        var jsonPath = "d:/Source/ByteTerrace/Puck/src/Puck.World/Assets/worlds/games/solitaire.world.json";
-        if (!File.Exists(jsonPath)) {
-            return;
-        }
-
+        var jsonPath = Path.Combine(ShippedWorlds.FindDirectory(), "games", "solitaire.world.json");
         var originalJson = File.ReadAllText(jsonPath);
         var originalNode = JsonNode.Parse(originalJson) as JsonObject;
         Assert.NotNull(originalNode);

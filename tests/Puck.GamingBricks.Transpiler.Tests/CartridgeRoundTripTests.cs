@@ -295,6 +295,28 @@ public class CartridgeRoundTripTests {
     }
 
     [Fact]
+    public void TestACartridgeRuleBodyRefusesAColonBeforeAContainer() {
+        const string source = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            rule "probe" {
+                when ph == 1
+                tags: ["a"]
+                ph = 2
+            }
+            """;
+
+        var diagnostics = new DiagnosticBag();
+
+        PuckParser.ParseDocumentWithDiagnostics(source: source, diagnostics: diagnostics);
+
+        var refusal = Assert.Single(diagnostics, d => d.Code == PuckDiagnosticCodes.ColonBeforeContainer);
+
+        Assert.Contains("'tags: [' - a array is written without the ':': use 'tags ['", refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TestConstantsAndTemplatesAreSourceOnly() {
         const string withConstants = """
             schema: "puck.cartridge.v1"

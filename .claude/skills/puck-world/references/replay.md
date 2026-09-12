@@ -228,8 +228,10 @@ matches.
 **`world.reset`/`world.load`/`world.reload` are replay-compatible.** They ride
 the ordered domain and tape as the `Rebuild` payload kind, CAS-pinned by a
 `sha256-64/{hex}` content hash: for Load/Reload, of the
-EXACT bytes the console read off disk (`WorldDefinitionFileSource.TryLoad`,
-shared by the console path and the offline re-drive); for Reset, of the
+EXACT bytes the console read off disk (`WorldDefinitionFileSource.TryLoad`, a
+JSON-only reader shared by the console path and the offline re-drive — see
+[console.md](console.md) for what that means for a `.puck`-booted world's
+`world.reload`/`world.save`); for Reset, of the
 re-driven run's OWN base's canonical bytes (`WorldDefinitionSerialization.
 Serialize`), computed fresh at apply time — never the recorded document
 itself, and never the live session's base. On re-drive, `ApplyRebuild`

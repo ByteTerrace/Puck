@@ -274,4 +274,4 @@ the adapter during the wait, reconnect with the same file, then capture again.
 Stopping control must remove discovery without stopping World; headless hosts
 must refuse capture. These checks run the ordinary engine, with no alternate
 simulation loop. See the
-[remaining plan](../../docs/reviews/puck-mcp-plan.md).
+[remaining plan](../../docs/specs/puck-mcp-plan.md).

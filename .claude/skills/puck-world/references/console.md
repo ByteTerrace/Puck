@@ -19,6 +19,7 @@ the project table in the main `SKILL.md`).
 - The stdin drain barrier and `world.wait`
 - The mirror
 - Screenshots
+- `.puck`-booted worlds: `world.reload`/`world.save` are JSON-only today
 - The document has ONE door — do not add a per-section verb
 - Grammar conventions for new verbs
 
@@ -274,6 +275,26 @@ the PNG; failure carries an exception, including disposal before service.
 tick wait alone does not prove a particular request finished. Cancelling an
 await does not cancel the accepted capture or release its output path for reuse.
 
+## `.puck`-booted worlds: `world.reload`/`world.save` are JSON-only today
+
+A world booted from `.puck` source (`--world <x>.puck`, transparently
+compiled by `src/Puck.World/PuckWorldLoader.cs`) is compiled ONCE, at boot.
+`WorldMutationCommandModule`'s `world.reload` and no-arg `world.save` do not
+know the source was `.puck` and do not re-invoke the compiler:
+
+- `world.reload` re-reads `definitionSource.SourcePath` through
+  `WorldDefinitionFileSource.TryLoad`, a JSON-only reader — reloading a
+  `.puck`-booted world fails to parse rather than recompiling it.
+- No-arg `world.save` writes canonical JSON to `definitionSource.SourcePath`
+  — on a `.puck`-booted world this overwrites the `.puck` source with
+  compiled JSON. `world.save <path>` to an explicit, different path is safe.
+
+Until this is fixed, the artist loop for a `.puck`-booted world is: edit the
+`.puck` file, then restart the world — do not `world.reload` it, and only
+`world.save` to a path that is not the `.puck` source. A JSON-booted world's
+`world.reload`/no-arg `world.save` are unaffected and behave exactly as their
+own verb descriptions state.
+
 ## The document has ONE door — do not add a per-section verb
 
 `world.row.set <path> <json>` and `world.row.remove <path> <key>`
@@ -426,6 +447,12 @@ longer matches its own content.
   other `world.row.set`/`.remove`. The drain barrier makes a following
   `world.addons` read wait for settled state.
 - New decision surface ⇒ read-back verb in the same change.
+- A `.puck` world is authored and checked offline (`puck fmt`/`puck
+  lint`/`puck compile`, `puck-dsl`) and booted via `--world <x>.puck`;
+  `world.row.set`/`.remove` and the field/list-element doors above remain the
+  LIVE runtime mutation surface for an already-booted session — complementary
+  doors, not competing ones. What a rule's own effect sugar compiles to is
+  [mutations.md](mutations.md)'s to state.
 
 `world.decisions` is an Immediate, no-argument, headless-safe read-back of
 world-rule choice policies and their active bindings. It reports the selected

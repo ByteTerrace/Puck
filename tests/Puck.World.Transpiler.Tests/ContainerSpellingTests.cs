@@ -85,6 +85,73 @@ public class ContainerSpellingTests {
     }
 
     [Fact]
+    public void TestRuleDecisionAndOptionBodiesFollowTheSameRule() {
+        AssertRefusesColon("""
+            schema: "puck.world.def.v1"
+
+            rule "zoned" {
+                when score[0] > 0
+                zones: ["a"]
+                score[0] += 1
+            }
+            """, "'zones: [' - a array is written without the ':': use 'zones ['");
+
+        AssertRefusesColon("""
+            schema: "puck.world.def.v1"
+
+            rule "chooser" {
+                decision {
+                    periodSeconds: 1s
+                    tieBreak: { seed: 0 }
+                    option "o" {
+                        score: 1
+                    }
+                }
+            }
+            """, "'tieBreak: {' - a block is written without the ':': use 'tieBreak {'");
+
+        AssertRefusesColon("""
+            schema: "puck.world.def.v1"
+
+            rule "chooser" {
+                decision {
+                    periodSeconds: 1s
+                    option "o" {
+                        score: 1
+                        neighbors: { range: 10 }
+                    }
+                }
+            }
+            """, "'neighbors: {' - a block is written without the ':': use 'neighbors {'");
+    }
+
+    [Fact]
+    public void TestRuleBodyContainersWithoutAColonAndScalarsWithOneParseClean() {
+        var diagnostics = ParseForDiagnostics("""
+            schema: "puck.world.def.v1"
+
+            rule "zoned" {
+                when score[0] > 0
+                mode: Edge
+                zones ["a"]
+                score[0] += 1
+            }
+
+            rule "chooser" {
+                decision {
+                    periodSeconds: 1s
+                    option "o" {
+                        score: 1
+                        neighbors { range: 10 }
+                    }
+                }
+            }
+            """);
+
+        Assert.DoesNotContain(diagnostics, diagnostic => (diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer));
+    }
+
+    [Fact]
     public void TestACallArgumentKeepsItsColon() {
         var diagnostics = ParseForDiagnostics("""
             schema: "puck.world.def.v1"

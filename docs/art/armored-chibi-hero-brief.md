@@ -10,10 +10,10 @@ The current owner-selected prototype is **Moth**, from the subsequent character
 collage: ivory/lilac armor, warm brown skin, an open hood, a side braid, and folding
 flight vanes. Virtual On and Power Stone join the broad style references. These
 choices supersede the island-ranger palette and helmet defaults below. The
-[Moth studio guide](../src/Puck.World/Assets/worlds/avatars/moth.md) owns the current authored
+[Moth studio guide](../../src/Puck.World/Assets/worlds/avatars/moth.md) owns the current authored
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
-The [Moth concept pack](art/moth-concept-pack-2026-09-09/README.md) expands the selected
+The [Moth concept pack](moth-concept-pack-2026-09-09/README.md) expands the selected
 source into character views, facial and armor details, proposed wing mechanics,
 and movement studies. Its guide distinguishes the owner-selected design from
 generated mechanical proposals.
@@ -99,22 +99,22 @@ At close inspection the eyes need a directed gaze and a blink or equivalent expr
 
 ## 3. Implementation route
 
-Read [the vision](vision.md), [the campaign](campaign.md), [the agent guide](agent-guide.md), and the applicable repository skills before changing code. Use the live source to resolve any contradiction; historical comments and examples are evidence, not a guarantee of runtime behavior.
+Read [the vision](../vision.md), [the campaign](../campaign.md), [the agent guide](../agent-guide.md), and the applicable repository skills before changing code. Use the live source to resolve any contradiction; historical comments and examples are evidence, not a guarantee of runtime behavior.
 
 These are implementation entry points inspected while preparing this brief, not a maintained capability inventory:
 
-| Decision | Starting point |
+| Subsystem or concept | Canonical source |
 |---|---|
-| Author a body-worn creation instead of expanding the procedural catalog | [WorldLook](../src/Puck.World.Schema/WorldLook.cs) |
-| Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../src/Puck.World.Authoring/Authoring/CreationGeometry.cs), [CreationFrame](../src/Puck.World.Authoring/Authoring/CreationFrame.cs) |
-| Motion signals, gated drivers, swings and slides | [CreationAnimation](../src/Puck.World.Authoring/Authoring/CreationAnimation.cs) |
-| Foot and hand constraints | [CreationEffector](../src/Puck.World.Authoring/Authoring/CreationEffector.cs) |
-| Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldStampPool](../src/Puck.World.Client/WorldStampPool.cs) |
-| Primitive composition and scope behavior | [CreationStampEmitter](../src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs) |
-| Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](examples/creations/adventurer.creation.json) |
-| Existing studio district for staging | [studio.world.json](../src/Puck.World/Assets/worlds/modules/studio.world.json) |
-| Production world integration | [puck.world.json](../src/Puck.World/Assets/worlds/puck.world.json) |
-| Shared material and lighting implementation | [SdfMaterial](../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-vm.hlsli](../src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-vm.hlsli), [sdf-world.hlsli](../src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli) |
+| Author a body-worn creation instead of expanding the procedural catalog | [WorldLook](../../src/Puck.World.Schema/WorldLook.cs) |
+| Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../../src/Puck.World.Authoring/Authoring/CreationGeometry.cs), [CreationFrame](../../src/Puck.World.Authoring/Authoring/CreationFrame.cs) |
+| Motion signals, gated drivers, swings and slides | [CreationAnimation](../../src/Puck.World.Authoring/Authoring/CreationAnimation.cs) |
+| Foot and hand constraints | [CreationEffector](../../src/Puck.World.Authoring/Authoring/CreationEffector.cs) |
+| Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldStampPool](../../src/Puck.World.Client/WorldStampPool.cs) |
+| Primitive composition and scope behavior | [CreationStampEmitter](../../src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs) |
+| Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](../examples/creations/adventurer.creation.json) |
+| Existing studio district for staging | [studio.world.json](../../src/Puck.World/Assets/worlds/modules/studio.world.json) |
+| Production world integration | [puck.world.json](../../src/Puck.World/Assets/worlds/puck.world.json) |
+| Shared material and lighting implementation | [SdfMaterial](../../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-vm.hlsli](../../src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-vm.hlsli), [sdf-world.hlsli](../../src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli) |
 
 Use the existing creation-look, prototype, and body appearance routes. Resolve which rows actually control the local character and mirrored appearances before changing them. Use compiler-backed references when tracing C# usage. A static statue in the studio does not prove the body-worn route works.
 
@@ -238,7 +238,7 @@ Judge each category as **pass**, **revise**, or **blocked**, citing the capture 
 
 ## 7. Verification mechanics and boundaries
 
-Use the running `Puck.World`; a build proves compilation, not the character. Consult the current [world skill](../.agents/skills/puck-world/SKILL.md) for console grammar, capture behavior, body/seat indexing, and run recipes, and the [SDF skill](../.agents/skills/sdf-world/SKILL.md) for shader contract pairs and bytecode regeneration. Do not run the quarantined Post battery.
+Use the running `Puck.World`; a build proves compilation, not the character. Consult the current [world skill](../../.claude/skills/puck-world/SKILL.md) for console grammar, capture behavior, body/seat indexing, and run recipes, and the [SDF skill](../../.claude/skills/sdf-world/SKILL.md) for shader contract pairs and bytecode regeneration. Do not run the quarantined Post battery.
 
 The baseline launch shape is:
 
@@ -254,7 +254,7 @@ Run builds and focused checks appropriate to actual changes. Schema or animation
 
 Keep implementation within this milestone: one hero, one alternate palette, essential movement and rendering support, production integration, and evidence. Leave terrain/sky upgrades, combat, equipment inventories, full avatar customization, broad renderer rewrites, and crowd-system redesign for separate work.
 
-Before completing, audit every documentation surface affected by a changed contract using [boy-scout](../.agents/skills/boy-scout/SKILL.md) and [documentation](../.agents/skills/documentation/SKILL.md). Record unrelated defects without expanding the change. Do not stage, commit, or alter another session's work.
+Before completing, audit every documentation surface affected by a changed contract using [boy-scout](../../.claude/skills/boy-scout/SKILL.md) and [documentation](../../.claude/skills/documentation/SKILL.md). Record unrelated defects without expanding the change. Do not stage, commit, or alter another session's work.
 
 ## 8. Handoff between implementing agents
 
@@ -272,4 +272,4 @@ Do not call the milestone complete while a required category is marked revise or
 
 ### Copyable execution prompt
 
-> Implement `docs/armored-chibi-hero-brief.md` in the current repository. Start with the live body-look route and baseline captures, then complete stages A–E. Preserve the original chunky anime/chibi direction and the proposed island-ranger identity while refining it through actual rendered comparisons. Prefer authored creation data and existing parent/driver/effector mechanisms. Add only general engine support justified by a visible deficiency. Integrate the hero as the main character, verify movement and gameplay views on both GPU backends, measure cost, and deliver the evidence required by the rubric. Read current repository instructions, preserve unrelated dirty work, and do not stop at a concept image, static studio statue, successful build, or plan. Use autonomous self-review checkpoints rather than repeated permission requests; report any real blocker precisely.
+> Implement `docs/art/armored-chibi-hero-brief.md` in the current repository. Start with the live body-look route and baseline captures, then complete stages A–E. Preserve the original chunky anime/chibi direction and the proposed island-ranger identity while refining it through actual rendered comparisons. Prefer authored creation data and existing parent/driver/effector mechanisms. Add only general engine support justified by a visible deficiency. Integrate the hero as the main character, verify movement and gameplay views on both GPU backends, measure cost, and deliver the evidence required by the rubric. Read current repository instructions, preserve unrelated dirty work, and do not stop at a concept image, static studio statue, successful build, or plan. Use autonomous self-review checkpoints rather than repeated permission requests; report any real blocker precisely.

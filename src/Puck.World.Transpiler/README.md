@@ -31,7 +31,7 @@ identifier: expression                       // a property whose value is a SCAL
 identifier(k: v, k2: v2)                      // a call expression statement
 identifier                                    // a bare flag statement, only where nothing else could follow on
                                                // the line (e.g. a placement row's bare `solid`, standing in for
-                                               // `solid: { margin: 0 }`)
+                                               // `solid { margin: 0 }`)
 ```
 
 A container value is written as a block and a scalar takes a colon — `host { }`, `cameras [ ]`, `documentId: "puck"`
@@ -86,7 +86,7 @@ rule "name" {
     bind localName : Int|Fixed = <operand>
     mode: Edge|Level
     forEach: "rowName"
-    zones: [...]
+    zones [...]
     decision { ... }                          // see below
     <effect statement>*
 }
@@ -132,7 +132,7 @@ decision {
     option "name" {
         when Gate
         score: <operand>
-        neighbors: { range: 10, candidateBudget: 12, maxCandidates: 4, halfAngleDegrees: 180, requiresLineOfSight: false, retainCurrent: true }
+        neighbors { range: 10, candidateBudget: 12, maxCandidates: 4, halfAngleDegrees: 180, requiresLineOfSight: false, retainCurrent: true }
         <effect statement>*
     }
 }
@@ -142,7 +142,7 @@ decision {
 
 ### Shapes, placements, and prototypes
 
-`shape Type "name" { ... }`, `placements { policy: { ... } placement "id" { ... } }`, and
+`shape Type "name" { ... }`, `placements { policy { ... } placement "id" { ... } }`, and
 `prototypes { prototype "id" { document { ... } } }` are ordinary named/targeted blocks — no dedicated grammar
 beyond the bare flag statement above (`solid` inside a `placement` row). `prototypes` admits `prototype` rows only
 (it lowers to a bare array, with no object for a property to land on) and `placements` admits `placement` rows and
@@ -212,7 +212,7 @@ on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a t
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
 `transaction`), PUCK026 (a rule with no effect statements), PUCK028 (a placement authoring both the bare `solid`
-flag and an explicit `solid: { }`), PUCK029 (`decision` missing `periodSeconds`), PUCK035 (basis/import composition
+flag and an explicit `solid { }`), PUCK029 (`decision` missing `periodSeconds`), PUCK035 (basis/import composition
 refused), PUCK036 (a statement inside `prototypes`/`placements` that the section's grammar cannot carry).
 
 `PUCK008`/`PUCK013`/`PUCK014` also cover a rule-body-only keyword found where an ordinary statement belongs

@@ -5,8 +5,11 @@ namespace Puck.World.Transpiler.Tests;
 
 /// <summary>The one enumeration of the shipped world corpus, and the one structural JSON comparison, that every
 /// corpus-wide gate in this assembly runs over.</summary>
-/// <remarks>Enumeration is recursive and unfiltered by design: a gate that skips a document cannot see it drift,
-/// and three private copies of the walk could disagree about which documents each gate covers.</remarks>
+/// <remarks>Enumeration is recursive, and every committed world document belongs to exactly one of the two corpora: a
+/// document with a <c>.puck</c> source beside it is gated through that source (<see cref="Sources"/>), every other
+/// document through its own decompilation (<see cref="Files"/>). A source-authored document is the expansion of its
+/// source, so decompiling it tests an import nobody performs and can exceed the source-length limit. Three private
+/// copies of the walk could disagree about which documents each gate covers.</remarks>
 internal static class ShippedWorlds {
     /// <summary>Returns the absolute path of <c>src/Puck.World/Assets/worlds</c>, walked up from the test
     /// runner's own directory.</summary>
@@ -27,22 +30,33 @@ internal static class ShippedWorlds {
         throw new DirectoryNotFoundException("Could not locate src/Puck.World/Assets/worlds directory from test runner.");
     }
 
-    /// <summary>Returns every <c>*.world.json</c> under the worlds directory, recursively, as forward-slashed
-    /// paths relative to it, in ordinal order.</summary>
-    /// <returns>The corpus as xUnit theory data.</returns>
+    /// <summary>Returns every <c>*.world.json</c> under the worlds directory that has no <c>.puck</c> source,
+    /// recursively, as forward-slashed paths relative to it, in ordinal order.</summary>
+    /// <returns>The decompilation corpus as xUnit theory data.</returns>
     public static TheoryData<string> Files() {
+        var sourceDocuments = Enumerate("*.puck").Select(DocumentOf).ToHashSet(StringComparer.Ordinal);
+
+        return new TheoryData<string>(Enumerate("*.world.json").Where(path => !sourceDocuments.Contains(path)));
+    }
+
+    /// <summary>Returns every <c>*.puck</c> world source under the worlds directory, recursively, as forward-slashed
+    /// paths relative to it, in ordinal order.</summary>
+    /// <returns>The source corpus as xUnit theory data.</returns>
+    public static TheoryData<string> Sources() => new(Enumerate("*.puck"));
+
+    /// <summary>Returns the committed document a world source compiles to: the path <c>puck compile</c> writes
+    /// when no output is named.</summary>
+    /// <param name="sourcePath">A forward-slashed source path relative to the worlds directory.</param>
+    /// <returns>The forward-slashed document path relative to the worlds directory.</returns>
+    public static string DocumentOf(string sourcePath) =>
+        Path.ChangeExtension(sourcePath, ".world.json").Replace('\\', '/');
+
+    private static IEnumerable<string> Enumerate(string pattern) {
         var worldsDirectory = FindDirectory();
-        var data = new TheoryData<string>();
 
-        var files = Directory.GetFiles(worldsDirectory, "*.world.json", SearchOption.AllDirectories)
+        return Directory.GetFiles(worldsDirectory, pattern, SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(worldsDirectory, path).Replace('\\', '/'))
-            .OrderBy(path => path, StringComparer.Ordinal);
-
-        foreach (var file in files) {
-            data.Add(file);
-        }
-
-        return data;
+            .Order(StringComparer.Ordinal);
     }
 }
 

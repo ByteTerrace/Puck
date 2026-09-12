@@ -1,11 +1,12 @@
-# Acknowledgments and citations
+# Citations and evidence sources
 
 Puck's emulator cores are validated against public hardware-test corpora and
 independently-written reference emulators used strictly as *evidence* (never as
 gates — see the `gaming-bricks` skill's oracle discipline). This file carries the
 citations for publicly-documented hardware facts that informed the implementation,
 so that identifiers, comments, and XML docs in the code stay free of external
-company / product / emulator proper nouns.
+company / product / emulator proper nouns. General research and library credits live
+in the repository root [ACKNOWLEDGMENTS.md](../ACKNOWLEDGMENTS.md).
 
 The same rule governs the mathematics. `Puck.Maths` names its primitives for what
 they do, so the people and the theorems behind a construction are credited here

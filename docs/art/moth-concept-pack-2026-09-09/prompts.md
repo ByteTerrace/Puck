@@ -4,7 +4,7 @@ Generated with the built-in image_gen tool. For the original sheets 1–4, input
 
 ## September 10: compact wing views (sheet 5)
 
-Inputs: [owner crop](compact-wing-owner-crop.png), then [character sheet](01-character-model-sheet.png). The motion sheet used the first view-sheet pass; the exhaust-only correction below was applied afterward to produce the saved final view sheet.
+Inputs: owner crop (reference crop of [00-owner-source.png](00-owner-source.png)), then [character sheet](01-character-model-sheet.png). The motion sheet used the first view-sheet pass; the exhaust-only correction below was applied afterward to produce the saved final view sheet.
 
 Use case: stylized-concept.
 Create a finished, high-resolution landscape production concept sheet, 2 columns by 2 rows, for MOTH's COMPACT TWIN WING PACK, with four large views of the SAME character and SAME equipment. Title "MOTH — COMPACT WING VIEWS". Input image 1 is the owner's authoritative small crop: preserve that exact compact two-shell backpack silhouette. Input image 2 is the canonical character model sheet: preserve identity, costume, proportions, materials. These are reference images, not panels to paste into the result.
@@ -28,7 +28,7 @@ Use case: precise-object-edit. Preserve this entire four-view MOTH — COMPACT W
 
 ## September 10: compact wing motion (sheet 6)
 
-Inputs: [owner crop](compact-wing-owner-crop.png), the first compact-wing view-sheet pass, then [character sheet](01-character-model-sheet.png).
+Inputs: owner crop (reference crop of [00-owner-source.png](00-owner-source.png)), the first compact-wing view-sheet pass, then [character sheet](01-character-model-sheet.png).
 
 Use case: stylized-concept.
 Create ONE polished landscape production animation concept sheet for MOTH, six full-body key poses in a clean 3-column by 2-row grid. Title "MOTH — COMPACT WING MOTION". Images 1 and 2 are authoritative references for the compact wing system: image 1 is the owner's crop, image 2 is the newly established compact wing view sheet. Image 3 is the canonical character sheet for anatomy, face and costume. Use these as design references, not panels to paste. Match the rendering quality and shapes of the compact wing view sheet exactly.

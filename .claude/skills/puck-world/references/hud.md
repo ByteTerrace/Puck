@@ -12,6 +12,7 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 ## Contents
 
 - Schema and caps
+- Authoring a panel in `.puck`
 - Templating (`WorldHudElement.Template`)
 - The overlay reservation — what refuses at construction
 - Bands — what `replace` replaces
@@ -126,6 +127,59 @@ declared range, or a plain `state.<row>` binding on a KEYED row with no single
 cell to show) the gauge draws EMPTY — the same "unbound gauge draws empty"
 rule an unbound binding already follows, not a new validation-time refusal
 (only existence is checked).
+
+## Authoring a panel in `.puck`
+
+`hud` has no dedicated DSL sugar or decompiler module (unlike `rules`/`shapes`/
+`placements`/`prototypes`) — a panel is authored through the language's
+generic named-block/array-property grammar alone (grammar and diagnostics
+belong to the `puck-dsl` skill; this is just the vocabulary applied). A world
+declaring the two `state` rows a panel below binds against, plus one panel
+with a bound text element and a bound gauge:
+
+```
+state {
+    world [
+        { name: "score", kind: "Int", value: 0 }
+        { name: "fuel", kind: "Int", value: 100, min: 0, max: 100 }
+    ]
+}
+
+hud {
+    defaults {
+        enabled: true
+    }
+    panels [
+        {
+            id: "status"
+            rect { x: 0.02, y: 0.02, width: 0.22, height: 0.08 }
+            layer: "Under"
+            style: "Strip"
+            elements [
+                {
+                    id: "score-label"
+                    kind: "Text"
+                    rect { x: 0, y: 0, width: 1, height: 0.5 }
+                    style: "Primary"
+                    binding: "state.score"
+                }
+                {
+                    id: "fuel-gauge"
+                    kind: "Gauge"
+                    rect { x: 0, y: 0.5, width: 1, height: 0.5 }
+                    style: "Accent"
+                    binding: "state.fuel"
+                }
+            ]
+        }
+    ]
+}
+```
+
+`fuel` declares both `min`/`max` (the both-or-neither rule), so its gauge
+fraction resolves from the row's own range rather than drawing empty. A
+`Template` element is the same panel/element shape with `template:` in place
+of `binding:` — see "Templating" below for the placeholder grammar.
 
 ## Templating (`WorldHudElement.Template`)
 

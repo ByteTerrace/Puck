@@ -29,17 +29,6 @@ Compile-time bindings are substituted before native compilation. Byte expression
 larger bare values are admitted only where a wide slot is supported. A wide read cannot be assigned to a byte
 destination implicitly. Empty required sections, including `rules []`, survive decompilation.
 
-`puck lint` and the CLI language server select this vocabulary from `schema: "puck.cartridge.v1"`, use the same
-forge validation, and locate errors at their authored rows or properties. Editor completions also follow the
-schema. Without `--output`, compile writes `<source>.cartridge.json` for a cartridge and `<source>.world.json`
-for a world. The regeneration gate covers every committed `.puck` cartridge source.
-
-Runtime value fields accept ordinary expressions: `x: cursor + 1` and `map(row: cursor + 1, column: 0, tile: 0)`
-have the same meaning as quoted operand spellings, including fields inside object literals and generated arrays.
-Compile-time bindings are substituted before native compilation. Byte expressions admit literals in 0..255;
-larger bare values are admitted only where a wide slot is supported. A wide read cannot be assigned to a byte
-destination implicitly. Empty required sections, including `rules []`, survive decompilation.
-
 Decompiling is one-way, like every Puck decompiler — `let` and `template` are a source-only idea and are gone from
 the JSON. The guarantee runs the other way: source written by the decompiler compiles back to the document it was
 read from, byte for byte.
@@ -55,7 +44,7 @@ title: "TETRIS"
 
 let wellFloor = 17
 
-variables: [
+variables [
     { name: "ph", initial: 14 }
 ]
 ```
@@ -133,7 +122,7 @@ like anything else:
 ```
 rule "steer" {
     when (key(left, held) or key(right, held)) and not paused == 1
-    dx = key(right, held) - key(left, held)
+    dx = $key:right:held - $key:left:held
 }
 ```
 

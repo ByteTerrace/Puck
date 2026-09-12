@@ -29,7 +29,9 @@ Puck is written from scratch, but very little of it was invented here. This file
 
 The GamingBrick machines were written against the community's hardware-research
 record. Behavioral facts derived from these sources are stated self-contained
-where the code uses them; the sources themselves are credited here.
+where the code uses them; the sources themselves are credited here. For detailed
+evidence-first hardware citations and mathematical theorem citations, see
+[docs/citations.md](docs/citations.md).
 
 - **SameBoy** ([Lior Halphon / LIJI32](https://sameboy.github.io/)) — reference emulator lineage for DMG/CGB hardware behavior (infrared port, HuC1/HuC3 IR windows, the link-cable printer protocol, PPU mode timing, SM83 STOP/DI/EI semantics), and origin of the **BESS** ("Best Effort Save State") savestate interchange format.
 - **mGBA** ([endrift](https://mgba.io/)) — reference emulator for AGB hardware behavior (cartridge GPIO/RTC/rumble/solar/tilt protocols, the game-override hardware table, audio FIFO, DMA count-latching, timer→IRQ latency, SIO timing, PPU sprite-cycle budget) and the debug-log register protocol; the [mgba-emu/suite](https://github.com/mgba-emu/suite) accuracy ROM drives the AGB accuracy-suite stage.

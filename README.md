@@ -158,10 +158,10 @@ Beside them: the [SDF handbook](docs/sdf-handbook/README.md), the
 [document examples](docs/examples), and the [docfx API reference](docs/api/index.md)
 (git-ignored build output of `dotnet docfx docs/api/docfx.json`).
 
-The [state duplication review](docs/reviews/state-duplication.md) identifies
+The [state duplication review](docs/specs/state-duplication.md) identifies
 shared implementation opportunities and the author semantics they must preserve.
 
-The [screens and machine extensions plan](docs/machine-extensions.md) proposes
+The [screens and machine extensions plan](docs/specs/machine-extensions.md) proposes
 independent machine hosting while preserving cabinet authoring and direct hardware gameplay.
 
 Standing on many shoulders — see [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).

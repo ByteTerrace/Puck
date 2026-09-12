@@ -57,7 +57,7 @@ flowchart LR
 
 ## What the current implementation establishes
 
-The [machine host README](../src/Puck.World.Machines/README.md) describes the
+The [machine host README](../../src/Puck.World.Machines/README.md) describes the
 implemented contracts. Use those contracts as the starting point, and rerun
 the affected tests against the integration base supplied to each worker.
 
@@ -66,20 +66,20 @@ the affected tests against the integration base supplied to each worker.
   contracts. Extend them; do not create another extension registry.
 - Named `machines` rows already own independent runtime generations, running
   state, staged replacement, removal, undo, and memory bindings. The existing
-  [lifetime laws](../tests/Puck.World.Tests/NamedMachineLifetimeLawTests.cs) and
-  [memory laws](../tests/Puck.World.Tests/NamedMachineMemoryLawTests.cs) exercise
+  [lifetime laws](../../tests/Puck.World.Tests/NamedMachineLifetimeLawTests.cs) and
+  [memory laws](../../tests/Puck.World.Tests/NamedMachineMemoryLawTests.cs) exercise
   this path, including shared-display lifetime and neutral headless input.
 - Both brick hosting adapters expose coherent hardware inspection and explicit
   patch/bus semantics, including Advanced addresses above 0xFFFF. Retain the
   existing worker barriers and synchronous embedding APIs.
-- [Screen sources](../src/Puck.World.Schema/WorldScreen.cs) and
-  [speaker sources](../src/Puck.World.Schema/WorldSpeaker.cs) now reference a
+- [Screen sources](../../src/Puck.World.Schema/WorldScreen.cs) and
+  [speaker sources](../../src/Puck.World.Schema/WorldSpeaker.cs) now reference a
   named machine instance and output. The shared-output lifetime laws pass, and
   a headless application run removed both displays while their one machine
   retained its generation and continued advancing. Display input folds into the
   instance's single port, and screen-index cable commands resolve named devices.
   Authored screen names and explicit control/link routing remain below.
-- [Screen operations](../src/Puck.World.Protocol/Protocol/WorldScreenOp.cs)
+- [Screen operations](../../src/Puck.World.Protocol/Protocol/WorldScreenOp.cs)
   still form a closed, screen-indexed lifecycle union. Direct rule observations,
   control routes, links, and replay must move with instance identity.
 - Generic provider operations travel through the ordered authority domain with
@@ -120,13 +120,13 @@ The delivered slices do not close every item in the original A/B/C packets:
 | Luna C: authoring and reproduction | Recursive metadata validation, alias/reference rewriting, declaring-document asset relocation, catalog-sensitive composition caches, and catalog propagation through actual callers | Execution receipts, verified machine replay/state evidence, optional distribution without bricks, and remaining editor/generated consumers |
 | Coordinator integration | Combined source reconciliation, actual console/forge forwarding, selected content-policy propagation, owned-world load/save propagation, source alias registration, checkpoint restore repair, and final executable verification | Review the next bounded slices and the complete acceptance matrix after implementation resumes |
 
-The [mirror source](../src/Puck.World/Assets/worlds/tools/hgb-mirror.puck) is the
+The [mirror source](../../src/Puck.World/Assets/worlds/tools/hgb-mirror.puck) is the
 current worked hardware example: five machine-owned bindings write world state
 into cartridge variables, and a sixth reads the cartridge's derived tile back
 into world state. These bindings survive removal of its machine display. The
-[arcade module](../src/Puck.World/Assets/worlds/modules/arcade.world.json) now
+[arcade module](../../src/Puck.World/Assets/worlds/modules/arcade.world.json) now
 declares three named producers. The
-[comparison source](../src/Puck.World/Assets/worlds/tools/hgb-compare.puck) uses
+[comparison source](../../src/Puck.World/Assets/worlds/tools/hgb-compare.puck) uses
 the same named-source model. Companion JSON was regenerated from `.puck`;
 the JSON-only arcade module remains authored JSON.
 
@@ -275,7 +275,7 @@ dotnet src/Puck.World/bin/Debug/net10.0/Puck.World.dll --world src/Puck.World/As
 ```
 
 Send these lines through its console/stdin. For automated runs, use BOM-less
-UTF-8 and the normal [stdin barrier contract](../.agents/skills/puck-world/references/console.md);
+UTF-8 and the normal [stdin barrier contract](../../.claude/skills/puck-world/references/console.md);
 wall-clock sleeps do not establish completed machine/world ticks.
 
 ```text
@@ -464,7 +464,7 @@ display must not retarget a command or a replay entry through a recycled index.
 Slot allocation and resource leases are presentation details, not machine state.
 
 Register machine, screen, binding, and connection names and references with the
-existing [module name machinery](../src/Puck.World.Schema/WorldModuleNamespace.cs).
+existing [module name machinery](../../src/Puck.World.Schema/WorldModuleNamespace.cs).
 Importing the same cabinet module under two aliases must produce two independent
 devices and displays, with local memory-row and control references rewritten
 together. A deliberate shared reference remains explicit. Preserve the existing
@@ -676,7 +676,7 @@ Keep these identities distinct:
 | Implementation and content receipt | Exactly which code, configuration, firmware, content, and compiler output produced this run |
 | Provider snapshot format | Whether opaque machine state can be restored by this implementation |
 
-Follow the [development-version ruling](../.agents/skills/puck-world/references/replay.md):
+Follow the [development-version ruling](../../.claude/skills/puck-world/references/replay.md):
 World remains v1 during development. Change the current schema and tape shape
 directly, regenerate documents, and re-record affected evidence. Do not add old
 readers, compatibility aliases, automatic fallback to retired shapes, or a v2
@@ -699,7 +699,7 @@ binding/watch history, pending deterministic operations, instance generations,
 and coupled-link state. Snapshot admission checks the receipt and snapshot
 format before any live instance changes. Presentation resources are rebuilt.
 
-The [current checkpoint gate](../src/Puck.World.Server/WorldServer.Checkpoint.cs)
+The [current checkpoint gate](../../src/Puck.World.Server/WorldServer.Checkpoint.cs)
 refuses machine-bearing history it cannot capture. Preserve that refusal until
 the complete machine and host state actually round-trips; an interface alone
 does not close it. Boot-anchored replay remains a valid initial strategy. Add
@@ -728,8 +728,8 @@ No new packages or persistent verification framework are needed for the plan.
    and mirror worlds, the arcade cabinets, forge insertion, memory reads/writes,
    model changes, links, audio, and replay. Identify which source magazines mean
    feed selection and which mean cartridge replacement. Use the existing
-   [machine-memory laws](../tests/Puck.World.Tests/MachineMemoryLawTests.cs),
-   [host transaction laws](../tests/Puck.World.Tests/MachineHostTransactionLawTests.cs),
+   [machine-memory laws](../../tests/Puck.World.Tests/MachineMemoryLawTests.cs),
+   [host transaction laws](../../tests/Puck.World.Tests/MachineHostTransactionLawTests.cs),
    and real executable sessions to pin phase order and failure behavior. Produce
    one worked cabinet module in both current and proposed data before changing
    the runtime. Resolve the default control/lifecycle rules against that example.

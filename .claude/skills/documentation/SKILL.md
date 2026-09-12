@@ -9,7 +9,7 @@ Use the register that matches the audience:
 
 | Surface | Register |
 |---|---|
-| Human-authored READMEs and `docs/` | Narrative, readable by students |
+| Human-authored READMEs and `docs/`, including a `.puck` source's companion `.md` | Narrative, readable by students |
 | XML comments on code members | Precise API reference |
 | `CLAUDE.md` and `.claude/` material | Operational instructions for agents |
 
@@ -55,3 +55,4 @@ or the surface-specific verification checklist.
 | [`maths-laws`](../maths-laws/SKILL.md) | Updating generated Maths registers or pinning a Maths behavior/documentation divergence. |
 | [`maths-usage`](../maths-usage/SKILL.md) | Documenting `src/Puck.Maths` and deciding whether the human or agent surface owns a fact. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Documenting an emulator code change that needs its subsystem verification story. |
+| `puck-dsl` | `.puck` grammar, diagnostics (`PUCKnnn`), formatter, or transpiler README changes. The vocabulary READMEs (`src/Puck.Transpiler/README.md`, `src/Puck.World.Transpiler/README.md`, `src/Puck.GamingBricks.Transpiler/README.md`) stay the authoritative source; this skill's own surfaces summarize and link rather than restate grammar. |

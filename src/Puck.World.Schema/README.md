@@ -2140,7 +2140,7 @@ A distance interaction's `neighbours` (1..64) evaluates at most that many right
 carriers per left carrier — the nearest first, ties by the lower body index —
 and its line prices pairs at that budget instead of the population squared.
 
-The [portable costing brief](../../docs/reviews/abstract-machine-costing.md)
+The [portable costing brief](../../docs/specs/abstract-machine-costing.md)
 defines the proposed replacement. Its cycle schedule remains uncalibrated.
 `WorldCostReport` exposes heuristic totals separately and reports unresolved
 cycle bounds, including search work; it cannot yet certify an abstract

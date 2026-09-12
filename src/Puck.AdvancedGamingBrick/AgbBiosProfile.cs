@@ -41,7 +41,7 @@ public readonly struct AgbBiosIdentity {
 /// against a non-retail image. This makes false cycle-drift reports loud and cheap to detect at machine assembly.</summary>
 public static class AgbBiosProfile {
     // The retail Advanced GamingBrick BIOS (16 KiB) SHA-1. Public, checkable, and the only image the cycle-parity /
-    // co-simulation tooling should trust. (Citations for external reference dumps live in ACKNOWLEDGMENTS.md.)
+    // co-simulation tooling should trust. (Citations for external reference dumps live in docs/citations.md.)
     private const string RetailBiosSha1 = "300c20df6731a33952ded8c436f7f186d25d3492";
 
     /// <summary>Classifies a BIOS image by its content hash.</summary>

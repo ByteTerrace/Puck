@@ -1,0 +1,32 @@
+schema: "puck.world.def.v1"
+basis: "../../../../../src/Puck.World/Assets/worlds/avatars/moth.world.json"
+documentId: "eval-contact-mismatch"
+
+placements {
+    placement "bollard" {
+        prototype: "subject"
+        position [2, 0, 2]
+        solid
+    }
+}
+
+prototypes {
+    prototype "subject" {
+        document {
+            schema: "puck.creation.v1"
+            name: "subject"
+            palette [
+                { color: "#B8452B" specular: 0.15 roughness: 0.5 }
+            ]
+            shape Prism "bollard" {
+                material: 0
+                position [0, 0.4, 0]
+                scale [0.15, 0.4, 0.15]
+                profile {
+                    kind: "Polygon"
+                    sides: 8
+                }
+            }
+        }
+    }
+}

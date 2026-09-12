@@ -552,7 +552,7 @@ for the authored facet.
 Each tabletop game — chess, poker, dominoes, billiards, bowling, tic-tac-toe,
 hex lines, mancala, the solitaires — lives in its own file under `Assets/worlds/games/`, imported bare by
 `puck.world.json` (`WorldDefinition.Imports`; see the
-[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)),
+[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents-composition.md#document-composition-basis-and-imports)),
 and every district lives under `Assets/worlds/modules/`, imported under its alias. The island restates
 each game's root placement row onto the market hall's floor (`parent: marketCourt`) and each district's
 `<alias>Court` row where the district stands, so a module's own rows never carry island coordinates. The

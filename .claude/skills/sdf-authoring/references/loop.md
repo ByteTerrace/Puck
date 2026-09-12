@@ -37,9 +37,31 @@ Mutation verbs return no synchronous echo — the verdict lands at the tick
 boundary on stderr. A second edit to the same row inside one tick is refused:
 `row '<identity>' already has an edit buffered this tick — fence with world.wait`.
 
-`world.reload` re-reads the current world from disk, which is the external-editor
-loop. `world.load <path> [force]` switches files and is refused while the journal
-is dirty without `force`. `world.save` persists live edits.
+`world.load <path> [force]`, `world.reload`, and a bare `world.save` are all
+JSON-only, and none of them know `.puck` exists — only the process's own boot
+(`--world <file>.puck`, once, via `PuckWorldLoader`) transpiles it. This is
+today's behavior, not a design choice a workaround can fix:
+
+- `world.load <path>` and `world.reload` both read through
+  `WorldDefinitionFileSource.TryLoad`, the plain JSON loader, with no
+  `.puck` special case. Pointed at a `.puck` file (explicitly for
+  `world.load`, or implicitly for `world.reload`'s re-read of the running
+  world's own origin) the read fails to parse
+  (`is not a valid puck.world.def.v1 document`) instead of picking up the
+  source.
+- `world.save` with **no path argument** writes canonical JSON back over the
+  running world's origin path. Against a `.puck`-sourced world this
+  overwrites the `.puck` file with JSON, discarding every `let`, `template`,
+  `for`, comment, and shape/palette sugar spelling in it.
+
+Against a world booted `--world <file>.puck`: `world.row.set`/`world.row`
+mutations are fine (they act on the in-memory document, not the file). To
+persist one, `world.save <explicit-path>.world.json` — never bare
+`world.save`, `world.reload`, or `world.load` naming the `.puck` path itself —
+then hand-port the change back into the `.puck` source (or decompile a
+throwaway copy to diff against; decompiling is one-way, see below). Restart
+with `--world <file>.puck` to pick up an edited `.puck` source; there is no
+live re-transpile.
 
 ## Looking
 
@@ -66,6 +88,12 @@ dotnet run --project src/Puck.World -c Release -- \
   < script.txt > out.log 2> err.log
 ```
 
+`<path>` may be a `.world.json` file or a `.puck` source — `PuckWorldLoader`
+transpiles a `.puck` path in memory at this one boot, transparently to
+everything below it. There is no separate compile step for a quick look; run
+`puck compile <file>.puck --validate` first only when you want the named
+diagnostics before spending a boot.
+
 Capture both streams: read-backs on stdout, refusals, mutation verdicts, and
 capture confirmations on stderr. Blank lines and `#` lines are skipped.
 
@@ -81,6 +109,22 @@ world.wait 4
 ```
 
 ## Offline verbs
+
+A `.puck` source compiles and validates first — `creation stats` and
+`schema --check` both take JSON, never `.puck`, directly:
+
+```bash
+puck compile <file>.puck --output <file>.world.json --validate
+puck lint <file>.puck --strict
+```
+
+`compile --validate` runs document-level validation: the stamp-budget count
+and the panel/trim/cells creation-scope refusal both fire here (they walk
+every `prototypes[]` row unconditionally, whether or not a placement uses
+it). It does **not** run emission or contact construction — `Morph` and
+similar PopField-only blends validate here and only fail at the next step;
+a Polygon/Ellipse prism profile under a `solid` placement, and a residual
+nonuniform `Scale`, likewise surface only there.
 
 ```bash
 dotnet run --project src/Puck.Cli -- creation stats --world <path> [--prototype <id>]
@@ -114,11 +158,29 @@ all-or-nothing.
 `schema --check` exits 1 on drift between the code and the generated section
 schemas.
 
-## Authoring in C# instead of JSON
+## Authoring in C# instead of JSON — a live but unused path
 
 `src/Puck.World.Authoring/Sculpting/` carries a builder for programmatic
-sculpting. The registry ships empty — a sculpt is registered by a composition
-root or a test, and `puck creation sculpts` prints `none registered` until one is.
+sculpting. It is real infrastructure — `CreationBuilder`'s topological
+invariants (parents declared before children, ids unique, `Mirror` always
+emitting `Left` before `Right`) are enforced and covered by
+`tests/Puck.World.Tests/CreationBuilderLawTests.cs`, and `puck creation
+sculpts`/`sculpt <name>` and the live `creation.sculpts`/`creation.sculpt`
+console twins are wired and working. But **no shipped creation is authored
+through it today**: `CreationSculptRegistry` ships with zero sculpts
+registered (a sculpt is registered by a composition root or a test, and
+`puck creation sculpts` prints `none registered` until one is), and nothing
+in the tree calls `new CreationBuilder(...)` outside that law-test suite.
+`moth.puck`'s 230 hand-authored `shape` statements are `.puck` DSL source,
+not `CreationBuilder` output.
+
+Prefer `.puck` for hand-authoring a character, armor, or prop — it is the
+checked-in convention every shipped creation follows, and the loop above
+already covers it. Reach for `CreationBuilder` only for programmatic or
+parametric generation (mirrored rigs from one authoring expression, a
+patch applied by a tool or test) where the DSL's `for`/lambda builtins
+would not fit, and register the result through `ICreationSculpt` so
+`puck creation sculpt` can apply and validate it.
 
 | Type | Use |
 |---|---|
@@ -133,10 +195,13 @@ The builder refuses a parent that is not yet declared:
 
 ## Verifying a change
 
-1. `creation stats` — distinguish whole-document validation and budget from
+1. For a `.puck` source, `puck compile --validate` first — it catches
+   structure, budget, and scope refusals before spending a `creation stats`
+   or a boot on them.
+2. `creation stats` — distinguish whole-document validation and budget from
    the separate static/pooled emission inspection; inspect clamp diagnostics.
-2. Run the game and capture. A claim about how something reads is not verified
+3. Run the game and capture. A claim about how something reads is not verified
    until you have looked at the image.
-3. If the placement carries a `solid` row, distinguish named refusals from
+4. If the placement carries a `solid` row, distinguish named refusals from
    accepted facets omitted by contact emission. Check contact explicitly;
    successful validation alone does not prove the picture matches collision.

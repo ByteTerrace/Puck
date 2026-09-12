@@ -685,7 +685,12 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context);
         if (cursor.Current is ':' or '=') {
+            var separator = cursor.Current;
+
             cursor.Advance();
+            SkipWhiteSpace(context);
+            RefuseColonBeforeContainer(context, name, separator, startOffset, line, col, diagnostics);
+
             var value = ParseExpression(context);
             var len = cursor.Offset - startOffset;
             return new PropertyNode(name, value, startOffset, len, line, col);

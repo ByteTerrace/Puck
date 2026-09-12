@@ -58,12 +58,12 @@ sequences it.
   with world-space lengths must account for that scale as documented by the
   shader contract.
 - Simulation state uses deterministic fixed-point data. Presentation shaders
-  may use floating point, and are supposed to hold cross-backend parity within
-  the configured thresholds — but nothing measures that today. The parity
-  stages were quarantined with `Puck.Post`; only the calibrated threshold
-  values (`ParityThresholds`/`ParityThresholdSet` in
-  `experimental/Puck.Post/ParityCheck.cs`) survive there, out of the build and
-  read by no runner. Treat parity as an unchecked intent, not a gate.
+  may use floating point, and hold cross-backend parity between Vulkan and Direct3D 12.
+  The legacy `Puck.Post` stages were quarantined, and cross-backend parity is now
+  verified on-demand by `puck parity` (`Puck.Cli parity`), which boots
+  `tests/Puck.Parity/parity.world.json` offscreen on both backends and renders three
+  verdicts per tick-scheduled capture: content gate, exact `stateHash`, and per-tile
+  pixel deltas under `tests/Puck.Parity/parity.contract.json`.
 - The analytic instruction stream and authored carve list are authoritative.
   `SampledRegion` bricks are bounded, invalidatable render caches, never the
   simulation or persistence representation.

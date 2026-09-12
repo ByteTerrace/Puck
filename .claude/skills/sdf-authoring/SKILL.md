@@ -1,6 +1,6 @@
 ---
 name: sdf-authoring
-description: "Author and edit Puck creations inside world prototypes: characters, armor, props, and SDF geometry. Use for sculpting, primitive/blend/warp selection, materials, state-driven looks, shape budgets, and author-frame, scope, or contact mismatches. Use sdf-world instead for VM, ISA, kernel, or shader implementation."
+description: "Author and edit Puck creations inside world prototypes, in `.puck` DSL source or raw JSON: characters, armor, props, and SDF geometry. Use for sculpting, primitive/blend/warp selection, materials, state-driven looks, shape budgets, author-frame/scope/contact mismatches, and the `shape`/`prototypes` DSL sugar. Route pure `.puck` grammar, CLI verbs, or PUCK0xx language diagnostics to puck-dsl instead. Use sdf-world instead for VM, ISA, kernel, or shader implementation."
 ---
 
 # Authoring a Puck creation
@@ -39,19 +39,78 @@ The conversion is field-specific: shape position, rotation, and joint convert;
 `inset.origin` and `inset.rotation` do not convert. Author them in the
 shader's winning frame (world space for static geometry; the owning dynamic
 slot's local frame otherwise). See [surface](references/surface.md#inset).
+The author-frame table above and its conversion apply identically whether the
+position array sits in raw JSON or in a `.puck` shape row — the frame is a
+document fact, not a spelling.
+
+## Authoring in `.puck` instead of JSON
+
+`.puck` is the checked-in authoring source for shipped creations —
+`src/Puck.World/Assets/worlds/avatars/moth.puck` sculpts the whole Moth
+character as `shape` rows inside `prototypes { prototype "moth" { document {
+} } }`, and `moth-courtyard.puck` shows the same sugar inside a `basis`-merge
+patch. A shape row is `shape Type "name" { field: value ... }`: array-valued
+fields take brackets with no colon (`position [0, 1.02, 0]`, `scale [x, y,
+z]`), scalar fields take a colon (`material: charcoal`, `exponent: softness`),
+and a `let name = value` binds a reusable constant — palette slots are named
+this way (`let charcoal = 2 // #252630`, then `material: charcoal` on every
+shape sharing it) rather than tracked as bare integers. `profile`, `domain`,
+`swings`, `slides`, and every other per-shape facet in this file are ordinary
+nested blocks with the same field spellings the JSON wire form uses; nothing
+below is renamed for the DSL. A `palette [ { ... } { ... } ]` array and a
+`prototypes { prototype "id" { document { } } }` block use that same
+container-is-a-block rule. The one-spelling grammar rule, `let`/`template`,
+units, and the CLI verbs belong to `puck-dsl` — load it before writing `.puck`
+source; this skill only teaches what the fields inside a shape/creation
+document mean.
+
+Compile and validate before trusting an edit:
+
+```bash
+puck compile <file>.puck --output <file>.world.json --validate
+puck lint <file>.puck --strict
+```
+
+`--validate` runs the same document-level checks described under "The
+budget" and "Composition" below — the stamp-budget count and the
+panel/trim/cells scope refusal both fire here, over every `prototypes[]`
+document, whether or not a placement uses it. What `--validate` does **not**
+run is emission or contact construction (`Morph`/`StairsUnion`/
+`StairsSubtraction`, the Polygon/Ellipse contact refusal, and a residual
+nonuniform `Scale`) — that tier is `creation stats`, described next.
+
+Never `puck decompile` over a `.puck` file you want to keep editing: a
+decompile is one-way and discards every `let`, `template`, and `for` in the
+source, replacing it with a flat, unnamed re-emission of the JSON. Decompile
+once to import a hand-authored JSON document, then edit the `.puck` from
+there.
 
 ## The loop
 
-Authoring is a live loop, not an edit-and-restart cycle. Five commands carry
-almost all of it:
+A world booted with `--world <file>.puck` transpiles in memory at boot only
+(`PuckWorldLoader`) — the running console never re-reads `.puck` again on its
+own. Authoring against that live process is still a live loop, not an
+edit-and-restart cycle, but two of its verbs are JSON-only traps against a
+`.puck`-sourced world:
 
 ```
 world.row.set creations <id> document.shapes[name=<shape>].<field> <json>
 world.row     creations <id> document.shapes[name=<shape>]
 world.wait    <ticks>
 world.screenshot <abs-path.png>
-world.reload
 ```
+
+`world.row.set`/`world.row` mutate the in-memory document and work
+regardless of source format. `world.reload` re-reads the document's on-disk
+origin through the plain JSON loader — against a `.puck`-sourced world it
+fails to parse. A bare `world.save` (no path argument) writes canonical JSON
+back over that same origin path — against a `.puck`-sourced world it
+overwrites the `.puck` file with JSON, destroying every `let`, `template`,
+`for`, comment, and shape-sugar spelling in it. Neither verb is fixed today.
+To persist a live edit made against a `.puck`-booted world: `world.save
+<explicit-path>.world.json` to an explicit path, hand-port the change into the
+`.puck` source, and restart (or recompile and reboot with `--world`) to pick
+it up — never bare `world.save` or `world.reload` on that world.
 
 `world.screenshot` only **arms** a capture. Fence it with `world.wait` and
 confirm the `[capture] … -> <path>` line on **stderr** before reading the file.
@@ -59,11 +118,15 @@ Read-backs land on stdout, refusals and capture confirmations on stderr, so
 capture both streams. Full verb surface, the offscreen recipe, and the
 sculpting library are in `references/loop.md`.
 
-Offline, the one structural check is:
+Offline, the structural checks are, in order:
 
 ```bash
-dotnet run --project src/Puck.Cli -- creation stats --world <path> --prototype <id>
+puck compile <file>.puck --output <file>.world.json --validate
+dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --prototype <id>
 ```
+
+The first step is only needed for a `.puck` source; a hand-authored JSON
+document starts at `creation stats` directly.
 
 It validates the whole world and checks the stamp budget, then emits text-free
 prototypes at unit placement scale to inspect static and pooled rest-pose clamps.
@@ -212,10 +275,11 @@ See [shapes](references/shapes.md#contact-admission).
 
 ## Verifying
 
-Structure first, then pixels:
+Source first, then structure, then pixels:
 
 ```bash
-dotnet run --project src/Puck.Cli -- creation stats --world <path> --prototype <id>
+puck compile <file>.puck --output <file>.world.json --validate   # .puck only
+dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --prototype <id>
 dotnet run --project src/Puck.Cli -- schema --check
 ```
 
@@ -231,4 +295,5 @@ stream and fencing rules that keep them honest, are in `references/loop.md`.
 | `references/composition.md` | Blends with formulas, domain folds, groups, scopes, trims, panels, the budget arithmetic |
 | `references/surface.md` | Palette fields, weathering, inset, render lanes, lighting, environment, tonemap, volumes |
 | `references/rig.md` | parent/joint/swings/slides, frames, chains, drivers, effectors, parts, cameras, text runs |
-| `references/loop.md` | Console verbs, capture recipes, `puck creation` verbs, the sculpting library for C# authoring |
+| `references/loop.md` | The `.puck` compile/lint/decompile loop, console verbs, capture recipes, `puck creation` verbs, the sculpting library for C# authoring |
+| [`puck-dsl` skill](../puck-dsl/SKILL.md) | `.puck` grammar (`let`/`template`/`for`, the one-spelling rule), the CLI verbs' flags, and PUCKnnn diagnostics not specific to a shape/creation field |

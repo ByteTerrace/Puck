@@ -9,7 +9,7 @@ Six concept sheets expand the owner's selected Moth into a visual handoff for ch
 | [Owner source](00-owner-source.png) | Character 4, bottom left, is the selected Moth. Other crew members are context, not alternate Moth designs. |
 | [Character model sheet](01-character-model-sheet.png) | Overall silhouette, proportions, front/side/back relationships, palette and compact flight-pack appearance. |
 | [Face and armor](02-face-and-armor.png) | Facial identity and expression, curved hood opening, swept shoulder layers, tapered boots and dark joint gaps. |
-| [Compact-wing owner crop](compact-wing-owner-crop.png) | The owner's September 10 reference for the two curved shells, compact size and band placement. |
+| Compact-wing owner reference | The owner's September 10 reference (from [Owner source](00-owner-source.png)) for the two curved shells, compact size and band placement. |
 | [Compact wing views](05-compact-wing-views.png) | Back, side and rear three-quarter views; matching rest and subtle hover opening. Current pack construction reference. |
 | [Compact wing motion](06-compact-wing-motion.png) | Jump preparation, takeoff, hover, forward flight, air brake and touchdown with the same two-shell assembly. Current flight pose reference. |
 | [Earlier flight exploration](03-flight-system.png) | Historical folding-fan proposal, superseded by the compact wing views. Do not implement its extra segments. |
@@ -33,4 +33,4 @@ Let the body compress before a jump and extend on takeoff, with the shells openi
 
 The owner source and subsequent owner feedback take precedence. Sheet 1 anchors overall identity and costume; sheet 2 clarifies surface treatment and expression. Sheet 5 anchors the compact pack; sheet 6 supplies its movement intent. Sheets 3–4 remain historical explorations. Generated perspective views are not exact orthographic blueprints: use one shared rig to verify hinge travel, armor clearance and exhaust separation through the complete motions. Small perspective or seam differences do not authorize new parts or outlets. Incidental slogans on the sheets are not game copy, lore or implementation requirements.
 
-For implementation priorities, use the [hero brief](../../armored-chibi-hero-brief.md). The [studio guide](../../../src/Puck.World/Assets/worlds/avatars/moth.md) documents the existing playable prototype and its live iteration controls; it does not establish the finished visual standard.
+For implementation priorities, use the [hero brief](../armored-chibi-hero-brief.md). The [studio guide](../../../src/Puck.World/Assets/worlds/avatars/moth.md) documents the existing playable prototype and its live iteration controls; it does not establish the finished visual standard.

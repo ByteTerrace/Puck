@@ -1,0 +1,29 @@
+schema: "puck.world.def.v1"
+basis: "../../../../../src/Puck.World/Assets/worlds/avatars/moth.world.json"
+documentId: "eval-sweep-cable"
+
+placements {
+}
+
+prototypes {
+    prototype "subject" {
+        document {
+            schema: "puck.creation.v1"
+            name: "subject"
+            palette [
+                { color: "#8B8F94" specular: 0.3 roughness: 0.4 }
+                { color: "#161616" specular: 0.05 roughness: 0.7 }
+            ]
+            shape Box "bracketLeft" {
+                material: 0
+                position [-0.3, 1.1, 0]
+                scale [0.03, 0.03, 0.03]
+            }
+            shape Box "bracketRight" {
+                material: 0
+                position [0.3, 1.0, 0]
+                scale [0.03, 0.03, 0.03]
+            }
+        }
+    }
+}

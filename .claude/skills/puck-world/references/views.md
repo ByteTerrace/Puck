@@ -33,7 +33,8 @@ Primary code:
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
 census implies a body (`population.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The standard chase
-framing below is AUTHORED — `puck.world.json` states its own:
+framing below is AUTHORED — `puck.world.json` states its own (JSON, its wire
+form, since that is the shipped flagship world's own committed source today):
 
 ```json
 "views": {
@@ -48,7 +49,7 @@ framing below is AUTHORED — `puck.world.json` states its own:
     "operations": [
       { "$type": "orbit", "distance": 5.4626001, "yaw": "state.look.behind", "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
       { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
-      { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
+      { "$type": "fieldOfView", "fieldOfViewRadians": 0.9599311 },
       { "$type": "dynamics", "row": "chase" }
     ]
   },
@@ -76,6 +77,60 @@ framing below is AUTHORED — `puck.world.json` states its own:
   }
 }
 ```
+
+The identical structure authored in `.puck` — `views`/`dynamics`/`playerDefaults`
+are ordinary named blocks and array properties, with no dedicated sugar of
+their own (grammar and diagnostics belong to the `puck-dsl` skill; this is
+just the vocabulary applied):
+
+```
+views {
+    seatControl {
+        yawReference: "World"
+        minPitch: -0.35
+        maxPitch: 1.2
+    }
+    seatRig {
+        name: "seatChase"
+        version: "puck.camera.v1"
+        operations [
+            orbit(distance: 5.4626001, yaw: "state.look.behind", pitch: 0.4145069, pivotOffset: [0, 0, 0])
+            lookAt(subject: { $type: "reference" }, targetOffset: [0, 1, 0], worldAxes: false)
+            fieldOfView(fieldOfViewRadians: 0.9599311)
+            dynamics(row: "chase")
+        ]
+    }
+    layouts []
+}
+
+dynamics [
+    { name: "chase", f: 0.9549, zeta: 1, r: 1 }
+]
+
+playerDefaults {
+    seatLook {
+        yawSensitivity: 0.001
+        pitchSensitivity: 0.001
+        invertYaw: false
+        invertPitch: false
+        stickLookRate: 2.6
+        gyro {
+            scale: 1.0
+            deadZone [0.02, 0.02, 0.02]
+            invertX: false
+            invertY: false
+            invertZ: false
+            yaw [0, -1, -1]
+            pitch [1, 0, 0]
+        }
+    }
+}
+```
+
+`orbit`/`fieldOfView` accept the named arguments shown; `orbit`'s first three
+positional arguments (unused above) would name `distance`/`pitch`/`yaw` in
+that order. Every other op is written by name only — the general call-form
+escape hatch, never a positional shorthand.
 
 What arms a pointer drag is a binding, not a feel: `player.orbit` (held —
 pointer motion orbits the camera) and `player.steer` (held — orbits AND the body
@@ -174,14 +229,17 @@ never a new engine type. `version` is `puck.camera.v1`; the op-count ceiling is
 | `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig` the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
 | `path` | sets the current SUBJECT to a point sampled from a named `curves` row (see documents.md) by arc-length `fraction` (bindable), facing the curve's own tangent, and re-seeds the eye there. `anchor`'s subject-seeding role; at most one, and it must lead (refused together with `anchor`). No `rate` field — a constant-rate dolly binds `fraction` to a `state` row carrying the `advance` trait. |
 | `clampPitch` | bounds the pitch a later `orbit` resolves with, live delta included. At most one, and it must precede the orbit. |
-| `fov` | the rendered vertical FOV, radians. Every program needs one (or a `blend` that reaches ones that do). Bindable: a literal, or `state.<row>[.<key>]`. |
+| `fieldOfView` | the rendered vertical FOV, radians (`fieldOfViewRadians`). Every program needs one (or a `blend`/`selectProgram` that reaches ones that do). Bindable: a literal, or `state.<row>[.<key>]`. |
 | `dynamics` | names a `dynamics` row (see documents.md); the resolver REPORTS the response, the caller applies it as a second-order boom ease (`SdfCameraBoomFollower`). No op is no ease — the boom passes through untouched. At most one. |
-| `blend` | lerps two other programs by NAME (eye, target, fov, and dynamics — component-wise when both sides are live, otherwise whichever side is live) at `weight`, itself bindable. At most one. |
+| `blend` | lerps two other programs by NAME (eye, target, field of view, and dynamics — component-wise when both sides are live, otherwise whichever side is live) at `weight`, itself bindable. At most one. |
+| `selectProgram` | evaluates exactly ONE of several other named programs, chosen by a live `key` (a literal, or the intended use, a `state.<row>[.<key>]` binding) rounded to the nearest whole number and matched against `cases` (each a `{value, program}` pair; at most one case per value); `default` names the program used when no case matches. The winning program's eye, target, field of view, and dynamics response pass through unchanged — no lerp, the discrete-switch counterpart of `blend`'s continuous mix: a rule-advanced integer row picks a whole framing outright rather than easing toward one. At most one per program; refused when it would create a reference cycle. |
 
 The blend namespace is the whole document's program table: every
-`cameras[].rig`, plus `views.seatRig` and `views.cameraRig`. A dangling name, a
-reference cycle (carrying its trail), and a program name declared twice in that
-namespace are all refused by name.
+`cameras[].rig`, plus `views.seatRig` and `views.cameraRig`. `selectProgram`
+resolves its `cases`/`default` names against the SAME namespace. A dangling
+name, a reference cycle (carrying its trail — `blend` and `selectProgram`
+share one cycle check), and a program name declared twice in that namespace
+are all refused by name.
 
 `views.seatRig` must contain an `orbit` op: `seatControl` declares a live
 yaw/pitch band, and only an orbit can express it. `views.cameraRig` — the
@@ -286,7 +344,8 @@ used. Refusal controls: omit `views.seatControl`, submit the old mixed
 `seatLook` members, invert the pitch interval, or name an unknown yaw reference.
 
 For a camera program: author an unknown op `$type`, put `anchor` anywhere but
-first, put `clampPitch` after its `orbit`, omit `fov`, name an undeclared
-program from a `blend`, or point two programs' blends at each other. Each is
-refused by name at load, the cycle carrying its trail. `world.view.camera`
+first, put `clampPitch` after its `orbit`, omit `fieldOfView`, name an
+undeclared program from a `blend`/`selectProgram`, or point two programs'
+blends (or select cases) at each other. Each is refused by name at load, the
+cycle carrying its trail. `world.view.camera`
 reports `cameraApplication=true` while a seat is in Free Cam.

@@ -1,6 +1,6 @@
 ---
 name: puck-world
-description: Guides work on Puck.World across its document and Protocol model, authoritative server simulation, composition root, mutation and authority systems, adjacency and federation, ordered submissions, HUD and views, engagement and session lifecycles, addons, replay, and console verbs. Use whenever changing or diagnosing any src/Puck.World* project, especially console verbs, mutation kinds, document sections, grants or refusals, transfers, seamless boundaries, HUD or view bindings, addon or replay behavior, and client/server seams. Also use before writing stdin-driven game verification because it defines the supported run recipes and encoding, indexing, collision, drain, screenshot, and replay-proof constraints.
+description: Guides work on Puck.World across its document and Protocol model, authoritative server simulation, composition root, mutation and authority systems, adjacency and federation, ordered submissions, HUD and views, engagement and session lifecycles, addons, replay, console verbs, and `.puck` world-DSL authoring. Use whenever changing or diagnosing any src/Puck.World* project, especially console verbs, mutation kinds, document sections, grants or refusals, transfers, seamless boundaries, HUD or view bindings, addon or replay behavior, client/server seams, and authoring or refusing a world's `.puck` source — rule/gate/effect sugar, `world.row.set` vs. `.puck` authoring, and PUCK0xx world-vocabulary refusals (route pure language/grammar/CLI questions to `puck-dsl` instead). Also use before writing stdin-driven game verification because it defines the supported run recipes and encoding, indexing, collision, drain, screenshot, and replay-proof constraints.
 ---
 
 # Puck.World: the game of many games
@@ -161,6 +161,23 @@ console is only a MIRROR of that pipe — nothing that draws (including a HUD
 `replace` panel taking over the whole overlay) can take the control plane
 away. Verify game behavior by RUNNING the game, never by a build gate
 (`CLAUDE.md` rule 3).
+
+A world document is authored in `.puck` source, not hand-written JSON.
+`Puck.World.Transpiler` — the `puck.world.def.v1` vocabulary, a peer of
+`Puck.GamingBricks.Transpiler`'s `puck.cartridge.v1`, both riding the
+schema-agnostic `Puck.Transpiler` core — lowers a parsed `.puck` document to
+the same JSON this file describes; JSON stays the wire form and the
+checked-in shape of every shipped world. `Puck.World`'s boot loader
+(`PuckWorldLoader.TryResolveWorld`) transparently compiles a `--world
+<x>.puck` path in memory before composing and validating it exactly like a
+JSON boot. The flagship `puck.world.json` itself has no `.puck` source today
+— it remains hand-authored JSON, while the avatar/courtyard/tool worlds and
+both shipped CGB cartridges are DSL-authored (`git ls-files '*.puck'` is the
+current inventory; treat it, not this sentence, as the source of truth).
+Grammar, `let`/`template`/modules, units, and diagnostics belong to
+`puck-dsl`; this skill owns only the world vocabulary's own sugar and
+semantics — the rule/gate/effect mapping in
+[references/mutations.md](references/mutations.md).
 
 ## The world project family
 
@@ -437,7 +454,13 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `--recording`, `--storage-uri`, `--user-id`, `--state-dir`, `--headless`,
   `--capture-dir`, `--listen`, `--connect`); host-related flags are nullable
   deployment overrides. Absent host overrides leave the world document's
-  `host` section in control. `host.presentation` has three values: windowed,
+  `host` section in control. `--world` accepts a `.puck` path directly —
+  `PuckWorldLoader` compiles it in memory before boot — or an ordinary JSON
+  world document; point at a worked example instead of hand-writing JSON:
+  `src/Puck.World.Transpiler/Samples/*.synthetic.world.puck` (fixtures) and
+  the shipped `Assets/worlds/avatars/moth.puck`, `moth-courtyard.puck`, and
+  `tools/hgb-mirror.puck`/`hgb-compare.puck` (real assets, each with a
+  committed JSON twin). `host.presentation` has three values: windowed,
   `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
   `offscreen` (full authority + GPU composition to images, no window —
   what `puck parity` boots). A world may author a `captures` section:
@@ -564,10 +587,13 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
 | Command modules, routing, the stdin barrier, output contract, verb grammar, screenshots | [references/console.md](references/console.md) |
 
-Adjacent skills: `sdf-world` for the renderer and SDF VM the frame source
-feeds; `gaming-bricks` for the emulators behind engaged screens;
-`rom-forge` for the SM83 framework and the Tune cart; `maths-usage` for
-choosing fixed-point primitives on sim value paths.
+Adjacent skills: `puck-dsl` for the `.puck` language core (grammar,
+`let`/`template`/modules, units, the `compile`/`lint`/`fmt`/`lsp` verbs,
+PUCKnnn diagnostics) — this skill owns only the world vocabulary's own sugar
+and semantics, not the language it rides; `sdf-world` for the renderer and
+SDF VM the frame source feeds; `gaming-bricks` for the emulators behind
+engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
+`maths-usage` for choosing fixed-point primitives on sim value paths.
 
 ## Boundaries worth knowing
 
@@ -602,7 +628,7 @@ choosing fixed-point primitives on sim value paths.
   against) — this is what makes `Resting`/`$physics:quiescent` mean the body
   is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
   `$physics:quiescent` rule operand are the console/rule surface; see
-  [references/documents.md](references/documents.md#crowd-scale-policies)
+  [references/documents-render.md](references/documents-render.md#crowd-scale-policies)
   for the authored `collision.bodyContacts` rigid fields, and the
   [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
   references for the mechanics. The shipped garden's `billiardsTray`/

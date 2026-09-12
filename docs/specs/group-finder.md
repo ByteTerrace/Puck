@@ -2,8 +2,8 @@
 
 This is the implementation design for Puck's group finder, requested on 2026-09-09.
 It proposes work; it does not claim that the experience exists. The
-[campaign](campaign.md) owns sequencing and verification status, and the
-[vision](vision.md) owns the world model. The source observations below were made
+[campaign](../campaign.md) owns sequencing and verification status, and the
+[vision](../vision.md) owns the world model. The source observations below were made
 against `31eab09cbd0b540539a038a5025b86a3f01a23bc`; the membership, role,
 completion and persistence rows were refreshed during the foundation work.
 
@@ -39,15 +39,15 @@ register. Recheck the cited code when implementing each slice.
 
 | Existing home | Consequence for this work |
 | --- | --- |
-| [WorldGroups.cs](../src/Puck.World.Schema/WorldGroups.cs) | Members now carry an explicit local-or-issuer-qualified identity reference, a nullable assigned role and a join ordinal. The qualified value alone is not authentication or a federated membership claim. `Ephemeral` dissolves an emptied runtime group; the name alone does not specify restart recovery. |
-| [WorldServer.MutationCompose.cs](../src/Puck.World.Server/WorldServer.MutationCompose.cs) and [WorldMutation.cs](../src/Puck.World.Protocol/Protocol/WorldMutation.cs) | `FormGroup` creates an empty group and `JoinGroup` adds one member. `WorldMutation.Batch` already composes several mutations against one candidate, validates once, journals once, and refuses the whole batch if any member would be refused or if `ExpectedDefinition` no longer matches. A fully accepted run roster is a `Batch` of `FormGroup` plus its `JoinGroup`s under an expected revision, not a new operation. |
-| [WorldGrants.cs](../src/Puck.World.Server/WorldGrants.cs) | Live local membership expansion now uses the member's exact role, including effective budgets and masks. A missing role gives no role-derived authority. Ownership-derived access uses the owning group's role; direct principal ownership remains separate. Checkpoint restore rebuilds these derived indexes from the restored roster. Authenticated connection-to-durable-member binding remains separate work. |
-| [WorldSessionResolver.cs](../src/Puck.World.Schema/WorldSessionResolver.cs) | Local group-scoped resolution exists. Its local group ids and process-local generation cache are not a federated membership proof or a shared destination directory. |
-| [WorldTransferEscrow.cs](../src/Puck.World.Server/WorldTransferEscrow.cs), [WorldInstanceHost.Transfers.cs](../src/Puck.World.Server/WorldInstanceHost.Transfers.cs) and [transfer recovery](../src/Puck.World.Server/WorldInstanceHost.TransferRecovery.cs) | Reserve, commit, status and recovery already exist. A transfer request names one source authority. Coordinating a complete roster arriving from several sources is additional work. |
-| [WorldSiloHost.cs](../src/Puck.World.Silo/WorldSiloHost.cs) and [WorldAuthorityBlobStore.cs](../src/Puck.World.Server/WorldAuthorityBlobStore.cs) | Activation fences and one conditional root publication now guard checkpoint/journal state. The silo queues snapshots at capture time with explicit journal coverage and freezes retiring activations. Receipt storage is a primitive, not yet an end-to-end durable mutation-completion guarantee. Journal append still reads and rewrites its page. |
-| [WorldSubmissionResult.cs](../src/Puck.World.Protocol/Protocol/WorldSubmissionResult.cs) | Mutation submissions carry a caller-preserved operation id and receive a typed applied/refused completion after application. `Ack` remains drainage-only for other payloads. A persistence enum does not itself publish a durable receipt; that final lifecycle integration remains work. |
-| [WorldExternalOperationJournal.cs](../src/Puck.World.Server/WorldExternalOperationJournal.cs) and [extension hosting](../src/Puck.World.Server/ExtensionHosting.md) | Durable external requests, request-key deduplication, causal recovery and reconciliation already exist. Reuse them for external coordination; do not build another outbox. |
-| [IObjectBlobStore.cs](../src/Puck.Storage/IObjectBlobStore.cs) | Reads, conditional writes and listing exist. This interface has no deletion operation: physical expiry cleanup needs a bounded storage operation or the established provider lifecycle path, not an imaginary existing API. |
+| [WorldGroups.cs](../../src/Puck.World.Schema/WorldGroups.cs) | Members now carry an explicit local-or-issuer-qualified identity reference, a nullable assigned role and a join ordinal. The qualified value alone is not authentication or a federated membership claim. `Ephemeral` dissolves an emptied runtime group; the name alone does not specify restart recovery. |
+| [WorldServer.MutationCompose.cs](../../src/Puck.World.Server/WorldServer.MutationCompose.cs) and [WorldMutation.cs](../../src/Puck.World.Protocol/Protocol/WorldMutation.cs) | `FormGroup` creates an empty group and `JoinGroup` adds one member. `WorldMutation.Batch` already composes several mutations against one candidate, validates once, journals once, and refuses the whole batch if any member would be refused or if `ExpectedDefinition` no longer matches. A fully accepted run roster is a `Batch` of `FormGroup` plus its `JoinGroup`s under an expected revision, not a new operation. |
+| [WorldGrants.cs](../../src/Puck.World.Server/WorldGrants.cs) | Live local membership expansion now uses the member's exact role, including effective budgets and masks. A missing role gives no role-derived authority. Ownership-derived access uses the owning group's role; direct principal ownership remains separate. Checkpoint restore rebuilds these derived indexes from the restored roster. Authenticated connection-to-durable-member binding remains separate work. |
+| [WorldSessionResolver.cs](../../src/Puck.World.Schema/WorldSessionResolver.cs) | Local group-scoped resolution exists. Its local group ids and process-local generation cache are not a federated membership proof or a shared destination directory. |
+| [WorldTransferEscrow.cs](../../src/Puck.World.Server/WorldTransferEscrow.cs), [WorldInstanceHost.Transfers.cs](../../src/Puck.World.Server/WorldInstanceHost.Transfers.cs) and [transfer recovery](../../src/Puck.World.Server/WorldInstanceHost.TransferRecovery.cs) | Reserve, commit, status and recovery already exist. A transfer request names one source authority. Coordinating a complete roster arriving from several sources is additional work. |
+| [WorldSiloHost.cs](../../src/Puck.World.Silo/WorldSiloHost.cs) and [WorldAuthorityBlobStore.cs](../../src/Puck.World.Server/WorldAuthorityBlobStore.cs) | Activation fences and one conditional root publication now guard checkpoint/journal state. The silo queues snapshots at capture time with explicit journal coverage and freezes retiring activations. Receipt storage is a primitive, not yet an end-to-end durable mutation-completion guarantee. Journal append still reads and rewrites its page. |
+| [WorldSubmissionResult.cs](../../src/Puck.World.Protocol/Protocol/WorldSubmissionResult.cs) | Mutation submissions carry a caller-preserved operation id and receive a typed applied/refused completion after application. `Ack` remains drainage-only for other payloads. A persistence enum does not itself publish a durable receipt; that final lifecycle integration remains work. |
+| [WorldExternalOperationJournal.cs](../../src/Puck.World.Server/WorldExternalOperationJournal.cs) and [extension hosting](../../src/Puck.World.Server/ExtensionHosting.md) | Durable external requests, request-key deduplication, causal recovery and reconciliation already exist. Reuse them for external coordination; do not build another outbox. |
+| [IObjectBlobStore.cs](../../src/Puck.Storage/IObjectBlobStore.cs) | Reads, conditional writes and listing exist. This interface has no deletion operation: physical expiry cleanup needs a bounded storage operation or the established provider lifecycle path, not an imaginary existing API. |
 
 The semantic `WorldGroup` reference walk through `Puck.World.Console` also reaches
 serialization, the resolver, the mutation composer and the grant indexes. That
@@ -67,7 +67,7 @@ selects its allowed configuration through the existing trusted registry.
 One authority owns a group's membership and decisions. Its hosting process can
 change without changing the group's identity. Do not allocate a world, timer,
 Orleans grain or database per group. The existing
-[WorldGrain](../src/Puck.World.Silo/WorldGrain.cs) remains a thin activation adapter.
+[WorldGrain](../../src/Puck.World.Silo/WorldGrain.cs) remains a thin activation adapter.
 
 The dungeon's authority independently owns capacity, progress and admission.
 The group's leader does not host the group and does not become the dungeon's

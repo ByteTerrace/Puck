@@ -290,6 +290,42 @@ Rules the catalog encodes:
   `Puck.State/GeneratorEngine.cs` because the BOOT resolver — which
   runs before any server exists — must reach the identical code.
 
+## Rule-effect sugar (`.puck`) → state mutation kind
+
+A world rule's body is `.puck` sugar over `Puck.State`'s own effect union
+(`ActionEffect`, `src/Puck.State/ActionEffect.cs`) — `Puck.World.Transpiler`
+invents no rule-effect shape of its own. Each fired effect becomes a
+`StateMutation` (`src/Puck.State/IRuleHost.cs`), and `WorldServer.RuleFrame.cs`
+folds that into one of the SAME `WorldMutation` state kinds the catalog above
+already names — never a shape unique to rules:
+
+| `.puck` effect statement | `ActionEffect` discriminant | `StateMutation` | Folds through |
+|---|---|---|---|
+| `row[key] = rhs` | `setState` | `UpsertCell` (`Write: Set`) | `UpsertStateCell` (49) |
+| `row[key] += rhs` | `addState` | `UpsertCell` (`Write: Add`) | `UpsertStateCell` (49) |
+| `countdown row[key]` | `countdownState` | `UpsertCell` (decrements by the tick's own step, floored at 0) | `UpsertStateCell` (49) |
+| `schedule row[key] in Ns` | `scheduleState` | `UpsertCell` (writes the due tick) | `UpsertStateCell` (49) |
+| `remove row[key]` | `removeStateCell` | `RemoveCell` | `RemoveStateCell` (50) |
+| `push row = rhs` | `pushState` | `Apply(StateTransform.Push)` | `TransformState` (75) |
+| `transform local = call(...)` | `transformState` | `Apply(Transform)` | `TransformState` (75) |
+| `generate(row: "...")` | `generate` | `Generate` | `Generate` (51) |
+| `transaction { } [onFailure { }]` | groups the statements above atomically (`RuleEvaluator.Effects.FireTransaction`) | — | each grouped effect folds as its own row above |
+
+Every one of these still lands on the rule frame first and installs once per
+tick — the cross-cutting "rule writes land on a frame" contract in
+`SKILL.md` — so the table names the kind a write eventually composes as,
+never a second apply path.
+
+**World rule bodies are straight-line.** The core `.puck` language parses
+`if`/`repeat`/`break`, call-form gates, and compound assignment
+(`+= -= *= /= %= &= |= ^= <<= >>=`) for every vocabulary, but the WORLD
+vocabulary's rule shape refuses all three by name: control flow is PUCK037, a
+call-form gate where only comparisons are legal is PUCK038, and a compound
+assignment none of the effects above carries an operator for is PUCK039
+(`src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`). A cartridge rule
+(`puck.cartridge.v1`, see `rom-forge`) is a DIFFERENT vocabulary that admits
+`if`/`repeat`/`break` — the refusal is per-vocabulary, not language-wide.
+
 ## Adding a mutation kind, end to end
 
 **FIRST — the catalog runs on a 128-bit lane; `puck search "\[MutationKind\(" src -M 0`

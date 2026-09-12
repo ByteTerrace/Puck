@@ -1,0 +1,35 @@
+schema: "puck.world.def.v1"
+basis: "../../../../../src/Puck.World/Assets/worlds/avatars/moth.world.json"
+documentId: "eval-flat-plastic"
+
+placements {
+}
+
+prototypes {
+    prototype "subject" {
+        document {
+            schema: "puck.creation.v1"
+            name: "subject"
+            palette [
+                { color: "#6E7580" specular: 0 roughness: 0.6 }
+                { color: "#0A0A0A" specular: 0 roughness: 0.6 }
+            ]
+            shape Superellipsoid "head" {
+                material: 0
+                position [0, 1.6, 0]
+                scale [0.14, 0.16, 0.14]
+                exponent: 3
+            }
+            shape Sphere "eyeLeft" {
+                material: 1
+                position [0.05, 1.62, 0.125]
+                scale [0.018, 0.018, 0.018]
+            }
+            shape Sphere "eyeRight" {
+                material: 1
+                position [-0.05, 1.62, 0.125]
+                scale [0.018, 0.018, 0.018]
+            }
+        }
+    }
+}

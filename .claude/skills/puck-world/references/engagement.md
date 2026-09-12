@@ -5,7 +5,8 @@ saying where its resolved intent goes and what the channels MEAN when they get
 there. That set is the whole of engagement: there is no route row, no capture
 flag, and no latch beside it to disagree with. Files:
 `src/Puck.World.Server/WorldEngagement.cs`, `WorldGrants.cs` (application
-storage), `src/Puck.World.Addons/Machines/WorldMachineHost.cs`,
+storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
+`.Bindings.cs`/`.Instances.cs` partials — pad/instance resolution),
 `src/Puck.World.Schema/ControlApplication.cs`,
 `src/Puck.World.Protocol/Protocol/WorldCommand.cs`, `WorldScreen.cs`
 (`WorldScreenRoute`), `WorldKit.cs` (the pad map),

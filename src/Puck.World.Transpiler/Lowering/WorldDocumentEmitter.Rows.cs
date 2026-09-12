@@ -7,7 +7,7 @@ using Puck.Transpiler.Diagnostics;
 namespace Puck.World.Transpiler.Lowering;
 
 // `shape Type "name" { }` (§4.1, a creation-document row — CreationDocument.Shapes, the live successor to the dead
-// `solid`/`"solids"` collector this renames in place) and `placements { policy: { } placement "id" { } }` (§4.2).
+// `solid`/`"solids"` collector this renames in place) and `placements { policy { } placement "id" { } }` (§4.2).
 public static partial class WorldDocumentEmitter {
     private static void LowerShapeBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["shapes"] is not JsonArray shapesArr) {

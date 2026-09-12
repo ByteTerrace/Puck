@@ -36,11 +36,17 @@ or the `$parked:` reserved rule channel.
 
 Before this wave, both doors' leave/disconnect path nulled `Entry.Body`,
 cleared `Entry.Active` (and, for a peer, `Entry.IsRemoteHuman`) IMMEDIATELY.
-Now, when `definition.Population.ReconnectGraceTicks` is positive (the
-authored document field; default 720 = 3s at 240 Hz; `0` keeps the exact
-pre-park immediate-teardown behavior), the SAME call instead:
+Now, when the compiled `definition.PopulationReconnectGraceTicks`
+(`WorldDefinition.cs:322`, a `CompiledTickDuration` derived from the authored
+`population.reconnectGraceSeconds` field at the world's own simulation rate;
+default 3.0s = 720 ticks at 240 Hz) is finite and positive — `IsZero` keeps
+the exact pre-park immediate-teardown behavior, and `IsNever` (a positive
+authored grace compiled at simulation rate 0) parks the body forever, never
+sweeping it — the SAME call instead:
 
-1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick + ReconnectGraceTicks` (derived at compile from the document-authored `reconnectGraceSeconds`)
+1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick +` the
+   compiled grace's tick count (`WorldPopulation`'s own cache of
+   `WorldDefinition.PopulationReconnectGraceTicks`, recompiled on any Rebuild)
    (`tick` is `WorldServer.NextInputTick` at the synchronous call site, or the
    `Step`-local `tick` inside the tick loop — both name the same instant).
 2. Leaves `Entry.Body`, `Entry.Active`, and (for a peer) `Entry.IsRemoteHuman`

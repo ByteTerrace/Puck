@@ -1,0 +1,41 @@
+{
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I hand-wrote this chunk of a puck.cartridge.v1 document as JSON and want it converted to idiomatic .puck source instead: { \"variables\": [ { \"name\": \"cursor\", \"initial\": 0 } ], \"arrays\": [ { \"name\": \"field\", \"initial\": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] } ] }. Give me the .puck form.",
+      "files": [],
+      "expected_output": "variables [ { name: \"cursor\", initial: 0 } ] and arrays [ { name: \"field\", initial: map(range(0, 20), i => 0) } ] (or an equivalent range/map builtin producing 20 zeros) written with array properties using no colon before the bracket, and scalar properties using a colon.",
+      "assertions": [
+        "Arrays are written as `identifier [ ... ]` with no colon before the bracket, never `variables: [` or `arrays: [`",
+        "The 20-element all-zero array collapses to a `map(range(0, 20), i => 0)` (or equivalent range/map) builtin rather than 20 literal zeros",
+        "Scalar object properties inside the row objects (`name:`, `initial:` on the variable) keep their colon",
+        "Does not introduce a `for` loop for a single-array value — `for` generates rows, `map` generates a value inside one row"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Two of my .puck edits are failing to compile and I don't understand either error:\n\n1) `host: {\\n    width: 1280\\n}` fails with a PUCK040 error pointing at the `host:` line.\n2) A rule in a puck.world.def.v1 document fails with PUCK037 when I write:\n```\nrule \"advance-round\" {\n    if tableState[activeRound] < 8 {\n        tableState[activeRound] += 1\n    }\n}\n```\nWhat's actually wrong with each one, and how do I fix them?",
+      "files": [],
+      "expected_output": "PUCK040: a container value (a block) is always written without a colon in front of it — `host { ... }`, not `host: { ... }`; drop the colon. PUCK037: the world vocabulary's rule body is straight-line and cannot carry `if`/`repeat`/`break` even though the core parser accepts that syntax for every vocabulary; gate the rule itself with a `when` clause (or split into two rules) instead of branching inside the body.",
+      "assertions": [
+        "States the PUCK040 fix as removing the colon before the block, not changing the block to a colon-scalar form",
+        "States that a colon in front of a container (`{` or `[`) is refused at every depth, not just at the document root",
+        "States that PUCK037 fires because the puck.world.def.v1 rule body is straight-line-only, not because `if` is unsupported by the language in general",
+        "Names `when` (gating the whole rule) or splitting into two rules as the concrete fix for the PUCK037 case, not a workaround that keeps the `if`",
+        "Does not conflate the two diagnostics or suggest the same fix for both"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "This cartridge array in my .puck source is 180 hand-typed zeroes and it's painful to review or change: `arrays [ { name: \"field\", initial: [0, 0, 0, ... 180 times ... , 0] } ] }`. Is there a way to write this that doesn't require 180 literal lines?",
+      "files": [],
+      "expected_output": "Replace the literal list with the compile-time collection builtins: `arrays [ { name: \"field\", initial: map(range(0, 180), i => 0) } ] }`. `range(0, 180)` produces the 180-element compile-time sequence and `map`'s lambda produces each element's value; the compiled JSON still contains 180 literal zeros (the builtin runs once at compile time, not at play time), but the authored source shrinks to one line.",
+      "assertions": [
+        "Proposes `map(range(0, 180), i => 0)` or an equivalent range/map/reduce builtin composition, not a `for` loop (a `for` emits rows, not one array's contents)",
+        "Is explicit that the compiled JSON still contains all 180 literal values — the builtin is a compile-time authoring convenience, not a runtime-evaluated expression",
+        "Does not claim this changes what the cartridge does at play time"
+      ]
+    }
+  ],
+  "skill_name": "puck-dsl"
+}

@@ -49,6 +49,36 @@ public class LinterCoverageTests {
         );
     }
 
+    public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
+
+    [Theory]
+    [MemberData(nameof(GetShippedWorldSources))]
+    public void EveryCommittedSourceLintsCleanOfReferenceFindings(string relativePath) {
+        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
+
+        var diagnostics = new DiagnosticBag();
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(File.ReadAllText(fullPath), diagnostics: diagnostics);
+        Assert.NotNull(parseResult.Value);
+
+        var sourceMap = new SourceMap();
+        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+            parseResult.Value,
+            basePath: Path.GetDirectoryName(fullPath),
+            sourceMap: sourceMap,
+            diagnostics: diagnostics
+        , cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotNull(loweringResult.Value);
+
+        PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: fullPath);
+
+        var referenceFindings = diagnostics.Where(d => ReferenceLintCodes.Contains(d.Code)).ToList();
+        Assert.True(
+            referenceFindings.Count == 0,
+            $"{relativePath} expected no reference-lint findings, got:{Environment.NewLine}"
+                + string.Join(Environment.NewLine, referenceFindings.Select(d => $"{d.Code} {d.Span}: {d.Message}"))
+        );
+    }
+
     [Fact]
     public void RootDocumentReportsItsOwnMisspelledStateRowWithARealSpan() {
         var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), "puck.world.json");

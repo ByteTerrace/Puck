@@ -1,0 +1,33 @@
+schema: "puck.world.def.v1"
+basis: "../../../../../src/Puck.World/Assets/worlds/avatars/moth.world.json"
+documentId: "eval-blocky-pauldron"
+
+placements {
+}
+
+prototypes {
+    prototype "subject" {
+        document {
+            schema: "puck.creation.v1"
+            name: "subject"
+            palette [
+                { color: "#8A8F94" specular: 0.3 roughness: 0.5 }
+            ]
+            shape Box "plateLower" {
+                material: 0
+                position [0, 1.0, 0]
+                scale [0.22, 0.09, 0.14]
+            }
+            shape Box "plateMid" {
+                material: 0
+                position [0, 1.12, 0]
+                scale [0.24, 0.10, 0.15]
+            }
+            shape Box "plateUpper" {
+                material: 0
+                position [0, 1.25, 0]
+                scale [0.20, 0.08, 0.13]
+            }
+        }
+    }
+}

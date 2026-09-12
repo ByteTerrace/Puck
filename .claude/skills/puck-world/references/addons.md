@@ -8,68 +8,17 @@ The ABI itself (cell layouts, exports, mount steps, determinism posture) is
 owned by `src/Puck.Scripting/README.md` — read it before touching the guest
 boundary; this file carries the World-relevant surface.
 
-For nondeterministic providers and external side effects, read
-`src/Puck.World.Server/Extensions.md`. `IWorldAddonHost` extends
-`IWorldExtensionRuntime` with `Recomputed` policy; `WorldRecordedExtension`
-uses recorded mutation ingress and the same `WorldCapabilityRequest` matcher.
-Drain provider contributions on the simulation pump, never from a provider
-thread into a tape bucket. External dispatch uses a durable CAS journal and
-authority lifetime leases; replay suppresses it before restoring its timeline.
-Do not confuse a queued contribution, an applied world mutation, and a confirmed
-external operation. Checkpoint capture still refuses pumped WASM/machine state;
-such a host needs complete replay recovery evidence for durable operations.
-`WorldReplayTape.CaptureExternalOperationCause` exports that prefix without
-stopping recording. Keep pinned modules available. After a live replay, only an
-explicit host `StartRecordedExtensionEpoch` admits fresh recorded runtimes;
-it refuses during active replay and never revives old instances.
-
-`src/Puck.World.Azure/README.md` owns the installed, explicitly enabled generic ARM provider. Keep
-its SDK dependency above Server. Reconciliation receives the last durable
-provider result, not the authority recovery image; preserve that result when a
-status query fails. SDK retries of mutations and cross-origin polling must not
-bypass the external-operation journal. No live cloud operation belongs in tests.
-
-`src/Puck.World.Server/ExtensionHosting.md` owns explicit service registration,
-scoped `WorldExtensionClient` capabilities, and the bounded `WorldExtensionHost`
-worker. Give adapters clients, never the root journal, credentials, or providers.
-World manifests do not grant service access. In-process providers are trusted;
-do not introduce executable discovery from documents or writable directories.
-`ObjectBlobNamespace` binds storage to a host-selected object, opaque namespace,
-byte limit, and lifetime; retain replay revocation on saved handles. Follow
-`src/Puck.Storage/README.md` for local confinement. Do not replace native
-handle-based containment with a string-prefix check. Verify changes with
-`WorldExtensionHostLawTests`, `WorldExtensionLawTests`, and
-`ConfinedStorageLawTests`; the latter needs Windows and Linux filesystem legs.
-
-`WorldConfiguredExtensions` now assembles installed provider types through the
-existing `WorldExtensionRegistry`, from strict `puck.world.extensions.v1` host
-configuration. `--extensions-config-file` is deployment authority, not a world
-field: never load it through imports or an addon-controlled path. Its exact world
-ID pins the boot authority. `WorldServiceExtensions` registers `azure.resource`
-in every boot shape; Azure is an Engine services adapter consumed by the root,
-not an upward Optional extensions dependency. No configuration loads assemblies.
-Read `src/Puck.World.Server/ExtensionConfiguration.md` before changing this seam.
-State connectors read through disclosure and manifests, capture cause on the
-closed simulation boundary, then do journal work asynchronously. Responses use
-the original request key; read back admitted status before caching completion.
-`world.extensions.catalog` and `world.extensions` own operator diagnostics.
-Run `WorldConfiguredExtensionLawTests` plus the existing extension/storage laws,
-and run the real headless executable for composition changes. Use only local
-input refusals or empty request tables for Azure boot canaries; never cloud mutations.
-
-Collection reads use the optional `IWorldConfiguredObservationProvider` capability
-and `IWorldExtensionObservationSource`, scheduled by `WorldConfiguredExtensions`.
-Sources return complete detached snapshots, disclose only approved fields, and
-cooperate with deadline/lifetime cancellation. Failures and overflow retain the
-last collection; never return a truncated set as complete. Projection uses one
-recorded mutation batch over existing state rows of any cell kind, parsed by
-each row's own kind, and nothing else. It checks admission read-back before
-suppressing retries. Replay revokes reads and blocks late projection. Keep
-provider concepts out of Server.
-Run `WorldObservationLawTests`; Azure pagination/confinement tests use fake HTTP.
-Live read-only discovery needs task authorization and must not gain mutation
-bindings. Check render admission too: a headless run cannot prove the boot
-placement-headroom envelope. The granaries module is the authored example.
+For nondeterministic providers and external side effects — extension hosting,
+Azure's ARM provider, storage confinement, and configured collection reads —
+read `src/Puck.World.Server/Extensions.md`, `src/Puck.World.Server/ExtensionHosting.md`,
+`src/Puck.World.Server/ExtensionConfiguration.md`, and `src/Puck.World.Azure/README.md`;
+those documents are the owning home for that surface, not this file. The one
+addon-relevant fact those documents don't carry: `IWorldAddonHost` extends
+`IWorldExtensionRuntime` with `Recomputed` policy, and `WorldRecordedExtension`
+uses recorded mutation ingress and the same `WorldCapabilityRequest` matcher an
+addon's own grants go through — so an addon and a configured extension share
+one capability-disclosure vocabulary even though they mount through different
+doors.
 
 ## Contents
 
@@ -222,12 +171,20 @@ stops emitting reads zero next tick.
 ## Requests, queries, verdicts
 
 Output cells are `Act` (drive) or `Ask` (request a handle). The request
-vocabulary (`Puck.Scripting.AddonAbi.RequestVerbs`) is closed and has TWO
-verbs today: `BodyPose = 0` (a query, `AnswerParts = 4`) and
-`SubmitMutation = 1` (`Count = 2`; a guest's declared `VerbCount` is a
-non-empty prefix) — a guest holding a Mutate handle over a document section
-acts through it with a JSON payload (kind ordinal + guest-memory pointer +
-length in the request cell's `A`/`B`/`C` lanes) rather than a query.
+vocabulary (`Puck.Scripting.AddonAbi.RequestVerbs`) is closed — `AddonAbi.cs`
+is the one authoritative member list; do not restate its size here, since a
+new verb is prefix growth the ABI pin never bumps for. Its members today:
+`BodyPose` (a query, no arguments, producing `BodyPoseAnswerParts` answer
+cells), `SubmitMutation` (a guest holding a Mutate handle over a document
+section acts through it with a JSON payload — the request cell's `A`/`B`/`C`
+lanes carry the mutation-kind ordinal, an unsigned guest-memory pointer, and a
+byte length — rather than a query; producing `SubmitMutationAnswerParts`
+answer cell), and `Designate` (a guest acts through a Drive handle over its
+OWN source body to designate a target: `A` is the target body index, `B` the
+target-register index, `C` zero; producing `DesignateAnswerParts` answer
+cell). `RequestVerbs.Count` bounds a guest's declared `VerbCount`, which may
+be any non-empty prefix of the vocabulary — growing the vocabulary must never
+refuse a guest built against fewer verbs.
 **A guest CAN edit the document at the ABI/authority level** — this is not
 withheld/inert. `Addons.WorldAddonMutationDecoder` wires 10 of
 the declared kinds today: the 5 HUD kinds
@@ -252,10 +209,14 @@ that need the whole document (does `creationId` resolve, does a `state` row's
 `Min`/`Max` pair validate, does a placement's `scale` sit inside the
 authoring envelope) stay with `WorldDefinitionValidator`, exactly like the
 HUD arms already left capacity/authoring checks to it.
-`ObservationVerbs` has 11 members: `GrantedBody` plus the ten world-events
-verbs the "World events" section below documents (`EventRegionEnter/Exit`,
-`EventSeatJoin/Leave`, `EventCollisionBegin/End`, `EventRouteEngaged/
-Disengaged`, `EventMachineMemoryChanged`, `EventGap`).
+`ObservationVerbs` (`AddonAbi.cs`, again the one authoritative list) is
+`GrantedBody` — the disclosure of a minted handle over a granted body, not an
+event — plus the world-events verbs the "World events" section below
+documents in full: region enter/exit, seat join/leave, collision begin/end,
+control-application engaged/disengaged, machine-memory-changed, the per-mount
+`EventGap` overflow summary, and federation link established/dropped
+(`EventLinkEstablished`/`EventLinkDropped`) — the sixth, ADDON-scoped family
+alongside the five WORLD-scoped ones "World events" names.
 
 Ask resolution gates on the manifest BEFORE subject inspection — an
 unrequested or out-of-range ask answers `AttenuatedToEmpty`, never

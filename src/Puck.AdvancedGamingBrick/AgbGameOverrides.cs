@@ -19,7 +19,7 @@ public readonly record struct AgbGameOverride(CartridgeBackup? Backup, bool? Has
 /// emulator keeps one — the string scan has a known-broken minority (anti-piracy carts that embed decoy save strings,
 /// the retro-classics series that baits with SRAM strings but is EEPROM-backed) that only an exact-code override
 /// resolves. The facts are public documentation (game codes are printed in the cartridge header; the behaviours are
-/// widely documented); no external emulator's data file was copied. See ACKNOWLEDGMENTS.md for citations.
+/// widely documented); no external emulator's data file was copied. See docs/citations.md for citations.
 /// <para>
 /// GPIO sensor presence (solar/tilt/gyro/rumble) keys off the same 4-character code. Game codes are public
 /// cartridge-header data; only the mapping from code to modeled hardware is encoded here. Any curated fixed-address

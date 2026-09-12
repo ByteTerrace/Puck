@@ -76,6 +76,31 @@ public class FormatterRoundTripTests {
         Assert.Equal("// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and", firstLine);
     }
 
+    public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
+
+    [Theory]
+    [MemberData(nameof(GetShippedWorldSources))]
+    public void FormattingNeverChangesWhatACommittedSourceCompilesTo(string relativePath) {
+        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
+        var source = File.ReadAllText(fullPath);
+        var formatted = PuckFormatter.Format(source);
+
+        var unformattedCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(CompileToJson(source, fullPath, relativePath)));
+        var formattedCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(CompileToJson(formatted, fullPath, relativePath)));
+
+        var mismatch = JsonMismatch.Find(JsonNode.Parse(unformattedCanonical), JsonNode.Parse(formattedCanonical), $"{relativePath}:");
+        Assert.Null(mismatch);
+    }
+
+    [Theory]
+    [MemberData(nameof(GetShippedWorldSources))]
+    public void FormattingACommittedSourceIsIdempotent(string relativePath) {
+        var pass1 = PuckFormatter.Format(File.ReadAllText(Path.Combine(ShippedWorlds.FindDirectory(), relativePath)));
+        var pass2 = PuckFormatter.Format(pass1);
+
+        Assert.Equal(pass1, pass2);
+    }
+
     private static JsonNode CompileToJson(string source, string fullPath, string relativePath) {
         var diagnostics = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);

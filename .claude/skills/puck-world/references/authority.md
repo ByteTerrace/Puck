@@ -335,9 +335,12 @@ principal immediately after it drops, with no tick in between — and stays
 with whoever took it (the template's re-mint refuses loudly). A census/inhabitant activation, which
 verifies no identity at all, still mints the `Control/all` seed
 (`BuildDefaultPeerControlGrants`) — population housekeeping, not an admission.
-A world document's `grants` section applies in the `WorldServer`
-constructor, in document order, under the Console actor, through the same
-`Grant` path `world.grant` uses — same loud accept/reject lines.
+In `.puck` source, `grants` is an ordinary array-of-objects property like any
+other document section — no dedicated sugar (grammar belongs to the
+`puck-dsl` skill). A world document's `grants` section applies in the
+`WorldServer` constructor, in document order, under the Console actor,
+through the same `Grant` path `world.grant` uses — same loud accept/reject
+lines.
 `WithoutAuthoredConsent` strips `Reach`/`Consent`/`Ceiling` from any
 document row carrying a ceiling, prints the withholding loudly, and applies
 the row with no pool: consent is authored LIVE by the seated human, never

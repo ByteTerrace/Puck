@@ -8,7 +8,7 @@ fold has an existing home whose declared purpose already covers it.
 
 This document records the decisions and the work they still imply. It states no
 status: what is built, the code answers, and what has been verified with the
-check that produced it belongs to [campaign.md](campaign.md). If this plan and
+check that produced it belongs to [campaign.md](../campaign.md). If this plan and
 the code disagree, the code wins and a line here is wrong.
 
 ## What the state of the art says, and what it implies here

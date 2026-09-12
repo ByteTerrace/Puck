@@ -5,7 +5,7 @@ using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Decompiler;
 
-// `placements { policy: { } placement "id" { } }` inverse (§4.2), mirroring `LowerPlacementsBlock`/
+// `placements { policy { } placement "id" { } }` inverse (§4.2), mirroring `LowerPlacementsBlock`/
 // `LowerPlacementRow`: `id` maps back to the block's quoted name (not `name` — `WorldPlacement`'s identity field is
 // `Id`), `prototypeId` maps back to a bare `prototype:` property, `yawDegrees`/`scale` elide at their defaults, and
 // `{"margin":0}` maps back to the bare `solid` flag.
