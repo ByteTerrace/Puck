@@ -4,6 +4,23 @@ World shading runs after the marcher accepts a hit. The field, analytic normal,
 material state, and configured lights feed a shared shader path on both GPU
 backends.
 
+## Silhouette coverage
+
+The deferred views pass softens grazing silhouette hits only when a cardinal
+neighbor sees sky. It reads the completed primary pass at the current view's
+render resolution; an empty tile uses the beam's current-frame proof because
+its primary records may be stale outside the indirect dispatch. An exhausted
+neighbor ray provides no visibility proof and cannot enable the blend.
+
+The weight uses the terminal field residual divided by the hit threshold,
+both in clamped field units, and the normal's grazing angle. A small field
+rise behind a surface is insufficient evidence of sky: it also occurs between
+grass and the ground, where sky blending creates pale outlines. This filter
+adds no field query. Geometry-to-geometry edges remain unfiltered, and the
+monolithic reference omits the filter because it has no completed neighbor
+records. Check silhouettes, ground-backed grass, changing cameras, multiple
+views and reduced render scales when changing this path.
+
 ## Ambient occlusion
 
 The default ambient path samples three points along the hit normal. Each probe

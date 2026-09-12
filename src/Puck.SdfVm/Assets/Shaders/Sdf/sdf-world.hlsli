@@ -1873,9 +1873,8 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
 //                   occlusion test, which scales the THRESHOLD up instead; the penumbra ESTIMATE divides a clearance
 //                   by the world-unit distance travelled, so that clearance is de-scaled.
 //   - calcAO      — the rung distance d in the (h - d) open-space deficit (a world-space rung minus a field sample).
-//   - coverage-AA — the open-space RISE (aheadField - terminalRadius), a world-space DIFFERENCE. It deliberately does
-//                   NOT de-scale the coverage RATIO, which stays in the SAME clamped units as the footprint termination
-//                   test it mirrors; the ratio must remain in clamped units.
+// Coverage AA deliberately does NOT de-scale its residual/threshold ratio: both operands use the clamped units
+// of the footprint termination test. Background visibility comes from neighboring primary records, not a field probe.
 // stepScale == 1.0 EXACTLY for an isometric, warp-free program and x / 1.0f == x to the bit, so those scenes stay
 // byte-identical whether the divide inlines here or is spelled at the call site.
 // GRADIENT-SCALED CALLERS: softShadowVisibility/calcAO/calcFastAO receive a `stepScale` argument the renderView
@@ -2053,7 +2052,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float materialBlendWeight = 0.0;
     int materialBlendOther = 0;
     int marchStep = 0;
-    // Tier-0 coverage AA: the CLAMPED field at the accepted hit (the terminal-step residual), captured by both march
+    // Silhouette coverage AA: the CLAMPED field at the accepted hit (the terminal-step residual), captured by both march
     // paths at their hit-accept. The coverage metric derived from it in the epilogue must live in the SAME units as
     // the footprint-adaptive termination test (clamped radius vs hitThreshold) — do NOT divide by stepScale here.
     // The divide-back that is correct for softShadowVisibility/calcAO (world-space geometric comparisons) is WRONG for this
@@ -2063,10 +2062,8 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // epilogue's coverage = terminalRadius / hitThreshold, and `traveled` is frozen at the hit after the loop breaks, so
     // this equals a recompute of max(SurfaceEpsilon, pixelFootprint * traveled) there — capture once instead.
     float terminalHitThreshold = SurfaceEpsilon;
-    // The per-program Lipschitz clamp, read ONCE and shared by softShadowVisibility, calcAO, and the coverage-AA epilogue (each
-    // divides it back out of a WORLD-space comparison — a penumbra ratio, an AO rung, the open-space rise; NOT the
-    // coverage ratio itself, which lives in the same clamped units as the termination test). Hoisting the single
-    // sdfStepScale() read here drops three redundant reads of the same segment-directory header lane.
+    // The per-program Lipschitz clamp, shared by softShadowVisibility and calcAO. Both divide it back out of
+    // world-space comparisons; the coverage ratio stays in the clamped units of the termination test.
     float stepScale = sdfStepScale();
 
     // The SLICE view never marches: it evaluates the field on a plane instead (its case below), and the beam prepass
@@ -2561,48 +2558,40 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             float fog = (1.0 - exp(-worldSkyFogDensity() * traveled));
             color = lerp(color, skyGradient(rayDirection), fog);
 
-            // Tier-0 coverage antialiasing: blend a HIT pixel toward the sky only where three independent signals agree
-            // it is a genuine silhouette edge, so a grazing edge ramps toward the background (reconstructing the
-            // sub-pixel silhouette ordered dither cannot) while solid surfaces stay bit-solid. The three signals are:
-            //   coverage — the terminal-step residual over the SAME hitThreshold the march terminated against (both
-            //       clamped units). A dead-on/overstepped hit lands deep below threshold (~0, saturate handles a
-            //       negative overstep); only a tangent-creep hit — the outermost ray of a silhouette — reads ~1.
-            //   grazing — the normal-facing clamp: a camera-facing surface can never blend, whatever the probes say.
-            //       Costs nothing (the normal is already computed on lit hits; an emissive screen face skips the
-            //       normal, reads grazing=1, and relies on the other two gates — its slab interior still gates to 0).
-            //   opened — the open-space confirmation, now RELATIVE: the field's rise from the terminal residual to a
-            //       probe a few footprints along the ray. A solid surface the ray is entering has a falling field
-            //       (opened <= 0 — the floor gates to 0 regardless of its terminal gap, the fault-2 leak); only a true
-            //       silhouette, where the ray exits past the edge into open space, rises. The rise is a world-space
-            //       geometric comparison, so de-scaling the DIFFERENCE by stepScale here is correct (same rule as
-            //       softShadowVisibility/calcAO) — fault 1 was de-scaling the absolute metric, not a difference.
-            // Sky-blend ONLY (Tier 0); blending against farther GEOMETRY is the gated Tier-1 continuation, out of
-            // scope here. Ordered dither runs AFTER this (the 8-bit store in sdf-world-views.comp), so the coverage
-            // ramp quantizes last and is never dithered-then-smeared along the edge.
-            // coverage rides terminalHitThreshold — the SAME threshold the march accepted the hit against, captured at
-            // accept (traveled is frozen at the hit after the loop, so this equals recomputing it here).
+#ifdef SDF_PRIMARY_READ
+            // Approximate sky-silhouette coverage, using visibility from this frame's completed primary pass.
+            // A local field rise behind a hit cannot distinguish sky from farther geometry: that old probe
+            // painted white halos around grass against the ground and cost another whole-field query.
+            // Keep the residual ratio in the same clamped units as hit acceptance; the normal gates grazing hits.
+            // Geometry-to-geometry edges receive no sky blend. The monolithic reference has no completed neighbor
+            // records and omits this filter. Ordered dither and bounded-volume composition still happen afterward.
             float coverage = saturate(terminalRadius / terminalHitThreshold);
             float grazing = (1.0 - saturate(-dot(normal, rayDirection)));
-            // The open-space probe (aheadField) is a WHOLE extra VM interpretation, so gate it: only a genuine
-            // silhouette candidate — coverage AND grazing both non-trivial — can produce a visible blend. A camera-
-            // facing solid hit reads grazing ~0 (and an overstepped one coverage ~0), so edgeWeight falls below the
-            // 8-bit dither quantum, the blend would quantize away, and the probe is pure waste there. Below the gate
-            // `opened` stays 0 and the lerp is a no-op — visually identical, one fewer map() on the common path.
             float edgeWeight = (coverage * grazing);
-            float opened = 0.0;
-
+            bool adjacentSky = false;
             if (edgeWeight > DitherQuantum) {
-                float probeSpan = max((pixelFootprint * traveled) * 3.0, SurfaceEpsilon);
-                float aheadField = mapDistanceMasked(surfacePoint + (rayDirection * probeSpan), instanceMaskBase);
-
-                sdfEvalCount += 1.0; // the open-space probe, only when the silhouette gate above admits it
-
-                // The open-space rise is a world-space geometric difference, so divide the Lipschitz clamp back out
-                // (same rule as softShadowVisibility/calcAO — fault 1 was de-scaling the ABSOLUTE coverage metric, not a difference).
-                opened = smoothstep(0.0, (0.5 * probeSpan), sdfDeScaleField((aheadField - terminalRadius), stepScale));
+                uint2 renderDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
+                const int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
+                [unroll] for (uint i = 0u; i < 4u; i++) {
+                    int2 neighbor = int2(pixel) + offsets[i];
+                    if (all(neighbor >= 0) && all(neighbor < int2(renderDims))) {
+                        uint neighborTile = worldTileIndex(viewIndex, uint2(neighbor) / WorldTileSize, params.tileGrid);
+                        // Empty tiles outside the indirect dispatch bbox have stale hit records. Use the beam's
+                        // current-frame emptiness proof directly; only live tiles may read the primary cache.
+                        if (tiles[worldTileMarchStartIndex(neighborTile)] == TileEmpty) {
+                            adjacentSky = true;
+                        } else {
+                            uint flags = sdfPrimaryHits[sdfPrimaryHitOffset(uint2(neighbor), viewIndex) + 11u];
+                            // Exhaustion proves neither sky nor geometry. Treat it conservatively as unknown.
+                            adjacentSky = adjacentSky || ((flags & 0x80000000u) == 0u && (flags & 255u) < (uint)MaxSteps);
+                        }
+                    }
+                }
             }
-
-            color = lerp(color, skyGradient(rayDirection), (edgeWeight * opened));
+            if (adjacentSky) {
+                color = lerp(color, skyGradient(rayDirection), edgeWeight);
+            }
+#endif
         }
     }
 

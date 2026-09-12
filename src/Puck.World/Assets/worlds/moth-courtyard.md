@@ -16,6 +16,11 @@ The floor, trees and rocks are solid. The banks and sandy patches have modeled
 relief, while surface weathering adds color variation to the grass and bark.
 Fine noise relief is visual: contact follows the underlying shapes, with the
 ground's displacement limited to one centimeter. Grass tufts are decorative.
+Banks, sand, moss, roots and crowns use slightly full superellipsoids
+(`landscapeExponent = 2.05`). Their bounded field avoids making a flattened
+shape slow every ray step through its entire noise scope. The previous
+ellipsoid composition exhausted the primary march budget at shallow angles,
+leaving sky where ground and tree bases should have appeared.
 Keep the central stations and inspection-camera corridors open when adjusting
 the scenery tables in the source.
 

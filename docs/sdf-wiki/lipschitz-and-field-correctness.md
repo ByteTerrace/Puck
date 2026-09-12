@@ -142,12 +142,13 @@ Two further consequences of scoping the analysis:
   relief/warps/eccentricity never tax the global `stepScale`. Anything
   UNSCOPED still folds globally — a flattened `Ellipsoid` outside a scope
   slows every march in the program by its eccentricity.
-- **The far band.** The relief ops are bounded by `|amplitude|`, so past
-  `4·|amplitude|` of accumulated field the kernels subtract `|amplitude|`
-  instead of evaluating the basis — a valid conservative lower bound. The
-  band rarely fires for a camera standing on the noised surface itself
-  (every march sample is near-band there); walkable relief belongs in
-  geometry, noise on silhouette masses.
+- **Continuous relief.** `Displace` and `NoiseDisplace` evaluate their basis
+  at every distance in both the scalar and gradient interpreters. Replacing
+  relief with `-|amplitude|` outside a band gives a lower value, but the jump
+  at the band's edge is not a continuous field. Footprint-based hits can
+  land there, and nearby normal and curvature samples then produce visible
+  rings and speckles. A future acceleration must keep a conservative step
+  bound separate from the field used for hits, materials and derivatives.
 
 Visual plausibility is not evidence of a safe distance estimate. Validate new
 field operations with grazing rays, fold boundaries, thin geometry, and a

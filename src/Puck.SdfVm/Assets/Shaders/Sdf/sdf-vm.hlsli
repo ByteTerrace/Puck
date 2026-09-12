@@ -3032,14 +3032,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
-                    // FAR-BAND fast path: the relief is bounded by |amplitude|, so beyond a few amplitudes of the
-                    // accumulated field `f - |amplitude|` is already a valid conservative lower bound — the march
-                    // needs nothing tighter there, and the trig runs only near the band that can matter.
-                    float displaceReach = abs(data0.w);
-                    if (result.distance > (4.0 * displaceReach)) {
-                        result.distance -= displaceReach;
-                        break;
-                    }
+                    // Evaluate the same continuous field at every distance. Switching to f-|amplitude| outside
+                    // a band introduces a jump that corrupts footprint hits and finite-difference curvature.
                     float3 df = (data0.xyz * localPosition);
                     result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
                     break;
@@ -3064,13 +3058,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_NOISE_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
-                    // FAR-BAND fast path (see SDF_OP_DISPLACE): the normalized octave sum stays in [-1, 1], so the
-                    // relief is bounded by |amplitude| and the far field subtracts it instead of hashing.
-                    float noiseReach = abs(data0.y);
-                    if (result.distance > (4.0 * noiseReach)) {
-                        result.distance -= noiseReach;
-                        break;
-                    }
+                    // Keep the field continuous, including outside the zero-set neighborhood: primary footprint
+                    // hits, material selection and curvature all consume these values (see SDF_OP_DISPLACE).
                     float3 q = (localPosition * data0.x);
                     float octaveAmplitude = 1.0;
                     float noiseSum = 0.0;
@@ -3969,13 +3958,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 #ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DISPLACE: {
                     // gradient += amp * grad(sin*sin*sin) — analytic and exact (the FD-cancellation win), mapped to world.
-                    // FAR-BAND fast path (KEEP IN SYNC with mapCore's case): the skipped band contributes a constant
-                    // to the bound field, so the gradient is untouched there.
-                    float displaceReach = abs(data0.w);
-                    if (result.distance > (4.0 * displaceReach)) {
-                        result.distance -= displaceReach;
-                        break;
-                    }
+                    // The scalar and dual evaluate the same continuous relief at every distance.
                     float3 df = (data0.xyz * localPosition);
                     float sx = sin(df.x);
                     float sy = sin(df.y);
@@ -4002,12 +3985,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 case SDF_OP_NOISE_DISPLACE: {
                     // distance += amp*invNorm*fbm; gradient += the analytic octave-summed lattice gradient, mapped to
                     // world through the chain Jacobian columns (KEEP IN SYNC with mapCore's case above).
-                    // FAR-BAND fast path (KEEP IN SYNC with mapCore's case): constant contribution, gradient untouched.
-                    float noiseReach = abs(data0.y);
-                    if (result.distance > (4.0 * noiseReach)) {
-                        result.distance -= noiseReach;
-                        break;
-                    }
+                    // KEEP IN SYNC with mapCore: no discontinuous far-band substitution.
                     float3 q = (localPosition * data0.x);
                     float octaveAmplitude = 1.0;
                     float octaveFrequency = data0.x;
