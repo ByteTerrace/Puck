@@ -210,6 +210,8 @@ name — says the operand is a time.
 
 ## Verification
 
+The [DSL release plan](../../docs/specs/dsl-release-hardening.md) preserves the semantic-consistency decisions, regression combinations and combined World release evidence required before further language growth.
+
 Lowering keeps compile-time values immutable and borrows cached arrays for reads. Indexing one element does not
 copy its containing array; a copy is made when a value enters output. `distinct` uses structural hashing and
 retains the first occurrence. Objects compare independently of property order, and integer comparison, sorting,

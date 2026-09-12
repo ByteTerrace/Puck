@@ -283,11 +283,11 @@ all if a different consumer read it differently.
 
 ## Related resources
 
-- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
+- [.claude/skills/sdf-world/SKILL.md](../../../.claude/skills/sdf-world/SKILL.md)
   — the `SdfFieldEvaluator` sync-pair entry (excluded-ops reconciliation,
   measured tolerances) and the "Composition, anchors, views, and queries"
   section's query provider summary.
-- [CLAUDE.md](../../CLAUDE.md) — the determinism contract (core rule 4). Note
+- [CLAUDE.md](../../../CLAUDE.md) — the determinism contract (core rule 4). Note
   that it no longer pairs with a verification contract for the engine: the
   battery that gated one is quarantined with `Puck.Post`.
 - Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,

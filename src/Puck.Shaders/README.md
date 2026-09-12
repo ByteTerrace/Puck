@@ -73,7 +73,7 @@ manifest's config schema into the world-document JSON Schema, so
 | Key | Meaning |
 |-----|---------|
 | `$schema` | `puck.shader.v1`. |
-| `name` | The set's id; must equal the file stem before `.puck.shader.json`. |
+| `name` | The set's id; the manifest filename is `<name>.puck.shader.json`. |
 | `description` | Carried into the emitted config JSON Schema. |
 | `stages` | `{ "vertex", "fragment" }` (a graphics set) or `{ "compute" }`; each a sibling `<stem>.hlsl` compiled to `<stem>.spv` and `<stem>.dxil`. |
 | `bindings[]` | `{ kind, vulkanBinding, directXRegister, count }`; `kind` is `storageBuffer`, `sampledImage`, `storageImage`, or `accelerationStructure`. Authored by hand and cross-checked against the pipeline description built for the set. A fullscreen pass declares exactly one `sampledImage` (the inner surface). |
@@ -218,7 +218,7 @@ runs, only the kind's own `class`.
 | Key | Meaning |
 |-----|---------|
 | `$schema` | `puck.probe.v1`. |
-| `name` | The kind's id; must equal the file stem before `.puck.probe.json`. |
+| `name` | The kind's id; the manifest filename is `<name>.puck.probe.json`. |
 | `class` | `kernel` (handwritten GPU compute on the camera graph's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
 | `inputs[]` | `{ name, class: "frame"\|"strobePair", optional?: bool }`, `1..8` sockets bound at `t0, t1, …` in this order (a `strobePair` socket takes two consecutive registers, lit then unlit). `name` is unique within the manifest: letters, digits, or `-`, starting with a letter. A document row plugs one `WorldFrameSource` into each socket by name; `optional` lets a row leave it unbound. |
 | `trigger` | The socket name whose new frame starts a cycle; defaults to `inputs[0].name`, must name a declared socket. |
@@ -286,6 +286,8 @@ image terms, in `faerie`'s `paintingX0..paintingY3` config order, so a
 quad — retroreflective tape on a real wall becomes a tracked painting frame.
 
 ## Shader pipelines and live development
+
+The [pipeline evolution plan](../../docs/specs/shader-pipeline-evolution.md) preserves the remaining execution, timing, packaging and hybrid-rendering work, with dependencies and completion evidence.
 
 A shader is source code for a GPU stage. A pass dispatches compute work or
 renders a fullscreen triangle. A pipeline connects those passes through named

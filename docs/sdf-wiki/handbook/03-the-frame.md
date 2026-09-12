@@ -17,7 +17,7 @@ precede culling; camera traversal, surface evaluation, AO and lighting have sepa
 ```
 
 These are the engine's GPU timing labels. Here is what the culling and rendering
-passes do; [the engine README](../../src/Puck.SdfVm/README.md)
+passes do; [the engine README](../../../src/Puck.SdfVm/README.md)
 describes the hit records shared by the four per-pixel passes.
 
 **mask** (`sdf-instance-cull.comp`) computes, for every 16×16 screen tile, the
@@ -201,16 +201,16 @@ pure fine-march number.
 ## Related resources
 
 - The five passes, the mask-first reorder, and the fused-cull occupancy tax:
-  [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md)
+  [`.claude/skills/sdf-world/SKILL.md`](../../../.claude/skills/sdf-world/SKILL.md)
   ("The MASK-FIRST pass order") and `SdfWorldEngine.PassLabels`.
 - The beam-slope sweep, the mask-first before/after table, and the carve
   ladders: the bench notes that held those tables were deleted on 2026-08-02
   and nothing replaced them. [08-performance.md](08-performance.md) keeps the
   headline shape of each; the underlying tables are gone.
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:
-  [`docs/sdf-wiki/hierarchical-and-instance-acceleration.md`](../sdf-wiki/hierarchical-and-instance-acceleration.md).
+  [`docs/sdf-wiki/reference/hierarchical-and-instance-acceleration.md`](../reference/hierarchical-and-instance-acceleration.md).
 - The two-deep frame ring, its per-slot fences, and the cross-frame scratch
   barrier: `FrameRingSize` and the `Record` method in
-  [`src/Puck.SdfVm/SdfWorldEngine.cs`](../../src/Puck.SdfVm/SdfWorldEngine.cs).
+  [`src/Puck.SdfVm/SdfWorldEngine.cs`](../../../src/Puck.SdfVm/SdfWorldEngine.cs).
 - Render-scale quantization and the byte-exact native path: the `RenderScale`
   sync-pair row in the sdf-world skill.

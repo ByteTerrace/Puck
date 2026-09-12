@@ -184,19 +184,19 @@ that model into practice with `SdfProgramBuilder`.
 
 ## Related resources
 
-- [docs/sdf-wiki/README.md](../sdf-wiki/README.md) — the standing
+- [docs/sdf-wiki/reference/README.md](../reference/README.md) — the standing
   determinism/parity constraints referenced throughout this handbook.
-- [docs/sdf-wiki/marching-acceleration.md](../sdf-wiki/marching-acceleration.md)
+- [docs/sdf-wiki/reference/marching-acceleration.md](../reference/marching-acceleration.md)
   and
-  [docs/sdf-wiki/hierarchical-and-instance-acceleration.md](../sdf-wiki/hierarchical-and-instance-acceleration.md)
+  [docs/sdf-wiki/reference/hierarchical-and-instance-acceleration.md](../reference/hierarchical-and-instance-acceleration.md)
   — the coarse-march and tile-cull techniques the passes diagram above
   compresses into "beam" and "mask".
-- [docs/sdf-wiki/lipschitz-and-field-correctness.md](../sdf-wiki/lipschitz-and-field-correctness.md)
+- [docs/sdf-wiki/reference/lipschitz-and-field-correctness.md](../reference/lipschitz-and-field-correctness.md)
   — the formal theory behind the step-scale correction mentioned above.
 - [08-performance.md](08-performance.md) — the measured per-pass GPU cost on
   the reference hardware, for readers who want the numbers behind "cheap coarse
   passes let the fine march skip regions." Those numbers are now recorded only
   in that chapter, and only as of when it was written; see its status note.
-- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
+- [.claude/skills/sdf-world/SKILL.md](../../../.claude/skills/sdf-world/SKILL.md)
   — the living contract this chapter's map is a simplified, human-facing
   view of.

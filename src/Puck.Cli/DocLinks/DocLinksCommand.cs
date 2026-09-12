@@ -24,10 +24,16 @@ internal static class DocLinksCommand {
         "src/Puck.World.Server/README.md",
         "src/Puck.Attestation/README.md",
         "README.md",
+        "docs/README.md",
         "docs/agent-guide.md",
         "docs/project-map.md",
         "docs/campaign.md",
         "docs/vision.md",
+        "docs/specs/README.md",
+        "docs/specs/world-model.md",
+        "docs/art/README.md",
+        "docs/gb-wiki/README.md",
+        "docs/sdf-wiki/README.md",
     ];
     // CLAUDE.md rule 1 pins these paths as existing only in git history; docs/project-map.md states exactly
     // that where it names them, so their non-resolution is correct, not a broken citation.
@@ -103,6 +109,10 @@ internal static class DocLinksCommand {
                         if (HistoricalFileNames.Contains(value: citation.Target, comparer: StringComparer.Ordinal) || fileNameIndex.Contains(item: citation.Target)) {
                             continue;
                         }
+                        // A leading-dot token names a partial file by its suffix (`.Drive.cs` beside `WorldReplayTape.cs`).
+                        if (citation.Target.StartsWith(value: '.') && fileNameIndex.Any(predicate: name => name.EndsWith(value: citation.Target, comparisonType: StringComparison.OrdinalIgnoreCase))) {
+                            continue;
+                        }
 
                         var message = $"{document}:{lineNumber}: cited filename '{citation.Target}' exists nowhere under src/, docs/, tests/, build/, or .claude/skills/";
 
@@ -147,7 +157,8 @@ internal static class DocLinksCommand {
     }
 
     private static IEnumerable<Citation> Citations(string line) {
-        foreach (Match match in MarkdownLink.Matches(input: line)) {
+        // A code span is literal text, never a link: `a[b](c)` inside backticks cites nothing.
+        foreach (Match match in MarkdownLink.Matches(input: Backticked.Replace(input: line, replacement: string.Empty))) {
             var target = match.Groups[1].Value;
 
             if (ExternalScheme.IsMatch(input: target) || target.StartsWith(value: '#')) {

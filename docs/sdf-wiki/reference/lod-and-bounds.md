@@ -43,7 +43,7 @@ enlarge the required raw level. An unsupported operation makes the complete
 expression unbounded. Only independent hard-union roots use these exclusions.
 Each AO rung checks that its scale-corrected ceiling fits this band before
 using the cached candidates; a failed check restores the full field. The
-[engine README](../../src/Puck.SdfVm/README.md#-the-render-pipeline) describes
+[engine README](../../../src/Puck.SdfVm/README.md#-the-render-pipeline) describes
 the shared-buffer layout and AO composition.
 
 ## One effective-scale rule

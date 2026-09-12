@@ -228,19 +228,19 @@ gains enable it at runtime; all three at zero disable it. It uses four nearby
 field samples and a center distance to estimate a discrete Laplacian, since
 the analytic normal alone provides no second derivative. Programs without
 shading-only detail reuse the primary hit's center distance. See the
-[renderer README](../../src/Puck.SdfVm/README.md) for hit-data reuse.
+[renderer README](../../../src/Puck.SdfVm/README.md) for hit-data reuse.
 
 ---
 
 ## Related resources
 
 - The forward-mode dual normal, its parity argument, and the four-tap comparison
-  path: [../sdf-wiki/gradients-and-normals.md](../sdf-wiki/gradients-and-normals.md).
+  path: [../reference/gradients-and-normals.md](../reference/gradients-and-normals.md).
 - Soft shadows (classic penumbra + closest-approach parabola), the normal-ladder
   AO, the shadow-proxy, curvature/NPR, and the surveyed-but-unbuilt occlusion
-  family: [../sdf-wiki/shading-ao-shadows.md](../sdf-wiki/shading-ao-shadows.md).
+  family: [../reference/shading-ao-shadows.md](../reference/shading-ao-shadows.md).
 - The de-scale invariant and why coverage AA is the exception:
-  [../sdf-wiki/lipschitz-and-field-correctness.md](../sdf-wiki/lipschitz-and-field-correctness.md).
+  [../reference/lipschitz-and-field-correctness.md](../reference/lipschitz-and-field-correctness.md).
 - Shadow culling wins or loses depending on occluder density — that much is
   settled. The measurements that located the win/lose boundary, and the
   correctness finding recorded alongside them, are **gone**: the bench notes

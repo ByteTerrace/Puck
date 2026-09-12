@@ -153,10 +153,7 @@ discriminating leg that goes red, a law is run against the unfixed code first.
 Read [docs/vision.md](docs/vision.md) (what Puck is and refuses to be), then
 [docs/campaign.md](docs/campaign.md) (what we are collectively building, where it
 stands, what is next), then the [guide for contributors and agents](docs/agent-guide.md).
-Beside them: the [SDF handbook](docs/sdf-handbook/README.md), the
-[SDF](docs/sdf-wiki/README.md) and [AGB](docs/agb-wiki/README.md) research wikis,
-[document examples](docs/examples), and the [docfx API reference](docs/api/index.md)
-(git-ignored build output of `dotnet docfx docs/api/docfx.json`).
+Beside them: the [SDF knowledge vault](docs/sdf-wiki/README.md) (including the 9-chapter guided handbook and technical reference library), the [Gaming Bricks wiki](docs/gb-wiki/README.md) (hardware cores for 8-bit HGB and 32-bit AGB), [document examples](docs/examples/README.md), and the [docfx API reference](docs/api/index.md) (build output of `dotnet docfx docs/api/docfx.json`).
 
 The [state duplication review](docs/specs/state-duplication.md) identifies
 shared implementation opportunities and the author semantics they must preserve.

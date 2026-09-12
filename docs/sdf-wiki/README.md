@@ -1,76 +1,82 @@
-# SDF technique reference
+# Signed Distance Fields (SDF) Architecture
 
-This reference explains signed-distance-field rendering techniques in the
-context of Puck's interpreted SDF VM. The pages summarize the algorithm,
-correctness requirements, determinism implications, and current applicability.
-Use [the technique index](verdict-index.md) for the compact verdict table.
-There is no investment-priority survey and no backlog: both were deleted on
-2026-08-02 and nothing replaced them. Where a page here calls something open,
-that sentence is the entire record of it — nothing tracks it and nothing
-sequences it.
+Welcome to the **Puck Signed Distance Field (SDF) Knowledge Vault**.
 
-## Performance and acceleration
+Puck renders its 3D world not through traditional polygonal meshes or rasterized triangles, but through **interpreted signed-distance field programs evaluated directly on the GPU**. Every object, mountain, plaza, and avatar is defined as a mathematical distance field, composed through constructive solid geometry (CSG), marched via sphere tracing, and shaded across a 5-pass compute pipeline holding bit-for-bit cross-platform determinism.
 
-- [Marching acceleration](marching-acceleration.md): relaxation, conservative
-  step bounds, curvature stepping, and non-linear tracing.
-- [Hierarchy and instance acceleration](hierarchical-and-instance-acceleration.md):
-  cone prepasses, uniform grids, ray pyramids, BVHs, and work graphs.
-- [Tape pruning and inclusion](tape-pruning-and-inclusion.md): per-region
-  specialization, Lipschitz pruning, interval evaluation, and synchronized
-  tracing.
-- [LOD and bounds](lod-and-bounds.md): proxy nodes, segment bounds, segment
-  tracing, and distance-dependent fidelity.
-- [March-loop scheduling](march-loop-scheduling.md): wavefront scheduling,
-  compaction, persistent threads, and march/shade separation.
+---
 
-## Correctness
+## Dual Reading Tracks
 
-- [Lipschitz and field correctness](lipschitz-and-field-correctness.md):
-  distance estimates, operation norms, repetition boundaries, and
-  bound-preserving procedural detail.
-- [Gradients and normals](gradients-and-normals.md): analytic forward-mode
-  gradients and finite-difference comparison paths.
-- [Antialiasing and filtering](antialiasing-and-filtering.md): coverage,
-  footprint termination, and ray-differential texture filtering.
+This vault is organized into two complementary tracks:
 
-## Shading and content
+```mermaid
+graph TD
+    SDFPortal[docs/sdf-wiki/README.md<br/>Master Portal] --> Handbook[docs/sdf-wiki/handbook/<br/>The Guided Course]
+    SDFPortal --> Reference[docs/sdf-wiki/reference/<br/>Technical Encyclopedia]
 
-- [Shading, AO, and shadows](shading-ao-shadows.md): ambient occlusion,
-  penumbra refinement, curvature shading, and light culling.
-- [Materials and primitives](materials-and-primitives.md): smooth composition,
-  material ownership, lifted primitives, and text fields.
-- [Text and glyphs](text-and-glyphs.md): marchable glyph geometry, decal text,
-  MTSDF field channels, and deterministic enrichment.
+    Handbook --> H1[01. The Idea]
+    Handbook --> H2[02. Program Model]
+    Handbook --> H3[03. The Frame]
+    Handbook --> H4[04. Lighting & Shading]
+    Handbook --> H5[05. Authoring]
+    Handbook --> H6[06. Motion & Views]
+    Handbook --> H7[07. Queries & Determinism]
+    Handbook --> H8[08. Performance]
+    Handbook --> H9[09. Bricks & Baking]
 
-## Decision support
+    Reference --> R_Perf[Performance & Acceleration]
+    Reference --> R_Math[Mathematics & Correctness]
+    Reference --> R_Shade[Materials, Text & Shading]
+    Reference --> R_Verd[Verdicts & Decision Support]
+```
 
-- [Technique index](verdict-index.md): compact current applicability by
-  technique family.
-- [Rejected and conditional techniques](negative-results-and-rejections.md):
-  non-goals and the concrete triggers that justify reconsideration.
+### Track 1: The Guided Course ([`handbook/`](handbook/README.md))
+A 9-chapter sequential book written to be read front-to-back by human contributors, students, and engineers seeking a deep mental model of the engine:
 
-## Standing constraints
+| Chapter | Core Subject |
+|---|---|
+| **[1. The Idea](handbook/01-the-idea.md)** | Distance fields, CSG composition, sphere tracing, and interpreted scene data vs. compiled shaders. |
+| **[2. The Program Model](handbook/02-the-program-model.md)** | Bytecode streams, running accumulator, Lipschitz step clamping, and instruction set architecture (ISA). |
+| **[3. The Frame](handbook/03-the-frame.md)** | 5 GPU compute passes, primary march, ray generation, tile culling masks, and frame rings. |
+| **[4. Lighting & Shading](handbook/04-lighting-and-shading.md)** | Analytic normal calculation, cone-traced penumbra shadows, multi-tap AO, and CRT screens as light emitters. |
+| **[5. Authoring](handbook/05-authoring.md)** | Scene construction with `SdfProgramBuilder`, coordinate spaces, smooth minimums (`smin`), and authoring pitfalls. |
+| **[6. Motion & Views](handbook/06-motion-and-views.md)** | Presentation anchors, 6 camera rigs, `ViewStack` hypervisor, view transitions, and diegetic screens. |
+| **[7. Queries & Determinism](handbook/07-queries-and-determinism.md)** | `IWorldQuery`, exact fixed-point evaluation, distance probes, raycasts, and derived surface gravity. |
+| **[8. Performance](handbook/08-performance.md)** | Cost modeling, occupancy, view-bound vs beam-bound bottlenecks, and measurement hygiene. |
+| **[9. Bricks & Baking](handbook/09-bricks-and-baking.md)** | The one sanctioned cache: sampled 3D distance bricks, the $\sqrt{3}$ march-safety rule, and invalidation lifecycles. |
 
-- The C# and HLSL interpreters form one packed contract.
-- A skipped segment or instance must be conservative; exact-cull paths must
-  return the accumulated field bit-for-bit when the candidate is irrelevant.
-- `map()` applies the program's `stepScale`. Consumers comparing the result
-  with world-space lengths must account for that scale as documented by the
-  shader contract.
-- Simulation state uses deterministic fixed-point data. Presentation shaders
-  may use floating point, and hold cross-backend parity between Vulkan and Direct3D 12.
-  The legacy `Puck.Post` stages were quarantined, and cross-backend parity is now
-  verified on-demand by `puck parity` (`Puck.Cli parity`), which boots
-  `tests/Puck.Parity/parity.world.json` offscreen on both backends and renders three
-  verdicts per tick-scheduled capture: content gate, exact `stateHash`, and per-tile
-  pixel deltas under `tests/Puck.Parity/parity.contract.json`.
-- The analytic instruction stream and authored carve list are authoritative.
-  `SampledRegion` bricks are bounded, invalidatable render caches, never the
-  simulation or persistence representation.
-- Shader features that should compile away use a static branch. Do not assume
-  multiplying a contribution by zero removes its instructions in both DXC
-  targets.
+---
 
-Paper publication years and source links are retained because they identify
-the cited work. Implementation dates, commit hashes, rollout narratives, and
-review-session provenance do not belong in these living references.
+### Track 2: The Technical Encyclopedia ([`reference/`](reference/README.md))
+Encyclopedic articles, formal proofs, and empirical verdicts for graphics engineers looking up contract facts:
+
+- **[Performance & Raymarching Acceleration](reference/README.md#performance--raymarching-acceleration)**:
+  - [Marching Acceleration](reference/marching-acceleration.md) — Over-relaxation and step bounding.
+  - [Hierarchical & Instance Acceleration](reference/hierarchical-and-instance-acceleration.md) — Cone prepasses, uniform grids, and BVHs.
+  - [Tape Pruning & Inclusion](reference/tape-pruning-and-inclusion.md) — Interval evaluation and region specialization.
+  - [LOD & Bounds](reference/lod-and-bounds.md) — Proxy nodes and segment-level bounds.
+  - [March-Loop Scheduling](reference/march-loop-scheduling.md) — Wavefront scheduling and persistent threads.
+- **[Correctness, Mathematics & Norms](reference/README.md#correctness-mathematics--norms)**:
+  - [Lipschitz & Field Correctness](reference/lipschitz-and-field-correctness.md) — Metric preservation and operation norms.
+  - [Gradients & Normals](reference/gradients-and-normals.md) — Analytic forward-mode vs finite-difference normals.
+  - [Antialiasing & Filtering](reference/antialiasing-and-filtering.md) — Coverage estimation and beam footprints.
+- **[Materials, Shading & Content Primitives](reference/README.md#materials-shading--content-primitives)**:
+  - [Shading, AO & Shadows](reference/shading-ao-shadows.md) — Multi-tap ambient occlusion and penumbra estimation.
+  - [Materials & Primitives](reference/materials-and-primitives.md) — Smooth polynomial blending and lifted primitives.
+  - [Text & Glyphs](reference/text-and-glyphs.md) — Marchable 3D typography and MSDF atlases.
+- **[Decision Support & Proofs](reference/README.md#decision-support--verdicts)**:
+  - [Technique Verdict Index](reference/verdict-index.md) — Applicability matrix across all evaluated SDF techniques.
+  - [Negative Results & Rejections](reference/negative-results-and-rejections.md) — Documented architectural non-goals and triggers.
+
+---
+
+## Standing Engine Constraints & GPU Parity
+
+All SDF shader implementations and simulation evaluators conform to these non-negotiable rules:
+
+1. **Interpreter Dual-Contract**: The C# simulation evaluator (`Puck.SdfVm`) and HLSL presentation shaders (`Puck.Shaders`) form one packed, bit-exact contract.
+2. **Conservative Cull Bounds**: Any segment or instance skipped during raymarching must be mathematically conservative; culling paths must evaluate bit-identical distances when active.
+3. **Step Scaling (`stepScale`)**: The `map()` function applies the scene's global `stepScale`. Any system comparing distances against world-space metrics must account for this scaling factor.
+4. **Cross-Backend GPU Parity**: Presentation shaders hold strict cross-backend parity between Vulkan and Direct3D 12. Parity is verified on-demand via `puck parity` (`tests/Puck.Parity/parity.world.json`), testing three verdicts per capture: content gate, exact `stateHash`, and per-tile pixel tolerances.
+5. **Authoritative Representation**: The analytic instruction stream and authored carve lists are authoritative. `SampledRegion` bricks are bounded, invalidatable render caches—never the simulation or persistence representation.

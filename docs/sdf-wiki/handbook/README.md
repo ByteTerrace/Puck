@@ -31,11 +31,13 @@ assumes 2 and 3.
 
 ## Related technical references
 
+For the proposed evolution beyond the SDF renderer, read [shader pipelines and hybrid rendering](../../specs/shader-pipeline-evolution.md). It separates the implemented pipeline foundation from the remaining graphics, shared-visibility and authoring milestones.
+
 The handbook teaches concepts and operational rules. The following references
 provide API-level contracts, implementation detail, research context, and
 reproducible measurements:
 
-- **[docs/sdf-wiki/](../sdf-wiki/README.md)** — technique references and
+- **[docs/sdf-wiki/](../reference/README.md)** — technique references and
   current Puck applicability.
 - **`Puck.Bench` (quarantined 2026-08-02, read-only)** — the benchmark harness in
   code: timing seams, the switch sweep, scoring math, the report format. Both
@@ -43,7 +45,7 @@ reproducible measurements:
   full design plan — were deleted on 2026-08-02, and the harness itself has no
   host composing it, so it cannot be run. Chapter 8 carries the surviving
   numbers and states that gap plainly.
-- **[.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)**
+- **[.claude/skills/sdf-world/SKILL.md](../../../.claude/skills/sdf-world/SKILL.md)**
   — the agent-facing contract: the C#↔HLSL sync-pair tables and settled
   engine semantics, kept dense and exact for tooling. The handbook is the
   teaching view of the same system; the skill is the working contract.

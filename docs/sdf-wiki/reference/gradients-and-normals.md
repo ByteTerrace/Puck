@@ -21,7 +21,7 @@ The renderer retains a four-tap tetrahedral finite-difference path for
 comparison and diagnosis. Authored curvature shading also uses four neighboring
 samples to estimate the field's second derivative, together with a center
 distance. Its sample loop shares one interpreter call site; see the
-[renderer README](../../src/Puck.SdfVm/README.md) for center-distance reuse.
+[renderer README](../../../src/Puck.SdfVm/README.md) for center-distance reuse.
 
 Choose the probe epsilon in world units and account for `stepScale`. Too small
 an epsilon amplifies floating-point noise; too large an epsilon rounds off

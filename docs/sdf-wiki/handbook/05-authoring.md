@@ -312,15 +312,15 @@ someone hits it, not at build time.
 
 ## Related resources
 
-- [docs/sdf-wiki/lipschitz-and-field-correctness.md](../sdf-wiki/lipschitz-and-field-correctness.md)
+- [docs/sdf-wiki/reference/lipschitz-and-field-correctness.md](../reference/lipschitz-and-field-correctness.md)
   — domain-repetition exactness and the neighbor-cell discontinuity this
   chapter's containment rule is built on.
-- [docs/sdf-wiki/text-and-glyphs.md](../sdf-wiki/text-and-glyphs.md) — the
+- [docs/sdf-wiki/reference/text-and-glyphs.md](../reference/text-and-glyphs.md) — the
   full engrave/emboss correctness case (C1/C2/C3) behind the never-coplanar
   label rule.
-- [docs/sdf-wiki/materials-and-primitives.md](../sdf-wiki/materials-and-primitives.md)
+- [docs/sdf-wiki/reference/materials-and-primitives.md](../reference/materials-and-primitives.md)
   — the material-blend-at-seams background behind the material-scope
   mechanism.
-- [.claude/skills/sdf-world/SKILL.md](../../.claude/skills/sdf-world/SKILL.md)
+- [.claude/skills/sdf-world/SKILL.md](../../../.claude/skills/sdf-world/SKILL.md)
   — the composition/anchor surface contract this chapter's emitter section
   summarizes, and the C#↔HLSL sync-pair table for every op named above.

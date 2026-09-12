@@ -59,7 +59,7 @@ unless the caller explicitly permits a replacement BIOS. Retail BIOS images rema
 user-supplied and are never committed; the separately MIT-licensed Puck firmware
 is an explicit package resource.
 
-The [Puck firmware guide](../../src/Puck.AdvancedGamingBrick/Firmware/README.md)
+The [Puck firmware guide](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md)
 owns source provenance and compatibility limits. Neither its bundled identity
 nor another replacement image establishes retail-BIOS timing parity. See
 [Determinism, Savestate, and Replay](determinism-savestate-replay.md) for the

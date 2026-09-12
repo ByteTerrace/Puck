@@ -1,25 +1,25 @@
 # Screens and machine extensions
 
-This is the authoritative status summary and agreed implementation plan for
-making the Gaming Bricks ordinary extensions while preserving physical screens,
-convenient cabinet authoring, and gameplay that directly observes and controls
-machine hardware. It is intended to let a new contributor resume the work
-without reconstructing the conversation or relying on temporary worktrees.
+This specification defines the machine-extension architecture for Puck: making the Gaming Bricks ordinary extensions while preserving physical screens, convenient cabinet authoring, and gameplay that directly observes and controls machine hardware.
 
-**Status recorded on 2026-09-12:** the first integrated milestone is complete
-and validated. The full extraction is unfinished. The three Luna implementation
-workers are stopped, and the audit task has the integrated changes for
-checkpointing. This summary records the state before that new checkpoint;
-`070dc6581921b0df25f82eef94a7b1d186303fa4` was the shared HEAD when it was written.
-No later commit is claimed here. Implementation remains paused at that milestone.
+## Table of contents
 
-Read the [implemented behavior](#what-the-current-implementation-establishes),
-[remaining work](#remaining-work-and-recommended-order),
-[verification record](#verification-record-and-reproduction), and
-[resumption notes](#integration-and-resumption-notes) first. The later design
-sections and worker briefs retain the complete target contract. In particular,
-the complete DSL examples describe the target: authored screen names, explicit
-control routes, and full replay behavior are not all available today.
+- [The decision](#the-decision)
+- [What the current implementation establishes](#what-the-current-implementation-establishes)
+- [System architecture & data flow](#the-decision)
+- [Implementation status and milestone baseline](#what-the-completed-milestone-means)
+- [Workstream breakdown](#remaining-work-and-recommended-order)
+- [Firmware, admission policy and package handoff](#firmware-admission-policy-and-package-handoff)
+- [Verification & reproduction](#verification-record-and-reproduction)
+- [Integration baseline and architectural checkpoints](#integration-baseline-and-architectural-checkpoints)
+- [Authoring and references](#authoring-separate-identity-keep-the-physical-vocabulary)
+- [Hardware interaction](#direct-hardware-interaction)
+- [Names, imports and author tools](#names-imports-and-author-tools)
+- [Implementation workstreams](#implementation-workstreams-and-execution-architecture)
+  - [Lane A: Runtime, displays, and player interaction](#lane-a-runtime-displays-and-player-interaction)
+  - [Lane B: Operations, authority, and hardware gameplay](#lane-b-operations-authority-and-hardware-gameplay)
+  - [Lane C: Authoring, receipts, and optional distribution](#lane-c-authoring-receipts-and-optional-distribution)
+- [Acceptance criteria & completion review](#acceptance-criteria-and-completion-review)
 
 ## The decision
 
@@ -113,12 +113,12 @@ the new identity, including reproduction and optional distribution.
 
 The delivered slices do not close every item in the original A/B/C packets:
 
-| Lane | Integrated work | What its original packet still includes |
+| Lane | Integrated work | What its specification still includes |
 |---|---|---|
-| Luna A: machines and displays | Named screen/speaker sources, shared producer lifetime, input folding for one compatible port, safe existing cable routing, named inspection, save capture, arcade and comparison/mirror data migration | Authored screen names and derived slots, explicit multiport controls and named link authoring, complete cabinet UX, and removal of old screen-owned execution |
-| Luna B: operations and hardware | Neutral operation capability, brick/Tune handlers, ordered server execution, typed outcomes, machine authority, canonical configuration adoption, and link/replacement refusals | Generic rule effects, direct observations and addon watches using instance identity, complete work/resource admission, and adversarial final integration |
-| Luna C: authoring and reproduction | Recursive metadata validation, alias/reference rewriting, declaring-document asset relocation, catalog-sensitive composition caches, and catalog propagation through actual callers | Execution receipts, verified machine replay/state evidence, optional distribution without bricks, and remaining editor/generated consumers |
-| Coordinator integration | Combined source reconciliation, actual console/forge forwarding, selected content-policy propagation, owned-world load/save propagation, source alias registration, checkpoint restore repair, and final executable verification | Review the next bounded slices and the complete acceptance matrix after implementation resumes |
+| Lane A: machines and displays | Named screen/speaker sources, shared producer lifetime, input folding for one compatible port, safe existing cable routing, named inspection, save capture, arcade and comparison/mirror data migration | Authored screen names and derived slots, explicit multiport controls and named link authoring, complete cabinet UX, and removal of old screen-owned execution |
+| Lane B: operations and hardware | Neutral operation capability, brick/Tune handlers, ordered server execution, typed outcomes, machine authority, canonical configuration adoption, and link/replacement refusals | Generic rule effects, direct observations and addon watches using instance identity, complete work/resource admission, and adversarial final integration |
+| Lane C: authoring and reproduction | Recursive metadata validation, alias/reference rewriting, declaring-document asset relocation, catalog-sensitive composition caches, and catalog propagation through actual callers | Execution receipts, verified machine replay/state evidence, optional distribution without bricks, and remaining editor/generated consumers |
+| System integration | Combined source reconciliation, actual console/forge forwarding, selected content-policy propagation, owned-world load/save propagation, source alias registration, checkpoint restore repair, and final executable verification | Review the next bounded slices and the complete acceptance matrix after implementation resumes |
 
 The [mirror source](../../src/Puck.World/Assets/worlds/tools/hgb-mirror.puck) is the
 current worked hardware example: five machine-owned bindings write world state
@@ -194,16 +194,15 @@ This is substantial work, not just polishing.
 | 4 | Finish ordinary cabinet authoring and player/author UX across the corpus. Separate feed selection from cartridge changes, complete read-back and save/reload, and update editor/generated consumers. | A reusable module/template is easy to place; two aliases work; insert/reset/eject and source selection have explicit effects; failed content, empty content, stopped execution, missing signal, and faults are distinguishable. |
 | 5 | Complete optional distribution and remove the old ownership path. Move remaining concrete composition/forge/Tune dependencies behind registration, then delete retired slots, options requirements, and screen-specific lifecycle protocol arms. | A build with no bundled brick dependencies boots ordinary sources and a non-brick provider; resolved dependency closure is checked; compiler references prove retired APIs have no callers; final acceptance matrix passes. |
 
-These priorities describe dependencies, not five mandatory serial jobs. On
-resumption, Luna A can own display/control/link completion while Luna B completes
-named gameplay consumers and bounds. Luna C can begin receipt design/implementation
-against agreed operation and asset contracts, with the coordinator reserving
-shared serializers and composition files. Cabinet migration follows the relevant
-identity contract; optional packaging can proceed when those contracts are stable.
-Do not make a worker wait for an API that exists only in another worker's brief.
+These priorities describe dependencies, not five mandatory serial jobs. In
+implementation, Lane A owns display/control/link completion while Lane B completes
+named gameplay consumers and bounds. Lane C owns receipt design/implementation
+against agreed operation and asset contracts, with shared serializers and composition
+files coordinated centrally. Cabinet migration follows the relevant identity contract;
+optional packaging can proceed when those contracts are stable.
 
-Use the [parallel schedule](#parallel-implementation-schedule) as the detailed
-brief library, but assign only the remaining bounded slice. Reuse the delivered
+Use the [implementation workstreams](#implementation-workstreams-and-execution-architecture) as the detailed
+specification library, assigning bounded slices. Reuse the delivered
 implementation and its tests. Do not restart A1/B1/C1 from scratch or describe a
 partial historical packet as complete merely because its smaller delivered
 slice passed.
@@ -214,6 +213,87 @@ unrelated performance work, and full cycle-level event capture without a
 selected gameplay requirement remain outside the extraction. If gameplay needs
 a short-lived hardware condition, specify that scenario and its timing precision
 before adding bounded provider-side event capture; do not silently approximate it.
+
+## Firmware, admission policy and package handoff
+
+Firmware compatibility, server content policy and package integration answer
+different questions. None is proof of the other. Their remaining acceptance work
+can proceed alongside the machine extraction without reopening its identity model.
+
+### Bundled firmware decisions and qualification
+
+Both brick families use ByteTerrace/Puck-branded startup with functional cartridge
+handoff. HGB's boot ROM initializes the selected hardware model and unmaps itself;
+AGB's BIOS also supplies runtime services and interrupt handling after startup.
+Keep those different responsibilities explicit when calling firmware complete.
+Cold and fast startup select presentation behavior independently of the firmware
+identity; fast startup is not permission to omit required runtime services.
+
+Require permissively licensed bundled firmware and retain source provenance and
+notices. GPL emibios is not the selected foundation. Original branding is not a
+cartridge authentication mechanism. The owning
+[AGB firmware guide](../../src/Puck.AdvancedGamingBrick/Firmware/README.md) and
+[HGB startup guide](../../src/Puck.HumbleGamingBrick/README.md#firmware-and-startup)
+hold implementation and rebuilding details; extend those sources instead of
+creating another BIOS implementation in the host.
+
+Qualification must distinguish source reproducibility, service compatibility and
+hardware timing. Rebuild the packaged images independently; exercise cold/fast
+handoff, IRQ/services, model transitions, graphics and audio with independent
+expected values. Keep HGB's boot-mapping/model-change guard. AGB service coverage
+must include stateful sequences, sound and MultiBoot paths, not only isolated
+return values. Timing-sensitive comparison requires the intended BIOS profile;
+replacement firmware passing service tests does not establish retail timing parity.
+Rerun the existing emulator batteries and investigate independent render failures,
+including the recorded `A.gba` case, before broad compatibility claims; changing a
+baseline to agree with the implementation is not a fix.
+
+User-supplied retail BIOS images and representative cartridges may be used locally
+for differential tests with explicit input paths and identities. They remain
+outside source control, packages and generated reports. Reports identify inputs
+and bounded comparisons, not redistribute their bytes. Missing licensed assets
+produce explicit skips rather than an assertion that those paths passed.
+
+### Server-selected content policy
+
+The local host default is Open/Allow. A server operator can instead select an
+immutable restricted policy that admits arbitrary provider-validated Puck-authored
+cartridges without publisher approval. The strictest servers can additionally
+require exact hashes or another explicitly selected trust policy. An allowlist
+is an option, not the general authoring requirement.
+
+This is reasonable control over what runs on that server, not a promise to solve
+GB/GBA piracy. Headers, filename extensions, a claimed format, signatures from an
+untrusted author, or visible branding do not prove copyright ownership. Validating
+and compiling an authored format establishes that preparation contract, not a
+legal classification of everything the author placed in it.
+
+Keep enforcement below every loading path, after trusted preparation and before
+runtime creation or commit: boot, insert/replacement, reload, restore and replay
+must carry the same selected policy. Check exact source and executable bytes and
+the provider-verified source format; auxiliary firmware assets remain distinct
+from cartridge content. Policy selection has separate operator authority from
+ordinary content submission. Test raw ROM rejection, relabeled input, changed
+source/output pins, valid new user-authored content, optional allowlist acceptance
+and rejection, and denied replacement retaining the running device. Installing an
+untrusted provider is outside this content filter's guarantee.
+
+### Consumer packages and optional distribution
+
+Repeat the package-consumer proof after the final public contract changes: pack
+the selected runtime and dependency closure, restore from a fresh local feed into
+an application outside the repository, and use package references only. Construct
+each synchronous brick, cold-boot with bundled firmware, submit input, advance,
+read video/audio and exercise the supported save-state contract. Verify that no
+repository paths, Forge toolchain, retail BIOS download or World application are
+needed merely to run the packaged brick. Do not mistake a source project-reference
+build or an earlier package smoke for proof of the changed package.
+
+Separately prove the distribution without bundled bricks described in the
+[remaining work](#remaining-work-and-recommended-order). A successful brick
+consumer does not establish that World's dependency closure is optional, and a
+catalog fingerprint is not the execution receipt required for verified replay.
+Publishing packages or deploying a server remains a separate authorized action.
 
 ## Verification record and reproduction
 
@@ -301,59 +381,20 @@ isolated session do not edit the checked-in `.puck` source. For the rendered
 experience, omit `--headless`; that launch is an interaction recipe, not new
 rendered validation evidence.
 
-## Integration and resumption notes
+## Integration baseline and architectural checkpoints
 
-The integrated shared checkout is the source to resume from after the audit
-checkpoint, not the old worker branches. Work was split across three
-`gpt-5.6-luna` workers at reasoning effort `high`, with the coordinator handling
-shared interfaces, integration, and verification. All workers stopped at the
-completed milestone. No implementation agent is currently assigned a next wave.
+The integrated codebase establishes the authoritative baseline for machine extensions. The work spans three functional workstreams:
 
-The audit handoff enumerated 121 shared paths with machine work or integration
-hunks and full-file hashes. Several also contain firmware/foundation or shader
-work. The audit task owns the combined checkpoint and must preserve those hunks.
-This user-requested summary is a subsequent documentation-only change to this
-file, so its old handoff hash is superseded. User-owned skill edits are outside
-the coordinated code checkpoint. No code implementation resumed for this summary.
+- **Lane A (Runtime & Displays)**: Screen/speaker sources referencing named machine instances, shared producer lifetime, output fanout.
+- **Lane B (Operations & Hardware)**: Generic operation capability, ordered server execution, hardware observations, and direct rule effects.
+- **Lane C (Authoring & Reproduction)**: Descriptor-driven configuration, asset relocation, receipts, and verified replay.
 
-The preserved worker references are recovery records, not recommended merge bases:
+### Verification principles across workstreams
 
-| Lane | Branch | Preserved HEAD |
-|---|---|---|
-| A | `codex/machine-displays-implementation-20260912` | `f6b385de68ab6c927406110296120d386e207bbb` |
-| B | `codex/machine-operations-implementation-20260912` | `9202419606f5563ea843ad4954c9dcefe76aabe1` |
-| C | `codex/machine-authoring-implementation-20260912` | `98c1394b4e96bc6483c0f44bc0ec2095ada5af77` |
-
-Those worktrees include uncommitted changes and overlapping prerequisite
-patches. A's final host corrections were made by B in A's checkout. B's older
-host/schema state is superseded. C's metadata work was integrated, then parent
-fixes completed owned-world load/save catalog propagation, policy selection,
-and machine-source alias registration. Do not cherry-pick or copy any worker
-checkout wholesale over the integrated result. Parent corrections need no
-backport into the preserved copies.
-
-For local recovery only, the historical handoff directory is
-`D:/kittoes0124/AppData/Local/Temp/puck-machine-handoff-0f722a740e9743518aecb7cd5b5ecaa3`;
-it contains `shared-machine-paths.txt`, hashes, exact isolated inventories,
-and original snapshot locations. Actual app logs are under
-`D:/kittoes0124/AppData/Local/Temp/puck-machine-final-a687d7166d2a44c1a39f767e7bdfe2f7`.
-These temporary artifacts may disappear; the status, evidence, commands, and
-remaining acceptance work are deliberately recorded here without depending on them.
-
-When implementation resumes:
-
-1. Verify the audit checkpoint and current dirty work. Refresh the integration
-   base; preserve user skill work and other tasks' source changes.
-2. Choose one concrete remaining acceptance case per lane and reserve exact
-   files, including shared schema, serializer, command, and composition edits.
-3. Give each Luna worker the relevant brief below, current signatures/base,
-   prerequisite changes, and focused test commands. Use fresh context with
-   the agreed high effort; do not repeat the original architecture investigation.
-4. Integrate a complete behavior slice, run its necessary checks and an actual
-   app case, then update this status and the owning project documentation.
-5. Close the full extraction only after the decisive acceptance cases pass and
-   the old ownership path is removed. A green build or this milestone's 133 tests
-   alone cannot close it.
+1. **Verify the active integration base**: Verify active changes and preserve unrelated subsystem edits.
+2. **Assign bounded functional slices**: Define concrete acceptance cases per workstream with explicit file ownership.
+3. **Integrate complete behavior slices**: Run focused unit/law tests plus actual headless and rendered application cases.
+4. **Enforce complete migration**: Close milestones only after acceptance criteria pass and retired ownership paths are deleted. A green build or existing tests alone cannot close an architectural milestone without meeting acceptance criteria.
 
 ## Authoring: separate identity, keep the physical vocabulary
 
@@ -822,45 +863,19 @@ continue the extraction. Exact field and command spellings can be settled in
 that exercise while preserving independent machine identity, retained screens,
 direct hardware access, and explicit execution/replay semantics.
 
-## Parallel implementation schedule
+## Implementation workstreams and execution architecture
 
-This is the dispatch plan for future implementation. All three workers are
-stopped at the milestone recorded above; this section does not authorize an
-automatic restart or imply that the original waves have all passed.
+Execution architecture partitions machine-extension delivery across three parallel workstreams (Lanes A, B, and C) coordinated by a unified integration gate. Workstreams operate with isolated workspaces and shared contracts to maintain independent velocity while preserving atomic integration.
 
-Use three implementation workers, each running `gpt-5.6-luna` with reasoning
-effort `high`. The coordinator is the fourth active agent. Start workers with
-fresh context (`fork_turns: none`) and the common brief plus exactly one packet
-below. Do not copy the accumulated conversation into them, give a worker the
-entire refactor as an open-ended task, or recursively spawn more workers.
-Reuse the workers for subsequent packets after their prerequisites pass.
+The integration gatekeeper owns interface decisions, integration, review, and the final real-application checks. Each lane owns implementation within its dedicated architectural slice. This separates implementation work while giving shared contracts a single decision maker.
 
-The coordinator owns interface decisions, integration, review, and the final
-real-application checks. Luna owns implementation in all three lanes. This
-separates implementation work while giving shared contracts one decision maker.
+### Workstream preparation and shared contracts
 
-### Dispatch preparation and shared contracts
+Before workstream dispatch, inspect dependencies and coordinate with related subsystems. At this architectural boundary, `DSL Refinement` is responsible for the shader pipeline, including shared World schema/emitter glue; agree machine-specific edits before assigning those files. Coordinate hosting and authority changes with `Gaming Brick Firmware`, which owns the membership/group foundation and server cartridge-admission policy. Its BIOS sources, CPU/bus internals, and conformance fixes are outside these workstreams. Preserve unrelated world and renderer work.
 
-Before dispatch, resolve the current integration commit, inspect dirty files,
-and reserve ownership with any other active tasks. At this milestone, `DSL Refinement` was
-responsible for the shader pipeline, including shared World schema/emitter glue;
-agree machine-specific edits before assigning those files. Coordinate hosting
-and authority changes with `Gaming Brick Firmware`, which also owns the
-membership/group foundation and server cartridge-admission policy. Its BIOS
-sources, CPU/bus internals, and conformance fixes are outside these packets. Preserve unrelated world and
-renderer work. A task being idle does not transfer ownership of its edits.
+Workspaces isolate source edits, generated outputs, compiler snapshots, and test reports. Integrate exact reviewed diffs, including an explicit list of new files, and refresh each workstream's base between packets. Do not copy whole directories back over the shared checkout.
 
-Give each worker an isolated worktree from the same verified integration base,
-including an explicit overlay of any prerequisite changes not yet committed.
-The first command in each worktree follows `boy-scout`'s `worktree-base` check.
-Worktrees isolate source edits, generated outputs, compiler snapshots, and test
-reports. They do not authorize commits. Integrate exact reviewed diffs, including
-an explicit list of new files, and refresh each worker's base between packets.
-Do not copy whole directories back over the shared checkout.
-
-Settle the following contracts in the dispatch brief before workers implement
-their consumers. A worker may propose a correction, but must identify its
-affected consumers and wait for the coordinator to redistribute the decision.
+Settle the following contracts before workstreams implement their consumers. A lane may propose a correction, but must identify its affected consumers and wait for gatekeeper coordination to redistribute the decision.
 
 | Contract | Decision for implementation |
 |---|---|
@@ -873,297 +888,98 @@ affected consumers and wait for the coordinator to redistribute the decision.
 | Provider assets | The existing field descriptor/walker owns configuration path and reference semantics. Asset preparation yields exact source, firmware, and compiled-image identities; core code contains no cartridge field-name tests. |
 | Replay | A neutral receipt identifies provider artifact closure, canonical configuration, firmware/content, compiler/output, and any snapshot format. Verify required identities before advancing. External operations are recorded once; deterministic rule/binding work is re-executed once. |
 
-The operation capability belongs on the engine/provider beside its descriptor.
-Preparation takes the current `MachineCreationRequest` and an operation id/payload,
-then returns a replacement configuration, a prepared runtime action with optional
-configuration to adopt on success, or an explicit refusal. Preparation reads no
-files and mutates no runtime. The host prepares/admit-checks replacement assets,
-validates authority and generation, applies the operation, and only then reports
-it applied. `content.insert`, `content.eject`, and `machine.reset` use replacement
-preparation; reset forces a new incarnation even when configuration is equal.
-`device.model` may preserve supported live state through a prepared runtime action
-and retains the firmware/model refusal guard. It updates canonical configuration
-only after success. Unknown operations report unsupported; malformed payloads
-for known operations report refusal.
+The operation capability belongs on the engine/provider beside its descriptor. Preparation takes the current `MachineCreationRequest` and an operation id/payload, then returns a replacement configuration, a prepared runtime action with optional configuration to adopt on success, or an explicit refusal. Preparation reads no files and mutates no runtime. The host prepares/admit-checks replacement assets, validates authority and generation, applies the operation, and only then reports it applied. `content.insert`, `content.eject`, and `machine.reset` use replacement preparation; reset forces a new incarnation even when configuration is equal. `device.model` may preserve supported live state through a prepared runtime action and retains the firmware/model refusal guard. It updates canonical configuration only after success. Unknown operations report unsupported; malformed payloads for known operations report refusal.
 
-Host execution has a separate preparation and commit boundary. Its prepared
-operation exposes the current and candidate machine rows and owns staged
-resources. The server checks authority, prepares the operation, and validates
-the candidate world before the host applies it. A live provider refusal leaves
-both the runtime declaration and the world definition unchanged. After an
-applied result, the server publishes the already-prepared definition so later
-edits cannot restore an old cartridge or model configuration. Save and drift
-checks read the host's ordered current machine declarations; they never decode
-provider options from a display.
+Host execution has a separate preparation and commit boundary. Its prepared operation exposes the current and candidate machine rows and owns staged resources. The server checks authority, prepares the operation, and validates the candidate world before the host applies it. A live provider refusal leaves both the runtime declaration and the world definition unchanged. After an applied result, the server publishes the already-prepared definition so later edits cannot restore an old cartridge or model configuration. Save and drift checks read the host's ordered current machine declarations; they never decode provider options from a display.
 
-The firmware/group task supplies the immutable content-admission policy. The
-machine host invokes it after trusted content preparation and before creation,
-including operation replacements and restoration. Its request distinguishes
-content from auxiliary assets through descriptor roles and includes exact source
-and execution bytes plus a format id emitted after successful provider parsing.
-A filename, a client-supplied tag, or the presence of prepared metadata cannot
-establish source provenance. Policy changes use separate authority from ordinary
-cartridge submission.
+The firmware/group task supplies the immutable content-admission policy. The machine host invokes it after trusted content preparation and before creation, including operation replacements and restoration. Its request distinguishes content from auxiliary assets through descriptor roles and includes exact source and execution bytes plus a format id emitted after successful provider parsing. A filename, a client-supplied tag, or the presence of prepared metadata cannot establish source provenance. Policy changes use separate authority from ordinary cartridge submission.
 
-This is a short contract checkpoint, not another architecture study. Complete
-compiler reference inventories for the breaking symbols at the supplied base,
-and give workers those results and the concrete signatures. Do not make every
-worker repeat the same repository-wide investigation. Initial independent
-provider and metadata work can run while the display cutover is implemented;
-dependent consumers start only after its integration gate.
+Complete compiler reference inventories for the breaking symbols at the supplied base, and provide workstreams those results and the concrete signatures. Initial independent provider and metadata work can run while the display cutover is implemented; dependent consumers start only after its integration gate.
 
 ### Waves and integration gates
 
-| Wave | Luna A: runtime and displays | Luna B: operations and hardware | Luna C: authoring and reproduction | Coordinator gate |
+| Wave | Lane A: runtime and displays | Lane B: operations and hardware | Lane C: authoring and reproduction | Integration gate |
 |---|---|---|---|---|
 | 1 | A1: named producer/display cutover and shared outputs | B1: provider operation capability and real handlers | C1: descriptor-aware imports, paths, and validation | Integrate A1, then B1/C1; compile the combined graph and run one real cabinet using named sources. |
 | 2 | A2: control routes, named links, and removal of screen-owned execution | B2: ordered operations, rules, observations, and authority | C2: receipts, recording, replay, and save semantics | One playable cabinet; two displays/two speakers share one machine; headless hardware gameplay and replay pass. |
-| 3 | A3: cabinet module, command/forge UX, and remaining corpus migration | B3: adversarial integration checks and bounded admission | C3: optional packaging and author-tool/generated-source completion | Run the complete acceptance matrix, remove all retired paths, and provide the user a reproducible test recipe. |
+| 3 | A3: cabinet module, command/forge UX, and remaining corpus migration | B3: adversarial integration checks and bounded admission | C3: optional packaging and author-tool/generated-source completion | Run the complete acceptance matrix, remove all retired paths, and provide a reproducible test recipe. |
 
-A wave is a dependency grouping, not a barrier that idles every worker. A worker
-whose packet passes may begin an independent next packet. The coordinator must
-first refresh its base and confirm that the needed contracts have landed.
-Never assign work that requires an unimplemented API and count placeholder
-methods or disabled tests as completion.
+A wave is a dependency grouping, not a barrier that idles all workstreams. A workstream whose packet passes may begin an independent next packet once its prerequisites have landed. Never assign work that requires an unimplemented API or count placeholder methods or disabled tests as completion.
 
-The first milestone is deliberately visible: a real cabinet with a named
-machine and display, including a second monitor that does not duplicate its
-execution. Subsequent work extends that same path to controls, hardware rules,
-replay, and distribution. Do not defer all runnable integration until wave 3.
+The first milestone is deliberately visible: a real cabinet with a named machine and display, including a second monitor that does not duplicate its execution. Subsequent work extends that same path to controls, hardware rules, replay, and distribution. Do not defer all runnable integration until wave 3.
 
-### Common implementation brief
+### Core implementation principles
 
-Every dispatch includes this brief, the selected packet, the actual worktree
-path/base, exact owned files, prerequisite diff, and test commands appropriate
-to those files:
+Every implementation workstream adheres to the following core constraints:
 
-1. **Objective.** Finish the agreed machine-extension extraction. Keep physical
-   screens and convenient cabinets. Direct control of unusual hardware is a
-   supported gameplay use, including raw addresses and world/machine state flow.
-2. **Starting point.** Read `CLAUDE.md`, `boy-scout`, `content-search`, and the
-   packet's owning skills. Read this plan's relevant contracts and the cited
-   current files. Named lifetime, staged replacement, prepared content, hardware
-   access, and memory binding implementations already exist; preserve and use them.
-3. **Ownership.** Edit only the packet's assigned files. New partials belong to
-   the same owner as their implementation. For a shared-file change, send the
-   coordinator an exact proposed patch and its reason; do not race another writer.
-   The coordinator assigns the mechanical callers of a renamed symbol explicitly.
-4. **Scope.** World remains v1. Migrate existing data and remove old shapes;
-   no compatibility readers, aliases, duplicate registries, universal graph,
-   new projects/packages, persistent verification scripts, or unrelated cleanup.
-   `.puck` owns companion JSON. Keep static composition available.
-5. **Execution.** Preserve integer timing, coherent worker barriers, transactional
-   admission, generation checks, and the rules → bindings → machine-advance order.
-   No screen-driven stepping, silent zero on failure, direct external write
-   bypass, or duplicate audio drains. Retain the firmware task's model/FF50 guard.
-6. **Evidence.** Use Puck content search and compiler-backed references for C#
-   migrations. Do not edit source while a compiler snapshot over that worktree
-   is running. Build the affected graph and run meaningful packet tests once;
-   repeat only after a relevant change or failure. The coordinator owns broad
-   integration and real rendered checks. No experimental builds or Post revival.
-7. **Documentation.** Update the changed API comments and owned source docs.
-   Report exact edits required in shared READMEs/skills to the coordinator.
-   Regenerate machine-owned output through its normal owner; do not hand-edit it.
-8. **Communication.** Report a contract conflict or outside dependency as soon as
-   it is found, with the smallest proposed resolution. Continue independent work.
-   Do not redesign an adjacent subsystem to avoid reporting the dependency.
-9. **Handoff.** Return the behavior delivered, changed/new/deleted files, exact
-   verification commands and results, the counterexample each new test protects,
-   remaining dependencies, and the diff from the supplied base. Name incomplete
-   behavior plainly. A successful build alone does not close a packet.
+1. **Objective.** Finish the agreed machine-extension extraction. Keep physical screens and convenient cabinets. Direct control of unusual hardware is a supported gameplay use, including raw addresses and world/machine state flow.
+2. **Starting point.** Review the repository guidelines and the workstream's owning components. Read this plan's relevant contracts and the cited current files. Named lifetime, staged replacement, prepared content, hardware access, and memory binding implementations already exist; preserve and use them.
+3. **Ownership.** Edit only the assigned files. New partials belong to the same owner as their implementation. For a shared-file change, provide an exact proposed patch and reason; do not race another writer.
+4. **Scope.** World remains v1. Migrate existing data and remove old shapes; no compatibility readers, aliases, duplicate registries, universal graph, new projects/packages, persistent verification scripts, or unrelated cleanup. `.puck` owns companion JSON. Keep static composition available.
+5. **Execution.** Preserve integer timing, coherent worker barriers, transactional admission, generation checks, and the rules → bindings → machine-advance order. No screen-driven stepping, silent zero on failure, direct external write bypass, or duplicate audio drains. Retain the firmware task's model/FF50 guard.
+6. **Evidence.** Use content search and compiler-backed references for C# migrations. Build the affected graph and run meaningful packet tests once; repeat only after a relevant change or failure. Integration gatekeeper owns broad integration and real rendered checks.
+7. **Documentation.** Update changed API comments and owned source docs. Report exact edits required in shared READMEs. Regenerate machine-owned output through its normal owner; do not hand-edit it.
+8. **Communication.** Report contract conflicts or outside dependencies immediately with the smallest proposed resolution. Continue independent work. Do not redesign an adjacent subsystem to avoid reporting the dependency.
+9. **Handoff.** Return behavior delivered, changed/new/deleted files, exact verification commands and results, the counterexample each new test protects, and remaining dependencies. Name incomplete behavior plainly. A successful build alone does not close a packet.
 
-### Luna A brief: runtime, displays, and player interaction
+### Lane A: runtime, displays, and player interaction
 
-**Purpose:** make the named instance the sole execution owner and preserve the
-physical cabinet experience as its consumers migrate.
+**Purpose:** make the named instance the sole execution owner and preserve the physical cabinet experience as its consumers migrate.
 
-**Read first:** `puck-world` and its engagement/mutation references, `sdf-world`,
-and `gaming-bricks` for linking/hosting changes. Begin with
-`WorldMachineHost.cs`, `WorldMachineHost.Instances.cs`,
-`WorldMachineHost.Bindings.cs`, `IWorldMachineHost.cs`,
-`WorldScreen.cs`, `WorldSpeaker.cs`, the screen binder, `WorldAudioDirector.cs`,
-and the named lifetime/transaction laws. Inspect the existing render resource
-catalogs before introducing any new allocation structure.
+**Read first:** `puck-world` and its engagement/mutation references, `sdf-world`, and `gaming-bricks` for linking/hosting changes. Begin with `WorldMachineHost.cs`, `WorldMachineHost.Instances.cs`, `WorldMachineHost.Bindings.cs`, `IWorldMachineHost.cs`, `WorldScreen.cs`, `WorldSpeaker.cs`, the screen binder, `WorldAudioDirector.cs`, and the named lifetime/transaction laws. Inspect the existing render resource catalogs before introducing any new allocation structure.
 
-**A1 — named displays and output sharing.** Own the screen/speaker schema
-cutover, derived screen catalog, renderer/binder consumers, machine runtime
-lifetime implementation, and output fan-out. The coordinator reserves central
-definition/serialization glue and assigns cross-project mechanical callers.
-Resolve outputs by instance, generation, and output identity. Adding/removing
-or retargeting a display must leave producers alive. Share one video publication
-and one audio drain across consumers, preserving resource retirement/device loss.
-Test a non-brick multi-output provider and an audio-only/headless provider in
-the existing test projects. Supply a real named-source cabinet for the gate;
-do not claim source migration complete while old inline machine sources load.
+**A1 — named displays and output sharing.** Own the screen/speaker schema cutover, derived screen catalog, renderer/binder consumers, machine runtime lifetime implementation, and output fan-out. The integration gatekeeper reserves central definition/serialization glue and assigns cross-project mechanical callers. Resolve outputs by instance, generation, and output identity. Adding/removing or retargeting a display must leave producers alive. Share one video publication and one audio drain across consumers, preserving resource retirement/device loss. Test a non-brick multi-output provider and an audio-only/headless provider in the existing test projects. Supply a real named-source cabinet for the gate; do not claim source migration complete while old inline machine sources load.
 
-**A2 — controls and coupled execution.** Own engagement routing, input folding,
-held-input release, cable group construction, and the host advance loop. Use B's
-operation executor for lifecycle actions. Link endpoints use machine identities
-in authored order; advance each live group once and skip its members in the
-individual loop. Validate unsupported or inconsistent running/link states before
-commit. Refused relinks/replacements preserve the live topology. Test seat
-separation, ambiguous port refusal, feed retargeting while a button is held,
-stale generations, and linked progress without any display. Run the required
-link battery coverage when its implementation changes.
+**A2 — controls and coupled execution.** Own engagement routing, input folding, held-input release, cable group construction, and the host advance loop. Use Lane B's operation executor for lifecycle actions. Link endpoints use machine identities in authored order; advance each live group once and skip its members in the individual loop. Validate unsupported or inconsistent running/link states before commit. Refused relinks/replacements preserve the live topology. Test seat separation, ambiguous port refusal, feed retargeting while a button is held, stale generations, and linked progress without any display. Run the required link battery coverage when its implementation changes.
 
-Delete screen-owned slots and lifecycle reconciliation, legacy screen memory
-ownership, and the legacy options-based requirement on `IMachineEngine` once
-their callers have moved. Concrete synchronous embedding overloads may remain
-where standalone core consumers use them. Prove deletion with compiler evidence.
+Delete screen-owned slots and lifecycle reconciliation, legacy screen memory ownership, and the legacy options-based requirement on `IMachineEngine` once their callers have moved. Concrete synchronous embedding overloads may remain where standalone core consumers use them. Prove deletion with compiler evidence.
 
-**A3 — authored cabinet and commands.** Own machine-related screen commands,
-engagement UX, forge forwarding, live capture of screen/cabinet configuration,
-and migrated world/module sources. Coordinate transpiler edits through C.
-Preserve the intention of every magazine: feed selection keeps producers;
-cartridge selection explicitly changes the selected machine. Read-back names
-the resolved machine and distinguishes stopped, empty, unavailable, and faulted.
-Use an ordinary reusable module/template and actual exported symbols or verified
-addresses. Prove two aliased cabinet copies and save/reload in the real app.
+**A3 — authored cabinet and commands.** Own machine-related screen commands, engagement UX, forge forwarding, live capture of screen/cabinet configuration, and migrated world/module sources. Coordinate transpiler edits through Lane C. Preserve the intention of every magazine: feed selection keeps producers; cartridge selection explicitly changes the selected machine. Read-back names the resolved machine and distinguishes stopped, empty, unavailable, and faulted. Use an ordinary reusable module/template and actual exported symbols or verified addresses. Prove two aliased cabinet copies and save/reload in the real app.
 
-### Luna B brief: operations, authority, and hardware gameplay
+### Lane B: operations, authority, and hardware gameplay
 
-**Purpose:** make provider operations and observations fully usable by gameplay
-without extending the core protocol for each console or peripheral.
+**Purpose:** make provider operations and observations fully usable by gameplay without extending the core protocol for each console or peripheral.
 
-**Read first:** `puck-world` authority/rules/console/replay references,
-`gaming-bricks`, and `maths-usage` before changing simulation arithmetic.
-Start with `MachineEngineDescriptor.cs`, the brick Hosting adapters,
-`WorldScreenOp.cs`, the ordered submission path, `WorldServer.NamedMachineMemory.cs`,
-direct machine rule facts, addon watches, and `WorldMachineCommandModule.cs`.
-The completed Maths coverage repair is a baseline, not another task to reopen.
+**Read first:** `puck-world` authority/rules/console/replay references, `gaming-bricks`, and `maths-usage` before changing simulation arithmetic. Start with `MachineEngineDescriptor.cs`, the brick Hosting adapters, `WorldScreenOp.cs`, the ordered submission path, `WorldServer.NamedMachineMemory.cs`, direct machine rule facts, addon watches, and `WorldMachineCommandModule.cs`. The completed Maths coverage repair is a baseline, not another task to reopen.
 
-**B1 — provider capability.** Own the neutral operation capability and brick/Tune
-handler implementations and descriptor entries. Reuse existing content,
-reconfiguration, input, and hardware capabilities; do not create a competing
-factory or introduce console names into the generic host. Validate payloads
-against the same descriptors used for discovery. Cover insert/eject/reset and
-supported model/device operations with concrete results and refusals. Preserve
-the existing boot/model guards and synchronous embedding APIs. Keep firmware
-implementation files under their current owner's control.
+**B1 — provider capability.** Own the neutral operation capability and brick/Tune handler implementations and descriptor entries. Reuse existing content, reconfiguration, input, and hardware capabilities; do not create a competing factory or introduce console names into the generic host. Validate payloads against the same descriptors used for discovery. Cover insert/eject/reset and supported model/device operations with concrete results and refusals. Preserve the existing boot/model guards and synchronous embedding APIs. Keep firmware implementation files under their current owner's control.
 
-**B2 — authoritative execution and rules.** Own the generic machine operation
-payload, server execution/authority code, machine command module, generic rule
-effect, direct observation path, and addon watch adaptation. Use the existing
-ordered submission position and principals, with expected instance generation
-checked at execution. Provider operations that prepare replacement content use
-A's transaction and C's pin/receipt seams. Keep compound engage/start ordering.
-Rules use the existing typed expression compiler; do not parse executable
-strings from provider JSON. Mirror validity and direct hardware validity must
-be queryable without treating an unavailable read as zero. Raw and symbolic
-addresses remain supported. Coordinate shared protocol codecs and central
-compiler switches through the coordinator; do not also own replay persistence.
+**B2 — authoritative execution and rules.** Own the generic machine operation payload, server execution/authority code, machine command module, generic rule effect, direct observation path, and addon watch adaptation. Use the existing ordered submission position and principals, with expected instance generation checked at execution. Provider operations that prepare replacement content use Lane A's transaction and Lane C's pin/receipt seams. Keep compound engage/start ordering. Rules use the existing typed expression compiler; do not parse executable strings from provider JSON. Mirror validity and direct hardware validity must be queryable without treating an unavailable read as zero. Raw and symbolic addresses remain supported. Coordinate shared protocol codecs and central compiler switches through the integration gatekeeper; do not also own replay persistence.
 
-Test unauthorized and stale operations, unsupported access, read-vs-write phase
-visibility, unavailable-to-real-zero transitions, replacement reapplying an
-unchanged world value, checked/truncated conversion, and an actual hardware
-side effect. A client/console operation must appear once in the ordered record;
-recomputed rule/binding effects must not appear again as external inputs.
+Test unauthorized and stale operations, unsupported access, read-vs-write phase visibility, unavailable-to-real-zero transitions, replacement reapplying an unchanged world value, checked/truncated conversion, and an actual hardware side effect. A client/console operation must appear once in the ordered record; recomputed rule/binding effects must not appear again as external inputs.
 
-**B3 — bounds and adversarial integration.** Close instance/work/memory/link and
-operation-payload admission through existing policy mechanisms, independently
-of screen capacity. Derive or measure limits rather than inventing constants.
-Test capacity refusal before allocation/commit, failed multi-object edits,
-queued replacement races, and retirement of old targets. Audit remaining
-hardware-specific protocol arms and bypasses. Full cycle-level event capture
-is not part of this extraction unless a selected gameplay case requires it;
-unsupported precision must refuse, not silently approximate.
+**B3 — bounds and adversarial integration.** Close instance/work/memory/link and operation-payload admission through existing policy mechanisms, independently of screen capacity. Derive or measure limits rather than inventing constants. Test capacity refusal before allocation/commit, failed multi-object edits, queued replacement races, and retirement of old targets. Audit remaining hardware-specific protocol arms and bypasses. Full cycle-level event capture is not part of this extraction unless a selected gameplay case requires it; unsupported precision must refuse, not silently approximate.
 
-### Luna C brief: authoring, receipts, and optional distribution
+### Lane C: authoring, receipts, and optional distribution
 
-**Purpose:** make extensions composable by authors and reproducible by hosts,
-including when Gaming Bricks are absent.
+**Purpose:** make extensions composable by authors and reproducible by hosts, including when Gaming Bricks are absent.
 
-**Read first:** `documentation`, `puck-world` document/replay references, and
-`rom-forge` for compiler/content boundaries. Start with
-`MachineConfigurationFields.cs`, `MachineConfigurationValidation.cs`,
-`WorldModuleNamespace.cs`, `WorldNameRegistry.cs`, `WorldDefinitionFileSource.cs`,
-semantic validation, the replay tape/snapshot codecs, and composition roots.
-The coordinator mediates files concurrently owned by `DSL Refinement`.
+**Read first:** `documentation`, `puck-world` document/replay references, and `rom-forge` for compiler/content boundaries. Start with `MachineConfigurationFields.cs`, `MachineConfigurationValidation.cs`, `WorldModuleNamespace.cs`, `WorldNameRegistry.cs`, `WorldDefinitionFileSource.cs`, semantic validation, the replay tape/snapshot codecs, and composition roots. The integration gatekeeper mediates files concurrently owned by `DSL Refinement`.
 
-**C1 — metadata-aware composition.** Own provider configuration field walking,
-descriptor structural checks, import/reference rewriting, document-relative
-asset relocation, and the corresponding validator/tool metadata consumers.
-Nested objects and arrays must behave consistently. Cache identity includes
-the relevant host catalog; no process-global default. Preserve unknown provider
-data for structural editing while semantic validation reports the missing
-descriptor. Test two aliases, intentional shared references, nested local
-declarations, relative firmware/content paths, and different catalogs reading
-the same document. Keep normal alias grammar. Deliver the authoring side of
-the first cabinet module with A; no new parser language is needed.
+**C1 — metadata-aware composition.** Own provider configuration field walking, descriptor structural checks, import/reference rewriting, document-relative asset relocation, and the corresponding validator/tool metadata consumers. Nested objects and arrays must behave consistently. Cache identity includes the relevant host catalog; no process-global default. Preserve unknown provider data for structural editing while semantic validation reports the missing descriptor. Test two aliases, intentional shared references, nested local declarations, relative firmware/content paths, and different catalogs reading the same document. Keep normal alias grammar. Deliver the authoring side of the first cabinet module with Lane A; no new parser language is needed.
 
-**C2 — execution identity and reproduction.** Own neutral receipt data and its
-serialization, CAS/pinning integration, replay persistence/drive, and machine
-save metadata. Coordinate host asset capture through the agreed read-only seam
-and B's operation records. Use existing hashing/storage machinery. Pin actual
-provider artifacts and their relevant dependency closure, canonical config,
-firmware/content, compiler, and compiled output; paths and version labels are
-not execution identity. Refuse a mismatch before the first machine advance.
-Add machine-state evidence that detects a changed guest register even if world
-population state matches. Require that evidence for a provider admitted to
-verified replay; an unsupported capability produces a named refusal.
+**C2 — execution identity and reproduction.** Own neutral receipt data and its serialization, CAS/pinning integration, replay persistence/drive, and machine save metadata. Coordinate host asset capture through the agreed read-only seam and Lane B's operation records. Use existing hashing/storage machinery. Pin actual provider artifacts and their relevant dependency closure, canonical config, firmware/content, compiler, and compiled output; paths and version labels are not execution identity. Refuse a mismatch before the first machine advance. Add machine-state evidence that detects a changed guest register even if world population state matches. Require that evidence for a provider admitted to verified replay; an unsupported capability produces a named refusal.
 
-Keep boot-anchored replay as the initial strategy. Preserve the checkpoint
-refusal until complete provider and host state can actually be restored;
-implementing general mid-run snapshots is not required to close this plan.
-Test source/firmware/code mismatch, external operation replay exactly once,
-deterministic bindings, named links, and machine-bearing save/reload semantics.
+Keep boot-anchored replay as the initial strategy. Preserve the checkpoint refusal until complete provider and host state can actually be restored; implementing general mid-run snapshots is not required to close this plan. Test source/firmware/code mismatch, external operation replay exactly once, deterministic bindings, named links, and machine-bearing save/reload semantics.
 
-**C3 — distribution and generated consumers.** Own extension registration,
-composition/build selection, Tune-to-Humble placement, and provider-specific
-forge wiring. Use existing projects and static extension registration. A build
-with no bundled brick references must still boot ordinary non-machine sources
-and accept a non-brick provider through the same contract. Audit the resolved
-dependency closure, not just direct csproj references; include CLI, silo,
-browser/static/AOT consumers where applicable. Dynamic loading remains optional.
-Finish machine-specific schema emission, editor/CLI/LSP metadata and generated
-consumers with their owners. A owns authored world changes; C regenerates them
-from `.puck` once the agreed source batch is stable. Never concurrently regenerate
-the same output or overwrite another task's source work.
+**C3 — distribution and generated consumers.** Own extension registration, composition/build selection, Tune-to-Humble placement, and provider-specific forge wiring. Use existing projects and static extension registration. A build with no bundled brick references must still boot ordinary non-machine sources and accept a non-brick provider through the same contract. Audit the resolved dependency closure, not just direct csproj references; include CLI, silo, browser/static/AOT consumers where applicable. Dynamic loading remains optional. Finish machine-specific schema emission, editor/CLI/LSP metadata and generated consumers with their owners. Lane A owns authored world changes; Lane C regenerates them from `.puck` once the agreed source batch is stable. Never concurrently regenerate the same output or overwrite another task's source work.
 
-### Coordinator review and completion
+### Acceptance criteria and completion review
 
-The coordinator keeps an explicit file reservation for every active packet.
-Shared definition/serializer registries, mutation kinds, grant vocabulary,
-central rule/codec switches, session capture, and composition entry points get
-one writer at a time. These are integration sites, not permission for the
-coordinator to take over each worker's implementation. Resolve conflicts against
-the shared contract and rerun the affected acceptance case before proceeding.
+The integration gatekeeper maintains explicit reservation for every active packet. Shared definition/serializer registries, mutation kinds, grant vocabulary, central rule/codec switches, session capture, and composition entry points get one writer at a time. These are integration sites, not permission for the gatekeeper to take over each workstream's implementation. Resolve conflicts against the shared contract and rerun the affected acceptance case before proceeding.
 
-Each packet returns a small complete behavior change with its own test evidence.
-Review it immediately. If its scope grows into a second subsystem, split the
-next acceptance case into a new packet instead of letting an agent investigate
-indefinitely. Report progress in terms of usable behavior and remaining gates,
-not number of files changed or tests that are unrelated to the milestone.
+Each packet returns a small complete behavior change with its own test evidence. Review it immediately. If its scope grows into a second subsystem, split the next acceptance case into a new packet instead of letting work investigate indefinitely. Report progress in terms of usable behavior and remaining gates, not number of files changed or tests that are unrelated to the milestone.
 
-The final gate is the decisive acceptance list above, with these concrete
-observations recorded through existing infrastructure:
+The final gate is the decisive acceptance list above, with these concrete observations recorded through existing infrastructure:
 
-- The same running machine/generation backs two displays and two speakers;
-  adding, removing, or selecting a display does not reset or double-step it.
-- Two aliased cabinet modules have independent input, bindings, links, and state.
-  A held control is released on retarget; cartridge replacement is explicit.
-- A display-free Advanced machine reads and writes an address above 0xFFFF;
-  direct predicates and mirrors preserve their documented timing and availability.
-- Invalid configuration, dependencies, authority, generation, and capacity all
-  refuse without replacing the live device or consuming an unrecorded operation.
-- Replay verifies code/content/firmware identity before execution and detects a
-  deliberately altered machine state. Unsupported checkpoint restoration refuses.
-- The no-bricks distribution builds and boots; a non-brick provider works with
-  the same catalog, operation, output, and authoring contracts.
-- The migrated corpus compiles through its normal source owners. Compiler
-  references confirm removal of screen-owned runtime slots and retired protocol
-  shapes; the new source shape has no fallback to embedded machine construction.
+- The same running machine/generation backs two displays and two speakers; adding, removing, or selecting a display does not reset or double-step it.
+- Two aliased cabinet modules have independent input, bindings, links, and state. A held control is released on retarget; cartridge replacement is explicit.
+- A display-free Advanced machine reads and writes an address above 0xFFFF; direct predicates and mirrors preserve their documented timing and availability.
+- Invalid configuration, dependencies, authority, generation, and capacity all refuse without replacing the live device or consuming an unrecorded operation.
+- Replay verifies code/content/firmware identity before execution and detects a deliberately altered machine state. Unsupported checkpoint restoration refuses.
+- The no-bricks distribution builds and boots; a non-brick provider works with the same catalog, operation, output, and authoring contracts.
+- The migrated corpus compiles through its normal source owners. Compiler references confirm removal of screen-owned runtime slots and retired protocol shapes; the new source shape has no fallback to embedded machine construction.
 
-Run affected World, Schema, Protocol, Transpiler, and hosting tests. Run Maths
-only when required by its owning change/routing, and run both brick Release
-batteries for changed shared hosting/clock contracts, including required link
-coverage. Finally launch real headless and rendered World sessions with an
-isolated state directory and private executable output when another user app
-holds the normal output. Never terminate that app to unblock a build.
+Run affected World, Schema, Protocol, Transpiler, and hosting tests. Run Maths only when required by its owning change/routing, and run both brick Release batteries for changed shared hosting/clock contracts, including required link coverage. Finally launch real headless and rendered World sessions with an isolated state directory and private executable output when another user app holds the normal output.
 
-Deliver the runnable cabinet/world path, exact launch command, the short
-interaction sequence the user can try, and any genuine unsupported capability.
-Do not mark the extraction complete while the two ownership paths coexist or
-while the only evidence is a successful build. Once these gates pass, stop;
-unrelated performance work, a new extension marketplace, full machine snapshots,
-and unrequested transient-watch scenarios are separate work.
+Deliver the runnable cabinet/world path, exact launch command, the short interaction sequence the user can try, and any genuine unsupported capability. Do not mark the extraction complete while the two ownership paths coexist or while the only evidence is a successful build. Once these gates pass, stop; unrelated performance work, a new extension marketplace, full machine snapshots, and unrequested transient-watch scenarios are separate work.

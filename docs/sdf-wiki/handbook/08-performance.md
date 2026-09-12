@@ -279,4 +279,4 @@ the same discipline applies whenever you hand-measure anything.
   [04-lighting-and-shading.md](04-lighting-and-shading.md).
 - The instance grid cull that flattened the beam wall, and the occupancy tax of
   its first fused attempt:
-  [../sdf-wiki/hierarchical-and-instance-acceleration.md](../sdf-wiki/hierarchical-and-instance-acceleration.md).
+  [../reference/hierarchical-and-instance-acceleration.md](../reference/hierarchical-and-instance-acceleration.md).

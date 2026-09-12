@@ -8,6 +8,7 @@ Living architectural rules live in the root documentation ([vision.md](../vision
 
 | Specification | Focus area | Scope & purpose |
 |---|---|---|
+| [World model](world-model.md) | World federation, presence, scale | The normative specification for multi-world relationships, portals, topological adjacencies, session resolution, simulation rates, federated handoffs, determinism, and attestation. |
 | [Screens and machine extensions](machine-extensions.md) | `Puck.World.Machines`, `Puck.GamingBricks` | Making Gaming Bricks ordinary extensions while preserving physical screens, convenient cabinet authoring, and direct hardware interaction. |
 | [Groups and cooperative matchmaking](group-finder.md) | `Puck.World.Schema`, `Puck.World.Server` | In-world group finder, portable membership, recoverable group states, and matchmaking over existing authority and storage. |
 | [Retail-scale cartridges](retail-scale-cartridges.md) | `Puck.GamingBricks`, `Puck.State` | Evaluation of whether Puck data can carry a retail-scale RPG (e.g. Pokémon Gold/Silver scale) without restating vocabulary. |

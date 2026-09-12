@@ -212,6 +212,8 @@ Owed beyond the numbered stages:
 
 ## Verification
 
+The [DSL and cartridge release brief](dsl-release-hardening.md) preserves the preceding correctness work, the shared semantic-metadata direction and the candidate release checks. Use it before expanding the program model described here.
+
 Every stage carries native execution on both real machines, because that is the
 forge's standing bar and the only thing separating a compiling document from a
 running one. Two gates are shared across all of them.

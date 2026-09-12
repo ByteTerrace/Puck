@@ -7,6 +7,11 @@ It proposes work; it does not claim that the experience exists. The
 against `31eab09cbd0b540539a038a5025b86a3f01a23bc`; the membership, role,
 completion and persistence rows were refreshed during the foundation work.
 
+To resume membership work, start with
+[Foundation completion before the finder](#foundation-completion-before-the-finder).
+The later finder slices are a separate delivery, not hidden prerequisites for
+finishing the engine foundation.
+
 ## The experience we are building
 
 Friends can form a party, invite people, find compatible strangers, enter one
@@ -313,9 +318,10 @@ credentials, notifications or external calls.
 
 ### Acknowledgement and the write boundary
 
-Retain `Ack`'s current meaning. Add typed results for the new operations identifying
-queued, applied, refused and durably committed outcomes, with operation id,
-revision and a stable refusal code. Do not parse console narration to learn them.
+Retain `Ack`'s drainage-only meaning for non-mutation payloads. Extend the existing
+typed mutation result through durable completion, keeping applied/refused decisions
+separate from pending/durable/uncertain persistence, with operation id, revision
+and a stable refusal code. Do not parse console narration to learn them.
 A connection correlation id alone is insufficient for a retry after reconnect.
 
 Expose a commit watermark/receipt from the existing serialized persistence path.
@@ -339,14 +345,15 @@ releasing any claim or reopening readiness.
 ### Writer fencing and write cost
 
 An ETag compare-and-swap detects a changed blob. It does not, by itself, stop an
-old authority from reading a new ETag and writing again. Establish one live
-authority epoch at activation and require it at commit publication and external
-dispatch. An old host loses write/admission authority after takeover. Extend the
-existing store/host path to enforce this; an Orleans activation assumption is
-not a substitute for a two-writer failure test.
+old authority from reading a new ETag and writing again. Preserve the existing
+activation epoch/token checks at the single authority-root publication and carry
+that fencing requirement into external dispatch. An old host loses write/admission
+authority after takeover. An Orleans activation assumption is not a substitute
+for a two-writer failure test. Do not replace the root with a separate epoch blob:
+checking one mutable blob and publishing another would reopen a race.
 
-Use immutable journal segments and a conditionally advanced committed head if
-the current page rewrite cannot meet the release load. The head binds epoch,
+Consider immutable journal segments behind the same conditionally advanced root
+if the current page rewrite cannot meet the release load. The root binds epoch,
 ordinal and checkpoint/tail references. A stale writer cannot refresh and adopt
 a newer epoch; only the activation protocol can do that. Immutable writes not
 reachable from the committed head are not accepted state. Checkpoint publication
@@ -365,6 +372,11 @@ not lock writes to its contents. The storage implementation must match its
 documented fencing protocol. See [Azure concurrency semantics](https://learn.microsoft.com/en-us/azure/storage/blobs/concurrency-manage).
 
 ### Clocks and deletion
+
+Foundation invitation and ownership deadlines use ordered engine ticks through
+the existing deadline table. Restoring them must not start a fresh grace period.
+The service-level finder additionally needs the following scheduling contract;
+do not turn it into a wall-clock read inside a membership reducer.
 
 Simulation decisions stay ordered and replayable. Use the existing host clock
 pattern and `TimeProvider` for operational scheduling. Host-side expiry metadata
@@ -467,6 +479,134 @@ insufficient samples produce an explanation, not a fabricated number. Track time
 to successful entry, not merely time to a proposed match. Hard constraints may
 make a request unmatchable; say which user-actionable condition can change without
 revealing another person's private block or eligibility facts.
+
+## Foundation completion before the finder
+
+Finish the engine's membership contract without shipping queues, matching,
+listings, ranks, party panels, a coordination-world deployment, or social-management
+applications. An engine field earns its place when authorization, destination
+resolution, or ownership must consult it. Test-only friendship, family, guild and
+party kinds exercise those doors; they do not become special engine types.
+
+The starting point is the explicit local/qualified member shape, live role-aware
+grant expansion, typed post-apply mutation results, and fenced authority storage.
+Reuse these implementations. Receipt storage does not yet make a mutation's
+response durable, and a qualified identity value does not authenticate its holder.
+The following units close those contracts rather than restart them.
+
+### Dependency order and parallel ownership
+
+First agree the durable operation identity, effective roster ownership and
+session-to-member binding together. Retry identity must survive reconnection
+while the recorded ingress principal still identifies the actual connection that
+submitted the operation. A new peer generation must not silently make a retry a
+new operation or authorize reading somebody else's receipt.
+
+| Unit | Bounded deliverable | Completion evidence |
+| --- | --- | --- |
+| A. Durable operation lifecycle | Carry requested durability from ingress through ordered application, the serialized persistence queue, receipt lookup and typed completion. Bind operation ids to canonical input and the verified durable actor; retain the original ingress actor for audit. Provide commit/read-back and retry lookup through the ordinary authority surface. | A lost reply followed by the same authenticated request returns the retained decision without applying twice. Changed actor or payload refuses. Crash before/after root publication, refused operations and uncertain writes all produce honest results. |
+| B. Bodyless sessions and qualified resolution | Add a distinct session principal and bounded session table at the existing authenticated doors. Bind issuer, subject and owned identity world there; keep connection generations separate from durable membership. Resolve named/tagged group destinations to one issuer-qualified group key and target-issued generation. | Native and MCP ingress can observe and act without allocating a body. Wrong issuer/tenant, stale session generation, forged claim and ambiguous same-tag memberships refuse. A Session actor cannot drive or transfer a body; later embodiment adds separately checked body authority. |
+| C. Scoped consent and roster survival | Add row-scoped group authority, revision-checked invitation/role/leadership/removal transitions, and one effective roster that survives policy reload. Keep consent outside ordinary editable state and authoring undo. | Recipient-only acceptance, last-place race, group-A-versus-group-B authorization, role changes, founder departure, deadline expiry, and reload/reset/load/redeploy all have discriminating controls. |
+| Integration | Join A/B/C through the existing command, wire, checkpoint, resolver and external-operation paths. Preserve machine/shader work and generate shared schemas once after contract integration. | Real authenticated processes prove reconnect, authority replacement, durable receipt recovery and group-scoped resolution; commands, queries and adapters agree. |
+
+A and B can proceed independently after their identity contract is agreed. C can
+build local consent and reload rules alongside them, but portable consent depends
+on B and its durable acknowledgements depend on A. Integrate that combination
+before claiming the foundation complete. Session work is separable from local
+groups, not optional for portable-membership acceptance.
+
+The requested parallel execution uses three bounded Luna/high workers for A, B
+and C, with a lead integrating shared contracts and independently checking failure
+cases. Shared principal/result codecs, checkpoint code, grant dispatch, composition
+roots and generated schemas each need one writer at a time. Each handoff includes
+complete callers, documentation and verification for its slice; a partial packet
+is not a completed milestone. This plan does not launch workers or authorize
+deployment, staging or a commit.
+
+### Contracts to settle in those units
+
+**Durable completion.** Keep publication sequence, journal sequence, checkpoint
+ordinal, roster revision, activation fence and connection generation distinct.
+An applied receipt must share the root publication that makes its state durable;
+a refusal receipt may publish without changing state. A timeout cancels waiting,
+not an accepted mutation. Suppress success notifications, portable proofs and
+dependent external effects until durability is established. An uncertain write
+requires reconciliation, not reapplication or a guessed refusal. Replace the
+reload path's echo observation with typed completion when that payload is
+integrated; do not broaden `Ack` to mean durable success.
+
+Retain the storage invariants already exercised: no implicit fence takeover,
+coherent recovery from one captured root, captured journal coverage on queued
+snapshots, no checkpoint tick regression, and frozen ingress after retirement.
+Restore group-derived authority without advancing the saved grant revision;
+ordinary live roster edits must still invalidate handles. Test restoring both a
+fresh and an already-populated grant table so stale role/ownership caches cannot
+survive. Keep byte-identical checkpoint recapture as a regression check.
+
+**Consent and scoped authority.** The planned operations are invite, revoke
+invitation, accept, decline, set member role, transfer leadership and administrative
+removal. Each invitation binds the exact group/revision, inviter, recipient,
+deadline and disposition. Acceptance is the recipient's own authenticated action;
+broad group administration never grants that identity. Creating a group and
+inserting its creator is one accepted transition, with stable join ordering for
+succession. Revision and capacity conflicts refuse by name. Expose stable group
+refusal codes and member/role/invitation read-backs.
+
+An ordinary `group:<id>` mutation hold is an alternative to `section:groups`,
+not permission to edit every group or the kind catalog. Carry the same dispatch
+budget and mutation-mask discipline as other row-scoped subjects. Update every
+codec and authority consumer together. Mutation ordinals 84/85 belong to machine
+upsert/removal; 86–92 were reserved for this seven-operation group unit and must
+be checked against the live catalog before assignment. The planned Group enum
+slot 11 is not wire byte 11: that wire byte already denotes Adjacency, and Machine
+uses wire byte 12. Allocate a distinct Group wire tag through the shared mapping;
+never cast enum values into protocol, replay or checkpoint bytes.
+
+**Roster and identity lifetime.** Preserve accepted membership, invitation
+disposition and role decisions across save, load, reset, reload, redeploy and
+authority takeover. Authored kinds and policy may refresh; a policy invalidating
+the live roster refuses or requires an explicit transition. Old saves and authoring
+undo cannot resurrect acceptance, revoked membership or spent invitations. Replay
+reproduces recorded decisions without fresh credentials or external dispatch.
+Define supported retry/proof retention before pruning receipts or tombstones.
+
+Verified session binding also carries the world relationship, not just matching
+issuer/subject text. A same-role or same-tag match cannot choose between two
+families. Keep the issuing authority's live roster as truth and the identity-side
+claim as its revocable projection. Persistent lifetime must not depend on the
+founder remaining present. Shared-property distribution and guardian delegation
+need concrete authority/settlement rules, not impersonation or unused kind fields.
+
+**Unresolved vocabulary and costs.** Before changing `OwnershipPolicy` or
+`SharedStateScope`, check their behavioral consumers. The original shrink proposal
+was to remove unused promises; the social-direction feedback asks that shared
+property remain possible. Neither authorizes a silent deletion or a pretend guild
+bank. Settle their contract when implementing the relevant ownership door, or
+explicitly retain/defer the design without claiming behavior.
+
+Measure append bytes and latency, checkpoint cost, receipt-index growth and the
+external journal under increasing retained history. Full-map receipt-index
+publication has quadratic cumulative byte cost as receipts accumulate, even when
+lookup is indexed. Measure before choosing segmentation, compaction or retention;
+preserve the single fenced root and retry evidence through any format change.
+Do not raise the 128-group/64-member ceilings to meet later finder targets without
+memory, wire and load evidence.
+
+### Acceptance handoff
+
+Run the existing schema membership, role authority, mutation outcome, authority
+store/recovery, retirement, Silo lifecycle and checkpoint-codec laws as regressions.
+Add missing consent, session, durable-result and roster-survival cases to their
+owning suites. Every denial needs a successful control, and the actor must differ
+from the target when that distinction is what the test claims to enforce.
+
+Use the existing real-process canary runner for group authority, recipient consent,
+reload survival and qualified membership across two authenticated authorities.
+Exercise dropped replies and takeover while the old writer continues running;
+a single activation or an in-memory fixture cannot establish that result. Run
+the normal World command/read-back path with both output streams captured. Keep
+the finder UI, matchmaking load envelope and service deployment outside this
+foundation's completion claim; they remain the later slices below.
 
 ## Implementation sequence and ownership
 

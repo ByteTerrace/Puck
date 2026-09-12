@@ -64,7 +64,5 @@ inputs. RTC and sensor values cross a recordable input seam. Whole-machine
 snapshots include every live latch and scheduler event. Presentation resampling
 may use floating point only when it cannot feed back into emulation.
 
-The SM83 AGB compatibility costume is not documented here. It belongs to the
-shared SM83 core in `src/Puck.HumbleGamingBrick`, and the `gaming-bricks` skill
-carries its settled contract facts — the plan document that used to hold them
-was deleted on 2026-08-02.
+The SM83 AGB compatibility costume is documented in the [Humble Gaming Brick wiki](../hgb/README.md).
+Shared machine hosting contracts, memory snapshots, and serial link cable emulation are documented in [Gaming Bricks Shared Infrastructure](../shared/README.md).
