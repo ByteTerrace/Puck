@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -71,10 +70,10 @@ public sealed class CartridgeSceneTests {
     private static CartridgeRule Arm(int phase, string counter, int next) =>
         new(
             Name: $"scene{phase}",
-            When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "ph"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: phase))],
+            When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "ph"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: phase)),
             Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: counter), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Value: new CartridgeValue(Constant: next)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: counter), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "ph"), Value: CartridgeExpressions.Of(constant: next)),
             ]);
 
     private sealed class SceneProbe : IDisposable {

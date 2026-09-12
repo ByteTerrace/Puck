@@ -12,7 +12,7 @@ That framing is the whole point. Puck is not a renderer with a scene format bolt
 
 Parity between the backends is deliberately *relaxed* by default. Floating-point codegen differs between DXC's two outputs in ways that are benign and well understood; the default envelope shrugs at those, and an opt-in strict posture applies calibrated per-family thresholds backed by measured evidence. Parity numbers are drift tripwires, not acceptance criteria. A backend disagreement that clears the envelope is not a success to celebrate; a threshold that is met is not a proof of correctness.
 
-**The SDF VM.** Everything visible is a signed-distance program — words and instances, never a mesh graph. Rendering is compute-shader sphere tracing: mask, beam, cull-args, views, composite. Hardware ray-query exists only as a parity probe against the primary march, never as the shipped path.
+**The SDF VM.** Everything visible is a signed-distance program — words and instances, never a mesh graph. Rendering uses compute-shader sphere tracing, with separate culling, traversal, surface, occlusion and lighting passes; [the engine README](../src/Puck.SdfVm/README.md#-the-render-pipeline) describes their order. Hardware ray-query exists only as a parity probe against the primary march, never as the shipped path.
 
 The VM is deliberately incurious about what it draws. A diegetic screen samples an opaque image handle; the VM has no idea whether that handle came from an emulator, a camera feed, a window capture, or another world entirely. That incuriosity is what makes hosting work.
 

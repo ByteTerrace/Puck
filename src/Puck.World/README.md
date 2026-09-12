@@ -1214,7 +1214,9 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
 `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.timing`, `world.gpu`, `world.fps`. Named tiers are
+`world.debug-view`, `world.timing`, `world.gpu`, `world.fps`. Render scale applies
+to both seat views and named cameras, multiplied by any layout-transition scale.
+Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field — read both `world.gpu` and `world.fps`
 at the intended population and view layout. `world.budget` is the DERIVED cost

@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -24,17 +23,17 @@ public sealed class CartridgeMapWriteTests {
             ],
             Rules = [new CartridgeRule(
                 Name: "paint",
-                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
+                When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "done"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)),
                 Body: [
                     // A run of solid cells along the top row, written through the queue at run time.
                     new CartridgeStatement(Kind: "repeat", Count: 4, Index: "col", Body: [
                         new CartridgeStatement(
                             Kind: "map",
-                            Row: new CartridgeValue(Constant: 0),
-                            Column: new CartridgeValue(Variable: "col"),
-                            Tile: new CartridgeValue(Constant: 1)),
+                            Row: CartridgeExpressions.Of(constant: 0),
+                            Column: CartridgeExpressions.Of(state: "col"),
+                            Tile: CartridgeExpressions.Of(constant: 1)),
                     ]),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: null, Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "done"), Operation: null, Value: CartridgeExpressions.Of(constant: 1)),
                 ])],
         };
         using var machine = Run(document: document, frames: 16, out _);
@@ -53,18 +52,18 @@ public sealed class CartridgeMapWriteTests {
             Variables = [new CartridgeVariable(Name: "i", Initial: 0)],
             Screens = [new CartridgeScreen(Name: "panel", Width: 4, Tiles: new int[8])],
         };
-        var write = new CartridgeStatement(Kind: "map", Row: new CartridgeValue(Constant: 0), Column: new CartridgeValue(Variable: "i"), Tile: new CartridgeValue(Constant: 0));
+        var write = new CartridgeStatement(Kind: "map", Row: CartridgeExpressions.Of(constant: 0), Column: CartridgeExpressions.Of(state: "i"), Tile: CartridgeExpressions.Of(constant: 0));
 
         // A loop past the queue's capacity is refused rather than silently dropping the overflow.
         Refuses(
-            document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "repeat", Count: 25, Index: "i", Body: [write])])] },
+            document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "repeat", Count: 25, Index: "i", Body: [write])])] },
             fragment: "against a queue of");
 
         // Branch arms are exclusive, so gated redraws are counted once, not summed.
         Assert.Empty(collection: CartridgeDocuments.Validate(document: document with {
-            Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(
+            Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(
                 Kind: "if",
-                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "i"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
+                When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "i"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)),
                 Then: [new CartridgeStatement(Kind: "repeat", Count: 20, Index: "i", Body: [write])],
                 Else: [new CartridgeStatement(Kind: "repeat", Count: 20, Index: "i", Body: [write])])])],
         }));
@@ -73,20 +72,20 @@ public sealed class CartridgeMapWriteTests {
         Refuses(
             document: document with {
                 Screens = [new CartridgeScreen(Name: "wide", Width: 20, Tiles: new int[20 * 8])],
-                Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "blit", Screen: "wide", Row: new CartridgeValue(Constant: 0), Column: new CartridgeValue(Constant: 0))])],
+                Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "blit", Screen: "wide", Row: CartridgeExpressions.Of(constant: 0), Column: CartridgeExpressions.Of(constant: 0))])],
             },
             fragment: "before the display-off window costs frames");
 
         Refuses(
-            document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "blit", Screen: "missing", Row: new CartridgeValue(Constant: 0), Column: new CartridgeValue(Constant: 0))])] },
+            document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "blit", Screen: "missing", Row: CartridgeExpressions.Of(constant: 0), Column: CartridgeExpressions.Of(constant: 0))])] },
             fragment: "Unknown screen");
 
         Refuses(
-            document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "blit", Screen: "panel", Row: new CartridgeValue(Constant: 31), Column: new CartridgeValue(Constant: 0))])] },
+            document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "blit", Screen: "panel", Row: CartridgeExpressions.Of(constant: 31), Column: CartridgeExpressions.Of(constant: 0))])] },
             fragment: "runs past the 32 by 32 map");
 
         Refuses(
-            document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "blit", Screen: "panel", Row: new CartridgeValue(Variable: "i"), Column: new CartridgeValue(Constant: 0))])] },
+            document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "blit", Screen: "panel", Row: CartridgeExpressions.Of(state: "i"), Column: CartridgeExpressions.Of(constant: 0))])] },
             fragment: "literal row and column");
     }
 

@@ -18,11 +18,11 @@ public sealed class CartridgeSpriteTurnTests {
         var document = CartridgeDocuments.Create(target: "cgb", title: "TURNCGB") with {
             Sprites = [new CartridgeSprite(
                 Name: "s",
-                Tile: new CartridgeValue(Constant: 0),
-                X: new CartridgeValue(Constant: 0),
-                Y: new CartridgeValue(Constant: 0),
-                Visible: new CartridgeValue(Constant: 1),
-                Turn: new CartridgeValue(Constant: 32))],
+                Tile: CartridgeExpressions.Of(constant: 0),
+                X: CartridgeExpressions.Of(constant: 0),
+                Y: CartridgeExpressions.Of(constant: 0),
+                Visible: CartridgeExpressions.Of(constant: 1),
+                Turn: CartridgeExpressions.Of(constant: 32))],
         };
         var errors = CartridgeDocuments.Validate(document: document);
         Assert.Contains(collection: errors, filter: error => error.Message.Contains(value: "can only mirror one", comparisonType: StringComparison.Ordinal));
@@ -38,11 +38,11 @@ public sealed class CartridgeSpriteTurnTests {
             ],
             Sprites = [new CartridgeSprite(
                 Name: "spinner",
-                Tile: new CartridgeValue(Constant: 1),
-                X: new CartridgeValue(Constant: 60),
-                Y: new CartridgeValue(Constant: 60),
-                Visible: new CartridgeValue(Constant: 1),
-                Turn: new CartridgeValue(Constant: turn))],
+                Tile: CartridgeExpressions.Of(constant: 1),
+                X: CartridgeExpressions.Of(constant: 60),
+                Y: CartridgeExpressions.Of(constant: 60),
+                Visible: CartridgeExpressions.Of(constant: 1),
+                Turn: CartridgeExpressions.Of(constant: turn))],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
         using var machine = new AgbVerifyMachineDriver(rom: result.Rom, label: "turn");

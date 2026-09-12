@@ -1,6 +1,5 @@
 using Puck.GamingBricks.Forge;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -45,8 +44,8 @@ public sealed class CartridgeSamplePitchTests {
     public void ValidationRefusesARateOnASoundThatIsNotARecording() {
         var document = CartridgeDocuments.Create(target: "agb", title: "RATEBAD") with {
             Sounds = [new CartridgeSound(Name: "theme", Music: [CartridgeCostMeasurement.Lead(part: CartridgeCostMeasurement.Track())])],
-            Rules = [new CartridgeRule(Name: "go", When: [], Body: [
-                new CartridgeStatement(Kind: "play", Sound: "theme", Rate: new CartridgeValue(Constant: 64)),
+            Rules = [new CartridgeRule(Name: "go", Body: [
+                new CartridgeStatement(Kind: "play", Sound: "theme", Rate: CartridgeExpressions.Of(constant: 64)),
             ])],
         };
         var errors = CartridgeDocuments.Validate(document: document);
@@ -90,12 +89,12 @@ public sealed class CartridgeSamplePitchTests {
             Rules = [
                 new CartridgeRule(
                     Name: "fire",
-                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 2))],
-                    Body: [new CartridgeStatement(Kind: "play", Sound: "note", Rate: new CartridgeValue(Constant: rate))]),
+                    When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "phase"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 2)),
+                    Body: [new CartridgeStatement(Kind: "play", Sound: "note", Rate: CartridgeExpressions.Of(constant: rate))]),
                 new CartridgeRule(
                     Name: "tick",
-                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 200))],
-                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1))]),
+                    When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "phase"), comparison: ActionStateComparison.Less, right: CartridgeExpressions.Of(constant: 200)),
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "phase"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1))]),
             ],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);

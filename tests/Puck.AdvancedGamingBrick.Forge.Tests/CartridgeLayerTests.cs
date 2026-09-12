@@ -43,9 +43,9 @@ public sealed class CartridgeLayerTests {
             document: document with {
                 Layers = [Layer(), Layer()],
                 Affine = new CartridgeAffine(
-                    Map: new int[256], Angle: new CartridgeValue(Constant: 0), Scale: new CartridgeValue(Constant: 16),
-                    CentreX: new CartridgeValue(Constant: 120), CentreY: new CartridgeValue(Constant: 80),
-                    Visible: new CartridgeValue(Constant: 1)),
+                    Map: new int[256], Angle: CartridgeExpressions.Of(constant: 0), Scale: CartridgeExpressions.Of(constant: 16),
+                    CentreX: CartridgeExpressions.Of(constant: 120), CentreY: CartridgeExpressions.Of(constant: 80),
+                    Visible: CartridgeExpressions.Of(constant: 1)),
             },
             fragment: "leaving room for 1");
     }
@@ -53,10 +53,10 @@ public sealed class CartridgeLayerTests {
     private static CartridgeLayer Layer(int[]? map = null, int priority = 2, int scrollX = 0, int visible = 1) => new(
         Map: map ?? new int[1024],
         MapPalettes: null,
-        ScrollX: new CartridgeValue(Constant: scrollX),
-        ScrollY: new CartridgeValue(Constant: 0),
+        ScrollX: CartridgeExpressions.Of(constant: scrollX),
+        ScrollY: CartridgeExpressions.Of(constant: 0),
         Priority: priority,
-        Visible: new CartridgeValue(Constant: visible));
+        Visible: CartridgeExpressions.Of(constant: visible));
 
     // Where the layer's solid column lands on screen, or -1 when it is not drawn at all.
     private static int ColumnOfRun(int layerScrollX, int visible = 1) {

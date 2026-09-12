@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -22,7 +21,7 @@ public sealed class CartridgeControlFlowTests {
             Arrays = [new CartridgeArray(Name: "values", Initial: [1, 2, 3, 4, 5, 6])],
             Rules = [Once(name: "sum", body: [
                 Repeat(count: 6, index: "row", body: [
-                    Set(target: "total", operation: ExpressionOp.Add, value: new CartridgeValue(Array: "values", Index: new CartridgeValue(Variable: "row"))),
+                    Set(target: "total", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(state: "values", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "row")))),
                 ]),
             ])],
         };
@@ -46,9 +45,9 @@ public sealed class CartridgeControlFlowTests {
                 Repeat(count: 5, index: "slot", body: [
                     new CartridgeStatement(
                         Kind: "if",
-                        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot")), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
+                        When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "cells", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot"))), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)),
                         Then: [new CartridgeStatement(Kind: "break")]),
-                    Set(target: "seen", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1)),
+                    Set(target: "seen", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1)),
                 ]),
             ])],
         };
@@ -77,15 +76,15 @@ public sealed class CartridgeControlFlowTests {
                     Repeat(count: 4, index: "inner", body: [
                         new CartridgeStatement(
                             Kind: "set",
-                            Target: new CartridgeTarget(Array: "grid", Index: new CartridgeValue(Variable: "cursor")),
+                            Target: new CartridgeTarget(State: "grid", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "cursor"))),
                             Operation: null,
-                            Value: new CartridgeValue(Variable: "cursor")),
+                            Value: CartridgeExpressions.Of(state: "cursor")),
                         new CartridgeStatement(
                             Kind: "if",
-                            When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "inner"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 2))],
-                            Then: [Set(target: "evens", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1))],
-                            Else: [Set(target: "odds", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1))]),
-                        Set(target: "cursor", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1)),
+                            When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "inner"), comparison: ActionStateComparison.Less, right: CartridgeExpressions.Of(constant: 2)),
+                            Then: [Set(target: "evens", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1))],
+                            Else: [Set(target: "odds", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1))]),
+                        Set(target: "cursor", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1)),
                     ]),
                 ]),
             ])],
@@ -122,13 +121,13 @@ public sealed class CartridgeControlFlowTests {
                 new CartridgeVariable(Name: "sink", Initial: 0),
             ],
             Arrays = [new CartridgeArray(Name: "cells", Initial: new int[180])],
-            Rules = [new CartridgeRule(Name: "work", When: [], Body: [
+            Rules = [new CartridgeRule(Name: "work", Body: [
                 Repeat(count: accepted, index: "band", body: [
                     Repeat(count: SweepInner, index: "slot", body: [
-                        Set(target: "sink", operation: ExpressionOp.Add, value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot"))),
+                        Set(target: "sink", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(state: "cells", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot")))),
                     ]),
                 ]),
-                Set(target: "ticks", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1)),
+                Set(target: "ticks", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1)),
             ])],
         };
         using var machine = Run(document: document, frames: Frames, out var result);
@@ -142,9 +141,9 @@ public sealed class CartridgeControlFlowTests {
             Variables = [new CartridgeVariable(Name: "i", Initial: 0), new CartridgeVariable(Name: "x", Initial: 0)],
         };
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "break")])] }, fragment: "inside a repeat");
-        Refuses(document: document with { Rules = [Rule(body: [Repeat(count: 0, index: "i", body: [Set(target: "x", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1))])])] }, fragment: "iteration count");
-        Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "repeat", Count: 4, Index: "missing", Body: [Set(target: "x", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1))])])] }, fragment: "Unknown state variable");
-        Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x"), Operation: null, Value: new CartridgeValue(Constant: 1), Count: 3)])] }, fragment: "cannot carry 'count'");
+        Refuses(document: document with { Rules = [Rule(body: [Repeat(count: 0, index: "i", body: [Set(target: "x", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1))])])] }, fragment: "iteration count");
+        Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "repeat", Count: 4, Index: "missing", Body: [Set(target: "x", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1))])])] }, fragment: "Unknown state variable");
+        Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "x"), Operation: null, Value: CartridgeExpressions.Of(constant: 1), Count: 3)])] }, fragment: "cannot carry 'count'");
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "loop")])] }, fragment: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend");
     }
 
@@ -170,10 +169,10 @@ public sealed class CartridgeControlFlowTests {
     private static CartridgeDocument Sweep(string target, int count) => Blank(target: target, title: "SWEEP") with {
         Variables = [new CartridgeVariable(Name: "slot", Initial: 0), new CartridgeVariable(Name: "band", Initial: 0), new CartridgeVariable(Name: "sink", Initial: 0)],
         Arrays = [new CartridgeArray(Name: "cells", Initial: new int[180])],
-        Rules = [new CartridgeRule(Name: "work", When: [], Body: [
+        Rules = [new CartridgeRule(Name: "work", Body: [
             Repeat(count: count, index: "band", body: [
                 Repeat(count: SweepInner, index: "slot", body: [
-                    Set(target: "sink", operation: ExpressionOp.Add, value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot"))),
+                    Set(target: "sink", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(state: "cells", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot")))),
                 ]),
             ]),
         ])],
@@ -181,19 +180,19 @@ public sealed class CartridgeControlFlowTests {
 
     private static CartridgeDocument Blank(string target, string title) => CartridgeDocuments.Create(target: target, title: title);
 
-    private static CartridgeStatement Set(string target, ExpressionOp? operation, CartridgeValue value) =>
-        new(Kind: "set", Target: new CartridgeTarget(Variable: target), Operation: operation, Value: value);
+    private static CartridgeStatement Set(string target, ExpressionOp? operation, ValueExpression value) =>
+        new(Kind: "set", Target: new CartridgeTarget(State: target), Operation: operation, Value: value);
 
     private static CartridgeStatement Repeat(int count, string index, CartridgeStatement[] body) =>
         new(Kind: "repeat", Count: count, Index: index, Body: body);
 
-    private static CartridgeRule Rule(CartridgeStatement[] body) => new(Name: "rule", When: [], Body: body);
+    private static CartridgeRule Rule(CartridgeStatement[] body) => new(Name: "rule", Body: body);
 
     // Guards the body behind a "done" latch so the measured state is the first frame's result, not a per-frame rerun.
     private static CartridgeRule Once(string name, CartridgeStatement[] body) => new(
         Name: name,
-        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
-        Body: [.. body, Set(target: "done", operation: null, value: new CartridgeValue(Constant: 1))]);
+        When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "done"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)),
+        Body: [.. body, Set(target: "done", operation: null, value: CartridgeExpressions.Of(constant: 1))]);
 
     private static void Refuses(CartridgeDocument document, string fragment) {
         var errors = CartridgeDocuments.Validate(document: document);

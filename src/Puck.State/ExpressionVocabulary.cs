@@ -63,4 +63,32 @@ public static class ExpressionVocabulary {
     /// <returns><see langword="true"/> when the vocabulary names <paramref name="name"/>.</returns>
     public static bool TryFind(string name, out ExpressionFunction? function) =>
         Functions.TryGetValue(key: name, value: out function);
+
+    /// <summary>Returns the operation a token denotes.</summary>
+    /// <param name="token">The token.</param>
+    /// <returns>The operation, or <see langword="null"/> for a payload token — a constant or a state read — which
+    /// carries its own value rather than consuming any.</returns>
+    /// <remarks>A third consumer of this vocabulary reaches the token list directly: a backend that EMITS an
+    /// expression rather than evaluating it needs each token's operation and arity to walk the postfix list, and
+    /// admits a subset of what the rule language evaluates. Deriving that from here is what keeps the subset a
+    /// refusal against one table instead of a second table.</remarks>
+    public static ExpressionOp? Operation(ValueToken token) {
+        ArgumentNullException.ThrowIfNull(argument: token);
+
+        return ExpressionOperators.Find(token: token)?.Operation;
+    }
+
+    /// <summary>Returns how many values an operation consumes from the stack.</summary>
+    /// <param name="operation">The operation.</param>
+    /// <returns>The count; zero for a payload operation.</returns>
+    public static int Arity(ExpressionOp operation) => ExpressionOperators.Arity(operation: operation);
+
+    /// <summary>Returns the spelling an operation is named by, for a refusal that quotes what the author wrote.</summary>
+    /// <param name="operation">The operation.</param>
+    /// <returns>The function name, the operator symbol, or the operation's own name when it has neither.</returns>
+    public static string Spelling(ExpressionOp operation) {
+        var found = ExpressionOperators.Find(operation: operation);
+
+        return ((found?.Name ?? found?.Symbol) ?? operation.ToString());
+    }
 }

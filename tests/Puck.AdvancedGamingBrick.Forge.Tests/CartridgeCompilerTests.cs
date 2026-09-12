@@ -4,7 +4,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -17,13 +16,13 @@ public sealed class CartridgeCompilerTests {
         draft.Set(pointer: "/variables", json: """[{"name":"x","initial":255},{"name":"released","initial":0},{"name":"compared","initial":0}]""");
         draft.Set(pointer: "/rules", json: """
             [
-              {"name":"press","when":[{"kind":"key","key":"right","mode":"pressed"}],"body":[{"kind":"set","target":{"variable":"x"},"operation":"Add","value":{"constant":2}}]},
-              {"name":"release","when":[{"kind":"key","key":"right","mode":"released"}],"body":[{"kind":"set","target":{"variable":"released"},"operation":"Add","value":{"constant":1}}]},
-              {"name":"compare","when":[{"kind":"compare","left":{"variable":"x"},"comparison":"Equal","right":{"constant":1}}],"body":[{"kind":"set","target":{"variable":"compared"},"value":{"constant":42}}]}
+              {"name":"press","when":{"$type":"compareValue","left":"$key:right:pressed","comparison":"Equal","right":"1","kind":"Int"},"body":[{"kind":"set","target":{"state":"x"},"operation":"Add","value":"2"}]},
+              {"name":"release","when":{"$type":"compareValue","left":"$key:right:released","comparison":"Equal","right":"1","kind":"Int"},"body":[{"kind":"set","target":{"state":"released"},"operation":"Add","value":"1"}]},
+              {"name":"compare","when":{"$type":"compareValue","left":"x","comparison":"Equal","right":"1","kind":"Int"},"body":[{"kind":"set","target":{"state":"compared"},"value":"42"}]}
             ]
             """);
         draft.Set(pointer: "/tiles/-", json: """{"name":"solid","pixels":["11111111","11111111","11111111","11111111","11111111","11111111","11111111","11111111"]}""");
-        draft.Set(pointer: "/sprites/-", json: """{"name":"cursor","tile":{"constant":1},"x":{"variable":"x"},"y":{"constant":24},"visible":{"constant":1}}""");
+        draft.Set(pointer: "/sprites/-", json: """{"name":"cursor","tile":"1","x":"x","y":"24","visible":"1"}""");
         var doc = draft.Check();
         ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
         var result = compiler.Compile(document: doc);
@@ -60,7 +59,7 @@ public sealed class CartridgeCompilerTests {
         foreach (var target in new[] { "cgb", "agb" }) {
             var document = CartridgeDocuments.Create(target: target, title: "COMPARE") with {
                 Variables = [new CartridgeVariable(Name: "result", Initial: 0)],
-                Rules = [new CartridgeRule(Name: "rule", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Constant: left), Comparison: comparison, Right: new CartridgeValue(Constant: right))], Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "result"), Operation: null, Value: new CartridgeValue(Constant: 1))])],
+                Rules = [new CartridgeRule(Name: "rule", When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(constant: left), comparison: comparison, right: CartridgeExpressions.Of(constant: right)), Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "result"), Operation: null, Value: CartridgeExpressions.Of(constant: 1))])],
             };
             ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
             var result = compiler.Compile(document: document);
@@ -75,17 +74,17 @@ public sealed class CartridgeCompilerTests {
         foreach (var target in new[] { "cgb", "agb" }) {
             var document = CartridgeDocuments.Create(target: target, title: "OPERATIONS") with {
                 Variables = [new CartridgeVariable(Name: "add", Initial: 0), new CartridgeVariable(Name: "sub", Initial: 0), new CartridgeVariable(Name: "and", Initial: 0), new CartridgeVariable(Name: "or", Initial: 0), new CartridgeVariable(Name: "xor", Initial: 0), new CartridgeVariable(Name: "done", Initial: 0)],
-                Rules = [new CartridgeRule(Name: "once", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))], Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "add"), Operation: null, Value: new CartridgeValue(Constant: 255)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "add"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 2)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "sub"), Operation: ExpressionOp.Subtract, Value: new CartridgeValue(Variable: "add")),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "and"), Operation: null, Value: new CartridgeValue(Constant: 240)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "and"), Operation: ExpressionOp.BitAnd, Value: new CartridgeValue(Constant: 60)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "or"), Operation: null, Value: new CartridgeValue(Constant: 240)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "or"), Operation: ExpressionOp.BitOr, Value: new CartridgeValue(Constant: 60)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "xor"), Operation: null, Value: new CartridgeValue(Constant: 240)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "xor"), Operation: ExpressionOp.BitXor, Value: new CartridgeValue(Constant: 60)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: null, Value: new CartridgeValue(Constant: 1)),
+                Rules = [new CartridgeRule(Name: "once", When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "done"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)), Body: [
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "add"), Operation: null, Value: CartridgeExpressions.Of(constant: 255)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "add"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 2)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "sub"), Operation: ExpressionOp.Subtract, Value: CartridgeExpressions.Of(state: "add")),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "and"), Operation: null, Value: CartridgeExpressions.Of(constant: 240)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "and"), Operation: ExpressionOp.BitAnd, Value: CartridgeExpressions.Of(constant: 60)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "or"), Operation: null, Value: CartridgeExpressions.Of(constant: 240)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "or"), Operation: ExpressionOp.BitOr, Value: CartridgeExpressions.Of(constant: 60)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "xor"), Operation: null, Value: CartridgeExpressions.Of(constant: 240)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "xor"), Operation: ExpressionOp.BitXor, Value: CartridgeExpressions.Of(constant: 60)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "done"), Operation: null, Value: CartridgeExpressions.Of(constant: 1)),
                 ])],
             };
             ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
@@ -106,9 +105,9 @@ public sealed class CartridgeCompilerTests {
         var before = draft.Show();
         Assert.Throws<ArgumentException>(testCode: () => draft.Set(pointer: "/tiles/99", json: "{}"));
         Assert.Equal(expected: before, actual: draft.Show());
-        Assert.Throws<System.Text.Json.JsonException>(testCode: () => draft.Set(pointer: "/scrollX", json: """{"constant":1,"constant":2}"""));
+        Assert.Throws<System.Text.Json.JsonException>(testCode: () => draft.Set(pointer: "/scrollX", json: """{"tokens":[],"tokens":[]}"""));
         Assert.Equal(expected: before, actual: draft.Show());
-        draft.Set(pointer: "/scrollX", json: """{"variable":"missing"}""");
+        draft.Set(pointer: "/scrollX", json: "\"missing\"");
         Assert.Throws<Puck.Assets.Documents.DocumentValidationException>(testCode: () => draft.Check());
         draft.Undo();
         Assert.Equal(expected: before, actual: draft.Show());

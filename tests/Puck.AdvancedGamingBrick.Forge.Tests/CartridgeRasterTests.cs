@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -23,7 +22,7 @@ public sealed class CartridgeRasterTests {
                 new CartridgeTile(Name: "solid", Pixels: [.. Enumerable.Repeat(element: "11111111", count: 8)]),
             ],
             Map = cells,
-            Raster = [new CartridgeRasterRow(Line: 80, ScrollX: new CartridgeValue(Constant: 32), ScrollY: new CartridgeValue(Constant: 0))],
+            Raster = [new CartridgeRasterRow(Line: 80, ScrollX: CartridgeExpressions.Of(constant: 32), ScrollY: CartridgeExpressions.Of(constant: 0))],
         };
         var result = new HgbCartridgeCompiler().Compile(document: document);
 
@@ -58,7 +57,7 @@ public sealed class CartridgeRasterTests {
                 new CartridgeTile(Name: "solid", Pixels: [.. Enumerable.Repeat(element: "11111111", count: 8)]),
             ],
             Map = cells,
-            Raster = [new CartridgeRasterRow(Line: 80, ScrollX: new CartridgeValue(Constant: 32), ScrollY: new CartridgeValue(Constant: 0))],
+            Raster = [new CartridgeRasterRow(Line: 80, ScrollX: CartridgeExpressions.Of(constant: 32), ScrollY: CartridgeExpressions.Of(constant: 0))],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
 
@@ -84,7 +83,7 @@ public sealed class CartridgeRasterTests {
                 new CartridgeTile(Name: "solid", Pixels: [.. Enumerable.Repeat(element: "11111111", count: 8)]),
             ],
             Map = cells,
-            Raster = [new CartridgeRasterRow(Line: 80, ScrollX: new CartridgeValue(Constant: 32), ScrollY: new CartridgeValue(Constant: 0))],
+            Raster = [new CartridgeRasterRow(Line: 80, ScrollX: CartridgeExpressions.Of(constant: 32), ScrollY: CartridgeExpressions.Of(constant: 0))],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
 
@@ -107,13 +106,13 @@ public sealed class CartridgeRasterTests {
             Variables = [new CartridgeVariable(Name: "i", Initial: 0), new CartridgeVariable(Name: "sink", Initial: 0), new CartridgeVariable(Name: "ticks", Initial: 0)],
             Raster = [.. Enumerable.Range(start: 0, count: CartridgeLimits.RasterRowCount).Select(selector: index => new CartridgeRasterRow(
                 Line: (index * 16) + 8,
-                ScrollX: new CartridgeValue(Variable: "sink"),
-                ScrollY: new CartridgeValue(Constant: 0)))],
-            Rules = [new CartridgeRule(Name: "work", When: [], Body: [
+                ScrollX: CartridgeExpressions.Of(state: "sink"),
+                ScrollY: CartridgeExpressions.Of(constant: 0)))],
+            Rules = [new CartridgeRule(Name: "work", Body: [
                 new CartridgeStatement(Kind: "repeat", Count: 200, Index: "i", Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "sink"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
                 ]),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ticks"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "ticks"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
             ])],
         };
 
@@ -139,13 +138,13 @@ public sealed class CartridgeRasterTests {
     public void ValidationChecksRowOrderAndRange() {
         var document = CartridgeDocuments.Create(target: "cgb", title: "RASTERBAD");
         Refuses(
-            document: document with { Raster = [new CartridgeRasterRow(Line: 200, ScrollX: new CartridgeValue(Constant: 0), ScrollY: new CartridgeValue(Constant: 0))] },
+            document: document with { Raster = [new CartridgeRasterRow(Line: 200, ScrollX: CartridgeExpressions.Of(constant: 0), ScrollY: CartridgeExpressions.Of(constant: 0))] },
             fragment: "scanline in 1..143");
         Refuses(
             document: document with {
                 Raster = [
-                    new CartridgeRasterRow(Line: 80, ScrollX: new CartridgeValue(Constant: 0), ScrollY: new CartridgeValue(Constant: 0)),
-                    new CartridgeRasterRow(Line: 40, ScrollX: new CartridgeValue(Constant: 0), ScrollY: new CartridgeValue(Constant: 0)),
+                    new CartridgeRasterRow(Line: 80, ScrollX: CartridgeExpressions.Of(constant: 0), ScrollY: CartridgeExpressions.Of(constant: 0)),
+                    new CartridgeRasterRow(Line: 40, ScrollX: CartridgeExpressions.Of(constant: 0), ScrollY: CartridgeExpressions.Of(constant: 0)),
                 ],
             },
             fragment: "ascending scanline order");

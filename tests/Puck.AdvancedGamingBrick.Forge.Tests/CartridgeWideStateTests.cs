@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -18,10 +17,8 @@ public sealed class CartridgeWideStateTests {
     public void AWideSlotCountsPastAByteAndReadsBackLittleEndian(string target) {
         // 300 additions of one: a byte slot would have wrapped to 44 long before the end.
         var result = Compiler(target: target).Compile(document: Base(target: target) with {
-            Rules = [new CartridgeRule(Name: "count", When: [
-                new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "score"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 300)),
-            ], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "score"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 7)),
+            Rules = [new CartridgeRule(Name: "count", When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "score"), comparison: ActionStateComparison.Less, right: CartridgeExpressions.Of(constant: 300)), Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "score"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 7)),
             ])],
         });
 
@@ -42,11 +39,9 @@ public sealed class CartridgeWideStateTests {
         // 0x0100 - 1 is the case a byte-at-a-time subtract gets wrong without the borrow.
         var result = Compiler(target: target).Compile(document: Base(target: target) with {
             Variables = [new CartridgeVariable(Name: "score", Initial: 256, Max: 65535), new CartridgeVariable(Name: "done", Initial: 0)],
-            Rules = [new CartridgeRule(Name: "spend", When: [
-                new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0)),
-            ], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "score"), Operation: ExpressionOp.Subtract, Value: new CartridgeValue(Constant: 1)),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Value: new CartridgeValue(Constant: 1)),
+            Rules = [new CartridgeRule(Name: "spend", When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "done"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)), Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "score"), Operation: ExpressionOp.Subtract, Value: CartridgeExpressions.Of(constant: 1)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "done"), Value: CartridgeExpressions.Of(constant: 1)),
             ])],
         });
 
@@ -70,10 +65,8 @@ public sealed class CartridgeWideStateTests {
                 new CartridgeVariable(Name: "bar", Initial: 255, Max: 65535),
                 new CartridgeVariable(Name: "greater", Initial: 0),
             ],
-            Rules = [new CartridgeRule(Name: "rank", When: [
-                new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "score"), Comparison: ActionStateComparison.Greater, Right: new CartridgeValue(Variable: "bar")),
-            ], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "greater"), Value: new CartridgeValue(Constant: 1)),
+            Rules = [new CartridgeRule(Name: "rank", When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "score"), comparison: ActionStateComparison.Greater, right: CartridgeExpressions.Of(state: "bar")), Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "greater"), Value: CartridgeExpressions.Of(constant: 1)),
             ])],
         });
 
@@ -86,8 +79,8 @@ public sealed class CartridgeWideStateTests {
     [Fact]
     public void AnOperationWithNoSixteenBitFormIsRefused() {
         var document = Base(target: "cgb") with {
-            Rules = [new CartridgeRule(Name: "scale", When: [], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "score"), Operation: ExpressionOp.Multiply, Value: new CartridgeValue(Constant: 2)),
+            Rules = [new CartridgeRule(Name: "scale", Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "score"), Operation: ExpressionOp.Multiply, Value: CartridgeExpressions.Of(constant: 2)),
             ])],
         };
 
@@ -99,10 +92,10 @@ public sealed class CartridgeWideStateTests {
         var document = Base(target: "cgb") with {
             Sprites = [new CartridgeSprite(
                 Name: "cursor",
-                Tile: new CartridgeValue(Constant: 0),
-                X: new CartridgeValue(Variable: "score"),
-                Y: new CartridgeValue(Constant: 0),
-                Visible: new CartridgeValue(Constant: 1))],
+                Tile: CartridgeExpressions.Of(constant: 0),
+                X: CartridgeExpressions.Of(state: "score"),
+                Y: CartridgeExpressions.Of(constant: 0),
+                Visible: CartridgeExpressions.Of(constant: 1))],
         };
 
         Assert.Contains(collection: CartridgeDocuments.Validate(document: document), filter: error => error.Message.Contains(value: "wide slot", comparisonType: StringComparison.Ordinal));

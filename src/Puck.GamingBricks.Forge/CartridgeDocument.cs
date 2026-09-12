@@ -63,9 +63,9 @@ public sealed record CartridgeDocument {
     /// <remarks>In tall mode a sprite's tile index selects a pair, so the low bit of the index is ignored.</remarks>
     public bool TallSprites { get; init; }
     /// <summary>Gets the horizontal background scroll, in pixels modulo 256.</summary>
-    public required CartridgeValue ScrollX { get; init; }
+    public required ValueExpression ScrollX { get; init; }
     /// <summary>Gets the vertical background scroll, in pixels modulo 256.</summary>
-    public required CartridgeValue ScrollY { get; init; }
+    public required ValueExpression ScrollY { get; init; }
 }
 
 /// <summary>
@@ -81,9 +81,9 @@ public sealed record CartridgeDocument {
 public sealed record CartridgeWindow(
     int[] Map,
     int[]? MapPalettes,
-    CartridgeValue X,
-    CartridgeValue Y,
-    CartridgeValue Visible);
+    ValueExpression X,
+    ValueExpression Y,
+    ValueExpression Visible);
 
 /// <summary>
 /// The cartridge's color. Each palette holds four colors on the humble machine and sixteen on the advanced one, and a
@@ -146,7 +146,7 @@ public sealed record CartridgeArray(string Name, int[] Initial);
 /// </remarks>
 /// <param name="Clear">The palette entry the surface is filled with each frame, or null to leave it as drawn.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeBitmap(CartridgeValue? Clear = null) {
+public sealed record CartridgeBitmap(ValueExpression? Clear = null) {
     /// <summary>The surface's height in pixels.</summary>
     public const int Height = 160;
     /// <summary>The surface's width in pixels.</summary>
@@ -172,10 +172,10 @@ public sealed record CartridgeBitmap(CartridgeValue? Clear = null) {
 public sealed record CartridgeLayer(
     int[] Map,
     int[]? MapPalettes,
-    CartridgeValue ScrollX,
-    CartridgeValue ScrollY,
+    ValueExpression ScrollX,
+    ValueExpression ScrollY,
     int Priority,
-    CartridgeValue Visible);
+    ValueExpression Visible);
 
 /// <summary>
 /// A scroll change applied from one scanline down, which is how a picture gets a fixed panel over a scrolling world
@@ -189,7 +189,7 @@ public sealed record CartridgeLayer(
 /// <param name="ScrollX">The horizontal scroll from that line down.</param>
 /// <param name="ScrollY">The vertical scroll from that line down.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeRasterRow(int Line, CartridgeValue ScrollX, CartridgeValue ScrollY);
+public sealed record CartridgeRasterRow(int Line, ValueExpression ScrollX, ValueExpression ScrollY);
 
 /// <summary>
 /// A background that rotates and scales about a centre. Only the advanced machine has one; the humble machine's
@@ -214,11 +214,11 @@ public sealed record CartridgeRasterRow(int Line, CartridgeValue ScrollX, Cartri
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeAffine(
     int[] Map,
-    CartridgeValue Angle,
-    CartridgeValue Scale,
-    CartridgeValue CentreX,
-    CartridgeValue CentreY,
-    CartridgeValue Visible);
+    ValueExpression Angle,
+    ValueExpression Scale,
+    ValueExpression CentreX,
+    ValueExpression CentreY,
+    ValueExpression Visible);
 
 /// <summary>
 /// The state slots a clock step fills from the cartridge's battery-backed real-time clock. Every field is optional;
@@ -326,36 +326,13 @@ public sealed record CartridgeSave(int Version, string[] Variables, string[] Arr
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeScreen(string Name, int Width, int[] Tiles, int[]? Palettes = null);
 
-/// <summary>
-/// A readable byte: exactly one of a literal, a named state slot, or an element of a named array. An array read also
-/// carries the <see cref="Index"/> expression evaluated to select the element.
-/// </summary>
-/// <param name="Constant">A literal in 0 through 255, or null.</param>
-/// <param name="Variable">A declared state name, or null.</param>
-/// <param name="Array">A declared array name, or null.</param>
-/// <param name="Index">The element selector; required with <paramref name="Array"/> and refused without it.</param>
+/// <summary>A writable slot: a declared state name, or a declared array addressed by a computed index.</summary>
+/// <param name="State">The declared state or array name.</param>
+/// <param name="Key">The element index for an array, spelled as the expression language spells a cell key — a bare
+/// number for a constant index, otherwise the canonical infix behind <see cref="RuleFacts.ExpressionKeyPrefix"/>.
+/// Required for an array and refused for a state slot.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeValue(int? Constant = null, string? Variable = null, string? Array = null, CartridgeValue? Index = null);
-
-/// <summary>A writable byte: exactly one of a named state slot or an element of a named array.</summary>
-/// <param name="Variable">A declared state name, or null.</param>
-/// <param name="Array">A declared array name, or null.</param>
-/// <param name="Index">The element selector; required with <paramref name="Array"/> and refused without it.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeTarget(string? Variable = null, string? Array = null, CartridgeValue? Index = null);
-
-/// <summary>A rule's conjunction. A key condition tests held/pressed/released input; a compare condition compares two
-/// unsigned values, sixteen bits wide when either operand is a wide slot.</summary>
-/// <param name="Kind">key or compare.</param>
-/// <param name="Key">For key: a, b, start, select, up, down, left or right.</param>
-/// <param name="Mode">For key: held, pressed or released.</param>
-/// <param name="Left">For compare: the left operand.</param>
-/// <param name="Comparison">For compare: the question asked of the two bytes, from the engine's own comparison
-/// vocabulary (<see cref="ActionStateComparison"/>) rather than a second spelling of it — a cartridge rule and a
-/// world rule ask the same six questions, so neither can grow an arm the other lacks.</param>
-/// <param name="Right">For compare: the right operand.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeCondition(string Kind, string? Key = null, string? Mode = null, CartridgeValue? Left = null, ActionStateComparison? Comparison = null, CartridgeValue? Right = null);
+public sealed record CartridgeTarget(string State, string? Key = null);
 
 /// <summary>
 /// One step of a rule body: a state write, a branch, a counted loop, or a loop exit. <paramref name="Kind"/> selects
@@ -367,9 +344,9 @@ public sealed record CartridgeCondition(string Kind, string? Key = null, string?
 /// engine's opcode vocabulary (<see cref="ExpressionOp"/>) — Add, Subtract, Multiply, Divide, Modulo, BitAnd, BitOr,
 /// BitXor, ShiftLeft or ShiftRight. Absent replaces the destination outright, which is what "set" means and what no
 /// opcode spells. <see cref="CartridgeOperations.Combines"/> is the admitted subset.</param>
-/// <param name="Value">For set: the source operand, evaluated when the step executes.</param>
-/// <param name="When">For if: all conditions must hold; empty always holds.</param>
-/// <param name="Then">For if: the steps taken when every condition holds.</param>
+/// <param name="Value">For set: the source expression, evaluated when the step executes.</param>
+/// <param name="When">For if: the gate; absent always holds.</param>
+/// <param name="Then">For if: the steps taken when the gate holds.</param>
 /// <param name="Else">For if: the steps taken otherwise, or null for none.</param>
 /// <param name="Count">For repeat: the literal iteration count, 1 through 255.</param>
 /// <param name="Index">For repeat: a declared variable the loop writes with the iteration number.</param>
@@ -392,32 +369,35 @@ public sealed record CartridgeStatement(
     string Kind,
     CartridgeTarget? Target = null,
     ExpressionOp? Operation = null,
-    CartridgeValue? Value = null,
-    CartridgeCondition[]? When = null,
+    ValueExpression? Value = null,
+    ActionPredicate? When = null,
     CartridgeStatement[]? Then = null,
     CartridgeStatement[]? Else = null,
     int? Count = null,
     string? Index = null,
     CartridgeStatement[]? Body = null,
-    CartridgeValue? Row = null,
-    CartridgeValue? Column = null,
-    CartridgeValue? Tile = null,
-    CartridgeValue? Palette = null,
+    ValueExpression? Row = null,
+    ValueExpression? Column = null,
+    ValueExpression? Tile = null,
+    ValueExpression? Palette = null,
     string? Screen = null,
     string? Sound = null,
-    CartridgeValue? Rate = null,
-    CartridgeValue? Amount = null,
+    ValueExpression? Rate = null,
+    ValueExpression? Amount = null,
     string? Toward = null,
     string? Surface = null,
-    CartridgeValue? Weight = null,
-    CartridgeValue? Colour = null);
+    ValueExpression? Weight = null,
+    ValueExpression? Colour = null);
 
 /// <summary>An ordered, conditional group of state changes.</summary>
 /// <param name="Name">The diagnostic name.</param>
-/// <param name="When">All conditions must hold; empty means every frame.</param>
 /// <param name="Body">Steps executed in declaration order.</param>
+/// <param name="When">The gate, from the engine's own predicate vocabulary (<see cref="ActionPredicate"/>) rather
+/// than a second spelling of it: a comparison of two expressions, or those composed through all, any and not. Absent
+/// means every frame. A button reads through the reserved <see cref="CartridgeExpressions.KeyPrefix"/> operand, so
+/// input composes under any and not like every other operand.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeRule(string Name, CartridgeCondition[] When, CartridgeStatement[] Body);
+public sealed record CartridgeRule(string Name, CartridgeStatement[] Body, ActionPredicate? When = null);
 
 /// <summary>A native 8 by 8 sprite bound to cartridge state. Coordinates are screen pixels; zero visibility hides it.</summary>
 /// <param name="Name">The sprite's author-facing name.</param>
@@ -436,12 +416,12 @@ public sealed record CartridgeRule(string Name, CartridgeCondition[] When, Cartr
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeSprite(
     string Name,
-    CartridgeValue Tile,
-    CartridgeValue X,
-    CartridgeValue Y,
-    CartridgeValue Visible,
-    CartridgeValue? Palette = null,
-    CartridgeValue? FlipX = null,
-    CartridgeValue? FlipY = null,
-    CartridgeValue? BehindBackground = null,
-    CartridgeValue? Turn = null);
+    ValueExpression Tile,
+    ValueExpression X,
+    ValueExpression Y,
+    ValueExpression Visible,
+    ValueExpression? Palette = null,
+    ValueExpression? FlipX = null,
+    ValueExpression? FlipY = null,
+    ValueExpression? BehindBackground = null,
+    ValueExpression? Turn = null);

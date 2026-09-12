@@ -52,7 +52,7 @@ public sealed class CartridgePaletteTests {
         Refuses(document: document with { MapPalettes = [.. Enumerable.Repeat(element: 3, count: 1024)] }, fragment: "background palette that is not declared");
         Refuses(
             document: document with {
-                Sprites = [new CartridgeSprite(Name: "s", Tile: new CartridgeValue(Constant: 0), X: new CartridgeValue(Constant: 0), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1), Palette: new CartridgeValue(Constant: 5))],
+                Sprites = [new CartridgeSprite(Name: "s", Tile: CartridgeExpressions.Of(constant: 0), X: CartridgeExpressions.Of(constant: 0), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1), Palette: CartridgeExpressions.Of(constant: 5))],
             },
             fragment: "object palette that is not declared");
     }

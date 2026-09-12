@@ -4,7 +4,7 @@ Authors `puck.cartridge.v1` documents in the Puck DSL. The language itself — p
 formatter, units — is [`Puck.Transpiler`](../Puck.Transpiler/README.md); this project is the vocabulary that knows
 what a cartridge's sections mean, the peer of `Puck.World.Transpiler`.
 
-Both artifacts are committed: the `.puck` source and the `.cartridge.json` it generates. The regeneration gate in
+Both artifacts are committed: the source and the cartridge document it generates. The regeneration gate in
 `tests/Puck.GamingBricks.Transpiler.Tests` compiles the committed source and compares it byte for byte against the
 committed document, so the two can never drift apart quietly.
 
@@ -98,12 +98,23 @@ rule "soft-drop" {
 | `key(<button>, held\|pressed\|released)` | a `key` condition |
 | `a == b` `!=` `<` `<=` `>` `>=` | a `compare` condition |
 
-An operand is one of three things and nothing else — a literal byte, a variable, or `array[index]` — because that
-is all the hardware evaluates. A `let` name resolves to its bound value at compile time, so it is never mistaken
-for a machine variable.
+An operand is an expression — the engine's own `ValueExpression`, in the same infix spelling a world rule uses, so
+`(score + bonus) * 2` and `field[cursor + 1]` are single operands and the compiler allocates whatever the machine
+holds in flight. A cartridge admits the subset an eight-bit machine spends a few instructions on
+(`CartridgeExpressions.Reads`); an operation the rule language evaluates and a cartridge does not is refused at
+that name. A `let` or `for` name resolves to its bound value at compile time wherever it appears in the expression,
+so it is never mistaken for a machine variable.
 
-A gate is a conjunction: conditions are tested in order and the first failure stops the rule, so `and` flattens
-into the condition list and `or`/`not` are refused by name.
+A gate composes through `and`, `or` and `not`, lowering to the engine's `all`, `any` and `not`. `key(...)` is a read
+of the reserved `$key:<button>:<mode>` operand compared against one, which is why input sits under `or` and `not`
+like anything else:
+
+```
+rule "steer" {
+    when (key(left, held) or key(right, held)) and not paused == 1
+    dx = key(right, held) - key(left, held)
+}
+```
 
 ## What this project does not do
 

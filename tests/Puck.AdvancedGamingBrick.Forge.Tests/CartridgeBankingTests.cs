@@ -30,8 +30,8 @@ public sealed class CartridgeBankingTests {
             Arrays = [new CartridgeArray(Name: "seed", Initial: [3, 1, 4])],
             // Music and array seeds live in the fixed window; a stranded bank would leave both unreadable.
             Sounds = [new CartridgeSound(Name: "theme", Music: [CartridgeCostMeasurement.Lead(part: CartridgeCostMeasurement.Track())])],
-            Rules = [new CartridgeRule(Name: "run", When: [], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "beat"), Operation: null, Value: new CartridgeValue(Array: "seed", Index: new CartridgeValue(Constant: 2))),
+            Rules = [new CartridgeRule(Name: "run", Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "beat"), Operation: null, Value: CartridgeExpressions.Of(state: "seed", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 2)))),
                 new CartridgeStatement(Kind: "play", Sound: "theme"),
             ])],
         };

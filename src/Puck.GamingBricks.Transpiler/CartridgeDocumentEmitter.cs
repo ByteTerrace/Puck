@@ -6,6 +6,7 @@ using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 
+using Puck.GamingBricks.Forge;
 using Puck.State;
 
 namespace Puck.GamingBricks.Transpiler;
@@ -35,8 +36,8 @@ public static class CartridgeDocumentEmitter {
         [">="] = nameof(ActionStateComparison.GreaterOrEqual),
     };
 
-    // Which call-form action arguments are operands rather than plain strings. A `CartridgeValue` field named here
-    // is converted; everything else is written through as the lowered value.
+    // Which call-form action arguments carry an expression rather than a plain string. A field named here is
+    // converted; everything else is written through as the lowered value.
     private static readonly HashSet<string> s_operandArguments = new(StringComparer.Ordinal) {
         "amount", "colour", "column", "palette", "rate", "row", "tile", "weight",
     };
@@ -87,6 +88,13 @@ public static class CartridgeDocumentEmitter {
     public static string CompileToJson(DocumentNode document) =>
         Encoding.UTF8.GetString(bytes: CompileToUtf8Bytes(document: document));
 
+    // The document fields outside a rule body that carry an expression. KEEP IN SYNC with the expression-typed members
+    // of the document records; a field missing here lowers as a bare scalar and is refused when the document is read.
+    private static readonly HashSet<string> s_expressionFields = new(comparer: StringComparer.Ordinal) {
+        "angle", "behindBackground", "centreX", "centreY", "clear", "flipX", "flipY", "palette", "scale", "scrollX",
+        "scrollY", "tile", "turn", "visible", "x", "y",
+    };
+
     private static void ProcessStatement(StatementNode statement, JsonObject target, DocumentScope scope) {
         switch (statement) {
             case LetNode let:
@@ -99,10 +107,25 @@ public static class CartridgeDocumentEmitter {
 
                 break;
 
-            case PropertyNode property:
-                DocumentLowering.AssignOrExtend(target, property.Name, DocumentLowering.LowerValue(expr: property.Value, scope: scope, fieldKey: property.Name));
+            case PropertyNode property: {
+                    var lowered = DocumentLowering.LowerValue(expr: property.Value, scope: scope, fieldKey: property.Name);
 
-                break;
+                    // A field that carries an expression is converted here rather than left as whatever scalar the
+                    // generic lowering produced, which is what lets `x: 80` and `visible: showpiece` stay the natural
+                    // spellings while the document carries one expression shape.
+                    if (s_expressionFields.Contains(item: property.Name)) {
+                        lowered = CartridgeOperand.FromLoweredValue(node: lowered, scope: scope, reason: out var reason);
+                        if (lowered is null) {
+                            Refuse(scope: scope, span: property.Span, message: reason!);
+
+                            break;
+                        }
+                    }
+
+                    DocumentLowering.AssignOrExtend(target, property.Name, lowered);
+
+                    break;
+                }
 
             case RuleBlockNode rule:
                 Append(target: target, section: "rules", item: LowerRule(rule: rule, scope: scope));
@@ -175,12 +198,12 @@ public static class CartridgeDocumentEmitter {
     }
 
     private static JsonObject LowerRule(RuleBlockNode rule, DocumentScope scope) {
-        var conditions = new JsonArray();
+        JsonNode? conditions = null;
         var body = new JsonArray();
 
         foreach (var statement in rule.Statements) {
             if (statement is WhenStatementNode gate) {
-                LowerConditions(predicate: gate.Predicate, into: conditions, scope: scope);
+                conditions = LowerGate(predicate: gate.Predicate, scope: scope);
 
                 continue;
             }
@@ -190,29 +213,40 @@ public static class CartridgeDocumentEmitter {
             }
         }
 
-        return new JsonObject {
-            ["name"] = rule.Name,
-            ["when"] = conditions,
-            ["body"] = body,
-        };
+        var result = new JsonObject { ["name"] = rule.Name };
+
+        // A rule with no gate carries no gate member; the absent one is what "every frame" is spelled as.
+        if (conditions is not null) {
+            result["when"] = conditions;
+        }
+
+        result["body"] = body;
+
+        return result;
     }
 
-    // A cartridge gate is a conjunction and nothing else: the hardware tests each condition in order and stops at
-    // the first that fails, so `and` flattens into the list and `or`/`not` have nowhere to go.
-    private static void LowerConditions(PredicateNode predicate, JsonArray into, DocumentScope scope) {
+    // A gate lowers to the engine's own predicate vocabulary, so and/or/not are the composition arms rather than
+    // three different cartridge spellings. A button test is a comparison of the reserved input channel against one,
+    // which is what lets input sit under or and not like any other operand.
+    private static JsonNode? LowerGate(PredicateNode predicate, DocumentScope scope) {
         switch (predicate) {
             case AndPredicateNode and:
-                foreach (var operand in and.Operands) {
-                    LowerConditions(predicate: operand, into: into, scope: scope);
-                }
+                return Composite(discriminator: "all", operands: and.Operands, scope: scope);
 
-                break;
+            case OrPredicateNode or:
+                return Composite(discriminator: "any", operands: or.Operands, scope: scope);
+
+            case NotPredicateNode not: {
+                var inner = LowerGate(predicate: not.Operand, scope: scope);
+
+                return ((inner is null) ? null : new JsonObject { ["$type"] = "not", ["predicate"] = inner });
+            }
 
             case ComparisonPredicateNode comparison: {
                 if (!s_comparisons.TryGetValue(key: comparison.Comparator, value: out var spelling)) {
                     Refuse(scope: scope, span: comparison.Span, message: $"'{comparison.Comparator}' is not a cartridge comparison");
 
-                    break;
+                    return null;
                 }
 
                 var left = CartridgeOperand.FromText(text: comparison.LeftText, scope: scope, reason: out var leftReason);
@@ -221,40 +255,56 @@ public static class CartridgeDocumentEmitter {
                 if ((left is null) || (right is null)) {
                     Refuse(scope: scope, span: comparison.Span, message: (leftReason ?? rightReason)!);
 
-                    break;
+                    return null;
                 }
 
-                into.AppendNode(item: new JsonObject {
-                    ["kind"] = "compare",
-                    ["left"] = left,
-                    ["comparison"] = spelling,
-                    ["right"] = right,
-                });
-
-                break;
+                return Compare(left: left, comparison: spelling, right: right);
             }
 
             case CallPredicateNode { Call.Name: "key" } key: {
                 if (key.Call.Arguments.Count != 2) {
                     Refuse(scope: scope, span: key.Span, message: "a key condition reads 'key(<button>, <held|pressed|released>)'");
 
-                    break;
+                    return null;
                 }
 
-                into.AppendNode(item: new JsonObject {
-                    ["kind"] = "key",
-                    ["key"] = ArgumentWord(argument: key.Call.Arguments[0]),
-                    ["mode"] = ArgumentWord(argument: key.Call.Arguments[1]),
-                });
+                var button = ArgumentWord(argument: key.Call.Arguments[0]);
+                var mode = ArgumentWord(argument: key.Call.Arguments[1]);
 
-                break;
+                return Compare(left: JsonValue.Create(value: $"{CartridgeExpressions.KeyPrefix}{button}:{mode}"), comparison: nameof(ActionStateComparison.Equal), right: JsonValue.Create(value: "1"));
             }
 
             default:
-                Refuse(scope: scope, span: predicate.Span, message: "a cartridge gate is a conjunction of comparisons and key tests");
+                Refuse(scope: scope, span: predicate.Span, message: "a cartridge gate composes comparisons and key tests through and, or and not");
 
-                break;
+                return null;
         }
+    }
+
+    private static JsonObject Compare(JsonNode? left, string comparison, JsonNode? right) => new() {
+        ["$type"] = "compareValue",
+        ["left"] = left,
+        ["comparison"] = comparison,
+        ["right"] = right,
+        ["kind"] = nameof(CellKind.Int),
+    };
+
+    private static JsonNode? Composite(string discriminator, IReadOnlyList<PredicateNode> operands, DocumentScope scope) {
+        var predicates = new JsonArray();
+
+        foreach (var operand in operands) {
+            var inner = LowerGate(predicate: operand, scope: scope);
+
+            if (inner is null) {
+                return null;
+            }
+
+            predicates.AppendNode(item: inner);
+        }
+
+        // One arm needs no wrapper: a single-element conjunction and the comparison itself are the same gate, and the
+        // flatter shape is what a guard is recognised by.
+        return ((predicates.Count == 1) ? predicates[0]!.DeepClone() : new JsonObject { ["$type"] = discriminator, ["predicates"] = predicates });
     }
 
     private static JsonNode? LowerAction(StatementNode statement, DocumentScope scope) {
@@ -276,15 +326,13 @@ public static class CartridgeDocumentEmitter {
             }
 
             case IfStatementNode branch: {
-                var conditions = new JsonArray();
+                var result = new JsonObject { ["kind"] = "if" };
 
-                LowerConditions(predicate: branch.Condition, into: conditions, scope: scope);
+                if (LowerGate(predicate: branch.Condition, scope: scope) is { } gate) {
+                    result["when"] = gate;
+                }
 
-                var result = new JsonObject {
-                    ["kind"] = "if",
-                    ["when"] = conditions,
-                    ["then"] = LowerActions(statements: branch.Then, scope: scope),
-                };
+                result["then"] = LowerActions(statements: branch.Then, scope: scope);
 
                 if (branch.Else is not null) {
                     result["else"] = LowerActions(statements: branch.Else, scope: scope);

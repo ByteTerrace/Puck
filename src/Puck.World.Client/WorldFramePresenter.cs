@@ -1494,7 +1494,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             }
 
             if (composed.Camera is { } cameraName) {
-                // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
+                // Named cameras share the live resolution setting with seat cameras, including layout transitions.
                 if (ResolveNamedCamera(
                     camera: out var namedCamera,
                     deltaSeconds: deltaSeconds,
@@ -1507,7 +1507,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                         Camera: namedCamera,
                         Region: region
                     ) {
-                        RenderScale = transitionScale,
+                        RenderScale = (m_settings.RenderScale * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {

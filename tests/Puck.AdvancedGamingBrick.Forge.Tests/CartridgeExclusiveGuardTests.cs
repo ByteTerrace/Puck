@@ -1,6 +1,5 @@
 using Puck.GamingBricks.Forge;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -49,8 +48,8 @@ public sealed class CartridgeExclusiveGuardTests {
         var staged = Document(rules: [
             Guarded(name: "a", phase: 0, work: 40),
             Guarded(name: "b", phase: 1, work: 40),
-            new CartridgeRule(Name: "advance", When: [], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Operation: null, Value: new CartridgeValue(Variable: "nph")),
+            new CartridgeRule(Name: "advance", Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "ph"), Operation: null, Value: CartridgeExpressions.Of(state: "nph")),
             ]),
         ]);
         var inline = Document(rules: [
@@ -122,16 +121,16 @@ public sealed class CartridgeExclusiveGuardTests {
     private static CartridgeRule Guarded(string name, int phase, int work, int? advance = null, string? loopIndex = null) {
         var body = new List<CartridgeStatement> {
             new(Kind: "repeat", Count: work, Index: loopIndex ?? "i", Body: [
-                new(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                new(Kind: "set", Target: new CartridgeTarget(State: "sink"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
             ]),
         };
         if (advance is { } next) {
-            body.Add(item: new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Operation: null, Value: new CartridgeValue(Constant: next)));
+            body.Add(item: new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "ph"), Operation: null, Value: CartridgeExpressions.Of(constant: next)));
         }
 
         return new CartridgeRule(
             Name: name,
-            When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "ph"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: phase))],
+            When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "ph"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: phase)),
             Body: [.. body]);
     }
 

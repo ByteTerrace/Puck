@@ -1,6 +1,5 @@
 using Puck.GamingBricks.Forge;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -43,10 +42,10 @@ public sealed class CartridgeBitmapTests {
             Rules = [
                 new CartridgeRule(
                     Name: "once",
-                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 3))],
+                    When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "phase"), comparison: ActionStateComparison.Less, right: CartridgeExpressions.Of(constant: 3)),
                     Body: [Plot(x: 70, y: 70, colour: 1)]),
-                new CartridgeRule(Name: "tick", When: [], Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                new CartridgeRule(Name: "tick", Body: [
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "phase"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
                 ]),
             ],
         };
@@ -73,26 +72,26 @@ public sealed class CartridgeBitmapTests {
                 Tiles = tiles,
                 Bitmap = new CartridgeBitmap(),
                 Window = new CartridgeWindow(
-                    Map: new int[1024], MapPalettes: null, X: new CartridgeValue(Constant: 0),
-                    Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)),
+                    Map: new int[1024], MapPalettes: null, X: CartridgeExpressions.Of(constant: 0),
+                    Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)),
             },
             fragment: "replaces the tile background");
         Refuses(
             document: CartridgeDocuments.Create(target: "agb", title: "BITBAD") with {
-                Rules = [new CartridgeRule(Name: "r", When: [], Body: [Plot(x: 0, y: 0, colour: 1)])],
+                Rules = [new CartridgeRule(Name: "r", Body: [Plot(x: 0, y: 0, colour: 1)])],
             },
             fragment: "requires a declared bitmap");
     }
 
     private static CartridgeStatement Plot(int x, int y, int colour) => new(
         Kind: "plot",
-        Row: new CartridgeValue(Constant: y),
-        Column: new CartridgeValue(Constant: x),
-        Colour: new CartridgeValue(Constant: colour));
+        Row: CartridgeExpressions.Of(constant: y),
+        Column: CartridgeExpressions.Of(constant: x),
+        Colour: CartridgeExpressions.Of(constant: colour));
 
     private static AgbVerifyMachineDriver Run((int X, int Y, int Colour)[] plots) {
         var document = Document() with {
-            Rules = [new CartridgeRule(Name: "draw", When: [], Body: [.. plots.Select(selector: static plot => Plot(x: plot.X, y: plot.Y, colour: plot.Colour))])],
+            Rules = [new CartridgeRule(Name: "draw", Body: [.. plots.Select(selector: static plot => Plot(x: plot.X, y: plot.Y, colour: plot.Colour))])],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
         var machine = new AgbVerifyMachineDriver(rom: result.Rom, label: "bitmap");
@@ -109,7 +108,7 @@ public sealed class CartridgeBitmapTests {
         return CartridgeDocuments.Create(target: "agb", title: "BITMAP") with {
             Palettes = new CartridgePalettes(Background: [palette], Object: [new int[16]]),
             Tiles = [new CartridgeTile(Name: "blank", Pixels: [.. Enumerable.Repeat(element: "00000000", count: 8)])],
-            Bitmap = new CartridgeBitmap(Clear: new CartridgeValue(Constant: 0)),
+            Bitmap = new CartridgeBitmap(Clear: CartridgeExpressions.Of(constant: 0)),
         };
     }
 

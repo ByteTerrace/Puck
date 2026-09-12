@@ -146,6 +146,10 @@ public static class PuckDiagnosticCodes {
     /// itself looks like from inside the expander.</summary>
     public const string TemplateExpansionTooDeep = "PUCK045";
 
+    /// <summary>PUCK046: a <c>for</c> body assigning a field rather than emitting a row. Building a value from a
+    /// sequence is <c>map</c>'s job, in value position.</summary>
+    public const string ForAssignsAField = "PUCK046";
+
     /// <summary>An unused <c>let</c> binding.</summary>
     public const string LintUnusedLet = "PUCK_LINT_001";
 

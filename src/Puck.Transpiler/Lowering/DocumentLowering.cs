@@ -272,6 +272,46 @@ public static class DocumentLowering {
         }
     }
 
+    /// <summary>Refuses a <c>for</c> body that assigns a field instead of emitting a row.</summary>
+    /// <param name="loop">The loop as written.</param>
+    /// <param name="scope">The scope refusals are reported into.</param>
+    /// <returns><see langword="true"/> when every body statement is admissible.</returns>
+    /// <remarks>
+    /// <para>A <c>for</c> EMITS ROWS. Building a value out of a sequence is <c>map</c>'s job, in value position, and
+    /// the two are not interchangeable: a row goes through its section's own sugar, defaults and refusals, while a
+    /// value is the JSON it lowers to and nothing else.</para>
+    /// <para>Assigning a field from a loop body had no honest reading. A scalar (<c>scalars: p</c>) kept the last
+    /// iteration and silently dropped every earlier one. An array (<c>curve [p, 0]</c>) went through
+    /// <see cref="AssignOrExtend"/>, whose extend exists so <c>shapes:</c> can merge with the array the row sugar
+    /// already built — so each iteration's elements were spliced into the field rather than appended to it,
+    /// flattening <c>[[1,0],[2,0]]</c> to <c>[1,0,2,0]</c> and corrupting any array the document had authored above
+    /// it. Both were silent. Refusing is what keeps one syntax from meaning append-element here and merge-lists
+    /// there, which is a distinction no reader could recover from the source.</para>
+    /// </remarks>
+    public static bool ValidateForBody(ForStatementNode loop, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(loop);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        var admissible = true;
+
+        foreach (var statement in loop.Body) {
+            if (statement is not PropertyNode property) {
+                continue;
+            }
+
+            scope.Diagnostics.ReportError(
+                PuckDiagnosticCodes.ForAssignsAField,
+                $"a 'for' emits rows, and '{property.Name}' is a field assignment — every iteration would write the "
+                    + $"same field. Build the value with map(...) in value position instead.",
+                property.Span
+            );
+
+            admissible = false;
+        }
+
+        return admissible;
+    }
+
     /// <summary>Flattens a <c>for</c> into the statements it produces, each paired with the scope its bindings are
     /// live in, for a section whose rows a dedicated dispatcher reads.</summary>
     /// <param name="loop">The loop as written.</param>
@@ -280,6 +320,10 @@ public static class DocumentLowering {
     public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
+
+        if (!ValidateForBody(loop: loop, scope: scope)) {
+            yield break;
+        }
 
         if (LowerValue(expr: loop.Sequence, scope: scope) is not JsonArray sequence) {
             scope.Diagnostics.ReportError(PuckDiagnosticCodes.ForSequenceRefused, "a 'for' walks an array known at compile time", loop.Sequence.Span);

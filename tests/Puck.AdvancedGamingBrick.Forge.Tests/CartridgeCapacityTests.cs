@@ -1,7 +1,6 @@
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick.Forge;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -19,13 +18,11 @@ public sealed class CartridgeCapacityTests {
             Variables = [new CartridgeVariable(Name: "i", Initial: 0), new CartridgeVariable(Name: "x", Initial: 0)],
             Arrays = [new CartridgeArray(Name: "cells", Initial: new int[256])],
             Rules = [.. Enumerable.Range(start: 0, count: CartridgeLimits.RuleCount).Select(selector: index => new CartridgeRule(
-                Name: $"r{index}",
-                When: [],
-                Body: [.. Enumerable.Range(start: 0, count: CartridgeLimits.StatementCount).Select(selector: static step => new CartridgeStatement(
+                Name: $"r{index}", Body: [.. Enumerable.Range(start: 0, count: CartridgeLimits.StatementCount).Select(selector: static step => new CartridgeStatement(
                     Kind: "set",
-                    Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Variable: "i")),
+                    Target: new CartridgeTarget(State: "cells", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "i"))),
                     Operation: ExpressionOp.Divide,
-                    Value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "x"))))]))],
+                    Value: CartridgeExpressions.Of(state: "cells", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "x")))))]))],
         };
 
         // Nothing about this is malformed: it is the schema's own maximum, and the shape checks pass.

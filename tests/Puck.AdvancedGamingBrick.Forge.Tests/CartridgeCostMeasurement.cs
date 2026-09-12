@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -34,7 +33,7 @@ public sealed class CartridgeCostMeasurement {
     [InlineData("cgb")]
     [InlineData("agb")]
     public void TheHarnessCanStillReachTheMachine(string target) {
-        var body = new[] { Set(target: "sink", operation: null, value: new CartridgeValue(Constant: 1)) };
+        var body = new[] { Set(target: "sink", operation: null, value: CartridgeExpressions.Of(constant: 1)) };
 
         // Far past what the target's reservation grants, which the search needs to be able to reach: nothing refuses a
         // document for being slow, so a probe compiles and simply misses frames.
@@ -65,7 +64,7 @@ public sealed class CartridgeCostMeasurement {
             // A second granularity separates per-loop setup from per-iteration overhead. Sprites, map writes and blits
             // are charged against the same frame, so each weight comes from the capacity a known count of them costs;
             // map writes cannot be measured inside the loop because the queue they feed is bounded per frame.
-            var step = Set(target: "sink", operation: null, value: new CartridgeValue(Constant: 1));
+            var step = Set(target: "sink", operation: null, value: CartridgeExpressions.Of(constant: 1));
             log.AppendLine(value: $"{target} {"step-grain-double",-18} {LargestSustained(target: target, body: [step], granularity: grain * 2, sprites: 0)}");
             log.AppendLine(value: $"{target} {"step-sprites40",-18} {LargestSustained(target: target, body: [step], granularity: grain, sprites: 40)}");
             log.AppendLine(value: $"{target} {"step-maps24",-18} {LargestSustained(target: target, body: [step], granularity: grain, sprites: 0, maps: 24)}");
@@ -90,9 +89,9 @@ public sealed class CartridgeCostMeasurement {
     // Shapes are chosen so the solve is determined: "step" and "step-twice" separate per-iteration loop overhead from
     // one step's cost, and every other shape adds exactly one primitive on top of a known baseline.
     private static (string, CartridgeStatement[])[] Shapes() {
-        var constant = new CartridgeValue(Constant: 1);
-        var variable = new CartridgeValue(Variable: "a");
-        var element = new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "i"));
+        var constant = CartridgeExpressions.Of(constant: 1);
+        var variable = CartridgeExpressions.Of(state: "a");
+        var element = CartridgeExpressions.Of(state: "cells", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "i")));
         var step = Set(target: "sink", operation: null, value: constant);
         var addConstant = Set(target: "sink", operation: ExpressionOp.Add, value: constant);
         return [
@@ -101,14 +100,14 @@ public sealed class CartridgeCostMeasurement {
             ("add-constant", [addConstant]),
             ("read-variable", [Set(target: "sink", operation: ExpressionOp.Add, value: variable)]),
             ("read-array", [Set(target: "sink", operation: ExpressionOp.Add, value: element)]),
-            ("write-array", [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Variable: "i")), Operation: null, Value: constant)]),
-            ("compare-taken", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "compare", Left: variable, Comparison: ActionStateComparison.GreaterOrEqual, Right: constant)], Then: [addConstant])]),
-            ("compare-skipped", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "compare", Left: variable, Comparison: ActionStateComparison.Less, Right: constant)], Then: [addConstant])]),
-            ("key-condition", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "key", Key: "a", Mode: "held")], Then: [addConstant])]),
-            ("multiply", [Set(target: "sink", operation: ExpressionOp.Multiply, value: new CartridgeValue(Constant: 3))]),
-            ("divide", [Set(target: "sink", operation: ExpressionOp.Divide, value: new CartridgeValue(Constant: 3))]),
-            ("modulo", [Set(target: "sink", operation: ExpressionOp.Modulo, value: new CartridgeValue(Constant: 3))]),
-            ("shift", [Set(target: "sink", operation: ExpressionOp.ShiftLeft, value: new CartridgeValue(Constant: 1))]),
+            ("write-array", [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "cells", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "i"))), Operation: null, Value: constant)]),
+            ("compare-taken", [new CartridgeStatement(Kind: "if", When: CartridgeExpressions.Gate(left: variable, comparison: ActionStateComparison.GreaterOrEqual, right: constant), Then: [addConstant])]),
+            ("compare-skipped", [new CartridgeStatement(Kind: "if", When: CartridgeExpressions.Gate(left: variable, comparison: ActionStateComparison.Less, right: constant), Then: [addConstant])]),
+            ("key-condition", [new CartridgeStatement(Kind: "if", When: CartridgeExpressions.Pressing(button: "a", mode: "held"), Then: [addConstant])]),
+            ("multiply", [Set(target: "sink", operation: ExpressionOp.Multiply, value: CartridgeExpressions.Of(constant: 3))]),
+            ("divide", [Set(target: "sink", operation: ExpressionOp.Divide, value: CartridgeExpressions.Of(constant: 3))]),
+            ("modulo", [Set(target: "sink", operation: ExpressionOp.Modulo, value: CartridgeExpressions.Of(constant: 3))]),
+            ("shift", [Set(target: "sink", operation: ExpressionOp.ShiftLeft, value: CartridgeExpressions.Of(constant: 1))]),
         ];
     }
 
@@ -166,21 +165,21 @@ public sealed class CartridgeCostMeasurement {
             Save = save > 0 ? new CartridgeSave(Version: 1, Variables: [], Arrays: ["kept"]) : null,
             Sounds = music ? [new CartridgeSound(Name: "theme", Music: [Lead(part: Track())])] : [],
             Sprites = [.. Enumerable.Range(start: 0, count: sprites).Select(selector: index => new CartridgeSprite(
-                Name: $"s{index}", Tile: new CartridgeValue(Constant: 0), X: new CartridgeValue(Variable: "sink"),
-                Y: new CartridgeValue(Constant: 40), Visible: new CartridgeValue(Constant: 1)))],
+                Name: $"s{index}", Tile: CartridgeExpressions.Of(constant: 0), X: CartridgeExpressions.Of(state: "sink"),
+                Y: CartridgeExpressions.Of(constant: 40), Visible: CartridgeExpressions.Of(constant: 1)))],
             Raster = [.. Enumerable.Range(start: 0, count: raster).Select(selector: index => new CartridgeRasterRow(
-                Line: (index * 16) + 8, ScrollX: new CartridgeValue(Variable: "sink"), ScrollY: new CartridgeValue(Constant: 0)))],
+                Line: (index * 16) + 8, ScrollX: CartridgeExpressions.Of(state: "sink"), ScrollY: CartridgeExpressions.Of(constant: 0)))],
             Screens = blitWidth > 0 ? [new CartridgeScreen(Name: "panel", Width: blitWidth, Tiles: new int[blitWidth * blitHeight])] : [],
-            Rules = [new CartridgeRule(Name: "work", When: [], Body: [
+            Rules = [new CartridgeRule(Name: "work", Body: [
                 .. Enumerable.Range(start: 0, count: maps).Select(selector: index => new CartridgeStatement(
-                    Kind: "map", Row: new CartridgeValue(Constant: index), Column: new CartridgeValue(Constant: 0), Tile: new CartridgeValue(Constant: 0))),
-                .. blitWidth > 0 ? new[] { new CartridgeStatement(Kind: "blit", Screen: "panel", Row: new CartridgeValue(Constant: 0), Column: new CartridgeValue(Constant: 0)) } : [],
+                    Kind: "map", Row: CartridgeExpressions.Of(constant: index), Column: CartridgeExpressions.Of(constant: 0), Tile: CartridgeExpressions.Of(constant: 0))),
+                .. blitWidth > 0 ? new[] { new CartridgeStatement(Kind: "blit", Screen: "panel", Row: CartridgeExpressions.Of(constant: 0), Column: CartridgeExpressions.Of(constant: 0)) } : [],
                 .. save > 0 ? new[] { new CartridgeStatement(Kind: "save"), new CartridgeStatement(Kind: "load") } : [],
                 .. music ? new[] { new CartridgeStatement(Kind: "play", Sound: "theme"), new CartridgeStatement(Kind: "stop") } : [],
                 new CartridgeStatement(Kind: "repeat", Count: outer, Index: "o", Body: [
                     new CartridgeStatement(Kind: "repeat", Count: granularity, Index: "i", Body: body),
                 ]),
-                Set(target: "ticks", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1)),
+                Set(target: "ticks", operation: ExpressionOp.Add, value: CartridgeExpressions.Of(constant: 1)),
             ])],
         };
     }
@@ -192,6 +191,6 @@ public sealed class CartridgeCostMeasurement {
         Schema: Puck.Assets.Documents.AudioDocument.CurrentSchema, Name: "t", Tempo: 8,
         Patterns: [[new Puck.Assets.Documents.AudioRowDocument(Note: "C4", Duty: null, Envelope: null)]], Order: [0], Effects: null);
 
-    private static CartridgeStatement Set(string target, ExpressionOp? operation, CartridgeValue value) =>
-        new(Kind: "set", Target: new CartridgeTarget(Variable: target), Operation: operation, Value: value);
+    private static CartridgeStatement Set(string target, ExpressionOp? operation, ValueExpression value) =>
+        new(Kind: "set", Target: new CartridgeTarget(State: target), Operation: operation, Value: value);
 }

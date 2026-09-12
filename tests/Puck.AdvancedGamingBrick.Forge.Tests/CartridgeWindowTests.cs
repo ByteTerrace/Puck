@@ -32,11 +32,11 @@ public sealed class CartridgeWindowTests {
             Window = new CartridgeWindow(
                 Map: panel,
                 MapPalettes: null,
-                X: new CartridgeValue(Constant: 80),
-                Y: new CartridgeValue(Constant: 72),
-                Visible: new CartridgeValue(Variable: "shown")),
-            Rules = [new CartridgeRule(Name: "hold", When: [], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "shown"), Operation: null, Value: new CartridgeValue(Variable: "shown")),
+                X: CartridgeExpressions.Of(constant: 80),
+                Y: CartridgeExpressions.Of(constant: 72),
+                Visible: CartridgeExpressions.Of(state: "shown")),
+            Rules = [new CartridgeRule(Name: "hold", Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "shown"), Operation: null, Value: CartridgeExpressions.Of(state: "shown")),
             ])],
         };
         using var machine = Run(document: document, frames: 20);
@@ -52,13 +52,13 @@ public sealed class CartridgeWindowTests {
         var document = CartridgeDocuments.Create(target: "cgb", title: "PANELBAD");
         var full = new int[1024];
         Refuses(
-            document: document with { Window = new CartridgeWindow(Map: new int[16], MapPalettes: null, X: new CartridgeValue(Constant: 0), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)) },
+            document: document with { Window = new CartridgeWindow(Map: new int[16], MapPalettes: null, X: CartridgeExpressions.Of(constant: 0), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)) },
             fragment: "Expected an array with 1024..1024");
         Refuses(
-            document: document with { Window = new CartridgeWindow(Map: [.. Enumerable.Repeat(element: 9, count: 1024)], MapPalettes: null, X: new CartridgeValue(Constant: 0), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)) },
+            document: document with { Window = new CartridgeWindow(Map: [.. Enumerable.Repeat(element: 9, count: 1024)], MapPalettes: null, X: CartridgeExpressions.Of(constant: 0), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)) },
             fragment: "outside the authored tile bank");
         Refuses(
-            document: document with { Window = new CartridgeWindow(Map: full, MapPalettes: new int[8], X: new CartridgeValue(Constant: 0), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)) },
+            document: document with { Window = new CartridgeWindow(Map: full, MapPalettes: new int[8], X: CartridgeExpressions.Of(constant: 0), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)) },
             fragment: "1024 entries");
     }
 

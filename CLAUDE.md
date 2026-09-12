@@ -43,6 +43,7 @@ These are kept current — read them before deep work.
 | [docs/agent-guide.md](docs/agent-guide.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
 | [docs/vision.md](docs/vision.md) then [docs/campaign.md](docs/campaign.md) | What Puck is and refuses to be; what we are collectively building, where it stands, and what is next. Read before picking up work. |
 | [docs/world-runtime-consolidation.md](docs/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation doctrine, the folds and the facade still owed, and what is deliberately excluded. It states no status — the campaign holds what is verified. |
+| [docs/retail-scale-cartridges.md](docs/retail-scale-cartridges.md) | What `puck.cartridge.v1` needs before a retail-scale game is authorable as data: the program model it lacks, the `Puck.State` vocabulary it should adopt rather than restate, which ceilings get re-derived, and the authoring gaps. States no status. |
 
 **There is no capability catalog or register any more, deliberately.** Both
 claimed per-capability *verification status*, and with `Puck.Post` quarantined

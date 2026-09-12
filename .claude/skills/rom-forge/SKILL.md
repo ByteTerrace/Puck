@@ -43,7 +43,15 @@ The current schema has explicit limits and omissions: cgb/agb targets,
 byte state, addressable byte arrays, 8x8 sprites, runtime background writes,
 cartridge audio, battery-backed state, and rule bodies that are step TREES
 (`set`/`if`/`repeat`/`break`/`map`/`blit`/`play`/`stop`/`save`/`load`), not flat
-action lists. It does not claim DMG or ROM banking. EVERY primitive runs on both
+action lists. An operand is a `Puck.State.ValueExpression` in its infix spelling
+and a gate is a `Puck.State.ActionPredicate`, so `(a + b) * 2`, `field[i + 1]`,
+`any` and `not` are all authorable; `CartridgeExpressions.Reads` is the admitted
+operation subset and everything outside it is refused at its own spelling. A
+button reads through `$key:<button>:<mode>`, which is why input composes under
+`not`. A write target is `{state, key}`, the key being a bare number, a bare cell
+read, or `$expr:` plus the index's infix spelling.
+
+The schema does not claim DMG or ROM banking. EVERY primitive runs on both
 targets; nothing is target-gated, and adding a gate would be a design decision
 rather than a shortcut.
 
@@ -85,7 +93,7 @@ native execution tests, not by a hidden special case.
   bytes.
 - CGB variables: `0xC200..0xC27F`; `0xC280` retains the prior held byte before
   `InputModule.EmitTick`, whose own previous field is advanced inside its call;
-  `0xC281` is the operand spill, `0xC282` the out-of-range discard sink, and
+  `0xC281` stages a value for a step that needs one address at a time, `0xC282` is the out-of-range discard sink, and
   arrays pack upward from `0xC283` to `0xDFFF`. AGB mirrors this with the sink at
   `0x020000C0` and arrays from `0x02000900`.
   The compiler uses `FrameworkKernel` and input primitives directly, with no
@@ -189,6 +197,19 @@ native execution tests, not by a hidden special case.
   ABSENT operation assigns — the one combination no opcode spells, so the field
   is omitted rather than carrying a name. `CartridgeOperations` holds the
   emittable subset; KEEP IN SYNC with both backends' operation switches.
+- Two admitted sets exist and they are not the same: `CartridgeOperations.Combines`
+  is what a write may combine with, and `CartridgeExpressions.Reads` is what an
+  expression may evaluate (the combining ten plus the six comparisons, minimum,
+  maximum, clamp, select, sign and bitwise complement). The cost model prices both
+  from one weight table but admits them separately, so a `minimum` inside an
+  expression is modelled while a `minimum` as a write's operation is not.
+- An expression evaluates in the operand width, every step. On SM83 that falls out
+  of the accumulator; the Thumb evaluator masks each arithmetic result back to a
+  byte on purpose, because thirty-two bit registers would otherwise disagree with
+  the other machine at the first intermediate rather than at the store. Operands in
+  flight live on the machine stack (`CartridgeExpressions.MaxDepth` bounds it), and
+  a single-token read emits exactly the one load it names, so nothing composed pays
+  for what is not composed.
 - Rules execute in source order; later steps read earlier writes. Arithmetic
   wraps modulo 256, comparisons are unsigned, and key edges are frame-local.
   A `repeat` count is a literal, never a variable, because the cost walk
@@ -281,8 +302,9 @@ at 0x00FE so the program counter falls into 0x0100.
 
 ## Per-frame cost is measured, never estimated
 
-`CartridgeCost` prices a document in abstract work units and `CartridgeValidation`
-refuses one that exceeds the per-frame reservation. The units name no processor,
+`CartridgeCost` prices a document in abstract work units and
+`CartridgeDocuments.Estimate` reports the frame's bound beside the target's
+reservation; nothing refuses on it. The units name no processor,
 clock or instruction count; one unit is an eleventh of a `set` step writing a
 literal to a variable. Weights come from `CartridgeCostMeasurement`, which boots
 documents on both real machines and bisects the largest per-frame iteration count
@@ -313,9 +335,9 @@ cost while a full-screen one exceeds a whole frame on the Color machine and bare
 registers on AGB, so it is both uncharacterized and a cadence-divergence hazard.
 Do not give it a weight without a model that spans both observations.
 
-A primitive with no measured weight prices as `CostBound.Unmodeled` and its
-document is refused; nothing is admitted against an invented number. Adding a
-primitive means measuring it. To re-measure, raise the reservation so the harness
+A primitive with no measured weight prices as `CostBound.Unmodeled`, which
+poisons the whole estimate rather than contributing an invented number, so the
+document builds with no usable advice. Adding a primitive means measuring it. To re-measure, raise the reservation so the harness
 can probe past it, run the harness with `PUCK_FORGE_MEASURE=1`, fold the reported
 capacities in, and restore the reservation. `CostBound` and `CostModelProfile`
 live in `Puck.Maths` and are shared with `Puck.State`'s rule cost; each subsystem

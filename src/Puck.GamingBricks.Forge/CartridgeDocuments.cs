@@ -43,8 +43,8 @@ public static class CartridgeDocuments {
             Raster = [],
             Rules = [],
             Sprites = [],
-            ScrollX = new CartridgeValue(Constant: 0),
-            ScrollY = new CartridgeValue(Constant: 0),
+            ScrollX = CartridgeExpressions.Of(constant: 0),
+            ScrollY = CartridgeExpressions.Of(constant: 0),
         }).Document;
     }
 

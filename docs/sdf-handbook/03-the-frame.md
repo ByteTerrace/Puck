@@ -10,15 +10,15 @@ whole-device stall.
 ## One indirect pipeline
 
 A world frame records its passes into one command buffer. Upload and sky filling
-precede culling; camera traversal and hit shading have separate dispatches:
+precede culling; camera traversal, surface evaluation, AO and lighting have separate dispatches:
 
 ```
-   upload → sky → mask → beam → cull-args → primary → views → composite
+   upload → sky → mask → beam → cull-args → primary → surface → ambient → views → composite
 ```
 
 These are the engine's GPU timing labels. Here is what the culling and rendering
 passes do; [the engine README](../../src/Puck.SdfVm/README.md)
-describes the hit records shared by primary and views.
+describes the hit records shared by the four per-pixel passes.
 
 **mask** (`sdf-instance-cull.comp`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile — a bitmask, one bit per
@@ -40,20 +40,26 @@ instances the mask already ruled out. Its cost is dominated by the VM evaluation
 performed along the representative cone.
 
 **cull-args** (`sdf-cull-args`) reads the beam's per-tile results and packs the
-indirect-dispatch arguments for primary and views. A parallel min/max reduction
+indirect-dispatch arguments for primary, surface, ambient and views. A parallel min/max reduction
 finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
 
 **primary** (`sdf-world-primary.comp`) traces camera rays from their tile's entry
-depth and records accepted hits. **views** (`sdf-world-views.comp`) reads those
-records and computes normals, materials, lighting, shadows, ambient occlusion,
-and volumes. Compare both passes when measuring per-pixel field cost.
+depth and records accepted hits. **surface** computes geometric normals and
+curvature. **ambient** evaluates contact occlusion along those normals.
+**views** reads these results and computes materials, lighting, shadows and
+volumes. Compare all four passes when measuring per-pixel field cost: moving
+work between kernels can reduce register pressure but adds buffer traffic.
 
 **composite** blits the finished per-view surfaces into the framebuffer, applying
 the per-view render-scale upsample where a view rendered below native. It is
 negligible throughout — well under 0.1 ms.
 
 ## What each pass costs, and where the cost lives
+
+The measurements below predate the traversal, surface and AO split. Their
+`views` label includes all per-pixel field work; current captures report that
+work across four passes. They explain the culling design, not today's pass budgets.
 
 On the reference GPU (a 4070, Vulkan, 1280×800) a single fullscreen shape — no
 instances — spends essentially all of its time in `views`: the `beam` cone-prepass

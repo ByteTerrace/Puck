@@ -44,11 +44,11 @@ public sealed class CartridgeAffineTests {
             ],
             Affine = new CartridgeAffine(
                 Map: map,
-                Angle: new CartridgeValue(Constant: angle),
-                Scale: new CartridgeValue(Constant: scale),
-                CentreX: new CartridgeValue(Constant: 120),
-                CentreY: new CartridgeValue(Constant: 80),
-                Visible: new CartridgeValue(Constant: visible)),
+                Angle: CartridgeExpressions.Of(constant: angle),
+                Scale: CartridgeExpressions.Of(constant: scale),
+                CentreX: CartridgeExpressions.Of(constant: 120),
+                CentreY: CartridgeExpressions.Of(constant: 80),
+                Visible: CartridgeExpressions.Of(constant: visible)),
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
         using var machine = new AgbVerifyMachineDriver(rom: result.Rom, label: "affine");
@@ -84,16 +84,16 @@ public sealed class CartridgeAffineTests {
     public void ValidationGatesTheTurningLayer() {
         var square = new int[256];
         var humble = CartridgeDocuments.Create(target: "cgb", title: "AFFCGB") with {
-            Affine = new CartridgeAffine(Map: square, Angle: new CartridgeValue(Constant: 0), Scale: new CartridgeValue(Constant: 16), CentreX: new CartridgeValue(Constant: 0), CentreY: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)),
+            Affine = new CartridgeAffine(Map: square, Angle: CartridgeExpressions.Of(constant: 0), Scale: CartridgeExpressions.Of(constant: 16), CentreX: CartridgeExpressions.Of(constant: 0), CentreY: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)),
         };
         Refuses(document: humble, fragment: "needs the advanced machine");
 
         var advanced = CartridgeDocuments.Create(target: "agb", title: "AFFBAD");
         Refuses(
-            document: advanced with { Affine = new CartridgeAffine(Map: new int[300], Angle: new CartridgeValue(Constant: 0), Scale: new CartridgeValue(Constant: 16), CentreX: new CartridgeValue(Constant: 0), CentreY: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)) },
+            document: advanced with { Affine = new CartridgeAffine(Map: new int[300], Angle: CartridgeExpressions.Of(constant: 0), Scale: CartridgeExpressions.Of(constant: 16), CentreX: CartridgeExpressions.Of(constant: 0), CentreY: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)) },
             fragment: "forming a square map");
         Refuses(
-            document: advanced with { Affine = new CartridgeAffine(Map: square, Angle: new CartridgeValue(Constant: 0), Scale: new CartridgeValue(Constant: 0), CentreX: new CartridgeValue(Constant: 0), CentreY: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)) },
+            document: advanced with { Affine = new CartridgeAffine(Map: square, Angle: CartridgeExpressions.Of(constant: 0), Scale: CartridgeExpressions.Of(constant: 0), CentreX: CartridgeExpressions.Of(constant: 0), CentreY: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)) },
             fragment: "zero scale has no inverse");
     }
 

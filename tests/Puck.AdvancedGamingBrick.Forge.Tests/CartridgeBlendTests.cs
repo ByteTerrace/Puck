@@ -30,8 +30,8 @@ public sealed class CartridgeBlendTests {
         // Validation refuses an authored constant past full, so the clamp exists for the values state supplies.
         var document = Document() with {
             Variables = [new CartridgeVariable(Name: "w", Initial: 200)],
-            Rules = [new CartridgeRule(Name: "mix", When: [], Body: [
-                new CartridgeStatement(Kind: "blend", Surface: "panel", Weight: new CartridgeValue(Variable: "w")),
+            Rules = [new CartridgeRule(Name: "mix", Body: [
+                new CartridgeStatement(Kind: "blend", Surface: "panel", Weight: CartridgeExpressions.Of(state: "w")),
             ])],
         };
 
@@ -52,8 +52,7 @@ public sealed class CartridgeBlendTests {
     }
 
     private static CartridgeRule Rule(string surface, int weight) => new(
-        Name: "mix", When: [],
-        Body: [new CartridgeStatement(Kind: "blend", Surface: surface, Weight: new CartridgeValue(Constant: weight))]);
+        Name: "mix", Body: [new CartridgeStatement(Kind: "blend", Surface: surface, Weight: CartridgeExpressions.Of(constant: weight))]);
 
     // Inside the panel's corner, where a blend mixes it with the background.
     private static uint Panel(int weight) => Sample(document: Document() with { Rules = [Rule(surface: "panel", weight: weight)] }, x: 160, y: 120);
@@ -94,9 +93,9 @@ public sealed class CartridgeBlendTests {
             Window = new CartridgeWindow(
                 Map: panel,
                 MapPalettes: null,
-                X: new CartridgeValue(Constant: 80),
-                Y: new CartridgeValue(Constant: 72),
-                Visible: new CartridgeValue(Constant: 1)),
+                X: CartridgeExpressions.Of(constant: 80),
+                Y: CartridgeExpressions.Of(constant: 72),
+                Visible: CartridgeExpressions.Of(constant: 1)),
         };
     }
 

@@ -132,12 +132,15 @@ public class CartridgeRoundTripTests {
             }
             """;
 
-        var conditions = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(Compile(source)["rules"])[0])["when"]);
+        var gate = Assert.IsType<JsonObject>(Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(Compile(source)["rules"])[0])["when"]);
+        var conditions = Assert.IsType<JsonArray>(gate["predicates"]);
+
+        Assert.Equal("all", gate["$type"]?.GetValue<string>());
 
         Assert.Equal(3, conditions.Count);
-        Assert.Equal("key", Assert.IsType<JsonObject>(conditions[0])["kind"]?.GetValue<string>());
-        Assert.Equal("left", Assert.IsType<JsonObject>(conditions[0])["key"]?.GetValue<string>());
-        Assert.Equal("held", Assert.IsType<JsonObject>(conditions[0])["mode"]?.GetValue<string>());
+        Assert.Equal("compareValue", Assert.IsType<JsonObject>(conditions[0])["$type"]?.GetValue<string>());
+        Assert.Equal("$key:left:held", Assert.IsType<JsonObject>(conditions[0])["left"]?.GetValue<string>());
+        Assert.Equal("1", Assert.IsType<JsonObject>(conditions[0])["right"]?.GetValue<string>());
         Assert.Equal(nameof(ActionStateComparison.Equal), Assert.IsType<JsonObject>(conditions[1])["comparison"]?.GetValue<string>());
         Assert.Equal(nameof(ActionStateComparison.GreaterOrEqual), Assert.IsType<JsonObject>(conditions[2])["comparison"]?.GetValue<string>());
     }
@@ -156,12 +159,10 @@ public class CartridgeRoundTripTests {
 
         var step = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(Compile(source)["rules"])[0])["body"])[0]);
         var target = Assert.IsType<JsonObject>(step["target"]);
-        var value = Assert.IsType<JsonObject>(step["value"]);
 
-        Assert.Equal("field", target["array"]?.GetValue<string>());
-        Assert.Equal("si", Assert.IsType<JsonObject>(target["index"])["variable"]?.GetValue<string>());
-        Assert.Equal("shapes", value["array"]?.GetValue<string>());
-        Assert.Equal("k", Assert.IsType<JsonObject>(value["index"])["variable"]?.GetValue<string>());
+        Assert.Equal("field", target["state"]?.GetValue<string>());
+        Assert.Equal("si", target["key"]?.GetValue<string>());
+        Assert.Equal("shapes[k]", step["value"]?.GetValue<string>());
     }
 
     [Fact]
@@ -195,8 +196,8 @@ public class CartridgeRoundTripTests {
         var painted = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(branch["else"])[0]);
 
         Assert.Equal("map", painted["kind"]?.GetValue<string>());
-        Assert.Equal("cr", Assert.IsType<JsonObject>(painted["row"])["variable"]?.GetValue<string>());
-        Assert.Equal(0, Assert.IsType<JsonObject>(painted["tile"])["constant"]?.GetValue<int>());
+        Assert.Equal("cr", painted["row"]?.GetValue<string>());
+        Assert.Equal("0", painted["tile"]?.GetValue<string>());
     }
 
     [Fact]
@@ -251,13 +252,13 @@ public class CartridgeRoundTripTests {
         for (var index = 0; (index < rules.Count); ++index) {
             var rule = Assert.IsType<JsonObject>(rules[index]);
             var expected = ((index == 0) ? 3 : 5);
-            var gate = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(rule["when"])[0]);
+            var gate = Assert.IsType<JsonObject>(rule["when"]);
             var step = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(rule["body"])[0]);
 
             // The bound name is a compile-time value, so it lands as a constant operand. Lowering it as a machine
             // variable named `phase` would compile, run, and read whatever byte happened to live there.
-            Assert.Equal(expected, Assert.IsType<JsonObject>(gate["right"])["constant"]?.GetValue<int>());
-            Assert.Equal(expected, Assert.IsType<JsonObject>(step["value"])["constant"]?.GetValue<int>());
+            Assert.Equal(expected.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), gate["right"]?.GetValue<string>());
+            Assert.Equal(expected.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), step["value"]?.GetValue<string>());
         }
     }
 

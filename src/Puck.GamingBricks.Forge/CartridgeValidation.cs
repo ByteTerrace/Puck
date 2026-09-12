@@ -151,7 +151,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             if (sprite is null) { Error(path: path, message: "A sprite cannot be null."); continue; }
             Name(name: sprite.Name, names: names, path: path);
             Value(value: sprite.Tile, path: path + ".tile");
-            if (sprite.Tile?.Constant >= document.Tiles.Length) {
+            if (Literal(value: sprite.Tile) >= document.Tiles.Length) {
                 Error(path: path + ".tile", message: "Tile is outside the authored bank.");
             }
 
@@ -172,7 +172,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
             if (sprite.Palette is { } slot) {
                 Value(value: slot, path: path + ".palette");
-                if (slot.Constant >= (document.Palettes?.Object?.Length ?? 0)) {
+                if (Literal(value: slot) >= (document.Palettes?.Object?.Length ?? 0)) {
                     Error(path: path + ".palette", message: "Sprite names an object palette that is not declared.");
                 }
             }
@@ -331,7 +331,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         Value(value: affine.CentreX, path: "affine.centreX");
         Value(value: affine.CentreY, path: "affine.centreY");
         Value(value: affine.Visible, path: "affine.visible");
-        if (affine.Scale?.Constant == 0) {
+        if (Literal(value: affine.Scale) == 0) {
             Error(path: "affine.scale", message: "A zero scale has no inverse; use one or more.");
         }
     }
@@ -653,7 +653,9 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
 
         // The frame's snapshot is one byte.
-        Narrow(value: new CartridgeValue(Variable: scene), path: "scene");
+        if (m_widths.TryGetValue(key: scene, value: out var width) && (width != 1)) {
+            Error(path: "scene", message: $"'{scene}' is a wide slot; the frame's scene snapshot is one byte.");
+        }
     }
 
     private void Rules() {
@@ -663,13 +665,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var path = $"rules[{index}]";
             if (rule is null) { Error(path: path, message: "A rule cannot be null."); continue; }
             Name(name: rule.Name, names: names, path: path);
-            if (!Count(items: rule.When, path: path + ".when", min: 0, max: CartridgeLimits.ConditionCount) || !Count(items: rule.Body, path: path + ".body", min: 1, max: CartridgeLimits.StatementCount)) {
+            if (!Count(items: rule.Body, path: path + ".body", min: 1, max: CartridgeLimits.StatementCount)) {
                 continue;
             }
 
-            for (var condition = 0; condition < rule.When.Length; ++condition) {
-                Condition(value: rule.When[condition], path: $"{path}.when[{condition}]");
-            }
+            Comparisons(gate: rule.When, path: path + ".when");
+            Gate(value: rule.When, path: path + ".when");
 
             if (Steps(statements: rule.Body) > CartridgeLimits.StatementCount) {
                 Error(path: path + ".body", message: $"A rule body holds at most {CartridgeLimits.StatementCount} steps in total.");
@@ -716,13 +717,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 break;
             case "if":
                 Reject(value: value, path: path, allowed: "when then else");
-                if (!Count(items: value.When, path: path + ".when", min: 0, max: CartridgeLimits.ConditionCount) || !Count(items: value.Then, path: path + ".then", min: 1, max: CartridgeLimits.StatementCount)) {
+                if (!Count(items: value.Then, path: path + ".then", min: 1, max: CartridgeLimits.StatementCount)) {
                     break;
                 }
 
-                for (var condition = 0; condition < value.When.Length; ++condition) {
-                    Condition(value: value.When[condition], path: $"{path}.when[{condition}]");
-                }
+                Comparisons(gate: value.When, path: path + ".when");
+                Gate(value: value.When, path: path + ".when");
 
                 Statements(statements: value.Then, path: path + ".then", depth: depth + 1, inLoop: inLoop);
                 if (value.Else is not null && Count(items: value.Else, path: path + ".else", min: 1, max: CartridgeLimits.StatementCount)) {
@@ -754,7 +754,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 Value(value: value.Tile, path: path + ".tile");
                 if (value.Palette is { } cellPalette) {
                     Value(value: cellPalette, path: path + ".palette");
-                    if (cellPalette.Constant >= (document.Palettes?.Background?.Length ?? 0)) {
+                    if (Literal(value: cellPalette) >= (document.Palettes?.Background?.Length ?? 0)) {
                         Error(path: path + ".palette", message: "The write names a background palette that is not declared.");
                     }
                 }
@@ -768,7 +768,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 }
 
                 // A blit paints with the display off, so its destination is fixed at build time rather than sampled.
-                if (value.Row?.Constant is not { } row || value.Column?.Constant is not { } column) {
+                if ((Literal(value: value.Row) is not { } row) || (Literal(value: value.Column) is not { } column)) {
                     Error(path: path, message: "A blit takes a literal row and column.");
                     break;
                 }
@@ -832,7 +832,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 }
 
                 Value(value: value.Weight, path: path + ".weight");
-                if (value.Weight?.Constant > CartridgeLimits.BlendWeights) {
+                if (Literal(value: value.Weight) > CartridgeLimits.BlendWeights) {
                     Error(path: path + ".weight", message: $"A blend weight runs 0 through {CartridgeLimits.BlendWeights}.");
                 }
 
@@ -840,7 +840,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             case "fade":
                 Reject(value: value, path: path, allowed: "amount toward");
                 Value(value: value.Amount, path: path + ".amount");
-                if (value.Amount?.Constant > CartridgeLimits.FadeSteps) {
+                if (Literal(value: value.Amount) > CartridgeLimits.FadeSteps) {
                     Error(path: path + ".amount", message: $"A fade runs 0 through {CartridgeLimits.FadeSteps}.");
                 }
 
@@ -894,7 +894,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
     private void Action(CartridgeStatement value, string path) {
         Target(target: value.Target, path: path + ".target");
-        var wideTarget = ((value.Target?.Variable is { } destination) && m_widths.TryGetValue(key: destination, value: out var destinationWidth) && (destinationWidth != 1));
+        var wideTarget = ((value.Target is { Key: null } destination) && m_widths.TryGetValue(key: destination.State, value: out var destinationWidth) && (destinationWidth != 1));
 
         if (wideTarget && (value.Operation is not (null or ExpressionOp.Add or ExpressionOp.Subtract))) {
             Error(path: path + ".operation", message: $"'{value.Operation}' has no sixteen-bit form; a wide slot takes assignment, {nameof(ExpressionOp.Add)} or {nameof(ExpressionOp.Subtract)}.");
@@ -905,156 +905,230 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
 
         WideValue(value: value.Value, path: path + ".value");
-        ConstantFits(value: value.Value, width: WidthOf(value: new CartridgeValue(Variable: value.Target?.Variable)), path: path + ".value");
+        ConstantFits(value: value.Value, width: (wideTarget ? 2 : 1), path: path + ".value");
         // A literal zero divisor or an out-of-range literal shift is always a defect; the runtime forms are total.
-        if (value.Operation is (ExpressionOp.Divide or ExpressionOp.Modulo) && value.Value?.Constant == 0) {
+        if ((value.Operation is (ExpressionOp.Divide or ExpressionOp.Modulo)) && (Literal(value: value.Value) == 0)) {
             Error(path: path + ".value", message: "A literal zero divisor is refused; a runtime zero divisor yields zero.");
         }
 
-        if (CartridgeOperations.Shifts(operation: value.Operation) && value.Value?.Constant >= 8) {
+        if (CartridgeOperations.Shifts(operation: value.Operation) && (Literal(value: value.Value) >= 8)) {
             Error(path: path + ".value", message: "A literal shift of eight or more is refused; it can only produce zero.");
         }
     }
 
-    private void Condition(CartridgeCondition? value, string path) {
-        if (value is null) { Error(path: path, message: "A condition cannot be null."); return; }
-        switch (value.Kind) {
-            case "key":
-                if (value.Key is not ("a" or "b" or "start" or "select" or "up" or "down" or "left" or "right")) {
-                    Error(path: path + ".key", message: "Unknown joypad key.");
+    private void Comparisons(ActionPredicate? gate, string path) {
+        var count = Reached(gate: gate);
+
+        if (count > CartridgeLimits.ConditionCount) {
+            Error(path: path, message: $"A gate reaches at most {CartridgeLimits.ConditionCount} comparisons; this one reaches {count}.");
+        }
+    }
+
+    private static int Reached(ActionPredicate? gate) => (gate switch {
+        null => 0,
+        ActionPredicate.All all => all.Predicates?.Sum(selector: Reached) ?? 0,
+        ActionPredicate.Any any => any.Predicates?.Sum(selector: Reached) ?? 0,
+        ActionPredicate.Not not => Reached(gate: not.Predicate),
+        _ => 1,
+    });
+
+    private void Gate(ActionPredicate? value, string path) {
+        switch (value) {
+            case null:
+                return;
+            case ActionPredicate.All all:
+                Composite(predicates: all.Predicates, path: path + ".predicates");
+                return;
+            case ActionPredicate.Any any:
+                Composite(predicates: any.Predicates, path: path + ".predicates");
+                return;
+            case ActionPredicate.Not not:
+                Gate(value: not.Predicate, path: path + ".predicate");
+                return;
+            case ActionPredicate.CompareValue compare:
+                if (compare.Kind != CellKind.Int) {
+                    Error(path: path + ".kind", message: "A cartridge compares whole numbers; the fixed-point domain has no representation on either machine.");
                 }
 
-                if (value.Mode is not ("held" or "pressed" or "released")) {
-                    Error(path: path + ".mode", message: "Expected held, pressed or released.");
-                }
+                WideValue(value: compare.Left, path: path + ".left");
+                WideValue(value: compare.Right, path: path + ".right");
+                ConstantFits(value: compare.Right, width: WidthOf(value: compare.Left), path: path + ".right");
+                ConstantFits(value: compare.Left, width: WidthOf(value: compare.Right), path: path + ".left");
+                return;
+            default:
+                Error(path: path, message: $"A cartridge gate compares two expressions, or composes those through all, any and not; '{value.GetType().Name}' is not one of them.");
+                return;
+        }
+    }
 
-                if (value.Left is not null || value.Right is not null || value.Comparison is not null) {
-                    Error(path: path, message: "A key condition cannot carry comparison fields.");
-                }
+    private void Composite(IReadOnlyList<ActionPredicate> predicates, string path) {
+        if ((predicates is null) || (predicates.Count == 0)) {
+            Error(path: path, message: "A composed gate needs at least one predicate.");
+            return;
+        }
 
-                break;
-            case "compare":
-                WideValue(value: value.Left, path: path + ".left"); WideValue(value: value.Right, path: path + ".right");
-                ConstantFits(value: value.Right, width: WidthOf(value: value.Left), path: path + ".right");
-                ConstantFits(value: value.Left, width: WidthOf(value: value.Right), path: path + ".left");
-                if (value.Comparison is null) {
-                    Error(path: path + ".comparison", message: "A comparison is required; the strict enum reader refuses any spelling outside the engine's own.");
-                }
-
-                if (value.Key is not null || value.Mode is not null) {
-                    Error(path: path, message: "A comparison cannot carry key fields.");
-                }
-
-                break;
-            default: Error(path: path + ".kind", message: "Expected key or compare."); break;
+        for (var index = 0; index < predicates.Count; ++index) {
+            Gate(value: predicates[index], path: $"{path}[{index}]");
         }
     }
 
     private void Target(CartridgeTarget? target, string path) {
-        if (target is null) { Error(path: path, message: "Supply a target variable or array element."); return; }
-        if ((target.Variable is null) == (target.Array is null)) {
-            Error(path: path, message: "Supply exactly one of variable or array.");
-            return;
-        }
-
-        if (target.Variable is { } variable) {
-            if (target.Index is not null) {
-                Error(path: path + ".index", message: "A variable target cannot carry an index.");
+        if (target is null) { Error(path: path, message: "Supply a target state or array element."); return; }
+        if (target.Key is null) {
+            if (m_arrays.ContainsKey(key: target.State)) {
+                Error(path: path, message: $"'{target.State}' is an array; a write to it requires an index.");
             }
-
-            if (!m_variables.Contains(item: variable)) {
-                Error(path: path + ".variable", message: $"Unknown state variable '{variable}'.");
+            else if (!m_variables.Contains(item: target.State)) {
+                Error(path: path + ".state", message: $"Unknown state variable '{target.State}'.");
             }
 
             return;
         }
 
-        Element(array: target.Array!, index: target.Index, path: path);
+        Element(array: target.State, key: target.Key, path: path);
     }
 
-    // How many bytes an operand occupies: a declared slot's own width, and one for everything else (an array element
-    // and a literal are bytes). An undeclared name is reported elsewhere and reads as narrow here.
-    private int WidthOf(CartridgeValue? value) => (((value?.Variable is { } name) && m_widths.TryGetValue(key: name, value: out var width))
-        ? width
-        : 1);
+    // How many bytes an operand occupies: a bare slot read carries the slot's own width, and everything else is a
+    // byte (an array element, a literal, a computed result). An undeclared name is reported elsewhere and reads narrow.
+    private int WidthOf(ValueExpression? value) =>
+        (((Slot(value: value) is { } name) && m_widths.TryGetValue(key: name, value: out var width)) ? width : 1);
+
+    // The single-token forms: a bare slot read, and a bare literal. Both are what a pairing rule is stated against.
+    private static string? Slot(ValueExpression? value) =>
+        ((value?.Tokens is [ValueToken.State { Key: null } state]) ? state.Name : null);
+
+    private static int? Literal(ValueExpression? value) =>
+        (((value?.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value))
+            ? (int)constant.Value
+            : null);
 
     // A literal wider than the slot it is paired with is a defect rather than an always-false comparison or a silently
     // truncated write, so it is refused where the pairing is known.
-    private void ConstantFits(CartridgeValue? value, int width, string path) {
-        if ((value?.Constant is not { } constant) || (width != 1) || (constant <= CartridgeLimits.NarrowMaximum)) {
+    private void ConstantFits(ValueExpression? value, int width, string path) {
+        if ((Literal(value: value) is not { } constant) || (width != 1) || (constant <= CartridgeLimits.NarrowMaximum)) {
             return;
         }
 
-        Error(path: path + ".constant", message: $"{constant} does not fit the one-byte slot it is paired with; declare that slot a wider max.");
+        Error(path: path, message: $"{constant} does not fit the one-byte slot it is paired with; declare that slot a wider max.");
     }
 
-    // A wide slot is two bytes, and only three places read one: a set step's target and value, and a comparison's
-    // operands. Every other field on both machines is a byte — a map cell, a sprite coordinate, an array index, a
-    // loop counter — so a wide slot there is refused by name rather than silently truncated to its low half.
-    private void Narrow(CartridgeValue? value, string path) {
-        if ((value?.Variable is { } name) && m_widths.TryGetValue(key: name, value: out var width) && (width != 1)) {
-            Error(path: path, message: $"'{name}' is a wide slot; this field reads a byte.");
-        }
-    }
+    private void Value(ValueExpression? value, string path) => Expression(value: value, path: path, wide: false);
 
-    private void Value(CartridgeValue? value, string path) {
-        Narrow(value: value, path: path);
-        WideValue(value: value, path: path);
-    }
+    private void WideValue(ValueExpression? value, string path) => Expression(value: value, path: path, wide: true);
 
-    private void WideValue(CartridgeValue? value, string path) {
-        if (value is null) { Error(path: path, message: "Supply exactly one of constant, variable or array."); return; }
-        var supplied = (value.Constant is not null ? 1 : 0) + (value.Variable is not null ? 1 : 0) + (value.Array is not null ? 1 : 0);
-        if (supplied != 1) {
-            Error(path: path, message: "Supply exactly one of constant, variable or array.");
+    // A wide slot is two bytes and the evaluator works a byte at a time, so one is admitted only as a whole operand in
+    // the three places that read a pair � a set step's target and value, and a comparison's operands. Inside a
+    // composed expression, and in every byte-wide field, it is refused by name rather than truncated to its low half.
+    private void Expression(ValueExpression? value, string path, bool wide) {
+        if ((value?.Tokens is null) || (value.Tokens.Count == 0)) { Error(path: path, message: "Supply an expression."); return; }
+        if (value.Tokens.Count > CartridgeExpressions.MaxTokens) {
+            Error(path: path, message: $"An expression carries at most {CartridgeExpressions.MaxTokens} tokens; this one carries {value.Tokens.Count}.");
             return;
         }
 
-        if (value.Constant is { } constant) {
-            // A literal is admitted against the WIDEST slot the document could hold it in; whether it fits the slot it
-            // is actually paired with is asked where that pairing is known.
-            if (constant is < 0 or > CartridgeLimits.WideMaximum) {
-                Error(path: path + ".constant", message: $"Expected a value in 0..{CartridgeLimits.WideMaximum}.");
-            }
-
-            if (value.Index is not null) {
-                Error(path: path + ".index", message: "A constant cannot carry an index.");
-            }
-
+        int depth;
+        try {
+            depth = CartridgeExpressions.Depth(expression: value);
+        }
+        catch (ArgumentException error) {
+            Error(path: path, message: error.Message);
             return;
         }
 
-        if (value.Variable is { } name) {
-            if (value.Index is not null) {
-                Error(path: path + ".index", message: "A variable cannot carry an index.");
-            }
-
-            if (!m_variables.Contains(item: name)) {
-                Error(path: path + ".variable", message: $"Unknown state variable '{name}'.");
-            }
-
-            return;
+        if (depth > CartridgeExpressions.MaxDepth) {
+            Error(path: path, message: $"An expression holds at most {CartridgeExpressions.MaxDepth} values at once; this one holds {depth}.");
         }
 
-        Element(array: value.Array!, index: value.Index, path: path);
+        var bare = (value.Tokens.Count == 1);
+        foreach (var token in value.Tokens) {
+            switch (token) {
+                case ValueToken.Constant constant:
+                    if (decimal.Truncate(d: constant.Value) != constant.Value) {
+                        Error(path: path, message: $"'{constant.Value}' is not a whole number; a cartridge carries no fraction.");
+                    }
+                    else if (constant.Value is < 0 or > CartridgeLimits.WideMaximum) {
+                        Error(path: path, message: $"Expected a value in 0..{CartridgeLimits.WideMaximum}.");
+                    }
+
+                    break;
+                case ValueToken.State state:
+                    Read(state: state, path: path, wide: (wide && bare));
+                    break;
+                default:
+                    if (ExpressionVocabulary.Operation(token: token) is not { } operation) {
+                        Error(path: path, message: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates.");
+                    }
+                    else if (!CartridgeExpressions.Admits(operation: operation)) {
+                        Error(path: path, message: $"The rule language evaluates '{ExpressionVocabulary.Spelling(operation: operation)}'; a cartridge does not.");
+                    }
+
+                    break;
+            }
+        }
     }
 
-    private void Element(string array, CartridgeValue? index, string path) {
+    private void Read(ValueToken.State state, string path, bool wide) {
+        if (state.Key is not null) {
+            Element(array: state.Name, key: state.Key, path: path);
+
+            return;
+        }
+
+        if (CartridgeExpressions.TryKey(name: state.Name, button: out var button, mode: out var mode)) {
+            if (button is not ("a" or "b" or "start" or "select" or "up" or "down" or "left" or "right")) {
+                Error(path: path, message: $"Unknown joypad button '{button}'.");
+            }
+
+            if (mode is not ("held" or "pressed" or "released")) {
+                Error(path: path, message: $"Expected held, pressed or released; found '{mode}'.");
+            }
+
+            return;
+        }
+
+        if (state.Name.StartsWith(value: "$", comparisonType: StringComparison.Ordinal)) {
+            Error(path: path, message: $"'{state.Name}' is not a channel a cartridge answers; input reads through '{CartridgeExpressions.KeyPrefix}<button>:<mode>'.");
+
+            return;
+        }
+
+        if (!m_variables.Contains(item: state.Name)) {
+            Error(path: path, message: $"Unknown state variable '{state.Name}'.");
+
+            return;
+        }
+
+        if (!wide && m_widths.TryGetValue(key: state.Name, value: out var width) && (width != 1)) {
+            Error(path: path, message: $"'{state.Name}' is a wide slot; this field reads a byte.");
+        }
+    }
+
+    private void Element(string array, string key, string path) {
         if (!m_arrays.ContainsKey(key: array)) {
-            Error(path: path + ".array", message: $"Unknown array '{array}'.");
+            Error(path: path, message: (m_variables.Contains(item: array)
+                ? $"'{array}' is a state slot; it cannot carry an index."
+                : $"Unknown array '{array}'."));
+        }
+
+        ValueExpression? index;
+        try {
+            index = CartridgeExpressions.Index(key: key);
+        }
+        catch (FormatException error) {
+            Error(path: path, message: $"The index of '{array}' does not parse: {error.Message}");
+            return;
         }
 
         if (index is null) {
-            Error(path: path + ".index", message: "An array access requires an index.");
+            Error(path: path, message: "An array access requires an index.");
             return;
         }
 
         Value(value: index, path: path + ".index");
-        if (index.Constant is { } literal && m_arrays.TryGetValue(key: array, value: out var length) && literal >= length) {
+        if ((Literal(value: index) is { } literal) && m_arrays.TryGetValue(key: array, value: out var length) && (literal >= length)) {
             Error(path: path + ".index", message: $"Index {literal} is outside array '{array}' of length {length}.");
         }
     }
-
 
     private void Error(string path, string message) => m_errors.Add(item: new DocumentValidationError(Path: path, Message: message));
     private bool Count<T>([NotNullWhen(returnValue: true)] T[]? items, string path, int min, int max) {

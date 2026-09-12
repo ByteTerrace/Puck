@@ -30,10 +30,10 @@ public sealed class CartridgeFadeTests {
             Variables = [new CartridgeVariable(Name: "x", Initial: 0)],
         };
         Refuses(
-            document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "fade", Amount: new CartridgeValue(Constant: 40), Toward: "black")])] },
+            document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "fade", Amount: CartridgeExpressions.Of(constant: 40), Toward: "black")])] },
             fragment: "fade runs 0 through 16");
         Refuses(
-            document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "fade", Amount: new CartridgeValue(Constant: 4), Toward: "grey")])] },
+            document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "fade", Amount: CartridgeExpressions.Of(constant: 4), Toward: "grey")])] },
             fragment: "Expected black or white");
     }
 
@@ -54,8 +54,8 @@ public sealed class CartridgeFadeTests {
                 new CartridgeTile(Name: "solid", Pixels: [.. Enumerable.Repeat(element: "11111111", count: 8)]),
             ],
             Map = cells,
-            Rules = [new CartridgeRule(Name: "dim", When: [], Body: [
-                new CartridgeStatement(Kind: "fade", Amount: new CartridgeValue(Constant: amount), Toward: toward),
+            Rules = [new CartridgeRule(Name: "dim", Body: [
+                new CartridgeStatement(Kind: "fade", Amount: CartridgeExpressions.Of(constant: amount), Toward: toward),
             ])],
         };
         ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();

@@ -245,8 +245,8 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         if (raster is not null) {
             // Scroll republishes here rather than after the rules, because a burst must never read the table while it
             // is being written. A change therefore shows the following frame, exactly as a map write does.
-            Load(value: document.ScrollX, register: LowRegister.R0); StoreResult(address: 0x04000010);
-            Load(value: document.ScrollY, register: LowRegister.R0); StoreResult(address: 0x04000012);
+            Load(expression: document.ScrollX, register: LowRegister.R0); StoreResult(address: 0x04000010);
+            Load(expression: document.ScrollY, register: LowRegister.R0); StoreResult(address: 0x04000012);
             Flush();
             Band(line: 0, scrollX: document.ScrollX, scrollY: document.ScrollY);
             foreach (var row in document.Raster) {
@@ -260,7 +260,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         if (document.Bitmap is { } surface && surface.Clear is { } fill) {
             // A transfer rather than a loop: the surface is 38400 bytes, which no per-frame loop could cover and
             // still leave a frame's worth of rules to run.
-            Load(value: fill, register: LowRegister.R0);
+            Load(expression: fill, register: LowRegister.R0);
             emitter.MoveRegister(destination: LowRegister.R1, source: LowRegister.R0);
             emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R1, source: LowRegister.R1, amount: 8);
             emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R0, source: LowRegister.R1);
@@ -291,28 +291,28 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         foreach (var rule in document.Rules) {
             var end = emitter.NewLabel();
-            Conditions(conditions: rule.When, fail: end);
+            Gate(predicate: rule.When, fail: end);
             Statements(statements: rule.Body, breakLabel: -1);
             emitter.MarkLabel(label: end);
             Flush();
         }
         if (raster is null) {
-            Load(value: document.ScrollX, register: LowRegister.R0); StoreResult(address: 0x04000010);
-            Load(value: document.ScrollY, register: LowRegister.R0); StoreResult(address: 0x04000012);
+            Load(expression: document.ScrollX, register: LowRegister.R0); StoreResult(address: 0x04000010);
+            Load(expression: document.ScrollY, register: LowRegister.R0); StoreResult(address: 0x04000012);
         }
 
         // r4 accumulates the frame's display control across every surface below; Load never touches it.
         emitter.LoadConstant(destination: LowRegister.R4, value: DisplayControl(document: document));
         if (document.Affine is { } turning2) {
             var parked = emitter.NewLabel();
-            Load(value: turning2.Visible, register: LowRegister.R0);
+            Load(expression: turning2.Visible, register: LowRegister.R0);
             emitter.CompareImmediate(register: LowRegister.R0, value: 0);
             emitter.Branch(condition: ThumbCondition.Equal, label: parked);
             affine!.EmitPlace(
-                angle: register => Load(value: turning2.Angle, register: register),
-                scale: register => Load(value: turning2.Scale, register: register),
-                centreX: register => Load(value: turning2.CentreX, register: register),
-                centreY: register => Load(value: turning2.CentreY, register: register));
+                angle: register => Load(expression: turning2.Angle, register: register),
+                scale: register => Load(expression: turning2.Scale, register: register),
+                centreX: register => Load(expression: turning2.CentreX, register: register),
+                centreY: register => Load(expression: turning2.CentreY, register: register));
             Enable(bit: 0x0400);
             emitter.MarkLabel(label: parked);
             Flush();
@@ -322,11 +322,11 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             var layer = document.Layers[index];
             var slot = layerSlots[layerBase + index];
             var parked = emitter.NewLabel();
-            Load(value: layer.Visible, register: LowRegister.R0);
+            Load(expression: layer.Visible, register: LowRegister.R0);
             emitter.CompareImmediate(register: LowRegister.R0, value: 0);
             emitter.Branch(condition: ThumbCondition.Equal, label: parked);
-            Load(value: layer.ScrollX, register: LowRegister.R0); StoreResult(address: slot.ScrollX);
-            Load(value: layer.ScrollY, register: LowRegister.R0); StoreResult(address: slot.ScrollX + 2);
+            Load(expression: layer.ScrollX, register: LowRegister.R0); StoreResult(address: slot.ScrollX);
+            Load(expression: layer.ScrollY, register: LowRegister.R0); StoreResult(address: slot.ScrollX + 2);
             Enable(bit: slot.Enable);
             emitter.MarkLabel(label: parked);
             Flush();
@@ -334,25 +334,25 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         if (document.Window is { } placed) {
             var hidden = emitter.NewLabel();
-            Load(value: placed.Visible, register: LowRegister.R0);
+            Load(expression: placed.Visible, register: LowRegister.R0);
             emitter.CompareImmediate(register: LowRegister.R0, value: 0);
             emitter.Branch(condition: ThumbCondition.Equal, label: hidden);
             // Scrolling the layer by the negated corner puts its first cell at that corner.
-            Load(value: placed.X, register: LowRegister.R0);
+            Load(expression: placed.X, register: LowRegister.R0);
             emitter.MoveImmediate(destination: LowRegister.R1, value: 0);
             emitter.SubtractRegister(destination: LowRegister.R0, source: LowRegister.R1, operand: LowRegister.R0);
             StoreResult(address: 0x04000014);
-            Load(value: placed.Y, register: LowRegister.R0);
+            Load(expression: placed.Y, register: LowRegister.R0);
             emitter.MoveImmediate(destination: LowRegister.R1, value: 0);
             emitter.SubtractRegister(destination: LowRegister.R0, source: LowRegister.R1, operand: LowRegister.R0);
             StoreResult(address: 0x04000016);
             // The rectangle runs from the corner to the screen's edges.
-            Load(value: placed.X, register: LowRegister.R0);
+            Load(expression: placed.X, register: LowRegister.R0);
             emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R0, source: LowRegister.R0, amount: 8);
             emitter.MoveImmediate(destination: LowRegister.R1, value: 240);
             emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R0, source: LowRegister.R1);
             StoreResult(address: 0x04000040);
-            Load(value: placed.Y, register: LowRegister.R0);
+            Load(expression: placed.Y, register: LowRegister.R0);
             emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R0, source: LowRegister.R0, amount: 8);
             emitter.MoveImmediate(destination: LowRegister.R1, value: 160);
             emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R0, source: LowRegister.R1);
@@ -368,9 +368,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         for (var i = 0; i < document.Sprites.Length; ++i) {
             var sprite = document.Sprites[i];
             var hide = emitter.NewLabel(); var done = emitter.NewLabel();
-            Load(value: sprite.Visible, register: LowRegister.R0);
+            Load(expression: sprite.Visible, register: LowRegister.R0);
             emitter.CompareImmediate(register: LowRegister.R0, value: 0); Require(condition: ThumbCondition.NotEqual, end: hide);
-            Load(value: sprite.Tile, register: LowRegister.R0);
+            Load(expression: sprite.Tile, register: LowRegister.R0);
             if (document.Tiles.Length < 256) { emitter.CompareImmediate(register: LowRegister.R0, value: (byte)document.Tiles.Length); Require(condition: ThumbCondition.CarryClear, end: hide); }
             if (sprite.Palette is { } slot) {
                 EmitFlagBits(value: slot, mask: 15, shift: 12);
@@ -378,7 +378,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
             // Attribute one's top bits name which parameter group a turning object reads.
             if (sprite.Turn is not null) {
-                EmitFlagBits(value: new CartridgeValue(Constant: i & 0x1F), mask: 31, shift: 9);
+                EmitFlagBits(value: CartridgeExpressions.Of(constant: (i & 0x1F)), mask: 31, shift: 9);
             }
 
             if (sprite.BehindBackground is { } behind) {
@@ -386,7 +386,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             }
 
             StoreResult(address: (uint)(0x07000004 + i * 8));
-            Load(value: sprite.X, register: LowRegister.R0); emitter.CompareImmediate(register: LowRegister.R0, value: 240); Require(condition: ThumbCondition.CarryClear, end: hide);
+            Load(expression: sprite.X, register: LowRegister.R0); emitter.CompareImmediate(register: LowRegister.R0, value: 240); Require(condition: ThumbCondition.CarryClear, end: hide);
             // Mirroring and turning share attribute one's bits, so a turning object cannot also be mirrored.
             if (sprite.Turn is null) {
                 if (sprite.FlipX is { } mirrorX) { EmitFlagBits(value: mirrorX, mask: 1, shift: 12); }
@@ -394,7 +394,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             }
 
             StoreResult(address: (uint)(0x07000002 + i * 8));
-            Load(value: sprite.Y, register: LowRegister.R0); emitter.CompareImmediate(register: LowRegister.R0, value: 160); Require(condition: ThumbCondition.CarryClear, end: hide);
+            Load(expression: sprite.Y, register: LowRegister.R0); emitter.CompareImmediate(register: LowRegister.R0, value: 160); Require(condition: ThumbCondition.CarryClear, end: hide);
             if (sprite.Turn is not null) {
                 emitter.MoveImmediate(destination: LowRegister.R1, value: 1);
                 emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R1, source: LowRegister.R1, amount: 8);
@@ -421,7 +421,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             // A parameter group's four halfwords sit every 32 bytes, in the gaps between object entries.
             spriteTurns!.EmitParameters(
                 group: i & 0x1F,
-                angle: register => Load(value: turn, register: register));
+                angle: register => Load(expression: turn, register: register));
             Flush();
         }
 
@@ -474,11 +474,11 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         // Appends one cell; validation has already bounded a frame's writes to the queue's capacity.
         void EmitQueuePush(CartridgeStatement statement) {
-            Load(value: statement.Row!, register: LowRegister.R5);
-            Load(value: statement.Column!, register: LowRegister.R6);
-            Load(value: statement.Tile!, register: LowRegister.R7);
+            Load(expression: statement.Row!, register: LowRegister.R5);
+            Load(expression: statement.Column!, register: LowRegister.R6);
+            Load(expression: statement.Tile!, register: LowRegister.R7);
             if (statement.Palette is { } shade) {
-                Load(value: shade, register: LowRegister.R3);
+                Load(expression: shade, register: LowRegister.R3);
             } else {
                 emitter.MoveImmediate(destination: LowRegister.R3, value: 0);
             }
@@ -505,7 +505,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
             emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
             for (var line = 0; line < height; ++line) {
-                var destination = 0x0600F800u + (uint)(((statement.Row!.Constant!.Value + line) * 32) + statement.Column!.Constant!.Value) * 2u;
+                var destination = 0x0600F800u + (uint)(((CartridgeExpressions.Whole(expression: statement.Row)!.Value + line) * 32) + CartridgeExpressions.Whole(expression: statement.Column)!.Value) * 2u;
                 Copy(sourceAddress: sourceAddress + (uint)(line * width * 2), destination: destination, count: width * 2);
             }
         }
@@ -526,11 +526,11 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             : document.Affine is null ? 0x1140u : 0x1041u;
 
         // Fills the table from a band's first scanline to the picture's end; ascending bands overwrite each other's tails.
-        void Band(int line, CartridgeValue scrollX, CartridgeValue scrollY) {
+        void Band(int line, ValueExpression scrollX, ValueExpression scrollY) {
             raster!.EmitFillFrom(
                 line: line,
-                scrollX: register => Load(value: scrollX, register: register),
-                scrollY: register => Load(value: scrollY, register: register));
+                scrollX: register => Load(expression: scrollX, register: register),
+                scrollY: register => Load(expression: scrollY, register: register));
             Flush();
         }
 
@@ -543,32 +543,60 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         uint Add(byte[] bytes) { var address = AgbForgeCartridge.DataAddress + (uint)data.Count; data.AddRange(collection: bytes); return address; }
 
         // Jumps to fail when any condition misses; falls through when all hold.
-        void Conditions(CartridgeCondition[] conditions, int fail) {
-            foreach (var condition in conditions) {
-                if (condition.Kind == "key") {
-                    emitter.LoadConstant(destination: LowRegister.R2, value: AgbForgeMemoryMap.StateBase);
-                    emitter.LoadHalf(baseRegister: LowRegister.R2, byteOffset: condition.Mode == "pressed" ? AgbForgeMemoryMap.InputPressedOffset : AgbForgeMemoryMap.InputHeldOffset, destination: LowRegister.R0);
-                    if (condition.Mode == "released") {
-                        emitter.LoadHalf(baseRegister: LowRegister.R2, byteOffset: AgbForgeMemoryMap.InputPreviousOffset, destination: LowRegister.R1);
-                        emitter.Alu(op: ThumbAlu.BitClear, destination: LowRegister.R1, source: LowRegister.R0);
-                        emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R1);
+        // Branches to fail when the gate misses; falls through when it holds. An absent gate always holds.
+        void Gate(ActionPredicate? predicate, int fail) {
+            switch (predicate) {
+                case null:
+                    return;
+                case ActionPredicate.All all:
+                    foreach (var inner in all.Predicates) { Gate(predicate: inner, fail: fail); }
+
+                    return;
+                case ActionPredicate.Any any: {
+                        var holds = emitter.NewLabel();
+
+                        foreach (var inner in any.Predicates) {
+                            var next = emitter.NewLabel();
+
+                            Gate(predicate: inner, fail: next);
+                            emitter.Branch(label: holds);
+                            emitter.MarkLabel(label: next);
+                        }
+
+                        emitter.Branch(label: fail);
+                        emitter.MarkLabel(label: holds);
+
+                        return;
                     }
-                    emitter.MoveImmediate(destination: LowRegister.R1, value: Key(key: condition.Key!));
-                    emitter.Alu(op: ThumbAlu.Test, destination: LowRegister.R0, source: LowRegister.R1);
-                    Require(condition: ThumbCondition.NotEqual, end: fail);
-                } else {
-                    LoadGuard(value: condition.Left!, register: LowRegister.R0);
-                    LoadGuard(value: condition.Right!, register: LowRegister.R1);
-                    emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
-                    Require(condition: condition.Comparison switch {
-                        ActionStateComparison.Equal => ThumbCondition.Equal,
-                        ActionStateComparison.NotEqual => ThumbCondition.NotEqual,
-                        ActionStateComparison.Less => ThumbCondition.CarryClear,
-                        ActionStateComparison.LessOrEqual => ThumbCondition.UnsignedLowerOrSame,
-                        ActionStateComparison.Greater => ThumbCondition.UnsignedHigher,
-                        _ => ThumbCondition.CarrySet,
-                    }, end: fail);
-                }
+                case ActionPredicate.Not not: {
+                        // The inner gate branches away when it MISSES, which is exactly when this one holds.
+                        var holds = emitter.NewLabel();
+
+                        Gate(predicate: not.Predicate, fail: holds);
+                        emitter.Branch(label: fail);
+                        emitter.MarkLabel(label: holds);
+
+                        return;
+                    }
+                default: {
+                        var compare = (ActionPredicate.CompareValue)predicate;
+
+                        Load(expression: compare.Left, register: LowRegister.R0, guard: true);
+                        emitter.Push(registers: LowRegisterMask.R0, includeLinkRegister: false);
+                        Load(expression: compare.Right, register: LowRegister.R1, guard: true);
+                        emitter.Pop(registers: LowRegisterMask.R0, includeProgramCounter: false);
+                        emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
+                        Require(condition: compare.Comparison switch {
+                            ActionStateComparison.Equal => ThumbCondition.Equal,
+                            ActionStateComparison.NotEqual => ThumbCondition.NotEqual,
+                            ActionStateComparison.Less => ThumbCondition.CarryClear,
+                            ActionStateComparison.LessOrEqual => ThumbCondition.UnsignedLowerOrSame,
+                            ActionStateComparison.Greater => ThumbCondition.UnsignedHigher,
+                            _ => ThumbCondition.CarrySet,
+                        }, end: fail);
+
+                        return;
+                    }
             }
         }
 
@@ -581,7 +609,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                         break;
                     case "if": {
                             var otherwise = emitter.NewLabel();
-                            Conditions(conditions: statement.When!, fail: otherwise);
+                            Gate(predicate: statement.When!, fail: otherwise);
                             Statements(statements: statement.Then!, breakLabel: breakLabel);
                             if (statement.Else is { } alternative) {
                                 var joined = emitter.NewLabel();
@@ -622,7 +650,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                     case "play": {
                             var sound = sounds[statement.Sound!];
                             if (sound.SampleLength > 0) {
-                                digital!.EmitStart(sampleAddress: sound.Parts[0].Address, sampleLength: sound.SampleLength, rate: statement.Rate is null ? null : register => Load(value: statement.Rate, register: register));
+                                digital!.EmitStart(sampleAddress: sound.Parts[0].Address, sampleLength: sound.SampleLength, rate: statement.Rate is null ? null : register => Load(expression: statement.Rate, register: register));
                             } else {
                                 foreach (var part in sound.Parts) {
                                     // The wave voice plays through a pattern, which must be in place before the voice starts.
@@ -673,7 +701,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                             // beneath it: the weight is the top's share in sixteenths, the rest comes from below.
                             var surface = 1u << Array.IndexOf(array: CartridgeLimits.BlendSurfaces, value: statement.Surface!);
                             var control = surface | 0x40u | ((0x3Fu & ~surface) << 8);
-                            Load(value: statement.Weight!, register: LowRegister.R0);
+                            Load(expression: statement.Weight!, register: LowRegister.R0);
                             emitter.MoveImmediate(destination: LowRegister.R1, value: CartridgeLimits.BlendWeights);
                             emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
                             var held = emitter.NewLabel();
@@ -695,7 +723,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                             // mode picks brighten or darken, and the level register carries the step.
                             emitter.LoadConstant(destination: LowRegister.R0, value: statement.Toward == "white" ? 0x3FBFu : 0x3FFFu);
                             StoreResult(address: 0x04000050);
-                            Load(value: statement.Amount!, register: LowRegister.R0);
+                            Load(expression: statement.Amount!, register: LowRegister.R0);
                             emitter.MoveImmediate(destination: LowRegister.R1, value: 16);
                             emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
                             var clamped = emitter.NewLabel();
@@ -733,12 +761,12 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                             var written = emitter.NewLabel();
 
                             // Off the surface is dropped rather than wrapped, which would draw on another row.
-                            Load(value: statement.Column!, register: LowRegister.R5);
+                            Load(expression: statement.Column!, register: LowRegister.R5);
                             emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Width);
                             emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R5, source: LowRegister.R0);
                             emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: dropped);
                             emitter.Branch(condition: ThumbCondition.Equal, label: dropped);
-                            Load(value: statement.Row!, register: LowRegister.R6);
+                            Load(expression: statement.Row!, register: LowRegister.R6);
                             emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Height);
                             emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R6, source: LowRegister.R0);
                             emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: dropped);
@@ -748,7 +776,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                             emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Width);
                             emitter.Alu(op: ThumbAlu.Multiply, destination: LowRegister.R6, source: LowRegister.R0);
                             emitter.AddRegister(destination: LowRegister.R5, source: LowRegister.R5, operand: LowRegister.R6);
-                            Load(value: statement.Colour!, register: LowRegister.R7);
+                            Load(expression: statement.Colour!, register: LowRegister.R7);
                             emitter.LoadConstant(destination: LowRegister.R0, value: 0x06000000u);
                             emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R5);
 
@@ -793,17 +821,21 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         // A plain assignment evaluates the operand first because the destination address computation leaves r0 alone; every other
         // operation keeps the operand in r1 and the destination address in r4, so an indexed destination is computed once.
+        // The destination address is computed first and held on the stack, because evaluating the operand runs the
+        // same registers an indexed destination does.
         void Act(CartridgeStatement action) {
+            Address(target: action.Target!);
+            emitter.Push(registers: LowRegisterMask.R4, includeLinkRegister: false);
             if (action.Operation is null) {
-                Load(value: action.Value!, register: LowRegister.R0);
-                Address(target: action.Target!);
+                Load(expression: action.Value!, register: LowRegister.R0);
+                emitter.Pop(registers: LowRegisterMask.R4, includeProgramCounter: false);
                 Store(target: action.Target!, source: LowRegister.R0);
 
                 return;
             }
 
-            Load(value: action.Value!, register: LowRegister.R1);
-            Address(target: action.Target!);
+            Load(expression: action.Value!, register: LowRegister.R1);
+            emitter.Pop(registers: LowRegisterMask.R4, includeProgramCounter: false);
             if (Wide(target: action.Target!)) {
                 emitter.LoadHalf(destination: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 0);
             } else {
@@ -825,7 +857,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         // A slot's declared width decides the store: a byte truncates at 256, a halfword at 65536, which is what makes
         // arithmetic wrap at the ceiling the document declared rather than always at a byte.
-        bool Wide(CartridgeTarget target) => ((target.Variable is { } name) && (widths[name] == 2));
+        bool Wide(CartridgeTarget target) => ((target.Key is null) && widths.TryGetValue(key: target.State, value: out var width) && (width == 2));
 
         void Store(CartridgeTarget target, LowRegister source) {
             if (Wide(target: target)) {
@@ -837,20 +869,54 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: source);
         }
 
-        // A rule's own gate reads the scene through the frame's snapshot; everything else reads live state.
-        void LoadGuard(CartridgeValue value, LowRegister register) {
-            if ((document.Scene is { } scene) && (value.Variable == scene)) {
-                emitter.LoadConstant(destination: LowRegister.R2, value: SceneAddress);
-                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
+        // Leaves the expression's value in the given register. A single-token read emits exactly the one load it names.
+        // A composed one spends the machine stack on the operands in flight and the helper routines on r5, so r4 and r5
+        // are saved around it and a caller's only clobber contract stays r0 through r3.
+        void Load(ValueExpression expression, LowRegister register, bool guard = false) {
+            if (expression.Tokens.Count == 1) {
+                Payload(token: expression.Tokens[0], register: register, guard: guard);
 
                 return;
             }
 
-            Load(value: value, register: register);
+            emitter.Push(registers: (LowRegisterMask.R4 | LowRegisterMask.R5), includeLinkRegister: false);
+
+            var depth = 0;
+
+            foreach (var token in expression.Tokens) {
+                if (token is ValueToken.Constant or ValueToken.State) {
+                    if (depth > 0) {
+                        emitter.Push(registers: LowRegisterMask.R0, includeLinkRegister: false);
+                    }
+
+                    Payload(token: token, register: LowRegister.R0, guard: guard);
+                    ++depth;
+
+                    continue;
+                }
+
+                var operation = ExpressionVocabulary.Operation(token: token)!.Value;
+                var arity = ExpressionVocabulary.Arity(operation: operation);
+
+                switch (arity) {
+                    case 1: Unary(operation: operation); break;
+                    case 2: Binary(operation: operation); break;
+                    default: Ternary(operation: operation); break;
+                }
+
+                depth -= (arity - 1);
+            }
+
+            emitter.Pop(registers: (LowRegisterMask.R4 | LowRegisterMask.R5), includeProgramCounter: false);
+            if (register != LowRegister.R0) {
+                emitter.MoveRegister(destination: register, source: LowRegister.R0);
+            }
         }
 
-        void Load(CartridgeValue value, LowRegister register) {
-            if (value.Constant is { } constant) {
+        void Payload(ValueToken token, LowRegister register, bool guard) {
+            if (token is ValueToken.Constant literal) {
+                var constant = (int)literal.Value;
+
                 // A literal paired with a wide slot exceeds a byte, so it comes in through the constant pool rather
                 // than the eight-bit immediate form.
                 if (constant > CartridgeLimits.NarrowMaximum) {
@@ -860,34 +926,202 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                 }
 
                 emitter.MoveImmediate(destination: register, value: (byte)constant);
-            } else if (value.Variable is { } name) {
-                emitter.LoadConstant(destination: LowRegister.R2, value: variables[name]);
-                if (widths[name] == 2) {
-                    emitter.LoadHalf(destination: register, baseRegister: LowRegister.R2, byteOffset: 0);
-                } else {
-                    emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
-                }
+
+                return;
+            }
+
+            var state = (ValueToken.State)token;
+
+            if (CartridgeExpressions.TryKey(name: state.Name, button: out var button, mode: out var mode)) {
+                Button(button: button, mode: mode, register: register);
+
+                return;
+            }
+
+            if (CartridgeExpressions.Index(key: state.Key) is { } index) {
+                Element(array: state.Name, index: index, address: LowRegister.R2);
+                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
+
+                return;
+            }
+
+            if (guard && (state.Name == document.Scene)) {
+                emitter.LoadConstant(destination: LowRegister.R2, value: SceneAddress);
+                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
+
+                return;
+            }
+
+            emitter.LoadConstant(destination: LowRegister.R2, value: variables[state.Name]);
+            if (widths[state.Name] == 2) {
+                emitter.LoadHalf(destination: register, baseRegister: LowRegister.R2, byteOffset: 0);
             } else {
-                Element(array: value.Array!, index: value.Index!, address: LowRegister.R2);
                 emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
             }
         }
 
-        void Address(CartridgeTarget target) {
-            if (target.Variable is { } name) {
-                emitter.LoadConstant(destination: LowRegister.R4, value: variables[name]);
-            } else {
-                Element(array: target.Array!, index: target.Index!, address: LowRegister.R4);
+        // Leaves 1 in the given register while the button satisfies the mode, and 0 otherwise.
+        void Button(string button, string mode, LowRegister register) {
+            var zero = emitter.NewLabel();
+            var done = emitter.NewLabel();
+
+            emitter.LoadConstant(destination: LowRegister.R2, value: AgbForgeMemoryMap.StateBase);
+            emitter.LoadHalf(baseRegister: LowRegister.R2, byteOffset: ((mode == "pressed") ? AgbForgeMemoryMap.InputPressedOffset : AgbForgeMemoryMap.InputHeldOffset), destination: LowRegister.R0);
+            if (mode == "released") {
+                emitter.LoadHalf(baseRegister: LowRegister.R2, byteOffset: AgbForgeMemoryMap.InputPreviousOffset, destination: LowRegister.R1);
+                emitter.Alu(op: ThumbAlu.BitClear, destination: LowRegister.R1, source: LowRegister.R0);
+                emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R1);
             }
+
+            emitter.MoveImmediate(destination: LowRegister.R1, value: Key(key: button));
+            emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R0, source: LowRegister.R1);
+            emitter.CompareImmediate(register: LowRegister.R0, value: 0);
+            emitter.Branch(condition: ThumbCondition.Equal, label: zero);
+            emitter.MoveImmediate(destination: register, value: 1);
+            emitter.Branch(label: done);
+            emitter.MarkLabel(label: zero);
+            emitter.MoveImmediate(destination: register, value: 0);
+            emitter.MarkLabel(label: done);
+        }
+
+        // Every intermediate is truncated to the operand width the moment it is produced, which is what keeps this
+        // machine's thirty-two bit registers agreeing with the other machine's accumulator at every step rather than
+        // only at the store.
+        void Truncate() {
+            emitter.MoveImmediate(destination: LowRegister.R1, value: 0xFF);
+            emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R0, source: LowRegister.R1);
+        }
+
+        void Unary(ExpressionOp operation) {
+            switch (operation) {
+                case ExpressionOp.BitNot:
+                    emitter.Alu(op: ThumbAlu.MoveNegated, destination: LowRegister.R0, source: LowRegister.R0);
+                    Truncate();
+
+                    return;
+                case ExpressionOp.Negate:
+                    emitter.Alu(op: ThumbAlu.Negate, destination: LowRegister.R0, source: LowRegister.R0);
+                    Truncate();
+
+                    return;
+                default: {
+                        // Every value is unsigned, so a sign is 0 or 1 and never -1.
+                        var zero = emitter.NewLabel();
+                        var done = emitter.NewLabel();
+
+                        emitter.CompareImmediate(register: LowRegister.R0, value: 0);
+                        emitter.Branch(condition: ThumbCondition.Equal, label: zero);
+                        emitter.MoveImmediate(destination: LowRegister.R0, value: 1);
+                        emitter.Branch(label: done);
+                        emitter.MarkLabel(label: zero);
+                        emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
+                        emitter.MarkLabel(label: done);
+
+                        return;
+                    }
+            }
+        }
+
+        // The right operand is in r0 and the left one on the stack, which the helper routines read as r0 and r1.
+        void Binary(ExpressionOp operation) {
+            emitter.MoveRegister(destination: LowRegister.R1, source: LowRegister.R0);
+            emitter.Pop(registers: LowRegisterMask.R0, includeProgramCounter: false);
+            switch (operation) {
+                case ExpressionOp.Add: emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1); Truncate(); return;
+                case ExpressionOp.Subtract: emitter.SubtractRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1); Truncate(); return;
+                case ExpressionOp.Multiply: arithmetic.EmitMultiply(); Truncate(); return;
+                case ExpressionOp.Divide: arithmetic.EmitDivide(); return;
+                case ExpressionOp.Modulo: arithmetic.EmitDivide(); emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R5); return;
+                case ExpressionOp.ShiftLeft: arithmetic.EmitShiftLeft(); Truncate(); return;
+                case ExpressionOp.ShiftRight: arithmetic.EmitShiftRight(); return;
+                case ExpressionOp.BitAnd: emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R0, source: LowRegister.R1); return;
+                case ExpressionOp.BitOr: emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R0, source: LowRegister.R1); return;
+                case ExpressionOp.BitXor: emitter.Alu(op: ThumbAlu.ExclusiveOr, destination: LowRegister.R0, source: LowRegister.R1); return;
+                case ExpressionOp.Minimum:
+                case ExpressionOp.Maximum: {
+                        var keep = emitter.NewLabel();
+
+                        emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
+                        emitter.Branch(condition: ((operation == ExpressionOp.Minimum) ? ThumbCondition.CarryClear : ThumbCondition.CarrySet), label: keep);
+                        emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R1);
+                        emitter.MarkLabel(label: keep);
+
+                        return;
+                    }
+                default: {
+                        var set = emitter.NewLabel();
+                        var done = emitter.NewLabel();
+
+                        emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
+                        emitter.Branch(condition: operation switch {
+                            ExpressionOp.Equal => ThumbCondition.Equal,
+                            ExpressionOp.NotEqual => ThumbCondition.NotEqual,
+                            ExpressionOp.Less => ThumbCondition.CarryClear,
+                            ExpressionOp.LessOrEqual => ThumbCondition.UnsignedLowerOrSame,
+                            ExpressionOp.Greater => ThumbCondition.UnsignedHigher,
+                            _ => ThumbCondition.CarrySet,
+                        }, label: set);
+                        emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
+                        emitter.Branch(label: done);
+                        emitter.MarkLabel(label: set);
+                        emitter.MoveImmediate(destination: LowRegister.R0, value: 1);
+                        emitter.MarkLabel(label: done);
+
+                        return;
+                    }
+            }
+        }
+
+        // Three operands: the last is in r0 and the first two are on the stack, deepest first.
+        void Ternary(ExpressionOp operation) {
+            emitter.MoveRegister(destination: LowRegister.R3, source: LowRegister.R0);
+            emitter.Pop(registers: LowRegisterMask.R1, includeProgramCounter: false);
+            emitter.Pop(registers: LowRegisterMask.R0, includeProgramCounter: false);
+            if (operation == ExpressionOp.Select) {
+                var otherwise = emitter.NewLabel();
+                var done = emitter.NewLabel();
+
+                emitter.CompareImmediate(register: LowRegister.R0, value: 0);
+                emitter.Branch(condition: ThumbCondition.Equal, label: otherwise);
+                emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R1);
+                emitter.Branch(label: done);
+                emitter.MarkLabel(label: otherwise);
+                emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R3);
+                emitter.MarkLabel(label: done);
+
+                return;
+            }
+
+            var above = emitter.NewLabel();
+            var below = emitter.NewLabel();
+
+            emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
+            emitter.Branch(condition: ThumbCondition.CarrySet, label: above);
+            emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R1);
+            emitter.MarkLabel(label: above);
+            emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R3);
+            emitter.Branch(condition: ThumbCondition.UnsignedLowerOrSame, label: below);
+            emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R3);
+            emitter.MarkLabel(label: below);
+        }
+
+        void Address(CartridgeTarget target) {
+            if (CartridgeExpressions.Index(key: target.Key) is { } index) {
+                Element(array: target.State, index: index, address: LowRegister.R4);
+
+                return;
+            }
+
+            emitter.LoadConstant(destination: LowRegister.R4, value: variables[target.State]);
         }
 
         // Leaves the addressed element in the given register, or the zeroed discard sink when the index is past the
         // declared length. The index is consumed in r3 immediately, so a nested array index reuses it safely.
-        void Element(string array, CartridgeValue index, LowRegister address) {
+        void Element(string array, ValueExpression index, LowRegister address) {
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
             var length = lengths[key: array];
-            Load(value: index, register: LowRegister.R3);
+            Load(expression: index, register: LowRegister.R3);
             if (length < CartridgeLimits.ArrayLength) {
                 emitter.CompareImmediate(register: LowRegister.R3, value: (byte)length);
                 emitter.Branch(condition: ThumbCondition.CarryClear, label: inside);
@@ -904,9 +1138,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         }
 
         // Folds a document value into the attribute halfword already being built in r0.
-        void EmitFlagBits(CartridgeValue value, byte mask, int shift) {
-            emitter.MoveRegister(destination: LowRegister.R5, source: LowRegister.R0);
-            Load(value: value, register: LowRegister.R0);
+        void EmitFlagBits(ValueExpression value, byte mask, int shift) {
+            emitter.Push(registers: LowRegisterMask.R0, includeLinkRegister: false);
+            Load(expression: value, register: LowRegister.R0);
             emitter.MoveImmediate(destination: LowRegister.R1, value: mask);
             if (mask == 1) {
                 // Any non-zero value sets the bit, so collapse it rather than masking its low bit away.
@@ -924,6 +1158,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             }
 
             emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R0, source: LowRegister.R0, amount: shift);
+            emitter.Pop(registers: LowRegisterMask.R5, includeProgramCounter: false);
             emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R0, source: LowRegister.R5);
         }
 

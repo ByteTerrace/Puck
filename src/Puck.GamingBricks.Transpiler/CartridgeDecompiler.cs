@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 
 using Puck.State;
 
+using Puck.GamingBricks.Forge;
+
 namespace Puck.GamingBricks.Transpiler;
 
 /// <summary>Writes a <c>puck.cartridge.v1</c> document back out as Puck DSL source.</summary>
@@ -89,8 +91,8 @@ public static class CartridgeDecompiler {
     private static void WriteRule(StringBuilder sb, JsonObject rule) {
         sb.Append("rule \"").Append(rule["name"]?.GetValue<string>() ?? string.Empty).Append("\" {\n");
 
-        if ((rule["when"] is JsonArray conditions) && (conditions.Count > 0)) {
-            sb.Append(Indent).Append("when ").Append(ConditionsSource(conditions: conditions)).Append('\n');
+        if (rule["when"] is JsonObject gate) {
+            sb.Append(Indent).Append("when ").Append(GateSource(gate: gate, nested: false)).Append('\n');
         }
 
         WriteBody(sb: sb, body: (rule["body"] as JsonArray), indentLevel: 1);
@@ -116,7 +118,7 @@ public static class CartridgeDecompiler {
                 var spelling = (s_assignments.TryGetValue(key: operation, value: out var found) ? found : "=");
 
                 sb.Append(pad)
-                    .Append(CartridgeOperand.ToSource(node: step["target"]))
+                    .Append(CartridgeOperand.TargetToSource(node: step["target"]))
                     .Append(' ').Append(spelling).Append(' ')
                     .Append(CartridgeOperand.ToSource(node: step["value"]))
                     .Append('\n');
@@ -125,7 +127,7 @@ public static class CartridgeDecompiler {
             }
 
             case "if": {
-                sb.Append(pad).Append("if ").Append(ConditionsSource(conditions: (step["when"] as JsonArray))).Append(" {\n");
+                sb.Append(pad).Append("if ").Append(GateSource(gate: (step["when"] as JsonObject), nested: false)).Append(" {\n");
                 WriteBody(sb: sb, body: (step["then"] as JsonArray), indentLevel: (indentLevel + 1));
 
                 if (step["else"] is JsonArray otherwise) {
@@ -195,24 +197,44 @@ public static class CartridgeDecompiler {
         return sb.ToString();
     }
 
-    private static string ConditionsSource(JsonArray? conditions) {
-        if ((conditions is null) || (conditions.Count == 0)) {
-            // An empty gate always holds, and the DSL has no keyword for one; a tautology is the honest spelling.
+    // Renders one predicate. A composed arm is parenthesised when it sits inside another, because and binds tighter
+    // than or in the language and an unbracketed mixture would read back as a different gate.
+    private static string GateSource(JsonObject? gate, bool nested) {
+        if (gate is null) {
+            // An absent gate always holds, and the DSL has no keyword for one; a tautology is the honest spelling.
             return "0 == 0";
         }
 
-        return string.Join(separator: " and ", values: conditions.OfType<JsonObject>().Select(selector: ConditionSource));
+        switch (gate["$type"]?.GetValue<string>()) {
+            case "all":
+                return Composed(gate: gate, separator: " and ", nested: nested);
+            case "any":
+                return Composed(gate: gate, separator: " or ", nested: nested);
+            case "not":
+                return $"not {GateSource(gate: (gate["predicate"] as JsonObject), nested: true)}";
+            default: {
+                var left = CartridgeOperand.ToSource(node: gate["left"]);
+                var right = CartridgeOperand.ToSource(node: gate["right"]);
+                var comparison = (gate["comparison"]?.GetValue<string>() ?? nameof(ActionStateComparison.Equal));
+                var comparator = (s_comparators.TryGetValue(key: comparison, value: out var found) ? found : "==");
+
+                // A button read against one is what a key test lowered to, and the key spelling is the readable half.
+                if ((comparison == nameof(ActionStateComparison.Equal))
+                    && (right == "1")
+                    && CartridgeExpressions.TryKey(name: left, button: out var button, mode: out var mode)) {
+                    return $"key({button}, {mode})";
+                }
+
+                return $"{left} {comparator} {right}";
+            }
+        }
     }
 
-    private static string ConditionSource(JsonObject condition) {
-        if (condition["kind"]?.GetValue<string>() == "key") {
-            return $"key({condition["key"]?.GetValue<string>()}, {condition["mode"]?.GetValue<string>()})";
-        }
+    private static string Composed(JsonObject gate, string separator, bool nested) {
+        var arms = ((gate["predicates"] as JsonArray) ?? []);
+        var inner = string.Join(separator: separator, values: arms.OfType<JsonObject>().Select(selector: arm => GateSource(gate: arm, nested: true)));
 
-        var comparison = (condition["comparison"]?.GetValue<string>() ?? "eq");
-        var comparator = (s_comparators.TryGetValue(key: comparison, value: out var found) ? found : "==");
-
-        return $"{CartridgeOperand.ToSource(node: condition["left"])} {comparator} {CartridgeOperand.ToSource(node: condition["right"])}";
+        return (nested ? $"({inner})" : inner);
     }
 
     // One field, in the one spelling its value's shape calls for: a container is a block, a scalar takes a colon.

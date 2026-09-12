@@ -19,8 +19,8 @@ public sealed class CartridgeSpriteTests {
                 new CartridgeTile(Name: "corner", Pixels: shape),
             ],
             Sprites = [
-                new CartridgeSprite(Name: "plain", Tile: new CartridgeValue(Constant: 1), X: new CartridgeValue(Constant: 0), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)),
-                new CartridgeSprite(Name: "mirrored", Tile: new CartridgeValue(Constant: 1), X: new CartridgeValue(Constant: 32), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1), FlipX: new CartridgeValue(Constant: 1)),
+                new CartridgeSprite(Name: "plain", Tile: CartridgeExpressions.Of(constant: 1), X: CartridgeExpressions.Of(constant: 0), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1)),
+                new CartridgeSprite(Name: "mirrored", Tile: CartridgeExpressions.Of(constant: 1), X: CartridgeExpressions.Of(constant: 32), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1), FlipX: CartridgeExpressions.Of(constant: 1)),
             ],
         };
         using var machine = Run(document: document, frames: 20);
@@ -45,7 +45,7 @@ public sealed class CartridgeSpriteTests {
                 new CartridgeTile(Name: "lower", Pixels: [.. Enumerable.Repeat(element: "11111111", count: 8)]),
             ],
             // In tall mode the index names a PAIR and its low bit is ignored, so tiles 2 and 3 both draw.
-            Sprites = [new CartridgeSprite(Name: "tall", Tile: new CartridgeValue(Constant: 2), X: new CartridgeValue(Constant: 0), Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1))],
+            Sprites = [new CartridgeSprite(Name: "tall", Tile: CartridgeExpressions.Of(constant: 2), X: CartridgeExpressions.Of(constant: 0), Y: CartridgeExpressions.Of(constant: 0), Visible: CartridgeExpressions.Of(constant: 1))],
         };
         using var machine = Run(document: document, frames: 20);
         var top = machine.Pixel(x: 4, y: 2);

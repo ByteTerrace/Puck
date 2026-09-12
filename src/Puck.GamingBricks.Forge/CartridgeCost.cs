@@ -62,7 +62,7 @@ public static class CartridgeCost {
         // A guard is tested whether or not it holds, so every rule's conditions are charged.
         var rules = document.Rules ?? [];
         foreach (var rule in rules) {
-            total = CostBound.Add(left: total, right: Conditions(conditions: rule?.When, profile: profile));
+            total = CostBound.Add(left: total, right: Conditions(gate: rule?.When, profile: profile));
         }
 
         var bodies = new CostBound[rules.Length];
@@ -113,9 +113,20 @@ public static class CartridgeCost {
     /// <returns>The guard variable's name and the value it must hold, or a null name.</returns>
     /// <remarks>The shape a phase machine's rules take.</remarks>
     public static (string? Name, int Value) Guard(CartridgeRule? rule) =>
-        rule?.When is [{ Kind: "compare", Comparison: ActionStateComparison.Equal, Left.Variable: { } name, Right.Constant: { } value }]
-            ? (name, value)
-            : (null, 0);
+        ((rule?.When is ActionPredicate.CompareValue { Comparison: ActionStateComparison.Equal } compare)
+            && (Slot(expression: compare.Left) is { } name)
+            && (Whole(expression: compare.Right) is { } value))
+                ? (name, value)
+                : (null, 0);
+
+    // The one-token forms a guard is recognised by: a bare slot read on the left, a bare literal on the right.
+    private static string? Slot(ValueExpression expression) =>
+        ((expression.Tokens is [ValueToken.State { Key: null } state]) ? state.Name : null);
+
+    private static int? Whole(ValueExpression expression) =>
+        ((expression.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value)
+            ? (int)constant.Value
+            : null);
 
     /// <summary>Returns the guard variables whose values genuinely partition a frame.</summary>
     /// <param name="rules">The document's rules, in evaluation order.</param>
@@ -163,7 +174,7 @@ public static class CartridgeCost {
                 continue;
             }
 
-            if (statement.Target?.Variable == name) {
+            if ((statement.Target is { Key: null } target) && (target.State == name)) {
                 return true;
             }
 
@@ -183,16 +194,24 @@ public static class CartridgeCost {
     }
 
 
-    private static CostBound Conditions(CartridgeCondition[]? conditions, CartridgeCostProfile profile) {
+    // A gate prices as the comparisons it reaches. Composition costs nothing of its own: all and any are the branch
+    // structure the arms were already charged for, and not swaps a branch condition rather than adding work.
+    private static CostBound Conditions(ActionPredicate? gate, CartridgeCostProfile profile) => (gate switch {
+        null => CostBound.Zero,
+        ActionPredicate.All all => Composite(predicates: all.Predicates, profile: profile),
+        ActionPredicate.Any any => Composite(predicates: any.Predicates, profile: profile),
+        ActionPredicate.Not not => Conditions(gate: not.Predicate, profile: profile),
+        ActionPredicate.CompareValue compare => CostBound.Add(
+            left: CostBound.Known(cycles: profile.ConditionCompare),
+            right: CostBound.Add(left: Operand(expression: compare.Left, profile: profile), right: Operand(expression: compare.Right, profile: profile))),
+        _ => CostBound.Unmodeled(reason: $"Gate '{gate.GetType().Name}' has no measured weight."),
+    });
+
+    private static CostBound Composite(IReadOnlyList<ActionPredicate> predicates, CartridgeCostProfile profile) {
         var total = CostBound.Zero;
-        foreach (var condition in conditions ?? []) {
-            total = CostBound.Add(left: total, right: condition?.Kind switch {
-                "key" => CostBound.Known(cycles: profile.ConditionKey),
-                "compare" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.ConditionCompare),
-                    right: CostBound.Add(left: Operand(value: condition.Left, profile: profile), right: Operand(value: condition.Right, profile: profile))),
-                _ => CostBound.Unmodeled(reason: $"Condition kind '{condition?.Kind}' has no measured weight."),
-            });
+
+        foreach (var predicate in predicates) {
+            total = CostBound.Add(left: total, right: Conditions(gate: predicate, profile: profile));
         }
 
         return total;
@@ -206,7 +225,7 @@ public static class CartridgeCost {
             total = CostBound.Add(left: total, right: statement?.Kind switch {
                 "set" => Step(statement: statement, profile: profile),
                 "if" => CostBound.Add(
-                    left: Conditions(conditions: statement.When, profile: profile),
+                    left: Conditions(gate: statement.When, profile: profile),
                     right: CostBound.Max(left: Statements(statements: statement.Then, cells: cells, payload: payload, profile: profile), right: Statements(statements: statement.Else, cells: cells, payload: payload, profile: profile))),
                 "repeat" => CostBound.Add(
                     left: CostBound.Known(cycles: profile.LoopSetup),
@@ -221,15 +240,15 @@ public static class CartridgeCost {
                 // A plot bounds two coordinates, multiplies, and rebuilds one halfword of video memory.
                 "plot" => CostBound.Add(
                     left: CostBound.Known(cycles: profile.StepMultiply + (profile.StepArithmetic * 3)),
-                    right: CostBound.Add(left: Operand(value: statement.Row, profile: profile), right: CostBound.Add(left: Operand(value: statement.Column, profile: profile), right: Operand(value: statement.Colour, profile: profile)))),
+                    right: CostBound.Add(left: Operand(expression: statement.Row, profile: profile), right: CostBound.Add(left: Operand(expression: statement.Column, profile: profile), right: Operand(expression: statement.Colour, profile: profile)))),
                 // A blend is two register writes and a clamp, so it costs what an arithmetic step does.
-                "blend" => CostBound.Add(left: CostBound.Known(cycles: profile.StepArithmetic), right: Operand(value: statement.Weight, profile: profile)),
-                "fade" => CostBound.Add(left: CostBound.Known(cycles: profile.SaveFixed), right: Operand(value: statement.Amount, profile: profile)),
+                "blend" => CostBound.Add(left: CostBound.Known(cycles: profile.StepArithmetic), right: Operand(expression: statement.Weight, profile: profile)),
+                "fade" => CostBound.Add(left: CostBound.Known(cycles: profile.SaveFixed), right: Operand(expression: statement.Amount, profile: profile)),
                 "play" or "stop" => CostBound.Known(cycles: profile.Sound),
                 "save" or "load" => CostBound.Known(cycles: profile.SaveFixed + (profile.SaveByte * payload)),
                 "map" => CostBound.Add(
                     left: CostBound.Known(cycles: profile.MapWrite),
-                    right: CostBound.Add(left: Operand(value: statement.Row, profile: profile), right: CostBound.Add(left: Operand(value: statement.Column, profile: profile), right: Operand(value: statement.Tile, profile: profile)))),
+                    right: CostBound.Add(left: Operand(expression: statement.Row, profile: profile), right: CostBound.Add(left: Operand(expression: statement.Column, profile: profile), right: Operand(expression: statement.Tile, profile: profile)))),
                 // Measurement puts a small blit near a fixed 600 units but a full-screen one past a whole frame, with
                 // no model spanning both, so it carries no weight and a document using one is refused.
                 // Flat to the cell cap: what a blit costs is the display-off window, not the cells copied.
@@ -241,29 +260,71 @@ public static class CartridgeCost {
         return total;
     }
 
-    private static CostBound Step(CartridgeStatement statement, CartridgeCostProfile profile) {
-        var operation = statement.Operation switch {
-            null => CostBound.Known(cycles: profile.StepSet),
-            ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor => CostBound.Known(cycles: profile.StepArithmetic),
-            ExpressionOp.Multiply => CostBound.Known(cycles: profile.StepMultiply),
-            ExpressionOp.Divide or ExpressionOp.Modulo => CostBound.Known(cycles: profile.StepDivide),
-            ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight => CostBound.Known(cycles: profile.StepShift),
-            _ => CostBound.Unmodeled(reason: $"Operation '{statement.Operation}' has no measured weight."),
-        };
-        return CostBound.Add(left: operation, right: CostBound.Add(left: Operand(value: statement.Value, profile: profile), right: Target(target: statement.Target, profile: profile)));
-    }
+    private static CostBound Step(CartridgeStatement statement, CartridgeCostProfile profile) =>
+        CostBound.Add(
+            left: Combine(operation: statement.Operation, profile: profile),
+            right: CostBound.Add(left: Operand(expression: statement.Value, profile: profile), right: Target(target: statement.Target, profile: profile)));
 
-    private static CostBound Operand(CartridgeValue? value, CartridgeCostProfile profile) {
-        if (value?.Array is not null) {
-            return CostBound.Add(left: CostBound.Known(cycles: profile.OperandArray), right: Operand(value: value.Index, profile: profile));
+    // An operation's weight is the same whether it combines into a destination or sits inside an expression: it is the
+    // same emitted helper either way, measured once. Pricing a nested operation at its combining weight charges one
+    // store the expression does not perform, so an expression is priced as the sequence of single steps it replaces —
+    // never under it, which is the safe direction for a number that only ever advises.
+    // A write admits the ten combining operations; an expression admits a wider set. Both price from one table.
+    private static CostBound Combine(ExpressionOp? operation, CartridgeCostProfile profile) =>
+        (CartridgeOperations.AdmitsCombine(operation: operation)
+            ? Weight(operation: operation, profile: profile)
+            : CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation!.Value)}' has no sixteen-bit combining form."));
+
+    private static CostBound Evaluate(ExpressionOp operation, CartridgeCostProfile profile) =>
+        (CartridgeExpressions.Admits(operation: operation)
+            ? Weight(operation: operation, profile: profile)
+            : CostBound.Unmodeled(reason: $"The rule language evaluates '{ExpressionVocabulary.Spelling(operation: operation)}'; a cartridge does not."));
+
+    private static CostBound Weight(ExpressionOp? operation, CartridgeCostProfile profile) => (operation switch {
+        null => CostBound.Known(cycles: profile.StepSet),
+        ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor
+            or ExpressionOp.BitNot or ExpressionOp.Negate => CostBound.Known(cycles: profile.StepArithmetic),
+        ExpressionOp.Multiply => CostBound.Known(cycles: profile.StepMultiply),
+        ExpressionOp.Divide or ExpressionOp.Modulo => CostBound.Known(cycles: profile.StepDivide),
+        ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight => CostBound.Known(cycles: profile.StepShift),
+        // A comparison, a bound and a choice are each a compare and a branch, which is what a gate's comparison was
+        // measured at.
+        ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual
+            or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual or ExpressionOp.Minimum or ExpressionOp.Maximum
+            or ExpressionOp.Select or ExpressionOp.Sign => CostBound.Known(cycles: profile.ConditionCompare),
+        ExpressionOp.Clamp => CostBound.Known(cycles: (profile.ConditionCompare * 2L)),
+        _ => CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation.Value)}' has no measured weight."),
+    });
+
+    private static CostBound Operand(ValueExpression? expression, CartridgeCostProfile profile) {
+        if (expression is null) {
+            return CostBound.Zero;
         }
 
-        return CostBound.Known(cycles: value?.Variable is null ? 0L : profile.OperandVariable);
+        var total = CostBound.Zero;
+
+        foreach (var token in expression.Tokens) {
+            total = CostBound.Add(left: total, right: token switch {
+                ValueToken.Constant => CostBound.Zero,
+                ValueToken.State state => Read(state: state, profile: profile),
+                _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
+                    ? Evaluate(operation: operation, profile: profile)
+                    : CostBound.Unmodeled(reason: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates.")),
+            });
+        }
+
+        return total;
     }
 
+    // A key on a read is an element index, which is the one read that carries its own inner expression.
+    private static CostBound Read(ValueToken.State state, CartridgeCostProfile profile) =>
+        ((CartridgeExpressions.Index(key: state.Key) is { } index)
+            ? CostBound.Add(left: CostBound.Known(cycles: profile.OperandArray), right: Operand(expression: index, profile: profile))
+            : CostBound.Known(cycles: (CartridgeExpressions.TryKey(name: state.Name, button: out _, mode: out _) ? profile.ConditionKey : profile.OperandVariable)));
+
     private static CostBound Target(CartridgeTarget? target, CartridgeCostProfile profile) =>
-        target?.Array is null
-            ? CostBound.Zero
-            : CostBound.Add(left: CostBound.Known(cycles: profile.TargetArray), right: Operand(value: target.Index, profile: profile));
+        ((CartridgeExpressions.Index(key: target?.Key) is { } index)
+            ? CostBound.Add(left: CostBound.Known(cycles: profile.TargetArray), right: Operand(expression: index, profile: profile))
+            : CostBound.Zero);
 
 }

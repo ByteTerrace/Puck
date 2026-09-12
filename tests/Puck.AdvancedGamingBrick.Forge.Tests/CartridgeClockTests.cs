@@ -17,7 +17,7 @@ public sealed class CartridgeClockTests {
                 new CartridgeVariable(Name: "day", Initial: 200),
             ],
             Clock = new CartridgeClock(Seconds: "sec", Minutes: "min", Hours: "hour", Days: "day"),
-            Rules = [new CartridgeRule(Name: "read", When: [], Body: [new CartridgeStatement(Kind: "clock")])],
+            Rules = [new CartridgeRule(Name: "read", Body: [new CartridgeStatement(Kind: "clock")])],
         };
         var result = new HgbCartridgeCompiler().Compile(document: document);
 
@@ -46,7 +46,7 @@ public sealed class CartridgeClockTests {
                 new CartridgeVariable(Name: "year", Initial: 200),
             ],
             Clock = new CartridgeClock(Seconds: "sec", Minutes: "min", Hours: "hour", Days: null, Day: "day", Month: "month", Year: "year"),
-            Rules = [new CartridgeRule(Name: "read", When: [], Body: [new CartridgeStatement(Kind: "clock")])],
+            Rules = [new CartridgeRule(Name: "read", Body: [new CartridgeStatement(Kind: "clock")])],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
 
@@ -70,7 +70,7 @@ public sealed class CartridgeClockTests {
         var document = CartridgeDocuments.Create(target: "agb", title: "CLOCKRUN") with {
             Variables = [new CartridgeVariable(Name: "sec", Initial: 200)],
             Clock = new CartridgeClock(Seconds: "sec", Minutes: null, Hours: null, Days: null),
-            Rules = [new CartridgeRule(Name: "read", When: [], Body: [new CartridgeStatement(Kind: "clock")])],
+            Rules = [new CartridgeRule(Name: "read", Body: [new CartridgeStatement(Kind: "clock")])],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);
         using var machine = new AgbVerifyMachineDriver(rom: result.Rom, label: "clock-run");
@@ -96,7 +96,7 @@ public sealed class CartridgeClockTests {
         var document = CartridgeDocuments.Create(target: "cgb", title: "CLOCKBAD") with {
             Variables = [new CartridgeVariable(Name: "x", Initial: 0)],
         };
-        Refuses(document: document with { Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(Kind: "clock")])] }, fragment: "requires a declared clock");
+        Refuses(document: document with { Rules = [new CartridgeRule(Name: "r", Body: [new CartridgeStatement(Kind: "clock")])] }, fragment: "requires a declared clock");
         Refuses(document: document with { Clock = new CartridgeClock(Seconds: "missing", Minutes: null, Hours: null, Days: null) }, fragment: "Unknown state variable");
         Refuses(document: document with { Clock = new CartridgeClock(Seconds: null, Minutes: null, Hours: null, Days: null) }, fragment: "at least one state slot");
 

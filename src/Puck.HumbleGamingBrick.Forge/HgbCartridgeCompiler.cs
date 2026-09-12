@@ -251,23 +251,23 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
             foreach (var rule in document.Rules) {
                 var end = emitter.NewLabel();
-                Conditions(conditions: rule.When, fail: end);
+                Gate(predicate: rule.When, fail: end);
                 Statements(statements: rule.Body, breakLabel: -1);
                 emitter.MarkLabel(label: end);
             }
-            Load(value: document.ScrollX); emitter.StoreAToAddress(address: 0xFF43);
-            Load(value: document.ScrollY); emitter.StoreAToAddress(address: 0xFF42);
+            Load(expression: document.ScrollX); emitter.StoreAToAddress(address: 0xFF43);
+            Load(expression: document.ScrollY); emitter.StoreAToAddress(address: 0xFF42);
             EmitRasterUpdate();
             if (document.Window is { } panel) {
                 var hidden = emitter.NewLabel();
                 var placed = emitter.NewLabel();
-                Load(value: panel.Visible);
+                Load(expression: panel.Visible);
                 emitter.ArithmeticImmediate(op: AluOp.Compare, value: 0);
                 emitter.JumpAbsolute(condition: Condition.Zero, label: hidden);
-                Load(value: panel.Y);
+                Load(expression: panel.Y);
                 emitter.StoreAToHighPage(port: Hw.PortWindowY);
                 // The horizontal register reads seven past the panel's left edge.
-                Load(value: panel.X);
+                Load(expression: panel.X);
                 emitter.ArithmeticImmediate(op: AluOp.Add, value: 7);
                 emitter.StoreAToHighPage(port: Hw.PortWindowX);
                 emitter.JumpAbsolute(label: placed);
@@ -280,15 +280,15 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             for (var i = 0; i < document.Sprites.Length; ++i) {
                 var sprite = document.Sprites[i];
                 var hide = emitter.NewLabel(); var done = emitter.NewLabel();
-                Load(value: sprite.Visible); emitter.ArithmeticImmediate(op: AluOp.Compare, value: 0);
+                Load(expression: sprite.Visible); emitter.ArithmeticImmediate(op: AluOp.Compare, value: 0);
                 emitter.JumpAbsolute(condition: Condition.Zero, label: hide);
-                Load(value: sprite.Tile);
+                Load(expression: sprite.Tile);
                 if (document.Tiles.Length < 256) { emitter.ArithmeticImmediate(op: AluOp.Compare, value: (byte)document.Tiles.Length); emitter.JumpAbsolute(condition: Condition.NoCarry, label: hide); }
                 emitter.StoreAToAddress(address: (ushort)(0xC102 + i * 4));
                 EmitAttributes(sprite: sprite, index: i);
-                Load(value: sprite.X); emitter.ArithmeticImmediate(op: AluOp.Compare, value: 160); emitter.JumpAbsolute(condition: Condition.NoCarry, label: hide);
+                Load(expression: sprite.X); emitter.ArithmeticImmediate(op: AluOp.Compare, value: 160); emitter.JumpAbsolute(condition: Condition.NoCarry, label: hide);
                 emitter.ArithmeticImmediate(op: AluOp.Add, value: 8); emitter.StoreAToAddress(address: (ushort)(0xC101 + i * 4));
-                Load(value: sprite.Y); emitter.ArithmeticImmediate(op: AluOp.Compare, value: 144); emitter.JumpAbsolute(condition: Condition.NoCarry, label: hide);
+                Load(expression: sprite.Y); emitter.ArithmeticImmediate(op: AluOp.Compare, value: 144); emitter.JumpAbsolute(condition: Condition.NoCarry, label: hide);
                 emitter.ArithmeticImmediate(op: AluOp.Add, value: 16); emitter.StoreAToAddress(address: (ushort)(0xC100 + i * 4));
                 emitter.JumpAbsolute(label: done);
                 emitter.MarkLabel(label: hide); emitter.XorA(); emitter.StoreAToAddress(address: (ushort)(0xC100 + i * 4));
@@ -296,72 +296,111 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             }
         }
 
-        // Jumps to fail when any condition misses; falls through when all hold.
-        void Conditions(CartridgeCondition[] conditions, int fail) {
-            foreach (var condition in conditions) {
-                if (condition.Kind == "key") {
-                    emitter.LoadAFromAddress(address: condition.Mode == "pressed" ? FrameworkMemoryMap.InputPressed : FrameworkMemoryMap.InputHeld);
-                    if (condition.Mode == "released") {
-                        emitter.ComplementA();
-                        emitter.Load(destination: Reg8.B, source: Reg8.A);
-                        emitter.LoadAFromAddress(address: HeldInputAddress);
-                        emitter.Arithmetic(op: AluOp.And, source: Reg8.B);
-                    }
-                    emitter.ArithmeticImmediate(op: AluOp.And, value: Key(key: condition.Key!));
-                    emitter.JumpAbsolute(condition: Condition.Zero, label: fail);
-                } else if (WideValue(value: condition.Left) || WideValue(value: condition.Right)) {
-                    // Sixteen bits compare a byte at a time. > and <= swap their operands so every case reads the
-                    // borrow out of one subtraction chain rather than needing a signed test.
-                    var swap = condition.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
+        // Jumps to fail when the gate misses; falls through when it holds. An absent gate always holds.
+        void Gate(ActionPredicate? predicate, int fail) {
+            switch (predicate) {
+                case null:
+                    return;
+                case ActionPredicate.All all:
+                    foreach (var inner in all.Predicates) { Gate(predicate: inner, fail: fail); }
 
-                    LoadWide(value: (swap ? condition.Right! : condition.Left!), pair: Reg16.Hl);
-                    LoadWide(value: (swap ? condition.Left! : condition.Right!), pair: Reg16.De);
-                    if (condition.Comparison is (ActionStateComparison.Equal or ActionStateComparison.NotEqual)) {
-                        var differs = emitter.NewLabel();
+                    return;
+                case ActionPredicate.Any any: {
+                        var holds = emitter.NewLabel();
 
-                        emitter.Load(destination: Reg8.A, source: Reg8.L);
-                        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.E);
-                        emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
-                        emitter.Load(destination: Reg8.A, source: Reg8.H);
-                        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.D);
-                        if (condition.Comparison is ActionStateComparison.Equal) {
-                            emitter.JumpAbsolute(condition: Condition.NotZero, label: fail);
-                            emitter.MarkLabel(label: differs);
-                        } else {
-                            var same = emitter.NewLabel();
+                        foreach (var inner in any.Predicates) {
+                            var next = emitter.NewLabel();
 
-                            emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
-                            emitter.MarkLabel(label: same);
-                            emitter.JumpAbsolute(label: fail);
-                            emitter.MarkLabel(label: differs);
+                            Gate(predicate: inner, fail: next);
+                            emitter.JumpAbsolute(label: holds);
+                            emitter.MarkLabel(label: next);
                         }
 
-                        continue;
+                        emitter.JumpAbsolute(label: fail);
+                        emitter.MarkLabel(label: holds);
+
+                        return;
                     }
+                case ActionPredicate.Not not: {
+                        // The inner gate jumps away when it MISSES, which is exactly when this one holds.
+                        var holds = emitter.NewLabel();
+
+                        Gate(predicate: not.Predicate, fail: holds);
+                        emitter.JumpAbsolute(label: fail);
+                        emitter.MarkLabel(label: holds);
+
+                        return;
+                    }
+                default:
+                    Compare(compare: (ActionPredicate.CompareValue)predicate, fail: fail);
+
+                    return;
+            }
+        }
+
+        void Compare(ActionPredicate.CompareValue compare, int fail) {
+            if (WideOperand(expression: compare.Left) || WideOperand(expression: compare.Right)) {
+                // Sixteen bits compare a byte at a time. > and <= swap their operands so every case reads the
+                // borrow out of one subtraction chain rather than needing a signed test.
+                var swap = compare.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
+
+                LoadWide(expression: (swap ? compare.Right : compare.Left), pair: Reg16.Hl);
+                emitter.Push(pair: StackPair.Hl);
+                LoadWide(expression: (swap ? compare.Left : compare.Right), pair: Reg16.De);
+                emitter.Pop(pair: StackPair.Hl);
+                if (compare.Comparison is (ActionStateComparison.Equal or ActionStateComparison.NotEqual)) {
+                    var differs = emitter.NewLabel();
 
                     emitter.Load(destination: Reg8.A, source: Reg8.L);
-                    emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.E);
+                    emitter.Arithmetic(op: AluOp.Compare, source: Reg8.E);
+                    emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
                     emitter.Load(destination: Reg8.A, source: Reg8.H);
-                    emitter.Arithmetic(op: AluOp.SubtractWithCarry, source: Reg8.D);
-                    // Carry out of the chain is the borrow: set means the first operand is the smaller one.
-                    emitter.JumpAbsolute(
-                        condition: ((condition.Comparison is (ActionStateComparison.Less or ActionStateComparison.Greater)) ? Condition.NoCarry : Condition.Carry),
-                        label: fail);
-                } else {
-                    // Reverse > and <= so all comparisons use carry/zero without signed arithmetic.
-                    var reverse = condition.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
-                    LoadGuard(value: reverse ? condition.Left! : condition.Right!);
-                    emitter.Load(destination: Reg8.B, source: Reg8.A);
-                    LoadGuard(value: reverse ? condition.Right! : condition.Left!);
-                    emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
-                    emitter.JumpAbsolute(condition: condition.Comparison switch {
-                        ActionStateComparison.Equal => Condition.NotZero,
-                        ActionStateComparison.NotEqual => Condition.Zero,
-                        ActionStateComparison.Less or ActionStateComparison.Greater => Condition.NoCarry,
-                        _ => Condition.Carry,
-                    }, label: fail);
+                    emitter.Arithmetic(op: AluOp.Compare, source: Reg8.D);
+                    if (compare.Comparison is ActionStateComparison.Equal) {
+                        emitter.JumpAbsolute(condition: Condition.NotZero, label: fail);
+                        emitter.MarkLabel(label: differs);
+                    } else {
+                        emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
+                        emitter.JumpAbsolute(label: fail);
+                        emitter.MarkLabel(label: differs);
+                    }
+
+                    return;
                 }
+
+                emitter.Load(destination: Reg8.A, source: Reg8.L);
+                emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.E);
+                emitter.Load(destination: Reg8.A, source: Reg8.H);
+                emitter.Arithmetic(op: AluOp.SubtractWithCarry, source: Reg8.D);
+                // Carry out of the chain is the borrow: set means the first operand is the smaller one.
+                emitter.JumpAbsolute(
+                    condition: ((compare.Comparison is (ActionStateComparison.Less or ActionStateComparison.Greater)) ? Condition.NoCarry : Condition.Carry),
+                    label: fail);
+
+                return;
             }
+
+            // Popping the saved left operand into B leaves the right one in A, which is the operand order > and <=
+            // need; every other comparison wants the left one in A, so it swaps them back through the accumulator.
+            var reversed = compare.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
+
+            Load(expression: compare.Left, guard: true);
+            emitter.Push(pair: StackPair.Af);
+            Load(expression: compare.Right, guard: true);
+            if (reversed) {
+                emitter.Pop(pair: StackPair.Bc);
+            } else {
+                emitter.Load(destination: Reg8.B, source: Reg8.A);
+                emitter.Pop(pair: StackPair.Af);
+            }
+
+            emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
+            emitter.JumpAbsolute(condition: compare.Comparison switch {
+                ActionStateComparison.Equal => Condition.NotZero,
+                ActionStateComparison.NotEqual => Condition.Zero,
+                ActionStateComparison.Less or ActionStateComparison.Greater => Condition.NoCarry,
+                _ => Condition.Carry,
+            }, label: fail);
         }
 
         // breakLabel is the enclosing loop's exit, or -1 outside any loop; validation has already refused a stray break.
@@ -373,7 +412,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                         break;
                     case "if": {
                             var otherwise = emitter.NewLabel();
-                            Conditions(conditions: statement.When!, fail: otherwise);
+                            Gate(predicate: statement.When!, fail: otherwise);
                             Statements(statements: statement.Then!, breakLabel: breakLabel);
                             if (statement.Else is { } alternative) {
                                 var joined = emitter.NewLabel();
@@ -437,7 +476,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             var clamped = emitter.NewLabel();
                             var placed = emitter.NewLabel();
                             var stride = emitter.NewLabel();
-                            Load(value: statement.Amount!);
+                            Load(expression: statement.Amount!);
                             emitter.ArithmeticImmediate(op: AluOp.Compare, value: CartridgeLimits.FadeSteps + 1);
                             emitter.JumpRelative(condition: Condition.Carry, label: clamped);
                             emitter.LoadAImmediate(value: CartridgeLimits.FadeSteps);
@@ -457,7 +496,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             // The object table follows the background one, stepped by its own stride.
                             emitter.LoadImmediate(pair: Reg16.Hl, value: (ushort)(table.Address + ((CartridgeLimits.FadeSteps + 1) * backgroundBytes)));
                             emitter.LoadImmediate(pair: Reg16.De, value: (ushort)objectBytes);
-                            Load(value: statement.Amount!);
+                            Load(expression: statement.Amount!);
                             emitter.ArithmeticImmediate(op: AluOp.Compare, value: CartridgeLimits.FadeSteps + 1);
                             var clampedObject = emitter.NewLabel();
                             var placedObject = emitter.NewLabel();
@@ -529,7 +568,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     case "map": {
                             // The queue push takes DE = cell address, A = tile. Row and column are runtime values, so the
                             // address is built as 0x9800 + row * 32 + column with the row's low three bits carried into H.
-                            Load(value: statement.Row!);
+                            Load(expression: statement.Row!);
                             emitter.ArithmeticImmediate(op: AluOp.And, value: 31);
                             emitter.Load(destination: Reg8.L, source: Reg8.A);
                             emitter.LoadImmediate(destination: Reg8.H, value: 0);
@@ -543,7 +582,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             emitter.Shift(op: ShiftOp.RotateLeft, register: Reg8.H);
                             emitter.Shift(op: ShiftOp.ShiftLeftArithmetic, register: Reg8.L);
                             emitter.Shift(op: ShiftOp.RotateLeft, register: Reg8.H);
-                            Load(value: statement.Column!);
+                            Load(expression: statement.Column!);
                             emitter.ArithmeticImmediate(op: AluOp.And, value: 31);
                             emitter.Arithmetic(op: AluOp.Add, source: Reg8.L);
                             emitter.Load(destination: Reg8.E, source: Reg8.A);
@@ -552,14 +591,14 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             emitter.Load(destination: Reg8.D, source: Reg8.A);
                             emitter.Push(pair: StackPair.De);
                             if (statement.Palette is { } shade) {
-                                Load(value: shade);
+                                Load(expression: shade);
                                 emitter.ArithmeticImmediate(op: AluOp.And, value: 0x07);
                             } else {
                                 emitter.XorA();
                             }
 
                             emitter.Load(destination: Reg8.C, source: Reg8.A);
-                            Load(value: statement.Tile!);
+                            Load(expression: statement.Tile!);
                             emitter.Pop(pair: StackPair.De);
                             background.EmitQueuePush();
                             break;
@@ -568,12 +607,12 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             var screen = screens[statement.Screen!];
                             background.EmitLcdOff();
                             background.EmitQueueClear();
-                            background.EmitPaintRect(sourceAddress: screen.Table.Address, row: statement.Row!.Constant!.Value, column: statement.Column!.Constant!.Value, width: screen.Width, height: screen.Height);
+                            background.EmitPaintRect(sourceAddress: screen.Table.Address, row: CartridgeExpressions.Whole(expression: statement.Row)!.Value, column: CartridgeExpressions.Whole(expression: statement.Column)!.Value, width: screen.Width, height: screen.Height);
                             if (screen.Shades is { } shades) {
                                 // The colour of a cell lives at the same address in the other video-memory bank.
                                 emitter.LoadAImmediate(value: 0x01);
                                 emitter.StoreAToHighPage(port: Hw.PortVramBank);
-                                background.EmitPaintRect(sourceAddress: shades.Address, row: statement.Row!.Constant!.Value, column: statement.Column!.Constant!.Value, width: screen.Width, height: screen.Height);
+                                background.EmitPaintRect(sourceAddress: shades.Address, row: CartridgeExpressions.Whole(expression: statement.Row)!.Value, column: CartridgeExpressions.Whole(expression: statement.Column)!.Value, width: screen.Width, height: screen.Height);
                                 emitter.XorA();
                                 emitter.StoreAToHighPage(port: Hw.PortVramBank);
                             }
@@ -593,8 +632,8 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         void Act(CartridgeStatement action) {
             // A wide slot is two bytes, so its assignment and its add/subtract run through the pair registers instead of
             // the accumulator. Validation has already refused every other operation against one.
-            if (WideTarget(target: action.Target) || WideValue(value: action.Value)) {
-                LoadWide(value: action.Value!, pair: Reg16.De);
+            if (WideTarget(target: action.Target) || WideOperand(expression: action.Value)) {
+                LoadWide(expression: action.Value!, pair: Reg16.De);
                 if (action.Operation is null) {
                     StoreWide(target: action.Target!, pair: Reg16.De);
 
@@ -602,7 +641,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 }
 
                 if (action.Operation is ExpressionOp.Add) {
-                    LoadWide(value: new CartridgeValue(Variable: action.Target!.Variable), pair: Reg16.Hl);
+                    LoadWide(expression: CartridgeExpressions.Of(state: action.Target!.State), pair: Reg16.Hl);
                     emitter.AddToHl(pair: Reg16.De);
                     StoreWide(target: action.Target!, pair: Reg16.Hl);
 
@@ -610,7 +649,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 }
 
                 // Subtract has no sixteen-bit form on this processor: the low byte borrows into the high one.
-                var wideAddress = (ushort)variables[action.Target!.Variable!];
+                var wideAddress = (ushort)variables[action.Target!.State];
 
                 emitter.LoadAFromAddress(address: wideAddress);
                 emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.E);
@@ -622,19 +661,18 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 return;
             }
 
+            Address(target: action.Target!);
+            emitter.Push(pair: StackPair.Hl);
+            Load(expression: action.Value!);
             if (action.Operation is null) {
-                Load(value: action.Value!);
-                emitter.StoreAToAddress(address: ScratchAddress);
-                Address(target: action.Target!);
-                emitter.LoadAFromAddress(address: ScratchAddress);
+                emitter.Pop(pair: StackPair.Hl);
                 emitter.Load(destination: Reg8.Memory, source: Reg8.A);
+
                 return;
             }
 
-            Load(value: action.Value!);
             emitter.Load(destination: Reg8.B, source: Reg8.A);
-            Address(target: action.Target!);
-            emitter.Push(pair: StackPair.Hl);
+            emitter.Pop(pair: StackPair.Hl);
             emitter.Load(destination: Reg8.A, source: Reg8.Memory);
             switch (action.Operation) {
                 case ExpressionOp.Multiply: arithmetic.EmitMultiply(); break;
@@ -652,7 +690,6 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     }, source: Reg8.B);
                     break;
             }
-            emitter.Pop(pair: StackPair.Hl);
             emitter.Load(destination: Reg8.Memory, source: Reg8.A);
         }
 
@@ -675,7 +712,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.XorA();
             emitter.StoreAToAddress(address: ScratchAddress);
             if (sprite.Palette is { } slot) {
-                Load(value: slot);
+                Load(expression: slot);
                 emitter.ArithmeticImmediate(op: AluOp.And, value: 0x07);
                 emitter.StoreAToAddress(address: ScratchAddress);
             }
@@ -686,7 +723,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 }
 
                 var skip = emitter.NewLabel();
-                Load(value: flag);
+                Load(expression: flag);
                 emitter.ArithmeticImmediate(op: AluOp.Compare, value: 0);
                 emitter.JumpRelative(condition: Condition.Zero, label: skip);
                 emitter.LoadAFromAddress(address: ScratchAddress);
@@ -713,9 +750,9 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 // A line early: the handler runs during the line above and writes in its horizontal blank.
                 emitter.LoadAImmediate(value: (byte)(row.Line - 1));
                 emitter.StoreAToAddress(address: (ushort)(RasterRowAddress + (index * 3)));
-                Load(value: row.ScrollX);
+                Load(expression: row.ScrollX);
                 emitter.StoreAToAddress(address: (ushort)(RasterRowAddress + (index * 3) + 1));
-                Load(value: row.ScrollY);
+                Load(expression: row.ScrollY);
                 emitter.StoreAToAddress(address: (ushort)(RasterRowAddress + (index * 3) + 2));
             }
         }
@@ -803,29 +840,41 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.ReturnFromInterrupt();
         }
 
-        bool WideValue(CartridgeValue? value) => ((value?.Variable is { } name) && (widths[name] == 2));
-        bool WideTarget(CartridgeTarget? target) => ((target?.Variable is { } name) && (widths[name] == 2));
+        // A wide operand is a bare read of a two-byte slot: that is the only shape the pair registers handle, and
+        // the only shape validation admits where a pair is read.
+        bool WideOperand(ValueExpression? expression) => ((Bare(expression: expression) is { } name) && widths.TryGetValue(key: name, value: out var width) && (width == 2));
+
+        bool WideTarget(CartridgeTarget? target) => ((target is { Key: null }) && widths.TryGetValue(key: target.State, value: out var width) && (width == 2));
+
+        static string? Bare(ValueExpression? expression) =>
+            ((expression?.Tokens is [ValueToken.State { Key: null } state]) ? state.Name : null);
 
         // Reads an operand as sixteen bits into the given pair. A narrow operand zero-extends, so a wide slot and a
         // byte compare and combine on the same terms.
-        void LoadWide(CartridgeValue value, Reg16 pair) {
+        void LoadWide(ValueExpression expression, Reg16 pair) {
             var low = ((pair == Reg16.Hl) ? Reg8.L : Reg8.E);
             var high = ((pair == Reg16.Hl) ? Reg8.H : Reg8.D);
-            if (value.Constant is { } constant) {
+
+            if (CartridgeExpressions.Whole(expression: expression) is { } constant) {
                 emitter.LoadImmediate(pair: pair, value: (ushort)constant);
 
                 return;
             }
 
-            var address = (ushort)variables[value.Variable!];
+            if (Bare(expression: expression) is { } name) {
+                var address = (ushort)variables[name];
 
-            emitter.LoadAFromAddress(address: address);
-            emitter.Load(destination: low, source: Reg8.A);
-            if (widths[value.Variable!] == 2) {
-                emitter.LoadAFromAddress(address: (ushort)(address + 1));
-                emitter.Load(destination: high, source: Reg8.A);
+                emitter.LoadAFromAddress(address: address);
+                emitter.Load(destination: low, source: Reg8.A);
+                if (widths[name] == 2) {
+                    emitter.LoadAFromAddress(address: (ushort)(address + 1));
+                    emitter.Load(destination: high, source: Reg8.A);
 
-                return;
+                    return;
+                }
+            } else {
+                Load(expression: expression, guard: true);
+                emitter.Load(destination: low, source: Reg8.A);
             }
 
             emitter.XorA();
@@ -835,7 +884,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         void StoreWide(CartridgeTarget target, Reg16 pair) {
             var low = ((pair == Reg16.Hl) ? Reg8.L : Reg8.E);
             var high = ((pair == Reg16.Hl) ? Reg8.H : Reg8.D);
-            var address = (ushort)variables[target.Variable!];
+            var address = (ushort)variables[target.State];
 
             emitter.Load(destination: Reg8.A, source: low);
             emitter.StoreAToAddress(address: address);
@@ -843,42 +892,215 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.StoreAToAddress(address: (ushort)(address + 1));
         }
 
-        // A rule's own gate reads the scene through the frame's snapshot; everything else reads live state.
-        void LoadGuard(CartridgeValue value) {
-            if ((document.Scene is { } scene) && (value.Variable == scene)) {
-                emitter.LoadAFromAddress(address: SceneAddress);
+        // Leaves the expression's value in the accumulator. Operands still in flight live on the machine stack, which
+        // is what the validated depth bounds; B and C are scratch and carry nothing across a call. Inside a gate every
+        // read of the declared scene answers from the frame's snapshot rather than live state, at any nesting.
+        void Load(ValueExpression expression, bool guard = false) {
+            var depth = 0;
+
+            foreach (var token in expression.Tokens) {
+                if (token is ValueToken.Constant or ValueToken.State) {
+                    if (depth > 0) {
+                        emitter.Push(pair: StackPair.Af);
+                    }
+
+                    if (token is ValueToken.Constant constant) {
+                        emitter.LoadAImmediate(value: (byte)(int)constant.Value);
+                    } else {
+                        Read(state: (ValueToken.State)token, guard: guard);
+                    }
+
+                    ++depth;
+
+                    continue;
+                }
+
+                var operation = ExpressionVocabulary.Operation(token: token)!.Value;
+                var arity = ExpressionVocabulary.Arity(operation: operation);
+
+                switch (arity) {
+                    case 1: Unary(operation: operation); break;
+                    case 2: Binary(operation: operation); break;
+                    default: Ternary(operation: operation); break;
+                }
+
+                depth -= (arity - 1);
+            }
+        }
+
+        void Read(ValueToken.State state, bool guard) {
+            if (CartridgeExpressions.TryKey(name: state.Name, button: out var button, mode: out var mode)) {
+                Button(button: button, mode: mode);
 
                 return;
             }
 
-            Load(value: value);
+            if (CartridgeExpressions.Index(key: state.Key) is { } index) {
+                Element(array: state.Name, index: index);
+                emitter.Load(destination: Reg8.A, source: Reg8.Memory);
+
+                return;
+            }
+
+            emitter.LoadAFromAddress(address: ((guard && (state.Name == document.Scene)) ? SceneAddress : (ushort)variables[state.Name]));
         }
 
-        void Load(CartridgeValue value) {
-            if (value.Constant is { } constant) {
-                emitter.LoadAImmediate(value: (byte)constant);
-            } else if (value.Variable is { } name) {
-                emitter.LoadAFromAddress(address: (ushort)variables[name]);
-            } else {
-                Element(array: value.Array!, index: value.Index!);
-                emitter.Load(destination: Reg8.A, source: Reg8.Memory);
+        // Leaves 1 in the accumulator while the button satisfies the mode, and 0 otherwise.
+        void Button(string button, string mode) {
+            var zero = emitter.NewLabel();
+            var done = emitter.NewLabel();
+
+            emitter.LoadAFromAddress(address: ((mode == "pressed") ? FrameworkMemoryMap.InputPressed : FrameworkMemoryMap.InputHeld));
+            if (mode == "released") {
+                emitter.ComplementA();
+                emitter.Load(destination: Reg8.B, source: Reg8.A);
+                emitter.LoadAFromAddress(address: HeldInputAddress);
+                emitter.Arithmetic(op: AluOp.And, source: Reg8.B);
             }
+
+            emitter.ArithmeticImmediate(op: AluOp.And, value: Key(key: button));
+            emitter.JumpRelative(condition: Condition.Zero, label: zero);
+            emitter.LoadAImmediate(value: 1);
+            emitter.JumpRelative(label: done);
+            emitter.MarkLabel(label: zero);
+            emitter.XorA();
+            emitter.MarkLabel(label: done);
+        }
+
+        void Unary(ExpressionOp operation) {
+            switch (operation) {
+                case ExpressionOp.BitNot:
+                    emitter.ComplementA();
+
+                    return;
+                case ExpressionOp.Negate:
+                    emitter.Load(destination: Reg8.B, source: Reg8.A);
+                    emitter.XorA();
+                    emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.B);
+
+                    return;
+                default: {
+                        // Every value is unsigned, so a sign is 0 or 1 and never -1.
+                        var zero = emitter.NewLabel();
+                        var done = emitter.NewLabel();
+
+                        emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
+                        emitter.JumpRelative(condition: Condition.Zero, label: zero);
+                        emitter.LoadAImmediate(value: 1);
+                        emitter.JumpRelative(label: done);
+                        emitter.MarkLabel(label: zero);
+                        emitter.XorA();
+                        emitter.MarkLabel(label: done);
+
+                        return;
+                    }
+            }
+        }
+
+        // The right operand is in the accumulator and the left one on the stack. Popping into B keeps the right one
+        // where it is, which is the order > and <= read; everything else wants the left one in the accumulator.
+        void Binary(ExpressionOp operation) {
+            var reversed = operation is (ExpressionOp.Greater or ExpressionOp.LessOrEqual);
+
+            if (reversed) {
+                emitter.Pop(pair: StackPair.Bc);
+            } else {
+                emitter.Load(destination: Reg8.B, source: Reg8.A);
+                emitter.Pop(pair: StackPair.Af);
+            }
+
+            switch (operation) {
+                case ExpressionOp.Multiply: arithmetic.EmitMultiply(); return;
+                case ExpressionOp.Divide: arithmetic.EmitDivide(); return;
+                case ExpressionOp.Modulo: arithmetic.EmitDivide(); emitter.Load(destination: Reg8.A, source: Reg8.C); return;
+                case ExpressionOp.ShiftLeft: arithmetic.EmitShiftLeft(); return;
+                case ExpressionOp.ShiftRight: arithmetic.EmitShiftRight(); return;
+                case ExpressionOp.Add: emitter.Arithmetic(op: AluOp.Add, source: Reg8.B); return;
+                case ExpressionOp.Subtract: emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.B); return;
+                case ExpressionOp.BitAnd: emitter.Arithmetic(op: AluOp.And, source: Reg8.B); return;
+                case ExpressionOp.BitOr: emitter.Arithmetic(op: AluOp.Or, source: Reg8.B); return;
+                case ExpressionOp.BitXor: emitter.Arithmetic(op: AluOp.Xor, source: Reg8.B); return;
+                case ExpressionOp.Minimum:
+                case ExpressionOp.Maximum: {
+                        var keep = emitter.NewLabel();
+
+                        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
+                        emitter.JumpRelative(condition: ((operation == ExpressionOp.Minimum) ? Condition.Carry : Condition.NoCarry), label: keep);
+                        emitter.Load(destination: Reg8.A, source: Reg8.B);
+                        emitter.MarkLabel(label: keep);
+
+                        return;
+                    }
+                default: {
+                        var set = emitter.NewLabel();
+                        var done = emitter.NewLabel();
+
+                        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
+                        emitter.JumpRelative(condition: operation switch {
+                            ExpressionOp.Equal => Condition.Zero,
+                            ExpressionOp.NotEqual => Condition.NotZero,
+                            ExpressionOp.Less or ExpressionOp.Greater => Condition.Carry,
+                            _ => Condition.NoCarry,
+                        }, label: set);
+                        emitter.XorA();
+                        emitter.JumpRelative(label: done);
+                        emitter.MarkLabel(label: set);
+                        emitter.LoadAImmediate(value: 1);
+                        emitter.MarkLabel(label: done);
+
+                        return;
+                    }
+            }
+        }
+
+        // Three operands: the last is in the accumulator and the first two are on the stack, deepest first.
+        void Ternary(ExpressionOp operation) {
+            emitter.Load(destination: Reg8.C, source: Reg8.A);
+            emitter.Pop(pair: StackPair.Af);
+            emitter.Load(destination: Reg8.B, source: Reg8.A);
+            emitter.Pop(pair: StackPair.Af);
+            if (operation == ExpressionOp.Select) {
+                var done = emitter.NewLabel();
+
+                emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
+                emitter.Load(destination: Reg8.A, source: Reg8.B);
+                emitter.JumpRelative(condition: Condition.NotZero, label: done);
+                emitter.Load(destination: Reg8.A, source: Reg8.C);
+                emitter.MarkLabel(label: done);
+
+                return;
+            }
+
+            var above = emitter.NewLabel();
+            var below = emitter.NewLabel();
+
+            emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
+            emitter.JumpRelative(condition: Condition.NoCarry, label: above);
+            emitter.Load(destination: Reg8.A, source: Reg8.B);
+            emitter.MarkLabel(label: above);
+            emitter.Arithmetic(op: AluOp.Compare, source: Reg8.C);
+            emitter.JumpRelative(condition: Condition.Carry, label: below);
+            emitter.JumpRelative(condition: Condition.Zero, label: below);
+            emitter.Load(destination: Reg8.A, source: Reg8.C);
+            emitter.MarkLabel(label: below);
         }
 
         void Address(CartridgeTarget target) {
-            if (target.Variable is { } name) {
-                emitter.LoadImmediate(pair: Reg16.Hl, value: (ushort)variables[name]);
-            } else {
-                Element(array: target.Array!, index: target.Index!);
+            if (CartridgeExpressions.Index(key: target.Key) is { } index) {
+                Element(array: target.State, index: index);
+
+                return;
             }
+
+            emitter.LoadImmediate(pair: Reg16.Hl, value: (ushort)variables[target.State]);
         }
 
         // Leaves HL at the addressed element, or at the zeroed discard sink when the index is past the declared length.
-        void Element(string array, CartridgeValue index) {
+        void Element(string array, ValueExpression index) {
             var length = lengths[key: array];
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
-            Load(value: index);
+            Load(expression: index);
             if (length < CartridgeLimits.ArrayLength) {
                 emitter.ArithmeticImmediate(op: AluOp.Compare, value: (byte)length);
                 emitter.JumpRelative(condition: Condition.Carry, label: inside);

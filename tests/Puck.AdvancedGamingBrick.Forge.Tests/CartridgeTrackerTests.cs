@@ -1,6 +1,5 @@
 using Puck.GamingBricks.Forge;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -61,19 +60,19 @@ public sealed class CartridgeTrackerTests {
             Arrays = [new CartridgeArray(Name: "rates", Initial: [48, 64, 96, 128])],
             Sounds = [new CartridgeSound(Name: "instrument", Sample: sample)],
             Rules = [
-                new CartridgeRule(Name: "clock", When: [], Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "tick"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                new CartridgeRule(Name: "clock", Body: [
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "tick"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
                     new CartridgeStatement(
                         Kind: "if",
-                        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "tick"), Comparison: ActionStateComparison.GreaterOrEqual, Right: new CartridgeValue(Constant: RowFrames))],
+                        When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "tick"), comparison: ActionStateComparison.GreaterOrEqual, right: CartridgeExpressions.Of(constant: RowFrames)),
                         Then: [
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "tick"), Operation: null, Value: new CartridgeValue(Constant: 0)),
+                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "tick"), Operation: null, Value: CartridgeExpressions.Of(constant: 0)),
                             new CartridgeStatement(
                                 Kind: "play",
                                 Sound: "instrument",
-                                Rate: new CartridgeValue(Array: "rates", Index: new CartridgeValue(Variable: "row"))),
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "row"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "row"), Operation: ExpressionOp.Modulo, Value: new CartridgeValue(Constant: 4)),
+                                Rate: CartridgeExpressions.Of(state: "rates", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "row")))),
+                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "row"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
+                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "row"), Operation: ExpressionOp.Modulo, Value: CartridgeExpressions.Of(constant: 4)),
                         ]),
                 ]),
             ],

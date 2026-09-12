@@ -2163,338 +2163,185 @@
         {
           "kind": "set",
           "target": {
-            "variable": "wt"
+            "state": "wt"
           },
-          "value": {
-            "variable": "wp"
-          }
+          "value": "wp"
         },
         {
           "kind": "set",
           "operation": "BitAnd",
           "target": {
-            "variable": "wt"
+            "state": "wt"
           },
-          "value": {
-            "constant": 3
-          }
+          "value": "3"
         },
         {
           "kind": "set",
           "operation": "Add",
           "target": {
-            "variable": "wt"
+            "state": "wt"
           },
-          "value": {
-            "constant": 182
-          }
+          "value": "182"
         },
         {
           "kind": "set",
           "target": {
-            "variable": "lt"
+            "state": "lt"
           },
-          "value": {
-            "variable": "lp"
-          }
+          "value": "lp"
         },
         {
           "kind": "set",
           "operation": "BitAnd",
           "target": {
-            "variable": "lt"
+            "state": "lt"
           },
-          "value": {
-            "constant": 1
-          }
+          "value": "1"
         },
         {
           "kind": "set",
           "operation": "Add",
           "target": {
-            "variable": "lt"
+            "state": "lt"
           },
-          "value": {
-            "constant": 186
-          }
+          "value": "186"
         },
         {
           "kind": "set",
           "target": {
-            "variable": "ht"
+            "state": "ht"
           },
-          "value": {
-            "variable": "af"
-          }
+          "value": "af"
         },
         {
           "kind": "set",
           "operation": "BitAnd",
           "target": {
-            "variable": "ht"
+            "state": "ht"
           },
-          "value": {
-            "constant": 3
-          }
+          "value": "3"
         },
         {
           "kind": "set",
           "operation": "Add",
           "target": {
-            "variable": "ht"
+            "state": "ht"
           },
-          "value": {
-            "constant": 188
-          }
+          "value": "188"
         }
       ],
-      "name": "frames",
-      "when": []
+      "name": "frames"
     }
   ],
   "schema": "puck.cartridge.v1",
   "screens": [],
-  "scrollX": {
-    "constant": 0
-  },
-  "scrollY": {
-    "constant": 0
-  },
+  "scrollX": "0",
+  "scrollY": "0",
   "sounds": [],
   "sprites": [
     {
       "name": "fall0",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 56
-      },
-      "y": {
-        "constant": 64
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "56",
+      "y": "64"
     },
     {
       "name": "fall1",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 64
-      },
-      "y": {
-        "constant": 64
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "64",
+      "y": "64"
     },
     {
       "name": "fall2",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 56
-      },
-      "y": {
-        "constant": 72
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "56",
+      "y": "72"
     },
     {
       "name": "fall3",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 64
-      },
-      "y": {
-        "constant": 72
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "64",
+      "y": "72"
     },
     {
       "name": "fall4",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 56
-      },
-      "y": {
-        "constant": 80
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "56",
+      "y": "80"
     },
     {
       "name": "fall5",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 64
-      },
-      "y": {
-        "constant": 80
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "64",
+      "y": "80"
     },
     {
       "name": "fall6",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 56
-      },
-      "y": {
-        "constant": 88
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "56",
+      "y": "88"
     },
     {
       "name": "fall7",
-      "palette": {
-        "constant": 1
-      },
-      "tile": {
-        "variable": "wt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 64
-      },
-      "y": {
-        "constant": 88
-      }
+      "palette": "1",
+      "tile": "wt",
+      "visible": "1",
+      "x": "64",
+      "y": "88"
     },
     {
       "name": "crest0",
-      "palette": {
-        "constant": 2
-      },
-      "tile": {
-        "variable": "lt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 24
-      },
-      "y": {
-        "constant": 104
-      }
+      "palette": "2",
+      "tile": "lt",
+      "visible": "1",
+      "x": "24",
+      "y": "104"
     },
     {
       "name": "crest1",
-      "palette": {
-        "constant": 2
-      },
-      "tile": {
-        "variable": "lt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 56
-      },
-      "y": {
-        "constant": 104
-      }
+      "palette": "2",
+      "tile": "lt",
+      "visible": "1",
+      "x": "56",
+      "y": "104"
     },
     {
       "name": "crest2",
-      "palette": {
-        "constant": 2
-      },
-      "tile": {
-        "variable": "lt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 88
-      },
-      "y": {
-        "constant": 104
-      }
+      "palette": "2",
+      "tile": "lt",
+      "visible": "1",
+      "x": "88",
+      "y": "104"
     },
     {
       "name": "crest3",
-      "palette": {
-        "constant": 2
-      },
-      "tile": {
-        "variable": "lt"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "constant": 64
-      },
-      "y": {
-        "constant": 128
-      }
+      "palette": "2",
+      "tile": "lt",
+      "visible": "1",
+      "x": "64",
+      "y": "128"
     },
     {
       "name": "hero",
-      "palette": {
-        "constant": 0
-      },
-      "tile": {
-        "variable": "ht"
-      },
-      "visible": {
-        "constant": 1
-      },
-      "x": {
-        "variable": "ax"
-      },
-      "y": {
-        "variable": "ay"
-      }
+      "palette": "0",
+      "tile": "ht",
+      "visible": "1",
+      "x": "ax",
+      "y": "ay"
     }
   ],
   "target": "cgb",

@@ -29,12 +29,22 @@ expansion, and the current pose. Starting with the far plane's footprint, two
 further refinements use the previous box's farthest corner to tighten the depth
 limit. Each refinement still contains every possible accepted point.
 
-The implementation in `sdf-part-bounds.hlsli` bounds superellipsoids, boxes,
-screen slabs, cylinders, ellipses and convex polygons, with the compiled part's
-optional scale, axial profile or shear. Unknown formulae publish an unbounded
-sentinel and preserve the original local march. This cache changes primary
-sample positions within the existing hit band; it does not change the field,
-collision queries or secondary-lighting masks.
+The implementation in `sdf-part-bounds.hlsli` bounds spheres, capsules, tori,
+ellipsoids, sweeps, superellipsoids, boxes, screen slabs and supported extruded
+or revolved profiles, with optional scale, axial profile or shear. Unknown
+formulae publish an unbounded sentinel and preserve the original local march.
+This cache changes primary sample positions within the existing hit band; it
+does not change the field or collision queries.
+
+A separate AO band encloses the raw-field sublevel set at 0.15. It also admits
+supported flat chains and complete uncompiled scopes. Cuts and intersections
+retain all leaf bounds; smooth unions add their expansion, and scope corrections
+enlarge the required raw level. An unsupported operation makes the complete
+expression unbounded. Only independent hard-union roots use these exclusions.
+Each AO rung checks that its scale-corrected ceiling fits this band before
+using the cached candidates; a failed check restores the full field. The
+[engine README](../../src/Puck.SdfVm/README.md#-the-render-pipeline) describes
+the shared-buffer layout and AO composition.
 
 ## One effective-scale rule
 

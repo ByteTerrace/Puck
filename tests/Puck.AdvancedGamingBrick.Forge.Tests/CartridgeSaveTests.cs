@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -25,7 +24,7 @@ public sealed class CartridgeSaveTests {
                 Once(phase: 0, body: [
                     new CartridgeStatement(Kind: "save"),
                     Set(target: "counter", value: 99),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Constant: 1)), Operation: null, Value: new CartridgeValue(Constant: 200)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "table", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 1))), Operation: null, Value: CartridgeExpressions.Of(constant: 200)),
                 ]),
                 Once(phase: 1, body: [new CartridgeStatement(Kind: "load")]),
             ],
@@ -54,16 +53,16 @@ public sealed class CartridgeSaveTests {
 
     }
 
-    private static CartridgeRule Rule(CartridgeStatement[] body) => new(Name: "rule", When: [], Body: body);
+    private static CartridgeRule Rule(CartridgeStatement[] body) => new(Name: "rule", Body: body);
 
     // Runs its body on the frame the phase counter names, then advances it.
     private static CartridgeRule Once(int phase, CartridgeStatement[] body) => new(
         Name: $"phase{phase}",
-        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: phase))],
+        When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "phase"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: phase)),
         Body: [.. body, Set(target: "phase", value: phase + 1)]);
 
     private static CartridgeStatement Set(string target, int value) =>
-        new(Kind: "set", Target: new CartridgeTarget(Variable: target), Operation: null, Value: new CartridgeValue(Constant: value));
+        new(Kind: "set", Target: new CartridgeTarget(State: target), Operation: null, Value: CartridgeExpressions.Of(constant: value));
 
     private sealed class SaveProbe : IDisposable {
         private readonly AgbVerifyMachineDriver? m_agb;

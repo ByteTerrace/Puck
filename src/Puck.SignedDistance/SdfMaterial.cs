@@ -35,7 +35,7 @@ namespace Puck.SignedDistance;
 /// exactly, so an unauthored material is byte-identical.</param>
 /// <param name="Soften">The shading-normal broadening in [0, 1]: blends the hit's normal toward a wide-stencil
 /// (0.05 creation-unit epsilon) field-gradient guide, smoothing fine surface detail (pores, panel seams, wear
-/// noise) out of the LIT normal while leaving the geometric silhouette untouched — the study's per-part guide
+/// noise) out of the lighting normal while leaving the silhouette and geometric AO normal untouched — the study's per-part guide
 /// ellipsoid normal, generalized without an authored guide shape. 0 (the default) skips the extra probe
 /// entirely.</param>
 /// <param name="Bounce">The warm/cool bounce tint added as <c>albedo * Bounce * (1 - max(n·key, 0)) *

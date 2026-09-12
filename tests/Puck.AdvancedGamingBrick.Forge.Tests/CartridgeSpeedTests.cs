@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -44,13 +43,13 @@ public sealed class CartridgeSpeedTests {
                 new CartridgeVariable(Name: "sink", Initial: 0),
                 new CartridgeVariable(Name: "ticks", Initial: 0),
             ],
-            Rules = [new CartridgeRule(Name: "work", When: [], Body: [
+            Rules = [new CartridgeRule(Name: "work", Body: [
                 new CartridgeStatement(Kind: "repeat", Count: outer, Index: "j", Body: [
                     new CartridgeStatement(Kind: "repeat", Count: inner, Index: "i", Body: [
-                        new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                        new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "sink"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
                     ]),
                 ]),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ticks"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "ticks"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
             ])],
         };
 }

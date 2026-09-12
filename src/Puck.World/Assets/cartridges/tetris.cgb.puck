@@ -3866,285 +3866,107 @@ screens []
 sprites [
     {
         name: "cell0"
-        palette {
-            variable: "pcol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showpiece"
-        }
-        x {
-            array: "sx"
-            index {
-                constant: 0
-            }
-        }
-        y {
-            array: "sy"
-            index {
-                constant: 0
-            }
-        }
+        palette: "pcol"
+        tile: "1"
+        visible: "showpiece"
+        x: "sx[0]"
+        y: "sy[0]"
     }
     {
         name: "cell1"
-        palette {
-            variable: "pcol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showpiece"
-        }
-        x {
-            array: "sx"
-            index {
-                constant: 1
-            }
-        }
-        y {
-            array: "sy"
-            index {
-                constant: 1
-            }
-        }
+        palette: "pcol"
+        tile: "1"
+        visible: "showpiece"
+        x: "sx[1]"
+        y: "sy[1]"
     }
     {
         name: "cell2"
-        palette {
-            variable: "pcol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showpiece"
-        }
-        x {
-            array: "sx"
-            index {
-                constant: 2
-            }
-        }
-        y {
-            array: "sy"
-            index {
-                constant: 2
-            }
-        }
+        palette: "pcol"
+        tile: "1"
+        visible: "showpiece"
+        x: "sx[2]"
+        y: "sy[2]"
     }
     {
         name: "cell3"
-        palette {
-            variable: "pcol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showpiece"
-        }
-        x {
-            array: "sx"
-            index {
-                constant: 3
-            }
-        }
-        y {
-            array: "sy"
-            index {
-                constant: 3
-            }
-        }
+        palette: "pcol"
+        tile: "1"
+        visible: "showpiece"
+        x: "sx[3]"
+        y: "sy[3]"
     }
     {
         name: "marker"
-        palette {
-            constant: 2
-        }
-        tile {
-            constant: 3
-        }
-        visible {
-            variable: "showmark"
-        }
-        x {
-            constant: 40
-        }
-        y {
-            variable: "markery"
-        }
+        palette: "2"
+        tile: "3"
+        visible: "showmark"
+        x: "40"
+        y: "markery"
     }
     {
         name: "rocket0"
-        palette {
-            constant: 5
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showrocket"
-        }
-        x {
-            constant: 56
-        }
-        y {
-            variable: "rk0"
-        }
+        palette: "5"
+        tile: "1"
+        visible: "showrocket"
+        x: "56"
+        y: "rk0"
     }
     {
         name: "rocket1"
-        palette {
-            constant: 5
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showrocket"
-        }
-        x {
-            constant: 48
-        }
-        y {
-            variable: "rk1"
-        }
+        palette: "5"
+        tile: "1"
+        visible: "showrocket"
+        x: "48"
+        y: "rk1"
     }
     {
         name: "rocket2"
-        palette {
-            constant: 5
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showrocket"
-        }
-        x {
-            constant: 56
-        }
-        y {
-            variable: "rk2"
-        }
+        palette: "5"
+        tile: "1"
+        visible: "showrocket"
+        x: "56"
+        y: "rk2"
     }
     {
         name: "rocket3"
-        palette {
-            constant: 5
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "showrocket"
-        }
-        x {
-            constant: 64
-        }
-        y {
-            variable: "rk3"
-        }
+        palette: "5"
+        tile: "1"
+        visible: "showrocket"
+        x: "64"
+        y: "rk3"
     }
     {
         name: "next0"
-        palette {
-            variable: "ncol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "shownext"
-        }
-        x {
-            array: "nx"
-            index {
-                constant: 0
-            }
-        }
-        y {
-            array: "ny"
-            index {
-                constant: 0
-            }
-        }
+        palette: "ncol"
+        tile: "1"
+        visible: "shownext"
+        x: "nx[0]"
+        y: "ny[0]"
     }
     {
         name: "next1"
-        palette {
-            variable: "ncol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "shownext"
-        }
-        x {
-            array: "nx"
-            index {
-                constant: 1
-            }
-        }
-        y {
-            array: "ny"
-            index {
-                constant: 1
-            }
-        }
+        palette: "ncol"
+        tile: "1"
+        visible: "shownext"
+        x: "nx[1]"
+        y: "ny[1]"
     }
     {
         name: "next2"
-        palette {
-            variable: "ncol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "shownext"
-        }
-        x {
-            array: "nx"
-            index {
-                constant: 2
-            }
-        }
-        y {
-            array: "ny"
-            index {
-                constant: 2
-            }
-        }
+        palette: "ncol"
+        tile: "1"
+        visible: "shownext"
+        x: "nx[2]"
+        y: "ny[2]"
     }
     {
         name: "next3"
-        palette {
-            variable: "ncol"
-        }
-        tile {
-            constant: 1
-        }
-        visible {
-            variable: "shownext"
-        }
-        x {
-            array: "nx"
-            index {
-                constant: 3
-            }
-        }
-        y {
-            array: "ny"
-            index {
-                constant: 3
-            }
-        }
+        palette: "ncol"
+        tile: "1"
+        visible: "shownext"
+        x: "nx[3]"
+        y: "ny[3]"
     }
 ]
 
@@ -7769,13 +7591,9 @@ save {
     version: 1
 }
 
-scrollX {
-    constant: 0
-}
+scrollX: "0"
 
-scrollY {
-    constant: 0
-}
+scrollY: "0"
 
 rule "phase-begin" {
     nph = ph
@@ -7944,7 +7762,7 @@ rule "settle" {
         r2 += 0
         c2 = cc
         c2 += 2
-        map(column: c2, palette: pcol, row: r2, tile: 1)
+        map(column: "c2", palette: "pcol", row: "r2", tile: "1")
     }
     play(sound: "settle")
     nfull = 0
@@ -8005,11 +7823,11 @@ rule "flash" {
             cc = 4
             cc -= fcol
             cc += 2
-            map(column: cc, palette: 0, row: cr, tile: 0)
+            map(column: "cc", palette: "0", row: "cr", tile: "0")
             c2 = 5
             c2 += fcol
             c2 += 2
-            map(column: c2, palette: 0, row: cr, tile: 0)
+            map(column: "c2", palette: "0", row: "cr", tile: "0")
         }
         fcol += 1
         if fcol >= 5 {
@@ -8116,9 +7934,9 @@ rule "republish" {
         c2 += 2
         dv = field[rcur]
         if dv == 0 {
-            map(column: c2, palette: 0, row: r2, tile: 0)
+            map(column: "c2", palette: "0", row: "r2", tile: "0")
         } else {
-            map(column: c2, palette: dv, row: r2, tile: 1)
+            map(column: "c2", palette: "dv", row: "r2", tile: "1")
         }
         rcur += 1
     }
@@ -8249,41 +8067,41 @@ rule "panel" {
             c2 = pcur
             c2 += 13
             dv += 4
-            map(column: c2, row: 2, tile: dv)
+            map(column: "c2", row: "2", tile: "dv")
         } else {
             if pcur == 5 {
-                map(column: 18, row: 2, tile: 4)
+                map(column: "18", row: "2", tile: "4")
             } else {
                 if pcur == 6 {
                     dv = level
                     dv /= 10
                     dv += 4
-                    map(column: 13, row: 6, tile: dv)
+                    map(column: "13", row: "6", tile: "dv")
                 } else {
                     if pcur == 7 {
                         dv = level
                         dv %= 10
                         dv += 4
-                        map(column: 14, row: 6, tile: dv)
+                        map(column: "14", row: "6", tile: "dv")
                     } else {
                         if pcur == 8 {
                             dv = lines
                             dv /= 100
                             dv += 4
-                            map(column: 13, row: 10, tile: dv)
+                            map(column: "13", row: "10", tile: "dv")
                         } else {
                             if pcur == 9 {
                                 dv = lines
                                 dv /= 10
                                 dv %= 10
                                 dv += 4
-                                map(column: 14, row: 10, tile: dv)
+                                map(column: "14", row: "10", tile: "dv")
                             } else {
                                 if pcur == 10 {
                                     dv = lines
                                     dv %= 10
                                     dv += 4
-                                    map(column: 15, row: 10, tile: dv)
+                                    map(column: "15", row: "10", tile: "dv")
                                 }
                             }
                         }
@@ -8321,7 +8139,7 @@ rule "title-name" {
             tcur += 1
             dv = title1[tcur]
             tcur += 1
-            map(column: cc, palette: si, row: cr, tile: dv)
+            map(column: "cc", palette: "si", row: "cr", tile: "dv")
         }
         if tcur >= 117 {
             painted = 1
@@ -8353,7 +8171,7 @@ rule "title-game" {
             tcur += 1
             dv = title2[tcur]
             tcur += 1
-            map(column: cc, palette: si, row: cr, tile: dv)
+            map(column: "cc", palette: "si", row: "cr", tile: "dv")
         }
         if tcur >= 120 {
             painted = 1
@@ -8385,7 +8203,7 @@ rule "title-rest" {
             tcur += 1
             dv = title3[tcur]
             tcur += 1
-            map(column: cc, palette: si, row: cr, tile: dv)
+            map(column: "cc", palette: "si", row: "cr", tile: "dv")
         }
         if tcur >= 147 {
             painted = 1
@@ -8414,7 +8232,7 @@ rule "title-wait" {
     si += 1
     dv = presstext[cc]
     cc += 4
-    map(column: cc, palette: si, row: 14, tile: dv)
+    map(column: "cc", palette: "si", row: "14", tile: "dv")
     if key(start, pressed) {
         beat = 0
         after = 10
@@ -8441,7 +8259,7 @@ rule "menu" {
             tcur += 1
             dv = menutext[tcur]
             tcur += 1
-            map(column: cc, palette: si, row: cr, tile: dv)
+            map(column: "cc", palette: "si", row: "cr", tile: "dv")
         }
         if tcur >= 228 {
             painted = 1
@@ -8461,7 +8279,7 @@ rule "menu" {
         }
         dv = startlevel
         dv += 4
-        map(column: 12, palette: 0, row: 11, tile: dv)
+        map(column: "12", palette: "0", row: "11", tile: "dv")
         if key(start, pressed) {
             gtype = pick
             after = 13
@@ -8490,7 +8308,7 @@ rule "wipe" {
         if wrow >= 18 {
             break
         }
-        map(column: wcol, palette: 0, row: wrow, tile: 0)
+        map(column: "wcol", palette: "0", row: "wrow", tile: "0")
         wcol += 1
         if wcol >= 20 {
             wcol = 0
@@ -8575,7 +8393,7 @@ rule "dress" {
         tcur += 1
         dv = paneltext[tcur]
         tcur += 1
-        map(column: cc, palette: si, row: cr, tile: dv)
+        map(column: "cc", palette: "si", row: "cr", tile: "dv")
     }
     if tcur >= 165 {
         dressed = 1
@@ -8620,7 +8438,7 @@ rule "over" {
             tcur += 1
             dv = overtext[tcur]
             tcur += 1
-            map(column: cc, palette: si, row: cr, tile: dv)
+            map(column: "cc", palette: "si", row: "cr", tile: "dv")
         }
         if tcur >= 204 {
             painted = 1
@@ -8692,7 +8510,7 @@ rule "tally" {
         } else {
             dv = 4
         }
-        map(column: cc, palette: 0, row: 9, tile: dv)
+        map(column: "cc", palette: "0", row: "9", tile: "dv")
     } else {
         dv = lines
         if dcur == 6 {
@@ -8706,7 +8524,7 @@ rule "tally" {
         cc = dcur
         cc -= 6
         cc += 8
-        map(column: cc, palette: 0, row: 13, tile: dv)
+        map(column: "cc", palette: "0", row: "13", tile: "dv")
     }
 }
 
@@ -8724,7 +8542,7 @@ rule "best" {
     } else {
         dv = 4
     }
-    map(column: cc, palette: 0, row: 16, tile: dv)
+    map(column: "cc", palette: "0", row: "16", tile: "dv")
 }
 
 rule "preview" {
@@ -8763,7 +8581,7 @@ rule "fade" {
     if fadeamt > fadeto {
         fadeamt -= 1
     }
-    fade(amount: fadeamt, toward: "black")
+    fade(amount: "fadeamt", toward: "black")
 }
 
 rule "phase-end" {

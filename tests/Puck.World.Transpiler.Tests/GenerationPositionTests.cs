@@ -94,6 +94,46 @@ public class GenerationPositionTests {
     }
 
     [Fact]
+    public void TestAForRefusesToAssignAFieldAndNamesMapInstead() {
+        // `for` emits rows; building a value out of a sequence is `map`'s job. Both readings this refuses used to be
+        // silent: a scalar kept the last iteration, and an array was spliced element-wise into whatever the field
+        // already held — flattening it and corrupting an array the document authored above the loop.
+        Assert.Contains(
+            LowerForDiagnostics("""
+                let points = [1, 2, 3]
+
+                for p in points {
+                    scalars: p
+                }
+                """),
+            diagnostic => diagnostic.Code == PuckDiagnosticCodes.ForAssignsAField);
+
+        Assert.Contains(
+            LowerForDiagnostics("""
+                let points = [1, 2, 3]
+
+                for p in points {
+                    curve [p, 0]
+                }
+                """),
+            diagnostic => diagnostic.Code == PuckDiagnosticCodes.ForAssignsAField);
+    }
+
+    [Fact]
+    public void TestMapIsHowASequenceBecomesAValue() {
+        // The other half of the same rule: the refusal above is only honest because `map` covers the case.
+        var lowered = Lower("""
+            let points = [1, 2, 3]
+
+            curve: map(points, p => [p, 0])
+            """);
+
+        Assert.Equal(
+            "[[1,0],[2,0],[3,0]]",
+            Assert.IsType<JsonArray>(lowered["curve"]).ToJsonString());
+    }
+
+    [Fact]
     public void TestAGateOperandReadsALetBindingRatherThanAStateRowOfThatName() {
         var rules = Assert.IsType<JsonArray>(Lower("""
             let wellFloor = 17

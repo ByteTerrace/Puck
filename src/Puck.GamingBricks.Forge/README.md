@@ -17,8 +17,8 @@ a headless host. `help forge.set` describes an individual command.
 forge.new cgb PLAYER
 forge.set /variables/- {"name":"x","initial":32}
 forge.set /tiles/- {"name":"block","pixels":["11111111","11111111","11111111","11111111","11111111","11111111","11111111","11111111"]}
-forge.set /sprites/- {"name":"player","tile":{"constant":1},"x":{"variable":"x"},"y":{"constant":40},"visible":{"constant":1}}
-forge.set /rules/- {"name":"move","when":[{"kind":"key","key":"right","mode":"held"}],"body":[{"kind":"set","target":{"variable":"x"},"operation":"Add","value":{"constant":1}}]}
+forge.set /sprites/- {"name":"player","tile":"1","x":"x","y":"40","visible":"1"}
+forge.set /rules/- {"name":"move","when":{"$type":"compareValue","left":"$key:right:held","comparison":"Equal","right":"1","kind":"Int"},"body":[{"kind":"set","target":{"state":"x"},"operation":"Add","value":"1"}]}
 forge.show /rules
 forge.check
 forge.build
@@ -68,7 +68,7 @@ refused at validation. Source files are bounded to 1 MiB and nesting to 32.
 ## Boot a document from a world screen
 
 A world's `screens[].source` of `$type: machine` may name a source document
-directly: a `contentPath` ending in `.cartridge.json` is parsed and compiled at
+directly: a `contentPath` naming a cartridge document is parsed and compiled at
 bind through the engine's own compiler (`gaming-brick` uses
 `HgbCartridgeCompiler`, `advanced-gaming-brick` uses `AgbCartridgeCompiler`)
 and the compiled bytes boot exactly as an exported ROM does. `screen.state
@@ -106,42 +106,74 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `screens` | Up to 16 named `{name,width,tiles,palettes}` rectangles, at most 120 tiles, painted by a blit step. `palettes` is optional and gives one background palette index per tile. |
 | `sounds` | Up to 8 named sounds, each exactly one of `music` (1–4 `{voice,part,waveform}` voice parts, one to a channel, each part a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). A voice any track's part occupies is refused to every effect, so an effect can never cut a line of the music off. |
 | `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. |
-| `rules` | Up to 1024 `{name,when,body}` rules; at most 8 conditions per rule and 64 steps anywhere in one body, nested at most 8 deep. Rules cost CODE, which the image's own windows bound, so the real refusal is `CartridgeCapacityException`; declaring `scene` is what keeps per-frame work flat as the count grows. |
-| `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field accepts constants or variables; `palette` is optional and selects an object palette. |
-| `scrollX`, `scrollY` | Constant/variable background offsets in pixels. |
+| `rules` | Up to 1024 `{name,body,when}` rules; a gate reaches at most 8 comparisons however it composes them, and one body holds at most 64 steps nested at most 8 deep. Rules cost CODE, which the image's own windows bound, so the real refusal is `CartridgeCapacityException`; declaring `scene` is what keeps per-frame work flat as the count grows. |
+| `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field is an expression; `palette` is optional and selects an object palette. |
+| `scrollX`, `scrollY` | Background offsets in pixels, each an expression. |
 
 Names are unique within each collection, case-sensitive, 1–64 ASCII letters,
 digits, underscores or hyphens, and an array may not reuse a variable's name.
-Constants and initial values are in 0–255.
+Initial values run 0 through the slot's declared ceiling.
 
-A value reads exactly one of a literal, a state slot, or an array element:
+A value is a `ValueExpression` — the engine's own expression, spelled infix:
 
 ```json
-{"constant":42}
-{"variable":"score"}
-{"array":"field","index":{"variable":"cursor"}}
+"42"
+"score"
+"field[cursor]"
+"(score + bonus) * 2"
+"minimum(hp, damage)"
+"lives > 0 ? speed : 0"
+"$key:right:held"
 ```
 
-An index is itself a value, so `field[pointers[cursor]]` nests. An index at or
-beyond the array's length reads zero and discards a write, which keeps every
-access total rather than trapping. A write destination is the same shape without
-the literal: `{"variable":"score"}` or `{"array":"field","index":{...}}`.
+`CartridgeExpressions.Reads` is the admitted subset: the arithmetic and bitwise
+operations, the six comparisons (each yielding 1 or 0), `minimum`, `maximum`,
+`clamp`, `select`, `sign` and bitwise complement. An operation the rule language
+evaluates and a cartridge does not — a hex lattice, a Hilbert index, a prime — is
+refused by that name rather than reported as unknown. Every step evaluates in the
+operand width, so a byte expression wraps modulo 256 at each operation and a
+sub-expression does not widen because it is nested. An expression carries at most
+64 tokens and holds at most 8 values at once; the machine spends its own stack on
+what is in flight.
+
+An index is itself an expression, so `field[pointers[cursor] + 1]` nests. An index
+at or beyond the array's length reads zero and discards a write, which keeps every
+access total rather than trapping. A button reads through `$key:<button>:<mode>`,
+yielding 1 while it satisfies the mode — so input composes under `any` and `not`
+like any other operand rather than being a condition kind conjunction alone can
+reach.
+
+A write destination names its state and, for an element, the index it is keyed by:
+`{"state":"score"}` or `{"state":"field","key":"cursor"}`. A key is a bare number,
+a bare cell read, or `$expr:` followed by the index's infix spelling.
+
+A gate is an `ActionPredicate`: a `compareValue` of two expressions, or those
+composed through `all`, `any` and `not`. An absent gate holds every frame.
+
+```json
+{"$type":"compareValue","left":"score","comparison":"GreaterOrEqual","right":"10","kind":"Int"}
+{"$type":"any","predicates":[{"$type":"compareValue","left":"$key:left:held","comparison":"Equal","right":"1","kind":"Int"}]}
+{"$type":"not","predicate":{"$type":"compareValue","left":"paused","comparison":"Equal","right":"1","kind":"Int"}}
+```
+
+A cartridge compares whole numbers, so `kind` is always `Int`; the fixed-point
+domain has no representation on either machine and is refused by name.
 
 A rule body is a tree of steps, not a flat list. Each step is one of:
 
 ```json
-{"kind":"set","target":{"variable":"score"},"operation":"Add","value":{"constant":1}}
-{"kind":"if","when":[...],"then":[...],"else":[...]}
+{"kind":"set","target":{"state":"score"},"operation":"Add","value":"1"}
+{"kind":"if","when":{...},"then":[...],"else":[...]}
 {"kind":"repeat","count":18,"index":"row","body":[...]}
 {"kind":"break"}
-{"kind":"map","row":{"variable":"y"},"column":{"variable":"x"},"tile":{"constant":3},"palette":{"variable":"colour"}}
-{"kind":"blit","screen":"panel","row":0,"column":0}
+{"kind":"map","row":"y","column":"x","tile":"3","palette":"colour"}
+{"kind":"blit","screen":"panel","row":"0","column":"0"}
 {"kind":"play","sound":"theme"}
 {"kind":"stop"}
-{"kind":"fade","amount":{"variable":"dim"},"toward":"black"}
-{"kind":"blend","surface":"panel","weight":{"variable":"alpha"}}
-{"kind":"play","sound":"pluck","rate":{"array":"notes","index":{"variable":"row"}}}
-{"kind":"plot","row":{"variable":"y"},"column":{"variable":"x"},"colour":{"constant":3}}
+{"kind":"fade","amount":"dim","toward":"black"}
+{"kind":"blend","surface":"panel","weight":"alpha"}
+{"kind":"play","sound":"pluck","rate":"notes[row]"}
+{"kind":"plot","row":"y","column":"x","colour":"3"}
 {"kind":"save"}
 {"kind":"load"}
 ```
@@ -153,7 +185,7 @@ are queued and land together in the next frame's vertical blank, so a cell
 changed this frame appears the frame after. The queue holds 24 entries, and validation bounds a frame's map
 writes to that rather than letting the queue drop one: loops multiply, and branch
 arms count once because only one runs. A blit repaints a whole named screen with
-the display off; its row and column are literals. Because no vertical blank
+the display off; its row and column are literal expressions. Because no vertical blank
 arrives while the display is off, a blit suspends frame production rather than
 merely costing work, which is why a screen is capped at 120 tiles — measured, the
 frame counter stalls entirely near 168.
@@ -249,22 +281,15 @@ iteration that broke, while a loop that finishes leaves it at `count`. A step
 carrying a field belonging to another kind is refused rather than ignored.
 
 Each frame samples input, evaluates rules in array order, then updates
-presentation. All conditions in `when` must match; an empty array always
-matches. Steps execute immediately in order, so later steps and rules see
-earlier writes. There are no hidden states or game-type switches.
+presentation. A rule's gate must hold; an absent one always holds. Steps execute
+immediately in order, so later steps and rules see earlier writes. There are no
+hidden states or game-type switches.
 
-Conditions have either of these shapes:
-
-```json
-{"kind":"key","key":"a","mode":"pressed"}
-{"kind":"compare","left":{"variable":"score"},"comparison":"GreaterOrEqual","right":{"constant":10}}
-```
-
-Keys are `a`, `b`, `start`, `select`, `up`, `down`, `left`, `right`. Modes are
+Buttons are `a`, `b`, `start`, `select`, `up`, `down`, `left`, `right`. Modes are
 `held`, `pressed`, `released`. Comparisons are unsigned and are named from the
 engine's own vocabulary (`Puck.State.ActionStateComparison`): `Equal`,
 `NotEqual`, `Less`, `LessOrEqual`, `Greater`, `GreaterOrEqual`. An action is
-`{"target":{"variable":"score"},"operation":"Add","value":{"constant":1}}`.
+`{"target":{"state":"score"},"operation":"Add","value":"1"}`.
 Operations are named from the engine's opcodes (`Puck.State.ExpressionOp`):
 `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `BitAnd`, `BitOr`, `BitXor`,
 `ShiftLeft` and `ShiftRight`; an ABSENT operation assigns, which is the one

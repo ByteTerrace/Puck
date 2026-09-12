@@ -3,7 +3,6 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
-using Puck.State;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -26,13 +25,13 @@ public sealed class CartridgeMemoryTests {
             ],
             Rules = [Once(name: "probe", actions: [
                 // read = table[cursor]
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "read"), Operation: null, Value: Element(array: "table", index: new CartridgeValue(Variable: "cursor"))),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "read"), Operation: null, Value: Element(array: "table", index: CartridgeExpressions.Of(state: "cursor"))),
                 // indirect = table[pointers[cursor]]
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "indirect"), Operation: null, Value: Element(array: "table", index: Element(array: "pointers", index: new CartridgeValue(Variable: "cursor")))),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "indirect"), Operation: null, Value: Element(array: "table", index: Element(array: "pointers", index: CartridgeExpressions.Of(state: "cursor")))),
                 // table[0] = table[0] + 5
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Constant: 0)), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 5)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "table", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 0))), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 5)),
                 // table[cursor] = 99
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Variable: "cursor")), Operation: null, Value: new CartridgeValue(Constant: 99)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "table", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "cursor"))), Operation: null, Value: CartridgeExpressions.Of(constant: 99)),
             ])],
         };
         using var machine = Run(document: document, frames: 12, out var result);
@@ -56,8 +55,8 @@ public sealed class CartridgeMemoryTests {
             ],
             Arrays = [new CartridgeArray(Name: "table", Initial: [1, 2, 3])],
             Rules = [Once(name: "probe", actions: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "read"), Operation: null, Value: Element(array: "table", index: new CartridgeValue(Variable: "past"))),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Variable: "past")), Operation: null, Value: new CartridgeValue(Constant: 200)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "read"), Operation: null, Value: Element(array: "table", index: CartridgeExpressions.Of(state: "past"))),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "table", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "past"))), Operation: null, Value: CartridgeExpressions.Of(constant: 200)),
             ])],
         };
         using var machine = Run(document: document, frames: 12, out var result);
@@ -100,7 +99,7 @@ public sealed class CartridgeMemoryTests {
                     new CartridgeVariable(Name: "done", Initial: 0),
                 ],
                 Rules = [Once(name: "apply", actions: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "value"), Operation: operation, Value: new CartridgeValue(Variable: "operand")),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "value"), Operation: operation, Value: CartridgeExpressions.Of(state: "operand")),
                 ])],
             };
             using var machine = Run(document: document, frames: 12, out var result);
@@ -119,8 +118,8 @@ public sealed class CartridgeMemoryTests {
             ],
             Arrays = [new CartridgeArray(Name: "cells", Initial: [6, 6, 6, 6])],
             Rules = [Once(name: "apply", actions: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Variable: "slot")), Operation: ExpressionOp.Multiply, Value: new CartridgeValue(Constant: 7)),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Constant: 1)), Operation: ExpressionOp.Divide, Value: new CartridgeValue(Constant: 3)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "cells", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot"))), Operation: ExpressionOp.Multiply, Value: CartridgeExpressions.Of(constant: 7)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "cells", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 1))), Operation: ExpressionOp.Divide, Value: CartridgeExpressions.Of(constant: 3)),
             ])],
         };
         using var machine = Run(document: document, frames: 12, out var result);
@@ -136,25 +135,25 @@ public sealed class CartridgeMemoryTests {
             Variables = [new CartridgeVariable(Name: "x", Initial: 0)],
             Arrays = [new CartridgeArray(Name: "table", Initial: [1, 2, 3])],
         };
-        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "missing", Index: new CartridgeValue(Constant: 0)), Operation: null, Value: new CartridgeValue(Constant: 1))])] }, fragment: "Unknown array");
-        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Constant: 5)), Operation: null, Value: new CartridgeValue(Constant: 1))])] }, fragment: "outside array");
-        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table"), Operation: null, Value: new CartridgeValue(Constant: 1))])] }, fragment: "requires an index");
-        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x", Index: new CartridgeValue(Constant: 0)), Operation: null, Value: new CartridgeValue(Constant: 1))])] }, fragment: "cannot carry an index");
-        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x"), Operation: ExpressionOp.Divide, Value: new CartridgeValue(Constant: 0))])] }, fragment: "zero divisor");
-        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x"), Operation: ExpressionOp.ShiftLeft, Value: new CartridgeValue(Constant: 8))])] }, fragment: "eight or more");
+        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "missing", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 0))), Operation: null, Value: CartridgeExpressions.Of(constant: 1))])] }, fragment: "Unknown array");
+        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "table", Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 5))), Operation: null, Value: CartridgeExpressions.Of(constant: 1))])] }, fragment: "outside array");
+        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "table"), Operation: null, Value: CartridgeExpressions.Of(constant: 1))])] }, fragment: "requires an index");
+        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "x", Key: "0"), Operation: null, Value: CartridgeExpressions.Of(constant: 1))])] }, fragment: "cannot carry an index");
+        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "x"), Operation: ExpressionOp.Divide, Value: CartridgeExpressions.Of(constant: 0))])] }, fragment: "zero divisor");
+        Refuses(document: document with { Rules = [Once(name: "r", actions: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "x"), Operation: ExpressionOp.ShiftLeft, Value: CartridgeExpressions.Of(constant: 8))])] }, fragment: "eight or more");
         Refuses(document: document with { Arrays = [new CartridgeArray(Name: "x", Initial: [1])] }, fragment: "reuse a variable name");
         Refuses(document: document with { Arrays = [.. Enumerable.Range(start: 0, count: 29).Select(selector: i => new CartridgeArray(Name: $"big{i}", Initial: new int[256]))] }, fragment: "state budget");
     }
 
     private static CartridgeDocument Blank(string target, string title) => CartridgeDocuments.Create(target: target, title: title);
 
-    private static CartridgeValue Element(string array, CartridgeValue index) => new(Array: array, Index: index);
+    private static ValueExpression Element(string array, ValueExpression index) => CartridgeExpressions.Of(state: array, key: CartridgeExpressions.Key(index: index));
 
     // Guards the body behind a "done" latch so the measured state is the first frame's result, not a per-frame rerun.
     private static CartridgeRule Once(string name, CartridgeStatement[] actions) => new(
         Name: name,
-        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
-        Body: [.. actions, new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: null, Value: new CartridgeValue(Constant: 1))]);
+        When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "done"), comparison: ActionStateComparison.Equal, right: CartridgeExpressions.Of(constant: 0)),
+        Body: [.. actions, new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "done"), Operation: null, Value: CartridgeExpressions.Of(constant: 1))]);
 
     private static void Refuses(CartridgeDocument document, string fragment) {
         var errors = CartridgeDocuments.Validate(document: document);
