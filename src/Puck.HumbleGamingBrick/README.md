@@ -9,6 +9,9 @@ off `ConsoleModel`, never as a forked implementation per console. Snapshot,
 fork, and queued off-thread hosting come from `Puck.GamingBricks`; this project
 supplies only the SM83-family hardware itself.
 
+This project is truly open source and dual-licensed under Apache-2.0 or MIT;
+see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
+
 ## ✨ Key features
 
 - *One core, every revision:* `ConsoleModel` is revision-valued

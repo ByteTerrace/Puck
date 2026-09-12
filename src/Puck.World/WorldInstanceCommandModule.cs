@@ -8,7 +8,7 @@ using static Puck.World.WorldCommandDefinition;
 namespace Puck.World;
 
 /// <summary>
-/// The console surface for this process's running world instances (docs/vision.md, "Multi-world ticking in one
+/// The console surface for this process's running world instances (docs/architecture/worlds.md, "Multi-world ticking in one
 /// process"). <c>world.instance.start</c> constructs a whole new <see cref="Server.WorldServer"/> and folds its
 /// stepping into the same fixed-step call the boot world already runs on; <c>world.instance.stop</c> retires one and
 /// disposes what it owned; <c>world.instance.status</c> reads any of them back — the boot instance included, under

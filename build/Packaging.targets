@@ -15,7 +15,8 @@
         <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
         <IncludeSymbols>true</IncludeSymbols>
         <PackageIcon>icon.png</PackageIcon>
-        <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+        <PackageLicenseFile Condition="'$(PuckLicenseKind)' != 'OpenSource'">LICENSE.md</PackageLicenseFile>
+        <PackageLicenseExpression Condition="'$(PuckLicenseKind)' == 'OpenSource'">MIT OR Apache-2.0</PackageLicenseExpression>
         <PackageProjectUrl>https://github.com/ByteTerrace/Puck</PackageProjectUrl>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <Product>ByteTerrace.Puck</Product>
@@ -33,8 +34,9 @@
             <PackageIcon> names — NU5046 at pack time. Link only affects how the item shows in an IDE.
         -->
         <None Include="$(MSBuildThisFileDirectory)..\docs\site\_theme\logo.png" Link="icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)..\LICENSE.md" Pack="true" PackagePath="\" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)..\LICENSING.md" Pack="true" PackagePath="\" Visible="false" />
+        <None Condition="'$(PuckLicenseKind)' != 'OpenSource'" Include="$(MSBuildThisFileDirectory)..\LICENSE.md" Pack="true" PackagePath="\" Visible="false" />
+        <None Condition="'$(PuckLicenseKind)' != 'OpenSource'" Include="$(MSBuildThisFileDirectory)..\LICENSING.md" Pack="true" PackagePath="\" Visible="false" />
+        <None Condition="'$(PuckLicenseKind)' == 'OpenSource'" Include="$(MSBuildThisFileDirectory)..\src\Puck.GamingBricks\LICENSE.md" Pack="true" PackagePath="LICENSE.md" Visible="false" />
         <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" Visible="false" />
     </ItemGroup>
 </Project>

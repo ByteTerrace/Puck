@@ -1333,6 +1333,8 @@ public sealed class WorldReplaySnapshot {
     /// <see cref="WorldServer"/> it is handed (or rely on <see cref="Drive"/> attaching it) — a host that never
     /// reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH that proves
     /// nothing.</param>
+    /// <param name="documents">The source a recorded <c>world.load</c>/<c>world.reload</c> re-reads its origin through
+    /// (<see cref="WorldServer.RebuildDocuments"/>); <see langword="null"/> reads JSON files directly.</param>
     /// <returns>The per-tick population-hash trace, one entry per recorded tick. <see cref="DriveTraces"/> exposes both
     /// traces and is what verdicts use.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>,
@@ -1341,15 +1343,16 @@ public sealed class WorldReplaySnapshot {
     /// re-run.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug: an authority-entry kind the re-drive switch
     /// below does not handle, which would silently drop a recorded input from the re-drive.</exception>
-    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) => DriveTraces(
+    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) => DriveTraces(
         profiles: profiles,
         engines: engines,
         machineHostFactory: machineHostFactory,
-        addonHostFactory: addonHostFactory
+        addonHostFactory: addonHostFactory,
+        documents: documents
     ).Pose;
 
     /// <summary>Re-drives once and returns both the pose inspection trace and authoritative state-system trace.</summary>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
@@ -1381,6 +1384,7 @@ public sealed class WorldReplaySnapshot {
             machines: machines
         );
 
+        server.RebuildDocuments = documents;
         server.EnterExtensionReplay();
 
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any

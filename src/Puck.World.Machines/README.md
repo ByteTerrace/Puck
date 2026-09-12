@@ -88,4 +88,4 @@ commit barrier also closes boot-only replay/checkpoint capture, since existing
 formats cannot reconstruct prior hardware execution. Full machine receipts,
 snapshots, authored screen names, explicit control/link routes, and removal of the
 remaining screen-owned compatibility paths are still tracked in
-[the machine extension plan](../../docs/specs/machine-extensions.md).
+[the machine extension plan](../../docs/plans/machine-extensions.md).

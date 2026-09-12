@@ -130,7 +130,7 @@ public sealed record WorldAdmissionVerdict {
 /// admission door's mandatory <c>attestation-v1-base</c> profile. Sealing algorithms and optional signing
 /// extensions are refused by document validation. OAuth and federated-authority rows require an empty string.</param>
 /// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded — carried
-/// alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed
+/// alongside the id because offline verification needs the real bytes, never a fetch (docs/architecture/worlds.md, "Signed
 /// attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.</param>
 /// <param name="Grants">What a peer verified under this entry is minted, INSTEAD OF the blanket
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate

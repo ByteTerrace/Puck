@@ -980,7 +980,7 @@ public static partial class WorldDefinitionValidator {
     // The session-source gate, shared by a declared/magazine-entry source (which carries the current document's
     // destinationNames) and a placement face override (ValidateFaceSources, which already threads destinationNames
     // for the PORTAL facet on the same row). Destination must name a declared destinations row — the row's own
-    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/vision.md).
+    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/architecture/worlds.md).
     // Camera, when present, is validated only as non-empty here — the destination's own definition is not joined at
     // boot, so an unknown camera name is a loud bind-time refusal (WorldScreenBinder), never a boot refusal.
     private static void ValidateSessionSource(WorldScreenSource.Session session, HashSet<string> destinationNames, WorldPlacementPortal? portal, string path, List<string> errors) {

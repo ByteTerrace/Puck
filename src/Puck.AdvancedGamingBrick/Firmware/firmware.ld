@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: Apache-2.0 OR MIT */
 OUTPUT_ARCH(arm)
 ENTRY(puck_reset)
 SECTIONS

@@ -20,8 +20,7 @@ split, and this README is the entry point — each sibling owns its own depth:
 | [`Puck.World.Client`](../Puck.World.Client/README.md) | The per-machine client half: seats, the entity view, the fly camera application, and the binding-authoring layer |
 | `Puck.World` (this project) | The audio director, the frame source, presentation, console command modules, assets, and `Program.cs` |
 
-The product intent (the overworld, the reveal ladder) lives in
-[`CLAUDE.md`](../../CLAUDE.md) and [`docs/vision.md`](../../docs/vision.md);
+The reference-game design lives in [the game guide](../../docs/game/README.md);
 nothing there is evidence that a capability is built. What each `Puck.*`
 project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
@@ -105,7 +104,7 @@ peer listening available. `puck canary` creates a run-scoped key for every
 runner-owned authority pair.
 
 **Hosted Puck.** Sign in with a ByteTerrace API Users account and use the
-generated authentication configuration from the deployed [Puck world release](../../docs/ci.md#azure-production-deployment):
+generated authentication configuration from the deployed [Puck world release](../../docs/development/ci.md#azure-production-deployment):
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json
@@ -280,7 +279,7 @@ owns the pipeline document and source-language contracts.
 
 [The Moth shader](Assets/pipelines/moth.glsl) remains a one-pass procedural
 character example; its header controls poses and framing. Its
-[concept pack](../../docs/art/moth-concept-pack-2026-09-09/README.md) is the visual
+[concept pack](../../docs/game/art/moth-concept-pack-2026-09-09/README.md) is the visual
 reference.
 ## The console
 

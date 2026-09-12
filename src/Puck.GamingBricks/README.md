@@ -7,6 +7,9 @@ queued-host substrate that turns a core into an off-thread, backpressured
 emulation worker. It carries no console-specific CPU, PPU, or cartridge logic
 of its own — that lives in each brick that references it.
 
+The GamingBrick projects are truly open source and dual-licensed under
+Apache-2.0 or MIT. See the shared [license notice](LICENSE.md).
+
 ## ✨ Key features
 
 - *Little-endian state serialization:* `StateWriter`/`StateReader` write and

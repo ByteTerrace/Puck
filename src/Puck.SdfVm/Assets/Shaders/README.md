@@ -22,13 +22,13 @@ the same capability and optimization flags:
 These versions match the engine's supported GPU capability floor. Do not lower
 them to work around a build issue; doing so would split the shader and device
 contracts. Consult the
-[agent guide](../../../../docs/agent-guide.md#gpu-support-and-shader-builds)
+[agent guide](../../../../docs/development/contributing.md#gpu-support-and-shader-builds)
 for the current hardware matrix.
 
 - **`-fspv-target-env=vulkan1.3` (SPIR-V 1.6)**: the device-side floor in
   `Puck.Vulkan` (instance request + a per-device `apiVersion` re-check with a
   loud, four-GPU-named failure below 1.3 — see the
-  [agent guide](../../../../docs/agent-guide.md#gpu-support-and-shader-builds))
+  [agent guide](../../../../docs/development/contributing.md#gpu-support-and-shader-builds))
   matches this exactly; a lower target here would produce modules the engine's
   own instance floor can't even load.
 - **`-T *_6_6` (Shader Model 6.6)**: the D3D12 peer of the SPIR-V floor above

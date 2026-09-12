@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * Original decoders for the public cartridge compression formats documented in
  * GBATEK. No upstream decompiled BitUnpack/Huffman implementations are included.

@@ -5,8 +5,8 @@ one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 
 | Verb | What it is |
 |---|---|
-| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
-| [`puck azure`](../../docs/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
+| [`puck nuget`](../../docs/development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
+| [`puck azure`](../../docs/development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck docs`](#automation-commands) | build and stage the website documentation. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
@@ -67,7 +67,7 @@ The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
 `puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
 `puck --version` reports the running CLI's version and source revision;
 `puck nuget version` reads the release version from the current checkout.
-See [the CLI used by CI](../../docs/ci.md#the-cli-used-by-ci) for candidate
+See [the CLI used by CI](../../docs/development/ci.md#the-cli-used-by-ci) for candidate
 installation, package installation checks, and release adoption.
 
 To build the candidate directly for local development:
@@ -143,7 +143,7 @@ QUIC reachability and the endpoint's expected public key; it requires QUIC suppo
 and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
 committed default addon, printing the content hash needed by its document rows.
 Azure credentials, deployment ordering, and access restoration belong to
-[`puck azure`](../../docs/ci.md#azure-production-deployment), which reaches these
+[`puck azure`](../../docs/development/ci.md#azure-production-deployment), which reaches these
 verbs in process.
 
 ## `puck official` — the local official tree producer
@@ -382,7 +382,7 @@ Exit codes: 0 every citation resolved, 1 unresolved citations (each named),
 ## `puck doc-links` — relative link and path check
 
 Checks a fixed documentation set (the world-project READMEs, the repository
-root README, and the top-level `docs/` orientation set) for citations that
+root README, and the engine manual's entry and topic pages) for citations that
 stopped resolving: relative markdown links, backticked rooted repository
 paths (`src/...`, `docs/...`, `tests/...`, `build/...`), and backticked bare
 filenames (looked up in an index swept from `src/`, `docs/`, `tests/`,
@@ -847,7 +847,7 @@ fails rather than reporting unchecked source as clean.
 added, modified, and renamed C# files from the PR comparison, excluding generated
 and quarantined code, applies the defaults, verifies convergence, and writes
 format.json plus format.patch. It never commits or pushes. The
-[CI formatting workflow](../../docs/ci.md#automatic-pr-formatting) compiles that
+[CI formatting workflow](../../docs/development/ci.md#automatic-pr-formatting) compiles that
 result before its separate trusted submitter can append a bot commit.
 
 **Phase 0 always runs first**, for every mode and every `-Only` selection:

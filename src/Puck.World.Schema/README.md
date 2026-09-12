@@ -766,7 +766,7 @@ over the entire composed candidate document — at boot, on every live mutation,
 and on a whole-document swap — so builders and mutation appliers never repeat
 semantic checks. The add-a-field procedure (model, validator, serializer
 registration, verify by running) is in
-[`docs/agent-guide.md`](../../docs/agent-guide.md).
+[`docs/development/contributing.md`](../../docs/development/contributing.md).
 
 **Serialization** (`WorldDefinitionSerialization.cs`): `WorldJsonContext` is a
 System.Text.Json source-generated context — camelCase member names, enums by
@@ -2140,7 +2140,7 @@ A distance interaction's `neighbours` (1..64) evaluates at most that many right
 carriers per left carrier — the nearest first, ties by the lower body index —
 and its line prices pairs at that budget instead of the population squared.
 
-The [portable costing brief](../../docs/specs/abstract-machine-costing.md)
+The [portable costing brief](../../docs/plans/abstract-machine-costing.md)
 defines the proposed replacement. Its cycle schedule remains uncalibrated.
 `WorldCostReport` exposes heuristic totals separately and reports unresolved
 cycle bounds, including search work; it cannot yet certify an abstract

@@ -298,7 +298,7 @@ owns provider-neutral configuration; the Azure README owns Azure provider keys.
 ## Production silo verification
 
 Endpoint naming and world/host alias conventions are owned by
-[CI and releases](../../../docs/ci.md); deployment values belong in `main.bicepparam`.
+[CI and releases](../../../docs/development/ci.md); deployment values belong in `main.bicepparam`.
 
 Azure CI packages `Assets/worlds/puck.world.json` and its referenced neighbours
 with `puck world prepare`; hosted references use canonical world file
@@ -326,7 +326,7 @@ key pin; no token belongs in world content or checkpoints. Azure's provider
 validates ByteTerrace API membership, while generic protocol code sees only the
 verified session namespace. Run the real client against the deployed endpoint
 for admission, authoritative interaction, and reconnect evidence; a QUIC key
-probe alone does not prove these. `docs/ci.md` owns Azure deployment policy.
+probe alone does not prove these. `docs/development/ci.md` owns Azure deployment policy.
 ## Cross-cutting contracts (every task)
 
 **Preserve determinism.** Use no wall clock, RNG, or float in simulation state;
@@ -437,7 +437,7 @@ beside an existing one:
    into the `world.budget` cost sheet in the same change — a derived cost
    nothing can echo is a silent frame tax.
 
-**Doc hygiene, same commit.** [`docs/campaign.md`](../../../docs/campaign.md) is the one document that says what we are collectively building; correct it in the SAME commit as any landing that changes its truth. NEVER write a status column — a status claim duplicates what the code answers better, so record the DECISION and let the code answer "is it done". Component READMEs are developer references (no doctrine
+**Doc hygiene, same commit.** [`docs/game/design.md`](../../../docs/game/design.md) is the one document that says what we are collectively building; correct it in the SAME commit as any landing that changes its truth. NEVER write a status column — a status claim duplicates what the code answers better, so record the DECISION and let the code answer "is it done". Component READMEs are developer references (no doctrine
 prose); if a change stales one, or stales a comment, fix it in the same
 change. A doc that would produce wrong behavior today is hostile, not stale —
 delete it.

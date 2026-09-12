@@ -5,7 +5,7 @@ contract. Read the relevant section when the compact skill routes here.
 
 ## Contents
 
-- [Declaration-first cases](#1-declaration-first-there-is-one-shape)
+- [Declaration-first cases](#1-declaration-first-the-declaration-is-data-the-run-is-code)
 - [Tiers and budgets](#2-tiers-and-budgets)
 - [Legs](#3-legs-what-the-statement-stands-on)
 - [Oracles](#4-oracles)

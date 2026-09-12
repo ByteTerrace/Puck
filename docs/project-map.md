@@ -1,7 +1,7 @@
 # Puck project map
 
 This map describes the current responsibility and dependency boundary of each
-project. See [agent-guide.md](agent-guide.md) for verification procedures.
+project. See [agent-guide.md](development/contributing.md) for verification procedures.
 
 ## Dependency rules
 

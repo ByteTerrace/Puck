@@ -113,7 +113,7 @@ public abstract record WorldScreenSource {
     /// framing sometimes supplies the margin itself.</param>
     public sealed record Qr(string Payload, string EcLevel = "M", int QuietZoneModules = 4) : WorldScreenSource;
     /// <summary>
-    /// A live rendered view of another world, resolved through a <c>destinations</c> row (docs/vision.md,
+    /// A live rendered view of another world, resolved through a <c>destinations</c> row (docs/architecture/worlds.md,
     /// "Observation and display"). The face/screen resolves the same resolver-owned identity a
     /// portal crossing at the same door would land in (<see cref="Puck.World.WorldSessionResolver"/>), attaches an
     /// observation lease to the resolved instance's server, and mirrors just enough of its delivered
@@ -131,7 +131,7 @@ public abstract record WorldScreenSource {
     /// resolved image viewer-dependent, and the shipped one-image-per-screen-index binding shows every viewer the
     /// same image — showing one viewer's world to everyone would be silently wrong, so a session face naming a
     /// non-global destination refuses at bind time by name rather than binding to an arbitrary viewer's resolution.
-    /// Per-viewport binding is future work (docs/vision.md, "User/group-scoped destinations make images
+    /// Per-viewport binding is future work (docs/architecture/worlds.md, "User/group-scoped destinations make images
     /// viewer-dependent").</para>
     /// </remarks>
     /// <param name="Destination">The <see cref="Puck.World.WorldDestination.Name"/> this face/screen observes. Must

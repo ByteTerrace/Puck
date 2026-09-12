@@ -25,15 +25,19 @@ internal static class DocLinksCommand {
         "src/Puck.Attestation/README.md",
         "README.md",
         "docs/README.md",
-        "docs/agent-guide.md",
+        "docs/overview.md",
+        "docs/getting-started.md",
+        "docs/architecture/README.md",
+        "docs/authoring/README.md",
+        "docs/rendering/README.md",
+        "docs/emulation/README.md",
+        "docs/development/README.md",
+        "docs/development/contributing.md",
+        "docs/reference/README.md",
+        "docs/plans/README.md",
+        "docs/decisions/README.md",
         "docs/project-map.md",
-        "docs/campaign.md",
-        "docs/vision.md",
-        "docs/specs/README.md",
-        "docs/specs/world-model.md",
-        "docs/art/README.md",
-        "docs/gb-wiki/README.md",
-        "docs/sdf-wiki/README.md",
+        "docs/game/README.md",
     ];
     // CLAUDE.md rule 1 pins these paths as existing only in git history; docs/project-map.md states exactly
     // that where it names them, so their non-resolution is correct, not a broken citation.
@@ -51,7 +55,7 @@ internal static class DocLinksCommand {
         var documentsArgument = new Argument<string[]>(name: "document") {
             Arity = ArgumentArity.ZeroOrMore,
             DefaultValueFactory = static _ => DefaultDocuments,
-            Description = "Repository-relative markdown files to check; absent, the world-documentation set this verb ships with.",
+            Description = "Repository-relative markdown files to check; absent, the manual entry points and World documentation set this verb ships with.",
         };
         var command = new Command(description: """
             Check that every relative markdown link and cited repository path resolves.

@@ -26,6 +26,7 @@ using Puck.World.Client;
 using Puck.World.Machines;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.World;
 
@@ -500,8 +501,11 @@ internal static class WorldBootComposition {
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             engines: sp.GetServices<IMachineEngine>(),
             machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
-            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
+            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
+            documents: sp.GetRequiredService<IWorldDocumentSource>()
         ));
+        // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
+        services.AddSingleton<IWorldDocumentSource, PuckDocumentComposer>();
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
 
         // The console's sequencing primitive: the tick barrier world.wait arms (published by the shared server-step
@@ -584,7 +588,7 @@ internal static class WorldBootComposition {
             router: sp.GetRequiredService<Func<InputRouter>>()
         ));
 
-        // The process's running world instances (docs/vision.md's "Multi-world ticking in one process" row):
+        // The process's running world instances (docs/architecture/worlds.md's "Multi-world ticking in one process" row):
         // the boot world plus every instance started at runtime through the console, stepped by both boot shapes'
         // IFixedStepSimulation.Step. CORE (not presentation-only): an instance beside the boot world is render-less
         // by construction, so it works identically headless or windowed. The engine is boot-free at construction —

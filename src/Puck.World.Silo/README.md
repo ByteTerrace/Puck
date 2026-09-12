@@ -28,7 +28,7 @@ The silo selects Orleans membership through the composition root's registry.
 `clustering.kind` is case-sensitive: this distribution registers `Localhost`.
 The document loader validates against that same registry before host construction.
 Other providers are refused until eligible world placement and exclusive ownership are implemented.
-See [deployment](../../docs/ci.md) for the production endpoint and release process.
+See [deployment](../../docs/development/ci.md) for the production endpoint and release process.
 
 The schema selects installed extensions by `type` and opaque object `settings`.
 The composition root's `WorldSiloExtensions` catalog uses `WorldExtensionRegistry`;
@@ -189,7 +189,7 @@ restoration of machine state here.
 
 ## Production deployment
 
-The [Azure workflow](../../docs/ci.md#azure-production-deployment) deploys the primary
+The [Azure workflow](../../docs/development/ci.md#azure-production-deployment) deploys the primary
 Puck world as a pinned row on a single regular VMSS worker. QUIC requires
 UDP ingress and Linux `libmsquic`; Container Apps does not expose UDP. The silo
 uses its own managed identity, private blob container, and persistent federation

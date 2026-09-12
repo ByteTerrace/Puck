@@ -1,4 +1,4 @@
-@ SPDX-License-Identifier: MIT
+@ SPDX-License-Identifier: Apache-2.0 OR MIT
 @ Copyright 2020 - 2021 DenSinH and fleroviux
 @ Copyright (c) 2026 ByteTerrace
 @ Exception/IRQ structure adapted from Cult-of-GBA/BIOS, commit

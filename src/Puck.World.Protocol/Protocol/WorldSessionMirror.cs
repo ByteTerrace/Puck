@@ -8,7 +8,7 @@ using Puck.World.Server;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The session projection's client-side mirror — the "minimal client-side pose/state mirror" docs/vision.md's
+/// The session projection's client-side mirror — the "minimal client-side pose/state mirror" docs/architecture/worlds.md's
 /// "Observation and display" names, attached to a destination instance's <c>WorldServer</c> under a
 /// <c>WorldServer.AttachSink(IClientSink)</c> lease exactly like any other client. It is deliberately not
 /// <c>WorldClient</c>: that type also carries a <c>PlayerRoster</c>/seat table this observation-only mirror
@@ -137,7 +137,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <c>WorldSessionSceneEmitter</c>'s self-derived render alpha divides real elapsed time by.</summary>
     public float StepSeconds => BitConverter.Int32BitsToSingle(value: Volatile.Read(location: ref m_stepSecondsBits));
     /// <summary>The destination's own step width (engine ticks per its authored simulation step) at the latest
-    /// delivered snapshot — the destination presentation clock docs/vision.md's "Observation and display"
+    /// delivered snapshot — the destination presentation clock docs/architecture/worlds.md's "Observation and display"
     /// names.</summary>
     public ulong StepTicks => unchecked((ulong)Interlocked.Read(location: ref m_stepTicksBits));
     /// <summary>The destination's latest completed simulation tick — read-back (<c>world.faces</c>'s session echo)

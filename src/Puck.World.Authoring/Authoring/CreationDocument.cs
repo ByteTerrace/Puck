@@ -247,7 +247,7 @@ public sealed record CreationNoiseDocument(
 /// pre-expanded, so the run stays font-independent on the wire). The run sits on its own plane (<paramref name="Position"/>
 /// centre + <paramref name="Rotation"/>, in the creation's workbench space: local +X = advance, +Y = ascent, +Z = the
 /// relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed
-/// (engrave / Subtraction) but never coplanar — coincident zero-sets speckle (docs/sdf-wiki/reference/text-and-glyphs.md).
+/// (engrave / Subtraction) but never coplanar — coincident zero-sets speckle (docs/rendering/sdf/reference/text-and-glyphs.md).
 /// <paramref name="Position"/>/<paramref name="Rotation"/> are authored in the creation's author frame (see
 /// <see cref="CreationFrame"/>).
 /// </summary>

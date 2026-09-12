@@ -142,7 +142,7 @@ paints sparsely.
   string | Promise<Response> | Promise<BootModule> | null | undefined`;
   returning `null`/`undefined` falls back to the default fetch. The studio
   uses this to feed content-hash-verified cached bytes instead of a network
-  fetch (see `docs/vision.md`'s remote-worlds default).
+  fetch (see `docs/architecture/worlds.md`'s remote-worlds default).
 - `options.runtimeConfig` &rarr; `DotnetHostBuilder.withConfig(config: MonoConfig)`,
   for a caller booting against a relocated `_framework` (an official-content
   CDN path rather than this AppBundle's own).

@@ -164,5 +164,5 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 
 Anything under `src/Puck.Maths` owes the law suite — see
 [the tests README](../../../tests/Puck.Maths.Tests/README.md) for the full
-tier ladder and [docs/agent-guide.md](../../../docs/agent-guide.md) for how to
+tier ladder and [docs/development/contributing.md](../../../docs/development/contributing.md) for how to
 verify.

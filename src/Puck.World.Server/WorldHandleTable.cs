@@ -78,7 +78,7 @@ public sealed class WorldHandleTable {
 
         if (principal.Kind is not (PrincipalKind.Addon or PrincipalKind.Peer)) {
             throw new ArgumentException(
-                message: $"a handle table is only for a principal outside the trust boundary (addon or peer) — {principal.Describe()} could grant itself anything, so it keeps naming subjects directly (docs/campaign.md)",
+                message: $"a handle table is only for a principal outside the trust boundary (addon or peer) — {principal.Describe()} could grant itself anything, so it keeps naming subjects directly (docs/game/design.md)",
                 paramName: nameof(principal)
             );
         }

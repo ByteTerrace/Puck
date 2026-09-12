@@ -36,7 +36,7 @@
         "type": "string"
       },
       "publicKey": {
-        "description": "The pinned key\u0027s actual SubjectPublicKeyInfo bytes, base64-encoded \u2014 carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, \u0022Signed attestation\u0022: consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.",
+        "description": "The pinned key\u0027s actual SubjectPublicKeyInfo bytes, base64-encoded \u2014 carried alongside the id because offline verification needs the real bytes, never a fetch (docs/architecture/worlds.md, \u0022Signed attestation\u0022: consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.",
         "type": "string"
       },
       "grants": {

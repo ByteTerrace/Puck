@@ -7,8 +7,10 @@ who needs what.
 
 These are the engine's default terms. Separately licensed components retain
 their own terms: in particular, the bundled HGB and AGB firmware is available
-under MIT, without changing the licenses of the managed emulator cores or Forge
-tools. See the [firmware inventory](THIRD-PARTY-NOTICES.md#bundled-gamingbrick-firmware)
+under Apache-2.0 or MIT, without changing the licenses of the managed emulator
+cores or Forge tools. This exception covers only the Puck-authored HGB/AGB boot
+ROMs that ship with the engine. Retail, test, and other user-supplied ROMs
+remain subject to their owners' terms. See the [firmware inventory](THIRD-PARTY-NOTICES.md#bundled-gamingbrick-firmware)
 for the source and package-local notices.
 
 > This document is a plain-language summary for humans. The binding legal terms are in

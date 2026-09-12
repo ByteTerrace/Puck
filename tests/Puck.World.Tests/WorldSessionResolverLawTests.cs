@@ -323,7 +323,7 @@ public sealed class WorldSessionResolverLawTests {
         Assert.False(condition: stillReused.IsNewGeneration);
         Assert.Equal(expected: reused.GenerationId, actual: stillReused.GenerationId);
     }
-    // RETURN MEANS HOME (docs/vision.md): TryAdopt/TryGetActive are the cache-install half of the seam
+    // RETURN MEANS HOME (docs/architecture/worlds.md): TryAdopt/TryGetActive are the cache-install half of the seam
     // Puck.World.WorldInstanceHost's own origin scan drives — this resolver carries no notion of "running instances"
     // at all (see this file's own class remarks), so what a law here can prove is exactly TryAdopt's OWN documented
     // contract: a pair with no active generation adopts the named instance, and ordinary TryResolve afterward reuses

@@ -1,4 +1,6 @@
-# Puck API Reference
+# Puck API reference
+
+For concepts and practical guides, start with the [engine manual](https://github.com/ByteTerrace/Puck/blob/main/docs/README.md). This page covers generated member documentation.
 
 Generated member reference for the reusable Puck libraries listed below. Project
 manuals provide conceptual guidance where available; this site is built directly

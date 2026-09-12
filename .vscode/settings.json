@@ -4,20 +4,21 @@
         "dotnet build": true
     },
     "files.exclude": {
-        "**/.claude": true,
-        "**/.worktrees": true,
         "**/.tmp": true,
-        "**/artifacts": true
+        "**/.worktrees": true
     },
     "files.watcherExclude": {
         "**/.git/objects/**": true,
         "**/.git/subtree-cache/**": true,
-        "**/node_modules/*/**": true,
-        "**/.claude/**": true,
-        "**/.worktrees/**": true,
         "**/.tmp/**": true,
-        "**/artifacts/**": true
+        "**/.worktrees/**": true,
+        "**/node_modules/*/**": true
     },
+    "puck.server.args": [
+        "./src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll",
+        "lsp"
+    ],
+    "puck.server.command": "dotnet",
     "search.exclude": {
         "**/.claude": true,
         "**/.worktrees": true

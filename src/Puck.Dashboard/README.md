@@ -9,7 +9,7 @@ The website also contains a Documentation page at `/docs`.
 `docs.byteterrace.com` opens it directly; `puck.byteterrace.com` opens World Studio.
 The page embeds the documentation overview and links to the generated API reference.
 Azure CI builds both into the same website release; see the
-[deployment contract](../../docs/ci.md#azure-production-deployment).
+[deployment contract](../../docs/development/ci.md#azure-production-deployment).
 
 ## Run and check
 

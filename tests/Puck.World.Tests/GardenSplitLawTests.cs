@@ -80,7 +80,7 @@ public sealed class GardenSplitLawTests {
 
     // pieceCell/pieceCode are keyed by PLACEMENT ID (piece0..piece31) — the placement-addressed re-authoring: a
     // game's own content never keys itself by body index, which is an artefact of wherever WorldPopulation happens
-    // to seat inhabited placements today (see chess.world.json's own remarks and docs/campaign.md's module-
+    // to seat inhabited placements today (see chess.world.json's own remarks and docs/game/design.md's module-
     // convention entry). This checks the declared key set matches the 32 declared piece placements exactly — never
     // where those placements land in the entity table, which the placement:$each/placement-ordinal machinery
     // resolves at runtime rather than at authoring time.

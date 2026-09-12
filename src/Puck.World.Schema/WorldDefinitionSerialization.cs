@@ -866,7 +866,7 @@ internal sealed class WorldPortalArrivalJsonConverter() : TokenEnumJsonConverter
     protected override string ToToken(WorldPortalArrival value) => WorldDestinationTokens.ArrivalToken(arrival: value);
 }
 /// <summary>
-/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/vision.md's "Durability,
+/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/architecture/worlds.md's "Durability,
 /// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>), mirroring
 /// <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>

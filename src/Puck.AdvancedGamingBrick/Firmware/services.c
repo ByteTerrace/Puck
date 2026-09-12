@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * Public GBA service contracts: https://mgba-emu.github.io/gbatek/#biosfunctions
  */

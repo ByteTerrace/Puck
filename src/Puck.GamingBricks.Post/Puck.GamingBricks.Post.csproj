@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
         <PuckKind>Validation</PuckKind>
         <PuckLayer>Validation</PuckLayer>
     </PropertyGroup>

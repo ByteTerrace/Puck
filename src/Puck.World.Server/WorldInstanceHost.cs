@@ -8,8 +8,8 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// A host's running world instances, keyed by console-chosen name — the <i>host</i> of docs/vision.md's
-/// "The words": the machine or process running instances. A boot-shaped host's own boot row (<see cref="Boot"/>) sits
+/// A host's running world instances, keyed by console-chosen name — the <i>host</i> of docs/architecture/worlds.md's
+/// "Terms": the machine or process running instances. A boot-shaped host's own boot row (<see cref="Boot"/>) sits
 /// beside every instance admitted later; a boot-free host (a silo) admits every row the identical way. Owns starting,
 /// stepping, reading back and retiring them, and the transfer engine — adjacency/portal sweeps, transfer
 /// minting/draining, escrow, forwarding, remote lanes — that lets several authorities share one process.
@@ -36,7 +36,7 @@ namespace Puck.World;
 /// go through <see cref="IWorldEmbodiedSeats"/> — the desktop implements it over those types
 /// (<c>Puck.World.Client.WorldClientSeats</c>); a host with no local seats passes
 /// <see cref="WorldEmbodiedSeats.None"/>, and every seat-facing member below is inert against it.</para>
-/// <para><b>Per-instance scheduling (docs/vision.md).</b> Each instance advances on its own
+/// <para><b>Per-instance scheduling (docs/architecture/worlds.md).</b> Each instance advances on its own
 /// authored <c>simulation.rateHz</c>, never a shared build-wide rate: <see cref="StepInstances"/> holds a
 /// per-instance accumulator (<see cref="WorldInstance.ScheduleAccumulatorTicks"/>) of engine ticks banked against
 /// the host's master timeline — a desktop boot row's own rate-derived cadence the fixed-step pump already drives

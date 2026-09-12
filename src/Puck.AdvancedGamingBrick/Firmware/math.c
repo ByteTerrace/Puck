@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * Fixed-width integer algorithms. The trigonometric approximation coefficients
  * are compatibility data documented by the MIT Cult-of-GBA implementation.

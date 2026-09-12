@@ -2064,7 +2064,7 @@
                 "title": "WorldScreenSourceQr"
               },
               {
-                "description": "A live rendered view of another world, resolved through a destinations row (docs/vision.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
+                "description": "A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
                 "properties": {
                   "$type": {
                     "const": "session"
@@ -2466,7 +2466,7 @@
                       "title": "WorldScreenSourceQr"
                     },
                     {
-                      "description": "A live rendered view of another world, resolved through a destinations row (docs/vision.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
+                      "description": "A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
                       "properties": {
                         "$type": {
                           "const": "session"
@@ -12129,7 +12129,7 @@
                       "title": "WorldScreenSourceQr"
                     },
                     {
-                      "description": "A live rendered view of another world, resolved through a destinations row (docs/vision.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
+                      "description": "A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
                       "properties": {
                         "$type": {
                           "const": "session"
@@ -18085,7 +18085,7 @@
         "null"
       ],
       "items": {
-        "description": "One row of the destinations section \u2014 scoped selection layered over exactly one WorldReference row (docs/vision.md, \u0022Reference, destination and session are different facts\u0022). A WorldReference names a document; a destination decides how an instance of that document is minted and reused. Several destinations may select one reference differently \u2014 a fresh group dungeon, a persisted user workshop, and a shared global zone can all point at the same document.",
+        "description": "One row of the destinations section \u2014 scoped selection layered over exactly one WorldReference row (docs/architecture/worlds.md, \u0022Reference, destination and session are different facts\u0022). A WorldReference names a document; a destination decides how an instance of that document is minted and reused. Several destinations may select one reference differently \u2014 a fresh group dungeon, a persisted user workshop, and a shared global zone can all point at the same document.",
         "type": [
           "object",
           "null"

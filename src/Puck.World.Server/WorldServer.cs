@@ -531,6 +531,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
     /// candidate's own origin rather than the currently loaded document. The path is the candidate's full path.</summary>
     public Func<string, IWorldNeighbourResolver?>? RebuildNeighbours { get; set; }
+    /// <summary>Gets or sets the composition-owned source a <c>world.load</c>/<c>world.reload</c> document and a replay
+    /// re-read of one are read through, so an origin this project cannot parse itself (a <c>.puck</c> source) loads
+    /// and pins identically live and on replay. <see langword="null"/> reads JSON files directly.</summary>
+    public IWorldDocumentSource? RebuildDocuments { get; set; }
     /// <summary>Observes a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)
     /// once <see cref="ApplyRebuild"/> has resolved its candidate and computed its CAS content hash, but before any
     /// refusal gate (grant check, dirty-journal guard, validate, capacity, solids) runs — so a rebuild the door goes

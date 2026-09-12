@@ -1357,7 +1357,7 @@ and capability, and generation-checked so a revoked or re-sorted handle
 refuses on its next use with a distinct verdict. The campaign that designed
 this model was retired on 2026-08-10, its rulings moved into the code they
 govern; what survives as WORK is carried in
-[`docs/campaign.md`](../../docs/campaign.md). This README is the reader-facing
+[`docs/game/design.md`](../../docs/game/design.md). This README is the reader-facing
 summary; the CODE outranks it on any point of disagreement.
 
 Two settled rulings worth restating here because their absence is invisible:
@@ -1741,7 +1741,7 @@ captures every one of the twelve envelope payload kinds except `Lever`
 composition, query, and screen-op) plus intents and the two
 peer-lifecycle server events; a mid-session capture honestly reports
 MISMATCH at tick 0 — carried in
-[`docs/campaign.md`](../../docs/campaign.md).
+[`docs/game/design.md`](../../docs/game/design.md).
 
 ## Verifying a change here
 

@@ -5,7 +5,7 @@ namespace Puck.World;
 
 /// <summary>
 /// One running copy of a world's simulation in this process — an <i>instance</i> in the plan of record's own words
-/// (docs/vision.md, "The words"): a world is the only first-class noun, and an instance is a running copy of
+/// (docs/architecture/worlds.md, "Terms"): a world is the only first-class noun, and an instance is a running copy of
 /// one. Every instance a host runs is an entry of this type, including a desktop's boot world, so the read-back
 /// surface carries one kind of row rather than a privileged world plus a lesser class beside it.
 /// </summary>

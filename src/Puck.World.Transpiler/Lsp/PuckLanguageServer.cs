@@ -354,7 +354,8 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var docCard = GetDocumentationForWord(word) ?? GetStateRowHoverCard(text, word);
+        var offset = text.Split('\n').Take(line).Sum(part => part.Length + 1) + col;
+        var docCard = PuckHoverInfo.Declaration(text, word, offset) ?? PuckHoverInfo.Builtin(word) ?? GetDocumentationForWord(word) ?? GetStateRowHoverCard(text, word);
         if (docCard is null) {
             await SendResponseAsync(id, null).ConfigureAwait(false);
             return;
@@ -379,11 +380,28 @@ public sealed class PuckLanguageServer {
             return null;
         }
 
+        var absolute = lines.Take(targetLine).Sum(part => part.Length + 1) + targetCol;
+        for (var index = 0; index <= absolute; ++index) {
+            var lexicalEnd = SourceLexemes.End(text, index);
+            if (lexicalEnd > index) {
+                if (absolute < lexicalEnd) {
+                    return text[index] == '`' && lexicalEnd > index + 1 && text[lexicalEnd - 1] == '`'
+                        ? text.Substring(index + 1, lexicalEnd - index - 2) : null;
+                }
+                index = lexicalEnd - 1;
+            }
+        }
+        if (!(char.IsLetterOrDigit(lineText[targetCol]) || lineText[targetCol] is '_' or '$')) {
+            return null;
+        }
         var start = targetCol;
         while (start > 0 && (char.IsLetterOrDigit(lineText[start - 1]) || lineText[start - 1] == '_' || lineText[start - 1] == '$')) {
             start--;
         }
 
+        if (start > 0 && lineText[start - 1] == '.') {
+            return null;
+        }
         var end = targetCol;
         while (end < lineText.Length && (char.IsLetterOrDigit(lineText[end]) || lineText[end] == '_' || lineText[end] == '$')) {
             end++;

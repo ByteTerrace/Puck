@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * Original ByteTerrace/Puck pixel lettering and startup sound. Presentation is
  * executed by the emulated CPU and hardware; no cartridge logo is used as art.

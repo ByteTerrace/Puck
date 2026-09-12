@@ -420,7 +420,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // A scope=group destination's selector: a `named` arm must resolve to a declared groups.groups[].id (the
-    // named/tagged split docs/vision.md "Durability, scope and generation" describes); a `tagged` arm names no
+    // named/tagged split docs/architecture/worlds.md "Durability, scope and generation" describes); a `tagged` arm names no
     // particular group up front — resolution walks the ACTING traveler's own memberships at transfer time (a later
     // lane's job), so this pass only holds the tag itself to the same non-empty discipline WorldGroup.Tags entries
     // already carry.

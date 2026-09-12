@@ -111,6 +111,49 @@ public class LspSugarTests {
         return last!;
     }
 
+    [Theory]
+    [InlineData("// Number of seats.\nlet seats = 4\ncount: sea|ts\n", "let seats = 4", "Number of seats.")]
+    [InlineData("count: sea|ts\nlet seats = 4\n", "let seats = 4", "compile-time constant")]
+    [InlineData("template tile(size = 2) { width: size }\nt|ile()\n", "template tile(size = 2)", "template")]
+    [InlineData("let size = 99\ntemplate tile(size = 2) { width: si|ze }\n", "size = 2", "template parameter")]
+    [InlineData("template tile(size = 2) { width: size }\ntile(si|ze: 3)\n", "size = 2", "template parameter")]
+    [InlineData("let item = 99\nvalues: map([1, 2], item => it|em + 1)\n", "item => item + 1", "lambda parameter")]
+    [InlineData("let item = 99\nvalues: map([1, 2], item => item + 1)\ncount: it|em\n", "let item = 99", "compile-time constant")]
+    [InlineData("for item in range(0, 2) { value: it|em }\n", "for item in range(0, 2)", "loop variable")]
+    [InlineData("rule \"x\" {\nbind amount : Int = 2\nhp += amo|unt\n}\n", "bind amount : Int = 2", "rule binding (Int)")]
+    [InlineData("values: ra|nge(3, 5)\n", "range(start, count)", "count consecutive integers")]
+    [InlineData("value: cla|mp(4, 0, 3)\n", "clamp(arg1, arg2, arg3)", "Arguments: 3")]
+    [InlineData("let seats = 4\nbroken: [\ncount: sea|ts\n", "let seats = 4", "compile-time constant")]
+    public async Task HoverResolvesDeclarationsAndFunctions(string markedSource, string signature, string description) {
+        var response = await HoverMarkedAsync(markedSource);
+        var text = response["result"]?["contents"]?["value"]?.ToString();
+        Assert.NotNull(text);
+        Assert.Contains(signature, text, StringComparison.Ordinal);
+        Assert.Contains(description, text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("let seats = 4\ncount: foreign.sea|ts\n")]
+    [InlineData("let seats = 4\n// sea|ts\n")]
+    [InlineData("let seats = 4\n/* sea|ts */\n")]
+    [InlineData("let seats = 4\nlabel: \"sea|ts\"\n")]
+    [InlineData("let seats = 4\ncount: seats| + 1\n")]
+    [InlineData("template tile(size = 2) { width: size }\nwidth: si|ze\n")]
+    [InlineData("rule \"x\" {\nbind amount : Int = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
+    public async Task HoverDoesNotInventOutOfScopeOrNonCodeSymbols(string source) {
+        var response = await HoverMarkedAsync(source);
+        Assert.Null(response["result"]);
+    }
+
+    private static Task<JsonNode> HoverMarkedAsync(string markedSource) {
+        var offset = markedSource.IndexOf('|', StringComparison.Ordinal);
+        var before = markedSource[..offset];
+        var line = before.Count(character => character == '\n');
+        var column = offset - before.LastIndexOf('\n') - 1;
+        var source = markedSource.Remove(offset, 1);
+        return SendRequestsAsync(source, (2,
+            $$$$"""{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///sugar.puck"},"position":{"line":{{{{line}}}},"character":{{{{column}}}}}}}"""));
+    }
     [Fact]
     public async Task CompletionOffersTheNewGateAndEffectKeywords() {
         var response = await SendRequestsAsync(

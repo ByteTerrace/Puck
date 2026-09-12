@@ -1,6 +1,6 @@
 namespace Puck.State;
 
-// The hand-written C# 15 basic union pattern (docs/campaign.md, "Compiled rule operands are a closed union"),
+// The hand-written C# 15 basic union pattern (docs/game/design.md, "Compiled rule operands are a closed union"),
 // polyfilled internally until .NET 11 supplies the real attribute/interface pair. The day the toolchain moves, the
 // flip is deleting these two markers and switching on the carrier's Value directly wherever a case-type dispatch
 // exists today; nothing else moves.

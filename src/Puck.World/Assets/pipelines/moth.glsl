@@ -1,7 +1,7 @@
 // MOTH - procedural SDF rendering of 01-character-model-sheet.png.
 // Swept shoulders, curved boots and surface finish: 02-face-and-armor.png.
 // Author and run this pipeline in Puck; pipeline.watch moth-pipeline on reloads saved edits.
-// Reference sheets: docs/art/moth-concept-pack-2026-09-09/.
+// Reference sheets: docs/game/art/moth-concept-pack-2026-09-09/.
 // The shader uses its paired camera when supplied; otherwise the orbit below.
 // Drag mouse: orbit. Release: hold view. Set AUTO_TURN to 1 for a turntable.
 // Approximate sculpt, not a mesh reconstruction. Front is +Z; units are artistic.

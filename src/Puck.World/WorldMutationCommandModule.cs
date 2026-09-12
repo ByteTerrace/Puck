@@ -231,7 +231,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     definition: out var loaded,
                     contentHash: out var contentHash,
                     reason: out var reason,
-                    neighbours: server.ResolveRebuildNeighbours(path: fullPath)
+                    neighbours: server.ResolveRebuildNeighbours(path: fullPath),
+                    documents: server.RebuildDocuments
                 )) {
                     return CommandResult.Error(output: $"[world.load: {reason}]");
                 }
@@ -265,7 +266,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             bindability: CommandBindability.Bindable,
             routing: CommandRouting.Simulation,
             name: "world.reload",
-            description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the re-read origin.",
+            description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
                 var path = definitionSource.SourcePath;
 
@@ -275,7 +276,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     definition: out var loaded,
                     contentHash: out var contentHash,
                     reason: out var reason,
-                    neighbours: server.ResolveRebuildNeighbours(path: path)
+                    neighbours: server.ResolveRebuildNeighbours(path: path),
+                    documents: server.RebuildDocuments
                 )) {
                     return CommandResult.Error(output: $"[world.reload: {reason}]");
                 }
@@ -329,12 +331,18 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.save",
-            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources. No argument writes back to the loaded world file. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
+            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources. No argument writes back to the loaded world file. A .puck target — including a .puck loaded world with no argument — is refused by name, since the canonical JSON would overwrite its source; name a JSON path instead. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
             handler: (context, args) => {
                 var target = ((args.Count >= 1)
                     ? args.Tail(start: 0)
                     : definitionSource.SourcePath
                 );
+
+                // A save writes canonical JSON, and a .puck file is source whose lets, templates, and comments the
+                // document does not carry — writing over one destroys them.
+                if (target.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    return CommandResult.Error(output: $"[world.save: {target} is .puck source — a save writes canonical JSON and would overwrite it; name a JSON target: world.save <path>.world.json; nothing written]");
+                }
 
                 // The same EVERY-section hold world.load and world.undo pass, and for the same two reasons rather than
                 // for symmetry's sake: the file this writes IS a loadable world document carrying every section, so

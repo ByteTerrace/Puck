@@ -287,7 +287,7 @@ quad — retroreflective tape on a real wall becomes a tracked painting frame.
 
 ## Shader pipelines and live development
 
-The [pipeline evolution plan](../../docs/specs/shader-pipeline-evolution.md) preserves the remaining execution, timing, packaging and hybrid-rendering work, with dependencies and completion evidence.
+The [pipeline evolution plan](../../docs/plans/shader-pipeline-evolution.md) preserves the remaining execution, timing, packaging and hybrid-rendering work, with dependencies and completion evidence.
 
 A shader is source code for a GPU stage. A pass dispatches compute work or
 renders a fullscreen triangle. A pipeline connects those passes through named

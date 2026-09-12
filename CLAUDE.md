@@ -1,13 +1,12 @@
 # AGENTS.md
 
-Puck is an **everything-as-data** engine: versioned JSON documents describe what
-runs, and the engine renders, composites, validates, and replays them
-deterministically on either GPU backend — Vulkan or Direct3D 12. The live game
-is `Puck.World`, whose document is `puck.world.def.v1` — the world itself, and,
-seeded from it, one per owned identity. It carries the `Extensions` round-trip
-convention (`Puck.World.DocumentExtensionsPolicy`).
-It is a deliberately dumb terminal *beneath* engines; where it ends up is left
-open on purpose.
+Puck is a C# engine for document-defined worlds. `Puck.World` composes the
+simulation, presentation and hosted machines. Start with [the engine manual](docs/README.md)
+for concepts and [development guidance](docs/development/README.md) for
+investigation and verification. Load the applicable repository skill before
+subsystem work; skills add operational constraints rather than a second engine
+explanation. Preserve the distinction between exact simulation-state determinism
+and floating-point presentation.
 
 ## Enforcement
 
@@ -35,30 +34,25 @@ way (rules 2 and 5).
 
 ## Orientation
 
-These are kept current — read them before deep work.
+Use the topic relevant to the task; game plans are not prerequisite reading for unrelated engine work.
 
 | Doc | Answers |
 |---|---|
 | [docs/project-map.md](docs/project-map.md) | What each `Puck.*` project is for, how they layer, the dependency rules. Its layering block is GENERATED from per-project declarations (`puck architecture --map`) and gated by `puck architecture --check` — do not hand-edit it. |
-| [docs/agent-guide.md](docs/agent-guide.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
-| [docs/vision.md](docs/vision.md) then [docs/campaign.md](docs/campaign.md) | What Puck is and refuses to be; what we are collectively building, where it stands, and what is next. Read before picking up work. |
-| [docs/specs/world-runtime-consolidation.md](docs/specs/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation doctrine, the folds and the facade still owed, and what is deliberately excluded. It states no status — the campaign holds what is verified. |
-| [docs/specs/retail-scale-cartridges.md](docs/specs/retail-scale-cartridges.md) | What `puck.cartridge.v1` needs before a retail-scale game is authorable as data: the program model it lacks, the `Puck.State` vocabulary it should adopt rather than restate, which ceilings get re-derived, and the authoring gaps. States no status. |
+| [docs/development/contributing.md](docs/development/contributing.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
+| [docs/overview.md](docs/overview.md) and [docs/architecture/README.md](docs/architecture/README.md) | What the engine does and how its runtime boundaries fit together. |
+| [docs/plans/README.md](docs/plans/README.md) and [docs/game/README.md](docs/game/README.md) | Proposed engineering work and the reference game, when the task concerns them. |
+| [docs/plans/world-runtime-consolidation.md](docs/plans/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation approach and remaining implementation work, and what is deliberately excluded. Use the linked development milestones for recorded verification. |
+| [docs/plans/retail-scale-cartridges.md](docs/plans/retail-scale-cartridges.md) | What `puck.cartridge.v1` needs before a retail-scale game is authorable as data: the program model it lacks, the `Puck.State` vocabulary it should adopt rather than restate, which ceilings get re-derived, and the authoring gaps. States no status. |
 
-**There is no capability catalog or register any more, deliberately.** Both
-claimed per-capability *verification status*, and with `Puck.Post` quarantined
-that column was false — a document consulted precisely to decide whether
-something is safe, asserting coverage that does not exist. A catalog that can
-drift from the code is worse than asking the code. **Do not recreate one as
-prose.** If an inventory is wanted, generate it (`puck` already derives the
-layering block this way) and give it a runner that fails when it disagrees with
-its source — a generator nobody runs is a hand-maintained file with extra steps.
-
-The same test governs every document here: if acting on it would produce the
-wrong behavior today it is not stale, it is hostile — delete it. Keep what
-records a DECISION and the reasoning that cannot be re-derived. Generate what
-the code already knows. A deleted plan is never reconstructed from git history
-and presented as current.
+The manual must explain current behavior and limitations without requiring a
+source investigation first. Keep that explanation separate from verification
+claims: a dated test result is evidence for its recorded candidate, not permanent
+certification. Generate inventories that the code owns, including the project
+layering map and schema/name registries. Plans record requested work and its
+completion conditions; preserve meaningful decisions and unresolved ideas when
+moving or consolidating documents. Update incoming links and navigation in the
+same change, including agent routing and documentation tooling.
 
 For an area's settled contract facts, load its skill: `sdf-world`,
 `gaming-bricks`, `rom-forge`, `symbol-analysis`, `maths-usage`,
@@ -219,6 +213,25 @@ correct them where they live.
    a diff or a formatter run appears to be about newlines, the setting is
    wrong and gets corrected here, not accommodated at the call site.
 
+## Shared working trees and delegated work
+
+Preserve unrelated work in the shared checkout. When a commit is requested,
+stage explicit paths, check each staging result, and inspect the complete index
+before committing. An amend includes the index; inspect the resulting commit
+rather than assuming it contains only this task's changes. Prefer a separate
+commit when another task may have staged work.
+
+When delegation is authorized, inventory the work first, assign explicit file
+ownership and applicable skills, and sequence edits to shared files. Give each
+assignment a concrete verification step and observable success condition. The
+integrator must inspect the shared result and run its checks; a worker's report
+is supporting evidence, not a substitute for verification. Check reported defects
+against the current files and commits before acting, and correct reports that
+became stale during concurrent work.
+
+Verify the operation itself, including its outputs and exit status. After moving
+a tool or document, exercise the real consumer at its new location. Run performance
+measurements without competing builds or GPU workloads.
 ## Repository automation
 
 Repository automation is Puck CLI. Every operation is a verb on the one
@@ -236,11 +249,11 @@ pack of the checkout; no job installs the CLI from `.config/dotnet-tools.json`.
 Never replace a failed restore with a source build. Runtime payloads and container
 images likewise pass from producers to verification and deployment without
 rebuilding. PR formatting also uses the candidate CLI so it checks the rules
-under review. See [CI tooling](docs/ci.md#the-cli-used-by-ci).
+under review. See [CI tooling](docs/development/ci.md#the-cli-used-by-ci).
 
 PR formatting is automated by CI, which appends a bot commit on repository
 branches and reruns validation. Do not install Git hooks or mutate Git
-configuration during builds. See [automatic PR formatting](docs/ci.md#automatic-pr-formatting).
+configuration during builds. See [automatic PR formatting](docs/development/ci.md#automatic-pr-formatting).
 
 `src/Puck.Azure.Resources/bootstrap.cs` is the repository's one C# file-based
 app, an identity-team operation run outside CI. It follows `.editorconfig` and
@@ -252,20 +265,16 @@ the linked `Puck.RepositoryPaths` helper for checkout-relative paths; do not
 infer runtime paths from compiler source paths or duplicate repository walkers.
 Use `ProcessStartInfo.ArgumentList` and check child exit codes. Compile it in
 Release without executing its operational body. See
-[file-app verification](docs/agent-guide.md#c-file-apps) for formatting and build commands.
+[file-app verification](docs/development/contributing.md#c-file-apps) for formatting and build commands.
 
-## The game — where intent lives
+## Reference-game work
 
-The four-world charter (Play plus the Dive/Kart/Jump dungeons, `studio` as a
-non-game dev canvas beside them), the reveal mechanic, and what is next are
-[docs/campaign.md](docs/campaign.md)'s to state — read it before game work,
-and never cite intent as evidence that a capability is built. The unification
-contract — one session, no `--flag` modes, the console as the control plane
-over stdin/stdout, durable configuration as document fields, no `PUCK_*`
-configuration surface — is stated in [docs/vision.md](docs/vision.md) ("What
-Puck is not"). For what exists today, read
-[src/Puck.World/README.md](src/Puck.World/README.md) and verify by running
-`Puck.World`.
+Read [the game design](docs/game/design.md) for the authored experience and
+[the game development plan](docs/plans/game-development.md) for proposed work.
+These are not prerequisites for unrelated library tasks. The configuration and
+session design choices live in [engine design decisions](docs/decisions/engine-design.md#configuration-and-operations-remain-discoverable).
+Use [the World guide](src/Puck.World/README.md) for current commands and verify
+host-dependent behavior by running the actual application.
 
 ## Controller input
 

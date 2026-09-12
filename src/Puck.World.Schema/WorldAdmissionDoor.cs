@@ -76,7 +76,7 @@ public static class WorldAdmissionDoor {
     private static readonly IReadOnlySet<string> NoReach = new HashSet<string>(comparer: StringComparer.Ordinal);
 
     /// <summary>The fixed audience every admission claim must be directed at. A placeholder single-audience value
-    /// until worlds carry an addressable per-document identity of their own (docs/vision.md's "Authenticating
+    /// until worlds carry an addressable per-document identity of their own (docs/architecture/worlds.md's "Authenticating
     /// the game wire" row, and the open "unembodied session authority" question) — today every World process's
     /// admission door is the same addressable thing, so one constant names it honestly rather than inventing
     /// per-world scoping this change does not need yet.</summary>

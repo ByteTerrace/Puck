@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * GBA MultiBoot sender, implemented from GBATEK's public wire protocol.
  * The initiating cartridge still owns discovery and header negotiation.

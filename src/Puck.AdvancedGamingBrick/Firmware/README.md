@@ -1,10 +1,11 @@
-# Puck native AGB firmware
+# Puck native AGB boot ROM firmware
 
 This folder owns the source for the bundled 16 KiB ByteTerrace/Puck BIOS.
 Its ARM exception handlers and Thumb service code execute on the same emulated
 ARM7TDMI as a cartridge. There is no host-side SWI replacement and no dependency
 on a retail BIOS image. The firmware source, original pixel lettering and chime,
-and generated image are separately available under the [MIT license](LICENSE).
+and generated image are separately available under the Apache-2.0 or MIT
+licenses in [LICENSE](LICENSE).
 
 Address zero is the cold reset vector. Address `0x20` is the Puck fast-boot
 entry: it follows the same native initialization and register handoff, omitting

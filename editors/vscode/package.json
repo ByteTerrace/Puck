@@ -1,7 +1,7 @@
 {
     "name": "vscode-puck",
     "displayName": "Puck Authoring Language",
-    "description": "Rich language support, syntax highlighting, and snippets for the Puck World Authoring DSL (.puck).",
+    "description": "IntelliSense, diagnostics, hover, formatting, and syntax highlighting for the Puck DSL (.puck).",
     "version": "1.0.0",
     "icon": "icon.png",
     "publisher": "ByteTerrace",
@@ -50,6 +50,58 @@
                 "language": "puck",
                 "path": "./snippets/puck.json"
             }
-        ]
+        ],
+        "commands": [
+            {
+                "title": "Puck: Restart Language Server",
+                "command": "puck.restartLanguageServer"
+            }
+        ],
+        "configuration": {
+            "title": "Puck",
+            "properties": {
+                "puck.server.args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "lsp"
+                    ],
+                    "description": "Arguments passed directly without a shell. For dotnet, use an absolute Puck.Cli.dll path followed by lsp.",
+                    "scope": "machine-overridable"
+                },
+                "puck.server.command": {
+                    "type": "string",
+                    "default": "puck",
+                    "description": "Executable used to launch the language server. Use dotnet to launch a Puck.Cli.dll assembly.",
+                    "scope": "machine-overridable"
+                }
+            }
+        }
+    },
+    "main": "./dist/extension.js",
+    "activationEvents": [
+        "onLanguage:puck"
+    ],
+    "extensionKind": [
+        "workspace"
+    ],
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": false
+        }
+    },
+    "scripts": {
+        "build": "esbuild extension.js --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+        "package": "vsce package --no-dependencies",
+        "vscode:prepublish": "npm run build"
+    },
+    "dependencies": {
+        "vscode-languageclient": "9.0.1"
+    },
+    "devDependencies": {
+        "@vscode/vsce": "3.9.2",
+        "esbuild": "0.28.2"
     }
 }

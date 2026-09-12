@@ -42,6 +42,7 @@ public sealed class WorldReplayInspector {
     private readonly IReadOnlyList<IMachineEngine> m_engines;
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldOwnedWorlds m_profiles;
+    private readonly IWorldDocumentSource? m_documents;
 
     /// <summary>Initializes the inspector over the same things a re-drive needs — the profile catalog seats
     /// re-resolve against, the screen-machine engine set and host factory, and the shadow addon-host factory — so
@@ -52,8 +53,10 @@ public sealed class WorldReplayInspector {
     /// and <paramref name="engines"/> — handed to <see cref="WorldReplaySnapshot.Drive"/>.</param>
     /// <param name="addonHostFactory">Builds the shadow addon host over a re-deserialized definition and its shadow
     /// server — wrapped here in the per-tick observer, never replaced.</param>
+    /// <param name="documents">The source a recorded <c>world.load</c>/<c>world.reload</c> re-reads its origin through
+    /// (handed to <see cref="WorldReplaySnapshot.Drive"/>); <see langword="null"/> reads JSON files directly.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
@@ -63,6 +66,7 @@ public sealed class WorldReplayInspector {
         m_engines = [.. engines];
         m_machineHostFactory = machineHostFactory;
         m_addonHostFactory = addonHostFactory;
+        m_documents = documents;
     }
 
     private static void AppendHeader(List<string> lines, string name, in WorldReplayLoad loaded) {
@@ -377,7 +381,8 @@ public sealed class WorldReplayInspector {
             },
             engines: m_engines,
             machineHostFactory: m_machineHostFactory,
-            profiles: m_profiles
+            profiles: m_profiles,
+            documents: m_documents
         );
 
         // The observation point is a CLAIM about WorldServer.Step's internal order (ResolveReads runs after the

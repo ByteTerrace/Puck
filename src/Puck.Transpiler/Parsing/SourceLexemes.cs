@@ -3,9 +3,13 @@ using Puck.Transpiler.Lowering;
 
 namespace Puck.Transpiler.Parsing;
 
-// Shared lexical boundaries for preflight and formatting. String contents never participate in structural edits.
-internal static class SourceLexemes {
-    internal static int End(string source, int offset) {
+/// <summary>Shared lexical boundaries for preflight, formatting, and editor services.</summary>
+public static class SourceLexemes {
+    /// <summary>Finds the exclusive end of a string, backquoted identifier, or comment at an offset.</summary>
+    /// <param name="source">The source text.</param>
+    /// <param name="offset">An index within the source text.</param>
+    /// <returns>The exclusive end, or the original offset when no quoted token or comment starts there. An unterminated token extends to the end of the source.</returns>
+    public static int End(string source, int offset) {
         var start = offset;
         if (source[offset] == '$' && offset + 1 < source.Length && source[offset + 1] == '"') { ++offset; }
         if (source[offset] == '"') {

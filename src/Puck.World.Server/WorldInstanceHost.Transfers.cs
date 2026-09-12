@@ -2041,7 +2041,7 @@ public sealed partial class WorldInstanceHost {
         /// <see cref="WorldDestinationDurability.Persisted"/> (see <see cref="TransferDestination.Retain"/>) — an
         /// Ephemeral-durability resolution reaps normally through the ordinary <see cref="ReapIfEmpty"/> rule the
         /// moment its occupancy hits zero, which is what lets <see cref="WorldSessionResolver.NotifyInstanceRetired"/>
-        /// observe the generation actually ending (docs/vision.md "Durability, scope and generation").</summary>
+        /// observe the generation actually ending (docs/architecture/worlds.md "Durability, scope and generation").</summary>
         Resolved,
     }
     /// <summary>A queued transfer's destination, as the console verb expressed it — resolved to a live
@@ -2173,7 +2173,7 @@ public sealed partial class WorldInstanceHost {
     /// re-verified (the scope-key re-derivation above is what proves the resolution still holds).
     /// <see langword="null"/> for a non-resolver transfer.</param>
     /// <param name="TransferId">The transfer id this particular queued crossing carries — minted deterministically at
-    /// enqueue time (docs/vision.md) unless a caller supplied one explicitly (console
+    /// enqueue time (docs/architecture/worlds.md) unless a caller supplied one explicitly (console
     /// <c>world.transfer</c>'s <c>transfer:&lt;id&gt;</c> token, the retry/idempotence verification seam). Threaded
     /// through every echo this transfer produces and checked against <see cref="m_appliedTransferIds"/> before
     /// anything else at drain time.</param>

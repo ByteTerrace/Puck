@@ -4,6 +4,8 @@
         <EnableDynamicLoading>true</EnableDynamicLoading>
         <IsAotCompatible>false</IsAotCompatible>
         <IsPackable>true</IsPackable>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
         <PackageId>ByteTerrace.Puck.AdvancedGamingBrick.Forge</PackageId>
         <PackageTags>agb;arm7tdmi;authoring;determinism;gba;homebrew;rom;thumb</PackageTags>
         <PuckKind>Production</PuckKind>

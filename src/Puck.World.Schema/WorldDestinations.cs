@@ -22,7 +22,7 @@ public enum WorldDestinationDurability {
     /// instance name any more.</summary>
     Persisted,
 }
-/// <summary>Which scoped identity/generation a <see cref="WorldDestination"/> selects (docs/vision.md,
+/// <summary>Which scoped identity/generation a <see cref="WorldDestination"/> selects (docs/architecture/worlds.md,
 /// "Durability, scope and generation"). Absent on the wire resolves to <see cref="Global"/> — today's behavior,
 /// unchanged for every destination row authored before this member existed.</summary>
 public enum WorldDestinationScope {
@@ -41,7 +41,7 @@ public enum WorldDestinationScope {
     Global,
 }
 /// <summary>Selects which group a <see cref="WorldDestinationScope.Group"/> destination resolves through — the
-/// <c>$type</c>-discriminated union docs/vision.md's "Durability, scope and generation" names. Required exactly
+/// <c>$type</c>-discriminated union docs/architecture/worlds.md's "Durability, scope and generation" names. Required exactly
 /// when <see cref="WorldDestination.Scope"/> is <see cref="WorldDestinationScope.Group"/>; admitted nowhere else. A
 /// future selection form widens this union with another <c>$type</c> arm rather than adding parallel optional fields
 /// to <see cref="WorldDestination"/> itself (the same closed-union discipline <see cref="WorldCameraSubject"/>/
@@ -66,7 +66,7 @@ public abstract record WorldGroupSelector {
 }
 /// <summary>
 /// One row of the <c>destinations</c> section — scoped selection layered over exactly one <see cref="WorldReference"/>
-/// row (docs/vision.md, "Reference, destination and session are different facts"). A <see cref="WorldReference"/>
+/// row (docs/architecture/worlds.md, "Reference, destination and session are different facts"). A <see cref="WorldReference"/>
 /// names a document; a destination decides how an instance of that document is minted and reused. Several
 /// destinations may select one reference differently — a fresh group dungeon, a persisted user workshop, and a
 /// shared global zone can all point at the same document.

@@ -187,7 +187,8 @@ public sealed partial class WorldReplayTape {
             addonHostFactory: m_addonHostFactory,
             engines: m_engines,
             machineHostFactory: m_machineHostFactory,
-            profiles: m_profiles
+            profiles: m_profiles,
+            documents: m_liveServer.RebuildDocuments
         );
 
         return new WorldReplayVerdict(

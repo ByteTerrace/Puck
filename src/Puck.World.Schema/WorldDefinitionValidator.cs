@@ -1529,7 +1529,7 @@ public static partial class WorldDefinitionValidator {
 
         // A portal facet's destination resolves against THIS set (below, inside ValidatePlacements), never against
         // referenceNames directly — the destinations section is the layer a portal facet now names, exactly the
-        // model docs/vision.md "Reference, destination and session are different facts" describes. A scope=group
+        // model docs/architecture/worlds.md "Reference, destination and session are different facts" describes. A scope=group
         // row's selector resolves against groupIds (see the move above).
         var destinationNames = ValidateDestinations(
             destinations: definition.Destinations,

@@ -4,6 +4,7 @@
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingBrick</PackageId>
         <PackageTags>agb;cgb;determinism;dmg;emulation;sm83</PackageTags>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>

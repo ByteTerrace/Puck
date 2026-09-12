@@ -512,7 +512,7 @@ public sealed class WorldAdjacencyLawTests {
         Assert.Contains(actualString: refused, comparisonType: StringComparison.Ordinal, expectedSubstring: "does not close its transform diamond");
     }
     // TrySharedCorner's first-match-wins order must agree whether a neighbour's edges arrive as a whole document or
-    // as an attestation — the quilt's own nw/ne/sw/se-vs-island collision (docs/campaign.md) is the real-world
+    // as an attestation — the quilt's own nw/ne/sw/se-vs-island collision (docs/game/design.md) is the real-world
     // instance of this; FiveDocumentCollision reproduces the same two-candidate ambiguity in code so this suite
     // never reads a shipped world file.
     [Fact]

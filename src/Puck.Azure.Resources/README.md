@@ -73,7 +73,7 @@ graph TB
 Use the provided [📋checklist](./CHECKLIST.md) to help track your progress.
 
 The current monorepo entry point is the
-[Azure GitHub Actions workflow](../../docs/ci.md#azure-production-deployment).
+[Azure GitHub Actions workflow](../../docs/development/ci.md#azure-production-deployment).
 It pins Bicep 0.46.1 and authenticates with the CI managed identity before
 restoring the published, versioned `ts/bvm` Template Specs. The `bvm` alias in
 `bicepconfig.json` selects their subscription and resource group; the local
@@ -94,7 +94,7 @@ The identity team runs [bootstrap.cs](./bootstrap.cs) from this directory with
 .NET 10 and its operator credentials. It creates the CI identity and federation,
 authors its constrained Owner delegation and Graph grants, and prepares the
 groups, custom roles, Azure DevOps connection and Template Specs. Application CI
-consumes this setup. See the [deployment access contract](../../docs/ci.md#azure-production-deployment).
+consumes this setup. See the [deployment access contract](../../docs/development/ci.md#azure-production-deployment).
 
 The script header lists its required platform arguments. For the existing Puck
 GitHub environment, also supply:

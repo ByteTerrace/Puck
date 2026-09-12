@@ -90,7 +90,7 @@ one a reader believes.
 
 **A deferral must never dangle.** If the owning document sheds a fact, that fact
 moves **into** the deferring document in the same change. This is already tree
-law: [`docs/agent-guide.md`](../../../../docs/agent-guide.md) § *Documentation
+law: [`docs/development/contributing.md`](../../../../docs/development/contributing.md) § *Documentation
 policy* requires moving any still-live contract, limitation, or procedure into
 its canonical reference before deleting the document that held it.
 
@@ -261,7 +261,7 @@ behavior writes `<inheritdoc/>` plus a `<remarks>` carrying only the increment.
 
 ### Completeness is a contract, not a courtesy
 
-[`docs/agent-guide.md`](../../../../docs/agent-guide.md) § *Code and documentation
+[`docs/development/contributing.md`](../../../../docs/development/contributing.md) § *Code and documentation
 conventions* states the obligation: public APIs describe current behavior,
 parameter units, ownership, lifetime, failure behavior, and determinism where
 relevant, and never narrate the change that introduced the API. A missing
@@ -294,7 +294,7 @@ Two consequences for the agent:
   parameter list is CS1573, which fails the build.
 
 Run `dotnet build Puck.slnx -c Release` after any edit that changes a `cref`,
-per [`docs/agent-guide.md`](../../../../docs/agent-guide.md) § *Analyze C#
+per [`docs/development/contributing.md`](../../../../docs/development/contributing.md) § *Analyze C#
 semantically*, step 4. `puck declarations --doc` inventories `cref` targets
 without a build (`symbol-analysis`).
 
@@ -319,7 +319,7 @@ goal. The prose standard and purge list in §1 apply here in full: a `SKILL.md`
 written in manifesto cadence breaks them exactly as a README would.
 
 A skill records **settled facts and procedures**, not architecture that may not
-be questioned: [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
+be questioned: [`docs/development/contributing.md`](../../../../docs/development/contributing.md) §
 *Engineering doctrine* makes skills evidence, outranked by the current request.
 
 ### Authoring a skill
@@ -395,18 +395,21 @@ document under `docs/` that names the skill.
 
 ### Placement and scope rules
 
-- **A single-owner document lives with its owner.** A project's design
-  rationale and specifications fold into that project's README (or the README
-  itself); `docs/` holds only cross-project material (vision, campaign, agent
-  guide, world model, project map, research corpora, verification runners,
-  reviews). There is no `docs/` index: the root `README.md` routes to the
-  document set, and its routing updates whenever the set changes.
-- **Documentation describes the current product.**
-  [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
-  *Documentation policy*: design history, completed rollout logs, migration
-  diaries, commit archaeology, and superseded plans belong in version control
-  history. Measurements survive only while they still explain a current
-  threshold, limitation, or decision.
+- **The engine manual starts at `docs/README.md`.** Its overview, getting-started
+  guide and topic pages help developers and agents learn and navigate the engine.
+  Project READMEs own detailed API and local implementation contracts; manual
+  pages may teach a workflow across those projects and link to the owners.
+  Keep plans and design decisions distinct from current reference material.
+  The root `README.md` routes into the manual, and both entry points are updated
+  when their destinations change. Do not duplicate a contract to fill an index.
+- **Separate current behavior from proposals and evidence.** Guides and
+  references explain the current product. Plans preserve requested work,
+  dependencies and completion criteria. Decision pages preserve consequential
+  reasoning. Dated verification records identify their candidate and environment;
+  they must not imply permanent capability certification. Consolidate session
+  handoffs into those homes instead of requiring readers to follow transcripts.
+  Do not discard an unresolved idea or requirement merely because its source
+  document is being reorganized.
 - **Never narrate the change inside the document.** No "recently added", "as of
   this change", "previously this was" — on any surface, XML documentation
   included.

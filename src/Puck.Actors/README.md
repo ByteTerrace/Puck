@@ -71,7 +71,7 @@ in-memory reminders/state and an ephemeral DataProtection key ring — `dotnet r
 
 ## Deploy
 
-The [Azure CI workflow](../../docs/ci.md#azure-production-deployment) builds from
+The [Azure CI workflow](../../docs/development/ci.md#azure-production-deployment) builds from
 the repository root, tests the Linux image, and deploys production by image digest.
 The Dockerfile requires the shared build files, analyzers, and sibling Maths
 project; using this project directory alone as its context cannot build it.

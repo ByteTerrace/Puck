@@ -135,7 +135,7 @@ each supported complete expression's raw-field sublevel set at 0.15 for AO.
 Together the bands occupy twelve floats per instance per viewport after the four
 tile planes. Construction reserves the instance envelope, so small views and
 live program changes do not limit coverage.
-See [bounds](../../docs/sdf-wiki/reference/lod-and-bounds.md#primary-part-bounds) for its scope.
+See [bounds](../../docs/rendering/sdf/reference/lod-and-bounds.md#primary-part-bounds) for its scope.
 
 Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
 shadow gather covers the full 65536-instance ceiling; reserved slots cannot

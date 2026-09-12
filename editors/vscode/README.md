@@ -1,23 +1,36 @@
 # Puck Authoring Language for VS Code
 
-Rich language support, syntax highlighting, bracket matching, and snippets for the **Puck World Authoring DSL** (`.puck` and `.world.puck`).
+IntelliSense for `.puck` files connects VS Code to the existing `puck lsp` language server. Open a Puck file to start completion suggestions, hover documentation, live diagnostics, document symbols, and formatting. Syntax highlighting, bracket matching, folding, and snippets are included.
 
-## Features
+## Setup
 
-- **Syntax Highlighting**: Comprehensive TextMate grammar covering directives (`schema`, `basis`, `let`, `import`, `export`), engine sections (`host`, `views`, `camera`, `seatRig`, `motion`, `rules`, `state`, `solids`, `materials`), WebAssembly addons (`addon`, `request`, `watchMemory`), physical units (`s`, `hz`, `deg`, `rad`, `m`, `px`), hexadecimal numbers, and color literals (`#RRGGBB`).
-- **Opinionated Puck Formatting**: Built to enforce Egyptian/K&R bracing (`{` on the declaration line) and standard 4-space indentation matching Puck's C# `.editorconfig` baseline.
-- **Bracket Matching & Auto-Closing**: Automatic pair management for `{}`, `[]`, `()`, and `""`.
-- **Code Folding**: Quick collapse/expand across world sections, templates, and `#region` blocks.
-- **Snippets**: Productivity snippets for `world`, `host`, `views`, `seatRig`, `addon`, `template`, `let`, and `import`.
+Install the Puck CLI and make its `puck` executable available on PATH, then install this extension. IntelliSense starts automatically in trusted workspaces. Press Ctrl+Space for suggestions, hover over a variable, template, built-in function, or keyword for documentation, or use Format Document.
 
-## Private Marketplace Installation
+Build the local CLI with `dotnet build src/Puck.Cli -c Release` from the repository root. For that assembly, set the following VS Code settings, replacing the path with your own absolute path:
 
-This extension is hosted on our internal **Puck VS Marketplace** (`mcr.microsoft.com/vsmarketplace/vscode-private-marketplace`):
-
-```bash
-# Package into VSIX
-puck packaging vscode
-
-# Install locally
-code --install-extension editors/vscode/vscode-puck-1.0.0.vsix
+```json
+{
+    "puck.server.command": "dotnet",
+    "puck.server.args": ["D:/Source/ByteTerrace/Puck/src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll", "lsp"]
+}
 ```
+
+The command and arguments are passed directly without a shell. Changes restart the server automatically. You can also run **Puck: Restart Language Server**. Startup failures appear as an error message; the **Puck Language Server** output channel contains server logs. Remote workspaces run the CLI on the remote host.
+
+Completion currently offers the server's keyword, section, function, and unit suggestions, with cartridge suggestions selected by document schema. It is not yet a complete context-sensitive semantic completion engine. See the [language-server documentation](../../src/Puck.World.Transpiler/README.md#editor-tooling) for server behavior.
+
+## Build and install
+
+From `editors/vscode`, run:
+
+```sh
+npm ci
+npm run package
+code --install-extension vscode-puck-1.0.0.vsix --force
+```
+
+The VSIX bundles the language client; the Puck CLI is installed separately. Packaging runs the build automatically.
+
+## Verification
+
+`test/extension-host.js` runs inside a VS Code extension development host, using its configured Puck CLI. It checks completion, hover, formatting, and open-document synchronization after a server restart. Launch VS Code with `--extensionDevelopmentPath` pointing at this directory and `--extensionTestsPath` pointing at that file, using an isolated user-data directory with the server settings above. Run `npm run build` first.

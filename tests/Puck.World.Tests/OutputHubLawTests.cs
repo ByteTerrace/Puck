@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Proves the observation-lifetime contract (<c>docs/vision.md</c>'s "Observation and display"
+/// Proves the observation-lifetime contract (<c>docs/architecture/worlds.md</c>'s "Observation and display"
 /// section): a typed-lane subscription is independently
 /// disposable, a late attach's non-consuming primer never steals a one-shot continuity hint an already-attached sink
 /// is due to observe, and a faulting sink is isolated rather than taking the tick down with it. All three exercise

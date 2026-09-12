@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 
@@ -36,11 +37,26 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
         try {
             if (resolvedName.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 var puckText = File.ReadAllText(path: resolvedName);
-                var doc = PuckParser.ParseDocument(source: puckText);
-                var lowered = WorldDocumentEmitter.Lower(
-                    basePath: Path.GetDirectoryName(path: resolvedName),
-                    document: doc
+                var diagnostics = new DiagnosticBag();
+                var parsed = PuckParser.ParseDocumentWithDiagnostics(source: puckText, diagnostics: diagnostics);
+                var lowered = ((parsed.Value is { } document)
+                    ? WorldDocumentEmitter.LowerWithDiagnostics(
+                        basePath: Path.GetDirectoryName(path: resolvedName),
+                        diagnostics: diagnostics,
+                        document: document
+                    ).Value
+                    : null
                 );
+
+                if (diagnostics.HasErrors || (lowered is null)) {
+                    var error = diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+
+                    reason = ((error is null)
+                        ? $"{resolvedName} does not compile."
+                        : $"{resolvedName}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}");
+
+                    return false;
+                }
 
                 content = Encoding.UTF8.GetBytes(s: lowered.ToJsonString());
             } else {

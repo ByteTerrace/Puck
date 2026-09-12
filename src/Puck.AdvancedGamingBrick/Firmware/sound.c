@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * Original public-SoundArea PCM driver. The documented channel controls are the
  * interface. Legacy player-management layouts are pinned by independent

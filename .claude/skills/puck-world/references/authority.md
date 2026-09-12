@@ -3,7 +3,7 @@
 ONE server-side table authorizes every write: `WorldGrants`
 (`src/Puck.World.Server/WorldGrants.cs`). Protocol vocabulary:
 `src/Puck.World.Schema/WorldGrant.cs`, `WorldPrincipal.cs`,
-`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels campaign that designed this model was retired 2026-08-10 and its rulings moved into the code above — read the CODE for current rulings, and `docs/campaign.md` for what remains as work.
+`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels campaign that designed this model was retired 2026-08-10 and its rulings moved into the code above — read the CODE for current rulings, and `docs/game/design.md` for what remains as work.
 
 ## Contents
 

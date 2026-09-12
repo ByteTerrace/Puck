@@ -8,6 +8,9 @@ link abstractions are shared where the hardware itself shares them. Snapshot,
 fork, and queued off-thread hosting come from `Puck.GamingBricks`; this
 project supplies only the AGB hardware itself.
 
+This project is truly open source and dual-licensed under Apache-2.0 or MIT;
+see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
+
 ## ✨ Key features
 
 - *A complete machine from one DI scope:* `AdvancedGamingBrickMachine` binds
@@ -62,7 +65,8 @@ limitations as `stub`. Nonzero replacement BIOS images are accepted, but
 their service completeness is the caller's responsibility.
 
 The [native firmware guide](Firmware/README.md) owns implementation coverage,
-provenance and remaining compatibility limits. The image is MIT-licensed and
+provenance and remaining compatibility limits. The image is dual-licensed
+under Apache-2.0 or MIT and
 embedded in the runtime package; an application does not need Forge, LLVM or
 a separate BIOS download. `AgbFirmware.GetImage()` returns a private copy.
 `AgbBiosKind.Puck` verifies exact bundled bytes, not retail cycle parity.

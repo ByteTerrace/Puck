@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 OR MIT
  * Copyright (c) 2026 ByteTerrace
  * Native ARM7TDMI firmware: no host callbacks, C runtime, or mutable BIOS data.
  */

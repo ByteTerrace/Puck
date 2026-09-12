@@ -1,10 +1,10 @@
 # Bundled HGB firmware
 
-These original Puck startup images are generated from
+These original Puck boot ROM startup images are generated from
 [`BootRomBuilder`](../../Puck.HumbleGamingBrick.Forge/BootRomBuilder.cs), one
 image per `ConsoleModel`. They are runtime resources, not external downloads.
 The `.bin` images in this directory are distributed under the adjacent
-[MIT license](LICENSE); this does not change the license of the emulator or
+[Apache-2.0 or MIT licenses](LICENSE); this does not change the license of the emulator or
 the Forge tooling.
 
 Regenerate or verify them with the documented

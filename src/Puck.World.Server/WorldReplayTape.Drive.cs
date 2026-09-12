@@ -148,7 +148,8 @@ public sealed partial class WorldReplayTape {
                 contentHash: out var contentHash,
                 definition: out _,
                 path: path,
-                reason: out var reason
+                reason: out var reason,
+                documents: m_liveServer.RebuildDocuments
             )) {
                 if (m_liveServer.Output.HasNarrationSink) {
                     m_liveServer.Output.Narrate(

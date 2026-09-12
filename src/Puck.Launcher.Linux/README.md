@@ -47,5 +47,5 @@ The last command is the honest ceiling of WSL2 verification here: a
 headless boot, no window. Windowed Linux — `dotnet run --project src/Puck.World
 -c Release -- --backend vulkan --exit-after-seconds 2` opening a real Wayland
 or Xcb window — is verified only on real Linux hardware (Steam Deck/Steam
-Machine, per `docs/agent-guide.md`'s supported GPU floor). That has not
+Machine, per `docs/development/contributing.md`'s supported GPU floor). That has not
 happened; do not claim otherwise.

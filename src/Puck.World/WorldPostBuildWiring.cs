@@ -191,6 +191,7 @@ internal static class WorldPostBuildWiring {
             new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory) ? directory : AppContext.BaseDirectory), catalogFingerprint: machineCatalogFingerprint, catalog: machineCatalog),
             storageNeighbours
         );
+        server.RebuildDocuments = services.GetRequiredService<IWorldDocumentSource>();
 
         // The boot authority's runtime adjacency source — unlike Neighbours (a load-time proof), this is
         // consulted every tick a body stands inside a derived overlap. Spawned authorities get

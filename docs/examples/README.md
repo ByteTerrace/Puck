@@ -1,31 +1,36 @@
-# Example Assets & Documents
+# Example documents
 
-This directory contains standalone example document assets demonstrating authoring schemas for creations and diegetic audio tunes in Puck.
+These small documents show the authoring formats for shapes and audio. They
+are reference assets, not standalone applications. The
+[authoring guide](../authoring/README.md) explains how to choose a workflow;
+[World authoring](../../src/Puck.World.Authoring/README.md) defines the formats.
 
----
+## Creations
 
-## Example Creations (`creations/`)
+A creation describes shapes, materials and their composition. Browse
+[creations](creations/) for the full set, or start with one of these:
 
-Signed-distance field creation models authored with CSG primitives, materials, and decals:
+- [Adventurer](creations/adventurer.creation.json): a humanoid model.
+- [CRT robot](creations/crt-robot.creation.json): a character built around a screen.
+- [Lantern fish](creations/lantern-fish.creation.json): an organic character.
+- [Town cottage](creations/town-cottage-a.creation.json): a building assembled
+  from repeated shapes.
+- [Town arcade](creations/town-arcade.creation.json): a cabinet-shaped asset.
 
-- **Characters & Avatars**:
-  - `adventurer.creation.json` — Humanoid adventurer model with vanity anchor attachments.
-  - `crt-robot.creation.json` — Retro CRT monitor-headed robot with diegetic screen faces.
-  - `lantern-fish.creation.json` — Organic deep-sea creature with emissive bulb and fins.
-- **Town Scenery & Architecture**:
-  - `town-arcade.creation.json` — Arcade cabinet housing retro machine screens and coin slots.
-  - `town-cottage-a.creation.json`, `town-cottage-b.creation.json` — Modular village cottages.
-  - `town-fountain.creation.json` — Central town square fountain with water layers.
-  - `town-grocery.creation.json` — Storefront building with awning and signs.
-  - `town-marquee.creation.json` — Illuminated theatre marquee with text runs.
-- **Street Furniture & Props**:
-  - `town-bench.creation.json`, `town-lamp.creation.json`, `town-mailbox.creation.json`, `town-planter.creation.json`, `town-tree.creation.json`.
+The directory also includes a second cottage, a fountain, grocery, marquee,
+and street furniture such as benches, lamps, mailboxes, planters and trees.
 
----
+## Audio
 
-## Example Tunes (`tunes/`)
+The [tunes](tunes/) directory contains
+[Brickfall](tunes/brickfall.audio.json) and a
+[small tune example](tunes/tune.audio.json). Read the owning audio format before
+choosing a playback or cartridge target; the document alone does not establish
+that every target accepts the same resources.
 
-Diegetic chiptune music tracks compiled for the Humble Gaming Brick audio synth:
+## Runnable examples
 
-- `brickfall.audio.json` — Fast-paced falling-block arcade puzzle theme.
-- `tune.audio.json` — Demonstration retro music sequence exercising all 4 APU sound channels.
+To see a complete host workflow, use the
+[shader pipeline example](../../src/Puck.World/README.md#shader-pipelines) or the
+[cartridge forge guide](../../src/Puck.GamingBricks.Forge/README.md). Those guides
+link the source files, launch commands and expected results together.

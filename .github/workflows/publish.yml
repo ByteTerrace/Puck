@@ -1,7 +1,7 @@
 name: Release NuGet packages
 run-name: NuGet ${{ inputs.publish && 'publication' || 'validation' }} — ${{ inputs.packages }} — ${{ github.ref_name }}
 
-# A version bump alone does not publish. Choose the batch explicitly; see docs/ci.md.
+# A version bump alone does not publish. Choose the batch explicitly; see docs/development/ci.md.
 # Keep this filename and the NuGet environment aligned with Trusted Publishing.
 on:
   workflow_dispatch:

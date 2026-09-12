@@ -1,3 +1,5 @@
+- name: Engine manual
+  href: https://github.com/ByteTerrace/Puck/blob/main/docs/README.md
 - name: Home
   href: index.md
 - name: API

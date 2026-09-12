@@ -21,7 +21,7 @@ For scoped material composition, `mapCore` must save/reset/restore
 A losing scope must not tint the parent; a winning hard-union scope must retain
 its internal seam. Verify both cases with contrasting scoped materials against
 an unrelated ground surface. The two-material outer-seam behavior is described
-in `docs/sdf-wiki/materials-and-primitives.md`.
+in `docs/rendering/sdf/materials-and-primitives.md`.
 
 Factual and procedural only: settled contracts, their exact sync points, and
 how to verify. The user's current instruction outranks it — if this file
@@ -46,7 +46,7 @@ accounting aligned. Verify through `WorldRenderEnvelopeLawTests` and
 `ShapePanelLawTests`' probe laws and a rendered live placement addition, since
 headless admission has no GPU capacity lease.
 
-> **Unification-contract alignment** (see docs/vision.md): world content is
+> **Unification-contract alignment** (see docs/decisions/engine-design.md): world content is
 > authored and loaded in-session — the `world.row.set`/`world.row.step`
 > document-row mutation verbs and `world.load`/`world.save` — never only
 > through a CLI flag. `Puck.World` has no content-authoring flags at all.
@@ -472,7 +472,7 @@ kernel variants, pass labels/timing, or descriptor/register wiring.
   current viewport's reduced render extent, and exclude exhausted rays from
   sky evidence. A local field rise does not prove sky behind grass or other
   foreground geometry. The monolithic reference omits this filter. See
-  `docs/sdf-wiki/shading-ao-shadows.md` for the weight and verification cases.
+  `docs/rendering/sdf/shading-ao-shadows.md` for the weight and verification cases.
 
 - **Sweep cull spheres must include the field's subtractive margin.**
   `SdfProgram.Sweep.cs` encloses the control-point hull, maximum positive profile

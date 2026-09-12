@@ -6,6 +6,8 @@
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.AdvancedGamingBrick</PackageId>
         <PackageTags>agb;arm7tdmi;determinism;emulation</PackageTags>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
         <RootNamespace>Puck.AdvancedGamingBrick</RootNamespace>

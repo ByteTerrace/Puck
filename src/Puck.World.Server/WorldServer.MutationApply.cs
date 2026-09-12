@@ -403,7 +403,8 @@ public sealed partial class WorldServer {
             contentHash: out var rereadHash,
             definition: out var reread,
             path: path,
-            reason: out var rereadReason
+            reason: out var rereadReason,
+            documents: RebuildDocuments
         )) {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {rereadReason}");
         } else {
@@ -799,7 +800,7 @@ public sealed partial class WorldServer {
     }
     // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
     // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
-    // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/vision.md's
+    // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/architecture/worlds.md's
     // "Observation and display" section). Stamped with the server's actual current tick/step width
     // (m_lastCompletedTick/m_lastStepTicks), which are still their default 0/0 before the very first Step has ever
     // run — the one case where 0/0 is the honest answer, preserved exactly.

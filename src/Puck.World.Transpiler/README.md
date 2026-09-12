@@ -258,10 +258,21 @@ always runs and always reports. Every other check is Information severity; the s
 
 ## Editor tooling
 
+The [VS Code extension](../../editors/vscode/README.md) starts this server through `puck lsp` when a Puck document opens. Its setup guide covers CLI paths, packaging, and restarting the server.
+
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords and the `Puck.State`
 predicate/effect/`CellKind` discriminators, hover on a declared `state` row name (its `kind`, and `capacity`/`domain`
 when present, via a best-effort lower of the open document), and `documentSymbol` entries for `rule` blocks (with
 `when`/`bind`/`decision` children).
+
+Hover also shows declarations for document-level `let` constants, templates (including parameter defaults),
+import aliases, template and lambda parameters, loop variables, and rule bindings. Local parameters and bindings
+are resolved within their enclosing scope. Contiguous `//` comments immediately above a declaration accompany
+its popup. Collection functions show their signatures and behavior; scalar function arity, domain, and operation
+come from `Puck.State.ExpressionVocabulary`. Declaration cards quote source rather than evaluating it, so units
+and expressions remain as authored and recoverable declarations still work while the document has syntax errors.
+Comments, string contents, and whitespace do not trigger symbol hover. Imported member definitions and inferred
+expression result types are not resolved by these cards.
 
 `Formatting/PuckFormatter.cs` is a meaning-preserving pass: formatting a document never changes what it compiles
 to. A `$name:segment` reserved channel — including a folded `$zones[...]` selector — is one opaque token, so its

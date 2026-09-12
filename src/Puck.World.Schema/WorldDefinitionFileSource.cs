@@ -363,7 +363,7 @@ public static class WorldDefinitionFileSource {
 
         return reader.ReadToEnd();
     }
-    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog) {
+    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents) {
         definition = null;
         contentHash = string.Empty;
 
@@ -375,16 +375,34 @@ public static class WorldDefinitionFileSource {
 
         byte[] bytes;
 
-        // The environmental read class, filtered exactly like every sibling read here (TryResolveChainFiles,
-        // DirectoryDocumentSource.TryRead): a locked, half-written, or permission-refused file, whose verdict is a
-        // property of the moment rather than of the bytes. Callers classify on this wording — WorldOwnedWorlds
-        // quarantines a file only for a document-shape refusal — so nothing but a real I/O refusal may reach it.
-        try {
-            bytes = File.ReadAllBytes(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+        if (documents is not null) {
+            // A supplied source owns how the root reads — a .puck root lowers to its document — so the pin below covers
+            // the document that source produces, not the file's raw bytes.
+            if (!documents.TryRead(
+                content: out var read,
+                name: path,
+                reason: out var readReason,
+                referrerName: path,
+                resolvedName: out _
+            )) {
+                reason = $"cannot read {path}: {readReason.ReplaceLineEndings(replacementText: " ")}";
 
-            return false;
+                return false;
+            }
+
+            bytes = read!;
+        } else {
+            // The environmental read class, filtered exactly like every sibling read here (TryResolveChainFiles,
+            // DirectoryDocumentSource.TryRead): a locked, half-written, or permission-refused file, whose verdict is a
+            // property of the moment rather than of the bytes. Callers classify on this wording — WorldOwnedWorlds
+            // quarantines a file only for a document-shape refusal — so nothing but a real I/O refusal may reach it.
+            try {
+                bytes = File.ReadAllBytes(path: path);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+                return false;
+            }
         }
 
         string json;
@@ -424,7 +442,7 @@ public static class WorldDefinitionFileSource {
         )
         ) {
             if (!TryComposeChainWithImports(
-                source: new DirectoryDocumentSource(),
+                source: (documents ?? new DirectoryDocumentSource()),
                 rootResolvedName: Path.GetFullPath(path: path),
                 rootBytes: bytes,
                 composed: out var composed,
@@ -1638,8 +1656,12 @@ public static class WorldDefinitionFileSource {
     /// hand should pass it.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host catalog.</param>
     /// <param name="catalog">The selected host machine catalog used for provider rewriting and semantic validation, or null for structural composition.</param>
+    /// <param name="documents">The source the root and every basis/import reference read through, or
+    /// <see langword="null"/> to read files directly. A source that lowers <c>.puck</c> makes
+    /// <paramref name="contentHash"/> pin the lowered document, so a source edit that lowers identically keeps the
+    /// pin.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) =>
+    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) =>
         TryLoadCore(
             contentHash: out contentHash,
             definition: out definition,
@@ -1648,7 +1670,8 @@ public static class WorldDefinitionFileSource {
             reason: out reason,
             validateAdjacencyClaims: true,
             catalogFingerprint: catalogFingerprint,
-            catalog: catalog
+            catalog: catalog,
+            documents: documents
         );
     /// <summary>Loads a file while validating only the facts owned by that document. Used before the composition root
     /// can supply a neighbour resolver, and by replay to obtain the bytes whose recorded content hash is compared by
@@ -1659,8 +1682,10 @@ public static class WorldDefinitionFileSource {
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host catalog.</param>
     /// <param name="catalog">The selected host machine catalog used for provider rewriting and semantic validation, or null for structural composition.</param>
+    /// <param name="documents">The source the root and every basis/import reference read through, or
+    /// <see langword="null"/> to read files directly — see <see cref="TryLoad"/>.</param>
     /// <returns><see langword="true"/> when the file loaded and its document-local facts validated.</returns>
-    public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) =>
+    public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) =>
         TryLoadCore(
             contentHash: out contentHash,
             definition: out definition,
@@ -1669,7 +1694,8 @@ public static class WorldDefinitionFileSource {
             reason: out reason,
             validateAdjacencyClaims: false,
             catalogFingerprint: catalogFingerprint,
-            catalog: catalog
+            catalog: catalog,
+            documents: documents
         );
 
     // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below

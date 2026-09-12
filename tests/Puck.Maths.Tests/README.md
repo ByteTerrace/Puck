@@ -21,7 +21,7 @@ Committed artifacts (all deterministic, stable ordering, update-on-change): `fro
 
 `TestPaths` resolves these files in the running checkout through the shared
 repository locator. CI source-path mapping does not change where declarations
-are read or generated artifacts are written; see [CI and releases](../../docs/ci.md).
+are read or generated artifacts are written; see [CI and releases](../../docs/development/ci.md).
 
 Every artifact write is **execution-gated**: the ledger persists an artifact only when the check that owns it actually
 ran this session. The manifest belongs to the ratchet gate, the frontier to the runs that consumed domains, each
