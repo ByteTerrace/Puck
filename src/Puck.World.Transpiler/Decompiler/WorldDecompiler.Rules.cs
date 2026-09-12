@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -211,14 +212,21 @@ public static partial class WorldDecompiler {
         // `comparison` and `kind` must be spelled exactly as their own enum members: the engine's converter accepts
         // any casing, but the sugar can only reproduce the canonical spelling, and printing a different one back
         // changes the document. `value` and `comparandState` together contradict `CompareState`'s own
-        // exactly-one-of contract and the sugar carries only one of them, so that shape stays call-form too.
+        // exactly-one-of contract and the sugar carries only one of them; a key present with an explicit JSON null
+        // is also unrepresentable, since the comparand text the sugar prints always recompiles to a real value.
         "compareState" => PuckDslVocabulary.TryParseCanonicalComparisonName(node["comparison"]?.ToString(), out _)
-            && ((node["value"] is null) != (node["comparandState"] is null))
+            && ((node["value"] is not null) != (node["comparandState"] is not null))
+            && !(node.ContainsKey("value") && node["value"] is null)
+            && !(node.ContainsKey("comparandState") && node["comparandState"] is null)
             && RowRefRoundTrips(node["state"]?.ToString() ?? "", node["key"]?.ToString())
             && (node["comparandState"] is not { } comparandState
                 || RowRefRoundTrips(comparandState.ToString() ?? "", node["comparandKey"]?.ToString())),
+        // A `compareValue` whose two operands are simple enough to re-lower as `compareState` can only keep its
+        // `$type` when the printed text carries a kind annotation forcing it back (`LowerComparison` treats any
+        // annotation as that force), so a node with no `kind` at all in that position has no sugar spelling.
         "compareValue" => PuckDslVocabulary.TryParseCanonicalComparisonName(node["comparison"]?.ToString(), out _)
             && (node["kind"] is null || PuckDslVocabulary.TryParseComparisonKind(node["kind"]!.ToString(), out _))
+            && (node["kind"] is not null || !CompareValueNeedsKindAnnotation(node))
             && !(node["left"]?.ToString() ?? "").TrimStart().StartsWith('('),
         // A single-child (or empty) `all`/`any` has no bare-sugar spelling at all: `AndGate`/`OrGate` only ever
         // build the `All`/`Any` wrapper when MORE than one operand was matched at the same keyword — one operand
@@ -286,27 +294,41 @@ public static partial class WorldDecompiler {
         var left = FormatRowRef(state, key);
         var symbol = ComparisonToSymbol(node["comparison"]?.ToString());
 
-        string right;
-        if (node["comparandState"] is { } comparandState) {
-            var comparandKey = node["comparandKey"]?.ToString();
-            right = FormatRowRef(comparandState.ToString() ?? "", comparandKey);
-        } else if (node["value"] is { } value) {
-            right = FormatValue(value, 0);
-        } else {
-            right = "0";
-        }
+        // `IsPredicateSafeForGateSugar` admits exactly one non-null comparand, so both arms below are total.
+        var right = (node["comparandState"] is { } comparandState)
+            ? FormatRowRef(comparandState.ToString() ?? "", node["comparandKey"]?.ToString())
+            : (node["value"] is { } value)
+                ? FormatValue(value, 0)
+                : throw new InvalidOperationException("compareState carries neither a value nor a comparandState");
 
         return $"{left} {symbol} {right}";
     }
 
+    // Whether the operands are simple enough that `LowerComparison` would read the bare `left cmp right` text back
+    // as a `compareState` node — the one case where a `Fixed` kind must still be printed, since the annotation is
+    // what keeps the node a `compareValue` on recompile.
+    private static bool CompareValueNeedsKindAnnotation(JsonObject node) =>
+        WorldDocumentEmitter.ClassifyBareComparison(node["left"]?.ToString() ?? "", node["right"]?.ToString() ?? "", out _, out _)
+            != WorldDocumentEmitter.BareComparisonShape.CompareValue;
+
+    // A kind annotation is wrapped in parens around the WHOLE comparison it names, `(left cmp right : Int)`,
+    // unconditionally of where the comparison sits: printed bare, the suffix would trail whatever came textually
+    // last in an `and`/`or` chain (`FormatConjunction` joins operands with no delimiter of its own), leaving a
+    // reader unable to tell whether it annotates that one comparison or the entire chain. Wrapping reuses the
+    // parenthesized-subgate grammar the language already has (`when (Gate)` — `ParseAtom`'s leading-`(` case), so
+    // nothing in `Parsing/` changes. `Fixed` is the default and stays elided wherever the bare text re-lowers to a
+    // `compareValue` on its own.
     private static string FormatCompareValue(JsonObject node) {
         var left = node["left"]?.ToString() ?? "";
         var right = node["right"]?.ToString() ?? "";
         var symbol = ComparisonToSymbol(node["comparison"]?.ToString());
-        var suffix = (PuckDslVocabulary.TryParseComparisonKind(node["kind"]?.ToString(), out var kind) && (kind == CellKind.Int))
-            ? $" : {Enum.GetName(CellKind.Int)}"
-            : "";
-        return $"{left} {symbol} {right}{suffix}";
+        var comparison = $"{left} {symbol} {right}";
+        if (!PuckDslVocabulary.TryParseComparisonKind(node["kind"]?.ToString(), out var kind)) {
+            return comparison;
+        }
+        return ((kind == CellKind.Int) || CompareValueNeedsKindAnnotation(node))
+            ? $"({comparison} : {Enum.GetName(kind)})"
+            : comparison;
     }
 
     // Only ever reached for a node `IsPredicateSafeForGateSugar` already accepted, which is what guarantees the wire
@@ -376,24 +398,36 @@ public static partial class WorldDecompiler {
     // applies — either nothing classifiable is present, `fromState`+`fromKey` are BOTH present, or `expression`
     // holds a shape the compiler's own operand classifier would reclassify as `value`/`fromState` on recompile
     // (that combination has no `=` sugar inverse; it always prints as call-form).
-    private static string? FormatEffectRhs(JsonObject obj, bool allowText) {
+    private static (string Text, string Key)? FormatEffectRhs(JsonObject obj, bool allowText) {
         if (allowText && obj["text"] is { } textVal) {
-            return FormatValue(textVal, 0);
+            return (FormatValue(textVal, 0), "text");
         }
         if (obj["valueSeconds"] is { } secondsVal) {
-            return $"{FormatValue(secondsVal, 0)}s";
+            return ($"{FormatValue(secondsVal, 0)}s", "valueSeconds");
         }
         if (obj["expression"] is { } exprVal) {
             var text = exprVal.ToString() ?? "";
-            return ExpressionRoundTripsThroughOperandRhs(text) ? text : null;
+            return ExpressionRoundTripsThroughOperandRhs(text) ? (text, "expression") : null;
         }
         if (obj["value"] is { } val) {
-            return FormatValue(val, 0);
+            return (FormatValue(val, 0), "value");
         }
         if (obj["fromState"] is { } fromStateVal && obj["fromKey"] is null) {
-            return fromStateVal.ToString() ?? "";
+            return (fromStateVal.ToString() ?? "", "fromState");
         }
         return null;
+    }
+
+    // Whether `obj` carries nothing beyond the keys a sugar spelling reprints. Any other key — including one
+    // present with an explicit JSON null, which the `is { }` reads above pass over — would be silently dropped, so
+    // the caller falls back to call form, whose printer carries every key.
+    private static bool CarriesOnly(JsonObject obj, params ReadOnlySpan<string> reprinted) {
+        foreach (var (key, _) in obj) {
+            if (!reprinted.Contains(key)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // The compiler's own operand classifier (`WorldDocumentEmitter.ApplyOperandRhs`) reclassifies a bare RHS operand
@@ -416,29 +450,33 @@ public static partial class WorldDecompiler {
         };
     }
 
+    // The `=` sugar emits only `$type`, `state`, `key` and the one right-hand-side key it consumed (LowerCellEffect
+    // fills nothing else), so an object carrying anything more — an explicit `"target": "Self"` the author wrote,
+    // or a second RHS key left behind — has no sugar spelling and prints as call form.
     private static string FormatSetOrAddEffect(string discriminator, JsonObject obj) {
-        var hasNonSelfTarget = obj["target"] is { } targetVal && !string.Equals(targetVal.ToString(), "Self", StringComparison.Ordinal);
-        var rhs = (hasNonSelfTarget || !IsEffectTargetSafe(obj)) ? null : FormatEffectRhs(obj, allowText: discriminator == "setState");
-        if (rhs is null) {
+        var rhs = IsEffectTargetSafe(obj) ? FormatEffectRhs(obj, allowText: discriminator == "setState") : null;
+        if (rhs is not { } entry || !CarriesOnly(obj, "$type", "state", "key", entry.Key)) {
             return FormatCallForm(obj, 0);
         }
         var op = (discriminator == "addState") ? "+=" : "=";
-        return $"{FormatRowRefTarget(obj)} {op} {rhs}";
+        return $"{FormatRowRefTarget(obj)} {op} {entry.Text}";
     }
 
     private static string FormatPushEffect(JsonObject obj) {
         var rhs = FormatEffectRhs(obj, allowText: false);
-        if (rhs is null) {
+        if (rhs is not { } entry || !CarriesOnly(obj, "$type", "state", entry.Key)) {
             return FormatCallForm(obj, 0);
         }
-        return $"push {obj["state"]} = {rhs}";
+        return $"push {obj["state"]} = {entry.Text}";
     }
 
     private static string FormatRowOnlyEffect(string keyword, JsonObject obj) =>
-        IsEffectTargetSafe(obj) ? $"{keyword} {FormatRowRefTarget(obj)}" : FormatCallForm(obj, 0);
+        (IsEffectTargetSafe(obj) && CarriesOnly(obj, "$type", "state", "key"))
+            ? $"{keyword} {FormatRowRefTarget(obj)}"
+            : FormatCallForm(obj, 0);
 
     private static string FormatScheduleEffect(JsonObject obj) {
-        if (obj["delaySeconds"] is not { } delay || !IsEffectTargetSafe(obj)) {
+        if (obj["delaySeconds"] is not { } delay || !IsEffectTargetSafe(obj) || !CarriesOnly(obj, "$type", "state", "key", "delaySeconds")) {
             return FormatCallForm(obj, 0);
         }
         return $"schedule {FormatRowRefTarget(obj)} in {FormatValue(delay, 0)}s";

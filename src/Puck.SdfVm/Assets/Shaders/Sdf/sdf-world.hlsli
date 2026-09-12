@@ -490,16 +490,21 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float outside = (length(max(edgeDistance, 0.0)) - CrtCornerRadius);
     float bezel = (1.0 - smoothstep(0.0, CrtBezelSoft, outside));
 
-    float3 sampled = sampleScreenSource(screenIndex, saturate(curved)).rgb;
+    // The image fills the area INSIDE the bezel rather than being masked by it: a bezel frames a screen, it never
+    // eats picture. Sampling the slab's whole face and then blackening its rim would crop CrtBezel of every edge —
+    // half a tile column on a 160-wide handheld image. Folds to the identity at CrtBezel = 0.
+    float2 image = (0.5 + ((curved - 0.5) / (1.0 - (2.0 * CrtBezel))));
+
+    float3 sampled = sampleScreenSource(screenIndex, saturate(image)).rgb;
 
     // Aperture grille — faint vertical RGB phosphor stripes: three cosines 120 degrees apart. Continuous (cos), so a
     // cross-backend UV delta never flips a hard edge; the period rides the screen-local UV, so the stripe stays on the
     // image. CrtApertureGrille = 0 is a no-op.
-    float3 grille = (0.5 + (0.5 * cos(((curved.x * CrtGrilleColumns) * SDF_TAU) - CrtGrillePhase)));
+    float3 grille = (0.5 + (0.5 * cos(((image.x * CrtGrilleColumns) * SDF_TAU) - CrtGrillePhase)));
     sampled *= (1.0 - (CrtApertureGrille * (1.0 - grille)));
 
     // Native-line scanlines (soft cosine), and a radial vignette when CrtVignette is non-zero.
-    float scanline = (1.0 - (CrtScanAmplitude * (0.5 - (0.5 * cos(((curved.y * CrtScanLines) * SDF_TAU))))));
+    float scanline = (1.0 - (CrtScanAmplitude * (0.5 - (0.5 * cos(((image.y * CrtScanLines) * SDF_TAU))))));
     float vignette = (1.0 - (CrtVignette * radiusSquared));
 
     // Bloom knee: bright pixels bleed a little (single-pixel fake — no neighborhood pass).

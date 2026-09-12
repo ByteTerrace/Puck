@@ -16,7 +16,8 @@ public static partial class PuckParser {
 
     /// <summary>Scans one contiguous span of opaque operand text: brackets and parentheses are tracked as one
     /// combined depth counter, a backquoted span is passed through uninterpreted, and scanning always stops
-    /// (without consuming) at a top-level ')', ',', ';', '}', a newline, or end of input. When <paramref
+    /// (without consuming) at a top-level ')', ',', ';', '}', a comment opener ('//' or '/*'), a newline, or end of
+    /// input. When <paramref
     /// name="stopKeywords"/> names a bare word found at a word boundary, scanning also stops there. When <paramref
     /// name="stopAtComparator"/>, a top-level comparison operator (from <see cref="ComparisonStopOperators"/>) also
     /// stops the scan without being consumed — <paramref name="sawComparator"/> reports whether that happened, so a
@@ -65,6 +66,12 @@ public static partial class PuckParser {
             }
 
             if (c is ',' or ';' or '}' or '\n' or '\r') {
+                break;
+            }
+
+            // The same comment terminators AtEndOfLogicalStatement recognizes: an operand span ends where a
+            // trailing comment begins, so a `when`/`bind` line accepts one the way an effect line already does.
+            if (c == '/' && (cursor.Offset + 1) < buffer.Length && buffer[cursor.Offset + 1] is '/' or '*') {
                 break;
             }
 
@@ -310,6 +317,45 @@ public static partial class PuckParser {
             return true;
         }
         return (i + 1 < buffer.Length && buffer[i] == '/' && buffer[i + 1] == '/');
+    }
+
+    // Whether the next identifier-or-string token after `offset` sits on a later line indented deeper than
+    // `keywordColumn` (1-based) — the continuation test a newline-terminated statement list needs to tell its own
+    // wrapped operands apart from the next statement at the same nesting level.
+    private static bool ContinuesOnDeeperIndentedLine(string buffer, int offset, int keywordColumn) {
+        var i = offset;
+
+        while (i < buffer.Length) {
+            var c = buffer[i];
+
+            if (char.IsWhiteSpace(c)) {
+                i++;
+                continue;
+            }
+            if (c == '/' && (i + 1) < buffer.Length && buffer[i + 1] == '/') {
+                while (i < buffer.Length && buffer[i] is not ('\r' or '\n')) {
+                    i++;
+                }
+                continue;
+            }
+            if (c == '/' && (i + 1) < buffer.Length && buffer[i + 1] == '*') {
+                var close = buffer.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                i = (close < 0) ? buffer.Length : (close + 2);
+                continue;
+            }
+            break;
+        }
+
+        if (i >= buffer.Length || !(char.IsLetter(buffer[i]) || buffer[i] is '_' or '$' or '"')) {
+            return false;
+        }
+
+        var lineStart = i;
+        while (lineStart > 0 && buffer[lineStart - 1] is not ('\r' or '\n')) {
+            lineStart--;
+        }
+
+        return ((i - lineStart) + 1) > keywordColumn;
     }
     /// <summary>Matches one cell-kind keyword a <c>: Kind</c>/<c>as Kind</c> annotation or a <c>bind</c> admits,
     /// spelled from the enum through <see cref="PuckDslVocabulary.ComparisonKindNames"/>. Returns

@@ -564,7 +564,7 @@ public class EmitterSugarTests {
     // ---- §4 shapes and placements ---------------------------------------------------------------------------
 
     [Fact]
-    public void ShapeFillsBlendSmoothRotationScaleGroupOnlyWhenAbsent() {
+    public void ShapeFillsBlendSmoothRotationScaleOnlyWhenAbsent() {
         var (json, diagnostics) = Lower("""
             shape Box "board" {
                 position: [0, -2.5, 0]
@@ -577,11 +577,25 @@ public class EmitterSugarTests {
         Assert.Equal("board", shape["name"]?.ToString());
         Assert.Equal("Union", shape["blend"]?.ToString());
         Assert.Equal(0, AsDouble(shape["smooth"]));
-        Assert.Equal(0, AsDouble(shape["group"]));
         var rotation = Assert.IsType<JsonArray>(shape["rotation"]);
         Assert.Equal([0, 0, 0, 1], rotation.Select(static n => n!.GetValue<int>()));
         var scale = Assert.IsType<JsonArray>(shape["scale"]);
         Assert.Equal([1, 1, 1], scale.Select(static n => n!.GetValue<int>()));
+    }
+
+    // `group` is null (omitted from the wire JSON) on an ungrouped shape and an explicit value — including an
+    // explicit 0 — on a grouped one; those are two different JSON shapes with no shared default, so the emitter
+    // never fills it and an unauthored shape carries no `group` key at all.
+    [Fact]
+    public void ShapeNeverFillsGroupWhenAbsent() {
+        var (json, diagnostics) = Lower("""
+            shape Box "board" {
+                position: [0, -2.5, 0]
+            }
+            """);
+        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
+        var shape = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(json["shapes"])[0]);
+        Assert.False(shape.ContainsKey("group"));
     }
 
     [Fact]
@@ -664,7 +678,7 @@ public class EmitterSugarTests {
     // ---- Shipped-world cross-checks --------------------------------------------------------------------------
 
     private static JsonObject LoadShippedRule(string relativeWorldPath, string ruleName) {
-        var worldsDir = FindWorldsDirectory();
+        var worldsDir = ShippedWorlds.FindDirectory();
         var fullPath = Path.Combine(worldsDir, relativeWorldPath);
         Assert.True(File.Exists(fullPath), $"Shipped world file not found: {fullPath}");
 
@@ -677,69 +691,6 @@ public class EmitterSugarTests {
             }
         }
         throw new InvalidOperationException($"rule '{ruleName}' not found in {relativeWorldPath}");
-    }
-
-    private static string? FindFirstMismatch(JsonNode? a, JsonNode? b, string path) {
-        if (a is null && b is null) {
-            return null;
-        }
-        if (a is null) {
-            return $"{path}: expected null, actual '{b?.ToJsonString()}'";
-        }
-        if (b is null) {
-            return $"{path}: expected '{a.ToJsonString()}', actual null";
-        }
-        if (a.GetValueKind() != b.GetValueKind()) {
-            return $"{path}: kinds differ: expected {a.GetValueKind()}, actual {b.GetValueKind()}";
-        }
-
-        if (a is JsonObject objA && b is JsonObject objB) {
-            foreach (var kvp in objA) {
-                if (!objB.ContainsKey(kvp.Key)) {
-                    return $"{path}: missing property '{kvp.Key}'";
-                }
-                var diff = FindFirstMismatch(kvp.Value, objB[kvp.Key], $"{path}/{kvp.Key}");
-                if (diff is not null) {
-                    return diff;
-                }
-            }
-            foreach (var kvp in objB) {
-                if (!objA.ContainsKey(kvp.Key)) {
-                    return $"{path}: unexpected extra property '{kvp.Key}'";
-                }
-            }
-            return null;
-        }
-
-        if (a is JsonArray arrA && b is JsonArray arrB) {
-            if (arrA.Count != arrB.Count) {
-                return $"{path}: array length expected {arrA.Count}, actual {arrB.Count}";
-            }
-            for (var i = 0; i < arrA.Count; i++) {
-                var diff = FindFirstMismatch(arrA[i], arrB[i], $"{path}[{i}]");
-                if (diff is not null) {
-                    return diff;
-                }
-            }
-            return null;
-        }
-
-        if (a is JsonValue valA && b is JsonValue valB && !JsonNode.DeepEquals(valA, valB)) {
-            return $"{path}: value expected '{valA.ToJsonString()}', actual '{valB.ToJsonString()}'";
-        }
-        return null;
-    }
-
-    private static string FindWorldsDirectory() {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null) {
-            var candidate = Path.Combine(dir, "src", "Puck.World", "Assets", "worlds");
-            if (Directory.Exists(candidate)) {
-                return candidate;
-            }
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new DirectoryNotFoundException("Could not locate src/Puck.World/Assets/worlds directory from test runner.");
     }
 
     [Fact]
@@ -755,7 +706,7 @@ public class EmitterSugarTests {
             }
             """);
 
-        var mismatch = FindFirstMismatch(expected, rule, "witness-claim");
+        var mismatch = JsonMismatch.Find(expected, rule, "witness-claim");
         Assert.Null(mismatch);
     }
 
@@ -782,7 +733,7 @@ public class EmitterSugarTests {
             }
             """);
 
-        var mismatch = FindFirstMismatch(expected, rule, "tabletop-advance-turn");
+        var mismatch = JsonMismatch.Find(expected, rule, "tabletop-advance-turn");
         Assert.Null(mismatch);
     }
 }

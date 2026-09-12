@@ -5,12 +5,14 @@ namespace Puck.World.Transpiler.Lowering;
 /// <summary>The values the <c>shape</c> and <c>placement</c> row sugar elides, and the exact node each elision
 /// stands for. The emitter fills from this table and the decompiler elides against it, so the two sides cannot
 /// disagree about what an omitted field means.</summary>
-/// <remarks>The shape defaults are the ones <c>CreationCanonicalizer.Normalize</c> fills unconditionally, so every
-/// canonical creation document carries them even at their default value; an emitter that skipped one would produce
-/// a document the engine's own canonical form does not match.</remarks>
+/// <remarks><c>ShapeDocument.Group</c> is not in this table: the authored corpus omits the key on some shapes and
+/// carries it on others, so filling a default on lowering would add a key the source does not have. (The engine
+/// itself cannot tell the two apart — <c>CreationCanonicalizer</c> normalizes an absent <c>group</c> and an
+/// explicit <c>0</c> to the same value — so the constraint is round-trip fidelity, not engine semantics.) It
+/// passes through both directions like <c>material</c>/<c>parent</c> instead.</remarks>
 public static class WorldDocumentRowDefaults {
     /// <summary>The shape fields that carry a default, in the order the emitter fills them.</summary>
-    public static IReadOnlyList<string> ShapeKeys { get; } = ["id", "blend", "smooth", "rotation", "scale", "group"];
+    public static IReadOnlyList<string> ShapeKeys { get; } = ["id", "blend", "smooth", "rotation", "scale"];
 
     /// <summary>The placement fields that carry a default.</summary>
     public static IReadOnlyList<string> PlacementKeys { get; } = ["yawDegrees", "scale"];
@@ -27,7 +29,6 @@ public static class WorldDocumentRowDefaults {
         // `CreationCanonicalizer.NormalizeRotation` passes through untouched, and never elides to this.
         "rotation" => new JsonArray(0, 0, 0, 1),
         "scale" => new JsonArray(1, 1, 1),
-        "group" => JsonValue.Create(0),
         _ => null,
     };
 

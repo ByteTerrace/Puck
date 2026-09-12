@@ -760,7 +760,29 @@ puck lsp
 validating, rooted at the source file's own directory — the same order
 `PuckWorldLoader` uses at boot. Validating the uncomposed root would report every
 field the basis supplies as missing, so a document naming a basis only validates
-correctly this way. `puck lint` composes on the same terms.
+correctly this way.
+
+Engine-schema validation runs only on a ROOT — a document declaring
+`schema: "puck.world.def.v1"`, a `basis`, or both
+(`WorldSemanticValidator.IsRootDocument`). Everything else is a MODULE some
+other, unknown root supplies fields for, and validating it as a world would
+report those fields as missing; `--validate` on a module is therefore a no-op,
+and `puck lint` applies the identical test, so the two verbs never contradict
+each other on the same file. `puck lint`'s separate symbol-resolution pass
+(`Puck.World.Transpiler.Validation.PuckLinter.LintReferences`) composes any
+document naming a `basis` or `imports` to resolve names those supply, but
+reports an unresolved name only for a root — see
+[the transpiler README](../Puck.World.Transpiler/README.md#reference-resolution-lint).
+
+Every verb that validates or composes a world document — `compile --validate`,
+`lint`, and `world prepare` — registers the shipped screen-machine engines
+(`gaming-brick`, `advanced-gaming-brick`, `tune-instrument`) and installs
+`Puck.World.Schema`'s vocabulary hooks through the CLI's one installer,
+`Puck.Cli.CliWorldVocabulary.EnsureInstalled` — the same `IGamingBrickExtension`
+entry points (`HumbleGamingBrickExtension`, `AdvancedGamingBrickExtension`) and
+`WorldMachineExtensionRegistry` the game's dynamic extension loader calls into,
+so a document naming a shipped `screens[]` engine validates identically here and
+at boot.
 
 `decompile` writes beside its source when `-o` is omitted. A basis or import path
 inside the document resolves relative to the `.puck` file, so a round trip must

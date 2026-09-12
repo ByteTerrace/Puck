@@ -1,15 +1,28 @@
+using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
+using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Validation;
 
-// Symbol resolution over the LOWERED JSON, not the AST: it sees exactly what ships, template-expanded and
-// basis-independent, and needs no re-implementation of the emitter's own resolution. Four reference families —
-// state row, prototypeId, placement parent, camera/spawn-point — plus a best-effort `$`-prefix typo check, all
-// Information severity except the shape-parent check (Warning). Zero false positives is the bar: a `$`-prefixed or
-// dotted (import-alias) name is never checked against a declared-row set, and a document declaring `basis` skips
-// every family outright, since its own rows may live in a basis chain this pass cannot see.
+// Symbol resolution over the LOWERED JSON, not the AST: it sees exactly what ships, template-expanded and ready to
+// compose. Four reference families — state row, prototypeId, placement parent, camera/spawn-point — plus a
+// best-effort `$`-prefix typo check and a shape-parent check, each Information severity except shape-parent
+// (Warning). Zero false positives is the bar: a `$`-prefixed or dotted (import-alias) name is never checked against
+// a declared-row set.
+//
+// A document naming a `basis` or `imports` composes its whole graph through PuckDocumentComposer — the same
+// composition the game boot path and `compile --validate` run — so a name only a basis or import supplies resolves
+// correctly instead of reading as unresolved. That composed tree is used ONLY to build the name catalog: every
+// candidate reference site is still found by walking THIS document's own tree (never the composed one, whose
+// merged array order no longer lines up with `sourceMap`), so a reported finding's JSON pointer always traces back
+// to this document's own source. Whether an unresolvable name is REPORTED turns on
+// WorldSemanticValidator.IsRootDocument instead: a module is a fragment some other, unknown root may import, so a
+// name it does not declare may be one that root supplies, which a standalone pass over the module cannot see. The
+// shape-parent check is the one exception on both sides: it resolves a shape's `parent` against sibling names in
+// the SAME shapes array, a purely local scope no basis or importer could ever change, so it always runs and always
+// reports.
 public static partial class PuckLinter {
     // Read from RuleFacts' own constants, trimmed of their trailing ':'/'[' separator, so a channel added there is
     // known here without a second edit.
@@ -21,32 +34,52 @@ public static partial class PuckLinter {
         }.Select(static prefix => prefix.TrimEnd(':', '[')).Distinct(StringComparer.Ordinal),
     ];
 
-    /// <summary>Lints a canonical lowered <c>puck.world.def.v1</c> document for unresolved symbolic references.</summary>
-    /// <param name="document">The lowered world document.</param>
+    /// <summary>Lints a canonical lowered <c>puck.world.def.v1</c> document for unresolved symbolic references.
+    /// A document naming a <c>basis</c> or <c>imports</c> composes that whole graph (through
+    /// <see cref="PuckDocumentComposer"/>, rooted beside <paramref name="sourcePath"/> exactly like
+    /// <see cref="WorldSemanticValidator.ValidateComposedWorld"/>) to build the name catalog references resolve
+    /// against, but always walks <paramref name="document"/>'s own tree — never the composed one — to find
+    /// candidate reference sites, so every reported finding's JSON pointer already belongs to this document's own
+    /// <paramref name="sourceMap"/>. A document <see cref="WorldSemanticValidator.IsRootDocument"/> calls a module
+    /// never reports an unresolvable name (it may be supplied by whichever root imports it), except a shape's
+    /// <c>parent</c>, which is scoped to sibling shapes in the same array and never depends on an outside
+    /// catalog.</summary>
+    /// <param name="document">The lowered world document — this document's own tree, not a composed one.</param>
     /// <param name="sourceMap">The JSON-pointer-to-span map the same lowering pass populated, for diagnostic spans.</param>
     /// <param name="diagnostics">The bag to record findings into.</param>
-    public static void LintReferences(JsonObject document, SourceMap? sourceMap, DiagnosticBag diagnostics) {
+    /// <param name="sourcePath">This document's own resolved path — a declared <c>basis</c>/<c>imports</c> entry
+    /// resolves relative to its directory. Required even for a document with no basis, for parity with
+    /// <see cref="WorldSemanticValidator.ValidateComposedWorld"/>'s contract; unused when there is nothing to
+    /// compose.</param>
+    public static void LintReferences(JsonObject document, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(diagnostics);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
 
-        if (document["basis"] is not null) {
-            diagnostics.ReportInformation(
-                PuckDiagnosticCodes.LintUnresolvedState,
-                "Symbol resolution skipped: this document declares a 'basis' — rows may be inherited from the basis chain, which this pass cannot see.",
-                SourceSpan.None
-            );
-            return;
+        var isRoot = WorldSemanticValidator.IsRootDocument(document);
+        var catalogSource = document;
+
+        if (document["basis"] is not null || document["imports"] is not null) {
+            var rootBytes = Encoding.UTF8.GetBytes(document.ToJsonString());
+
+            if (PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var reason)) {
+                catalogSource = composed ?? document;
+            } else {
+                var span = (sourceMap is not null && sourceMap.TryGetSpan("/basis", out var basisSpan)) ? basisSpan : SourceSpan.None;
+                diagnostics.ReportError(PuckDiagnosticCodes.CompositionRefused, $"Basis/import composition refused: {reason}", span);
+                return;
+            }
         }
 
         var references = new ReferenceCatalog(
-            State: CollectRowNames(document["state"] as JsonObject),
-            Prototypes: CollectFieldValues(document["prototypes"] as JsonArray, "id"),
-            Placements: CollectFieldValues((document["placements"] as JsonObject)?["rows"] as JsonArray, "id"),
-            Cameras: CollectFieldValues(document["cameras"] as JsonArray, "name"),
-            SpawnPoints: CollectFieldValues(document["spawnPoints"] as JsonArray, "id")
+            State: CollectRowNames(catalogSource["state"] as JsonObject),
+            Prototypes: CollectFieldValues(catalogSource["prototypes"] as JsonArray, "id"),
+            Placements: CollectFieldValues((catalogSource["placements"] as JsonObject)?["rows"] as JsonArray, "id"),
+            Cameras: CollectFieldValues(catalogSource["cameras"] as JsonArray, "name"),
+            SpawnPoints: CollectFieldValues(catalogSource["spawnPoints"] as JsonArray, "id")
         );
 
-        WalkForReferences(document, string.Empty, references, sourceMap, diagnostics);
+        WalkForReferences(document, string.Empty, references, sourceMap, diagnostics, resolveGlobalReferences: isRoot);
     }
 
     private readonly record struct ReferenceCatalog(
@@ -97,23 +130,23 @@ public static partial class PuckLinter {
         return false;
     }
 
-    private static void WalkForReferences(JsonNode? node, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics) {
+    private static void WalkForReferences(JsonNode? node, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
         switch (node) {
             case JsonObject obj:
-                CheckObjectReferences(obj, pointer, catalog, sourceMap, diagnostics);
+                CheckObjectReferences(obj, pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
                 foreach (var (key, value) in obj) {
-                    WalkForReferences(value, $"{pointer}/{key}", catalog, sourceMap, diagnostics);
+                    WalkForReferences(value, $"{pointer}/{key}", catalog, sourceMap, diagnostics, resolveGlobalReferences);
                 }
                 break;
 
             case JsonArray arr:
                 // A `shapes` array (a creation document's own row collection) scopes its own `parent` resolution to
-                // sibling shape names in the SAME array — never a global name.
+                // sibling shape names in the SAME array — never a global name, and never gated by module/root mode.
                 if (pointer.EndsWith("/shapes", StringComparison.Ordinal)) {
                     CheckShapeParents(arr, pointer, sourceMap, diagnostics);
                 }
                 for (var index = 0; index < arr.Count; index++) {
-                    WalkForReferences(arr[index], $"{pointer}/{index}", catalog, sourceMap, diagnostics);
+                    WalkForReferences(arr[index], $"{pointer}/{index}", catalog, sourceMap, diagnostics, resolveGlobalReferences);
                 }
                 break;
         }
@@ -136,9 +169,9 @@ public static partial class PuckLinter {
         }
     }
 
-    private static void CheckObjectReferences(JsonObject obj, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics) {
+    private static void CheckObjectReferences(JsonObject obj, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
         // A placement row (identified by its own required prototypeId) — parent names a sibling placement id.
-        if (TryGetString(obj, "prototypeId", out var prototypeId)) {
+        if (resolveGlobalReferences && TryGetString(obj, "prototypeId", out var prototypeId)) {
             if (!catalog.Prototypes.Contains(prototypeId)) {
                 Report(sourceMap, diagnostics, $"{pointer}/prototypeId", PuckDiagnosticCodes.LintUnresolvedPrototype, DiagnosticSeverity.Information,
                     $"Unresolved prototypeId '{prototypeId}'.");
@@ -149,35 +182,43 @@ public static partial class PuckLinter {
             }
         }
 
-        CheckStateField(obj, "state", pointer, catalog, sourceMap, diagnostics);
-        CheckStateField(obj, "comparandState", pointer, catalog, sourceMap, diagnostics);
-        CheckStateField(obj, "fromState", pointer, catalog, sourceMap, diagnostics);
+        CheckStateField(obj, "state", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
+        CheckStateField(obj, "comparandState", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
+        CheckStateField(obj, "fromState", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
 
-        // ValueExpression-typed fields carry their author's verbatim infix text — every State token inside gets the same check.
-        CheckOperandField(obj, "left", pointer, catalog, sourceMap, diagnostics);
-        CheckOperandField(obj, "right", pointer, catalog, sourceMap, diagnostics);
-        CheckOperandField(obj, "expression", pointer, catalog, sourceMap, diagnostics);
-        CheckOperandField(obj, "score", pointer, catalog, sourceMap, diagnostics);
-
-        if (TryGetString(obj, "camera", out var cameraName) && cameraName.Length > 0 && !catalog.Cameras.Contains(cameraName)) {
-            Report(sourceMap, diagnostics, $"{pointer}/camera", PuckDiagnosticCodes.LintUnresolvedView, DiagnosticSeverity.Information,
-                $"Unresolved camera reference '{cameraName}'.");
+        // ValueExpression-typed fields carry their author's verbatim infix text — every State token inside gets the
+        // same check. "left"/"right" are ValueExpression text ONLY on a compareValue predicate (WorldNameRegistry's
+        // one Expression-role entry for that pair) — every other left/right pair in the document model (e.g. an
+        // interaction row's property/placement-id pair) is a different name kind entirely and must not be walked
+        // as an expression.
+        if (TryGetString(obj, "$type", out var discriminator) && (discriminator == "compareValue")) {
+            CheckOperandField(obj, "left", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
+            CheckOperandField(obj, "right", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
         }
-        if (TryGetString(obj, "spawnPoint", out var spawnPointId) && !catalog.SpawnPoints.Contains(spawnPointId)) {
-            Report(sourceMap, diagnostics, $"{pointer}/spawnPoint", PuckDiagnosticCodes.LintUnresolvedView, DiagnosticSeverity.Information,
-                $"Unresolved spawn point reference '{spawnPointId}'.");
+        CheckOperandField(obj, "expression", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
+        CheckOperandField(obj, "score", pointer, catalog, sourceMap, diagnostics, resolveGlobalReferences);
+
+        if (resolveGlobalReferences) {
+            if (TryGetString(obj, "camera", out var cameraName) && cameraName.Length > 0 && !catalog.Cameras.Contains(cameraName)) {
+                Report(sourceMap, diagnostics, $"{pointer}/camera", PuckDiagnosticCodes.LintUnresolvedView, DiagnosticSeverity.Information,
+                    $"Unresolved camera reference '{cameraName}'.");
+            }
+            if (TryGetString(obj, "spawnPoint", out var spawnPointId) && !catalog.SpawnPoints.Contains(spawnPointId)) {
+                Report(sourceMap, diagnostics, $"{pointer}/spawnPoint", PuckDiagnosticCodes.LintUnresolvedView, DiagnosticSeverity.Information,
+                    $"Unresolved spawn point reference '{spawnPointId}'.");
+            }
         }
     }
 
-    private static void CheckStateField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics) {
-        if (!TryGetString(obj, field, out var name) || IsSkippableName(name) || catalog.State.Contains(name)) {
+    private static void CheckStateField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
+        if (!resolveGlobalReferences || !TryGetString(obj, field, out var name) || IsSkippableName(name) || catalog.State.Contains(name)) {
             return;
         }
         Report(sourceMap, diagnostics, $"{pointer}/{field}", PuckDiagnosticCodes.LintUnresolvedState, DiagnosticSeverity.Information,
             $"Unresolved state row '{name}'.");
     }
 
-    private static void CheckOperandField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics) {
+    private static void CheckOperandField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
         if (!TryGetString(obj, field, out var text) || !ExpressionSpelling.TryParse(text, out var tokens, out _)) {
             return;
         }
@@ -187,10 +228,12 @@ public static partial class PuckLinter {
                 continue;
             }
             if (IsSkippableName(state.Name)) {
+                // The channel-prefix typo check is purely local (a fixed known-prefix list, never the document's
+                // own catalog), so it runs whether or not this document declares a basis.
                 CheckChannelPrefixTypo(state.Name, fieldPointer, sourceMap, diagnostics);
                 continue;
             }
-            if (!catalog.State.Contains(state.Name)) {
+            if (resolveGlobalReferences && !catalog.State.Contains(state.Name)) {
                 Report(sourceMap, diagnostics, fieldPointer, PuckDiagnosticCodes.LintUnresolvedState, DiagnosticSeverity.Information,
                     $"Unresolved state row '{state.Name}'.");
             }

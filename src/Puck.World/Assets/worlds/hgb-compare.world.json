@@ -1,0 +1,167 @@
+{
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "compare",
+      "renderHeight": 720,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "compare",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.5,
+                -5
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.5,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    }
+  ],
+  "documentId": "puck-hgb-compare-v1",
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 720,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "Windowed",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "schema": "puck.world.def.v1",
+  "screens": [
+    {
+      "halfDepth": 0.01,
+      "halfHeight": 1.44,
+      "halfWidth": 1.6,
+      "index": 0,
+      "origin": [
+        1.8,
+        1.5,
+        0
+      ],
+      "right": [
+        -1,
+        0,
+        0
+      ],
+      "round": 0,
+      "route": {
+        "engageRadius": 0,
+        "engageable": false
+      },
+      "source": {
+        "$type": "machine",
+        "contentPath": "../../../../roms/tetris-world-rev1.gb",
+        "engine": "gaming-brick",
+        "options": "cgb"
+      },
+      "up": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "halfDepth": 0.01,
+      "halfHeight": 1.44,
+      "halfWidth": 1.6,
+      "index": 1,
+      "origin": [
+        -1.8,
+        1.5,
+        0
+      ],
+      "right": [
+        -1,
+        0,
+        0
+      ],
+      "round": 0,
+      "route": {
+        "engageRadius": 0,
+        "engageable": false
+      },
+      "source": {
+        "$type": "machine",
+        "contentPath": "../cartridges/tetris.cgb.cartridge.json",
+        "engine": "gaming-brick",
+        "options": "cgb"
+      },
+      "up": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
+  "views": {
+    "layouts": [
+      {
+        "name": "compare",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "compare",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 0.01,
+      "minPitch": -0.01,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "seat",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 1,
+          "pitch": 0,
+          "yaw": 0
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
+  }
+}

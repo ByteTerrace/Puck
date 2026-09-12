@@ -81,7 +81,11 @@ public static partial class WorldDecompiler {
         }
 
         foreach (var (k, v) in row) {
-            if (elide.Contains(k) || v is null) {
+            if (elide.Contains(k)) {
+                continue;
+            }
+            if (v is null) {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: null");
                 continue;
             }
             if (v is JsonValue numeric && UnitSuffixFor(k, numeric) is { } unit) {

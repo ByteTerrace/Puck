@@ -106,6 +106,9 @@ public static class PuckDiagnosticCodes {
     /// <summary>A basis or import graph the composer refused.</summary>
     public const string CompositionRefused = "PUCK035";
 
+    /// <summary>A statement inside a section block that the section's own grammar cannot carry.</summary>
+    public const string UnrecognizedSectionStatement = "PUCK036";
+
     /// <summary>An unused <c>let</c> binding.</summary>
     public const string LintUnusedLet = "PUCK_LINT_001";
 

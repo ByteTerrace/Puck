@@ -1,0 +1,118 @@
+schema: "puck.world.def.v1"
+documentId: "puck-hgb-compare-v1"
+
+let eyeHeight = 1.5
+let eyeDistance = -5
+let fieldOfView = 0.9
+let viewWidth = 1280
+let viewHeight = 720
+
+// The machine's own 160 by 144, so the picture is never squeezed.
+let screenHalfWidth = 1.6
+let screenHalfHeight = 1.44
+let screenHalfDepth = 0.01
+// The lit face is right x up: (-1,0,0) x (0,1,0) = (0,0,-1), turning it back along -Z to meet the eye. It also puts
+// image column zero at the +X end, which reads LEFT, because the eye looks along +Z and its own right hand is -X.
+let screenRight = [-1, 0, 0]
+let screenUp = [0, 1, 0]
+// +X reads left, so the reference takes leftX.
+let leftX = 1.8
+let rightX = -1.8
+let brick = "gaming-brick"
+let colorOptions = "cgb"
+let reference = "../../../../roms/tetris-world-rev1.gb"
+let authored = "../cartridges/tetris.cgb.cartridge.json"
+
+host {
+    authority: null
+    backend: "auto"
+    exitAfterSeconds: 0
+    fullscreen: false
+    genlock: null
+    height: viewHeight
+    journalDepth: 2000
+    listen: null
+    presentMode: "Immediate"
+    presentation: "Windowed"
+    rayQuery: true
+    surfaceFormat: "r8g8b8a8"
+    targetHertz: 60
+    timing: false
+    width: viewWidth
+}
+
+screens: [
+    {
+        index: 0
+        origin: [leftX, eyeHeight, 0]
+        right: screenRight
+        up: screenUp
+        halfWidth: screenHalfWidth
+        halfHeight: screenHalfHeight
+        halfDepth: screenHalfDepth
+        round: 0
+        source: machine(engine: brick, contentPath: reference, options: colorOptions)
+        route: { engageable: false, engageRadius: 0 }
+    }
+    {
+        index: 1
+        origin: [rightX, eyeHeight, 0]
+        right: screenRight
+        up: screenUp
+        halfWidth: screenHalfWidth
+        halfHeight: screenHalfHeight
+        halfDepth: screenHalfDepth
+        round: 0
+        source: machine(engine: brick, contentPath: authored, options: colorOptions)
+        route: { engageable: false, engageRadius: 0 }
+    }
+]
+
+cameras: [
+    {
+        anchor: null
+        name: "compare"
+        renderHeight: viewHeight
+        renderWidth: viewWidth
+        rig: {
+            name: "compare"
+            operations: [
+                anchor(subject: worldPoint(point: [0, eyeHeight, eyeDistance]))
+                lookAt(subject: worldPoint(point: [0, eyeHeight, 0]))
+                fov(fieldOfViewRadians: fieldOfView)
+            ]
+            version: "puck.camera.v1"
+        }
+    }
+]
+
+views {
+    layout "compare" {
+        seatCount: 0
+        slots: [
+            {
+                camera: "compare"
+                height: 1
+                width: 1
+                x: 0
+                y: 0
+            }
+        ]
+        transitionRenderScale: 1
+        transitionSeconds: 0.25
+    }
+
+    seatControl {
+        maxPitch: 0.01
+        minPitch: -0.01
+        yawReference: "World"
+    }
+
+    seatRig "seat" {
+        version: "puck.camera.v1"
+        operations: [
+            orbit(distance: 1, pitch: 0, yaw: 0)
+            fov(fieldOfViewRadians: fieldOfView)
+        ]
+    }
+}

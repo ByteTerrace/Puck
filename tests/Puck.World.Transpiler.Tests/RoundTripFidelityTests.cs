@@ -176,6 +176,34 @@ public class RoundTripFidelityTests {
     }
 
     [Fact]
+    public void EmptyExportFacetArraySurvivesTheRoundTrip() {
+        // An exported facet with zero names is a present-but-empty array, not an absent facet; losing it would
+        // silently drop the export from the composed document.
+        const string json = """
+            {"schema":"puck.world.def.v1","exports":{"actions":[]}}
+            """;
+
+        var puck = WorldDecompiler.Decompile(json);
+        Assert.Contains("export action", puck, StringComparison.Ordinal);
+        AssertRoundTripsExactly(json);
+    }
+
+    [Fact]
+    public void NullValuedCallFormArgumentSurvivesTheRoundTrip() {
+        // A call-form argument can be explicitly authored as JSON null (distinct from the argument being absent
+        // entirely); the printer must reprint it rather than silently dropping the argument.
+        const string json = """
+            {"schema":"puck.world.def.v1","views":{"seatRig":{"operations":[
+              {"$type":"lookAt","focusDistance":6,"targetOffset":null,"worldAxes":true}
+            ]}}}
+            """;
+
+        var puck = WorldDecompiler.Decompile(json);
+        Assert.Contains("targetOffset: null", puck, StringComparison.Ordinal);
+        AssertRoundTripsExactly(json);
+    }
+
+    [Fact]
     public void DegreesNativeFieldsAllPrintTheirUnitNotJustYawDegrees() {
         const string json = """
             {"schema":"puck.world.def.v1","placements":{"rows":[
@@ -186,59 +214,5 @@ public class RoundTripFidelityTests {
         var puck = WorldDecompiler.Decompile(json);
         Assert.Contains("outwardYawDegrees: 15deg", puck, StringComparison.Ordinal);
         AssertRoundTripsExactly(json);
-    }
-}
-
-/// <summary>Structural JSON comparison that distinguishes a missing property from an extra one.</summary>
-internal static class JsonMismatch {
-    public static string? Find(JsonNode? expected, JsonNode? actual, string path) {
-        if (expected is null && actual is null) {
-            return null;
-        }
-        if (expected is null) {
-            return $"{path}: expected null, actual '{actual?.ToJsonString()}'";
-        }
-        if (actual is null) {
-            return $"{path}: expected '{expected.ToJsonString()}', actual null";
-        }
-
-        if (expected is JsonObject expectedObject && actual is JsonObject actualObject) {
-            foreach (var (key, value) in expectedObject) {
-                if (!actualObject.ContainsKey(key)) {
-                    return $"{path}/{key}: missing property";
-                }
-                var diff = Find(value, actualObject[key], $"{path}/{key}");
-                if (diff is not null) {
-                    return diff;
-                }
-            }
-            foreach (var (key, _) in actualObject) {
-                if (!expectedObject.ContainsKey(key)) {
-                    return $"{path}/{key}: unexpected extra property";
-                }
-            }
-            return null;
-        }
-
-        if (expected is JsonArray expectedArray && actual is JsonArray actualArray) {
-            if (expectedArray.Count != actualArray.Count) {
-                return $"{path}: array length expected {expectedArray.Count}, actual {actualArray.Count}";
-            }
-            for (var i = 0; i < expectedArray.Count; i++) {
-                var diff = Find(expectedArray[i], actualArray[i], $"{path}[{i}]");
-                if (diff is not null) {
-                    return diff;
-                }
-            }
-            return null;
-        }
-
-        if (expected is JsonValue expectedValue && actual is JsonValue actualValue) {
-            return JsonNode.DeepEquals(expectedValue, actualValue)
-                ? null
-                : $"{path}: value expected '{expectedValue.ToJsonString()}', actual '{actualValue.ToJsonString()}'";
-        }
-
-        return $"{path}: kinds differ";
     }
 }

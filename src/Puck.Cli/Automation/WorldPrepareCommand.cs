@@ -17,12 +17,7 @@ internal static class WorldPrepareCommand {
     // Hosted storage addresses worlds by canonical file name, independently of repository directories.
     private static int Run(string output, string root) {
 
-        Puck.World.Client.WorldSchemaVocabularyHooks.Install(
-            postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-            probeKindCheck: WorldProbeKinds.IsShipped,
-            screenMachineCartridgeCheck: WorldScreenMachineEngines.CompilesCartridges,
-            screenMachineEngineCheck: WorldScreenMachineEngines.IsRegistered
-        );
+        CliWorldVocabulary.EnsureInstalled();
         Directory.CreateDirectory(path: output);
         var pending = new Queue<string>();
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);

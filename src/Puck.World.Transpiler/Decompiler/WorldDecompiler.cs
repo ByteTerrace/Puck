@@ -80,9 +80,8 @@ public static partial class WorldDecompiler {
 
             // Any other export facets
             foreach (var (k, v) in exportsObj) {
-                if (k is not "actions" and not "bindings" and not "reads" && v is JsonArray arr && arr.Count > 0) {
-                    var names = string.Join(", ", arr.Select(n => n?.ToString() ?? ""));
-                    sb.AppendLine(CultureInfo.InvariantCulture, $"export {k} {names}");
+                if (k is not "actions" and not "bindings" and not "reads" && v is JsonArray arr) {
+                    EmitExportNames(sb, k, arr);
                 }
             }
             hasHeaders = true;
@@ -113,7 +112,7 @@ public static partial class WorldDecompiler {
                 DecompileViewsBlock(sb, viewsObj);
             } else if (string.Equals(key, "addons", StringComparison.OrdinalIgnoreCase) && value is JsonArray addonsArr) {
                 DecompileAddonsBlock(sb, addonsArr);
-            } else if (string.Equals(key, "shapes", StringComparison.OrdinalIgnoreCase) && value is JsonArray shapesArr) {
+            } else if (string.Equals(key, "shapes", StringComparison.OrdinalIgnoreCase) && value is JsonArray shapesArr && shapesArr.Count > 0 && CanSugarShapes(shapesArr)) {
                 DecompileShapesBlock(sb, shapesArr, indentLevel: 0);
             } else if (string.Equals(key, "materials", StringComparison.OrdinalIgnoreCase) && value is JsonArray materialsArr) {
                 DecompileMaterialsBlock(sb, materialsArr);
@@ -121,6 +120,8 @@ public static partial class WorldDecompiler {
                 DecompileRulesBlock(sb, rulesArr, indentLevel: 0);
             } else if (string.Equals(key, "placements", StringComparison.OrdinalIgnoreCase) && value is JsonObject placementsObj && CanSugarPlacements(placementsObj)) {
                 DecompilePlacementsBlock(sb, placementsObj, indentLevel: 0);
+            } else if (string.Equals(key, "prototypes", StringComparison.OrdinalIgnoreCase) && value is JsonArray prototypesArr && CanSugarPrototypes(prototypesArr)) {
+                DecompilePrototypesBlock(sb, prototypesArr, indentLevel: 0);
             } else if (value is JsonObject blockObj) {
                 DecompileNamedBlock(sb, key, null, blockObj, indentLevel: 0);
             } else {
@@ -132,10 +133,21 @@ public static partial class WorldDecompiler {
     }
 
     private static void EmitExportFacet(StringBuilder sb, JsonObject exportsObj, string facetKey, string keyword) {
-        if (exportsObj.TryGetPropertyValue(facetKey, out var node) && node is JsonArray arr && arr.Count > 0) {
-            var names = string.Join(", ", arr.Select(n => n?.ToString() ?? ""));
-            sb.AppendLine(CultureInfo.InvariantCulture, $"export {keyword} {names}");
+        if (exportsObj.TryGetPropertyValue(facetKey, out var node) && node is JsonArray arr) {
+            EmitExportNames(sb, keyword, arr);
         }
+    }
+
+    // An empty array still prints its facet keyword, with no names, so the facet's presence (as
+    // opposed to its absence) survives the round trip.
+    private static void EmitExportNames(StringBuilder sb, string keyword, JsonArray arr) {
+        if (arr.Count == 0) {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"export {keyword}");
+            return;
+        }
+
+        var names = string.Join(", ", arr.Select(n => n?.ToString() ?? ""));
+        sb.AppendLine(CultureInfo.InvariantCulture, $"export {keyword} {names}");
     }
 
     private static void DecompileViewsBlock(StringBuilder sb, JsonObject views) {
@@ -197,7 +209,7 @@ public static partial class WorldDecompiler {
         };
 
         foreach (var (k, v) in views) {
-            if (handledViewsKeys.Contains(k) || v is null) {
+            if (handledViewsKeys.Contains(k)) {
                 continue;
             }
             if (!first) {
@@ -243,7 +255,7 @@ public static partial class WorldDecompiler {
 
         // Remaining properties
         foreach (var (k, v) in srObj) {
-            if (k is "name" or "version" or "operations" || v is null) {
+            if (k is "name" or "version" or "operations") {
                 continue;
             }
             sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: {FormatValue(v, indentLevel + 1)}");
@@ -292,7 +304,9 @@ public static partial class WorldDecompiler {
             if (excludedKeys is not null && excludedKeys.Contains(k)) {
                 continue;
             }
-            if (v is null) {
+            if (string.Equals(k, "shapes", StringComparison.OrdinalIgnoreCase) && v is JsonArray shapesArr && shapesArr.Count > 0 && CanSugarShapes(shapesArr)) {
+                DecompileShapesBlock(sb, shapesArr, indentLevel + 1);
+            } else if (v is null) {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: null");
             } else if (v is JsonObject childObj) {
                 DecompileNamedBlock(sb, k, null, childObj, indentLevel + 1);
@@ -382,7 +396,7 @@ public static partial class WorldDecompiler {
         var type = obj["$type"]?.ToString() ?? "";
         var args = new List<string>();
         foreach (var (k, v) in obj) {
-            if (string.Equals(k, "$type", StringComparison.Ordinal) || v is null) {
+            if (string.Equals(k, "$type", StringComparison.Ordinal)) {
                 continue;
             }
             args.Add($"{k}: {FormatValue(v, indentLevel)}");

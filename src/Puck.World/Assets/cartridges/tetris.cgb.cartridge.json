@@ -2353,6 +2353,22 @@
       "initial": 0
     },
     {
+      "name": "fcol",
+      "initial": 0
+    },
+    {
+      "name": "fhold",
+      "initial": 0
+    },
+    {
+      "name": "fadeamt",
+      "initial": 0
+    },
+    {
+      "name": "fadeto",
+      "initial": 0
+    },
+    {
       "name": "rk0",
       "initial": 200
     },
@@ -3785,6 +3801,15 @@
         0,
         0,
         0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fullrows",
+      "initial": [
         0,
         0,
         0,
@@ -9080,14 +9105,44 @@
               }
             },
             {
-              "kind": "set",
-              "target": {
-                "variable": "nfull"
-              },
-              "operation": "add",
-              "value": {
-                "variable": "full"
-              }
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "full"
+                  },
+                  "comparison": "ne",
+                  "right": {
+                    "constant": 0
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "array": "fullrows",
+                    "index": {
+                      "variable": "nfull"
+                    }
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "cr"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "nfull"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 1
+                  }
+                }
+              ]
             },
             {
               "kind": "set",
@@ -9154,11 +9209,31 @@
                 {
                   "kind": "set",
                   "target": {
+                    "variable": "fcol"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "fhold"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
                     "variable": "nph"
                   },
                   "operation": "set",
                   "value": {
-                    "constant": 3
+                    "constant": 19
                   }
                 }
               ],
@@ -9171,6 +9246,239 @@
                   "operation": "set",
                   "value": {
                     "constant": 6
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flash",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 19
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "fhold"
+              },
+              "comparison": "ne",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "fhold"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            }
+          ],
+          "else": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "fhold"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "repeat",
+              "count": 4,
+              "index": "k",
+              "body": [
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "variable": "k"
+                      },
+                      "comparison": "ge",
+                      "right": {
+                        "variable": "nfull"
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "break"
+                    }
+                  ]
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "cr"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "array": "fullrows",
+                    "index": {
+                      "variable": "k"
+                    }
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "cr"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "cc"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 4
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "cc"
+                  },
+                  "operation": "subtract",
+                  "value": {
+                    "variable": "fcol"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "cc"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 2
+                  }
+                },
+                {
+                  "kind": "map",
+                  "row": {
+                    "variable": "cr"
+                  },
+                  "column": {
+                    "variable": "cc"
+                  },
+                  "tile": {
+                    "constant": 0
+                  },
+                  "palette": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "c2"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 5
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "c2"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "variable": "fcol"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "c2"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 2
+                  }
+                },
+                {
+                  "kind": "map",
+                  "row": {
+                    "variable": "cr"
+                  },
+                  "column": {
+                    "variable": "c2"
+                  },
+                  "tile": {
+                    "constant": 0
+                  },
+                  "palette": {
+                    "constant": 0
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "fcol"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "fcol"
+                  },
+                  "comparison": "ge",
+                  "right": {
+                    "constant": 5
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "nph"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 3
                   }
                 }
               ]
@@ -15287,6 +15595,110 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "fade",
+      "when": [],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "fadeto"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "ph"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 12
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "fadeto"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 16
+              }
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "fadeamt"
+              },
+              "comparison": "lt",
+              "right": {
+                "variable": "fadeto"
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "fadeamt"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "fadeamt"
+              },
+              "comparison": "gt",
+              "right": {
+                "variable": "fadeto"
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "fadeamt"
+              },
+              "operation": "subtract",
+              "value": {
+                "constant": 1
+              }
+            }
+          ]
+        },
+        {
+          "kind": "fade",
+          "amount": {
+            "variable": "fadeamt"
+          },
+          "toward": "black"
         }
       ]
     },

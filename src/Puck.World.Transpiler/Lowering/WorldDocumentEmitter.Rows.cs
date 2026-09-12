@@ -71,10 +71,27 @@ public static partial class WorldDocumentEmitter {
             } else if (stmt is PropertyNode prop) {
                 scope.CurrentPointer = placementsPointer;
                 placementsObj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
+            } else {
+                ReportUnrecognizedSectionStatement("placements", "'placement' rows and plain properties", stmt, scope);
             }
         }
 
         scope.CurrentPointer = oldPointer;
+    }
+
+    // A statement the section's grammar has no slot for would otherwise be dropped without a trace — a one-letter
+    // typo in the row keyword silently loses a whole row and everything nested in it.
+    private static void ReportUnrecognizedSectionStatement(string section, string admitted, StatementNode stmt, EvaluationScope scope) {
+        var spelling = stmt switch {
+            BlockNode block => $"'{block.Identifier}' block",
+            PropertyNode property => $"'{property.Name}' property",
+            _ => "statement",
+        };
+        scope.Diagnostics.ReportError(
+            PuckDiagnosticCodes.UnrecognizedSectionStatement,
+            $"'{section}' carries no {spelling} — it admits {admitted}",
+            stmt.Span
+        );
     }
 
     private static JsonObject LowerPlacementRow(BlockNode row, EvaluationScope scope) {
@@ -110,6 +127,44 @@ public static partial class WorldDocumentEmitter {
                     rowObj[key] = WorldDocumentRowDefaults.PlacementDefault(key);
                 }
             }
+        }
+
+        return rowObj;
+    }
+
+    private static void LowerPrototypesBlock(BlockNode block, JsonObject parent, EvaluationScope scope) {
+        if (parent["prototypes"] is not JsonArray protoArr) {
+            protoArr = [];
+            parent["prototypes"] = protoArr;
+        }
+
+        var prototypesPointer = $"{scope.CurrentPointer}/prototypes";
+        var oldPointer = scope.CurrentPointer;
+        scope.SourceMap?.Register(prototypesPointer, block.Span);
+
+        foreach (var stmt in block.Statements) {
+            if (stmt is BlockNode { Identifier: "prototype" } row) {
+                var rowIdx = protoArr.Count;
+                scope.CurrentPointer = $"{prototypesPointer}/{rowIdx}";
+                scope.SourceMap?.Register(scope.CurrentPointer, row.Span);
+                protoArr.AppendNode(LowerPrototypeRow(row, scope));
+            } else {
+                // `prototypes` lowers to a bare array, so there is no object for a property to land on either.
+                ReportUnrecognizedSectionStatement("prototypes", "'prototype' rows only", stmt, scope);
+            }
+        }
+
+        scope.CurrentPointer = oldPointer;
+    }
+
+    // `WorldPrototype.Id` is the block's quoted name, the same way `WorldPlacement.Id` is; `document` is an
+    // ordinary nested block reached through `LowerBlockToObject` -> `ProcessStatement` -> `LowerBlock`, so a `shape`
+    // statement inside it hits `LowerShapeBlock` the same way one at document root does.
+    private static JsonObject LowerPrototypeRow(BlockNode row, EvaluationScope scope) {
+        var rowObj = LowerBlockToObject(row, scope);
+
+        if (!rowObj.ContainsKey("id") && !string.IsNullOrEmpty(row.Name)) {
+            rowObj["id"] = row.Name;
         }
 
         return rowObj;

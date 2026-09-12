@@ -56,7 +56,7 @@ public class FormatterSugarTests {
     [Theory]
     [MemberData(nameof(ShippedWorldFiles))]
     public void FormattingTheDecompiledFormOfEveryShippedWorldIsIdempotent(string relativePath) {
-        var fullPath = Path.Combine(FindWorldsDirectory(), relativePath);
+        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
         Assert.True(File.Exists(fullPath), $"Shipped world file not found: {fullPath}");
         var decompiled = WorldDecompiler.Decompile(File.ReadAllText(fullPath));
 
@@ -80,15 +80,4 @@ public class FormatterSugarTests {
         }
     }
 
-    private static string FindWorldsDirectory() {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null) {
-            var candidate = Path.Combine(dir, "src", "Puck.World", "Assets", "worlds");
-            if (Directory.Exists(candidate)) {
-                return candidate;
-            }
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new DirectoryNotFoundException("Could not locate src/Puck.World/Assets/worlds directory from test runner.");
-    }
 }

@@ -67,6 +67,66 @@ public sealed class TetrisShots {
         Shoot(directory: directory, machine: machine, name: "09-game-over", buttons: JoypadButtons.None, frames: 60 * 8);
     }
 
+    [Fact]
+    public void CaptureMotion() {
+        if (Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_SHOTS") is not { Length: > 0 } directory) {
+            return;
+        }
+
+        Directory.CreateDirectory(path: directory);
+
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "motion");
+        var phase = (ushort)result.Variables["ph"];
+
+        // The picture dimming on the way from the title to the mode menu, sampled across the ramp.
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 120);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        Settle(directory: directory, machine: machine, name: "10-fade-0", phase: phase, wanted: 12, after: 0);
+        Shoot(directory: directory, machine: machine, name: "10-fade-1", buttons: JoypadButtons.None, frames: 6);
+        Shoot(directory: directory, machine: machine, name: "10-fade-2", buttons: JoypadButtons.None, frames: 6);
+
+        // Into a game, with a row one cell short of complete so the next piece finishes it. Seeding the well writes
+        // its memory, not the picture, so the republish pass has to run before any of it is on screen.
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 130);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 130);
+        for (var column = 0; column < 10; ++column) {
+            machine.Write(address: (ushort)(result.Arrays["field"] + (17 * 10) + (uint)column), value: (byte)((column % 6) + 2));
+        }
+
+        machine.Write(address: phase, value: 5);
+        Settle(directory: directory, machine: machine, name: "11-seeded", phase: phase, wanted: 0, after: 4);
+
+        // Straight into the scan, which finds the row complete. What the run through a landing piece proves is
+        // gameplay; what this proves is what the clear LOOKS like.
+        machine.Write(address: phase, value: 2);
+
+        // The completed row coming apart, a column pair at a time. The pass is entered ONCE and sampled across its
+        // own length; waiting for it again would wait for a second clear that never comes.
+        Settle(directory: directory, machine: machine, name: "12-clearing-0", phase: phase, wanted: 19, after: 0);
+
+        for (var shot = 1; shot < 5; ++shot) {
+            Shoot(directory: directory, machine: machine, name: $"12-clearing-{shot}", buttons: JoypadButtons.None, frames: 2);
+        }
+    }
+
+    // Steps a frame at a time until the cartridge reaches a phase, holds for a few more, then shoots. A fixed frame
+    // count cannot catch a pass that lasts ten frames and starts whenever the piece happens to land.
+    private static void Settle(string directory, VerifyMachineDriver machine, string name, ushort phase, byte wanted, int after) {
+        for (var guard = 0; (guard < 60 * 40); ++guard) {
+            if (machine.Read(address: phase) == wanted) {
+                Shoot(directory: directory, machine: machine, name: name, buttons: JoypadButtons.None, frames: after);
+
+                return;
+            }
+
+            machine.RunFrames(buttons: JoypadButtons.None, frames: 1);
+        }
+
+        throw new InvalidOperationException(message: $"The cartridge never reached phase {wanted} for '{name}'.");
+    }
+
     private static void Shoot(string directory, VerifyMachineDriver machine, string name, JoypadButtons buttons, int frames) {
         machine.RunFrames(buttons: buttons, frames: frames);
 

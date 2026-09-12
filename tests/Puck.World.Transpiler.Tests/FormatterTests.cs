@@ -102,4 +102,61 @@ value: 1
         Assert.DoesNotContain("} {", formatted);
         Assert.Contains("cells: [\n    {\n        key: \"feltColor\"", formatted);
     }
+
+    // A ternary's colon carries a space on both sides (Puck.State.ExpressionSpelling's own spelling); stripping the
+    // leading one splices "x : y" into "x: y", a different, unreadable binding.
+    [Fact]
+    public void TestFormatterPreservesTernaryColonSpacing() {
+        var input = "rule \"r\" {\n"
+            + "    bind ownBefore : Int = turn == 0 ? a : b\n"
+            + "}\n";
+        var formatted = PuckFormatter.Format(input);
+        Assert.Contains("bind ownBefore : Int = turn == 0 ? a : b", formatted);
+    }
+
+    // A backquoted name (`N,S,E,W`) is one lexeme; its commas are name characters, not statement punctuation, and
+    // must not gain the space the comma rule inserts everywhere else.
+    [Fact]
+    public void TestFormatterPreservesBackquotedNameCommas() {
+        var input = "rule \"r\" {\n"
+            + "    when `$board:attacks:board:-5:-4:N,S,E,W`[5] != 0\n"
+            + "}\n";
+        var formatted = PuckFormatter.Format(input);
+        Assert.Contains("`$board:attacks:board:-5:-4:N,S,E,W`[5]", formatted);
+    }
+
+    [Fact]
+    public void TestFormatterPreservesACommentBetweenTwoRules() {
+        var input = "rule \"first\" {\n"
+            + "    a = 1\n"
+            + "}\n"
+            + "\n"
+            + "// a comment between two rules\n"
+            + "rule \"second\" {\n"
+            + "    b = 2\n"
+            + "}\n";
+        var formatted = PuckFormatter.Format(input);
+        Assert.Contains("// a comment between two rules", formatted);
+
+        var lines = formatted.Split('\n');
+        var commentIndex = Array.FindIndex(lines, line => line.Contains("// a comment between two rules", StringComparison.Ordinal));
+        var secondRuleIndex = Array.FindIndex(lines, line => line.Contains("rule \"second\"", StringComparison.Ordinal));
+        Assert.True(commentIndex >= 0 && secondRuleIndex > commentIndex);
+    }
+
+    // The decompiler's one-time-import header must still be readable as a header after formatting, not folded into
+    // whatever follows it.
+    [Fact]
+    public void TestFormatterKeepsTheLeadingHeaderCommentAsTheFirstLine() {
+        var input = "// Decompiled from a canonical Puck world document — a one-time import.\n"
+            + "// 'let'/'template' cannot be recovered; re-running the decompiler will not\n"
+            + "// preserve hand-authored constants or templates added after this file was\n"
+            + "// generated. Treat this file as a starting point, not a synced mirror.\n"
+            + "\n"
+            + "\n"
+            + "puck: 1\n";
+        var formatted = PuckFormatter.Format(input);
+        var lines = formatted.Split('\n');
+        Assert.Equal("// Decompiled from a canonical Puck world document — a one-time import.", lines[0]);
+    }
 }

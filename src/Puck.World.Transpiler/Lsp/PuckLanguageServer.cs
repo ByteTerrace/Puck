@@ -20,6 +20,15 @@ public sealed class PuckLanguageServer {
         array.Add(node);
     }
 
+    private static bool TryGetLocalPath(string uri, out string path) {
+        if (Uri.TryCreate(uri, UriKind.Absolute, out var parsed) && parsed.IsFile) {
+            path = parsed.LocalPath;
+            return true;
+        }
+        path = "";
+        return false;
+    }
+
     /// <summary>Creates a new instance of the Puck Language Server over the given input and output streams.</summary>
     /// <param name="input">The stream to read LSP JSON-RPC messages from (e.g. Console.OpenStandardInput()).</param>
     /// <param name="output">The stream to write LSP JSON-RPC messages to (e.g. Console.OpenStandardOutput()).</param>
@@ -166,6 +175,24 @@ public sealed class PuckLanguageServer {
 
         if (parseResult.Value is not null) {
             PuckLinter.Lint(parseResult.Value, diagnosticsBag);
+
+            // Reference resolution needs a real directory to resolve a declared basis/import against, which only a
+            // `file://` URI carries — an unsaved buffer publishes syntax-level lint alone.
+            if (TryGetLocalPath(uri, out var sourcePath)) {
+                var loweringDiags = new DiagnosticBag();
+                var sourceMap = new SourceMap();
+                var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+                    document: parseResult.Value,
+                    basePath: Path.GetDirectoryName(sourcePath),
+                    sourceMap: sourceMap,
+                    diagnostics: loweringDiags
+                );
+                diagnosticsBag.AddRange(loweringDiags);
+
+                if (loweringResult.Value is not null && !diagnosticsBag.HasErrors) {
+                    PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnosticsBag, sourcePath: sourcePath);
+                }
+            }
         }
 
         var lspDiags = new JsonArray();
@@ -251,7 +278,7 @@ public sealed class PuckLanguageServer {
         AddCompletion(items, "and", "and", "Keyword: Gate conjunction", 14);
         AddCompletion(items, "or", "or", "Keyword: Gate disjunction", 14);
         AddCompletion(items, "not", "not ${1:condition}", "Keyword: Gate negation", 14);
-        AddCompletion(items, "as", "as ${1|Int,Fixed|}", "Keyword: Comparison kind annotation", 14);
+        AddCompletion(items, "as", "as ${1|Int,Fixed|}", "Keyword: Comparison kind annotation — wrap in (...) beside and/or", 14);
         AddCompletion(items, "rule", "rule \"${1:name}\" {\n    when $0\n}", "Keyword: Reactive rule block", 14);
         AddCompletion(items, "bind", "bind ${1:name}: ${2|Int,Fixed|} = ${3:expression}", "Keyword: Rule-scoped binding", 14);
         AddCompletion(items, "push", "push ${1:row} = ${2:value}", "Keyword: pushState effect", 14);

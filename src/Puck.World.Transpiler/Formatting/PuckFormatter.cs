@@ -104,6 +104,7 @@ public static class PuckFormatter {
 
         foreach (var line in lines) {
             var inString = false;
+            var stringDelimiter = '\0';
             var escape = false;
             var splitIdx = -1;
 
@@ -111,18 +112,21 @@ public static class PuckFormatter {
                 var c = line[i];
 
                 if (inString) {
+                    // A backquoted name (ExpressionSpelling's `seat-1`/`N,S,E,W` spelling) carries no escape
+                    // sequence, so only a `"` string honors a preceding backslash.
                     if (escape) {
                         escape = false;
-                    } else if (c == '\\') {
+                    } else if (c == '\\' && stringDelimiter == '"') {
                         escape = true;
-                    } else if (c == '"') {
+                    } else if (c == stringDelimiter) {
                         inString = false;
                     }
                     continue;
                 }
 
-                if (c == '"') {
+                if (c is '"' or '`') {
                     inString = true;
+                    stringDelimiter = c;
                     continue;
                 }
 
@@ -238,6 +242,7 @@ public static class PuckFormatter {
     private static int CalculateNestingDelta(string line) {
         var delta = 0;
         var inString = false;
+        var stringDelimiter = '\0';
         var escape = false;
 
         for (var i = 0; i < line.Length; i++) {
@@ -246,9 +251,9 @@ public static class PuckFormatter {
             if (inString) {
                 if (escape) {
                     escape = false;
-                } else if (c == '\\') {
+                } else if (c == '\\' && stringDelimiter == '"') {
                     escape = true;
-                } else if (c == '"') {
+                } else if (c == stringDelimiter) {
                     inString = false;
                 }
                 continue;
@@ -259,8 +264,9 @@ public static class PuckFormatter {
                 break; // rest of line is comment
             }
 
-            if (c == '"') {
+            if (c is '"' or '`') {
                 inString = true;
+                stringDelimiter = c;
                 continue;
             }
 
@@ -282,6 +288,7 @@ public static class PuckFormatter {
 
         var sb = new StringBuilder(trimmed.Length);
         var inString = false;
+        var stringDelimiter = '\0';
         var escape = false;
 
         for (var i = 0; i < trimmed.Length; i++) {
@@ -289,11 +296,13 @@ public static class PuckFormatter {
 
             if (inString) {
                 sb.Append(c);
+                // A backquoted name carries no escape sequence: `N,S,E,W`'s commas are name characters, not
+                // statement punctuation, and only a `"` string honors a preceding backslash.
                 if (escape) {
                     escape = false;
-                } else if (c == '\\') {
+                } else if (c == '\\' && stringDelimiter == '"') {
                     escape = true;
-                } else if (c == '"') {
+                } else if (c == stringDelimiter) {
                     inString = false;
                 }
                 continue;
@@ -308,8 +317,9 @@ public static class PuckFormatter {
                 break;
             }
 
-            if (c == '"') {
+            if (c is '"' or '`') {
                 inString = true;
+                stringDelimiter = c;
                 sb.Append(c);
                 continue;
             }
@@ -327,11 +337,13 @@ public static class PuckFormatter {
                 }
             }
 
-            // Normalize colon: remove spaces before, ensure single space after (unless followed by newline or delimiter)
+            // Normalize colon: ensure single space after (unless followed by newline or delimiter). A colon already
+            // carrying one space before it — `bind name : Kind`, a `when Gate : Kind` suffix, or a ternary's
+            // `? a : b` — is ExpressionSpelling's own spacing (Puck.State.ExpressionSpelling's Ternary.PrintBare),
+            // not an unspaced property colon, and stripping that space splices `a : b` into `a: b`. The preceding
+            // whitespace is already collapsed to at most one space by the general run below, so leaving it alone
+            // here recovers both spellings without telling them apart.
             if (c == ':') {
-                while (sb.Length > 0 && sb[^1] == ' ') {
-                    sb.Length--;
-                }
                 sb.Append(':');
                 if (i + 1 < trimmed.Length && trimmed[i + 1] != ' ' && trimmed[i + 1] != ':' && trimmed[i + 1] != '\n') {
                     sb.Append(' ');

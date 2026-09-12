@@ -115,6 +115,11 @@ public static partial class PuckParser {
             SkipToEndOfStatement(context);
         }
 
+        // `kind` becomes a field of THIS comparison's own node, never of the `and`/`or` chain it may sit inside —
+        // AndGate/OrGate only ever combine already-built PredicateNodes, so a suffix parsed here can never leak onto
+        // a sibling operand no matter which one in the chain carries it or where the chain ends. `WorldDecompiler`
+        // still wraps a printed `Int` annotation in parens (`(left cmp right : Int)`) so a READER can see that same
+        // binding, since the suffix would otherwise sit at the tail of the whole printed chain.
         string? kind = null;
         SkipWhiteSpace(context);
         if (TryMatchKeyword(context, "as")) {

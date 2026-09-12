@@ -284,6 +284,14 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
+        // Prototypes section — an array of WorldPrototype { id, document } rows, with `prototype "id" { document { } }`
+        // sub-blocks. `document` is an ordinary nested block (falls through to the general-block case below), so a
+        // `shape` statement inside it reaches the same LowerShapeBlock path a root-level creation document uses.
+        if (string.Equals(id, "prototypes", StringComparison.OrdinalIgnoreCase)) {
+            LowerPrototypesBlock(block, parent, scope);
+            return;
+        }
+
         // Material collection block (puck.creation.v1)
         if (string.Equals(id, "material", StringComparison.OrdinalIgnoreCase)) {
             if (parent["materials"] is not JsonArray materialsArr) {

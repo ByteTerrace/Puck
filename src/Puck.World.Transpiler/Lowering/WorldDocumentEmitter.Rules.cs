@@ -220,29 +220,64 @@ public static partial class WorldDocumentEmitter {
             };
         }
 
-        ExpressionSpelling.TryParse(cmp.LeftText, out var leftTokens, out _);
-        ExpressionSpelling.TryParse(cmp.RightText, out var rightTokens, out _);
-
-        if (leftTokens.Count == 1 && leftTokens[0] is ValueToken.State leftState) {
-            if (rightTokens.Count == 1 && rightTokens[0] is ValueToken.Constant rightConstant) {
-                return NewCompareState(leftState.Name, leftState.Key, comparison, value: rightConstant.Value);
-            }
-            if (rightTokens.Count == 1 && rightTokens[0] is ValueToken.State rightState) {
-                return NewCompareState(leftState.Name, leftState.Key, comparison, comparandState: rightState.Name, comparandKey: rightState.Key);
-            }
-        } else if (leftTokens.Count == 1 && leftTokens[0] is ValueToken.Constant leftConstant
-            && rightTokens.Count == 1 && rightTokens[0] is ValueToken.State rightState2) {
-            // Operands swapped so the live State read is always the CompareState subject — the decompiler never
-            // emits this constant-first spelling, only the compiler tolerates it.
-            return NewCompareState(rightState2.Name, rightState2.Key, PuckDslVocabulary.NameOf(PuckDslVocabulary.Flip(parsedComparison)), value: leftConstant.Value);
+        switch (ClassifyBareComparison(cmp.LeftText, cmp.RightText, out var leftToken, out var rightToken)) {
+            case BareComparisonShape.StateAgainstConstant:
+                return NewCompareState(((ValueToken.State)leftToken!).Name, ((ValueToken.State)leftToken).Key, comparison, value: ((ValueToken.Constant)rightToken!).Value);
+            case BareComparisonShape.StateAgainstState:
+                return NewCompareState(((ValueToken.State)leftToken!).Name, ((ValueToken.State)leftToken).Key, comparison, comparandState: ((ValueToken.State)rightToken!).Name, comparandKey: ((ValueToken.State)rightToken).Key);
+            case BareComparisonShape.ConstantAgainstState:
+                // Operands swapped so the live State read is always the CompareState subject — the decompiler never
+                // emits this constant-first spelling, only the compiler tolerates it.
+                return NewCompareState(((ValueToken.State)rightToken!).Name, ((ValueToken.State)rightToken).Key, PuckDslVocabulary.NameOf(PuckDslVocabulary.Flip(parsedComparison)), value: ((ValueToken.Constant)leftToken!).Value);
+            default:
+                return new JsonObject {
+                    ["$type"] = "compareValue",
+                    ["comparison"] = comparison,
+                    ["kind"] = "Fixed",
+                    ["left"] = cmp.LeftText,
+                    ["right"] = cmp.RightText,
+                };
         }
+    }
 
-        return new JsonObject {
-            ["$type"] = "compareValue",
-            ["comparison"] = comparison,
-            ["kind"] = "Fixed",
-            ["left"] = cmp.LeftText,
-            ["right"] = cmp.RightText,
+    /// <summary>Which node an unannotated <c>left cmp right</c> comparison lowers to.</summary>
+    internal enum BareComparisonShape {
+        /// <summary>A <c>compareValue</c> node carrying both operand texts verbatim.</summary>
+        CompareValue,
+
+        /// <summary>A <c>compareState</c> node reading the left operand's row against a literal.</summary>
+        StateAgainstConstant,
+
+        /// <summary>A <c>compareState</c> node reading the left operand's row against the right operand's row.</summary>
+        StateAgainstState,
+
+        /// <summary>A <c>compareState</c> node built from the FLIPPED comparison, the right operand's row as
+        /// subject and the left operand's literal as comparand.</summary>
+        ConstantAgainstState,
+    }
+
+    /// <summary>Classifies what a comparison with no <c>: Kind</c> annotation lowers to.</summary>
+    /// <remarks>The decompiler's <c>FormatCompareValue</c> calls this to decide whether a <c>compareValue</c>
+    /// node's bare <c>left cmp right</c> text would re-lower to <c>compareState</c>, which is when it must print
+    /// the kind annotation even for the default kind.</remarks>
+    /// <param name="leftText">The left operand's verbatim source text.</param>
+    /// <param name="rightText">The right operand's verbatim source text.</param>
+    /// <param name="leftToken">The left operand's single token, when it has exactly one; otherwise
+    /// <see langword="null"/>.</param>
+    /// <param name="rightToken">The right operand's single token, when it has exactly one; otherwise
+    /// <see langword="null"/>.</param>
+    /// <returns>The shape the comparison lowers to.</returns>
+    internal static BareComparisonShape ClassifyBareComparison(string leftText, string rightText, out ValueToken? leftToken, out ValueToken? rightToken) {
+        ExpressionSpelling.TryParse(leftText, out var leftTokens, out _);
+        ExpressionSpelling.TryParse(rightText, out var rightTokens, out _);
+        leftToken = (leftTokens.Count == 1) ? leftTokens[0] : null;
+        rightToken = (rightTokens.Count == 1) ? rightTokens[0] : null;
+
+        return (leftToken, rightToken) switch {
+            (ValueToken.State, ValueToken.Constant) => BareComparisonShape.StateAgainstConstant,
+            (ValueToken.State, ValueToken.State) => BareComparisonShape.StateAgainstState,
+            (ValueToken.Constant, ValueToken.State) => BareComparisonShape.ConstantAgainstState,
+            _ => BareComparisonShape.CompareValue,
         };
     }
 

@@ -206,24 +206,28 @@ public static partial class PuckParser {
             }
 
             var names = new List<string>();
-            while (true) {
-                SkipWhiteSpace(context);
-                if (TryReadIdentifier(context, out var exportName)) {
-                    names.Add(exportName);
-                } else if (TryReadString(context, out var exportStr)) {
-                    names.Add(exportStr);
-                } else {
-                    break;
-                }
 
-                SkipWhiteSpace(context);
-                if (!TryConsume(context, ',')) {
-                    break;
-                }
-            }
+            // A facet with zero names ends its line right after the facet word (an empty exported array
+            // round-trips this way), so names crossing a newline must be told apart from the next statement: a
+            // continuation line is one indented deeper than the `export` keyword's own column. Without that test a
+            // bare `export action` swallows the following statement's leading token as an export name.
+            if (!AtEndOfLogicalStatement(context.Scanner.Buffer, context.Scanner.Cursor.Offset)
+                || ContinuesOnDeeperIndentedLine(context.Scanner.Buffer, context.Scanner.Cursor.Offset, col)) {
+                while (true) {
+                    SkipWhiteSpace(context);
+                    if (TryReadIdentifier(context, out var exportName)) {
+                        names.Add(exportName);
+                    } else if (TryReadString(context, out var exportStr)) {
+                        names.Add(exportStr);
+                    } else {
+                        break;
+                    }
 
-            if (names.Count == 0) {
-                throw CreateException(context, $"Expected one or more export names under facet '{facet}'");
+                    SkipWhiteSpace(context);
+                    if (!TryConsume(context, ',')) {
+                        break;
+                    }
+                }
             }
 
             var len = context.Scanner.Cursor.Offset - startOffset;

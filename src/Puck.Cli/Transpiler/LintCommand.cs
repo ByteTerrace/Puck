@@ -1,5 +1,4 @@
 using System.CommandLine;
-using Puck.World;
 using Puck.World.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Parsing;
@@ -9,25 +8,6 @@ namespace Puck.Cli.Transpiler;
 
 /// <summary><c>puck lint</c> — runs static analysis and semantic linting over Puck DSL files.</summary>
 internal static class LintCommand {
-    // WorldDefinitionValidator reads screen-machine-engine/post-render-extension/probe-kind catalogs through
-    // Puck.World.Schema's injection hooks; some process root must wire them before the first validation runs (see
-    // Puck.World.Client.WorldSchemaVocabularyHooks and Puck.Cli.Transpiler.CompileCommand, which wires the same
-    // hooks for `puck compile --validate`). Installing is idempotent, so the guard here is an optimization only.
-    private static bool s_vocabularyHooksInstalled;
-
-    private static void EnsureVocabularyHooksInstalled() {
-        if (s_vocabularyHooksInstalled) {
-            return;
-        }
-
-        Puck.World.Client.WorldSchemaVocabularyHooks.Install(
-            postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-            probeKindCheck: WorldProbeKinds.IsShipped,
-            screenMachineCartridgeCheck: WorldScreenMachineEngines.CompilesCartridges,
-            screenMachineEngineCheck: WorldScreenMachineEngines.IsRegistered
-        );
-        s_vocabularyHooksInstalled = true;
-    }
     public static Command Create() {
         var pathArgument = new Argument<string>(
             name: "path"
@@ -61,7 +41,7 @@ internal static class LintCommand {
     }
 
     public static int Execute(string path, bool strict) {
-        EnsureVocabularyHooksInstalled();
+        CliWorldVocabulary.EnsureInstalled();
         var fullPath = Path.GetFullPath(path);
 
         if (Directory.Exists(fullPath)) {
@@ -115,8 +95,12 @@ internal static class LintCommand {
             diagnostics.AddRange(loweringDiags);
 
             if (loweringResult.Value is not null && !diagnostics.HasErrors) {
-                WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath);
-                PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics);
+                // Only a root composes to a full engine schema; validating a module as one reports as missing
+                // every field whichever root imports it supplies.
+                if (WorldSemanticValidator.IsRootDocument(loweringResult.Value)) {
+                    WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath);
+                }
+                PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath);
             }
         }
 

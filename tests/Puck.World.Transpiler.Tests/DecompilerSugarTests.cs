@@ -18,20 +18,8 @@ public class DecompilerSugarTests {
         "\"$type\": \"transaction\"", "\"$type\":\"transaction\"",
     ];
 
-    private static string FindWorldsDirectory() {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null) {
-            var candidate = Path.Combine(dir, "src", "Puck.World", "Assets", "worlds");
-            if (Directory.Exists(candidate)) {
-                return candidate;
-            }
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new DirectoryNotFoundException("Could not locate src/Puck.World/Assets/worlds directory from test runner.");
-    }
-
     private static string DecompileWorld(string relativePath) {
-        var fullPath = Path.Combine(FindWorldsDirectory(), relativePath);
+        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
         Assert.True(File.Exists(fullPath), $"Shipped world file not found: {fullPath}");
         return WorldDecompiler.Decompile(File.ReadAllText(fullPath));
     }
@@ -131,7 +119,9 @@ public class DecompilerSugarTests {
         Assert.DoesNotContain("smooth", firstShape, StringComparison.Ordinal);
         Assert.DoesNotContain("rotation", firstShape, StringComparison.Ordinal);
         Assert.DoesNotContain("scale", firstShape, StringComparison.Ordinal);
-        Assert.DoesNotContain("group", firstShape, StringComparison.Ordinal);
+        // `group` carries no default (an ungrouped shape omits the key entirely instead) — an authored 0 is a
+        // different, meaningful state from absence, so it always prints rather than eliding.
+        Assert.Contains("group: 0", firstShape, StringComparison.Ordinal);
         Assert.Contains("position: [0, 0, 0]", firstShape, StringComparison.Ordinal);
 
         Assert.Contains("shape Sphere {", puck, StringComparison.Ordinal);
