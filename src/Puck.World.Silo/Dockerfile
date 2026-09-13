@@ -9,7 +9,11 @@ ENV CI=true
 RUN dotnet restore src/Puck.World.Silo --locked-mode \
     && dotnet publish src/Puck.World.Silo -c Release --no-restore -o /app \
     && dotnet publish src/Puck.Cli -c Release -o /puck-cli \
-    && dotnet /puck-cli/Puck.Cli.dll world prepare src/Puck.World/Assets/worlds /app/worlds
+    && dotnet /puck-cli/Puck.Cli.dll world prepare src/Puck.World/Assets/worlds /app/worlds \
+    && dotnet publish src/Puck.World.Azure -c Release --no-restore -o /app/worlds/extensions/Puck.World.Azure \
+    && dotnet publish src/Puck.HumbleGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.HumbleGamingBrick.Forge \
+    && dotnet publish src/Puck.AdvancedGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.AdvancedGamingBrick.Forge \
+    && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp
 
 FROM caddy:2.11.4 AS tls
 # TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
@@ -28,7 +32,8 @@ WORKDIR /app
 # directory; the exact image digest retains the cartridges and other dependencies with the runtime.
 COPY --from=build /source/src/Puck.World/Assets .
 COPY --from=build /app .
-# The optional distribution entry point composes host extensions; the silo assembly does not depend on them.
+# Each extension is published with its dependency manifest into a matching directory, so the loader discovers
+# only its entry assembly. Both entry points scan ./extensions from /app/worlds; the silo stays provider-neutral.
 COPY --from=build /puck-cli /puck-cli
 # The deployment supplies its silo document and federation keys as mounted files.
 WORKDIR /app/worlds

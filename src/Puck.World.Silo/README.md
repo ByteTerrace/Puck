@@ -30,6 +30,19 @@ The document loader validates against that same registry before host constructio
 Other providers are refused until eligible world placement and exclusive ownership are implemented.
 See [deployment](../../docs/development/ci.md) for the production endpoint and release process.
 
+The official Docker image publishes Azure, Humble Gaming Brick, Advanced Gaming
+Brick, and MCP into separate named directories under `/app/worlds/extensions`,
+including each extension's dependencies and dependency manifest. Both the default
+silo entry point and the optional CLI MCP entry point discover that directory from
+their working directory. Merely placing assemblies beside the CLI does not install
+them into the silo. Provider registration does not enable optional services: the
+silo and MCP documents still select their configured behavior.
+Extensions using .NET hosted services retain their lifecycle callbacks and
+background-task supervision. A fault stops the worker and returns a failure exit
+code, including when the world itself was otherwise healthy.
+Discovered providers remain loaded for the process lifetime; changing their code
+requires restarting the worker with the selected release image.
+
 The schema selects installed extensions by `type` and opaque object `settings`.
 The composition root's `WorldSiloExtensions` catalog uses `WorldExtensionRegistry`;
 world documents cannot install code. For a local host:

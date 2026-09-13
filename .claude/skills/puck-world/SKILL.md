@@ -383,6 +383,16 @@ The runner independently computes the expected receipt hash before each leg.
 `WorldReleaseReceiptProofTests` covers this helper; set `PUCK_TEST_PREVIOUS_WORLD_IMAGE`
 alongside `PUCK_TEST_WORLD_IMAGE` for the real older-exercise refusal control.
 Do not equate the checkpoint hash with receipt proof.
+The official image publishes Azure, both Gaming Brick forges, and MCP with their
+dependency manifests under `/app/worlds/extensions`. Both shipped entry points
+discover that directory. Optional dependencies absent from the bare host resolve
+inside their extension; shared host contracts retain default-context identity.
+Discovered providers use process-lifetime load contexts; the discovery API has no
+unload owner, so collectible contexts would allow premature dependency unloading.
+Keep .NET hosted-service supervision and lifecycle callbacks when composing an
+extension, and return failure if its background task faults. Run
+`WorldReleasePackagedHostTests` with `PUCK_TEST_WORLD_IMAGE` to verify actual image
+startup, both machine types, Azure health, MCP discovery and failed-listener shutdown.
 Read retained package definitions with the composed-document parser, allowing
 unfilled boot draws; checkpoint live and undo documents keep strict rehydration.
 Bootstrap retries compare `LoadPublishedDefinitionBytesAsync` with the archived

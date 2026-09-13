@@ -8,7 +8,8 @@ namespace Puck.World.Server;
 /// <summary>
 /// Custom <see cref="AssemblyLoadContext"/> that isolates extension dependencies via
 /// <see cref="AssemblyDependencyResolver"/> while delegating shared host contract assemblies
-/// to <see cref="AssemblyLoadContext.Default"/> to guarantee type identity.
+/// to <see cref="AssemblyLoadContext.Default"/> to guarantee type identity. Optional dependencies
+/// absent from that host resolve from the extension's published dependency graph.
 /// </summary>
 public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
     private static readonly HashSet<string> SharedHostPrefixes = new(StringComparer.OrdinalIgnoreCase) {
@@ -40,7 +41,9 @@ public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
 
     /// <summary>Initializes a new isolated extension load context.</summary>
     /// <param name="pluginPath">The file path to the extension assembly.</param>
-    public PuckExtensionLoadContext(string pluginPath) : base(name: Path.GetFileNameWithoutExtension(pluginPath), isCollectible: true) {
+    public PuckExtensionLoadContext(string pluginPath) : this(pluginPath, isCollectible: true) { }
+
+    internal PuckExtensionLoadContext(string pluginPath, bool isCollectible) : base(name: Path.GetFileNameWithoutExtension(pluginPath), isCollectible: isCollectible) {
         m_resolver = new AssemblyDependencyResolver(pluginPath);
     }
 
@@ -51,7 +54,11 @@ public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
         if (name is not null) {
             foreach (var prefix in SharedHostPrefixes) {
                 if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
-                    return null; // Defer to AssemblyLoadContext.Default to ensure shared type identity
+                    // Share contracts available to this host. An optional dependency can match a broad prefix
+                    // without being installed in the host (for example ModelContextProtocol in a bare silo).
+                    // In that case the extension's published dependency graph must supply it.
+                    try { return Default.LoadFromAssemblyName(assemblyName); }
+                    catch (FileNotFoundException) { break; }
                 }
             }
         }
@@ -112,7 +119,9 @@ public static class WorldExtensionLoader {
             throw new FileNotFoundException($"Extension assembly not found at '{fullPath}'.", fullPath);
         }
 
-        var loadContext = new PuckExtensionLoadContext(pluginPath: fullPath);
+        // This API installs process-lifetime providers and returns no unload owner. A collectible context can
+        // finalize before a later hosted-service callback resolves one of its dependencies.
+        var loadContext = new PuckExtensionLoadContext(pluginPath: fullPath, isCollectible: false);
         var assembly = loadContext.LoadFromAssemblyPath(assemblyPath: fullPath);
         var activatedExtensions = new List<object>();
 

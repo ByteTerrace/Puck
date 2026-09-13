@@ -672,6 +672,13 @@ records the external-effect proof required before that operation can be supporte
 
 ### Hosted worker runtime
 
+The image includes the [silo's runtime extensions](../../src/Puck.World.Silo/README.md#hosted-test-world)
+with their dependencies. The ordinary silo and optional MCP entry points discover
+the same installed Azure and Gaming Brick providers. Run `WorldReleasePackagedHostTests`
+with `PUCK_TEST_WORLD_IMAGE` set to the candidate image to check its entry points;
+successful execution through the CLI alone cannot prove that the ordinary worker
+has its providers installed.
+
 `puck world prepare` packages Puck and its referenced neighbours. Official release
 preparation pins the complete inventory, with a distinct retained signing key for
 each world and a matching door budget. Orleans membership is explicitly local. Checkpoints and journals live in

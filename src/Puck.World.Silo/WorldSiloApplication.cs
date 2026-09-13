@@ -135,10 +135,10 @@ public static class WorldSiloApplication {
                     var controlRegistry = new SiloControlExtensionRegistry();
                     controlExt.Register(registry: controlRegistry);
                     if (controlRegistry.HostedControlFactory is { } factory) {
-                        builder.Services.AddHostedService(implementationFactory: sp => {
+                        builder.Services.AddSingleton<IHostedService>(implementationFactory: sp => {
                             var controlHost = sp.GetRequiredService<IControlSessionHost>();
                             var service = factory(sp, controlHost, mcpConfigPath);
-                            return new SiloHostedServiceAdapter(service: service);
+                            return AdaptHostedService(service);
                         });
                     }
                 }
@@ -148,9 +148,9 @@ public static class WorldSiloApplication {
             var agentRegistry = new SiloWorldAgentExtensionRegistry();
             agentExt.Register(registry: agentRegistry);
             if (agentRegistry.AgentRunnerFactory is { } factory) {
-                builder.Services.AddHostedService(implementationFactory: sp => {
+                builder.Services.AddSingleton<IHostedService>(implementationFactory: sp => {
                     var service = factory(sp);
-                    return new SiloHostedServiceAdapter(service: service);
+                    return AdaptHostedService(service);
                 });
             }
         }
@@ -159,13 +159,16 @@ public static class WorldSiloApplication {
         // its cross-row/host-level narration for the run's whole lifetime — each admitted row's own WorldServer.Output
         // still narrates unbound (a row activates well after this point; see WorldGrain).
         host.Services.GetRequiredService<WorldSiloHost>().Instances.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
+        var backgroundServices = host.Services.GetServices<IHostedService>().OfType<BackgroundService>().ToArray();
         try {
             await host.RunAsync(cancellationToken);
         } catch (Orleans.Runtime.OrleansLifecycleCanceledException) {
             // A quit that lands before Orleans' own startup lifecycle finishes cancels that lifecycle — an ordinary
             // shutdown race, not a fault; every terminal command already ran on the tick thread before this unwound.
         }
-        return Environment.ExitCode;
+        // StopHost supervises background failures but does not set the process exit code. A failed configured
+        // service must remain a failed worker to Docker/systemd even when shutdown itself drains successfully.
+        return backgroundServices.Any(service => service.ExecuteTask?.IsFaulted == true) ? 1 : Environment.ExitCode;
     }
 
     private sealed class LoadedExtensions {
@@ -173,6 +176,11 @@ public static class WorldSiloApplication {
         public List<IControlExtension> ControlExtensions { get; } = [];
         public List<Puck.World.Protocol.IWorldAgentExtension> AgentExtensions { get; } = [];
     }
+
+    // Preserve BackgroundService supervision and IHostedLifecycleService callbacks when an extension uses
+    // the .NET hosting contract. A forwarding-only wrapper hides its execution task and startup failures.
+    private static IHostedService AdaptHostedService(Puck.Abstractions.IPuckHostedService service) =>
+        service as IHostedService ?? new SiloHostedServiceAdapter(service);
 
     private sealed class SiloHostedServiceAdapter(Puck.Abstractions.IPuckHostedService service) : IHostedService {
         public Task StartAsync(CancellationToken cancellationToken) => service.StartAsync(cancellationToken: cancellationToken);

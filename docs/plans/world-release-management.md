@@ -93,8 +93,16 @@ to metadata and require package-bound qualification.
 - Full-inventory acceptance exposed preparation and boot gaps: published boot
   draws need composed-document parsing and byte-based retry checks; nested machine
   assets need relocation when hosted file names are flattened; colocated silo rows
-  need signing identities without invented public endpoints. These corrections
-  are under verification in the five-world packaged control.
+  need signing identities without invented public endpoints. Both five-world
+  forward imports passed; reverse qualification and ordinary worker startup hit
+  timeouts. A saved-import profile identified eager navigation graph rebuilding
+  during validation of empty shared-navigation checkpoints; correction and full
+  inventory reruns remain pending.
+- The official image now publishes discoverable Azure, Gaming Brick and MCP
+  extensions with their dependencies. Four packaged entry-point controls passed:
+  the ordinary silo, silo MCP, CLI MCP, and a conflicting MCP listener that must
+  fail the worker. Dynamic providers live for the process lifetime; optional
+  dependencies resolve locally, and .NET hosted-service supervision is preserved.
 
 **Remaining:**
 

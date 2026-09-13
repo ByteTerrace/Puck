@@ -93,6 +93,7 @@ public sealed class DynamicExtensionLoaderLawTests {
         Assert.NotEmpty(loaded);
         Assert.NotNull(controlExtension);
         Assert.Equal("Puck.Mcp", controlExtension!.Name);
+        Assert.False(System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(controlExtension.GetType().Assembly)!.IsCollectible);
 
         var registry = new TestControlExtensionRegistry();
         controlExtension.Register(registry);
