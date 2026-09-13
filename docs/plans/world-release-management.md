@@ -36,8 +36,10 @@ integration remain incomplete.
   report `GET /private-healthz`, and freeze retiring activations.
 - `WorldReleaseTransition` computes and reverses a definition delta; the first
   policy refuses changed definitions.
-- The CLI `release` command offers `prepare`, `status`, `finalize`, and
-  `qualify`, with `exercise` as the packaged qualification leg.
+- The CLI `release` command offers `prepare`, `status`, `finalize`, `resume`, and
+  `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
+  durable pending operation and pinned deployment configuration, including its
+  compute template. Resume and finalization acquire an Azure controller lease.
 - `WorldReleaseArchive` retains exact manifests and package files. The Azure
   runtime adapter and loopback worker controls exist but are not connected to
   the production deployment entry point.
@@ -56,6 +58,10 @@ integration remain incomplete.
 - No definition edit is admitted yet; phase 3's preservation rules are unwritten.
 - `AzureWorld` still writes `artifacts/world-rollback.json` and restores saved
   blob versions on failure, so phase 5's replacement has not happened.
+- The immutable deployment-configuration store and Key Vault version adapter
+  exist, but production deploy still needs to publish them before beginning an
+  operation. Lease loss cancels local child processes; already accepted Azure
+  worker operations still need verification against stale controller execution.
 - No packaged release-pair qualification or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
 - Named handheld machine checkpoints now preserve core state and host pacing,

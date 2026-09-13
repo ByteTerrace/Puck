@@ -132,6 +132,7 @@ puck world prepare <worlds-directory> <output-directory>
 puck world release prepare <package-directory> --silo <silo.json> --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json]
 puck world release finalize
+puck world release resume
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
@@ -166,7 +167,22 @@ managed group is reported explicitly and returns exit code 2.
 guarded group write. It preserves gameplay, recovery history, and retained
 artifacts. Repeating it after finalization succeeds without another mutation;
 an uncommitted or closed deployment refuses. It uses the same configured Azure
-group as `status`.
+group as `status`, and acquires the deployment controller lease before its write.
+`world release resume` reads the configured group's pending operation and resumes
+that exact source and target. It loads verified retained packages, a pinned Key
+Vault secret version containing deployment inputs, and the retained compute
+template. It never substitutes the latest secret value or the current checkout's
+template. Missing or conflicting retained inputs refuse before a worker effect.
+A recovered source is reported as a failed deployment, not a successful upgrade.
+
+Resume and finalization use a renewable Azure Blob lease to exclude competing
+controllers. Losing ownership cancels the CLI's child processes and closes its
+next-effect checks; the durable operation remains available for a later resume.
+This controller lease complements the world's authority fences and publication
+barrier. It does not retract an Azure operation already accepted by the service.
+The production deploy path still needs to publish these retained inputs and use
+the managed coordinator before it can claim the same recovery guarantees.
+
 `world release qualify` runs four isolated Docker legs over a marked, coherent
 offline fixture: both packages import the source state, then both import the
 candidate's saved continuation. Complete checkpoint hashes must agree for each

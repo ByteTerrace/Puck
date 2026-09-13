@@ -7,7 +7,8 @@ using Puck.World.Silo;
 namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
-    private sealed record AzureWorldReleaseDeployment(WorldReleaseManifest Manifest, JsonObject Parameters) {
+    private sealed record AzureWorldReleaseDeployment(WorldReleaseManifest Manifest, WorldReleaseDeploymentConfiguration Configuration) {
+        public JsonObject Parameters => Configuration.Parameters;
         public string Image => Text(Parameters["release"]);
         public int HealthPort => Parameters["configuration"]!["lifecycle"]!["healthPort"]!.GetValue<int>();
         public int ShutdownSeconds => Parameters["configuration"]!["lifecycle"]!["shutdownSeconds"]!.GetValue<int>();
@@ -165,7 +166,9 @@ internal static partial class AzureCommand {
             cancellationToken.ThrowIfCancellationRequested();
             var path = Path.Combine(temporary, "release-compute.json");
             WriteParameters(path, deployment.Parameters);
-            await ApplyWorldComputeAsync(resourceGroup, path, scaleSet).ConfigureAwait(false);
+            var template = Path.Combine(temporary, "release-compute-template.json");
+            CliFiles.WriteJson(template, deployment.Configuration.ComputeTemplate);
+            await ApplyWorldComputeAsync(resourceGroup, path, scaleSet, template).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             await CheckWorkerAsync(await WorkerAsync().ConfigureAwait(false), deployment).ConfigureAwait(false);
         }

@@ -124,8 +124,12 @@ internal static partial class AzureCommand {
             return 1;
         }
     }
-    private static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, string? directory = null, bool capture = false, string? input = null) =>
-        (await CliProcess.RunCheckedAsync(arguments: arguments, capture: capture, executable: executable, input: input, root: (directory ?? Root()))).Trim();
+    private static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, string? directory = null, bool capture = false, string? input = null) {
+        var controller = WorldReleaseController.Value;
+        if (controller is not null) { await controller.EnsureHeldAsync().ConfigureAwait(false); }
+        return (await CliProcess.RunCheckedAsync(arguments: arguments, capture: capture, executable: executable, input: input,
+            root: (directory ?? Root()), cancellationToken: controller?.Token ?? default)).Trim();
+    }
     private static async Task PuckAsync(params string[] arguments) {
         if (await PuckRootCommand.InvokeAsync(args: arguments) != 0) { throw new InvalidOperationException(message: $"puck {arguments[0]} failed."); }
     }

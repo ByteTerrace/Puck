@@ -6,6 +6,14 @@ process handling, branding asset synchronization, and MCP behavior. Individual f
 and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.
 
+The release laws cover immutable deployment configuration references, exclusive
+controller ownership, bootstrap refusal over existing gameplay, and cancellation
+of an owned child process. `WorldReleaseAzureLeaseTests` uses the actual Azure
+SDK against an isolated local Azurite container. Load
+`mcr.microsoft.com/azure-storage/azurite:3.35.0` and start Docker to run that law;
+it reports an asset-gated skip when the image or Docker is unavailable. It does
+not contact a production storage account.
+
 ## Verification
 
 From the repository root, run in PowerShell or another shell:

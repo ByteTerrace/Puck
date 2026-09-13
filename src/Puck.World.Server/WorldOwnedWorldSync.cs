@@ -68,7 +68,9 @@ public sealed class WorldOwnedWorldSync {
     // definition or projection meant to be publicly reachable has to live under it; every other hosted leaf (a
     // checkpoint, a journal page) is simulation state and stays under HostedNamespace, reachable only with the
     // identity's own storage token.
-    internal const string HostedPrivateNamespace = ("private/" + HostedNamespace);
+    /// <summary>Account-relative namespace for hosted authority state and release bookkeeping. Access requires
+    /// the owning identity's storage authorization; credential values themselves belong in the secret store.</summary>
+    public const string HostedPrivateNamespace = ("private/" + HostedNamespace);
 
     // Bounds a discovery transport exception's message to one flat console line — see DiscoverCloudIds' catch.
     private const int DiscoveryDetailLengthLimit = 200;

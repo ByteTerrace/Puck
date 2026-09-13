@@ -133,7 +133,9 @@ supplied local copy and explains its next action. `WorldReleaseCoordinator` is t
 driver: it requires a qualification runner receipt, records each durable phase
 before invoking a runtime effect, and persists pre-commit recovery before
 restoring a source. The Azure command adapter still has to supply its runtime
-driver before production deployment can claim this workflow.
+driver before production deployment can claim this workflow. The CLI's `resume`
+command already selects a pending operation and loads its retained deployment
+inputs; it refuses missing packages, secret versions, or compute templates.
 
 `WorldReleaseArchive` retains canonical manifests and exact package files in the
 same private object store. File objects use full SHA-256 pins; the manifest is

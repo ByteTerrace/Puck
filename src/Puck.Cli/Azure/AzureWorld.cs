@@ -250,11 +250,11 @@ internal static partial class AzureCommand {
             Directory.Delete(path: temporary, recursive: true);
         }
     }
-    private static async Task ApplyWorldComputeAsync(string group, string parameters, string scaleSet) {
+    private static async Task ApplyWorldComputeAsync(string group, string parameters, string scaleSet, string? retainedTemplate = null) {
         const string CompiledCompute = "artifacts/production-world-compute.json";
 
-        if (CliGitHub.IsActions && !File.Exists(path: CompiledCompute)) { throw new FileNotFoundException(message: "CI world deployment requires its compiled compute template."); }
-        await AzAsync("deployment", "group", "create", "-g", group, "--name", (scaleSet + "-application"), "--template-file", (File.Exists(path: CompiledCompute) ? CompiledCompute : "src/Puck.Azure.Resources/worldSiloCompute.bicep"), "--parameters", ("@" + parameters), "-o", "none");
+        if (retainedTemplate is null && CliGitHub.IsActions && !File.Exists(path: CompiledCompute)) { throw new FileNotFoundException(message: "CI world deployment requires its compiled compute template."); }
+        await AzAsync("deployment", "group", "create", "-g", group, "--name", (scaleSet + "-application"), "--template-file", retainedTemplate ?? (File.Exists(path: CompiledCompute) ? CompiledCompute : "src/Puck.Azure.Resources/worldSiloCompute.bicep"), "--parameters", ("@" + parameters), "-o", "none");
         await AzAsync("vmss", "update-instances", "-g", group, "--name", scaleSet, "--instance-ids", "*", "-o", "none");
     }
     private static async Task WorldGuestAsync(string group, string script, string worker) {

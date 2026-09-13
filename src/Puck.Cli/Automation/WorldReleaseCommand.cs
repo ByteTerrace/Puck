@@ -63,7 +63,13 @@ internal static class WorldReleaseCommand {
             return 0;
         });
 
-        return new Command("release", "Prepare and inspect hosted-world deployment groups.") { prepare, status, finalize, qualify, WorldReleaseExerciseCommand.Create() };
+        var resume = new Command("resume", "Resume the configured group's durable operation using its retained release inputs.");
+        resume.SetAction(async (_, token) => {
+            var result = await AzureCommand.ResumeWorldReleaseAsync(token).ConfigureAwait(false);
+            Console.WriteLine(result.Detail);
+            return result.Completed && !result.SourceRecovered ? 0 : 1;
+        });
+        return new Command("release", "Prepare, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, WorldReleaseExerciseCommand.Create() };
     }
 
     private static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {

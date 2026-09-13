@@ -8,7 +8,8 @@ namespace Puck.Cli;
 // draining both streams can deadlock, and returning before the pumps finish loses the tail that often names a crash.
 internal static class CliProcess {
     // A credential may travel on stdin (docker login --password-stdin), never in an argument or a shell expression.
-    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false, string? input = null) {
+    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false, string? input = null, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
         var command = arguments.ToList();
 
         // The cmd.exe launchers behind az and npm re-parse their arguments; their interpreters take a clean vector.
@@ -28,6 +29,7 @@ internal static class CliProcess {
             RedirectStandardInput = (input is not null),
             RedirectStandardOutput = capture,
             UseShellExecute = false,
+            CreateNoWindow = true,
             WorkingDirectory = root,
         };
 
@@ -37,8 +39,16 @@ internal static class CliProcess {
         var output = (capture ? process.StandardOutput.ReadToEndAsync() : Task.FromResult(result: ""));
         var errors = (capture ? process.StandardError.ReadToEndAsync() : Task.FromResult(result: ""));
 
-        if (input is not null) { await process.StandardInput.WriteAsync(value: input); process.StandardInput.Close(); }
-        await process.WaitForExitAsync();
+        try {
+            if (input is not null) { await process.StandardInput.WriteAsync(input.AsMemory(), cancellationToken); process.StandardInput.Close(); }
+            await process.WaitForExitAsync(cancellationToken);
+        } catch (OperationCanceledException) {
+            try { if (!process.HasExited) { process.Kill(entireProcessTree: true); } }
+            catch (InvalidOperationException) when (process.HasExited) { }
+            await process.WaitForExitAsync(CancellationToken.None);
+            await Task.WhenAll(output, errors);
+            throw;
+        }
         var text = await output;
         var errorText = await errors;
 

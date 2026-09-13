@@ -328,6 +328,13 @@ restart in that phase activates without restoring again. Run
 `WorldReleaseCutoverLawTests` for the real-host coordinator, latest-state rollback,
 and interrupted recovery, plus `WorldReleaseArchiveLawTests` for retained package
 integrity. These same-binary laws do not qualify a pair of packaged engine images.
+`world release resume` reads the pending operation and pinned deployment inputs;
+production deploy still needs to publish those inputs and enter this coordinator.
+Resume and finalization use a renewable controller lease. Run the CLI
+`WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained
+configuration, bootstrap, or controller ownership. The Azure lease law requires
+Docker and the Azurite image documented in the CLI test README. Cancellation of
+the local Azure CLI does not retract an already accepted remote operation.
 `world release qualify` executes exact Docker images over a copied offline fixture
 with networking disabled; see the CLI README for the fixture and evidence contract.
 Each package must preserve the same source import and candidate-written reverse
