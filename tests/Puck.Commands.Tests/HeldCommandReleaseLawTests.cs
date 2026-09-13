@@ -21,21 +21,43 @@ public sealed class HeldCommandReleaseLawTests {
             );
             var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
-            router.Capture(signal: InputSignal.Press(source: "keyboard.q", deviceId: device));
-            var pressed = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+            router.Capture(signal: InputSignal.Press(
+                source: "keyboard.q",
+                deviceId: device
+            ));
+            var pressed = router.SnapshotForTick(
+                tick: 1UL,
+                windowEndTick: ulong.MaxValue
+            );
 
-            Assert.Equal(expected: CommandPhase.Started, actual: Assert.Single(collection: Assert.Single(collection: pressed.Lanes).Entries).Phase);
+            Assert.Equal(
+                expected: CommandPhase.Started,
+                actual: Assert.Single(collection: Assert.Single(collection: pressed.Lanes).Entries).Phase
+            );
 
-            router.Capture(signal: InputSignal.Release(source: "keyboard.q", deviceId: device));
-            var released = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+            router.Capture(signal: InputSignal.Release(
+                source: "keyboard.q",
+                deviceId: device
+            ));
+            var released = router.SnapshotForTick(
+                tick: 2UL,
+                windowEndTick: ulong.MaxValue
+            );
             var releaseEntries = ((released.Lanes.Length == 0)
                 ? []
-                : released.Lanes[0].Entries.ToArray());
+                : released.Lanes[0].Entries.ToArray()
+            );
 
             if (expectsRelease) {
-                Assert.Contains(collection: releaseEntries, filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch));
+                Assert.Contains(
+                    collection: releaseEntries,
+                    filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch)
+                );
             } else {
-                Assert.DoesNotContain(collection: releaseEntries, filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch));
+                Assert.DoesNotContain(
+                    collection: releaseEntries,
+                    filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch)
+                );
             }
         }
     }
@@ -44,17 +66,35 @@ public sealed class HeldCommandReleaseLawTests {
         var registry = new CommandRegistry(modules: [new Module()]);
         var router = new InputRouter(
             registry: registry,
-            bindings: new FixedBindings(binding: new CommandBinding(Command: HeldVerb, ActivateOn: CommandPhase.Started)),
+            bindings: new FixedBindings(binding: new CommandBinding(
+                Command: HeldVerb,
+                ActivateOn: CommandPhase.Started
+            )),
             principalResolver: new ConsolePrincipal()
         );
         var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
-        router.Capture(signal: InputSignal.Press(source: "keyboard.q", deviceId: device));
-        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
-        router.Capture(signal: InputSignal.Release(source: "keyboard.q", deviceId: device));
-        var released = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+        router.Capture(signal: InputSignal.Press(
+            source: "keyboard.q",
+            deviceId: device
+        ));
+        _ = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: ulong.MaxValue
+        );
+        router.Capture(signal: InputSignal.Release(
+            source: "keyboard.q",
+            deviceId: device
+        ));
+        var released = router.SnapshotForTick(
+            tick: 2UL,
+            windowEndTick: ulong.MaxValue
+        );
 
-        Assert.DoesNotContain(collection: released.Lanes.SelectMany(selector: static lane => lane.Entries.ToArray()), filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch));
+        Assert.DoesNotContain(
+            collection: released.Lanes.SelectMany(selector: static lane => lane.Entries.ToArray()),
+            filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch)
+        );
     }
 
     private sealed class FixedBindings(CommandBinding binding) : IInputBindings {

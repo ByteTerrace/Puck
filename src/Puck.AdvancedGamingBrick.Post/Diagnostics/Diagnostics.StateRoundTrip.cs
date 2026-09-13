@@ -47,6 +47,7 @@ internal sealed partial class Diagnostics {
 
         return ((failures == 0)
             ? 0
-            : 1);
+            : 1
+        );
     }
 }

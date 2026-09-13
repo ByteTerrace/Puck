@@ -19,59 +19,146 @@ public class DecompilerSugarTests {
     ];
 
     private static string DecompileWorld(string relativePath) {
-        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
-        Assert.True(File.Exists(fullPath), $"Shipped world file not found: {fullPath}");
-        return WorldDecompiler.Decompile(File.ReadAllText(fullPath));
+        var fullPath = Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        );
+
+        Assert.True(
+            condition: File.Exists(path: fullPath),
+            userMessage: $"Shipped world file not found: {fullPath}"
+        );
+        return WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
     }
 
+    [Fact]
+    public void AnyTypeObjectOutsideSeatRigPrintsAsCallForm() {
+        var root = new JsonObject {
+            ["schema"] = "puck.world.definition.v1",
+            ["cameras"] = new JsonArray(new JsonObject { ["$type"] = "worldPoint", ["x"] = 1, ["y"] = 2, ["z"] = 3 }),
+        };
+
+        var puck = WorldDecompiler.Decompile(root: root);
+
+        Assert.DoesNotContain(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "$type"
+        );
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "worldPoint(x: 1, y: 2, z: 3)"
+        );
+    }
+    [Fact]
+    public void ChessPlacementsElideDefaultYawAndScale() {
+        var puck = DecompileWorld(relativePath: "games/chess.world.json");
+
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "placement \"tabletop\" {"
+        );
+        var start = puck.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            value: "placement \"tabletop\" {"
+        );
+        var end = puck.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            startIndex: start,
+            value: "\n    }"
+        );
+        var row = puck[start..end];
+
+        Assert.DoesNotContain(
+            actualString: row,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "yawDegrees"
+        );
+        Assert.DoesNotContain(
+            actualString: row,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "scale"
+        );
+        Assert.Contains(
+            actualString: row,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "prototype: \"tabletop\""
+        );
+        Assert.Contains(
+            actualString: row,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "solid"
+        );
+    }
     [Fact]
     public void ChessRulesCarryNoLiteralTypeDiscriminators() {
-        var puck = DecompileWorld("games/chess.world.json");
+        var puck = DecompileWorld(relativePath: "games/chess.world.json");
+
         foreach (var probe in LiteralTypeKeyProbes) {
-            Assert.DoesNotContain(probe, puck, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                actualString: puck,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: probe
+            );
         }
     }
-
-    [Fact]
-    public void RootWorldRulesCarryNoLiteralTypeDiscriminators() {
-        var puck = DecompileWorld("puck.world.json");
-        foreach (var probe in LiteralTypeKeyProbes) {
-            Assert.DoesNotContain(probe, puck, StringComparison.Ordinal);
-        }
-    }
-
     [Fact]
     public void ChessRulesUseWhenAndCallFormSugar() {
-        var puck = DecompileWorld("games/chess.world.json");
-        Assert.Contains("rule \"tabletop-settle-hold-advance\" {", puck, StringComparison.Ordinal);
-        Assert.Contains("when $physics:quiescent == 1 and settleHold < 60", puck, StringComparison.Ordinal);
+        var puck = DecompileWorld(relativePath: "games/chess.world.json");
+
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "rule \"tabletop-settle-hold-advance\" {"
+        );
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "when $physics:quiescent == 1 and settleHold < 60"
+        );
         // The one gate in this file whose compareValue.left begins with '(' (§1.2/A11: `ParseAtom` would
         // otherwise misread the leading paren as a nested-gate grouping) falls back to a plain `gate:` property,
         // still printed through the call-form escape hatch rather than a literal `$type` object.
-        Assert.Contains("gate: all(predicates: [", puck, StringComparison.Ordinal);
-        Assert.Contains("compareState(comparison: \"Equal\", state: \"settleHold\", value: 60)", puck, StringComparison.Ordinal);
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "gate: all(predicates: ["
+        );
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "compareState(comparison: \"Equal\", state: \"settleHold\", value: 60)"
+        );
     }
-
-    [Fact]
-    public void ChessPlacementsElideDefaultYawAndScale() {
-        var puck = DecompileWorld("games/chess.world.json");
-        Assert.Contains("placement \"tabletop\" {", puck, StringComparison.Ordinal);
-        var start = puck.IndexOf("placement \"tabletop\" {", StringComparison.Ordinal);
-        var end = puck.IndexOf("\n    }", start, StringComparison.Ordinal);
-        var row = puck[start..end];
-        Assert.DoesNotContain("yawDegrees", row, StringComparison.Ordinal);
-        Assert.DoesNotContain("scale", row, StringComparison.Ordinal);
-        Assert.Contains("prototype: \"tabletop\"", row, StringComparison.Ordinal);
-        Assert.Contains("solid", row, StringComparison.Ordinal);
-    }
-
     [Fact]
     public void HeaderNamesTheSourceAsCanonicalAndWarnsAgainstReDecompiling() {
-        var puck = DecompileWorld("games/chess.world.json");
-        Assert.StartsWith("// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and", puck, StringComparison.Ordinal);
-        Assert.Contains("would OVERWRITE this file", puck, StringComparison.Ordinal);
-    }
+        var puck = DecompileWorld(relativePath: "games/chess.world.json");
 
+        Assert.StartsWith(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedStartString: "// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and"
+        );
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "would OVERWRITE this file"
+        );
+    }
+    [Fact]
+    public void RootWorldRulesCarryNoLiteralTypeDiscriminators() {
+        var puck = DecompileWorld(relativePath: "puck.world.json");
+
+        foreach (var probe in LiteralTypeKeyProbes) {
+            Assert.DoesNotContain(
+                actualString: puck,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: probe
+            );
+        }
+    }
     // The shipped corpus authors every `prototypes[].document.shapes` array as a plain object/array literal (no
     // wrapping block statement reaches that position in the grammar — see AGENTS handoff notes), so shape-block
     // sugar is exercised here directly against a standalone `shapes` section rather than through a shipped world.
@@ -80,7 +167,7 @@ public class DecompilerSugarTests {
     // exact CLR type (`TryGetValue<long>`/`<double>` both fail), unlike one parsed from JSON text.
     [Fact]
     public void ShapesBlockElidesDefaultsAndKeepsNonDefaults() {
-        const string json = """
+        const string Json = """
         {
             "schema": "puck.creation.v1",
             "shapes": [
@@ -108,45 +195,102 @@ public class DecompilerSugarTests {
         }
         """;
 
-        var puck = WorldDecompiler.Decompile(json);
+        var puck = WorldDecompiler.Decompile(jsonText: Json);
 
-        Assert.Contains("shape Box {", puck, StringComparison.Ordinal);
-        var firstStart = puck.IndexOf("shape Box {", StringComparison.Ordinal);
-        var firstEnd = puck.IndexOf("\n}", firstStart, StringComparison.Ordinal);
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "shape Box {"
+        );
+        var firstStart = puck.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            value: "shape Box {"
+        );
+        var firstEnd = puck.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            startIndex: firstStart,
+            value: "\n}"
+        );
         var firstShape = puck[firstStart..firstEnd];
-        Assert.DoesNotContain("id:", firstShape, StringComparison.Ordinal);
-        Assert.DoesNotContain("blend", firstShape, StringComparison.Ordinal);
-        Assert.DoesNotContain("smooth", firstShape, StringComparison.Ordinal);
-        Assert.DoesNotContain("rotation", firstShape, StringComparison.Ordinal);
-        Assert.DoesNotContain("scale", firstShape, StringComparison.Ordinal);
+
+        Assert.DoesNotContain(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "id:"
+        );
+        Assert.DoesNotContain(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "blend"
+        );
+        Assert.DoesNotContain(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "smooth"
+        );
+        Assert.DoesNotContain(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "rotation"
+        );
+        Assert.DoesNotContain(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "scale"
+        );
         // `group` carries no default (an ungrouped shape omits the key entirely instead) — an authored 0 is a
         // different, meaningful state from absence, so it always prints rather than eliding.
-        Assert.Contains("group: 0", firstShape, StringComparison.Ordinal);
-        Assert.Contains("position [0, 0, 0]", firstShape, StringComparison.Ordinal);
+        Assert.Contains(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "group: 0"
+        );
+        Assert.Contains(
+            actualString: firstShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "position [0, 0, 0]"
+        );
 
-        Assert.Contains("shape Sphere {", puck, StringComparison.Ordinal);
-        var secondStart = puck.IndexOf("shape Sphere {", StringComparison.Ordinal);
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "shape Sphere {"
+        );
+        var secondStart = puck.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            value: "shape Sphere {"
+        );
         var secondShape = puck[secondStart..];
-        Assert.Contains("id: 5", secondShape, StringComparison.Ordinal);
-        Assert.Contains("blend: \"Subtract\"", secondShape, StringComparison.Ordinal);
-        Assert.Contains("smooth: 0.25", secondShape, StringComparison.Ordinal);
-        Assert.Contains("rotation: \"state.transforms.identity\"", secondShape, StringComparison.Ordinal);
-        Assert.Contains("scale [2, 2, 2]", secondShape, StringComparison.Ordinal);
-        Assert.Contains("group: 3", secondShape, StringComparison.Ordinal);
-    }
 
-    [Fact]
-    public void AnyTypeObjectOutsideSeatRigPrintsAsCallForm() {
-        var root = new JsonObject {
-            ["schema"] = "puck.world.definition.v1",
-            ["cameras"] = new JsonArray(
-                new JsonObject { ["$type"] = "worldPoint", ["x"] = 1, ["y"] = 2, ["z"] = 3 }
-            ),
-        };
-
-        var puck = WorldDecompiler.Decompile(root);
-
-        Assert.DoesNotContain("$type", puck, StringComparison.Ordinal);
-        Assert.Contains("worldPoint(x: 1, y: 2, z: 3)", puck, StringComparison.Ordinal);
+        Assert.Contains(
+            actualString: secondShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "id: 5"
+        );
+        Assert.Contains(
+            actualString: secondShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "blend: \"Subtract\""
+        );
+        Assert.Contains(
+            actualString: secondShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "smooth: 0.25"
+        );
+        Assert.Contains(
+            actualString: secondShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "rotation: \"state.transforms.identity\""
+        );
+        Assert.Contains(
+            actualString: secondShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "scale [2, 2, 2]"
+        );
+        Assert.Contains(
+            actualString: secondShape,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "group: 3"
+        );
     }
 }

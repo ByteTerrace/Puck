@@ -14,7 +14,10 @@ public static partial class UnsignedNumberFunctions {
         var maximum = value.SquareRoot();
         var center = checked((maximum * (maximum + T.One)));
         // Do not form 2*center: that intermediate can overflow even when the result fits.
-        return ((value >= center) ? (center - (value - center)) : checked((center + (center - value))));
+        return ((value >= center)
+            ? (center - (value - center))
+            : checked((center + (center - value)))
+        );
     }
     /// <summary>Adds the same nonnegative amount to both components of an elegant pair.</summary>
     /// <typeparam name="T">The unsigned binary integer carrier.</typeparam>
@@ -26,10 +29,17 @@ public static partial class UnsignedNumberFunctions {
     public static T ElegantTranslate<T>(this T value, T amount) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var maximum = value.SquareRoot();
         var center = checked((maximum * (maximum + T.One)));
-        var distance = ((value >= center) ? (value - center) : (center - value));
+        var distance = ((value >= center)
+            ? (value - center)
+            : (center - value)
+        );
         var target = checked((maximum + amount));
 
-        return ElegantRecenter(maximum: target, distance: distance, above: (value >= center) ^ T.IsOddInteger(value: amount));
+        return ElegantRecenter(
+            maximum: target,
+            distance: distance,
+            above: (value >= center) ^ T.IsOddInteger(value: amount)
+        );
     }
     /// <summary>Multiplies both components of an elegant pair by a nonnegative integer.</summary>
     /// <typeparam name="T">The unsigned binary integer carrier.</typeparam>
@@ -39,19 +49,31 @@ public static partial class UnsignedNumberFunctions {
     /// <exception cref="OverflowException">The scaled pair does not fit the carrier.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ElegantScale<T>(this T value, T factor) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        if ((factor == T.Zero) || (value == T.Zero)) { return T.Zero; }
+        if (
+            (factor == T.Zero) ||
+            (value == T.Zero)
+        ) { return T.Zero; }
         var maximum = value.SquareRoot();
 
-        if (T.IsOddInteger(value: factor) || T.IsEvenInteger(value: maximum)) {
+        if (
+            T.IsOddInteger(value: factor) ||
+            T.IsEvenInteger(value: maximum)
+        ) {
             // The shell orientation is unchanged, so all terms are nonnegative and checked independently.
             return checked(((factor * value) + ((factor * (factor - T.One)) * (maximum * maximum))));
         }
         var center = checked((maximum * (maximum + T.One)));
-        var distance = ((value >= center) ? (value - center) : (center - value));
+        var distance = ((value >= center)
+            ? (value - center)
+            : (center - value)
+        );
         var target = checked((maximum * factor));
 
-        return ElegantRecenter(maximum: target, distance: checked((distance * factor)),
-            above: (value >= center) ^ (T.IsOddInteger(value: maximum) != T.IsOddInteger(value: target)));
+        return ElegantRecenter(
+            maximum: target,
+            distance: checked((distance * factor)),
+            above: (value >= center) ^ (T.IsOddInteger(value: maximum) != T.IsOddInteger(value: target))
+        );
     }
     /// <summary>Gets the larger component of an elegant pair without decoding the pair.</summary>
     /// <typeparam name="T">The unsigned binary integer carrier.</typeparam>
@@ -67,7 +89,10 @@ public static partial class UnsignedNumberFunctions {
     public static T ElegantDifference<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var maximum = value.SquareRoot();
 
-        return ElegantDifference(maximum: maximum, value: value);
+        return ElegantDifference(
+            maximum: maximum,
+            value: value
+        );
     }
     /// <summary>Gets the smaller component of an elegant pair without decoding the pair.</summary>
     /// <typeparam name="T">The unsigned binary integer carrier.</typeparam>
@@ -77,7 +102,10 @@ public static partial class UnsignedNumberFunctions {
     public static T ElegantMinimum<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var maximum = value.SquareRoot();
 
-        return (maximum - ElegantDifference(maximum: maximum, value: value));
+        return (maximum - ElegantDifference(
+            maximum: maximum,
+            value: value
+        ));
     }
     /// <summary>Gets the sum of the components of an elegant pair without decoding the pair.</summary>
     /// <typeparam name="T">The unsigned binary integer carrier.</typeparam>
@@ -87,19 +115,28 @@ public static partial class UnsignedNumberFunctions {
     public static T ElegantSum<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var maximum = value.SquareRoot();
 
-        return ((maximum << 1) - ElegantDifference(maximum: maximum, value: value));
+        return ((maximum << 1) - ElegantDifference(
+            maximum: maximum,
+            value: value
+        ));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ElegantDifference<T>(T value, T maximum) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var center = (maximum * (maximum + T.One));
 
-        return ((value >= center) ? (value - center) : (center - value));
+        return ((value >= center)
+            ? (value - center)
+            : (center - value)
+        );
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ElegantRecenter<T>(T maximum, T distance, bool above) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var center = checked((maximum * checked((maximum + T.One))));
 
-        return (above ? checked((center + distance)) : checked((center - distance)));
+        return (above
+            ? checked((center + distance))
+            : checked((center - distance))
+        );
     }
 }

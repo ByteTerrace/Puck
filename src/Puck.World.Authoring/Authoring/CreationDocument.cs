@@ -169,14 +169,14 @@ public sealed record ShapeDocument(
     /// <c>SdfInstruction</c>, so this bounds a shape's domain-op instruction cost for capacity probes
     /// (<c>Puck.World.Client.WorldStampPool</c>'s <c>probeWorstCase</c> sizing).</summary>
     public const int MaxDomainOps = 4;
-    /// <summary>The largest authored magnitude of <see cref="Shear"/>'s X (linear) or Y (quadratic) component.</summary>
-    public const float MaxShear = 4f;
     /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
     public const float MaxOnion = 0.2f;
-    /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
-    public const float MaxSmooth = 0.5f;
+    /// <summary>The largest authored magnitude of <see cref="Shear"/>'s X (linear) or Y (quadratic) component.</summary>
+    public const float MaxShear = 4f;
     /// <summary>The most entries <see cref="Slides"/> carries.</summary>
     public const int MaxSlides = 4;
+    /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
+    public const float MaxSmooth = 0.5f;
     /// <summary>The most entries <see cref="Swings"/> carries — one shape is one limb segment, and four covers a
     /// two-driver limb hinging on two axes.</summary>
     public const int MaxSwings = 4;

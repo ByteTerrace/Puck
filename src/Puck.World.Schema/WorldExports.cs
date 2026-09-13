@@ -15,7 +15,6 @@ public enum WorldExportFacet : byte {
     /// scalar, a binding wheel or bar row. Admitted by <see cref="WorldExports.Bindings"/>.</summary>
     Binding,
 }
-
 /// <summary>The surface an imported module offers its host: the names the host may read, drive, and bind to. A
 /// module's names are private by default — every row, lattice, rule, table, pattern, generator, field, and dynamics
 /// row it declares is its own — and a host reference to a name outside these lists refuses at compose by name
@@ -54,7 +53,6 @@ public sealed record WorldExports(
         WorldExportFacet.Binding => $"{MemberName}.bindings",
         _ => $"{MemberName}.reads",
     };
-
     /// <summary>Validates the record against the names the module declares: every entry names a declaration, and no
     /// list repeats an entry.</summary>
     /// <param name="declared">Every name the module declares, spelled as the composed document spells it.</param>
@@ -63,7 +61,7 @@ public sealed record WorldExports(
     public bool TryValidate(IReadOnlySet<string> declared, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: declared);
 
-        foreach (var facet in (ReadOnlySpan<WorldExportFacet>)[WorldExportFacet.Read, WorldExportFacet.Action, WorldExportFacet.Binding]) {
+        foreach (var facet in ((ReadOnlySpan<WorldExportFacet>)[WorldExportFacet.Read, WorldExportFacet.Action, WorldExportFacet.Binding])) {
             var names = Of(facet: facet);
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -98,14 +96,23 @@ public sealed record WorldExports(
     public string Describe() {
         var parts = new List<string>(capacity: 3);
 
-        foreach (var facet in (ReadOnlySpan<WorldExportFacet>)[WorldExportFacet.Read, WorldExportFacet.Action, WorldExportFacet.Binding]) {
+        foreach (var facet in ((ReadOnlySpan<WorldExportFacet>)[WorldExportFacet.Read, WorldExportFacet.Action, WorldExportFacet.Binding])) {
             var names = Of(facet: facet);
 
             if (names.Count > 0) {
-                parts.Add(item: $"{MemberOf(facet: facet)[(MemberName.Length + 1)..]}:{string.Join(separator: ",", values: names)}");
+                parts.Add(item: $"{MemberOf(facet: facet)[(MemberName.Length + 1)..]}:{string.Join(
+                    separator: ",",
+                    values: names
+                )}");
             }
         }
 
-        return ((parts.Count == 0) ? "none" : string.Join(separator: " ", values: parts));
+        return ((parts.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: " ",
+                values: parts
+            )
+        );
     }
 }

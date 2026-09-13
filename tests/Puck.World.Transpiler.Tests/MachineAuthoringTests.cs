@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class MachineAuthoringTests {
     [Fact]
     public void NamedDevicesUseOrdinaryBlocksArraysAndConstants() {
-        const string source = """
+        const string Source = """
             schema: "puck.world.definition.v1"
             let deviceModel = "cgb"
             let cartridge = "content/demo.cartridge.json"
@@ -25,15 +25,24 @@ public sealed class MachineAuthoringTests {
                 }
             ]
             """;
-        var lowered = WorldDocumentEmitter.Lower(PuckParser.ParseDocument(source));
-        var definition = WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(lowered.ToJsonString()));
-        var machine = Assert.Single(definition.Machines);
-        Assert.Equal("brook", machine.Name);
-        Assert.False(machine.Running);
-        Assert.Equal("cgb", machine.Configuration.GetProperty("model").GetString());
-        Assert.Equal("content/demo.cartridge.json", machine.Configuration.GetProperty("content").GetProperty("path").GetString());
-    }
+        var lowered = WorldDocumentEmitter.Lower(PuckParser.ParseDocument(Source));
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: lowered.ToJsonString()));
+        var machine = Assert.Single(collection: definition.Machines);
 
+        Assert.Equal(
+            "brook",
+            machine.Name
+        );
+        Assert.False(condition: machine.Running);
+        Assert.Equal(
+            "cgb",
+            machine.Configuration.GetProperty(propertyName: "model").GetString()
+        );
+        Assert.Equal(
+            "content/demo.cartridge.json",
+            machine.Configuration.GetProperty(propertyName: "content").GetProperty(propertyName: "path").GetString()
+        );
+    }
     [Fact]
     public void TwoAliasesMintIndependentMachineIdentities() {
         var source = JsonNode.Parse("""
@@ -41,10 +50,34 @@ public sealed class MachineAuthoringTests {
             """)!.AsObject();
         var left = source.DeepClone().AsObject();
         var right = source.DeepClone().AsObject();
-        Assert.True(WorldModuleNamespace.TryApply(left, "left", out var leftReason), leftReason);
-        Assert.True(WorldModuleNamespace.TryApply(right, "right", out var rightReason), rightReason);
-        Assert.Equal("left_brook", left["machines"]![0]!["name"]!.GetValue<string>());
-        Assert.Equal("right_brook", right["machines"]![0]!["name"]!.GetValue<string>());
-        Assert.Equal("gaming-brick", left["machines"]![0]!["engine"]!.GetValue<string>());
+
+        Assert.True(
+            condition: WorldModuleNamespace.TryApply(
+                alias: "left",
+                module: left,
+                reason: out var leftReason
+            ),
+            userMessage: leftReason
+        );
+        Assert.True(
+            condition: WorldModuleNamespace.TryApply(
+                alias: "right",
+                module: right,
+                reason: out var rightReason
+            ),
+            userMessage: rightReason
+        );
+        Assert.Equal(
+            "left_brook",
+            left["machines"]![0]!["name"]!.GetValue<string>()
+        );
+        Assert.Equal(
+            "right_brook",
+            right["machines"]![0]!["name"]!.GetValue<string>()
+        );
+        Assert.Equal(
+            "gaming-brick",
+            left["machines"]![0]!["engine"]!.GetValue<string>()
+        );
     }
 }

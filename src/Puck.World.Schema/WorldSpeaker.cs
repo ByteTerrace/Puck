@@ -279,6 +279,21 @@ public sealed record WorldAudioCue(
         VoiceBabble,
     ];
 
+    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
+    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
+        for (var index = 0; (index < tokens.Count); index++) {
+            if (string.Equals(
+                a: tokens[index],
+                b: candidate,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
     /// <param name="token">The candidate token.</param>
     public static bool IsEventToken(string? token) => Contains(
@@ -299,20 +314,6 @@ public sealed record WorldAudioCue(
         candidate: token,
         tokens: ProducerBypassedTokens
     );
-    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
-    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
-        for (var index = 0; (index < tokens.Count); index++) {
-            if (string.Equals(
-                a: tokens[index],
-                b: candidate,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }
 /// <summary>
 /// The world's audio host-section defaults — document defaults with the same absence-coalesce convention every
@@ -353,12 +354,6 @@ public sealed record WorldAudioDefaults(
 
     private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
 
-    /// <summary>Gets the cue table. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
-    public IReadOnlyList<WorldAudioCue> Cues {
-        get => m_cues;
-        init => m_cues = (value ?? []);
-    }
     /// <summary>Gets the inert absence — zero master gain (silent), zero speaker radius, no fade, no cues. The
     /// engine holds no audio posture of its own: the standard values are AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits them by naming that document as its
@@ -371,4 +366,10 @@ public sealed record WorldAudioDefaults(
         Listener: ListenerFocus,
         MasterGain: 0f
     );
+    /// <summary>Gets the cue table. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
+    public IReadOnlyList<WorldAudioCue> Cues {
+        get => m_cues;
+        init => m_cues = (value ?? []);
+    }
 }

@@ -11,7 +11,6 @@ public enum MachineRuntimeStatus {
     /// <summary>A runtime fault prevents advancement.</summary>
     Faulted,
 }
-
 /// <summary>A deterministic runtime owned by a host. Displays, audio, controls, removable content, and hardware
 /// access are optional capabilities; none is required to advance a machine.</summary>
 /// <remarks>One producer supplies ordered operations and exact integer tick budgets. An implementation may use a

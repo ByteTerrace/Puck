@@ -22,23 +22,22 @@ namespace Puck.World.Protocol;
 /// issuer's own signed window.
 /// </remarks>
 public sealed class WorldAttestedAuthenticator : IAuthenticator {
+    private const int NewChallengeBytes = 32;
+
     /// <summary>The fixed audience every federation-identity claim is directed at.</summary>
     public const string Audience = "puck.world";
+    /// <summary>The fixed purpose every federation-identity claim declares.</summary>
+    public const string Purpose = "puck.world.federation-identity";
+
+    private readonly Func<DateTimeOffset> m_now;
+    private readonly ISigningOracle? m_oracle;
+    private readonly Func<IReadOnlyList<WorldAdmissionEntry>?>? m_trustEntries;
 
     /// <summary>The verifier-side ceiling on a federation-identity claim's own age, independent of the fresh
     /// per-connection challenge nonce that already bounds replay.</summary>
     public static readonly TimeSpan MaximumClaimAge = TimeSpan.FromMinutes(value: 5);
 
-    /// <summary>The fixed purpose every federation-identity claim declares.</summary>
-    public const string Purpose = "puck.world.federation-identity";
-
     internal static readonly IAttestationCodec Codec = new CborAttestationCodec();
-
-    private const int NewChallengeBytes = 32;
-
-    private readonly Func<DateTimeOffset> m_now;
-    private readonly ISigningOracle? m_oracle;
-    private readonly Func<IReadOnlyList<WorldAdmissionEntry>?>? m_trustEntries;
 
     /// <summary>Initializes the authenticator.</summary>
     /// <param name="trustEntries">Reads the reading world's current <c>admission</c> rows fresh at every verify
@@ -89,7 +88,8 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
             return false;
         }
 
-        if (!AttestationChainEnvelope.TryDecode(
+        if (
+            !AttestationChainEnvelope.TryDecode(
             chain: out var chainBytes,
             claim: out var claimBytes,
             reason: out _,

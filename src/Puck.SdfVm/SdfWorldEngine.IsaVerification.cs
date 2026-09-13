@@ -222,7 +222,10 @@ public sealed partial class SdfWorldEngine {
                 sampledImage: sampledImage,
                 viewsPipeline: m_viewsFoldsPipeline
             );
-            SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "fold views");
+            SdfShaderSetVerification.ValidateReport(
+                report: report.Span,
+                viewsVariant: "fold views"
+            );
             report = DispatchIsaReport(
                 initializeImages: false,
                 readback: readback,
@@ -230,7 +233,10 @@ public sealed partial class SdfWorldEngine {
                 sampledImage: sampledImage,
                 viewsPipeline: m_primaryPipeline
             );
-            SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "primary traversal");
+            SdfShaderSetVerification.ValidateReport(
+                report: report.Span,
+                viewsVariant: "primary traversal"
+            );
             report = DispatchIsaReport(
                 initializeImages: false,
                 readback: readback,
@@ -238,7 +244,10 @@ public sealed partial class SdfWorldEngine {
                 sampledImage: sampledImage,
                 viewsPipeline: m_surfacePipeline
             );
-            SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "surface evaluation");
+            SdfShaderSetVerification.ValidateReport(
+                report: report.Span,
+                viewsVariant: "surface evaluation"
+            );
             report = DispatchIsaReport(
                 initializeImages: false,
                 readback: readback,
@@ -246,7 +255,10 @@ public sealed partial class SdfWorldEngine {
                 sampledImage: sampledImage,
                 viewsPipeline: m_ambientPipeline
             );
-            SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "ambient occlusion");
+            SdfShaderSetVerification.ValidateReport(
+                report: report.Span,
+                viewsVariant: "ambient occlusion"
+            );
         } finally {
             Array.Clear(array: m_pushConstant);
         }

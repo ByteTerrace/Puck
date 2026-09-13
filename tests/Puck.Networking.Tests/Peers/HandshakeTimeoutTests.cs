@@ -31,11 +31,13 @@ public sealed class HandshakeTimeoutTests {
 
 
         transport.Accept(connection: connection);
-        Assert.False(acceptor.HandshakeRefusals.TryRead(out _));
-        await clock.ExpireAsync(PeerWireProtocol.ControlStreamTimeout, deadline.Token);
+        Assert.False(condition: acceptor.HandshakeRefusals.TryRead(item: out _));
+        await clock.ExpireAsync(
+            PeerWireProtocol.ControlStreamTimeout,
+            deadline.Token
+        );
 
         var refused = await acceptor.HandshakeRefusals.ReadAsync(cancellationToken: deadline.Token);
-
 
         Assert.Equal(
             expected: PeerRefusal.HandshakeTimedOut,
@@ -78,10 +80,13 @@ public sealed class HandshakeTimeoutTests {
             ct: deadline.Token,
             endpoint: PeerTestSupport.Loopback(port: 1)
         );
-        Assert.False(dialing.IsCompleted);
-        await clock.ExpireAsync(PeerWireProtocol.HandshakeTimeout, deadline.Token);
-        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(() => dialing);
 
+        Assert.False(condition: dialing.IsCompleted);
+        await clock.ExpireAsync(
+            PeerWireProtocol.HandshakeTimeout,
+            deadline.Token
+        );
+        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => dialing);
 
         Assert.Equal(
             expected: PeerRefusal.HandshakeTimedOut,

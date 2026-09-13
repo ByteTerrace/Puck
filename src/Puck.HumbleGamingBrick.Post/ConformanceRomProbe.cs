@@ -30,6 +30,25 @@ internal static class ConformanceRomProbe {
     private const ushort Signature2Address = 0xA003;
     private const ushort StatusAddress = 0xA000;
 
+    // Collapse the serial stream's control characters and runs of whitespace into a single readable line.
+    private static string Clean(string text) {
+        var builder = new StringBuilder(capacity: text.Length);
+
+        foreach (var character in text) {
+            _ = builder.Append(value: (char.IsControl(c: character)
+                ? ' '
+                : character));
+        }
+
+        return string.Join(
+            separator: ' ',
+            values: builder.ToString().Split(
+                options: StringSplitOptions.RemoveEmptyEntries,
+                separator: ((char[]?)null)
+            )
+        );
+    }
+
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="romCase">The case to run.</param>
     /// <param name="budget">The case's wall-clock budget.</param>
@@ -84,7 +103,8 @@ internal static class ConformanceRomProbe {
                 } else if (sawRunning) {
                     return ((status == PassStatus)
                         ? (ConformanceRomResult.Pass, Clean(text: rendered))
-                        : (ConformanceRomResult.Fail, $"result code 0x{status:X2}"));
+                        : (ConformanceRomResult.Fail, $"result code 0x{status:X2}")
+                    );
                 }
             }
         }
@@ -106,24 +126,5 @@ internal static class ConformanceRomProbe {
         }
 
         return (ConformanceRomResult.Inconclusive, $"no result within {romCase.FrameCap} frames; serial=\"{Clean(text: final)}\"");
-    }
-
-    // Collapse the serial stream's control characters and runs of whitespace into a single readable line.
-    private static string Clean(string text) {
-        var builder = new StringBuilder(capacity: text.Length);
-
-        foreach (var character in text) {
-            _ = builder.Append(value: (char.IsControl(c: character)
-                ? ' '
-                : character));
-        }
-
-        return string.Join(
-            separator: ' ',
-            values: builder.ToString().Split(
-                options: StringSplitOptions.RemoveEmptyEntries,
-                separator: ((char[]?)null)
-            )
-        );
     }
 }

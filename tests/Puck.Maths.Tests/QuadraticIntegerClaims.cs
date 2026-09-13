@@ -32,13 +32,39 @@ internal static class QuadraticIntegerClaims {
     }
     private static Element DeterministicElement(long step, long bound) =>
         new(
-            U: DeterministicComponent(bound: bound, multiplier: 2654435761L, offset: 17L, step: step),
-            V: DeterministicComponent(bound: bound, multiplier: 6364136223846793005L, offset: 11L, step: step)
+            U: DeterministicComponent(
+                bound: bound,
+                multiplier: 2654435761L,
+                offset: 17L,
+                step: step
+            ),
+            V: DeterministicComponent(
+                bound: bound,
+                multiplier: 6364136223846793005L,
+                offset: 11L,
+                step: step
+            )
         );
-    // ---- Shared-nothing reference arithmetic (none of these call any Puck.Maths member) ----
+    // Trial division over a small ceiling, independent of NumberTheoryFunctions.SegmentedPrimeSieve/EnumeratePrimes.
+    private static IReadOnlyList<int> EnumerateSmallPrimesUpTo(int ceiling) {
+        var primes = new List<int>();
 
-    private static BigInteger RefNorm(BigInteger p, BigInteger q, BigInteger u, BigInteger v) =>
-        (((u * u) + ((p * u) * v)) - ((q * v) * v));
+        for (var candidate = 2; (candidate <= ceiling); ++candidate) {
+            var isPrime = true;
+
+            for (var divisor = 2; ((((long)divisor) * divisor) <= candidate); ++divisor) {
+                if ((candidate % divisor) == 0) {
+                    isPrime = false;
+
+                    break;
+                }
+            }
+
+            if (isPrime) { primes.Add(item: candidate); }
+        }
+
+        return primes;
+    }
     // The floor integer square root by Newton descent, independent of BigIntegerFunctions.SquareRoot.
     private static BigInteger ISqrtBig(BigInteger value) {
         if (value.Sign <= 0) { return BigInteger.Zero; }
@@ -78,9 +104,16 @@ internal static class QuadraticIntegerClaims {
 
             if (witness >= value) { continue; }
 
-            var residue = BigInteger.ModPow(exponent: oddPart, modulus: value, value: witness);
+            var residue = BigInteger.ModPow(
+                exponent: oddPart,
+                modulus: value,
+                value: witness
+            );
 
-            if (residue.IsOne || (residue == (value - 1))) { continue; }
+            if (
+                residue.IsOne ||
+                (residue == (value - 1))
+            ) { continue; }
 
             var composite = true;
 
@@ -99,25 +132,66 @@ internal static class QuadraticIntegerClaims {
 
         return true;
     }
-    // Trial division over a small ceiling, independent of NumberTheoryFunctions.SegmentedPrimeSieve/EnumeratePrimes.
-    private static IReadOnlyList<int> EnumerateSmallPrimesUpTo(int ceiling) {
-        var primes = new List<int>();
+    // Rebuilds an element from its factorization using the SUBJECT's own Multiply — this is the reassembly the
+    // factorization contract promises, not a second implementation of it.
+    private static Element Reassemble(Algebra algebra, QuadraticFactorization factorization) {
+        var product = factorization.LeadingUnit;
 
-        for (var candidate = 2; (candidate <= ceiling); ++candidate) {
-            var isPrime = true;
-
-            for (var divisor = 2; ((((long)divisor) * divisor) <= candidate); ++divisor) {
-                if ((candidate % divisor) == 0) {
-                    isPrime = false;
-
-                    break;
-                }
-            }
-
-            if (isPrime) { primes.Add(item: candidate); }
+        foreach (var factor in factorization.Factors) {
+            for (var power = 0; (power < factor.Multiplicity); ++power) { product = algebra.Multiply(
+                left: product,
+                right: factor.Prime
+            ); }
         }
 
-        return primes;
+        return product;
+    }
+    // The inert branch of the splitting law, recomputed locally rather than through QuadraticIntegerArithmetic's own
+    // SplittingCharacter or NumberTheoryFunctions.JacobiSymbol.
+    private static bool RefIsInert(BigInteger discriminant, BigInteger rationalPrime) {
+        if (rationalPrime == 2) {
+            var residue = ((int)(((discriminant % 8) + 8) % 8));
+
+            return (
+                (1 == (residue & 1)) &&
+                (1 != residue)
+            );
+        }
+
+        return (-1 == RefJacobiSymbol(
+            denominator: rationalPrime,
+            numerator: discriminant
+        ));
+    }
+    // The prime-element predicate recomputed from the reference norm alone: calls no QuadraticIntegerArithmetic member.
+    private static bool RefIsPrimeElement(Element value, BigInteger p, BigInteger q) {
+        var norm = BigInteger.Abs(value: RefNorm(
+            p: p,
+            q: q,
+            u: value.U,
+            v: value.V
+        ));
+
+        if (norm <= BigInteger.One) { return false; }
+        if (IsProbablePrimeBig(value: norm)) { return true; }
+
+        var root = ISqrtBig(value: norm);
+
+        if (
+            ((root * root) != norm) ||
+            (!IsProbablePrimeBig(value: root)) ||
+            (!RefIsInert(
+            discriminant: ((p * p) + (4 * q)),
+            rationalPrime: root
+        ))
+        ) {
+            return false;
+        }
+
+        return (
+            (value.U % root).IsZero &&
+            (value.V % root).IsZero
+        );
     }
     // The Jacobi symbol by binary reciprocity descent with the two's supplement — written here, sharing no
     // line with NumberTheoryFunctions.JacobiSymbol or UnsignedNumberFunctions.JacobiSymbol.
@@ -132,64 +206,56 @@ internal static class QuadraticIntegerClaims {
 
                 var residue = ((int)(lower % 8));
 
-                if ((3 == residue) || (5 == residue)) { symbol = -symbol; }
+                if (
+                    (3 == residue) ||
+                    (5 == residue)
+                ) { symbol = -symbol; }
             }
 
             (upper, lower) = (lower, upper);
 
-            if ((3 == ((int)(upper % 4))) && (3 == ((int)(lower % 4)))) { symbol = -symbol; }
+            if (
+                (3 == ((int)(upper % 4))) &&
+                (3 == ((int)(lower % 4)))
+            ) { symbol = -symbol; }
 
             upper %= lower;
         }
 
-        return (lower.IsOne ? symbol : 0);
+        return (lower.IsOne
+            ? symbol
+            : 0
+        );
     }
-    // The inert branch of the splitting law, recomputed locally rather than through QuadraticIntegerArithmetic's own
-    // SplittingCharacter or NumberTheoryFunctions.JacobiSymbol.
-    private static bool RefIsInert(BigInteger discriminant, BigInteger rationalPrime) {
-        if (rationalPrime == 2) {
-            var residue = ((int)(((discriminant % 8) + 8) % 8));
+    // ---- Shared-nothing reference arithmetic (none of these call any Puck.Maths member) ----
 
-            return ((1 == (residue & 1)) && (1 != residue));
+    private static BigInteger RefNorm(BigInteger p, BigInteger q, BigInteger u, BigInteger v) =>
+        (((u * u) + ((p * u) * v)) - ((q * v) * v));
+    // The orbit box the real-order generator search walked before it followed the ideal's continued fraction, kept here
+    // as the shared-nothing existence oracle for quadratic-integer.real-order-prime-norm-existence-vs-retired-orbit-box:
+    // every solution of X^2 - Delta*Y^2 = 4N lies in some orbit of the norm-one unit, and every orbit meets the box
+    // X^2 < 2|N|U, Delta*Y^2 < 2|N|U. Returns null when the box exceeds the budget.
+    private static bool? RetiredOrbitBoxHasNormElement(BigInteger discriminant, BigInteger rationalPrime, long budget) {
+        var unit = RetiredPellConvergentLoop(radicand: discriminant);
+
+        foreach (var norm in ((BigInteger[])[(4 * rationalPrime), (-4 * rationalPrime)])) {
+            var strictSquareCeiling = (((2 * BigInteger.Abs(value: norm)) * unit.X) - 1);
+            var yBound = ISqrtBig(value: (strictSquareCeiling / discriminant));
+
+            if (yBound > budget) { return null; }
+
+            for (var y = BigInteger.Zero; (y <= yBound); ++y) {
+                var square = (norm + ((discriminant * y) * y));
+
+                if (square.Sign < 0) { continue; }
+
+                var root = ISqrtBig(value: square);
+
+                if ((root * root) == square) { return true; }
+            }
         }
 
-        return (-1 == RefJacobiSymbol(denominator: rationalPrime, numerator: discriminant));
-    }
-    // The prime-element predicate recomputed from the reference norm alone: calls no QuadraticIntegerArithmetic member.
-    private static bool RefIsPrimeElement(Element value, BigInteger p, BigInteger q) {
-        var norm = BigInteger.Abs(value: RefNorm(p: p, q: q, u: value.U, v: value.V));
-
-        if (norm <= BigInteger.One) { return false; }
-        if (IsProbablePrimeBig(value: norm)) { return true; }
-
-        var root = ISqrtBig(value: norm);
-
-        if (((root * root) != norm) || (!IsProbablePrimeBig(value: root)) || (!RefIsInert(discriminant: ((p * p) + (4 * q)), rationalPrime: root))) {
-            return false;
-        }
-
-        return ((value.U % root).IsZero && (value.V % root).IsZero);
-    }
-    // Rebuilds an element from its factorization using the SUBJECT's own Multiply — this is the reassembly the
-    // factorization contract promises, not a second implementation of it.
-    private static Element Reassemble(Algebra algebra, QuadraticFactorization factorization) {
-        var product = factorization.LeadingUnit;
-
-        foreach (var factor in factorization.Factors) {
-            for (var power = 0; (power < factor.Multiplicity); ++power) { product = algebra.Multiply(left: product, right: factor.Prime); }
-        }
-
-        return product;
-    }
-    private static bool SameFactorization(QuadraticFactorization left, QuadraticFactorization right) {
-        if (left.LeadingUnit != right.LeadingUnit) { return false; }
-        if (left.Factors.Count != right.Factors.Count) { return false; }
-
-        for (var index = 0; (index < left.Factors.Count); ++index) {
-            if (left.Factors[index] != right.Factors[index]) { return false; }
-        }
-
-        return true;
+        return false;
     }
     // The convergent loop PellEquation.FundamentalUnit ran before it delegated to the shared unit-equation primitive,
     // transcribed here so quadratic-integer.pell-delegation-vs-retired-convergent-loop compares the delegation against
@@ -222,27 +288,23 @@ internal static class QuadraticIntegerClaims {
             quotient = ((root + remainder) / denominator);
         }
     }
-    // The orbit box the real-order generator search walked before it followed the ideal's continued fraction, kept here
-    // as the shared-nothing existence oracle for quadratic-integer.real-order-prime-norm-existence-vs-retired-orbit-box:
-    // every solution of X^2 - Delta*Y^2 = 4N lies in some orbit of the norm-one unit, and every orbit meets the box
-    // X^2 < 2|N|U, Delta*Y^2 < 2|N|U. Returns null when the box exceeds the budget.
-    private static bool? RetiredOrbitBoxHasNormElement(BigInteger discriminant, BigInteger rationalPrime, long budget) {
-        var unit = RetiredPellConvergentLoop(radicand: discriminant);
+    private static bool SameFactorization(QuadraticFactorization left, QuadraticFactorization right) {
+        if (left.LeadingUnit != right.LeadingUnit) { return false; }
+        if (left.Factors.Count != right.Factors.Count) { return false; }
 
-        foreach (var norm in ((BigInteger[])[(4 * rationalPrime), (-4 * rationalPrime)])) {
-            var strictSquareCeiling = (((2 * BigInteger.Abs(value: norm)) * unit.X) - 1);
-            var yBound = ISqrtBig(value: (strictSquareCeiling / discriminant));
+        for (var index = 0; (index < left.Factors.Count); ++index) {
+            if (left.Factors[index] != right.Factors[index]) { return false; }
+        }
 
-            if (yBound > budget) { return null; }
-
-            for (var y = BigInteger.Zero; (y <= yBound); ++y) {
-                var square = (norm + ((discriminant * y) * y));
-
-                if (square.Sign < 0) { continue; }
-
-                var root = ISqrtBig(value: square);
-
-                if ((root * root) == square) { return true; }
+        return true;
+    }
+    // A discriminant residue check: whether SOME (x, y) in [0, 4) makes x^2 - d*y^2 congruent to -1 modulo four. Used to
+    // verify the FORCED sign argument at d = 991 and d = 99991 (both 3 mod 4, so x^2 - d*y^2 = x^2 + y^2 mod 4, which is
+    // never 3) without hard-coding either result.
+    private static bool SomeResidueIsNegativeOneModFour(BigInteger d) {
+        for (var x = 0; (x < 4); ++x) {
+            for (var y = 0; (y < 4); ++y) {
+                if (3 == (((((x * x) - ((d * y) * y)) % 4) + 4) % 4)) { return true; }
             }
         }
 
@@ -263,7 +325,10 @@ internal static class QuadraticIntegerClaims {
 
                 scanX = root;
                 scanY = candidate;
-                scanSign = ((target == (deltaYSquared - 4)) ? -1 : 1);
+                scanSign = ((target == (deltaYSquared - 4))
+                    ? -1
+                    : 1
+                );
 
                 return true;
             }
@@ -275,19 +340,50 @@ internal static class QuadraticIntegerClaims {
 
         return false;
     }
-    // A discriminant residue check: whether SOME (x, y) in [0, 4) makes x^2 - d*y^2 congruent to -1 modulo four. Used to
-    // verify the FORCED sign argument at d = 991 and d = 99991 (both 3 mod 4, so x^2 - d*y^2 = x^2 + y^2 mod 4, which is
-    // never 3) without hard-coding either result.
-    private static bool SomeResidueIsNegativeOneModFour(BigInteger d) {
-        for (var x = 0; (x < 4); ++x) {
-            for (var y = 0; (y < 4); ++y) {
-                if (3 == (((((x * x) - ((d * y) * y)) % 4) + 4) % 4)) { return true; }
+
+    // ---- (h4) restructured: the Delta=3964/D=991 audit reproduction and Delta=399964, without pinned literals ----
+    public static string? AuditHangCompletesForcedSignSurface() {
+        foreach (var (q, label) in (((BigInteger Q, string Label)[])[
+            (((BigInteger)991), "D=991 (Delta=3964, the audit's former hang)"),
+            (((BigInteger)99_991), "D=99991 (Delta=399964)"),
+        ])) {
+            var algebra = Algebra.Create(
+                p: BigInteger.Zero,
+                q: q
+            );
+            var discriminant = algebra.Discriminant;
+
+            if (discriminant != (4 * q)) { return $"{label}: Delta={discriminant}, expected 4*D={(4 * q)} for a (P,Q)=(0,D) descriptor"; }
+
+            // The forced-sign argument is about the order's own norm form a^2 - D*b^2 (Norm(unit) = Certificate/4), so it
+            // is checked on D = q itself, never on Delta = 4*D, which is always 0 (mod 4) and would trip on nothing.
+            if ((((q % 4) + 4) % 4) != 3) { return $"{label}: D={q} is not 3 (mod 4), so the forced-sign argument below does not apply to it"; }
+            if (SomeResidueIsNegativeOneModFour(d: q)) { return $"{label}: some (x,y) makes x^2-D*y^2 = -1 (mod 4), so the forced-sign argument is wrong"; }
+
+            var worker = System.Threading.Tasks.Task.Run(function: () => algebra.FundamentalUnit());
+
+            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return $"{label}: FundamentalUnit did not complete inside the bounded wait"; }
+
+            var unit = worker.Result;
+            var unitX = (2 * unit.U);
+            var certificate = ((unitX * unitX) - ((discriminant * unit.V) * unit.V));
+
+            if (BigInteger.Abs(value: certificate) != 4) { return $"{label}: X^2-Delta*Y^2 = {certificate}, expected +-4"; }
+
+            var norm = algebra.Norm(value: unit);
+
+            if (BigInteger.Abs(value: norm) != BigInteger.One) { return $"{label}: norm {norm} is not +-1"; }
+            if (norm != BigInteger.One) { return $"{label}: norm {norm}, but the mod-4 argument forces +1"; }
+
+            foreach (var shifted in ((BigInteger[])[(unitX + 2), (unitX - 2)])) {
+                if (IsPerfectSquare(value: shifted)) { return $"{label}: X{((shifted > unitX)
+                    ? "+"
+                    : "-")}2 is a perfect square, so the answer could be a unit's square"; }
             }
         }
 
-        return false;
+        return null;
     }
-
     // ---- (a) + (d): the nine imaginary class-number-one worlds and the real Delta = 5 world factor exactly ----
     public static string? ClassNumberOneWorldsFactorSurface() {
         (int P, int Q, int Delta)[] worlds = [
@@ -297,18 +393,31 @@ internal static class QuadraticIntegerClaims {
         ];
 
         foreach (var (p, q, delta) in worlds) {
-            var algebra = Algebra.Create(p: p, q: q);
+            var algebra = Algebra.Create(
+                p: p,
+                q: q
+            );
 
-            Assert.Equal(expected: ((BigInteger)delta), actual: algebra.Discriminant);
+            Assert.Equal(
+                expected: ((BigInteger)delta),
+                actual: algebra.Discriminant
+            );
 
             var factored = 0;
 
             for (var step = 0L; (step < 250L); ++step) {
-                var element = DeterministicElement(bound: 500L, step: step);
+                var element = DeterministicElement(
+                    bound: 500L,
+                    step: step
+                );
 
                 if (BigInteger.Abs(value: algebra.Norm(value: element)) <= 1) { continue; }
 
-                if (!algebra.TryFactorize(factorization: out var factorization, obstruction: out var obstruction, value: element)) {
+                if (!algebra.TryFactorize(
+                    factorization: out var factorization,
+                    obstruction: out var obstruction,
+                    value: element
+                )) {
                     return $"world Delta={delta}: unexpected obstruction at rational prime {obstruction.RationalPrime} factoring ({element.U},{element.V})";
                 }
 
@@ -317,7 +426,10 @@ internal static class QuadraticIntegerClaims {
                     if (algebra.CanonicalAssociate(value: factor.Prime) != factor.Prime) { return $"world Delta={delta}: non-canonical factor ({factor.Prime.U},{factor.Prime.V})"; }
                 }
 
-                if (Reassemble(algebra: algebra, factorization: factorization) != element) { return $"world Delta={delta}: reassembly mismatch for ({element.U},{element.V})"; }
+                if (Reassemble(
+                    algebra: algebra,
+                    factorization: factorization
+                ) != element) { return $"world Delta={delta}: reassembly mismatch for ({element.U},{element.V})"; }
                 if (!algebra.IsUnit(value: factorization.LeadingUnit)) { return $"world Delta={delta}: leading factor is not a unit"; }
 
                 ++factored;
@@ -328,112 +440,30 @@ internal static class QuadraticIntegerClaims {
 
         return null;
     }
-    // ---- (d): the golden fundamental unit at Delta = 5, and SplittingCharacter against an independent reciprocity descent ----
-    public static string? GoldenUnitAndSplittingSurface() {
-        var algebra = Algebra.Create(p: BigInteger.One, q: BigInteger.One);
-
-        Assert.Equal(expected: ((BigInteger)5), actual: algebra.Discriminant);
-
-        var fundamental = algebra.FundamentalUnit();
-
-        // x itself (0, 1) is Phi by construction of the descriptor (P, Q) = (1, 1): its norm is 0^2 + 1*0*1 - 1*1^2 = -1,
-        // an exact hand computation of the SAME formula Norm implements, not a value taken from running the subject.
-        Assert.Equal(expected: new Element(U: BigInteger.Zero, V: BigInteger.One), actual: fundamental);
-        Assert.Equal(expected: BigInteger.MinusOne, actual: algebra.Norm(value: fundamental));
-
-        var primes = EnumerateSmallPrimesUpTo(ceiling: 2000);
-        var agreements = 0;
-
-        foreach (var ell in primes) {
-            var rationalPrime = ((BigInteger)ell);
-            var character = algebra.SplittingCharacter(rationalPrime: rationalPrime);
-            var expectedInert = RefIsInert(discriminant: 5, rationalPrime: rationalPrime);
-            var expected = ((0 == (rationalPrime % 5))
-                ? QuadraticSplitting.Ramified
-                : (expectedInert ? QuadraticSplitting.Inert : QuadraticSplitting.Split));
-
-            if (character != expected) { return $"Delta=5: SplittingCharacter({ell}) = {character}, expected {expected} from the independent reciprocity descent"; }
-
-            ++agreements;
-        }
-
-        if (agreements != primes.Count) { return "Delta=5: the splitting sweep did not visit every enumerated prime"; }
-
-        return null;
-    }
-    // ---- (b) + (c): the sum-of-two-squares law and the first-twist class-group witness ----
-    public static string? SumOfTwoSquaresAndWitnessSurface() {
-        var sumOfSquares = Algebra.Create(p: BigInteger.Zero, q: BigInteger.MinusOne);
-        var primes = EnumerateSmallPrimesUpTo(ceiling: 9_999);
-        var splitCount = 0;
-
-        foreach (var ell in primes) {
-            var rationalPrime = ((BigInteger)ell);
-
-            if (!sumOfSquares.TryFactorize(value: new Element(U: rationalPrime, V: BigInteger.Zero), factorization: out var factorization, obstruction: out _)) {
-                return $"(0,-1) world: unexpected obstruction at {ell}";
-            }
-
-            var hasNormEll = factorization.Factors.Any(predicate: factor => (BigInteger.Abs(value: sumOfSquares.Norm(value: factor.Prime)) == rationalPrime));
-            var expected = ((1 == (ell & 3)) || (2 == ell));
-
-            if (hasNormEll != expected) { return $"(0,-1) world: sum-of-two-squares law broke at {ell}: hasNormEll={hasNormEll}, expected={expected}"; }
-            if (hasNormEll) { ++splitCount; }
-
-            var character = sumOfSquares.SplittingCharacter(rationalPrime: rationalPrime);
-            var characterSplits = (QuadraticSplitting.Inert != character);
-
-            if (characterSplits != hasNormEll) { return $"(0,-1) world: SplittingCharacter({ell}) disagrees with the norm-{ell} factor test"; }
-        }
-
-        if (splitCount == 0) { return "(0,-1) world: no prime split, so the law was never exercised"; }
-
-        // The first-twist witness: 6 = 2*3 must fail in the Delta = -20 world.
-        var twist = Algebra.Create(p: BigInteger.Zero, q: ((BigInteger)(-5)));
-
-        if (twist.TryFactorize(value: new Element(U: 6, V: BigInteger.Zero), factorization: out _, obstruction: out var witness)) {
-            return "Delta=-20: factoring 6 unexpectedly succeeded";
-        }
-        if ((witness.RationalPrime != 2) && (witness.RationalPrime != 3)) { return $"Delta=-20: obstruction at {witness.RationalPrime}, expected 2 or 3"; }
-
-        // The obstruction-rate survey: three non-class-number-one worlds must show a nonzero obstruction rate, in
-        // contrast with the zero-obstruction worlds quadratic-integer.class-number-one-worlds-factor-prime-canonical pins.
-        (int P, int Q, int Delta)[] survey = [(0, -5, -20), (1, -4, -15), (0, -6, -24)];
-
-        foreach (var (p, q, delta) in survey) {
-            var algebra = Algebra.Create(p: p, q: q);
-            var obstructed = 0;
-            var factored = 0;
-
-            for (var step = 0L; (step < 300L); ++step) {
-                var element = DeterministicElement(bound: 200L, step: step);
-
-                if (BigInteger.Abs(value: algebra.Norm(value: element)) <= 1) { continue; }
-
-                if (algebra.TryFactorize(factorization: out var factorization, obstruction: out _, value: element)) {
-                    if (Reassemble(algebra: algebra, factorization: factorization) != element) { return $"Delta={delta}: reassembly mismatch"; }
-
-                    ++factored;
-                } else {
-                    ++obstructed;
-                }
-            }
-
-            if (obstructed == 0) { return $"Delta={delta}: zero obstructions observed, so the nontrivial class group was never exercised"; }
-        }
-
-        return null;
-    }
     // ---- (e): factorization is deterministic across repeated calls ----
     public static string? FactorizationDeterminismSurface() {
-        var algebra = Algebra.Create(p: BigInteger.One, q: ((BigInteger)(-5))); // Delta = -19, class number one.
+        var algebra = Algebra.Create(
+            p: BigInteger.One,
+            q: ((BigInteger)(-5))
+        ); // Delta = -19, class number one.
         var elements = new Element[100];
 
-        for (var step = 0L; (step < elements.Length); ++step) { elements[step] = DeterministicElement(bound: 500L, step: step); }
+        for (var step = 0L; (step < elements.Length); ++step) { elements[step] = DeterministicElement(
+            bound: 500L,
+            step: step
+        ); }
 
         foreach (var element in elements) {
-            var firstOk = algebra.TryFactorize(factorization: out var first, obstruction: out var firstObstruction, value: element);
-            var secondOk = algebra.TryFactorize(factorization: out var second, obstruction: out var secondObstruction, value: element);
+            var firstOk = algebra.TryFactorize(
+                factorization: out var first,
+                obstruction: out var firstObstruction,
+                value: element
+            );
+            var secondOk = algebra.TryFactorize(
+                factorization: out var second,
+                obstruction: out var secondObstruction,
+                value: element
+            );
 
             if (firstOk != secondOk) { return $"({element.U},{element.V}): two passes disagreed on success"; }
             if (!firstOk) {
@@ -442,7 +472,10 @@ internal static class QuadraticIntegerClaims {
                 continue;
             }
 
-            if (!SameFactorization(left: first, right: second)) { return $"({element.U},{element.V}): two factorization passes diverged"; }
+            if (!SameFactorization(
+                left: first,
+                right: second
+            )) { return $"({element.U},{element.V}): two factorization passes diverged"; }
         }
 
         return null;
@@ -455,29 +488,86 @@ internal static class QuadraticIntegerClaims {
         var cheapChecks = 0;
 
         foreach (var (p, q, delta) in worlds) {
-            var algebra = Algebra.Create(p: p, q: q);
+            var algebra = Algebra.Create(
+                p: p,
+                q: q
+            );
             var bp = ((BigInteger)p);
             var bq = ((BigInteger)q);
 
             for (var regime = 0; (regime < 3); ++regime) {
                 for (var step = 0L; (step < 60L); ++step) {
                     var element = (regime switch {
-                        0 => DeterministicElement(bound: 5_000L, step: step),
+                        0 => DeterministicElement(
+                        bound: 5_000L,
+                        step: step
+                    ),
                         1 => new Element(
-                            U: (((step & 1) == 0) ? DeterministicComponent(bound: 5_000L, multiplier: 2654435761L, offset: 17L, step: step) : ((FastBoundLong + DeterministicComponent(bound: 32L, multiplier: 97L, offset: 3L, step: step)) * ((0 == (step & 2)) ? 1 : -1))),
-                            V: (((step & 4) == 0) ? DeterministicComponent(bound: 5_000L, multiplier: 6364136223846793005L, offset: 11L, step: step) : ((FastBoundLong + DeterministicComponent(bound: 32L, multiplier: 131L, offset: 7L, step: step)) * ((0 == (step & 8)) ? 1 : -1)))
-                        ),
+                        U: (((step & 1) == 0)
+                        ? DeterministicComponent(
+                                bound: 5_000L,
+                                multiplier: 2654435761L,
+                                offset: 17L,
+                                step: step
+                            )
+                        : ((FastBoundLong + DeterministicComponent(
+                                bound: 32L,
+                                multiplier: 97L,
+                                offset: 3L,
+                                step: step
+                            )) * ((0 == (step & 2))
+                            ? 1
+                            : -1))),
+                        V: (((step & 4) == 0)
+                        ? DeterministicComponent(
+                                bound: 5_000L,
+                                multiplier: 6364136223846793005L,
+                                offset: 11L,
+                                step: step
+                            )
+                        : ((FastBoundLong + DeterministicComponent(
+                                bound: 32L,
+                                multiplier: 131L,
+                                offset: 7L,
+                                step: step
+                            )) * ((0 == (step & 8))
+                            ? 1
+                            : -1)))
+                    ),
                         _ => new Element(
-                            U: (((FastBoundLong * 2) + DeterministicComponent(bound: 1_000_000L, multiplier: 251L, offset: 13L, step: step)) * ((0 == (step & 1)) ? 1 : -1)),
-                            V: (((FastBoundLong * 2) + DeterministicComponent(bound: 1_000_000L, multiplier: 401L, offset: 19L, step: step)) * ((0 == (step & 2)) ? 1 : -1))
-                        ),
+                        U: (((FastBoundLong * 2) + DeterministicComponent(
+                            bound: 1_000_000L,
+                            multiplier: 251L,
+                            offset: 13L,
+                            step: step
+                        )) * ((0 == (step & 1))
+                        ? 1
+                        : -1)),
+                        V: (((FastBoundLong * 2) + DeterministicComponent(
+                            bound: 1_000_000L,
+                            multiplier: 401L,
+                            offset: 19L,
+                            step: step
+                        )) * ((0 == (step & 2))
+                        ? 1
+                        : -1))
+                    ),
                     });
 
-                    var referenceNorm = RefNorm(p: bp, q: bq, u: element.U, v: element.V);
+                    var referenceNorm = RefNorm(
+                        p: bp,
+                        q: bq,
+                        u: element.U,
+                        v: element.V
+                    );
 
                     if (algebra.Norm(value: element) != referenceNorm) { return $"Delta={delta} regime {regime}: norm mismatch for ({element.U},{element.V})"; }
                     if (algebra.IsUnit(value: element) != BigInteger.Abs(value: referenceNorm).IsOne) { return $"Delta={delta} regime {regime}: IsUnit mismatch for ({element.U},{element.V})"; }
-                    if (algebra.IsPrimeElement(value: element) != RefIsPrimeElement(p: bp, q: bq, value: element)) { return $"Delta={delta} regime {regime}: IsPrimeElement mismatch for ({element.U},{element.V})"; }
+                    if (algebra.IsPrimeElement(value: element) != RefIsPrimeElement(
+                        p: bp,
+                        q: bq,
+                        value: element
+                    )) { return $"Delta={delta} regime {regime}: IsPrimeElement mismatch for ({element.U},{element.V})"; }
 
                     ++cheapChecks;
                 }
@@ -490,16 +580,40 @@ internal static class QuadraticIntegerClaims {
 
             foreach (var ell in probePrimes) {
                 var rationalPrime = ((BigInteger)ell);
-                var inert = RefIsInert(discriminant: discriminant, rationalPrime: rationalPrime);
+                var inert = RefIsInert(
+                    discriminant: discriminant,
+                    rationalPrime: rationalPrime
+                );
 
                 foreach (var candidate in ((Element[])[
-                    new Element(U: rationalPrime, V: BigInteger.Zero),
-                    new Element(U: -rationalPrime, V: BigInteger.Zero),
-                    algebra.Multiply(left: new Element(U: rationalPrime, V: BigInteger.Zero), right: algebra.Root),
+                    new Element(
+                        U: rationalPrime,
+                        V: BigInteger.Zero
+                    ),
+                    new Element(
+                        U: -rationalPrime,
+                        V: BigInteger.Zero
+                    ),
+                    algebra.Multiply(
+                        left: new Element(
+                            U: rationalPrime,
+                            V: BigInteger.Zero
+                        ),
+                        right: algebra.Root
+                    ),
                 ])) {
-                    if (BigInteger.Abs(value: RefNorm(p: bp, q: bq, u: candidate.U, v: candidate.V)) != (rationalPrime * rationalPrime)) { continue; }
+                    if (BigInteger.Abs(value: RefNorm(
+                        p: bp,
+                        q: bq,
+                        u: candidate.U,
+                        v: candidate.V
+                    )) != (rationalPrime * rationalPrime)) { continue; }
 
-                    var expected = RefIsPrimeElement(p: bp, q: bq, value: candidate);
+                    var expected = RefIsPrimeElement(
+                        p: bp,
+                        q: bq,
+                        value: candidate
+                    );
 
                     if (algebra.IsPrimeElement(value: candidate) != expected) { return $"Delta={delta}: IsPrimeElement mismatch on the {ell} square probe ({candidate.U},{candidate.V})"; }
                     if (expected != inert) { return $"Delta={delta}: ({candidate.U},{candidate.V}) of norm {ell}^2 judged {expected}, but the splitting character says inert={inert}"; }
@@ -517,7 +631,10 @@ internal static class QuadraticIntegerClaims {
         var factorChecks = 0;
 
         foreach (var (p, q, delta) in worlds) {
-            var algebra = Algebra.Create(p: p, q: q);
+            var algebra = Algebra.Create(
+                p: p,
+                q: q
+            );
             var bp = ((BigInteger)p);
             var bq = ((BigInteger)q);
 
@@ -525,29 +642,67 @@ internal static class QuadraticIntegerClaims {
                 var k = ((BigInteger)scale);
 
                 for (var step = 0L; (step < 20L); ++step) {
-                    var baseElement = DeterministicElement(bound: 63L, step: step);
-                    var element = new Element(U: (k * baseElement.U), V: (k * baseElement.V));
-                    var referenceNorm = RefNorm(p: bp, q: bq, u: element.U, v: element.V);
+                    var baseElement = DeterministicElement(
+                        bound: 63L,
+                        step: step
+                    );
+                    var element = new Element(
+                        U: (k * baseElement.U),
+                        V: (k * baseElement.V)
+                    );
+                    var referenceNorm = RefNorm(
+                        p: bp,
+                        q: bq,
+                        u: element.U,
+                        v: element.V
+                    );
 
                     if (BigInteger.Abs(value: referenceNorm) <= 1) { continue; }
 
-                    var succeeded = algebra.TryFactorize(factorization: out var factorization, obstruction: out var obstruction, value: element);
-                    var succeededAgain = algebra.TryFactorize(factorization: out var factorizationAgain, obstruction: out var obstructionAgain, value: element);
+                    var succeeded = algebra.TryFactorize(
+                        factorization: out var factorization,
+                        obstruction: out var obstruction,
+                        value: element
+                    );
+                    var succeededAgain = algebra.TryFactorize(
+                        factorization: out var factorizationAgain,
+                        obstruction: out var obstructionAgain,
+                        value: element
+                    );
 
-                    if ((succeeded != succeededAgain) || (obstruction != obstructionAgain)) { return $"Delta={delta} k={scale}: nondeterministic factorization of ({element.U},{element.V})"; }
+                    if (
+                        (succeeded != succeededAgain) ||
+                        (obstruction != obstructionAgain)
+                    ) { return $"Delta={delta} k={scale}: nondeterministic factorization of ({element.U},{element.V})"; }
 
                     if (succeeded) {
-                        if (!SameFactorization(left: factorization, right: factorizationAgain)) { return $"Delta={delta} k={scale}: divergent repeated factorization of ({element.U},{element.V})"; }
-                        if (Reassemble(algebra: algebra, factorization: factorization) != element) { return $"Delta={delta} k={scale}: reassembly mismatch for ({element.U},{element.V})"; }
+                        if (!SameFactorization(
+                            left: factorization,
+                            right: factorizationAgain
+                        )) { return $"Delta={delta} k={scale}: divergent repeated factorization of ({element.U},{element.V})"; }
+                        if (Reassemble(
+                            algebra: algebra,
+                            factorization: factorization
+                        ) != element) { return $"Delta={delta} k={scale}: reassembly mismatch for ({element.U},{element.V})"; }
                         if (!algebra.IsUnit(value: factorization.LeadingUnit)) { return $"Delta={delta} k={scale}: leading factor is not a unit"; }
 
-                        var normProduct = BigInteger.Abs(value: RefNorm(p: bp, q: bq, u: factorization.LeadingUnit.U, v: factorization.LeadingUnit.V));
+                        var normProduct = BigInteger.Abs(value: RefNorm(
+                            p: bp,
+                            q: bq,
+                            u: factorization.LeadingUnit.U,
+                            v: factorization.LeadingUnit.V
+                        ));
 
                         foreach (var factor in factorization.Factors) {
                             if (!algebra.IsPrimeElement(value: factor.Prime)) { return $"Delta={delta} k={scale}: non-prime factor"; }
                             if (algebra.CanonicalAssociate(value: factor.Prime) != factor.Prime) { return $"Delta={delta} k={scale}: non-canonical factor"; }
 
-                            var factorNorm = BigInteger.Abs(value: RefNorm(p: bp, q: bq, u: factor.Prime.U, v: factor.Prime.V));
+                            var factorNorm = BigInteger.Abs(value: RefNorm(
+                                p: bp,
+                                q: bq,
+                                u: factor.Prime.U,
+                                v: factor.Prime.V
+                            ));
 
                             for (var power = 0; (power < factor.Multiplicity); ++power) { normProduct *= factorNorm; }
                         }
@@ -562,52 +717,62 @@ internal static class QuadraticIntegerClaims {
             }
         }
 
-        return ((factorChecks < 50) ? "the fast-tier divide-out sweep visited too few scaled factorizations to trust" : null);
+        return ((factorChecks < 50)
+            ? "the fast-tier divide-out sweep visited too few scaled factorizations to trust"
+            : null
+        );
     }
-    // ---- (h1): FundamentalUnit over every real order in [5, 4000] vs the retired ascending-Y scan ----
-    public static string? RealOrderFundamentalUnitVsRetiredScanSurface() {
-        const int DiscriminantCeiling = 4_000;
-        const int ScanBudget = 10_000;
+    // ---- (d): the golden fundamental unit at Delta = 5, and SplittingCharacter against an independent reciprocity descent ----
+    public static string? GoldenUnitAndSplittingSurface() {
+        var algebra = Algebra.Create(
+            p: BigInteger.One,
+            q: BigInteger.One
+        );
 
-        var realized = 0;
-        var scanned = 0;
+        Assert.Equal(
+            expected: ((BigInteger)5),
+            actual: algebra.Discriminant
+        );
 
-        for (var delta = 5; (delta <= DiscriminantCeiling); ++delta) {
-            var residue = delta & 3;
+        var fundamental = algebra.FundamentalUnit();
 
-            if ((0 != residue) && (1 != residue)) { continue; }
-            if (IsPerfectSquare(value: delta)) { continue; }
+        // x itself (0, 1) is Phi by construction of the descriptor (P, Q) = (1, 1): its norm is 0^2 + 1*0*1 - 1*1^2 = -1,
+        // an exact hand computation of the SAME formula Norm implements, not a value taken from running the subject.
+        Assert.Equal(
+            expected: new Element(
+                U: BigInteger.Zero,
+                V: BigInteger.One
+            ),
+            actual: fundamental
+        );
+        Assert.Equal(
+            expected: BigInteger.MinusOne,
+            actual: algebra.Norm(value: fundamental)
+        );
 
-            var p = delta & 1;
-            var algebra = Algebra.Create(p: ((BigInteger)p), q: ((BigInteger)((delta - (p * p)) / 4)));
+        var primes = EnumerateSmallPrimesUpTo(ceiling: 2000);
+        var agreements = 0;
 
-            if (algebra.Discriminant != delta) { return $"({p},{((delta - (p * p)) / 4)}) has Delta={algebra.Discriminant}, expected {delta}"; }
+        foreach (var ell in primes) {
+            var rationalPrime = ((BigInteger)ell);
+            var character = algebra.SplittingCharacter(rationalPrime: rationalPrime);
+            var expectedInert = RefIsInert(
+                discriminant: 5,
+                rationalPrime: rationalPrime
+            );
+            var expected = ((0 == (rationalPrime % 5))
+                ? QuadraticSplitting.Ramified
+                : (expectedInert
+                    ? QuadraticSplitting.Inert
+                    : QuadraticSplitting.Split
+            ));
 
-            var unit = algebra.FundamentalUnit();
-            var unitX = ((2 * unit.U) + (p * unit.V));
-            var unitY = unit.V;
-            var certificate = ((unitX * unitX) - ((delta * unitY) * unitY));
+            if (character != expected) { return $"Delta=5: SplittingCharacter({ell}) = {character}, expected {expected} from the independent reciprocity descent"; }
 
-            if (BigInteger.Abs(value: certificate) != 4) { return $"Delta={delta}: X^2-Delta*Y^2 = {certificate}, expected +-4"; }
-            if (algebra.Norm(value: unit) != certificate.Sign) { return $"Delta={delta}: norm {algebra.Norm(value: unit)} disagrees with the certificate sign {certificate.Sign}"; }
-            if ((unitX.Sign <= 0) || (unitY.Sign <= 0)) { return $"Delta={delta}: non-positive coordinate ({unitX},{unitY})"; }
-
-            ++realized;
-
-            if (unitY > ScanBudget) { continue; }
-
-            if (!TryRetiredAscendingUnitScan(delta: delta, scanSign: out var scanSign, scanX: out var scanX, scanY: out var scanY, yCeiling: unitY)) {
-                return $"Delta={delta}: the retired scan found no solution at or below Y={unitY}, so ({unitX},{unitY}) is not minimal";
-            }
-            if ((scanX != unitX) || (scanY != unitY) || (scanSign != certificate.Sign)) {
-                return $"Delta={delta}: the retired scan's first hit ({scanX},{scanY}) sign {scanSign} != ({unitX},{unitY}) sign {certificate.Sign}";
-            }
-
-            ++scanned;
+            ++agreements;
         }
 
-        if (realized < 1000) { return "too few real orders were realized in [5, 4000] to trust the sweep"; }
-        if (scanned < 500) { return "too few real orders fell inside the scan budget to trust the minimality cross-check"; }
+        if (agreements != primes.Count) { return "Delta=5: the splitting sweep did not visit every enumerated prime"; }
 
         return null;
     }
@@ -619,7 +784,10 @@ internal static class QuadraticIntegerClaims {
         (int Delta, int P, int Q)[] landmine = [(5, 1, 1), (13, 1, 3), (61, 1, 15), (109, 1, 27), (181, 1, 45)];
 
         foreach (var (delta, p, q) in landmine) {
-            var algebra = Algebra.Create(p: p, q: q);
+            var algebra = Algebra.Create(
+                p: p,
+                q: q
+            );
 
             if (algebra.Discriminant != delta) { return $"(landmine) descriptor ({p},{q}) has Delta={algebra.Discriminant}, expected {delta}"; }
 
@@ -635,17 +803,29 @@ internal static class QuadraticIntegerClaims {
 
         // Descriptor invariance: (1,1) and (3,-1) are both Delta = 5; the recovered (X, Y) is identical.
         {
-            var first = Algebra.Create(p: BigInteger.One, q: BigInteger.One);
-            var second = Algebra.Create(p: ((BigInteger)3), q: BigInteger.MinusOne);
+            var first = Algebra.Create(
+                p: BigInteger.One,
+                q: BigInteger.One
+            );
+            var second = Algebra.Create(
+                p: ((BigInteger)3),
+                q: BigInteger.MinusOne
+            );
 
-            if ((first.Discriminant != 5) || (second.Discriminant != 5)) { return "(h3) (1,1) and (3,-1) must both be Delta=5"; }
+            if (
+                (first.Discriminant != 5) ||
+                (second.Discriminant != 5)
+            ) { return "(h3) (1,1) and (3,-1) must both be Delta=5"; }
 
             var firstUnit = first.FundamentalUnit();
             var secondUnit = second.FundamentalUnit();
             var firstX = ((2 * firstUnit.U) + firstUnit.V);
             var secondX = ((2 * secondUnit.U) + (3 * secondUnit.V));
 
-            if ((firstX != secondX) || (firstUnit.V != secondUnit.V)) { return $"(h3) the two Delta=5 descriptors recovered ({firstX},{firstUnit.V}) and ({secondX},{secondUnit.V})"; }
+            if (
+                (firstX != secondX) ||
+                (firstUnit.V != secondUnit.V)
+            ) { return $"(h3) the two Delta=5 descriptors recovered ({firstX},{firstUnit.V}) and ({secondX},{secondUnit.V})"; }
             if ((firstUnit.U - secondUnit.U) != (((3 - 1) / 2) * firstUnit.V)) { return "(h3) the scalar parts do not differ by (P'-P)/2*Y"; }
         }
 
@@ -654,7 +834,10 @@ internal static class QuadraticIntegerClaims {
         (int P, int Q, int Delta)[] rejected = [(0, -1, -4), (0, 0, 0), (0, 1, 4), (1, 2, 9), (0, 4, 16)];
 
         foreach (var (p, q, delta) in rejected) {
-            var algebra = Algebra.Create(p: p, q: q);
+            var algebra = Algebra.Create(
+                p: p,
+                q: q
+            );
 
             if (algebra.Discriminant != delta) { return $"(h5) descriptor ({p},{q}) has Delta={algebra.Discriminant}, expected {delta}"; }
 
@@ -682,49 +865,175 @@ internal static class QuadraticIntegerClaims {
 
             var (referenceX, referenceY) = RetiredPellConvergentLoop(radicand: radicand);
 
-            if ((delegated.X != referenceX) || (delegated.Y != referenceY)) { return $"D={radicand}: delegated ({delegated.X},{delegated.Y}) != retired loop ({referenceX},{referenceY})"; }
+            if (
+                (delegated.X != referenceX) ||
+                (delegated.Y != referenceY)
+            ) { return $"D={radicand}: delegated ({delegated.X},{delegated.Y}) != retired loop ({referenceX},{referenceY})"; }
             if (((delegated.X * delegated.X) - ((radicand * delegated.Y) * delegated.Y)) != BigInteger.One) { return $"D={radicand}: the delegated unit fails X^2-D*Y^2=1"; }
 
             ++agreements;
         }
 
-        return ((agreements < 2_000) ? "too few nonsquare radicands agreed to trust the delegation sweep" : null);
+        return ((agreements < 2_000)
+            ? "too few nonsquare radicands agreed to trust the delegation sweep"
+            : null
+        );
     }
-    // ---- (h4) restructured: the Delta=3964/D=991 audit reproduction and Delta=399964, without pinned literals ----
-    public static string? AuditHangCompletesForcedSignSurface() {
-        foreach (var (q, label) in (((BigInteger Q, string Label)[])[
-            (((BigInteger)991), "D=991 (Delta=3964, the audit's former hang)"),
-            (((BigInteger)99_991), "D=99991 (Delta=399964)"),
-        ])) {
-            var algebra = Algebra.Create(p: BigInteger.Zero, q: q);
-            var discriminant = algebra.Discriminant;
+    // ---- (i2) + (i3): factorizations beyond the orbit box's reach, with the expected norm computed independently ----
+    public static string? RealOrderFactorizationBeyondOrbitBoxSurface() {
+        {
+            var order = Algebra.Create(
+                p: BigInteger.Zero,
+                q: ((BigInteger)991)
+            );
+            var element = new Element(
+                U: 15,
+                V: 2
+            );
+            var expectedNorm = RefNorm(
+                p: BigInteger.Zero,
+                q: 991,
+                u: 15,
+                v: 2
+            );
+            var norm = order.Norm(value: element);
 
-            if (discriminant != (4 * q)) { return $"{label}: Delta={discriminant}, expected 4*D={(4 * q)} for a (P,Q)=(0,D) descriptor"; }
+            if (norm != expectedNorm) { return $"D=991: N(15,2) = {norm}, expected the independently recomputed {expectedNorm}"; }
 
-            // The forced-sign argument is about the order's own norm form a^2 - D*b^2 (Norm(unit) = Certificate/4), so it
-            // is checked on D = q itself, never on Delta = 4*D, which is always 0 (mod 4) and would trip on nothing.
-            if ((((q % 4) + 4) % 4) != 3) { return $"{label}: D={q} is not 3 (mod 4), so the forced-sign argument below does not apply to it"; }
-            if (SomeResidueIsNegativeOneModFour(d: q)) { return $"{label}: some (x,y) makes x^2-D*y^2 = -1 (mod 4), so the forced-sign argument is wrong"; }
+            var magnitude = BigInteger.Abs(value: expectedNorm);
 
-            var worker = System.Threading.Tasks.Task.Run(function: () => algebra.FundamentalUnit());
+            if (!IsProbablePrimeBig(value: magnitude)) { return $"D=991: |N(15,2)| = {magnitude} is expected to be a rational prime"; }
+            if (QuadraticSplitting.Inert == order.SplittingCharacter(rationalPrime: magnitude)) { return "D=991: the rational prime above N(15,2) must be non-inert, or the generator search is never entered"; }
 
-            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return $"{label}: FundamentalUnit did not complete inside the bounded wait"; }
+            var worker = System.Threading.Tasks.Task.Run(function: () => (order.TryFactorize(
+                factorization: out var factorization,
+                obstruction: out _,
+                value: element
+            )
+                ? factorization
+                : throw new InvalidOperationException(message: "(15,2) failed to factor, but it generates its own prime ideal")));
 
-            var unit = worker.Result;
-            var unitX = (2 * unit.U);
-            var certificate = ((unitX * unitX) - ((discriminant * unit.V) * unit.V));
+            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return "D=991: TryFactorize(15,2) did not complete inside the bounded wait"; }
 
-            if (BigInteger.Abs(value: certificate) != 4) { return $"{label}: X^2-Delta*Y^2 = {certificate}, expected +-4"; }
+            var result = worker.Result;
 
-            var norm = algebra.Norm(value: unit);
-
-            if (BigInteger.Abs(value: norm) != BigInteger.One) { return $"{label}: norm {norm} is not +-1"; }
-            if (norm != BigInteger.One) { return $"{label}: norm {norm}, but the mod-4 argument forces +1"; }
-
-            foreach (var shifted in ((BigInteger[])[(unitX + 2), (unitX - 2)])) {
-                if (IsPerfectSquare(value: shifted)) { return $"{label}: X{((shifted > unitX) ? "+" : "-")}2 is a perfect square, so the answer could be a unit's square"; }
-            }
+            if (Reassemble(
+                algebra: order,
+                factorization: result
+            ) != element) { return "D=991: reassembly mismatch"; }
+            if (1 != result.Factors.Count) { return $"D=991: {result.Factors.Count} factors, expected 1"; }
+            if (BigInteger.Abs(value: order.Norm(value: result.Factors[0].Prime)) != magnitude) { return "D=991: the single factor does not carry the expected norm magnitude"; }
         }
+
+        {
+            var order = Algebra.Create(
+                p: BigInteger.Zero,
+                q: ((BigInteger)99_991)
+            );
+            var element = new Element(
+                U: 401,
+                V: 3
+            );
+            var expectedMagnitude = BigInteger.Abs(value: RefNorm(
+                p: BigInteger.Zero,
+                q: 99_991,
+                u: 401,
+                v: 3
+            ));
+            var worker = System.Threading.Tasks.Task.Run(function: () => (order.TryFactorize(
+                factorization: out var factorization,
+                obstruction: out _,
+                value: element
+            )
+                ? factorization
+                : throw new InvalidOperationException(message: "(401,3) failed to factor")));
+
+            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return "D=99991: TryFactorize(401,3) did not complete inside the bounded wait"; }
+
+            var result = worker.Result;
+
+            if (Reassemble(
+                algebra: order,
+                factorization: result
+            ) != element) { return "D=99991: reassembly mismatch"; }
+            if (!order.IsUnit(value: result.LeadingUnit)) { return "D=99991: leading factor is not a unit"; }
+
+            var normProduct = BigInteger.Abs(value: order.Norm(value: result.LeadingUnit));
+
+            foreach (var factor in result.Factors) {
+                var factorNorm = BigInteger.Abs(value: order.Norm(value: factor.Prime));
+
+                for (var power = 0; (power < factor.Multiplicity); ++power) { normProduct *= factorNorm; }
+            }
+
+            if (normProduct != expectedMagnitude) { return $"D=99991: factor-norm product {normProduct} != independently recomputed |norm| {expectedMagnitude}"; }
+        }
+
+        return null;
+    }
+    // ---- (h1): FundamentalUnit over every real order in [5, 4000] vs the retired ascending-Y scan ----
+    public static string? RealOrderFundamentalUnitVsRetiredScanSurface() {
+        const int DiscriminantCeiling = 4_000;
+        const int ScanBudget = 10_000;
+
+        var realized = 0;
+        var scanned = 0;
+
+        for (var delta = 5; (delta <= DiscriminantCeiling); ++delta) {
+            var residue = delta & 3;
+
+            if (
+                (0 != residue) &&
+                (1 != residue)
+            ) { continue; }
+            if (IsPerfectSquare(value: delta)) { continue; }
+
+            var p = delta & 1;
+            var algebra = Algebra.Create(
+                p: ((BigInteger)p),
+                q: ((BigInteger)((delta - (p * p)) / 4))
+            );
+
+            if (algebra.Discriminant != delta) { return $"({p},{((delta - (p * p)) / 4)}) has Delta={algebra.Discriminant}, expected {delta}"; }
+
+            var unit = algebra.FundamentalUnit();
+            var unitX = ((2 * unit.U) + (p * unit.V));
+            var unitY = unit.V;
+            var certificate = ((unitX * unitX) - ((delta * unitY) * unitY));
+
+            if (BigInteger.Abs(value: certificate) != 4) { return $"Delta={delta}: X^2-Delta*Y^2 = {certificate}, expected +-4"; }
+            if (algebra.Norm(value: unit) != certificate.Sign) { return $"Delta={delta}: norm {algebra.Norm(value: unit)} disagrees with the certificate sign {certificate.Sign}"; }
+            if (
+                (unitX.Sign <= 0) ||
+                (unitY.Sign <= 0)
+            ) { return $"Delta={delta}: non-positive coordinate ({unitX},{unitY})"; }
+
+            ++realized;
+
+            if (unitY > ScanBudget) { continue; }
+
+            if (!TryRetiredAscendingUnitScan(
+                delta: delta,
+                scanSign: out var scanSign,
+                scanX: out var scanX,
+                scanY: out var scanY,
+                yCeiling: unitY
+            )) {
+                return $"Delta={delta}: the retired scan found no solution at or below Y={unitY}, so ({unitX},{unitY}) is not minimal";
+            }
+            if (
+                (scanX != unitX) ||
+                (scanY != unitY) ||
+                (scanSign != certificate.Sign)
+            ) {
+                return $"Delta={delta}: the retired scan's first hit ({scanX},{scanY}) sign {scanSign} != ({unitX},{unitY}) sign {certificate.Sign}";
+            }
+
+            ++scanned;
+        }
+
+        if (realized < 1000) { return "too few real orders were realized in [5, 4000] to trust the sweep"; }
+        if (scanned < 500) { return "too few real orders fell inside the scan budget to trust the minimality cross-check"; }
 
         return null;
     }
@@ -741,11 +1050,17 @@ internal static class QuadraticIntegerClaims {
         for (var delta = 5; (delta <= DiscriminantCeiling); ++delta) {
             var residue = delta & 3;
 
-            if ((0 != residue) && (1 != residue)) { continue; }
+            if (
+                (0 != residue) &&
+                (1 != residue)
+            ) { continue; }
             if (IsPerfectSquare(value: delta)) { continue; }
 
             var p = delta & 1;
-            var algebra = Algebra.Create(p: ((BigInteger)p), q: ((BigInteger)((delta - (p * p)) / 4)));
+            var algebra = Algebra.Create(
+                p: ((BigInteger)p),
+                q: ((BigInteger)((delta - (p * p)) / 4))
+            );
 
             foreach (var ell in primes) {
                 var rationalPrime = ((BigInteger)ell);
@@ -753,11 +1068,21 @@ internal static class QuadraticIntegerClaims {
 
                 if (QuadraticSplitting.Inert == splitting) { continue; }
 
-                var square = new Element(U: rationalPrime, V: BigInteger.Zero);
-                var succeeded = algebra.TryFactorize(factorization: out var factorization, obstruction: out var obstruction, value: square);
+                var square = new Element(
+                    U: rationalPrime,
+                    V: BigInteger.Zero
+                );
+                var succeeded = algebra.TryFactorize(
+                    factorization: out var factorization,
+                    obstruction: out var obstruction,
+                    value: square
+                );
 
                 if (succeeded) {
-                    if (Reassemble(algebra: algebra, factorization: factorization) != square) { return $"Delta={delta} ell={ell}: reassembly mismatch"; }
+                    if (Reassemble(
+                        algebra: algebra,
+                        factorization: factorization
+                    ) != square) { return $"Delta={delta} ell={ell}: reassembly mismatch"; }
                     if (!factorization.Factors.Any(predicate: factor => (BigInteger.Abs(value: algebra.Norm(value: factor.Prime)) == rationalPrime))) { return $"Delta={delta} ell={ell}: factored without producing a prime of norm +-ell"; }
                 } else {
                     if (obstruction.RationalPrime != rationalPrime) { return $"Delta={delta} ell={ell}: obstruction names {obstruction.RationalPrime}"; }
@@ -766,7 +1091,11 @@ internal static class QuadraticIntegerClaims {
 
                 ++decisions;
 
-                var oracle = RetiredOrbitBoxHasNormElement(budget: BoxBudget, discriminant: delta, rationalPrime: rationalPrime);
+                var oracle = RetiredOrbitBoxHasNormElement(
+                    budget: BoxBudget,
+                    discriminant: delta,
+                    rationalPrime: rationalPrime
+                );
 
                 if (oracle is null) { continue; }
                 if (oracle.Value != succeeded) { return $"Delta={delta} ell={ell}: the walk says {succeeded}, the retired orbit box says {oracle.Value}"; }
@@ -780,58 +1109,101 @@ internal static class QuadraticIntegerClaims {
 
         return null;
     }
-    // ---- (i2) + (i3): factorizations beyond the orbit box's reach, with the expected norm computed independently ----
-    public static string? RealOrderFactorizationBeyondOrbitBoxSurface() {
-        {
-            var order = Algebra.Create(p: BigInteger.Zero, q: ((BigInteger)991));
-            var element = new Element(U: 15, V: 2);
-            var expectedNorm = RefNorm(p: BigInteger.Zero, q: 991, u: 15, v: 2);
-            var norm = order.Norm(value: element);
+    // ---- (b) + (c): the sum-of-two-squares law and the first-twist class-group witness ----
+    public static string? SumOfTwoSquaresAndWitnessSurface() {
+        var sumOfSquares = Algebra.Create(
+            p: BigInteger.Zero,
+            q: BigInteger.MinusOne
+        );
+        var primes = EnumerateSmallPrimesUpTo(ceiling: 9_999);
+        var splitCount = 0;
 
-            if (norm != expectedNorm) { return $"D=991: N(15,2) = {norm}, expected the independently recomputed {expectedNorm}"; }
+        foreach (var ell in primes) {
+            var rationalPrime = ((BigInteger)ell);
 
-            var magnitude = BigInteger.Abs(value: expectedNorm);
-
-            if (!IsProbablePrimeBig(value: magnitude)) { return $"D=991: |N(15,2)| = {magnitude} is expected to be a rational prime"; }
-            if (QuadraticSplitting.Inert == order.SplittingCharacter(rationalPrime: magnitude)) { return "D=991: the rational prime above N(15,2) must be non-inert, or the generator search is never entered"; }
-
-            var worker = System.Threading.Tasks.Task.Run(function: () => (order.TryFactorize(factorization: out var factorization, obstruction: out _, value: element)
-                ? factorization
-                : throw new InvalidOperationException(message: "(15,2) failed to factor, but it generates its own prime ideal")));
-
-            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return "D=991: TryFactorize(15,2) did not complete inside the bounded wait"; }
-
-            var result = worker.Result;
-
-            if (Reassemble(algebra: order, factorization: result) != element) { return "D=991: reassembly mismatch"; }
-            if (1 != result.Factors.Count) { return $"D=991: {result.Factors.Count} factors, expected 1"; }
-            if (BigInteger.Abs(value: order.Norm(value: result.Factors[0].Prime)) != magnitude) { return "D=991: the single factor does not carry the expected norm magnitude"; }
-        }
-
-        {
-            var order = Algebra.Create(p: BigInteger.Zero, q: ((BigInteger)99_991));
-            var element = new Element(U: 401, V: 3);
-            var expectedMagnitude = BigInteger.Abs(value: RefNorm(p: BigInteger.Zero, q: 99_991, u: 401, v: 3));
-            var worker = System.Threading.Tasks.Task.Run(function: () => (order.TryFactorize(factorization: out var factorization, obstruction: out _, value: element)
-                ? factorization
-                : throw new InvalidOperationException(message: "(401,3) failed to factor")));
-
-            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return "D=99991: TryFactorize(401,3) did not complete inside the bounded wait"; }
-
-            var result = worker.Result;
-
-            if (Reassemble(algebra: order, factorization: result) != element) { return "D=99991: reassembly mismatch"; }
-            if (!order.IsUnit(value: result.LeadingUnit)) { return "D=99991: leading factor is not a unit"; }
-
-            var normProduct = BigInteger.Abs(value: order.Norm(value: result.LeadingUnit));
-
-            foreach (var factor in result.Factors) {
-                var factorNorm = BigInteger.Abs(value: order.Norm(value: factor.Prime));
-
-                for (var power = 0; (power < factor.Multiplicity); ++power) { normProduct *= factorNorm; }
+            if (!sumOfSquares.TryFactorize(
+                value: new Element(
+                    U: rationalPrime,
+                    V: BigInteger.Zero
+                ),
+                factorization: out var factorization,
+                obstruction: out _
+            )) {
+                return $"(0,-1) world: unexpected obstruction at {ell}";
             }
 
-            if (normProduct != expectedMagnitude) { return $"D=99991: factor-norm product {normProduct} != independently recomputed |norm| {expectedMagnitude}"; }
+            var hasNormEll = factorization.Factors.Any(predicate: factor => (BigInteger.Abs(value: sumOfSquares.Norm(value: factor.Prime)) == rationalPrime));
+            var expected = ((1 == (ell & 3)) || (2 == ell));
+
+            if (hasNormEll != expected) { return $"(0,-1) world: sum-of-two-squares law broke at {ell}: hasNormEll={hasNormEll}, expected={expected}"; }
+            if (hasNormEll) { ++splitCount; }
+
+            var character = sumOfSquares.SplittingCharacter(rationalPrime: rationalPrime);
+            var characterSplits = (QuadraticSplitting.Inert != character);
+
+            if (characterSplits != hasNormEll) { return $"(0,-1) world: SplittingCharacter({ell}) disagrees with the norm-{ell} factor test"; }
+        }
+
+        if (splitCount == 0) { return "(0,-1) world: no prime split, so the law was never exercised"; }
+
+        // The first-twist witness: 6 = 2*3 must fail in the Delta = -20 world.
+        var twist = Algebra.Create(
+            p: BigInteger.Zero,
+            q: ((BigInteger)(-5))
+        );
+
+        if (twist.TryFactorize(
+            value: new Element(
+                U: 6,
+                V: BigInteger.Zero
+            ),
+            factorization: out _,
+            obstruction: out var witness
+        )) {
+            return "Delta=-20: factoring 6 unexpectedly succeeded";
+        }
+        if (
+            (witness.RationalPrime != 2) &&
+            (witness.RationalPrime != 3)
+        ) { return $"Delta=-20: obstruction at {witness.RationalPrime}, expected 2 or 3"; }
+
+        // The obstruction-rate survey: three non-class-number-one worlds must show a nonzero obstruction rate, in
+        // contrast with the zero-obstruction worlds quadratic-integer.class-number-one-worlds-factor-prime-canonical pins.
+        (int P, int Q, int Delta)[] survey = [(0, -5, -20), (1, -4, -15), (0, -6, -24)];
+
+        foreach (var (p, q, delta) in survey) {
+            var algebra = Algebra.Create(
+                p: p,
+                q: q
+            );
+            var obstructed = 0;
+            var factored = 0;
+
+            for (var step = 0L; (step < 300L); ++step) {
+                var element = DeterministicElement(
+                    bound: 200L,
+                    step: step
+                );
+
+                if (BigInteger.Abs(value: algebra.Norm(value: element)) <= 1) { continue; }
+
+                if (algebra.TryFactorize(
+                    factorization: out var factorization,
+                    obstruction: out _,
+                    value: element
+                )) {
+                    if (Reassemble(
+                        algebra: algebra,
+                        factorization: factorization
+                    ) != element) { return $"Delta={delta}: reassembly mismatch"; }
+
+                    ++factored;
+                } else {
+                    ++obstructed;
+                }
+            }
+
+            if (obstructed == 0) { return $"Delta={delta}: zero obstructions observed, so the nontrivial class group was never exercised"; }
         }
 
         return null;

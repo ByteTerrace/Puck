@@ -32,7 +32,6 @@ namespace Puck.World;
 /// <param name="AngularDamping">The angular-velocity decay rate, per second, on the same terms as
 /// <see cref="LinearDamping"/>. Non-negative; zero (the default) applies none.</param>
 public sealed record WorldRigid(float Mass, float Restitution = 0f, float Friction = 0f, float RollingFriction = 0f, float LinearDamping = 0f, float AngularDamping = 0f);
-
 /// <summary>The one-time fixed-point compilation of a kit's <see cref="WorldRigid"/> facet: derived mass/inertia
 /// (via <see cref="FixedMassProperties"/>, from the kit's own compiled collider) already inverted at
 /// <see cref="Scales"/>, the collider's own centre-of-mass offset from the body's root (the same offset every
@@ -55,8 +54,9 @@ public readonly record struct FixedWorldRigid(
     /// <summary>Where mass/inertia reciprocals are placed — the library's own room-scale placement, which comfortably
     /// covers the census this engine's worlds author (roughly 0.05..50 units of mass at metre scale).</summary>
     public static FixedRigidScales Scales => FixedRigidScales.RoomScale;
-    private const int MassFractionBitCount = 32;
+
     private const int InertiaFractionBitCount = 32;
+    private const int MassFractionBitCount = 32;
 
     /// <summary>Compiles an authored <see cref="WorldRigid"/> facet against its kit's already-compiled collider.
     /// Validation (<see cref="WorldDefinitionValidator"/>) has already proved that the derived room-scale mass
@@ -66,13 +66,17 @@ public readonly record struct FixedWorldRigid(
     /// <exception cref="InvalidOperationException">The caller bypassed document validation and the derived mass
     /// properties are not representable at <see cref="Scales"/>.</exception>
     public static FixedWorldRigid Compile(WorldRigid rigid, FixedWorldCollider collider) {
-        if (!TryCompile(rigid: rigid, collider: collider, compiled: out var compiled, reason: out var reason)) {
+        if (!TryCompile(
+            collider: collider,
+            compiled: out var compiled,
+            reason: out var reason,
+            rigid: rigid
+        )) {
             throw new InvalidOperationException(message: reason);
         }
 
         return compiled;
     }
-
     /// <summary>Attempts the fixed-point mass-property derivation without throwing, so the document validator can
     /// refuse values whose authored primitives or mass leave the engine's room-scale representation.</summary>
     /// <param name="rigid">The authored facet.</param>
@@ -88,7 +92,7 @@ public readonly record struct FixedWorldRigid(
             return false;
         }
 
-        var fixedMaximum = (double)FixedQ4816.MaxValue;
+        var fixedMaximum = ((double)FixedQ4816.MaxValue);
 
         if (
             !float.IsFinite(f: rigid.Mass) ||
@@ -115,86 +119,86 @@ public readonly record struct FixedWorldRigid(
         // unit-density mass equals the shape's volume at MassFractionBitCount, and scaling the unit-density inertia
         // by (targetMass / unitMass) is the identical result TryXxxBody would report at the solved density —
         // computed once instead of twice.
-        const long unitDensity = (1L << MassFractionBitCount);
+        const long UnitDensity = (1L << MassFractionBitCount);
         long unitMass, unitIxx, unitIyy, unitIzz;
         FixedVector3 centerOffset;
         FixedQ4816 boundingRadius;
 
         switch (volume.Kind) {
             case FixedBodyColliderKind.Sphere: {
-                if (!FixedMassProperties.TrySphereBody(
-                    density: unitDensity,
-                    fractionBitsDensity: MassFractionBitCount,
-                    radius: volume.Radius.Value,
-                    fractionBitsLength: FixedQ4816.FractionBitCount,
-                    fractionBitsMass: MassFractionBitCount,
-                    fractionBitsInertia: InertiaFractionBitCount,
-                    mass: out unitMass,
-                    inertia: out var inertia
-                )) {
-                    reason = "A rigid sphere's mass properties are not representable.";
-                    return false;
-                }
+                    if (!FixedMassProperties.TrySphereBody(
+                        density: UnitDensity,
+                        fractionBitsDensity: MassFractionBitCount,
+                        radius: volume.Radius.Value,
+                        fractionBitsLength: FixedQ4816.FractionBitCount,
+                        fractionBitsMass: MassFractionBitCount,
+                        fractionBitsInertia: InertiaFractionBitCount,
+                        mass: out unitMass,
+                        inertia: out var inertia
+                    )) {
+                        reason = "A rigid sphere's mass properties are not representable.";
+                        return false;
+                    }
 
-                unitIxx = inertia;
-                unitIyy = inertia;
-                unitIzz = inertia;
-                centerOffset = volume.Center;
-                boundingRadius = volume.Radius;
-                break;
-            }
+                    unitIxx = inertia;
+                    unitIyy = inertia;
+                    unitIzz = inertia;
+                    centerOffset = volume.Center;
+                    boundingRadius = volume.Radius;
+                    break;
+                }
             case FixedBodyColliderKind.Capsule: {
-                var segment = (volume.Endpoint - volume.Center);
-                var centerDistance = segment.Length;
+                    var segment = (volume.Endpoint - volume.Center);
+                    var centerDistance = segment.Length;
 
-                if (!FixedMassProperties.TryCapsuleBody(
-                    density: unitDensity,
-                    fractionBitsDensity: MassFractionBitCount,
-                    radius: volume.Radius.Value,
-                    centerDistance: centerDistance.Value,
-                    fractionBitsLength: FixedQ4816.FractionBitCount,
-                    fractionBitsMass: MassFractionBitCount,
-                    fractionBitsInertia: InertiaFractionBitCount,
-                    mass: out unitMass,
-                    axial: out var axial,
-                    perpendicular: out var perpendicular
-                )) {
-                    reason = "A rigid capsule's mass properties are not representable.";
-                    return false;
+                    if (!FixedMassProperties.TryCapsuleBody(
+                        density: UnitDensity,
+                        fractionBitsDensity: MassFractionBitCount,
+                        radius: volume.Radius.Value,
+                        centerDistance: centerDistance.Value,
+                        fractionBitsLength: FixedQ4816.FractionBitCount,
+                        fractionBitsMass: MassFractionBitCount,
+                        fractionBitsInertia: InertiaFractionBitCount,
+                        mass: out unitMass,
+                        axial: out var axial,
+                        perpendicular: out var perpendicular
+                    )) {
+                        reason = "A rigid capsule's mass properties are not representable.";
+                        return false;
+                    }
+
+                    // The capsule collider's own axis is world/body Y (see FixedWorldCollider.Compile); the mass kernel
+                    // derives about its own Y axis too, so axial maps straight to Y and perpendicular to X/Z.
+                    unitIxx = perpendicular;
+                    unitIyy = axial;
+                    unitIzz = perpendicular;
+                    centerOffset = (volume.Center + (segment / FixedQ4816.FromInteger(value: 2L)));
+                    boundingRadius = (volume.Radius + (centerDistance / FixedQ4816.FromInteger(value: 2L)));
+                    break;
                 }
-
-                // The capsule collider's own axis is world/body Y (see FixedWorldCollider.Compile); the mass kernel
-                // derives about its own Y axis too, so axial maps straight to Y and perpendicular to X/Z.
-                unitIxx = perpendicular;
-                unitIyy = axial;
-                unitIzz = perpendicular;
-                centerOffset = (volume.Center + (segment / FixedQ4816.FromInteger(value: 2L)));
-                boundingRadius = (volume.Radius + (centerDistance / FixedQ4816.FromInteger(value: 2L)));
-                break;
-            }
             case FixedBodyColliderKind.Box: {
-                if (!FixedMassProperties.TryBoxBody(
-                    density: unitDensity,
-                    fractionBitsDensity: MassFractionBitCount,
-                    halfX: volume.HalfExtents.X.Value,
-                    halfY: volume.HalfExtents.Y.Value,
-                    halfZ: volume.HalfExtents.Z.Value,
-                    fractionBitsLength: FixedQ4816.FractionBitCount,
-                    fractionBitsMass: MassFractionBitCount,
-                    fractionBitsInertia: InertiaFractionBitCount,
-                    mass: out unitMass,
-                    ixx: out unitIxx,
-                    iyy: out unitIyy,
-                    izz: out unitIzz
-                )) {
-                    reason = "A rigid box's mass properties are not representable.";
-                    return false;
-                }
+                    if (!FixedMassProperties.TryBoxBody(
+                        density: UnitDensity,
+                        fractionBitsDensity: MassFractionBitCount,
+                        halfX: volume.HalfExtents.X.Value,
+                        halfY: volume.HalfExtents.Y.Value,
+                        halfZ: volume.HalfExtents.Z.Value,
+                        fractionBitsLength: FixedQ4816.FractionBitCount,
+                        fractionBitsMass: MassFractionBitCount,
+                        fractionBitsInertia: InertiaFractionBitCount,
+                        mass: out unitMass,
+                        ixx: out unitIxx,
+                        iyy: out unitIyy,
+                        izz: out unitIzz
+                    )) {
+                        reason = "A rigid box's mass properties are not representable.";
+                        return false;
+                    }
 
-                centerOffset = volume.Center;
-                boundingRadius = volume.HalfExtents.Length;
-                break;
-            }
+                    centerOffset = volume.Center;
+                    boundingRadius = volume.HalfExtents.Length;
+                    break;
+                }
             default:
                 reason = $"A rigid kit's collider kind '{volume.Kind}' has no closed-form mass properties.";
                 return false;
@@ -204,53 +208,53 @@ public readonly record struct FixedWorldRigid(
         // ratio — the same result density = targetMass/unitMass fed back into TryXxxBody would produce, since every
         // formula above is linear in density.
         var targetMass = FixedQ4816.FromDouble(value: rigid.Mass);
-        const int massScaleShift = (MassFractionBitCount - FixedQ4816.FractionBitCount);
+        const int MassScaleShift = (MassFractionBitCount - FixedQ4816.FractionBitCount);
 
         if (
             (targetMass <= FixedQ4816.Zero) ||
-            (targetMass.Value > (long.MaxValue >> massScaleShift))
+            (targetMass.Value > (long.MaxValue >> MassScaleShift))
         ) {
             reason = "A rigid kit's authored mass is not representable at the engine's mass scale.";
             return false;
         }
 
-        var targetMassRaw = (targetMass.Value << massScaleShift);
+        var targetMassRaw = (targetMass.Value << MassScaleShift);
 
         if (
             !FusedArithmetic.TryScaledReciprocal(
-            value: unitMass,
             fractionBitsIn: MassFractionBitCount,
             fractionBitsOut: MassFractionBitCount,
-            result: out var inverseUnitMass
+            result: out var inverseUnitMass,
+            value: unitMass
         ) ||
             !FusedArithmetic.TryMixedScaleProduct(
             a: targetMassRaw,
-            fractionBitsA: MassFractionBitCount,
             b: inverseUnitMass,
+            fractionBitsA: MassFractionBitCount,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: MassFractionBitCount,
             result: out var massRatio
         ) ||
             !FusedArithmetic.TryMixedScaleProduct(
             a: unitIxx,
-            fractionBitsA: InertiaFractionBitCount,
             b: massRatio,
+            fractionBitsA: InertiaFractionBitCount,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: InertiaFractionBitCount,
             result: out var ixx
         ) ||
             !FusedArithmetic.TryMixedScaleProduct(
             a: unitIyy,
-            fractionBitsA: InertiaFractionBitCount,
             b: massRatio,
+            fractionBitsA: InertiaFractionBitCount,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: InertiaFractionBitCount,
             result: out var iyy
         ) ||
             !FusedArithmetic.TryMixedScaleProduct(
             a: unitIzz,
-            fractionBitsA: InertiaFractionBitCount,
             b: massRatio,
+            fractionBitsA: InertiaFractionBitCount,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: InertiaFractionBitCount,
             result: out var izz

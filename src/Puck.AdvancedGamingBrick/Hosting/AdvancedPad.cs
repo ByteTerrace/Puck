@@ -4,6 +4,11 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>Folds a neutral controller image into the Advanced GamingBrick's active-low KEYINPUT register.</summary>
 internal static class AdvancedPad {
+    private static int Press(int keys, bool pressed, int bit) => (pressed
+        ? keys & ~(1 << bit)
+        : keys
+    );
+
     /// <summary>Applies one recorded pad image to a machine's input devices: the KEYINPUT image plus the recorded solar
     /// light level and tilt sample. The authoritative core and its lookahead fork drive this one seam, so the predicted
     /// branch applies the SAME full input image the authority does; the sensor writes are no-ops on a cartridge with no
@@ -77,8 +82,4 @@ internal static class AdvancedPad {
 
         return ((ushort)keys);
     }
-
-    private static int Press(int keys, bool pressed, int bit) => (pressed
-        ? keys & ~(1 << bit)
-        : keys);
 }

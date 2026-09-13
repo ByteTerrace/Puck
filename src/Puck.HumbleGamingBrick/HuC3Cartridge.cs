@@ -42,13 +42,13 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
 
     private readonly int m_ramBankWrapMask;
 
-    // The machine's shared IR transceiver, injected by the component factory (null when built bare in a test — then the IR
-    // window keeps its lone-hardware behaviour: dark reads, dropped writes). Host wiring, never serialized.
-    private IInfrared? m_infrared;
     private int m_accessFlags;
     private int m_accessIndex;
     private int m_days;
     private int m_dotAccumulator;
+    // The machine's shared IR transceiver, injected by the component factory (null when built bare in a test — then the IR
+    // window keeps its lone-hardware behaviour: dark reads, dropped writes). Host wiring, never serialized.
+    private IInfrared? m_infrared;
     private int m_minutes;
     private int m_mode;
     private int m_ramBank;
@@ -72,180 +72,19 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     }
 
     /// <inheritdoc/>
+    protected override bool RamAccessible =>
+        (Header.HasRam && (m_mode == ModeRam));
+
+    /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Lcd;
     /// <inheritdoc/>
     public IInfrared? Infrared {
         set => m_infrared = value;
     }
-
-    /// <inheritdoc/>
-    protected override bool RamAccessible =>
-        (Header.HasRam && (m_mode == ModeRam));
-
     /// <inheritdoc/>
     public override int PersistentClockByteCount =>
         PersistentClockFooterByteCount;
-
-    /// <inheritdoc/>
-    public override byte[] ExportPersistentClock(long unixTimestampSeconds) {
-        var footer = new byte[PersistentClockFooterByteCount];
-        var span = footer.AsSpan();
-
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: span[0..],
-            value: ((uint)m_minutes)
-        );
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: span[4..],
-            value: ((uint)m_days)
-        );
-        BinaryPrimitives.WriteInt64LittleEndian(
-            destination: span[8..],
-            value: unixTimestampSeconds
-        );
-
-        return footer;
-    }
-    /// <inheritdoc/>
-    public override void ImportPersistentClock(ReadOnlySpan<byte> source) {
-        if (source.Length < PersistentClockFooterByteCount) {
-            return;
-        }
-
-        // Masked to the three/four nibbles the write protocol itself can produce; the trailing timestamp is
-        // deliberately ignored (the deterministic clock resumes, never advancing from wall time), and the
-        // sub-minute prescaler restarts.
-        m_minutes = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0xFFF));
-        m_days = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0xFFF));
-        m_dotAccumulator = 0;
-    }
-    /// <inheritdoc/>
-    public void Tick() {
-        // Determinism: the sole time source is the emulated LCD clock.
-        if (++m_dotAccumulator < DotsPerMinute) {
-            return;
-        }
-
-        m_dotAccumulator = 0;
-
-        if (++m_minutes < MinutesPerDay) {
-            return;
-        }
-
-        m_minutes = 0;
-        m_days = (m_days + 1) & 0xFFF;
-    }
-    /// <inheritdoc/>
-    public override void WriteControl(ushort address, byte value) {
-        switch (address >> 13) {
-            case 0: // 0x0000-0x1FFF: window mode nibble
-                m_mode = value & 0x0F;
-
-                break;
-            case 1: // 0x2000-0x3FFF: full-byte ROM bank, zero reads as one
-                m_romBank = ((value == 0)
-                    ? 1
-                    : value);
-
-                break;
-            case 2: // 0x4000-0x5FFF: RAM bank
-                m_ramBank = value;
-
-                break;
-            default: // 0x6000-0x7FFF: no register
-                break;
-        }
-    }
-    /// <summary>Reads from the external window according to the selected mode: banked RAM, the RTC read register (which
-    /// reports <c>0x01</c> while the command flags are armed, else the fetched nibble), the always-ready status
-    /// semaphore, the dark IR receiver, or the protocol idle value <c>0x01</c>.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The mode-selected value.</returns>
-    public override byte ReadRam(ushort address) =>
-        m_mode switch {
-            ModeRam => base.ReadRam(address: address),
-            ModeRtcRead => ((m_accessFlags == 0x02)
-        ? (byte)0x01
-        : (byte)m_readValue),
-            ModeStatus => 0x01,
-            ModeInfrared => ((byte)((m_infrared?.ReceivedLight ?? false)
-        ? 0x01
-        : 0x00)),
-            _ => 0x01,
-        };
-    /// <summary>Writes to the external window according to the selected mode: banked RAM, an RTC command, or nothing —
-    /// the read-only protocol modes and the disabled window consume the write.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <param name="value">The value (or command byte) to store.</param>
-    public override void WriteRam(ushort address, byte value) {
-        switch (m_mode) {
-            case ModeRam:
-                base.WriteRam(
-                    address: address,
-                    value: value
-                );
-
-                break;
-            case ModeRtcCommand:
-                ExecuteRtcCommand(command: value);
-
-                break;
-            case ModeInfrared:
-                // Bit 0 drives the shared IR LED (the same LED the RP register drives).
-                if (m_infrared is not null) {
-                    m_infrared.CartLightOut = ((value & 0x01) != 0);
-                }
-
-                break;
-            default: // read-only protocol modes and the disabled window drop the write
-                break;
-        }
-    }
-    /// <inheritdoc/>
-    /// <remarks>Overridden: the window is entirely mode-selected (RAM, RTC command/read, status, IR), so it stays on
-    /// the interface path.</remarks>
-    public override bool TryComputeRamWindow(out int offset, out int length) {
-        offset = 0;
-        length = 0;
-
-        return false;
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
-            address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
-        );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteInt32(value: m_accessFlags);
-        writer.WriteInt32(value: m_accessIndex);
-        writer.WriteInt32(value: m_days);
-        writer.WriteInt32(value: m_dotAccumulator);
-        writer.WriteInt32(value: m_minutes);
-        writer.WriteInt32(value: m_mode);
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteInt32(value: m_readValue);
-        writer.WriteInt32(value: m_romBank);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_accessFlags = reader.ReadInt32();
-        m_accessIndex = reader.ReadInt32();
-        m_days = reader.ReadInt32();
-        m_dotAccumulator = reader.ReadInt32();
-        m_minutes = reader.ReadInt32();
-        m_mode = reader.ReadInt32();
-        m_ramBank = reader.ReadInt32();
-        m_readValue = reader.ReadInt32();
-        m_romBank = reader.ReadInt32();
-    }
 
     private void ExecuteRtcCommand(byte command) {
         var nibble = command & 0x0F;
@@ -310,5 +149,166 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
         }
 
         // Higher indices hold the write-only alarm block, which has no observable readback here.
+    }
+
+    /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        m_accessFlags = reader.ReadInt32();
+        m_accessIndex = reader.ReadInt32();
+        m_days = reader.ReadInt32();
+        m_dotAccumulator = reader.ReadInt32();
+        m_minutes = reader.ReadInt32();
+        m_mode = reader.ReadInt32();
+        m_ramBank = reader.ReadInt32();
+        m_readValue = reader.ReadInt32();
+        m_romBank = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteInt32(value: m_accessFlags);
+        writer.WriteInt32(value: m_accessIndex);
+        writer.WriteInt32(value: m_days);
+        writer.WriteInt32(value: m_dotAccumulator);
+        writer.WriteInt32(value: m_minutes);
+        writer.WriteInt32(value: m_mode);
+        writer.WriteInt32(value: m_ramBank);
+        writer.WriteInt32(value: m_readValue);
+        writer.WriteInt32(value: m_romBank);
+    }
+
+    /// <inheritdoc/>
+    public override byte[] ExportPersistentClock(long unixTimestampSeconds) {
+        var footer = new byte[PersistentClockFooterByteCount];
+        var span = footer.AsSpan();
+
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[0..],
+            value: ((uint)m_minutes)
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[4..],
+            value: ((uint)m_days)
+        );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: span[8..],
+            value: unixTimestampSeconds
+        );
+
+        return footer;
+    }
+    /// <inheritdoc/>
+    public override void ImportPersistentClock(ReadOnlySpan<byte> source) {
+        if (source.Length < PersistentClockFooterByteCount) {
+            return;
+        }
+
+        // Masked to the three/four nibbles the write protocol itself can produce; the trailing timestamp is
+        // deliberately ignored (the deterministic clock resumes, never advancing from wall time), and the
+        // sub-minute prescaler restarts.
+        m_minutes = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0xFFF));
+        m_days = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0xFFF));
+        m_dotAccumulator = 0;
+    }
+    /// <summary>Reads from the external window according to the selected mode: banked RAM, the RTC read register (which
+    /// reports <c>0x01</c> while the command flags are armed, else the fetched nibble), the always-ready status
+    /// semaphore, the dark IR receiver, or the protocol idle value <c>0x01</c>.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The mode-selected value.</returns>
+    public override byte ReadRam(ushort address) =>
+        m_mode switch {
+            ModeRam => base.ReadRam(address: address),
+            ModeRtcRead => ((m_accessFlags == 0x02)
+            ? (byte)0x01
+            : (byte)m_readValue),
+            ModeStatus => 0x01,
+            ModeInfrared => ((byte)((m_infrared?.ReceivedLight ?? false)
+            ? 0x01
+            : 0x00)),
+            _ => 0x01,
+        };
+    /// <inheritdoc/>
+    public void Tick() {
+        // Determinism: the sole time source is the emulated LCD clock.
+        if (++m_dotAccumulator < DotsPerMinute) {
+            return;
+        }
+
+        m_dotAccumulator = 0;
+
+        if (++m_minutes < MinutesPerDay) {
+            return;
+        }
+
+        m_minutes = 0;
+        m_days = (m_days + 1) & 0xFFF;
+    }
+    /// <inheritdoc/>
+    /// <remarks>Overridden: the window is entirely mode-selected (RAM, RTC command/read, status, IR), so it stays on
+    /// the interface path.</remarks>
+    public override bool TryComputeRamWindow(out int offset, out int length) {
+        offset = 0;
+        length = 0;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public override void WriteControl(ushort address, byte value) {
+        switch (address >> 13) {
+            case 0: // 0x0000-0x1FFF: window mode nibble
+                m_mode = value & 0x0F;
+
+                break;
+            case 1: // 0x2000-0x3FFF: full-byte ROM bank, zero reads as one
+                m_romBank = ((value == 0)
+                    ? 1
+                    : value
+                );
+
+                break;
+            case 2: // 0x4000-0x5FFF: RAM bank
+                m_ramBank = value;
+
+                break;
+            default: // 0x6000-0x7FFF: no register
+                break;
+        }
+    }
+    /// <summary>Writes to the external window according to the selected mode: banked RAM, an RTC command, or nothing —
+    /// the read-only protocol modes and the disabled window consume the write.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <param name="value">The value (or command byte) to store.</param>
+    public override void WriteRam(ushort address, byte value) {
+        switch (m_mode) {
+            case ModeRam:
+                base.WriteRam(
+                    address: address,
+                    value: value
+                );
+
+                break;
+            case ModeRtcCommand:
+                ExecuteRtcCommand(command: value);
+
+                break;
+            case ModeInfrared:
+                // Bit 0 drives the shared IR LED (the same LED the RP register drives).
+                if (m_infrared is not null) {
+                    m_infrared.CartLightOut = ((value & 0x01) != 0);
+                }
+
+                break;
+            default: // read-only protocol modes and the disabled window drop the write
+                break;
+        }
     }
 }

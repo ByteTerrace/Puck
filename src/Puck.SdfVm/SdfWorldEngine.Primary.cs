@@ -8,7 +8,11 @@ public sealed partial class SdfWorldEngine {
     private void RecordHitPass(nint commandBuffer, nint timingPool, IGpuComputePipeline pipeline, string label, uint timingMark) {
         var recorder = m_gpu.ComputeRecorder;
 
-        recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, label: label);
+        recorder.BeginDebugGroup(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            label: label
+        );
         recorder.BindComputePipeline(
             commandBufferHandle: commandBuffer,
             deviceHandle: m_deviceHandle,
@@ -34,8 +38,15 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             deviceHandle: m_deviceHandle
         );
-        recorder.EndDebugGroup(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle);
-        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: timingMark, timingPool: timingPool);
+        recorder.EndDebugGroup(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle
+        );
+        WriteTimingMark(
+            commandBuffer: commandBuffer,
+            queryIndex: timingMark,
+            timingPool: timingPool
+        );
         recorder.MemoryBarrier(
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,

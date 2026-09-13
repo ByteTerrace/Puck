@@ -34,17 +34,24 @@ public sealed class FixedCosineTransformPlan {
         var fourierPlan = FixedFourierTransformPlan.Create(length: length);
         var forward = new FixedComplex[length];
         var inverse = new FixedComplex[length];
-        var phaseShift = (62 - BitOperations.Log2((uint)length));
+        var phaseShift = (62 - BitOperations.Log2(value: ((uint)length)));
 
         for (var k = 0; (k < length); ++k) {
             if (k <= (length >> 1)) {
-                var phase = unchecked((0UL - (ulong)k) << phaseShift);
+                var phase = unchecked(((0UL - ((ulong)k)) << phaseShift));
+
                 var (sin, cos) = FixedQ4816.SinCosTurns(fractionalTurns: phase);
-                forward[k] = new(Real: cos, Imaginary: sin);
-            }
-            else {
-                var reflected = forward[length - k];
-                forward[k] = new(Real: -reflected.Imaginary, Imaginary: -reflected.Real);
+                forward[k] = new(
+                    Imaginary: sin,
+                    Real: cos
+                );
+            } else {
+                var reflected = forward[(length - k)];
+
+                forward[k] = new(
+                    Real: -reflected.Imaginary,
+                    Imaginary: -reflected.Real
+                );
             }
             inverse[k] = forward[k].Conjugate();
         }

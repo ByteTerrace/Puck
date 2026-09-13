@@ -30,6 +30,75 @@ public static class CreationFrame {
         z: 0f
     );
 
+    private static CreationDocument Apply(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        return document with {
+            Effectors = ConvertList(
+            source: document.Effectors,
+            convert: FlipEffector
+        ),
+            Cameras = ConvertList(
+            source: document.Cameras,
+            convert: camera => camera with { Position = Flip(value: camera.Position) }
+        ),
+            Frames = ConvertList(
+            source: document.Frames,
+            convert: frame => frame with {
+                    Transforms = (ConvertList(
+                source: frame.Transforms,
+                convert: transform => transform with {
+                            Position = Flip(value: transform.Position),
+                            Rotation = Flip(value: transform.Rotation),
+                        }
+            ) ?? []),
+                }
+        ),
+            Shapes = ConvertList(
+            source: document.Shapes,
+            convert: shape => shape with {
+                    Position = Flip(value: shape.Position),
+                    Rotation = Flip(value: shape.Rotation),
+                    Joint = ((shape.Joint is { } joint)
+            ? Flip(value: joint)
+            : null),
+                    Domain = ConvertList(
+                source: shape.Domain,
+                convert: FlipDomainOp
+            ),
+                    Slides = ConvertList(
+                source: shape.Slides,
+                convert: FlipSlide
+            ),
+                    Swings = ConvertList(
+                source: shape.Swings,
+                convert: FlipSwing
+            ),
+                }
+        ),
+            // A run riding a shape is expressed in that shape's local frame, which the shape's own conversion carries.
+            TextRuns = ConvertList(
+            source: document.TextRuns,
+            convert: run => ((run.ShapeId is null)
+            ? run with {
+                        Position = Flip(value: run.Position),
+                        Rotation = Flip(value: run.Rotation),
+                    }
+            : run)
+        ),
+            // A volume riding a shape is expressed in that shape's local frame, which the shape's own conversion
+            // carries; a root-riding one converts like a shape.
+            Volumes = ConvertList(
+            source: document.Volumes,
+            convert: volume => ((volume.Parent is null)
+            ? volume with {
+                        Position = Flip(value: volume.Position),
+                        Rotation = Flip(value: volume.Rotation),
+                    }
+            : volume)
+        ),
+        };
+    }
     private static List<T>? ConvertList<T>(IReadOnlyList<T>? source, Func<T, T> convert) {
         if (source is not { Count: > 0 }) {
             return null;
@@ -49,84 +118,6 @@ public static class CreationFrame {
         z: -value.Z
     );
     private static Quaternion Flip(Quaternion value) => Quaternion.Normalize(value: (Yaw180 * value));
-    private static CreationDocument Apply(CreationDocument document) {
-        ArgumentNullException.ThrowIfNull(document);
-
-        return document with {
-            Effectors = ConvertList(
-                source: document.Effectors,
-                convert: FlipEffector
-            ),
-            Cameras = ConvertList(
-                source: document.Cameras,
-                convert: camera => camera with { Position = Flip(value: camera.Position) }
-            ),
-            Frames = ConvertList(
-                source: document.Frames,
-                convert: frame => frame with {
-                    Transforms = (ConvertList(
-                        source: frame.Transforms,
-                        convert: transform => transform with {
-                            Position = Flip(value: transform.Position),
-                            Rotation = Flip(value: transform.Rotation),
-                        }
-                    ) ?? []),
-                }
-            ),
-            Shapes = ConvertList(
-                source: document.Shapes,
-                convert: shape => shape with {
-                    Position = Flip(value: shape.Position),
-                    Rotation = Flip(value: shape.Rotation),
-                    Joint = ((shape.Joint is { } joint)
-                        ? Flip(value: joint)
-                        : null),
-                    Domain = ConvertList(
-                        source: shape.Domain,
-                        convert: FlipDomainOp
-                    ),
-                    Slides = ConvertList(
-                        source: shape.Slides,
-                        convert: FlipSlide
-                    ),
-                    Swings = ConvertList(
-                        source: shape.Swings,
-                        convert: FlipSwing
-                    ),
-                }
-            ),
-            // A run riding a shape is expressed in that shape's local frame, which the shape's own conversion carries.
-            TextRuns = ConvertList(
-                source: document.TextRuns,
-                convert: run => ((run.ShapeId is null)
-                    ? run with {
-                        Position = Flip(value: run.Position),
-                        Rotation = Flip(value: run.Rotation),
-                    }
-                    : run)
-            ),
-            // A volume riding a shape is expressed in that shape's local frame, which the shape's own conversion
-            // carries; a root-riding one converts like a shape.
-            Volumes = ConvertList(
-                source: document.Volumes,
-                convert: volume => ((volume.Parent is null)
-                    ? volume with {
-                        Position = Flip(value: volume.Position),
-                        Rotation = Flip(value: volume.Rotation),
-                    }
-                    : volume)
-            ),
-        };
-    }
-
-    /// <summary>Converts an author-frame document to the engine frame — every render, collision, and anchor
-    /// consumer's entry point. A creation camera's <see cref="CreationCameraDocument.Yaw"/>/<see cref="CreationCameraDocument.Pitch"/>
-    /// offsets and a chain's IK goal/pole are left untouched: nothing in the engine reads them today, and they never
-    /// leave the author-frame sculpt session that solves them.</summary>
-    /// <param name="document">The author-frame document.</param>
-    /// <returns>The equivalent engine-frame document.</returns>
-    public static CreationDocument ToEngine(CreationDocument document) => Apply(document: document);
-
     // Every ShapeDomainOp field other than a Symmetry normal is either a scalar (an offset, a spacing/limit/cell
     // magnitude, a material stride) or an axis/plane-selecting enum — both invariant under Yaw180, a diag(-1,1,-1)
     // proper rotation: it negates two axes without swapping which axis is which, so "the X axis"/"the XZ plane"
@@ -137,7 +128,20 @@ public static class CreationFrame {
         ? (symmetry with { Normal = Flip(value: symmetry.Normal) })
         : op
     );
-
+    // An effector's probe direction is a direction and its body offset is a position, so both take the same Flip; the
+    // reach, standoff, weight, plant window and target-kind name are frame-invariant scalars and tokens. A state
+    // target's referenced cell holds a WORLD point, so it never crosses this boundary.
+    private static CreationEffectorDocument FlipEffector(CreationEffectorDocument effector) => effector with {
+        Target = effector.Target with {
+            Direction = ((effector.Target.Direction is { } direction)
+        ? Flip(value: direction)
+        : null),
+            Offset = ((effector.Target.Offset is { } offset)
+        ? Flip(value: offset)
+        : null),
+        },
+    };
+    private static ShapeSlideDocument FlipSlide(ShapeSlideDocument slide) => slide with { Axis = Flip(value: slide.Axis) };
     // A swing's pivot is a position and its axis is a direction, so both take the same Flip. Yaw180 is a proper
     // rotation (det diag(-1, 1, -1) = +1), so a rotation axis carries no extra sign: conjugating axisAngle(a, θ) by
     // M yields axisAngle(M a, θ) with the angle — and hence the amplitude, phase, and waveform — unchanged.
@@ -145,25 +149,17 @@ public static class CreationFrame {
         Axis = Flip(value: swing.Axis),
         Pivot = Flip(value: swing.Pivot),
     };
-    private static ShapeSlideDocument FlipSlide(ShapeSlideDocument slide) => slide with { Axis = Flip(value: slide.Axis) };
-
-    // An effector's probe direction is a direction and its body offset is a position, so both take the same Flip; the
-    // reach, standoff, weight, plant window and target-kind name are frame-invariant scalars and tokens. A state
-    // target's referenced cell holds a WORLD point, so it never crosses this boundary.
-    private static CreationEffectorDocument FlipEffector(CreationEffectorDocument effector) => effector with {
-        Target = effector.Target with {
-            Direction = ((effector.Target.Direction is { } direction)
-                ? Flip(value: direction)
-                : null),
-            Offset = ((effector.Target.Offset is { } offset)
-                ? Flip(value: offset)
-                : null),
-        },
-    };
 
     /// <summary>Converts an engine-frame document back to the author frame — the echo/save boundary. The identical
     /// transform to <see cref="ToEngine"/>: a 180° yaw is its own inverse.</summary>
     /// <param name="document">The engine-frame document.</param>
     /// <returns>The equivalent author-frame document.</returns>
     public static CreationDocument ToAuthor(CreationDocument document) => Apply(document: document);
+    /// <summary>Converts an author-frame document to the engine frame — every render, collision, and anchor
+    /// consumer's entry point. A creation camera's <see cref="CreationCameraDocument.Yaw"/>/<see cref="CreationCameraDocument.Pitch"/>
+    /// offsets and a chain's IK goal/pole are left untouched: nothing in the engine reads them today, and they never
+    /// leave the author-frame sculpt session that solves them.</summary>
+    /// <param name="document">The author-frame document.</param>
+    /// <returns>The equivalent engine-frame document.</returns>
+    public static CreationDocument ToEngine(CreationDocument document) => Apply(document: document);
 }

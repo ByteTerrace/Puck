@@ -21,19 +21,33 @@ public sealed class GeneratorExtendedWorldLawTests {
             Draw: new Draw(
                 Generator: new StateGenerator(
                     Source: GeneratorSource.StreamDraw,
-                    Extended: new GeneratorExtended(K: 8, Script: [12345L])
+                    Extended: new GeneratorExtended(
+                        K: 8,
+                        Script: [12345L]
+                    )
                 ),
                 Timing: DrawTiming.Event
             )
         );
         var authored = Fixtures.BuildDocument().WithWorldState(rows: [row]);
 
-        Assert.True(condition: WorldDrawBootResolver.TryResolve(definition: authored, instanceIdentity: "boot", resolved: out var resolved, reason: out var reason), userMessage: reason);
+        Assert.True(
+            condition: WorldDrawBootResolver.TryResolve(
+                definition: authored,
+                instanceIdentity: "boot",
+                reason: out var reason,
+                resolved: out var resolved
+            ),
+            userMessage: reason
+        );
 
         return resolved;
     }
     private static (long Cursor, long Value) ReadSlot(WorldDefinition definition) {
-        var row = WorldDefinitionRows.FindStateRow(rows: definition.State, name: "extended-roll")!;
+        var row = WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: "extended-roll"
+        )!;
 
         return (row.DrawCursor, row.Cells![0].Value);
     }
@@ -49,12 +63,27 @@ public sealed class GeneratorExtendedWorldLawTests {
         var (rightCursor, rightValue) = ReadSlot(definition: right.Server.Definition);
 
         // The scripted first sample settled at boot, identically on both sides.
-        Assert.Equal(expected: 12345L, actual: leftValue);
-        Assert.Equal(expected: leftCursor, actual: rightCursor);
-        Assert.Equal(expected: leftValue, actual: rightValue);
         Assert.Equal(
-            expected: WorldRuntimeStateHash.HashAuthoritative(server: left.Server, tick: 0UL),
-            actual: WorldRuntimeStateHash.HashAuthoritative(server: right.Server, tick: 0UL)
+            actual: leftValue,
+            expected: 12345L
+        );
+        Assert.Equal(
+            actual: rightCursor,
+            expected: leftCursor
+        );
+        Assert.Equal(
+            actual: rightValue,
+            expected: leftValue
+        );
+        Assert.Equal(
+            expected: WorldRuntimeStateHash.HashAuthoritative(
+                server: left.Server,
+                tick: 0UL
+            ),
+            actual: WorldRuntimeStateHash.HashAuthoritative(
+                server: right.Server,
+                tick: 0UL
+            )
         );
     }
     [Fact]
@@ -63,31 +92,58 @@ public sealed class GeneratorExtendedWorldLawTests {
 
         var (bootCursor, bootValue) = ReadSlot(definition: fixture.Server.Definition);
 
-        Assert.Equal(expected: 12345L, actual: bootValue);
+        Assert.Equal(
+            actual: bootValue,
+            expected: 12345L
+        );
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(Principal: Actor, Row: "extended-roll"));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(
+            Principal: Actor,
+            Row: "extended-roll"
+        ));
         fixture.Step();
 
         var (redrawnCursor, redrawnValue) = ReadSlot(definition: fixture.Server.Definition);
 
-        Assert.Equal(expected: (bootCursor + 1L), actual: redrawnCursor);
+        Assert.Equal(
+            actual: redrawnCursor,
+            expected: (bootCursor + 1L)
+        );
 
-        fixture.Server.EnqueueUndo(count: 1, principal: WorldPrincipal.Console);
+        fixture.Server.EnqueueUndo(
+            count: 1,
+            principal: WorldPrincipal.Console
+        );
         fixture.Step();
 
         var (undoneCursor, undoneValue) = ReadSlot(definition: fixture.Server.Definition);
 
-        Assert.Equal(expected: bootCursor, actual: undoneCursor);
-        Assert.Equal(expected: bootValue, actual: undoneValue);
+        Assert.Equal(
+            actual: undoneCursor,
+            expected: bootCursor
+        );
+        Assert.Equal(
+            actual: undoneValue,
+            expected: bootValue
+        );
 
         // The next draw after the undo reproduces exactly what the undone draw produced — the cursor, not a
         // persisted extended-generator table, is the whole of a save/reload/undo proof.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(Principal: Actor, Row: "extended-roll"));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(
+            Principal: Actor,
+            Row: "extended-roll"
+        ));
         fixture.Step();
 
         var (replayedCursor, replayedValue) = ReadSlot(definition: fixture.Server.Definition);
 
-        Assert.Equal(expected: redrawnCursor, actual: replayedCursor);
-        Assert.Equal(expected: redrawnValue, actual: replayedValue);
+        Assert.Equal(
+            actual: replayedCursor,
+            expected: redrawnCursor
+        );
+        Assert.Equal(
+            actual: replayedValue,
+            expected: redrawnValue
+        );
     }
 }

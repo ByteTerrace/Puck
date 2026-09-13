@@ -8,19 +8,36 @@ namespace Puck.Cli;
 internal static class CliFiles {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
+    public static void CopyDirectory(string source, string destination) {
+        Directory.CreateDirectory(path: destination);
+        foreach (var file in Directory.EnumerateFiles(
+            path: source,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*"
+        )) {
+            var target = Path.Combine(
+                path1: destination,
+                path2: Path.GetRelativePath(
+                    path: file,
+                    relativeTo: source
+                )
+            );
+
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
+            File.Copy(
+                destFileName: target,
+                overwrite: true,
+                sourceFileName: file
+            );
+        }
+    }
     public static JsonNode ReadJson(string path) =>
         (JsonNode.Parse(json: File.ReadAllText(path: path)) ?? throw new InvalidDataException(message: $"Empty JSON: {path}"));
     public static void WriteJson(string path, JsonNode value) {
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: Path.GetFullPath(path: path))!);
-        File.WriteAllText(contents: (value.ToJsonString(options: Indented) + "\n"), path: path);
-    }
-    public static void CopyDirectory(string source, string destination) {
-        Directory.CreateDirectory(path: destination);
-        foreach (var file in Directory.EnumerateFiles(path: source, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
-            var target = Path.Combine(path1: destination, path2: Path.GetRelativePath(path: file, relativeTo: source));
-
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-            File.Copy(destFileName: target, overwrite: true, sourceFileName: file);
-        }
+        File.WriteAllText(
+            contents: (value.ToJsonString(options: Indented) + "\n"),
+            path: path
+        );
     }
 }

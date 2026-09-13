@@ -15,16 +15,15 @@ namespace Puck.Azure.Functions.Services;
 /// issuing key deserves the same treatment (or Key Vault-backed sealing) before this leaves
 /// prototype stage.
 /// </summary>
-public sealed class IssuingKeyOptions
-{
-    /// <summary>SPKI PEM of the cold root's public key. Its SHA-256 fingerprint is the domain every envelope in this trust tree names.</summary>
-    public string? RootPublicKeyPem { get; set; }
+public sealed class IssuingKeyOptions {
     /// <summary>The root-signed key binding for the issuing key: base64 of the CBOR wire bytes, as emitted by the ceremony.</summary>
     public string? IssuingBindingBase64 { get; set; }
-    /// <summary>PKCS8-encrypted PEM of the issuing key's private half, as emitted by the ceremony.</summary>
-    public string? IssuingPrivateKeyPem { get; set; }
     /// <summary>Passphrase for <see cref="IssuingPrivateKeyPem"/>. See the prototype-shortcut note on this class.</summary>
     public string? IssuingPrivateKeyPassword { get; set; }
+    /// <summary>PKCS8-encrypted PEM of the issuing key's private half, as emitted by the ceremony.</summary>
+    public string? IssuingPrivateKeyPem { get; set; }
+    /// <summary>SPKI PEM of the cold root's public key. Its SHA-256 fingerprint is the domain every envelope in this trust tree names.</summary>
+    public string? RootPublicKeyPem { get; set; }
     /// <summary>The validity window authored onto every subject key binding this service mints or re-attests.</summary>
     public TimeSpan SubjectBindingValidity { get; set; } = TimeSpan.FromDays(value: 30);
 }

@@ -18,7 +18,13 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
 
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
             directory = directory.Parent;
         }
 
@@ -26,13 +32,28 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
 
         return directory!.FullName;
     }
-
     private static Dictionary<string, byte[]> WorldsDirectoryDocuments() {
-        var root = Path.Combine(RepositoryRoot(), "src", "Puck.World", "Assets", "worlds");
+        var root = Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "Puck.World",
+            "Assets",
+            "worlds"
+        );
         var result = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal);
 
-        foreach (var file in Directory.EnumerateFiles(path: root, searchPattern: "*.json", searchOption: SearchOption.AllDirectories)) {
-            var relative = Path.GetRelativePath(relativeTo: root, path: file).Replace(oldChar: '\\', newChar: '/');
+        foreach (var file in Directory.EnumerateFiles(
+            path: root,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.json"
+        )) {
+            var relative = Path.GetRelativePath(
+                path: file,
+                relativeTo: root
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
 
             result[relative] = File.ReadAllBytes(path: file);
         }
@@ -62,15 +83,42 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
 
         BrowserParseResult parsed = null!;
 
-        Time(label: "Parse (tictactoe fragment under standard.basis.json)", action: () => parsed = BrowserParser.ParseFragment(fragmentUtf8: fragmentBytes, hostUtf8: basisBytes, alias: "a"));
-        Assert.True(condition: parsed.Ok, userMessage: string.Join(separator: "; ", values: parsed.Errors?.Select(selector: e => e.Message) ?? []));
+        Time(
+            label: "Parse (tictactoe fragment under standard.basis.json)",
+            action: () => parsed = BrowserParser.ParseFragment(
+                fragmentUtf8: fragmentBytes,
+                hostUtf8: basisBytes,
+                alias: "a"
+            )
+        );
+        Assert.True(
+            condition: parsed.Ok,
+            userMessage: string.Join(
+                separator: "; ",
+                values: (parsed.Errors?.Select(selector: e => e.Message) ?? [])
+            )
+        );
 
         // ComposeTree: the whole island — BrowserComposer's own tree merge (WorldDefinitionFileSource, Puck.World.Schema)
         // plus one TryParseAndValidate pass over the merged ~428 KB result.
         BrowserComposeResult composed = null!;
 
-        Time(label: "ComposeTree (full island: puck.world.json + basis + 16 imports)", action: () => composed = BrowserComposer.ComposeTree(rootName: "puck.world.json", documents: documents, editedName: null, editedUtf8: null));
-        Assert.True(condition: composed.Ok, userMessage: string.Join(separator: "; ", values: composed.Errors?.Select(selector: e => e.Message) ?? []));
+        Time(
+            label: "ComposeTree (full island: puck.world.json + basis + 16 imports)",
+            action: () => composed = BrowserComposer.ComposeTree(
+                rootName: "puck.world.json",
+                documents: documents,
+                editedName: null,
+                editedUtf8: null
+            )
+        );
+        Assert.True(
+            condition: composed.Ok,
+            userMessage: string.Join(
+                separator: "; ",
+                values: (composed.Errors?.Select(selector: e => e.Message) ?? [])
+            )
+        );
 
         var composedUtf8 = Encoding.UTF8.GetBytes(s: composed.Composed!);
 
@@ -80,11 +128,26 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
         List<string> reparseErrors = [];
         List<string> reparseDeferred = [];
 
-        Time(label: "  -> TryParseAndValidate alone, over the already-composed island", action: () => {
-            var ok = BrowserParser.TryParseAndValidate(utf8Json: composedUtf8, errors: reparseErrors, deferred: reparseDeferred, definition: out _, compilation: out _);
+        Time(
+            label: "  -> TryParseAndValidate alone, over the already-composed island",
+            action: () => {
+            var ok = BrowserParser.TryParseAndValidate(
+                utf8Json: composedUtf8,
+                errors: reparseErrors,
+                deferred: reparseDeferred,
+                definition: out _,
+                compilation: out _
+            );
 
-            Assert.True(condition: ok, userMessage: string.Join(separator: "; ", values: reparseErrors));
-        });
+            Assert.True(
+                condition: ok,
+                userMessage: string.Join(
+                    separator: "; ",
+                    values: reparseErrors
+                )
+            );
+        }
+        );
 
         // Compile: BrowserExports.Compile's own core — TryParseAndValidate over the composed island a THIRD time
         // (once inside ComposeTree, once standalone above, once here) plus this project's own BrowserSession
@@ -92,12 +155,30 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
         List<string> compileErrors = [];
         List<string> compileDeferred = [];
 
-        Time(label: "Compile (composed island: TryParseAndValidate + BrowserSession construction)", action: () => {
-            var ok = BrowserParser.TryParseAndValidate(utf8Json: composedUtf8, errors: compileErrors, deferred: compileDeferred, definition: out var definition, compilation: out var compilation);
+        Time(
+            label: "Compile (composed island: TryParseAndValidate + BrowserSession construction)",
+            action: () => {
+            var ok = BrowserParser.TryParseAndValidate(
+                utf8Json: composedUtf8,
+                errors: compileErrors,
+                deferred: compileDeferred,
+                definition: out var definition,
+                compilation: out var compilation
+            );
 
-            Assert.True(condition: ok, userMessage: string.Join(separator: "; ", values: compileErrors));
-            Assert.NotNull(@object: new BrowserSession(definition: definition!, compilation: compilation!));
-        });
+            Assert.True(
+                condition: ok,
+                userMessage: string.Join(
+                    separator: "; ",
+                    values: compileErrors
+                )
+            );
+            Assert.NotNull(@object: new BrowserSession(
+                definition: definition!,
+                compilation: compilation!
+            ));
+        }
+        );
 
         // A second pass over the identical bytes, in the same process — separates one-time JIT/static-init cost
         // (tier-0 compilation of WorldDefinitionValidator/WorldDocumentBasis/RuleEvaluator's own call graph, first
@@ -115,14 +196,41 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
             return stopwatch.Elapsed;
         }
 
-        TimeWarm(label: "Parse (tictactoe fragment under standard.basis.json)", action: () => parsed = BrowserParser.ParseFragment(fragmentUtf8: fragmentBytes, hostUtf8: basisBytes, alias: "a"));
-        TimeWarm(label: "ComposeTree (full island: puck.world.json + basis + 16 imports)", action: () => composed = BrowserComposer.ComposeTree(rootName: "puck.world.json", documents: documents, editedName: null, editedUtf8: null));
-        TimeWarm(label: "Compile (composed island: TryParseAndValidate + BrowserSession construction)", action: () => {
-            var ok = BrowserParser.TryParseAndValidate(utf8Json: composedUtf8, errors: [], deferred: [], definition: out var definition, compilation: out var compilation);
+        TimeWarm(
+            label: "Parse (tictactoe fragment under standard.basis.json)",
+            action: () => parsed = BrowserParser.ParseFragment(
+                fragmentUtf8: fragmentBytes,
+                hostUtf8: basisBytes,
+                alias: "a"
+            )
+        );
+        TimeWarm(
+            label: "ComposeTree (full island: puck.world.json + basis + 16 imports)",
+            action: () => composed = BrowserComposer.ComposeTree(
+                rootName: "puck.world.json",
+                documents: documents,
+                editedName: null,
+                editedUtf8: null
+            )
+        );
+        TimeWarm(
+            label: "Compile (composed island: TryParseAndValidate + BrowserSession construction)",
+            action: () => {
+            var ok = BrowserParser.TryParseAndValidate(
+                utf8Json: composedUtf8,
+                errors: [],
+                deferred: [],
+                definition: out var definition,
+                compilation: out var compilation
+            );
 
             Assert.True(condition: ok);
-            Assert.NotNull(@object: new BrowserSession(definition: definition!, compilation: compilation!));
-        });
+            Assert.NotNull(@object: new BrowserSession(
+                definition: definition!,
+                compilation: compilation!
+            ));
+        }
+        );
 
         output.WriteLine(message: "");
         output.WriteLine(message: "--- native engine timing (Stopwatch, JIT, no wasm interpreter) — first pass in this process ---");
@@ -145,7 +253,10 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
         // multiple seconds per call once its call graph is already tiered up, on any machine this repository builds
         // on — see this project's README's own "Performance" section for the wasm comparison.
         foreach (var (label, elapsed) in warmRows) {
-            Assert.True(condition: elapsed < TimeSpan.FromSeconds(value: 3), userMessage: $"{label} took {elapsed.TotalMilliseconds:F1} ms natively on a warm second pass — investigate before blaming the wasm build alone.");
+            Assert.True(
+                condition: (elapsed < TimeSpan.FromSeconds(value: 3)),
+                userMessage: $"{label} took {elapsed.TotalMilliseconds:F1} ms natively on a warm second pass — investigate before blaming the wasm build alone."
+            );
         }
     }
 }

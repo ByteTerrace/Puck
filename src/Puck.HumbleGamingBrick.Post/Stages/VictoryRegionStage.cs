@@ -28,14 +28,14 @@ internal sealed class VictoryRegionStage : IPostStage<PostContext> {
     private static readonly byte[] Region = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x4F, 0xFF, 0xBF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "victory-region";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

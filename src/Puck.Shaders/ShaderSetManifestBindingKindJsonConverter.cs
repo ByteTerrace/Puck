@@ -25,7 +25,11 @@ public sealed class ShaderSetManifestBindingKindJsonConverter : JsonConverter<Sh
             ShaderSetManifestBindingKind.SampledImage => "sampledImage",
             ShaderSetManifestBindingKind.StorageImage => "storageImage",
             ShaderSetManifestBindingKind.AccelerationStructure => "accelerationStructure",
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "The binding kind is not defined."),
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(value),
+            value,
+            "The binding kind is not defined."
+        ),
         });
     }
 }

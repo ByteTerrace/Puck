@@ -14,15 +14,60 @@ public static class WorldStateBindingContext {
     /// <summary>The prefix a <c>state.&lt;row&gt;</c> row reference carries.</summary>
     public const string RowReferencePrefix = "state.";
 
+    /// <summary>Validates an optional state-row reference used as a keyed text presentation table.</summary>
+    /// <param name="reference">The optional <c>state.&lt;row&gt;</c> reference.</param>
+    /// <param name="path">The author-facing document path naming the field.</param>
+    /// <param name="stateRows">The routed world's state rows by name.</param>
+    /// <param name="errors">The collection receiving refusal messages.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/>, <paramref name="stateRows"/>, or
+    /// <paramref name="errors"/> is <see langword="null"/>.</exception>
+    internal static void ValidatePresentationRowReference(string? reference, string path, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: stateRows);
+        ArgumentNullException.ThrowIfNull(argument: errors);
+
+        if (reference is null) {
+            return;
+        }
+        if (!TryParseRowReference(
+            reference: reference,
+            rowName: out var rowName
+        )) {
+            errors.Add(item: $"{path} '{reference}' must be spelled state.<row> with a valid row name");
+
+            return;
+        }
+        if (!stateRows.TryGetValue(
+            key: rowName,
+            value: out var row
+        )) {
+            errors.Add(item: $"{path} '{reference}' names no declared state row");
+
+            return;
+        }
+        if (row.Kind != CellKind.Text) {
+            errors.Add(item: $"{path} '{reference}' names a {row.Kind} row; presentation rows must be text");
+        }
+        if (!row.IsKeyed) {
+            errors.Add(item: $"{path} '{reference}' names a scalar row; presentation rows must be keyed by action or sector id");
+        }
+    }
+
     // Whether any cell of the row reads differently from one tick to the next with no write in between — an advance
     // or a cycle on the row or on any cell. A control context must change only through explicit state writes.
     private static bool Advances(WorldStateRow row) {
-        if ((row.Advance is not null) || (row.Cycle is not null)) {
+        if (
+            (row.Advance is not null) ||
+            (row.Cycle is not null)
+        ) {
             return true;
         }
 
         foreach (var cell in (row.Cells ?? [])) {
-            if ((cell?.Advance is not null) || (cell?.Cycle is not null)) {
+            if (
+                (cell?.Advance is not null) ||
+                (cell?.Cycle is not null)
+            ) {
                 return true;
             }
         }
@@ -50,38 +95,6 @@ public static class WorldStateBindingContext {
             _ => raw.ToString(provider: CultureInfo.InvariantCulture),
         };
     }
-    /// <summary>Parses a <c>state.&lt;row&gt;</c> row reference — a document field naming a whole state row whose
-    /// CELL KEY comes from the runtime rather than the reference (a binding bar's icon row or a wheel's label/icon
-    /// row). The dotted spelling is
-    /// the same one an authored value reference (<c>state.colors.paper</c>) and a HUD token (<c>state.&lt;row&gt;</c>)
-    /// use; it stops at the row because the key is not knowable until draw time.</summary>
-    /// <param name="reference">The reference text.</param>
-    /// <param name="rowName">The row name on success.</param>
-    /// <returns><see langword="true"/> when the reference is well-formed.</returns>
-    public static bool TryParseRowReference(string? reference, [NotNullWhen(true)] out string? rowName) {
-        rowName = null;
-
-        if (
-            (reference is not { Length: > 0 }) ||
-            !reference.StartsWith(comparisonType: StringComparison.Ordinal, value: RowReferencePrefix)
-        ) {
-            return false;
-        }
-
-        var candidate = reference[RowReferencePrefix.Length..];
-
-        if (!CellName.TryParse(
-            candidate: candidate,
-            name: out var name,
-            reason: out _
-        )) {
-            return false;
-        }
-
-        rowName = name.ToString();
-
-        return true;
-    }
     /// <summary>Parses a <c>state:&lt;row&gt;</c> family name.</summary>
     /// <param name="family">The binding-context family name.</param>
     /// <param name="rowName">The validated state-row name on success.</param>
@@ -101,6 +114,41 @@ public static class WorldStateBindingContext {
             reason: out _
         )
         );
+    }
+    /// <summary>Parses a <c>state.&lt;row&gt;</c> row reference — a document field naming a whole state row whose
+    /// CELL KEY comes from the runtime rather than the reference (a binding bar's icon row or a wheel's label/icon
+    /// row). The dotted spelling is
+    /// the same one an authored value reference (<c>state.colors.paper</c>) and a HUD token (<c>state.&lt;row&gt;</c>)
+    /// use; it stops at the row because the key is not knowable until draw time.</summary>
+    /// <param name="reference">The reference text.</param>
+    /// <param name="rowName">The row name on success.</param>
+    /// <returns><see langword="true"/> when the reference is well-formed.</returns>
+    public static bool TryParseRowReference(string? reference, [NotNullWhen(true)] out string? rowName) {
+        rowName = null;
+
+        if (
+            (reference is not { Length: > 0 }) ||
+            !reference.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: RowReferencePrefix
+        )
+        ) {
+            return false;
+        }
+
+        var candidate = reference[RowReferencePrefix.Length..];
+
+        if (!CellName.TryParse(
+            candidate: candidate,
+            name: out var name,
+            reason: out _
+        )) {
+            return false;
+        }
+
+        rowName = name.ToString();
+
+        return true;
     }
     /// <summary>Reads the state published for a seat from a delivered world definition.</summary>
     /// <param name="definition">The routed world definition.</param>
@@ -239,7 +287,10 @@ public static class WorldStateBindingContext {
                 stateRows: stateRows
             );
 
-            if ((wheel.LabelRow is null) && (wheel.IconRow is null)) {
+            if (
+                (wheel.LabelRow is null) &&
+                (wheel.IconRow is null)
+            ) {
                 continue;
             }
 
@@ -262,45 +313,6 @@ public static class WorldStateBindingContext {
                     }
                 }
             }
-        }
-    }
-
-    /// <summary>Validates an optional state-row reference used as a keyed text presentation table.</summary>
-    /// <param name="reference">The optional <c>state.&lt;row&gt;</c> reference.</param>
-    /// <param name="path">The author-facing document path naming the field.</param>
-    /// <param name="stateRows">The routed world's state rows by name.</param>
-    /// <param name="errors">The collection receiving refusal messages.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/>, <paramref name="stateRows"/>, or
-    /// <paramref name="errors"/> is <see langword="null"/>.</exception>
-    internal static void ValidatePresentationRowReference(string? reference, string path, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
-        ArgumentNullException.ThrowIfNull(argument: path);
-        ArgumentNullException.ThrowIfNull(argument: stateRows);
-        ArgumentNullException.ThrowIfNull(argument: errors);
-
-        if (reference is null) {
-            return;
-        }
-        if (!TryParseRowReference(
-            reference: reference,
-            rowName: out var rowName
-        )) {
-            errors.Add(item: $"{path} '{reference}' must be spelled state.<row> with a valid row name");
-
-            return;
-        }
-        if (!stateRows.TryGetValue(
-            key: rowName,
-            value: out var row
-        )) {
-            errors.Add(item: $"{path} '{reference}' names no declared state row");
-
-            return;
-        }
-        if (row.Kind != CellKind.Text) {
-            errors.Add(item: $"{path} '{reference}' names a {row.Kind} row; presentation rows must be text");
-        }
-        if (!row.IsKeyed) {
-            errors.Add(item: $"{path} '{reference}' names a scalar row; presentation rows must be keyed by action or sector id");
         }
     }
 }

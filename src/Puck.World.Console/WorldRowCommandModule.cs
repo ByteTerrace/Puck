@@ -42,19 +42,19 @@ namespace Puck.World;
 public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
 
+    // The section table — the one thing that legitimately stays as data (CLAUDE.md: a table over these rows is
+    // vocabulary, not logic to duplicate per section). Built once per type: no entry closes over a particular
+    // WorldServer — the four sections whose mutation reads live document state (inputHold/views.seatRig/
+    // views.seatControl/playerDefaults.seatLook) take it as this delegate's own leading parameter instead, resolved
+    // fresh at each invocation through IWorldConsoleAuthority.
+    private static readonly IReadOnlyDictionary<string, RowSection> Sections = BuildSections();
+
     // world.row.step read-your-writes guard (see WorldRowStepWindowGuard). Console-side control state, single-threaded
     // on the command pump; off every hashed simulation path. Shared with every other module that reads a row off the
     // live document and resubmits it whole (WorldSculptCommandModule) when the composition root hands both the same
     // instance — a second read-modify-whole-row write to one row inside one tick window is the same stale read
     // whichever verb issues it.
     private readonly WorldRowStepWindowGuard m_stepGuard = (stepGuard ?? new());
-
-    // The section table — the one thing that legitimately stays as data (CLAUDE.md: a table over these rows is
-    // vocabulary, not logic to duplicate per section). Built once per type: no entry closes over a particular
-    // WorldServer — the four sections whose mutation reads live document state (inputHold/views.seatRig/
-    // views.seatControl/playerDefaults.seatLook) take it as this delegate's own leading parameter instead, resolved
-    // fresh at each invocation through IWorldConsoleAuthority.
-    private static readonly IReadOnlyDictionary<string, RowSection> s_sections = BuildSections();
 
     // The one r1/cycle assignment-sequence builder both kits and looks reduce to — they differ only in which
     // WorldMutation kind wraps the built WorldRowAssignment and r1's own additive offset (the two sequences must not
@@ -173,9 +173,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         RowType: typeof(WorldMachine),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldMachine,
-            toMutation: static (principal, machine) => new WorldMutation.UpsertMachine(principal, machine)
+            toMutation: static (principal, machine) => new WorldMutation.UpsertMachine(
+                Machine: machine,
+                Principal: principal
+            )
         ),
-        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveMachine(principal, name)),
+        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveMachine(
+            Name: name,
+            Principal: principal
+        )),
         Read: ReadRowByKey(
             info: WorldJsonContext.Default.WorldMachine,
             keyOf: static row => row.Name,
@@ -702,6 +708,101 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
     };
+    // The list field's own name — the last dotted component of listPath, bracket stripped — the same discriminator
+    // TryResolveArrayElement's refusal quotes ("no element of 'shapes' has …").
+    private static string ContainerName(string listPath) {
+        var dot = listPath.LastIndexOf(value: '.');
+        var last = ((dot < 0)
+            ? listPath
+            : listPath[(dot + 1)..]
+        );
+        var bracket = last.IndexOf(value: '[');
+
+        return ((bracket < 0)
+            ? last
+            : last[..bracket]
+        );
+    }
+    private static string DescribeConvergence(float? value) => ((value is { } finite)
+        ? finite.ToString(
+            format: "0.###",
+            provider: CultureInfo.InvariantCulture
+        )
+        : "instant"
+    );
+    private static string DescribeDiscriminator(JsonNode? element) {
+        if (element is not JsonObject obj) {
+            return "-";
+        }
+
+        if (
+            obj.TryGetPropertyValue(
+            jsonNode: out var name,
+            propertyName: "name"
+        ) &&
+            (name is not null)
+        ) {
+            return name.ToJsonString();
+        }
+
+        if (
+            obj.TryGetPropertyValue(
+            jsonNode: out var id,
+            propertyName: "id"
+        ) &&
+            (id is not null)
+        ) {
+            return id.ToJsonString();
+        }
+
+        return "-";
+    }
+    // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface.
+    private static string DescribeHolds(WorldMotion motion) {
+        if (motion.Holds is not { Count: > 0 } holds) {
+            return "holds=none";
+        }
+
+        var builder = new StringBuilder(value: "holds=(");
+
+        for (var index = 0; (index < holds.Count); index++) {
+            var hold = holds[index];
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((index == 0)
+                ? ""
+                : ",")}{hold.Name}:{hold.Hold}"
+            );
+
+            if (hold.Gravity is { } gravity) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###})"
+                );
+            }
+            if (hold.Envelope is { } envelope) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[envelope rise={DescribeOptional(value: envelope.RiseSpeed)} sink={envelope.SinkSpeed:0.###}]"
+                );
+            }
+            if (hold.Medium is { } medium) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[medium idleDrift={medium.IdleDrift:0.###} equilibriumOffset={medium.EquilibriumOffset:0.###} settleRate={medium.SettleRate:0.###}]"
+                );
+            }
+            if (hold.Thrust > 0f) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[thrust={hold.Thrust:0.###}]"
+                );
+            }
+        }
+
+        return builder.Append(value: ')').ToString();
+    }
     // world.kits: name, program, and the motion row's key scalars — the census this section never had.
     private static string DescribeKits(WorldServer server) {
         var kits = server.Definition.Kits;
@@ -725,18 +826,51 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return builder.Append(value: ']').ToString();
     }
-    // A kit's tether facet: the aim/rope tuning and its named channels — "tether=none" for a kit that carries no
-    // rope at all (body.attach/body.detach/body.reel refuse it by name).
-    private static string DescribeTether(WorldTether? tether) {
-        if (tether is not { } facet) {
-            return "tether=none";
+    // A list field's own read-back: one summary line per element (its own compact JSON — the same text
+    // world.row.set's literal form would accept back), headed by a discriminator (name, else id, else "-") so a
+    // long list's elements can be told apart without reading every field.
+    private static string DescribeListing(string path, string? key, string? fieldPath, JsonArray array) {
+        var keySuffix = ((key is { Length: > 0 })
+            ? $" {key}"
+            : string.Empty
+        );
+        var fieldSuffix = ((fieldPath is { Length: > 0 })
+            ? $".{fieldPath}"
+            : string.Empty
+        );
+        var builder = new StringBuilder(value: $"[world.row: {path}{keySuffix}{fieldSuffix}: {array.Count} element(s)]");
+
+        for (var index = 0; (index < array.Count); index++) {
+            var element = array[index];
+
+            _ = builder.Append(value: Environment.NewLine);
+            _ = builder.Append(value: $"[world.row {index}: {DescribeDiscriminator(element: element)} {(element?.ToJsonString() ?? "null")}]");
         }
 
-        return string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"tether(maxAnchorDistance={facet.MaxAnchorDistance:0.#####} aimHalfAngleDegrees={facet.AimHalfAngleDegrees:0.#####} lengthRate={facet.LengthRate:0.#####} minLength={facet.MinLength:0.#####} releaseVelocityScale={facet.ReleaseVelocityScale:0.#####} attach={(facet.AttachChannel ?? "none")} detach={(facet.DetachChannel ?? "none")} reel={(facet.ReelChannel ?? "none")} modeState={(facet.ModeState ?? "none")})"
-        );
+        return builder.ToString();
     }
+    // maxPitch is unread while pitchRate is zero (a planar drive frame), so the census omits it there rather than
+    // echoing a clamp that governs nothing.
+    private static string DescribeMaxPitch(WorldTurn turn) => ((turn.PitchRate > 0f)
+        ? string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $" pitchMax={turn.MaxPitch:0.###}"
+        )
+        : string.Empty
+    );
+    private static string DescribeMotion(WorldMotion motion) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###}{DescribeMaxPitch(turn: motion.Turn)} upTurn=({motion.UpTurn.Field:0.###}/{motion.UpTurn.Contact:0.###}) obstruction=({motion.Obstruction.Displacement:0.###}/{motion.Obstruction.IdleThreshold:0.###}/{motion.Obstruction.GraceSeconds:0.###}) groundStick={motion.GroundStick:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
+    );
+    // The generic "omitted" read-back for an optional authored scalar — none is a document fact worth showing
+    // plainly, distinct from DescribeConvergence's own "instant" (an absent RATE, never an absent scalar).
+    private static string DescribeOptional(float? value) => ((value is { } finite)
+        ? finite.ToString(
+            format: "0.###",
+            provider: CultureInfo.InvariantCulture
+        )
+        : "none"
+    );
     // A kit's shaping table: each row's mechanism in order — a named dynamics follower, the anisotropic decomposition (with
     // its own key scalars), or the whole-vector response law — echoed alongside the motion row so world.kits answers
     // "how does this kit feel" without a separate lookup.
@@ -757,8 +891,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             }
 
             if (row?.Dynamics is { Length: > 0 } name) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"dynamics:{name}");
-            } else if ((row?.Across is { } across) && (row.Along is { } along)) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"dynamics:{name}"
+                );
+            } else if (
+                (row?.Across is { } across) &&
+                (row.Along is { } along)
+            ) {
                 _ = builder.Append(
                     provider: CultureInfo.InvariantCulture,
                     handler: $"drive(engage={DescribeConvergence(value: along.Engage)} reversalRate={DescribeConvergence(value: along.ReversalRate)} release={DescribeConvergence(value: along.Release)} backwardSpeed={DescribeOptional(value: along.BackwardSpeed)} lateral={DescribeConvergence(value: across.Lateral)})"
@@ -775,265 +915,31 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return builder.ToString();
     }
-    private static string DescribeConvergence(float? value) => (value is { } finite
-        ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
-        : "instant"
-    );
-    // The generic "omitted" read-back for an optional authored scalar — none is a document fact worth showing
-    // plainly, distinct from DescribeConvergence's own "instant" (an absent RATE, never an absent scalar).
-    private static string DescribeOptional(float? value) => (value is { } finite
-        ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
-        : "none"
-    );
-    // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface.
-    private static string DescribeHolds(WorldMotion motion) {
-        if (motion.Holds is not { Count: > 0 } holds) {
-            return "holds=none";
+    // A kit's tether facet: the aim/rope tuning and its named channels — "tether=none" for a kit that carries no
+    // rope at all (body.attach/body.detach/body.reel refuse it by name).
+    private static string DescribeTether(WorldTether? tether) {
+        if (tether is not { } facet) {
+            return "tether=none";
         }
 
-        var builder = new StringBuilder(value: "holds=(");
-
-        for (var index = 0; (index < holds.Count); index++) {
-            var hold = holds[index];
-
-            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{((index == 0) ? "" : ",")}{hold.Name}:{hold.Hold}");
-
-            if (hold.Gravity is { } gravity) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###})");
-            }
-            if (hold.Envelope is { } envelope) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[envelope rise={DescribeOptional(value: envelope.RiseSpeed)} sink={envelope.SinkSpeed:0.###}]");
-            }
-            if (hold.Medium is { } medium) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[medium idleDrift={medium.IdleDrift:0.###} equilibriumOffset={medium.EquilibriumOffset:0.###} settleRate={medium.SettleRate:0.###}]");
-            }
-            if (hold.Thrust > 0f) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[thrust={hold.Thrust:0.###}]");
-            }
-        }
-
-        return builder.Append(value: ')').ToString();
-    }
-    private static string DescribeMotion(WorldMotion motion) => string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###}{DescribeMaxPitch(turn: motion.Turn)} upTurn=({motion.UpTurn.Field:0.###}/{motion.UpTurn.Contact:0.###}) obstruction=({motion.Obstruction.Displacement:0.###}/{motion.Obstruction.IdleThreshold:0.###}/{motion.Obstruction.GraceSeconds:0.###}) groundStick={motion.GroundStick:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
-    );
-    // maxPitch is unread while pitchRate is zero (a planar drive frame), so the census omits it there rather than
-    // echoing a clamp that governs nothing.
-    private static string DescribeMaxPitch(WorldTurn turn) => (turn.PitchRate > 0f
-        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $" pitchMax={turn.MaxPitch:0.###}")
-        : string.Empty
-    );
-    private CommandResult HandleAssign(CommandContext context, WireArgs args) {
-        if (args.Count < 2) {
-            return CommandResult.Usage(
-                form: "kits|looks r1 | cycle <name> [<name>…]",
-                verb: "world.assign"
-            );
-        }
-
-        var principal = context.ActingPrincipal();
-        var target = args[0].ToString();
-
-        return target switch {
-            "kits" => BuildAssignment(
-            args: args,
-            r1Offset: 1,
-            toMutation: static (principal, assignment) => new WorldMutation.SetKitAssignment(
-                Assignment: assignment,
-                Principal: principal
-            ),
-            principal: principal,
-            verb: "world.assign kits"
-        ),
-            "looks" => BuildAssignment(
-            args: args,
-            r1Offset: 129,
-            toMutation: static (principal, assignment) => new WorldMutation.SetLookAssignment(
-                Assignment: assignment,
-                Principal: principal
-            ),
-            principal: principal,
-            verb: "world.assign looks"
-        ),
-            _ => CommandResult.Error(output: $"[world.assign: unknown target '{target}' — kits|looks]"),
-        };
-    }
-    private CommandResult HandleRemove(WorldServer server, CommandContext context, WireArgs args) {
-        // The list-element form (world.row.remove <path> [<key>] <listPath> <selector>) is 3 tokens for a keyless
-        // section, 4 for a keyed one — neither collides with the whole-row form's fixed 2, so the dispatch is by
-        // count alone, no JSON-shape heuristic needed (every token here is a plain address, never a payload).
-        if (args.Count is (3 or 4)) {
-            return HandleListRemove(
-                args: args,
-                context: context,
-                server: server
-            );
-        }
-
-        if (args.Count != 2) {
-            return CommandResult.Usage(
-                form: "<path> <key> | <path> [<key>] <listPath> <selector>",
-                verb: "world.row.remove"
-            );
-        }
-
-        var path = args[0].ToString();
-        var key = args[1].ToString();
-        var principal = context.ActingPrincipal();
-
-        if (string.Equals(
-            a: path,
-            b: PropertiesNamesPath,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            return link.Submit(
-                mutation: new WorldMutation.SetProperty(
-                    Name: key,
-                    Principal: principal,
-                    Remove: true
-                ),
-                echoes: echoes,
-                verb: "world.row.remove"
-            );
-        }
-
-        if (!s_sections.TryGetValue(
-            key: path,
-            value: out var section
-        )) {
-            return UnknownPath(
-                path: path,
-                verb: "world.row.remove"
-            );
-        }
-
-        if (section.Remove is not { } remove) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: keyless (set only) — no remove]");
-        }
-
-        var outcome = remove(
-            server,
-            principal,
-            key
-        );
-
-        return ((outcome.Error is { } error)
-            ? CommandResult.Error(output: $"[world.row.remove: {path}: {error}]")
-            : link.Submit(
-                mutation: outcome.Mutation!,
-                echoes: echoes,
-                verb: "world.row.remove"
-            )
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"tether(maxAnchorDistance={facet.MaxAnchorDistance:0.#####} aimHalfAngleDegrees={facet.AimHalfAngleDegrees:0.#####} lengthRate={facet.LengthRate:0.#####} minLength={facet.MinLength:0.#####} releaseVelocityScale={facet.ReleaseVelocityScale:0.#####} attach={(facet.AttachChannel ?? "none")} detach={(facet.DetachChannel ?? "none")} reel={(facet.ReelChannel ?? "none")} modeState={(facet.ModeState ?? "none")})"
         );
     }
-    // world.row.remove's list-element form: locates the named list field (a plain dotted/bracketed path, resolving
-    // through any intermediate selector — "document.shapes[name=forearmL].swings"), removes the ONE element
-    // <selector> names, and submits the whole modified row through the SAME section Upsert the whole-row form uses.
-    private CommandResult HandleListRemove(WorldServer server, CommandContext context, WireArgs args) {
-        var path = args[0].ToString();
-
-        if (!s_sections.TryGetValue(
-            key: path,
-            value: out var section
-        )) {
-            return UnknownPath(
-                path: path,
-                verb: "world.row.remove"
-            );
+    // Strips section.DropOnEdit's named top-level properties from a row before it is resubmitted whole — every
+    // field/list edit's shared last step ahead of ToJsonString().
+    private static void DropEditArtifacts(JsonNode row, RowSection section) {
+        if (
+            (section.DropOnEdit is not { Count: > 0 } drop) ||
+            (row is not JsonObject obj)
+        ) {
+            return;
         }
 
-        var keyed = (section.Remove is not null);
-        var expected = (keyed ? 4 : 3);
-
-        if (args.Count != expected) {
-            return CommandResult.Usage(
-                form: (keyed ? $"{path} <key> <listPath> <selector>" : $"{path} <listPath> <selector>"),
-                verb: "world.row.remove"
-            );
+        foreach (var property in drop) {
+            _ = obj.Remove(propertyName: property);
         }
-
-        var key = (keyed ? args[1].ToString() : string.Empty);
-        var listPath = (keyed ? args[2].ToString() : args[1].ToString());
-        var selectorText = args[(keyed ? 3 : 2)].ToString();
-        var rowIdentity = RowIdentity(
-            key: key,
-            keyed: keyed,
-            path: path
-        );
-
-        if (m_stepGuard.IsClaimed(
-            rowIdentity: rowIdentity,
-            window: server.NextInputTick
-        )) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: row '{rowIdentity}' already has an edit buffered this tick — fence with world.wait]");
-        }
-
-        var read = section.Read(
-            server,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: {readError}]");
-        }
-
-        if (!TryResolveListContainer(
-            array: out var array,
-            error: out var containerError,
-            listPath: listPath,
-            root: read.Row!,
-            verb: "world.row.remove"
-        )) {
-            return containerError;
-        }
-
-        var containerName = ContainerName(listPath: listPath);
-
-        if (!WorldRowFieldPath.TryParseSelector(
-            containerName: containerName,
-            error: out var selectorParseError,
-            segment: out var selector,
-            text: selectorText
-        )) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: {selectorText}: {selectorParseError}]");
-        }
-
-        if (!WorldRowFieldPath.TryResolveArrayElement(
-            array: array!,
-            error: out var selectorError,
-            index: out var index,
-            path: listPath,
-            segment: selector
-        )) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: {selectorError}]");
-        }
-
-        array!.RemoveAt(index: index);
-
-        DropEditArtifacts(
-            row: read.Row!,
-            section: section
-        );
-
-        var principal = context.ActingPrincipal();
-        var outcome = section.Upsert(
-            server,
-            principal,
-            read.Row!.ToJsonString()
-        );
-
-        if (outcome.Error is { } upsertError) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: {listPath}: {upsertError}]");
-        }
-
-        m_stepGuard.Claim(rowIdentity: rowIdentity);
-
-        return link.Submit(
-            mutation: outcome.Mutation!,
-            echoes: echoes,
-            verb: "world.row.remove"
-        );
     }
     private CommandResult HandleAdd(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count < 3) {
@@ -1045,7 +951,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         var path = args[0].ToString();
 
-        if (!s_sections.TryGetValue(
+        if (!Sections.TryGetValue(
             key: path,
             value: out var section
         )) {
@@ -1056,21 +962,38 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         }
 
         var keyed = (section.Remove is not null);
-        var addressTokens = (keyed ? 3 : 2);
+        var addressTokens = (keyed
+            ? 3
+            : 2
+        );
 
         if (args.Count <= addressTokens) {
             return CommandResult.Usage(
-                form: (keyed ? $"{path} <key> <listPath> <json> [after=<selector>]" : $"{path} <listPath> <json> [after=<selector>]"),
+                form: (keyed
+                ? $"{path} <key> <listPath> <json> [after=<selector>]"
+                : $"{path} <listPath> <json> [after=<selector>]"),
                 verb: "world.row.add"
             );
         }
 
-        var key = (keyed ? args[1].ToString() : string.Empty);
-        var listPath = (keyed ? args[2].ToString() : args[1].ToString());
+        var key = (keyed
+            ? args[1].ToString()
+            : string.Empty
+        );
+        var listPath = (keyed
+            ? args[2].ToString()
+            : args[1].ToString()
+        );
         var leadingTokens = (addressTokens + 1);
         var lastIndex = (args.Count - 1);
-        var hasAfter = ((lastIndex >= addressTokens) && args[lastIndex].StartsWith(value: "after=", comparisonType: StringComparison.OrdinalIgnoreCase));
-        var afterText = (hasAfter ? args[lastIndex][6..].ToString() : null);
+        var hasAfter = ((lastIndex >= addressTokens) && args[lastIndex].StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "after="
+        ));
+        var afterText = (hasAfter
+            ? args[lastIndex][6..].ToString()
+            : null
+        );
         // RawBetween carries no preserveQuotes escape hatch (unlike RawAfter): an after= clause's element JSON that is
         // itself a single bare quoted string loses its quotes there. Every list this door reaches holds record
         // elements (an object literal), never a bare string, so this is inert in practice.
@@ -1193,53 +1116,491 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             verb: "world.row.add"
         );
     }
-    // Resolves listPath's OWN array node off root — every segment (including intermediate selectors, e.g. the
-    // "shapes[name=forearmL]" in "document.shapes[name=forearmL].swings") is walked, landing ON the list field
-    // itself rather than one level short of it, which is what world.row.add/.remove operate over.
-    private static bool TryResolveListContainer(JsonNode root, string listPath, string verb, out JsonArray? array, out CommandResult error) {
-        array = null;
+    private CommandResult HandleAssign(CommandContext context, WireArgs args) {
+        if (args.Count < 2) {
+            return CommandResult.Usage(
+                form: "kits|looks r1 | cycle <name> [<name>…]",
+                verb: "world.assign"
+            );
+        }
+
+        var principal = context.ActingPrincipal();
+        var target = args[0].ToString();
+
+        return target switch {
+            "kits" => BuildAssignment(
+            args: args,
+            r1Offset: 1,
+            toMutation: static (principal, assignment) => new WorldMutation.SetKitAssignment(
+                Assignment: assignment,
+                Principal: principal
+            ),
+            principal: principal,
+            verb: "world.assign kits"
+        ),
+            "looks" => BuildAssignment(
+            args: args,
+            r1Offset: 129,
+            toMutation: static (principal, assignment) => new WorldMutation.SetLookAssignment(
+                Assignment: assignment,
+                Principal: principal
+            ),
+            principal: principal,
+            verb: "world.assign looks"
+        ),
+            _ => CommandResult.Error(output: $"[world.assign: unknown target '{target}' — kits|looks]"),
+        };
+    }
+    // world.row.remove's list-element form: locates the named list field (a plain dotted/bracketed path, resolving
+    // through any intermediate selector — "document.shapes[name=forearmL].swings"), removes the ONE element
+    // <selector> names, and submits the whole modified row through the SAME section Upsert the whole-row form uses.
+    private CommandResult HandleListRemove(WorldServer server, CommandContext context, WireArgs args) {
+        var path = args[0].ToString();
+
+        if (!Sections.TryGetValue(
+            key: path,
+            value: out var section
+        )) {
+            return UnknownPath(
+                path: path,
+                verb: "world.row.remove"
+            );
+        }
+
+        var keyed = (section.Remove is not null);
+        var expected = (keyed
+            ? 4
+            : 3
+        );
+
+        if (args.Count != expected) {
+            return CommandResult.Usage(
+                form: (keyed
+                ? $"{path} <key> <listPath> <selector>"
+                : $"{path} <listPath> <selector>"),
+                verb: "world.row.remove"
+            );
+        }
+
+        var key = (keyed
+            ? args[1].ToString()
+            : string.Empty
+        );
+        var listPath = (keyed
+            ? args[2].ToString()
+            : args[1].ToString()
+        );
+        var selectorText = args[(keyed
+            ? 3
+            : 2)].ToString();
+        var rowIdentity = RowIdentity(
+            key: key,
+            keyed: keyed,
+            path: path
+        );
+
+        if (m_stepGuard.IsClaimed(
+            rowIdentity: rowIdentity,
+            window: server.NextInputTick
+        )) {
+            return CommandResult.Error(output: $"[world.row.remove: {path}: row '{rowIdentity}' already has an edit buffered this tick — fence with world.wait]");
+        }
+
+        var read = section.Read(
+            server,
+            key
+        );
+
+        if (read.Error is { } readError) {
+            return CommandResult.Error(output: $"[world.row.remove: {path}: {readError}]");
+        }
+
+        if (!TryResolveListContainer(
+            array: out var array,
+            error: out var containerError,
+            listPath: listPath,
+            root: read.Row!,
+            verb: "world.row.remove"
+        )) {
+            return containerError;
+        }
+
+        var containerName = ContainerName(listPath: listPath);
+
+        if (!WorldRowFieldPath.TryParseSelector(
+            containerName: containerName,
+            error: out var selectorParseError,
+            segment: out var selector,
+            text: selectorText
+        )) {
+            return CommandResult.Error(output: $"[world.row.remove: {path}: {selectorText}: {selectorParseError}]");
+        }
+
+        if (!WorldRowFieldPath.TryResolveArrayElement(
+            array: array!,
+            error: out var selectorError,
+            index: out var index,
+            path: listPath,
+            segment: selector
+        )) {
+            return CommandResult.Error(output: $"[world.row.remove: {path}: {selectorError}]");
+        }
+
+        array!.RemoveAt(index: index);
+
+        DropEditArtifacts(
+            row: read.Row!,
+            section: section
+        );
+
+        var principal = context.ActingPrincipal();
+        var outcome = section.Upsert(
+            server,
+            principal,
+            read.Row!.ToJsonString()
+        );
+
+        if (outcome.Error is { } upsertError) {
+            return CommandResult.Error(output: $"[world.row.remove: {path}: {listPath}: {upsertError}]");
+        }
+
+        m_stepGuard.Claim(rowIdentity: rowIdentity);
+
+        return link.Submit(
+            mutation: outcome.Mutation!,
+            echoes: echoes,
+            verb: "world.row.remove"
+        );
+    }
+    // world.row.set's literal-field form: reads the addressed row, replaces ONE field in place (creating an absent
+    // optional member; an index/selector segment must already exist — see WorldRowFieldPath.TrySetLeaf), and submits
+    // the whole modified row through the SAME section Upsert the whole-row form uses — so the spliced field crosses
+    // the row's own JsonTypeInfo exactly once, at reparse, which is where its declared shape (including a bindable
+    // field's "state.row.key" string arm) is actually validated.
+    private CommandResult HandleLiteralSet(WorldServer server, CommandContext context, WireArgs args, string path, RowSection section) {
+        var keyed = (section.Remove is not null);
+
+        if (
+            keyed &&
+            (args.Count < 3)
+        ) {
+            return CommandResult.Usage(
+                form: $"{path} <key> <fieldPath> <json>",
+                verb: "world.row.set"
+            );
+        }
+
+        var key = (keyed
+            ? args[1].ToString()
+            : string.Empty
+        );
+        var fieldPath = (keyed
+            ? args[2].ToString()
+            : args[1].ToString()
+        );
+        var leadingTokens = (keyed
+            ? 4
+            : 3
+        );
+        // preserveQuotes: a literal field value is often a bare JSON string (an enum name, a "state.row.key" binding,
+        // a text field) — the whole tail IS then exactly one quoted token, which RawAfter's default unwrap would
+        // strip into invalid JSON (the payload the whole-row form always carries, an object or array literal, is
+        // never a single quoted token, so it never hit this).
+        var json = WorldCommandArguments.RawAfter(
+            args: in args,
+            context: context,
+            preserveQuotes: true,
+            tokens: leadingTokens
+        );
+
+        if (string.IsNullOrWhiteSpace(value: json)) {
+            return CommandResult.Usage(
+                form: (keyed
+                ? $"{path} <key> <fieldPath> <json>"
+                : $"{path} <fieldPath> <json>"),
+                verb: "world.row.set"
+            );
+        }
+
+        var rowIdentity = RowIdentity(
+            key: key,
+            keyed: keyed,
+            path: path
+        );
+
+        if (m_stepGuard.IsClaimed(
+            rowIdentity: rowIdentity,
+            window: server.NextInputTick
+        )) {
+            return CommandResult.Error(output: $"[world.row.set: {path}: row '{rowIdentity}' already has an edit buffered this tick — a second edit composes from the same pre-drain base and would revert the first; fence with world.wait, or compose one JSON row with world.row.set {path} <json>{(keyed
+                ? " (the key rides inside the JSON)"
+                : string.Empty)}]");
+        }
+
+        var read = section.Read(
+            server,
+            key
+        );
+
+        if (read.Error is { } readError) {
+            return CommandResult.Error(output: $"[world.row.set: {path}: {readError}]");
+        }
+
+        JsonNode? replacement;
+
+        try {
+            replacement = JsonNode.Parse(json: json);
+        } catch (JsonException exception) {
+            return CommandResult.Error(output: $"[world.row.set: {path}: {fieldPath}: {exception.Message}]");
+        }
 
         if (!WorldRowFieldPath.TryParse(
             error: out var parseError,
-            path: listPath,
+            path: fieldPath,
             segments: out var segments
         )) {
-            error = CommandResult.Error(output: $"[{verb}: {parseError}]");
-
-            return false;
+            return CommandResult.Error(output: $"[world.row.set: {path}: {parseError}]");
         }
+
+        var last = segments[^1];
 
         if (!WorldRowFieldPath.TryNavigate(
-            container: out var node,
+            container: out var container,
             error: out var navError,
-            path: listPath,
-            root: root,
-            segments: segments
+            path: fieldPath,
+            root: read.Row!,
+            segments: segments.AsSpan(
+                start: 0,
+                length: (segments.Length - 1)
+            )
         )) {
-            error = CommandResult.Error(output: $"[{verb}: {navError}]");
-
-            return false;
+            return CommandResult.Error(output: $"[world.row.set: {path}: {navError}]");
         }
 
-        if (node is not JsonArray resolved) {
-            error = CommandResult.Error(output: $"[{verb}: '{listPath}' is not a list]");
-
-            return false;
+        if (!WorldRowFieldPath.TrySetLeaf(
+            container: container!,
+            error: out var setError,
+            last: last,
+            path: fieldPath,
+            replacement: replacement
+        )) {
+            return CommandResult.Error(output: $"[world.row.set: {path}: {setError}]");
         }
 
-        array = resolved;
-        error = default;
+        DropEditArtifacts(
+            row: read.Row!,
+            section: section
+        );
 
-        return true;
+        var principal = context.ActingPrincipal();
+        var outcome = section.Upsert(
+            server,
+            principal,
+            read.Row!.ToJsonString()
+        );
+
+        if (outcome.Error is { } upsertError) {
+            return CommandResult.Error(output: $"[world.row.set: {path}: {fieldPath}: {upsertError}]");
+        }
+
+        m_stepGuard.Claim(rowIdentity: rowIdentity);
+
+        return link.Submit(
+            mutation: outcome.Mutation!,
+            echoes: echoes,
+            verb: "world.row.set"
+        );
     }
-    // The list field's own name — the last dotted component of listPath, bracket stripped — the same discriminator
-    // TryResolveArrayElement's refusal quotes ("no element of 'shapes' has …").
-    private static string ContainerName(string listPath) {
-        var dot = listPath.LastIndexOf(value: '.');
-        var last = ((dot < 0) ? listPath : listPath[(dot + 1)..]);
-        var bracket = last.IndexOf(value: '[');
+    private CommandResult HandleRead(WorldServer server, WireArgs args) {
+        if (args.Count < 1) {
+            return CommandResult.Usage(
+                form: "<path> [<key>] [<fieldPath>]",
+                verb: "world.row"
+            );
+        }
 
-        return ((bracket < 0) ? last : last[..bracket]);
+        var path = args[0].ToString();
+
+        if (!Sections.TryGetValue(
+            key: path,
+            value: out var section
+        )) {
+            return UnknownPath(
+                path: path,
+                verb: "world.row"
+            );
+        }
+
+        var keyed = (section.Remove is not null);
+        string key;
+        string? fieldPath;
+
+        if (keyed) {
+            if (args.Count < 2) {
+                return CommandResult.Usage(
+                    form: $"{path} <key> [<fieldPath>]",
+                    verb: "world.row"
+                );
+            }
+
+            key = args[1].ToString();
+            fieldPath = ((args.Count >= 3)
+                ? args[2].ToString()
+                : null
+            );
+        } else {
+            key = string.Empty;
+            fieldPath = ((args.Count >= 2)
+                ? args[1].ToString()
+                : null
+            );
+        }
+
+        var read = section.Read(
+            server,
+            key
+        );
+
+        if (read.Error is { } readError) {
+            return CommandResult.Error(output: $"[world.row: {path}: {readError}]");
+        }
+
+        var node = read.Row!;
+
+        if (fieldPath is not { Length: > 0 }) {
+            // The whole-row echo is what the whole-row set form accepts back with a field changed, so it omits the
+            // same derived self-digest a field edit strips (a creation's hash, recomputed from the content it would
+            // no longer match); the digest itself stays readable by field path.
+            DropEditArtifacts(
+                row: node,
+                section: section
+            );
+        } else {
+            if (!WorldRowFieldPath.TryParse(
+                error: out var parseError,
+                path: fieldPath,
+                segments: out var segments
+            )) {
+                return CommandResult.Error(output: $"[world.row: {path}: {parseError}]");
+            }
+
+            var last = segments[^1];
+
+            if (!WorldRowFieldPath.TryNavigate(
+                container: out var container,
+                error: out var navError,
+                path: fieldPath,
+                root: node,
+                segments: segments.AsSpan(
+                    start: 0,
+                    length: (segments.Length - 1)
+                )
+            )) {
+                return CommandResult.Error(output: $"[world.row: {path}: {navError}]");
+            }
+
+            if (!WorldRowFieldPath.TryGetLeaf(
+                container: container!,
+                error: out var leafError,
+                last: last,
+                leaf: out var leaf,
+                path: fieldPath
+            )) {
+                return CommandResult.Error(output: $"[world.row: {path}: {leafError}]");
+            }
+
+            node = leaf!;
+        }
+
+        if (node is JsonArray listing) {
+            return new CommandResult(Output: DescribeListing(
+                array: listing,
+                fieldPath: fieldPath,
+                key: (keyed
+                ? key
+                : null),
+                path: path
+            ));
+        }
+
+        var keySuffix = (keyed
+            ? $" {key}"
+            : string.Empty
+        );
+        var fieldSuffix = ((fieldPath is { Length: > 0 })
+            ? $".{fieldPath}"
+            : string.Empty
+        );
+
+        return new CommandResult(Output: $"[world.row: {path}{keySuffix}{fieldSuffix} = {node.ToJsonString()}]");
+    }
+    private CommandResult HandleRemove(WorldServer server, CommandContext context, WireArgs args) {
+        // The list-element form (world.row.remove <path> [<key>] <listPath> <selector>) is 3 tokens for a keyless
+        // section, 4 for a keyed one — neither collides with the whole-row form's fixed 2, so the dispatch is by
+        // count alone, no JSON-shape heuristic needed (every token here is a plain address, never a payload).
+        if (args.Count is (3 or 4)) {
+            return HandleListRemove(
+                args: args,
+                context: context,
+                server: server
+            );
+        }
+
+        if (args.Count != 2) {
+            return CommandResult.Usage(
+                form: "<path> <key> | <path> [<key>] <listPath> <selector>",
+                verb: "world.row.remove"
+            );
+        }
+
+        var path = args[0].ToString();
+        var key = args[1].ToString();
+        var principal = context.ActingPrincipal();
+
+        if (string.Equals(
+            a: path,
+            b: PropertiesNamesPath,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return link.Submit(
+                mutation: new WorldMutation.SetProperty(
+                    Name: key,
+                    Principal: principal,
+                    Remove: true
+                ),
+                echoes: echoes,
+                verb: "world.row.remove"
+            );
+        }
+
+        if (!Sections.TryGetValue(
+            key: path,
+            value: out var section
+        )) {
+            return UnknownPath(
+                path: path,
+                verb: "world.row.remove"
+            );
+        }
+
+        if (section.Remove is not { } remove) {
+            return CommandResult.Error(output: $"[world.row.remove: {path}: keyless (set only) — no remove]");
+        }
+
+        var outcome = remove(
+            server,
+            principal,
+            key
+        );
+
+        return ((outcome.Error is { } error)
+            ? CommandResult.Error(output: $"[world.row.remove: {path}: {error}]")
+            : link.Submit(
+                mutation: outcome.Mutation!,
+                echoes: echoes,
+                verb: "world.row.remove"
+            )
+        );
     }
     private CommandResult HandleSet(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count < 1) {
@@ -1275,7 +1636,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             );
         }
 
-        if (!s_sections.TryGetValue(
+        if (!Sections.TryGetValue(
             key: path,
             value: out var section
         )) {
@@ -1331,59 +1692,54 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             )
         );
     }
-    // The whole-row form's own discriminator: a RowSection's RowType is always a record, so its inline-JSON payload
-    // is always an object or array literal — never how a bare key or a dotted field path is spelled.
-    private static bool LooksLikeJsonContainer(ReadOnlySpan<char> token) => ((token.Length > 0) && ((token[0] == '{') || (token[0] == '[')));
-    // world.row.set's literal-field form: reads the addressed row, replaces ONE field in place (creating an absent
-    // optional member; an index/selector segment must already exist — see WorldRowFieldPath.TrySetLeaf), and submits
-    // the whole modified row through the SAME section Upsert the whole-row form uses — so the spliced field crosses
-    // the row's own JsonTypeInfo exactly once, at reparse, which is where its declared shape (including a bindable
-    // field's "state.row.key" string arm) is actually validated.
-    private CommandResult HandleLiteralSet(WorldServer server, CommandContext context, WireArgs args, string path, RowSection section) {
-        var keyed = (section.Remove is not null);
-
-        if (
-            keyed &&
-            (args.Count < 3)
-        ) {
+    private CommandResult HandleStep(WorldServer server, CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
             return CommandResult.Usage(
-                form: $"{path} <key> <fieldPath> <json>",
-                verb: "world.row.set"
+                form: "<path> <delta>",
+                verb: "world.row.step"
             );
         }
 
-        var key = (keyed ? args[1].ToString() : string.Empty);
-        var fieldPath = (keyed ? args[2].ToString() : args[1].ToString());
-        var leadingTokens = (keyed ? 4 : 3);
-        // preserveQuotes: a literal field value is often a bare JSON string (an enum name, a "state.row.key" binding,
-        // a text field) — the whole tail IS then exactly one quoted token, which RawAfter's default unwrap would
-        // strip into invalid JSON (the payload the whole-row form always carries, an object or array literal, is
-        // never a single quoted token, so it never hit this).
-        var json = WorldCommandArguments.RawAfter(
-            args: in args,
-            context: context,
-            preserveQuotes: true,
-            tokens: leadingTokens
-        );
+        var path = args[0].ToString();
+        float delta;
 
-        if (string.IsNullOrWhiteSpace(value: json)) {
+        if (args.Count == 2) {
+            if (!args.TryFloat(
+                index: 1,
+                value: out delta
+            )) {
+                return CommandResult.Error(output: $"[world.row.step: could not parse delta '{args[1].ToString()}' as a finite number]");
+            }
+        } else if (context.Origin == CommandOrigin.Binding) {
+            delta = context.Value.AsAxis1D;
+        } else {
             return CommandResult.Usage(
-                form: (keyed ? $"{path} <key> <fieldPath> <json>" : $"{path} <fieldPath> <json>"),
-                verb: "world.row.set"
+                form: "<path> <delta>",
+                verb: "world.row.step"
             );
         }
 
-        var rowIdentity = RowIdentity(
-            key: key,
-            keyed: keyed,
-            path: path
-        );
+        if (!TryResolveStepTarget(
+            error: out var resolveError,
+            fieldPath: out var fieldPath,
+            key: out var key,
+            path: path,
+            section: out var section
+        )) {
+            return CommandResult.Error(output: $"[world.row.step: {resolveError}]");
+        }
+
+        // The ROW identity (section, or section.key) the field lives inside — path with its trailing field segment
+        // removed. The whole-row upsert collides at this grain, not the field grain: two steps to different fields of
+        // ONE row still stomp each other. Every pre-drain submission targets NextInputTick, so it is the window a
+        // same-row collision lives inside.
+        var rowIdentity = path[..((path.Length - fieldPath.Length) - 1)];
 
         if (m_stepGuard.IsClaimed(
             rowIdentity: rowIdentity,
             window: server.NextInputTick
         )) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: row '{rowIdentity}' already has an edit buffered this tick — a second edit composes from the same pre-drain base and would revert the first; fence with world.wait, or compose one JSON row with world.row.set {path} <json>{(keyed ? " (the key rides inside the JSON)" : string.Empty)}]");
+            return CommandResult.Error(output: $"[world.row.step: {path}: row '{rowIdentity}' already has a step buffered this tick — a second step composes from the same pre-drain base and would revert the first; fence with world.wait, or use world.row.set for the final value]");
         }
 
         var read = section.Read(
@@ -1392,45 +1748,19 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         );
 
         if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {readError}]");
+            return CommandResult.Error(output: $"[world.row.step: {path}: {readError}]");
         }
 
-        JsonNode? replacement;
-
-        try {
-            replacement = JsonNode.Parse(json: json);
-        } catch (JsonException exception) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {fieldPath}: {exception.Message}]");
-        }
-
-        if (!WorldRowFieldPath.TryParse(
-            error: out var parseError,
-            path: fieldPath,
-            segments: out var segments
-        )) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {parseError}]");
-        }
-
-        var last = segments[^1];
-
-        if (!WorldRowFieldPath.TryNavigate(
-            container: out var container,
-            error: out var navError,
-            path: fieldPath,
+        if (!WorldRowFieldStepper.TryStep(
+            delta: delta,
+            error: out var stepError,
+            fieldPath: fieldPath,
+            newText: out _,
+            oldText: out _,
             root: read.Row!,
-            segments: segments.AsSpan(start: 0, length: (segments.Length - 1))
+            rowType: section.RowType
         )) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {navError}]");
-        }
-
-        if (!WorldRowFieldPath.TrySetLeaf(
-            container: container!,
-            error: out var setError,
-            last: last,
-            path: fieldPath,
-            replacement: replacement
-        )) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {setError}]");
+            return CommandResult.Error(output: $"[world.row.step: {path}: {stepError}]");
         }
 
         DropEditArtifacts(
@@ -1446,21 +1776,77 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         );
 
         if (outcome.Error is { } upsertError) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {fieldPath}: {upsertError}]");
+            return CommandResult.Error(output: $"[world.row.step: {path}: {upsertError}]");
         }
 
+        // Claim the row for this window only once the upsert is genuinely buffered — a step that refused above never
+        // blocks a later well-formed one.
         m_stepGuard.Claim(rowIdentity: rowIdentity);
 
+        // A buffered mutation verb (echo model 3): no synchronous applied-result line — the whole-row upsert composes
+        // and revalidates at the tick boundary, where WorldServer.EchoTap narrates the accept/reject. Asserting
+        // old -> new here would claim an outcome the drain can still reject. A drain REJECTION additionally prints a
+        // per-verb "[world.row.step: …]" line through the registered correlation, so a script can account the refusal
+        // against the verb that submitted it.
         return link.Submit(
             mutation: outcome.Mutation!,
             echoes: echoes,
-            verb: "world.row.set"
+            verb: "world.row.step"
         );
     }
-    // The row-edit window guard's own identity string — "path.key" for a keyed section, bare "path" for a keyless
-    // one — the SAME spelling world.row.step derives from its own combined address, so a step and a literal edit to
-    // the same row in one tick window collide under the identical guard.
-    private static string RowIdentity(string path, string key, bool keyed) => (keyed ? $"{path}.{key}" : path);
+    // The whole-row form's own discriminator: a RowSection's RowType is always a record, so its inline-JSON payload
+    // is always an object or array literal — never how a bare key or a dotted field path is spelled.
+    private static bool LooksLikeJsonContainer(ReadOnlySpan<char> token) => ((token.Length > 0) && ((token[0] == '{') || (token[0] == '[')));
+    // The keyless-section reader: the whole row IS the section, read fresh off the live definition.
+    private static Func<WorldServer, string, RowReadOutcome> ReadRow<T>(JsonTypeInfo<T> info, Func<WorldServer, T> select) {
+        return (server, _) => ToReadOutcome(node: JsonSerializer.SerializeToNode(
+            value: select(server),
+            jsonTypeInfo: info
+        ));
+    }
+    // The one section (screens) keyed by its own array POSITION rather than a stable name.
+    private static Func<WorldServer, string, RowReadOutcome> ReadRowByIndex<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select) {
+        return (server, key) => {
+            if (!CommandArgs.TryParseInt(
+                text: key,
+                value: out var index
+            )) {
+                return RowReadOutcome.Fail(error: $"bad index '{key}' — an integer");
+            }
+
+            var rows = select(server);
+
+            if (((uint)index) >= ((uint)rows.Count)) {
+                return RowReadOutcome.Fail(error: $"index {index} out of range (0..{(rows.Count - 1)})");
+            }
+
+            return ToReadOutcome(node: JsonSerializer.SerializeToNode(
+                value: rows[index],
+                jsonTypeInfo: info
+            ));
+        };
+    }
+    // The keyed-section reader: a linear scan by the row's own stable key text (every keyed section's key type —
+    // string, DocumentIdentifier, CellName — round-trips through ToString() the same way its Remove delegate's
+    // plain-string key already does).
+    private static Func<WorldServer, string, RowReadOutcome> ReadRowByKey<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select, Func<T, string> keyOf) {
+        return (server, key) => {
+            foreach (var row in select(server)) {
+                if (string.Equals(
+                    a: keyOf(row),
+                    b: key,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return ToReadOutcome(node: JsonSerializer.SerializeToNode(
+                        jsonTypeInfo: info,
+                        value: row
+                    ));
+                }
+            }
+
+            return RowReadOutcome.Fail(error: $"no row '{key}'");
+        };
+    }
     // rules and interactions key their Remove mutation by the validated CellName type rather than a plain
     // string.
     private static Func<WorldServer, WorldPrincipal, string, RowOutcome> RemoveByCellName(Func<WorldPrincipal, CellName, WorldMutation> remove) {
@@ -1501,6 +1887,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             arg2: key
         ));
     }
+    // The row-edit window guard's own identity string — "path.key" for a keyed section, bare "path" for a keyless
+    // one — the SAME spelling world.row.step derives from its own combined address, so a step and a literal edit to
+    // the same row in one tick window collide under the identical guard.
+    private static string RowIdentity(string path, string key, bool keyed) => (keyed
+        ? $"{path}.{key}"
+        : path
+    );
     // Materializes the trailing tokens from <paramref name="start"/> onward as the assignment's identifier array —
     // the ONE place world.assign needs each row name separately rather than the joined free-text tail RawAfter gives.
     private static DocumentIdentifier[] TailIdentifiers(in WireArgs args, int start) {
@@ -1518,11 +1911,136 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return identifiers;
     }
+    private static RowReadOutcome ToReadOutcome(JsonNode? node) => ((node is null)
+        ? RowReadOutcome.Fail(error: "serialized to null")
+        : RowReadOutcome.Ok(row: node)
+    );
+    // Resolves listPath's OWN array node off root — every segment (including intermediate selectors, e.g. the
+    // "shapes[name=forearmL]" in "document.shapes[name=forearmL].swings") is walked, landing ON the list field
+    // itself rather than one level short of it, which is what world.row.add/.remove operate over.
+    private static bool TryResolveListContainer(JsonNode root, string listPath, string verb, out JsonArray? array, out CommandResult error) {
+        array = null;
+
+        if (!WorldRowFieldPath.TryParse(
+            error: out var parseError,
+            path: listPath,
+            segments: out var segments
+        )) {
+            error = CommandResult.Error(output: $"[{verb}: {parseError}]");
+
+            return false;
+        }
+
+        if (!WorldRowFieldPath.TryNavigate(
+            container: out var node,
+            error: out var navError,
+            path: listPath,
+            root: root,
+            segments: segments
+        )) {
+            error = CommandResult.Error(output: $"[{verb}: {navError}]");
+
+            return false;
+        }
+
+        if (node is not JsonArray resolved) {
+            error = CommandResult.Error(output: $"[{verb}: '{listPath}' is not a list]");
+
+            return false;
+        }
+
+        array = resolved;
+        error = default;
+
+        return true;
+    }
+    // Resolves a step path against the SAME section table world.row.set uses, one level deeper: the longest
+    // section-key prefix (dot-boundary match) wins, so a dotted section name (hud.panels, views.seatRig) is never
+    // shadowed by a shorter one. A keyed section's remainder splits at its first dot into (rowKey, fieldPath); a
+    // keyless section's whole remainder IS the field path. An exact section-key match (no remainder) has no field to
+    // step — the whole row, not a field — and is refused the same as an unknown path.
+    private static bool TryResolveStepTarget(string path, out RowSection section, out string key, out string fieldPath, out string? error) {
+        section = null!;
+        key = string.Empty;
+        fieldPath = string.Empty;
+
+        string? bestKey = null;
+        RowSection? best = null;
+
+        foreach (var (candidateKey, candidateSection) in Sections) {
+            if (string.Equals(
+                a: path,
+                b: candidateKey,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                continue;
+            }
+
+            var prefix = (candidateKey + ".");
+
+            if (
+                !path.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: prefix
+            ) ||
+                ((bestKey is not null) && (candidateKey.Length <= bestKey.Length))
+            ) {
+                continue;
+            }
+
+            bestKey = candidateKey;
+            best = candidateSection;
+        }
+
+        if (
+            (bestKey is null) ||
+            (best is null)
+        ) {
+            error = UnknownStepPath(path: path);
+
+            return false;
+        }
+
+        var remainder = path[(bestKey.Length + 1)..];
+
+        if (best.Remove is null) {
+            if (remainder.Length == 0) {
+                error = $"'{path}': no field to step — a bare section path steps nothing";
+
+                return false;
+            }
+
+            section = best;
+            fieldPath = remainder;
+            error = null;
+
+            return true;
+        }
+
+        var dot = remainder.IndexOf(value: '.');
+
+        if (
+            (dot < 0) ||
+            (dot == 0) ||
+            (dot == (remainder.Length - 1))
+        ) {
+            error = $"'{path}': a keyed section needs a row key and a field — {bestKey}.<key>.<field>";
+
+            return false;
+        }
+
+        section = best;
+        key = remainder[..dot];
+        fieldPath = remainder[(dot + 1)..];
+        error = null;
+
+        return true;
+    }
     // Every admissible path, sections plus the one bare-name exception, sorted for a stable, greppable refusal.
     private static CommandResult UnknownPath(string verb, string path) {
         var admissible = string.Join(
             separator: ", ",
-            values: s_sections.Keys.Append(element: PropertiesNamesPath).OrderBy(
+            values: Sections.Keys.Append(element: PropertiesNamesPath).OrderBy(
                 keySelector: static name => name,
                 comparer: StringComparer.Ordinal
             )
@@ -1530,168 +2048,19 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return CommandResult.Error(output: $"[{verb}: unknown path '{path}' — {admissible}]");
     }
-
-    /// <summary>Composes the <c>world.row.set</c> mutation for one dotted path and raw JSON tail WITHOUT submitting
-    /// it — the seam the routed twin (<c>player.row.set</c>, which follows a crossed seat's authority route) reuses,
-    /// so the routed grammar and the local grammar can never drift. A section whose mutation composes against the
-    /// addressed world's own live document is refused by name (a routed write's document lives at the destination),
-    /// and so is the bare-name <c>properties.names</c> exception, which carries no JSON row.</summary>
-    /// <param name="path">The dotted document member path (the <c>world.row.set</c> vocabulary).</param>
-    /// <param name="json">The raw JSON row tail.</param>
-    /// <param name="principal">The composing principal. Informational for a routed submission — the destination
-    /// re-stamps the envelope with the traveler's own transfer principal before admission.</param>
-    /// <param name="mutation">The composed mutation, on success.</param>
-    /// <param name="error">The named refusal, on failure.</param>
-    /// <returns><see langword="true"/> when the mutation composed.</returns>
-    public static bool TryComposeRoutedSet(string path, string json, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
-        mutation = null;
-
-        if (!s_sections.TryGetValue(
-            key: path,
-            value: out var section
-        )) {
-            error = $"unknown path '{path}' — {string.Join(
-                separator: ", ",
-                values: s_sections.Keys.Where(predicate: static key => !s_sections[key].ReadsLiveDocument).Order(comparer: StringComparer.Ordinal)
-            )}";
-
-            return false;
-        }
-
-        if (section.ReadsLiveDocument) {
-            error = $"'{path}' composes against the addressed world's own live document, which a routed write cannot read — author it on the destination's console";
-
-            return false;
-        }
-
-        var outcome = section.Upsert(
-            arg1: null!,
-            arg2: principal,
-            arg3: json
+    // Every admissible step section, sorted for a stable, greppable refusal — properties.names is NOT included
+    // (it is a bare-name registry toggle, not a document row a field lives inside).
+    private static string UnknownStepPath(string path) {
+        var admissible = string.Join(
+            separator: ", ",
+            values: Sections.Keys.OrderBy(
+                keySelector: static name => name,
+                comparer: StringComparer.Ordinal
+            )
         );
 
-        if (outcome.Mutation is not { } composed) {
-            error = (outcome.Error ?? "the row did not parse");
-
-            return false;
-        }
-
-        mutation = composed;
-        error = string.Empty;
-
-        return true;
+        return $"unknown path '{path}' — {admissible}";
     }
-
-    /// <summary>Composes the <c>world.row.set</c> mutation for one dotted path and one row read off the live document
-    /// and edited in place — the read-modify-whole-row shape the literal field/list doors above take, exposed for a
-    /// module that composes such rows outside this one (<c>creation.sculpt</c>, which resubmits every row a sculpt's
-    /// patch touched). Strips the section's edit artifacts (<c>creations</c>' derived <c>hash</c>) exactly as those
-    /// doors do, and composes under <paramref name="principal"/> — the caller passes the identity its own ingress
-    /// stamped (<c>context.ActingPrincipal()</c>), never one it constructed. Composing is not submitting: the caller
-    /// still owns the <see cref="WorldRowStepWindowGuard"/> claim and the link submission.</summary>
-    /// <param name="server">The addressed row's server (the handful of sections whose mutation reads its live document).</param>
-    /// <param name="path">The dotted document member path (the <c>world.row.set</c> vocabulary).</param>
-    /// <param name="row">The edited row, as read off the live document and modified.</param>
-    /// <param name="principal">The acting principal the mutation carries.</param>
-    /// <param name="mutation">The composed mutation, on success.</param>
-    /// <param name="error">The named refusal, on failure.</param>
-    /// <returns><see langword="true"/> when the mutation composed.</returns>
-    public static bool TryComposeEditedRow(WorldServer server, string path, JsonNode row, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
-        mutation = null;
-
-        if (!s_sections.TryGetValue(
-            key: path,
-            value: out var section
-        )) {
-            error = UnknownPath(
-                path: path,
-                verb: "world.row.set"
-            ).Output;
-
-            return false;
-        }
-
-        DropEditArtifacts(
-            row: row,
-            section: section
-        );
-
-        var outcome = section.Upsert(
-            arg1: server,
-            arg2: principal,
-            arg3: row.ToJsonString()
-        );
-
-        if (outcome.Mutation is not { } composed) {
-            error = (outcome.Error ?? "the row did not parse");
-
-            return false;
-        }
-
-        mutation = composed;
-        error = string.Empty;
-
-        return true;
-    }
-    /// <summary>Composes the whole-row <c>world.row.remove</c> mutation for one keyed section and key without
-    /// submitting it — the remove twin of <see cref="TryComposeEditedRow"/>. A keyless section (set only) and an
-    /// unknown path are refused by name exactly as the verb refuses them.</summary>
-    /// <param name="server">The addressed row's server.</param>
-    /// <param name="path">The dotted document member path.</param>
-    /// <param name="key">The row key.</param>
-    /// <param name="principal">The acting principal the mutation carries.</param>
-    /// <param name="mutation">The composed mutation, on success.</param>
-    /// <param name="error">The named refusal, on failure.</param>
-    /// <returns><see langword="true"/> when the mutation composed.</returns>
-    public static bool TryComposeRemove(WorldServer server, string path, string key, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
-        mutation = null;
-
-        if (!s_sections.TryGetValue(
-            key: path,
-            value: out var section
-        )) {
-            error = UnknownPath(
-                path: path,
-                verb: "world.row.remove"
-            ).Output;
-
-            return false;
-        }
-
-        if (section.Remove is not { } remove) {
-            error = $"{path}: keyless (set only) — no remove";
-
-            return false;
-        }
-
-        var outcome = remove(
-            arg1: server,
-            arg2: principal,
-            arg3: key
-        );
-
-        if (outcome.Mutation is not { } composed) {
-            error = (outcome.Error ?? "the key did not parse");
-
-            return false;
-        }
-
-        mutation = composed;
-        error = string.Empty;
-
-        return true;
-    }
-    /// <summary>The row-edit window guard's identity for one row — <c>path.key</c> for a keyed section, the bare
-    /// <c>path</c> for a keyless one — the spelling every read-modify-whole-row door here claims under, so another
-    /// module's whole-row resubmission of the same row collides with a pending literal/list/step edit by name.</summary>
-    /// <param name="path">The dotted document member path.</param>
-    /// <param name="key">The row key, or null for a keyless section.</param>
-    public static string RowIdentityOf(string path, string? key) => RowIdentity(
-        key: (key ?? string.Empty),
-        keyed: (key is not null),
-        path: path
-    );
-
     // Type-erased upsert factory (server-agnostic form): parses <paramref name="info"/>'s shape from the raw JSON
     // tail and hands the parsed value to <paramref name="toMutation"/> — the ONE generic seam most of the section
     // table closes over.
@@ -1876,402 +2245,165 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             }
         );
     }
-    private CommandResult HandleRead(WorldServer server, WireArgs args) {
-        if (args.Count < 1) {
-            return CommandResult.Usage(
-                form: "<path> [<key>] [<fieldPath>]",
-                verb: "world.row"
-            );
-        }
+    /// <summary>The row-edit window guard's identity for one row — <c>path.key</c> for a keyed section, the bare
+    /// <c>path</c> for a keyless one — the spelling every read-modify-whole-row door here claims under, so another
+    /// module's whole-row resubmission of the same row collides with a pending literal/list/step edit by name.</summary>
+    /// <param name="path">The dotted document member path.</param>
+    /// <param name="key">The row key, or null for a keyless section.</param>
+    public static string RowIdentityOf(string path, string? key) => RowIdentity(
+        key: (key ?? string.Empty),
+        keyed: (key is not null),
+        path: path
+    );
+    /// <summary>Composes the <c>world.row.set</c> mutation for one dotted path and one row read off the live document
+    /// and edited in place — the read-modify-whole-row shape the literal field/list doors above take, exposed for a
+    /// module that composes such rows outside this one (<c>creation.sculpt</c>, which resubmits every row a sculpt's
+    /// patch touched). Strips the section's edit artifacts (<c>creations</c>' derived <c>hash</c>) exactly as those
+    /// doors do, and composes under <paramref name="principal"/> — the caller passes the identity its own ingress
+    /// stamped (<c>context.ActingPrincipal()</c>), never one it constructed. Composing is not submitting: the caller
+    /// still owns the <see cref="WorldRowStepWindowGuard"/> claim and the link submission.</summary>
+    /// <param name="server">The addressed row's server (the handful of sections whose mutation reads its live document).</param>
+    /// <param name="path">The dotted document member path (the <c>world.row.set</c> vocabulary).</param>
+    /// <param name="row">The edited row, as read off the live document and modified.</param>
+    /// <param name="principal">The acting principal the mutation carries.</param>
+    /// <param name="mutation">The composed mutation, on success.</param>
+    /// <param name="error">The named refusal, on failure.</param>
+    /// <returns><see langword="true"/> when the mutation composed.</returns>
+    public static bool TryComposeEditedRow(WorldServer server, string path, JsonNode row, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
+        mutation = null;
 
-        var path = args[0].ToString();
-
-        if (!s_sections.TryGetValue(
+        if (!Sections.TryGetValue(
             key: path,
             value: out var section
         )) {
-            return UnknownPath(
+            error = UnknownPath(
                 path: path,
-                verb: "world.row"
-            );
-        }
+                verb: "world.row.set"
+            ).Output;
 
-        var keyed = (section.Remove is not null);
-        string key;
-        string? fieldPath;
-
-        if (keyed) {
-            if (args.Count < 2) {
-                return CommandResult.Usage(
-                    form: $"{path} <key> [<fieldPath>]",
-                    verb: "world.row"
-                );
-            }
-
-            key = args[1].ToString();
-            fieldPath = ((args.Count >= 3) ? args[2].ToString() : null);
-        } else {
-            key = string.Empty;
-            fieldPath = ((args.Count >= 2) ? args[1].ToString() : null);
-        }
-
-        var read = section.Read(
-            server,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row: {path}: {readError}]");
-        }
-
-        var node = read.Row!;
-
-        if (fieldPath is not { Length: > 0 }) {
-            // The whole-row echo is what the whole-row set form accepts back with a field changed, so it omits the
-            // same derived self-digest a field edit strips (a creation's hash, recomputed from the content it would
-            // no longer match); the digest itself stays readable by field path.
-            DropEditArtifacts(
-                row: node,
-                section: section
-            );
-        } else {
-            if (!WorldRowFieldPath.TryParse(
-                error: out var parseError,
-                path: fieldPath,
-                segments: out var segments
-            )) {
-                return CommandResult.Error(output: $"[world.row: {path}: {parseError}]");
-            }
-
-            var last = segments[^1];
-
-            if (!WorldRowFieldPath.TryNavigate(
-                container: out var container,
-                error: out var navError,
-                path: fieldPath,
-                root: node,
-                segments: segments.AsSpan(start: 0, length: (segments.Length - 1))
-            )) {
-                return CommandResult.Error(output: $"[world.row: {path}: {navError}]");
-            }
-
-            if (!WorldRowFieldPath.TryGetLeaf(
-                container: container!,
-                error: out var leafError,
-                last: last,
-                leaf: out var leaf,
-                path: fieldPath
-            )) {
-                return CommandResult.Error(output: $"[world.row: {path}: {leafError}]");
-            }
-
-            node = leaf!;
-        }
-
-        if (node is JsonArray listing) {
-            return new CommandResult(Output: DescribeListing(
-                array: listing,
-                fieldPath: fieldPath,
-                key: (keyed ? key : null),
-                path: path
-            ));
-        }
-
-        var keySuffix = (keyed ? $" {key}" : string.Empty);
-        var fieldSuffix = ((fieldPath is { Length: > 0 }) ? $".{fieldPath}" : string.Empty);
-
-        return new CommandResult(Output: $"[world.row: {path}{keySuffix}{fieldSuffix} = {node.ToJsonString()}]");
-    }
-    // A list field's own read-back: one summary line per element (its own compact JSON — the same text
-    // world.row.set's literal form would accept back), headed by a discriminator (name, else id, else "-") so a
-    // long list's elements can be told apart without reading every field.
-    private static string DescribeListing(string path, string? key, string? fieldPath, JsonArray array) {
-        var keySuffix = ((key is { Length: > 0 }) ? $" {key}" : string.Empty);
-        var fieldSuffix = ((fieldPath is { Length: > 0 }) ? $".{fieldPath}" : string.Empty);
-        var builder = new StringBuilder(value: $"[world.row: {path}{keySuffix}{fieldSuffix}: {array.Count} element(s)]");
-
-        for (var index = 0; (index < array.Count); index++) {
-            var element = array[index];
-
-            _ = builder.Append(value: Environment.NewLine);
-            _ = builder.Append(value: $"[world.row {index}: {DescribeDiscriminator(element: element)} {(element?.ToJsonString() ?? "null")}]");
-        }
-
-        return builder.ToString();
-    }
-    private static string DescribeDiscriminator(JsonNode? element) {
-        if (element is not JsonObject obj) {
-            return "-";
-        }
-
-        if (
-            obj.TryGetPropertyValue(propertyName: "name", jsonNode: out var name) &&
-            (name is not null)
-        ) {
-            return name.ToJsonString();
-        }
-
-        if (
-            obj.TryGetPropertyValue(propertyName: "id", jsonNode: out var id) &&
-            (id is not null)
-        ) {
-            return id.ToJsonString();
-        }
-
-        return "-";
-    }
-
-    private CommandResult HandleStep(WorldServer server, CommandContext context, WireArgs args) {
-        if (args.Count is (< 1 or > 2)) {
-            return CommandResult.Usage(
-                form: "<path> <delta>",
-                verb: "world.row.step"
-            );
-        }
-
-        var path = args[0].ToString();
-        float delta;
-
-        if (args.Count == 2) {
-            if (!args.TryFloat(
-                index: 1,
-                value: out delta
-            )) {
-                return CommandResult.Error(output: $"[world.row.step: could not parse delta '{args[1].ToString()}' as a finite number]");
-            }
-        } else if (context.Origin == CommandOrigin.Binding) {
-            delta = context.Value.AsAxis1D;
-        } else {
-            return CommandResult.Usage(
-                form: "<path> <delta>",
-                verb: "world.row.step"
-            );
-        }
-
-        if (!TryResolveStepTarget(
-            error: out var resolveError,
-            fieldPath: out var fieldPath,
-            key: out var key,
-            path: path,
-            section: out var section
-        )) {
-            return CommandResult.Error(output: $"[world.row.step: {resolveError}]");
-        }
-
-        // The ROW identity (section, or section.key) the field lives inside — path with its trailing field segment
-        // removed. The whole-row upsert collides at this grain, not the field grain: two steps to different fields of
-        // ONE row still stomp each other. Every pre-drain submission targets NextInputTick, so it is the window a
-        // same-row collision lives inside.
-        var rowIdentity = path[..((path.Length - fieldPath.Length) - 1)];
-
-        if (m_stepGuard.IsClaimed(
-            rowIdentity: rowIdentity,
-            window: server.NextInputTick
-        )) {
-            return CommandResult.Error(output: $"[world.row.step: {path}: row '{rowIdentity}' already has a step buffered this tick — a second step composes from the same pre-drain base and would revert the first; fence with world.wait, or use world.row.set for the final value]");
-        }
-
-        var read = section.Read(
-            server,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.step: {path}: {readError}]");
-        }
-
-        if (!WorldRowFieldStepper.TryStep(
-            delta: delta,
-            error: out var stepError,
-            fieldPath: fieldPath,
-            newText: out _,
-            oldText: out _,
-            root: read.Row!,
-            rowType: section.RowType
-        )) {
-            return CommandResult.Error(output: $"[world.row.step: {path}: {stepError}]");
+            return false;
         }
 
         DropEditArtifacts(
-            row: read.Row!,
+            row: row,
             section: section
         );
 
-        var principal = context.ActingPrincipal();
         var outcome = section.Upsert(
-            server,
-            principal,
-            read.Row!.ToJsonString()
+            arg1: server,
+            arg2: principal,
+            arg3: row.ToJsonString()
         );
 
-        if (outcome.Error is { } upsertError) {
-            return CommandResult.Error(output: $"[world.row.step: {path}: {upsertError}]");
-        }
-
-        // Claim the row for this window only once the upsert is genuinely buffered — a step that refused above never
-        // blocks a later well-formed one.
-        m_stepGuard.Claim(rowIdentity: rowIdentity);
-
-        // A buffered mutation verb (echo model 3): no synchronous applied-result line — the whole-row upsert composes
-        // and revalidates at the tick boundary, where WorldServer.EchoTap narrates the accept/reject. Asserting
-        // old -> new here would claim an outcome the drain can still reject. A drain REJECTION additionally prints a
-        // per-verb "[world.row.step: …]" line through the registered correlation, so a script can account the refusal
-        // against the verb that submitted it.
-        return link.Submit(
-            mutation: outcome.Mutation!,
-            echoes: echoes,
-            verb: "world.row.step"
-        );
-    }
-    // Resolves a step path against the SAME section table world.row.set uses, one level deeper: the longest
-    // section-key prefix (dot-boundary match) wins, so a dotted section name (hud.panels, views.seatRig) is never
-    // shadowed by a shorter one. A keyed section's remainder splits at its first dot into (rowKey, fieldPath); a
-    // keyless section's whole remainder IS the field path. An exact section-key match (no remainder) has no field to
-    // step — the whole row, not a field — and is refused the same as an unknown path.
-    private static bool TryResolveStepTarget(string path, out RowSection section, out string key, out string fieldPath, out string? error) {
-        section = null!;
-        key = string.Empty;
-        fieldPath = string.Empty;
-
-        string? bestKey = null;
-        RowSection? best = null;
-
-        foreach (var (candidateKey, candidateSection) in s_sections) {
-            if (string.Equals(
-                a: path,
-                b: candidateKey,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                continue;
-            }
-
-            var prefix = (candidateKey + ".");
-
-            if (
-                !path.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: prefix
-            ) ||
-                ((bestKey is not null) && (candidateKey.Length <= bestKey.Length))
-            ) {
-                continue;
-            }
-
-            bestKey = candidateKey;
-            best = candidateSection;
-        }
-
-        if (
-            (bestKey is null) ||
-            (best is null)
-        ) {
-            error = UnknownStepPath(path: path);
+        if (outcome.Mutation is not { } composed) {
+            error = (outcome.Error ?? "the row did not parse");
 
             return false;
         }
 
-        var remainder = path[(bestKey.Length + 1)..];
-
-        if (best.Remove is null) {
-            if (remainder.Length == 0) {
-                error = $"'{path}': no field to step — a bare section path steps nothing";
-
-                return false;
-            }
-
-            section = best;
-            fieldPath = remainder;
-            error = null;
-
-            return true;
-        }
-
-        var dot = remainder.IndexOf(value: '.');
-
-        if (
-            (dot < 0) ||
-            (dot == 0) ||
-            (dot == (remainder.Length - 1))
-        ) {
-            error = $"'{path}': a keyed section needs a row key and a field — {bestKey}.<key>.<field>";
-
-            return false;
-        }
-
-        section = best;
-        key = remainder[..dot];
-        fieldPath = remainder[(dot + 1)..];
-        error = null;
+        mutation = composed;
+        error = string.Empty;
 
         return true;
     }
-    // Every admissible step section, sorted for a stable, greppable refusal — properties.names is NOT included
-    // (it is a bare-name registry toggle, not a document row a field lives inside).
-    private static string UnknownStepPath(string path) {
-        var admissible = string.Join(
-            separator: ", ",
-            values: s_sections.Keys.OrderBy(
-                keySelector: static name => name,
-                comparer: StringComparer.Ordinal
-            )
+    /// <summary>Composes the whole-row <c>world.row.remove</c> mutation for one keyed section and key without
+    /// submitting it — the remove twin of <see cref="TryComposeEditedRow"/>. A keyless section (set only) and an
+    /// unknown path are refused by name exactly as the verb refuses them.</summary>
+    /// <param name="server">The addressed row's server.</param>
+    /// <param name="path">The dotted document member path.</param>
+    /// <param name="key">The row key.</param>
+    /// <param name="principal">The acting principal the mutation carries.</param>
+    /// <param name="mutation">The composed mutation, on success.</param>
+    /// <param name="error">The named refusal, on failure.</param>
+    /// <returns><see langword="true"/> when the mutation composed.</returns>
+    public static bool TryComposeRemove(WorldServer server, string path, string key, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
+        mutation = null;
+
+        if (!Sections.TryGetValue(
+            key: path,
+            value: out var section
+        )) {
+            error = UnknownPath(
+                path: path,
+                verb: "world.row.remove"
+            ).Output;
+
+            return false;
+        }
+
+        if (section.Remove is not { } remove) {
+            error = $"{path}: keyless (set only) — no remove";
+
+            return false;
+        }
+
+        var outcome = remove(
+            arg1: server,
+            arg2: principal,
+            arg3: key
         );
 
-        return $"unknown path '{path}' — {admissible}";
-    }
-    // The keyless-section reader: the whole row IS the section, read fresh off the live definition.
-    private static Func<WorldServer, string, RowReadOutcome> ReadRow<T>(JsonTypeInfo<T> info, Func<WorldServer, T> select) {
-        return (server, _) => ToReadOutcome(node: JsonSerializer.SerializeToNode(
-            value: select(server),
-            jsonTypeInfo: info
-        ));
-    }
-    // The keyed-section reader: a linear scan by the row's own stable key text (every keyed section's key type —
-    // string, DocumentIdentifier, CellName — round-trips through ToString() the same way its Remove delegate's
-    // plain-string key already does).
-    private static Func<WorldServer, string, RowReadOutcome> ReadRowByKey<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select, Func<T, string> keyOf) {
-        return (server, key) => {
-            foreach (var row in select(server)) {
-                if (string.Equals(
-                    a: keyOf(row),
-                    b: key,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    return ToReadOutcome(node: JsonSerializer.SerializeToNode(
-                        jsonTypeInfo: info,
-                        value: row
-                    ));
-                }
-            }
+        if (outcome.Mutation is not { } composed) {
+            error = (outcome.Error ?? "the key did not parse");
 
-            return RowReadOutcome.Fail(error: $"no row '{key}'");
-        };
+            return false;
+        }
+
+        mutation = composed;
+        error = string.Empty;
+
+        return true;
     }
-    // The one section (screens) keyed by its own array POSITION rather than a stable name.
-    private static Func<WorldServer, string, RowReadOutcome> ReadRowByIndex<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select) {
-        return (server, key) => {
-            if (!CommandArgs.TryParseInt(
-                text: key,
-                value: out var index
-            )) {
-                return RowReadOutcome.Fail(error: $"bad index '{key}' — an integer");
-            }
+    /// <summary>Composes the <c>world.row.set</c> mutation for one dotted path and raw JSON tail WITHOUT submitting
+    /// it — the seam the routed twin (<c>player.row.set</c>, which follows a crossed seat's authority route) reuses,
+    /// so the routed grammar and the local grammar can never drift. A section whose mutation composes against the
+    /// addressed world's own live document is refused by name (a routed write's document lives at the destination),
+    /// and so is the bare-name <c>properties.names</c> exception, which carries no JSON row.</summary>
+    /// <param name="path">The dotted document member path (the <c>world.row.set</c> vocabulary).</param>
+    /// <param name="json">The raw JSON row tail.</param>
+    /// <param name="principal">The composing principal. Informational for a routed submission — the destination
+    /// re-stamps the envelope with the traveler's own transfer principal before admission.</param>
+    /// <param name="mutation">The composed mutation, on success.</param>
+    /// <param name="error">The named refusal, on failure.</param>
+    /// <returns><see langword="true"/> when the mutation composed.</returns>
+    public static bool TryComposeRoutedSet(string path, string json, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
+        mutation = null;
 
-            var rows = select(server);
+        if (!Sections.TryGetValue(
+            key: path,
+            value: out var section
+        )) {
+            error = $"unknown path '{path}' — {string.Join(
+                separator: ", ",
+                values: Sections.Keys.Where(predicate: static key => !Sections[key].ReadsLiveDocument).Order(comparer: StringComparer.Ordinal)
+            )}";
 
-            if (((uint)index) >= ((uint)rows.Count)) {
-                return RowReadOutcome.Fail(error: $"index {index} out of range (0..{(rows.Count - 1)})");
-            }
+            return false;
+        }
 
-            return ToReadOutcome(node: JsonSerializer.SerializeToNode(
-                value: rows[index],
-                jsonTypeInfo: info
-            ));
-        };
+        if (section.ReadsLiveDocument) {
+            error = $"'{path}' composes against the addressed world's own live document, which a routed write cannot read — author it on the destination's console";
+
+            return false;
+        }
+
+        var outcome = section.Upsert(
+            arg1: null!,
+            arg2: principal,
+            arg3: json
+        );
+
+        if (outcome.Mutation is not { } composed) {
+            error = (outcome.Error ?? "the row did not parse");
+
+            return false;
+        }
+
+        mutation = composed;
+        error = string.Empty;
+
+        return true;
     }
-    private static RowReadOutcome ToReadOutcome(JsonNode? node) => ((node is null)
-        ? RowReadOutcome.Fail(error: "serialized to null")
-        : RowReadOutcome.Ok(row: node)
-    );
 
     // One entry of the section table: a path's upsert (always present), remove (null for a keyless section), and
     // read (world.row.step's row lookup — the whole row for a keyed section, the whole section for a keyless one) —
@@ -2284,20 +2416,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     // literal set form, add, remove) strips before resubmitting the modified row — a derived self-digest the row
     // itself carries (see the "creations" entry), never author data a field edit should preserve.
     private sealed record RowSection(Func<WorldServer, WorldPrincipal, string, RowOutcome> Upsert, Func<WorldServer, WorldPrincipal, string, RowOutcome>? Remove, Func<WorldServer, string, RowReadOutcome> Read, Type RowType, bool ReadsLiveDocument = false, IReadOnlyList<string>? DropOnEdit = null);
-    // Strips section.DropOnEdit's named top-level properties from a row before it is resubmitted whole — every
-    // field/list edit's shared last step ahead of ToJsonString().
-    private static void DropEditArtifacts(JsonNode row, RowSection section) {
-        if (
-            (section.DropOnEdit is not { Count: > 0 } drop) ||
-            (row is not JsonObject obj)
-        ) {
-            return;
-        }
-
-        foreach (var property in drop) {
-            _ = obj.Remove(propertyName: property);
-        }
-    }
     // A parsed-and-built mutation, or the reason building one failed — the ONE outcome shape every section entry
     // returns, so the two verb handlers stay generic over which section answered.
     private readonly record struct RowOutcome(WorldMutation? Mutation, string? Error) {
@@ -2337,9 +2455,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 public sealed class WorldRowStepWindowGuard {
     private readonly HashSet<string> m_claimed = new(comparer: StringComparer.Ordinal);
 
-    private ulong m_window;
     private bool m_seenWindow;
+    private ulong m_window;
 
+    /// <summary>Records <paramref name="rowIdentity"/> as buffered in the current window — called only once a step's
+    /// upsert is genuinely submitted, so a step refused for any other reason never blocks a retry.</summary>
+    /// <param name="rowIdentity">The row the submitted step addresses.</param>
+    public void Claim(string rowIdentity) => _ = m_claimed.Add(item: rowIdentity);
     /// <summary>Gets a value indicating whether a step to <paramref name="rowIdentity"/> collides with one already
     /// buffered in <paramref name="window"/> — advancing to (and emptying) a new window first. The whole-row upsert
     /// stomps at the row grain, so the addressed field is not part of the identity.</summary>
@@ -2347,7 +2469,10 @@ public sealed class WorldRowStepWindowGuard {
     /// <param name="rowIdentity">The row a step addresses (a section path, or a section path plus row key).</param>
     /// <returns><see langword="true"/> when the row already has a step buffered this window; otherwise <see langword="false"/>.</returns>
     public bool IsClaimed(ulong window, string rowIdentity) {
-        if (!m_seenWindow || (window != m_window)) {
+        if (
+            !m_seenWindow ||
+            (window != m_window)
+        ) {
             m_seenWindow = true;
             m_window = window;
             m_claimed.Clear();
@@ -2355,8 +2480,4 @@ public sealed class WorldRowStepWindowGuard {
 
         return m_claimed.Contains(item: rowIdentity);
     }
-    /// <summary>Records <paramref name="rowIdentity"/> as buffered in the current window — called only once a step's
-    /// upsert is genuinely submitted, so a step refused for any other reason never blocks a retry.</summary>
-    /// <param name="rowIdentity">The row the submitted step addresses.</param>
-    public void Claim(string rowIdentity) => _ = m_claimed.Add(item: rowIdentity);
 }

@@ -13,15 +13,15 @@ public sealed class LabelTable {
 
     private int m_nextLabel;
 
-    /// <summary>Allocates an unbound label id; bind it with <see cref="Mark"/> at the target instruction.</summary>
-    /// <returns>The new label id.</returns>
-    public int New() =>
-        m_nextLabel++;
     /// <summary>Binds <paramref name="label"/> to a byte offset in the emitter's stream.</summary>
     /// <param name="label">The label id to bind.</param>
     /// <param name="offset">The byte offset in the emitted stream that the label names.</param>
     public void Mark(int label, int offset) =>
         m_offsets[label] = offset;
+    /// <summary>Allocates an unbound label id; bind it with <see cref="Mark"/> at the target instruction.</summary>
+    /// <returns>The new label id.</returns>
+    public int New() =>
+        m_nextLabel++;
     /// <summary>Resolves a bound label to the byte offset it names.</summary>
     /// <param name="kind">The branch family named in the refusal — the emitter's own mnemonic for the fixup being
     /// resolved, so the message points at the instruction that cannot be patched.</param>

@@ -133,12 +133,15 @@ if (parseResult.Errors.Count > 0) {
 }
 var connectTarget = parseResult.GetValue(option: connectOption);
 Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;
-if (parseResult.GetValue(extensionsConfigFileOption) is { } extensionsPath) {
+if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPath) {
     try {
-        if (connectTarget is not null) { throw new InvalidOperationException("Service extensions require a local authority, not a remote client boot."); }
-        extensionsConfiguration = Puck.World.Server.WorldExtensionConfiguration.Parse(Puck.Storage.ConfinedFile.ReadAllBytes(extensionsPath, 1048576));
-    } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException) {
-        Console.Error.WriteLine($"[world.extensions: configuration refused: {exception.Message}]");
+        if (connectTarget is not null) { throw new InvalidOperationException(message: "Service extensions require a local authority, not a remote client boot."); }
+        extensionsConfiguration = Puck.World.Server.WorldExtensionConfiguration.Parse(utf8: Puck.Storage.ConfinedFile.ReadAllBytes(
+            maximumBytes: 1048576,
+            path: extensionsPath
+        ));
+    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)) {
+        Console.Error.WriteLine(value: $"[world.extensions: configuration refused: {exception.Message}]");
         return 1;
     }
 }
@@ -186,7 +189,7 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
 // Build the host-local extension snapshot before loading the world: composition and semantic validation must use the same
 // immutable catalog that runtime machine construction receives, including optional installed extensions.
 var machineCatalog = WorldBootComposition.BuildMachineCatalog();
-var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog);
+var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog);
 // The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
@@ -212,18 +215,22 @@ if (!PuckWorldLoader.TryResolveWorld(
 // every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
 Puck.Networking.IAuthenticator authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator();
 string? connectionSubject = null;
-if (parseResult.GetValue(authenticationConfigFileOption) is { } authenticationPath) {
+if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenticationPath) {
     try {
-        if (connectTarget is null || parseResult.GetValue(federationKeyFileOption) is not null) {
-            throw new ArgumentException("Connection authentication requires --connect and cannot be combined with --federation-key-file.");
+        if (
+            (connectTarget is null) ||
+            (parseResult.GetValue(option: federationKeyFileOption) is not null)
+        ) {
+            throw new ArgumentException(message: "Connection authentication requires --connect and cannot be combined with --federation-key-file.");
         }
-        var connection = WorldConnectionAuthentication.Load(authenticationPath);
+        var connection = WorldConnectionAuthentication.Load(path: authenticationPath);
+
         authenticator = connection.Authenticator;
         connectionSubject = connection.Subject;
         // A user's local authority is an instance namespace, not a published listening endpoint.
         worldSource = worldSource with { Definition = worldSource.Definition with { HostRaw = worldSource.Definition.Host with { Authority = null, Listen = null } } };
-    } catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or Azure.Identity.AuthenticationFailedException) {
-        Console.Error.WriteLine($"[world.authentication: configuration refused: {error.Message}]");
+    } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or Azure.Identity.AuthenticationFailedException)) {
+        Console.Error.WriteLine(value: $"[world.authentication: configuration refused: {error.Message}]");
         return 1;
     }
 }
@@ -295,13 +302,16 @@ var height = ((uint)hostSettings.Height);
 GpuTimingControl.Shared.TrySeed(armed: hostSettings.Timing);
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
-services.AddWorldMachineCatalog(machineCatalog);
+services.AddWorldMachineCatalog(machineCatalog: machineCatalog);
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
 services.AddSingleton<Puck.Networking.IAuthenticator>(implementationInstance: authenticator);
-services.AddSingleton(_ => new Puck.World.Server.WorldPeerNetwork(
-    identityFile: parseResult.GetValue(option: federationKeyFileOption) ??
-        Path.Combine(Puck.World.Server.WorldStateRoot.Resolve(), "Network", "peer.pk8")));
+services.AddSingleton(implementationFactory: _ => new Puck.World.Server.WorldPeerNetwork(identityFile: (parseResult.GetValue(option: federationKeyFileOption) ??
+        Path.Combine(
+    path1: Puck.World.Server.WorldStateRoot.Resolve(),
+    path2: "Network",
+    path3: "peer.pk8"
+))));
 // The resolved host settings — read by the composition modules below and the world.host verb.
 services.AddSingleton(implementationInstance: hostSettings);
 // Registered before the launcher terminal block (AddLauncherTerminal/AddLauncherHeadlessTerminal, reached through
@@ -352,9 +362,12 @@ services.AddSingleton(implementationInstance: seatBindings);
 // composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
 services.AddWorldAuthoritativeCore();
 if (connectionSubject is not null) {
-    services.AddSingleton(sp => ActivatorUtilities.CreateInstance<Puck.World.Server.WorldServer>(sp, connectionSubject));
+    services.AddSingleton(implementationFactory: sp => ActivatorUtilities.CreateInstance<Puck.World.Server.WorldServer>(
+        sp,
+        connectionSubject
+    ));
 }
-services.AddSingleton(new WorldServiceExtensionOptions(extensionsConfiguration));
+services.AddSingleton(implementationInstance: new WorldServiceExtensionOptions(Configuration: extensionsConfiguration));
 if (hostSettings.Headless) {
     // No window, GPU device, swapchain, allocator, backend presenter, or audio device — the headless twin of the
     // block below (command pump + tick host). Nothing under AddWorldPresentation is ever called on this path.

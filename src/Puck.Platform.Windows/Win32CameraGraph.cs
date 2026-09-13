@@ -32,7 +32,10 @@ internal abstract class Win32CameraGraph<TStream> : ICameraGraph<TStream> where 
     protected bool Stopping => m_stop;
 
     public void Dispose() {
-        if (0 != Interlocked.Exchange(location1: ref m_disposed, value: 1)) {
+        if (0 != Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        )) {
             return;
         }
 
@@ -74,7 +77,10 @@ internal abstract class Win32CameraGraph<TStream> : ICameraGraph<TStream> where 
         m_stop = true;
         OnStopping();
 
-        if ((m_thread is { } thread) && !thread.Join(millisecondsTimeout: StopTimeoutMilliseconds)) {
+        if (
+            (m_thread is { } thread) &&
+            !thread.Join(millisecondsTimeout: StopTimeoutMilliseconds)
+        ) {
             Console.Error.WriteLine(value: $"[camera] '{Name}' did not stop within {StopTimeoutMilliseconds} ms; its worker retains its native resources until the driver call returns.");
         }
     }
@@ -107,7 +113,11 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
     public int Width => width;
 
     public bool TryCapture(out Surface surface) {
-        if (!Frames.TryGetLatest(destination: ref m_pullBuffer, height: out var frameHeight, width: out var frameWidth)) {
+        if (!Frames.TryGetLatest(
+            destination: ref m_pullBuffer,
+            height: out var frameHeight,
+            width: out var frameWidth
+        )) {
             surface = default;
 
             return false;
@@ -128,15 +138,14 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
 internal sealed class Win32SharedStream(CameraSensor sensor, int width, int height, CameraCaptureFormat nativeFormat, SurfaceFormat targetFormat) : ICameraSharedStream {
     private readonly TaskCompletionSource<nint[]> m_targets = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public LatestSlotPublication Slots { get; } = new();
+
     public long FrameVersion => Slots.Version;
     public int Height => height;
     public long LastFrameTimestamp => Slots.Timestamp;
     public int LatestSlot => Slots.LatestSlot;
     public CameraCaptureFormat NativeFormat => nativeFormat;
     public CameraSensor Sensor => sensor;
-
-    public LatestSlotPublication Slots { get; } = new();
-
     public SurfaceFormat TargetFormat => targetFormat;
     public Task<nint[]> Targets => m_targets.Task;
     public int Width => width;
@@ -147,7 +156,10 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
         ArgumentNullException.ThrowIfNull(sharedTargetHandles);
 
         if (sharedTargetHandles.Count < 2) {
-            throw new ArgumentException(message: "At least two shared targets are required.", paramName: nameof(sharedTargetHandles));
+            throw new ArgumentException(
+                message: "At least two shared targets are required.",
+                paramName: nameof(sharedTargetHandles)
+            );
         }
 
         Slots.Configure(targetCount: sharedTargetHandles.Count);

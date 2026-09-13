@@ -11,6 +11,145 @@ internal static class FileWalk {
         ".git", "artifacts", "BenchmarkDotNet.Artifacts", "bin", "node_modules", "obj", "publish",
     };
 
+    private static bool HasExtension(string path, string? extension) =>
+        ((extension is null) || path.EndsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: extension
+        ));
+    // The `.claude/worktrees` pair, matched as a pair so a `worktrees` directory anywhere else stays in.
+    private static bool IsAgentWorktreeRoot(string parent, string name) =>
+        (string.Equals(
+            a: name,
+            b: "worktrees",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+        && string.Equals(
+            a: Path.GetFileName(path: parent),
+            b: ".claude",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ));
+    private static bool MatchesAny(IReadOnlyList<CliGlob> globs, string fullPath) {
+        if (globs.Count == 0) {
+            return false;
+        }
+
+        var rel = CliPaths.RelForGlob(fullPath: fullPath);
+        var name = Path.GetFileName(path: fullPath);
+
+        foreach (var g in globs) {
+            if (g.IsMatch(value: (g.BasenameOnly
+                ? name
+                : rel))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Directory-name form of MatchesAny: only the basename globs apply, since a path-form glob is written
+    // against a file's relative path.
+    private static bool MatchesAnyName(IReadOnlyList<CliGlob> globs, string name) {
+        foreach (var g in globs) {
+            if (
+                g.BasenameOnly &&
+                g.IsMatch(value: name)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static void WalkDirectory(
+        string verb,
+        string dir,
+        IReadOnlyList<CliGlob> include,
+        IReadOnlyList<CliGlob> exclude,
+        string? extension,
+        Func<string, bool>? admit,
+        List<string> acc,
+        HashSet<string> seen
+    ) {
+        var stack = new Stack<string>();
+
+        stack.Push(item: dir);
+
+        while (stack.Count > 0) {
+            var current = stack.Pop();
+            IEnumerable<string> entries;
+
+            try {
+                entries = Directory.EnumerateFileSystemEntries(path: current);
+            } catch (Exception ex) when ((ex is UnauthorizedAccessException or IOException)) {
+                WarnUnreadable(
+                    exception: ex,
+                    path: current,
+                    verb: verb
+                );
+
+                continue;
+            }
+
+            foreach (var entry in entries) {
+                if (Directory.Exists(path: entry)) {
+                    var name = Path.GetFileName(path: entry);
+
+                    // A '/'-less --not glob names a basename, and a directory has one too: pruning here is
+                    // what makes `--not publish` exclude the directory rather than nothing. Path-form globs
+                    // stay a file filter. Agent worktrees (.claude/worktrees) hold live duplicate checkouts
+                    // whose copies answer a query as if they were live consumers, so they are pruned for
+                    // every verb; naming one as a root still walks it.
+                    if (
+                        !SkipDirectories.Contains(item: name) &&
+                        !MatchesAnyName(
+                        globs: exclude,
+                        name: name
+                    ) &&
+                        !IsAgentWorktreeRoot(
+                        name: name,
+                        parent: current
+                    )
+                    ) {
+                        stack.Push(item: entry);
+                    }
+
+                    continue;
+                }
+
+                if (!HasExtension(
+                    extension: extension,
+                    path: entry
+                )) {
+                    continue;
+                }
+
+                if (
+                    (include.Count > 0) &&
+                    !MatchesAny(
+                    fullPath: entry,
+                    globs: include
+                )
+                ) {
+                    continue;
+                }
+
+                if (MatchesAny(
+                    fullPath: entry,
+                    globs: exclude
+                )) {
+                    continue;
+                }
+
+                if (
+                    seen.Add(item: entry) &&
+                    (admit?.Invoke(arg: entry) ?? true)
+                ) {
+                    acc.Add(item: entry);
+                }
+            }
+        }
+    }
+
     // The admitted files, or null when a root names nothing on disk — a mistyped path would otherwise
     // answer exactly the way a tree with no matches does, and the caller turns null into a usage error.
     // Every bad root is reported before the walk gives up, so one run names them all.
@@ -48,15 +187,23 @@ internal static class FileWalk {
                 // honors the extension filter, --not, and the per-file gate. A named file of the wrong
                 // extension is called out rather than dropped, but does not fail the run: a caller may
                 // legitimately hand a mixed list over.
-                if (!HasExtension(extension: extension, path: full)) {
+                if (!HasExtension(
+                    extension: extension,
+                    path: full
+                )) {
                     Console.Error.WriteLine(value: $"{verb}: skipping {CliPaths.ToDisplay(fullPath: full)}: not a {extension} file.");
 
                     continue;
                 }
 
-                if (!MatchesAny(fullPath: full, globs: exclude)
-                    && seen.Add(item: full)
-                    && (admit?.Invoke(arg: full) ?? true)) {
+                if (
+                    !MatchesAny(
+                    fullPath: full,
+                    globs: exclude
+                ) &&
+                    seen.Add(item: full) &&
+                    (admit?.Invoke(arg: full) ?? true)
+                ) {
                     acc.Add(item: full);
                 }
 
@@ -71,7 +218,16 @@ internal static class FileWalk {
                 continue;
             }
 
-            WalkDirectory(acc: acc, admit: admit, dir: full, exclude: exclude, extension: extension, include: include, seen: seen, verb: verb);
+            WalkDirectory(
+                acc: acc,
+                admit: admit,
+                dir: full,
+                exclude: exclude,
+                extension: extension,
+                include: include,
+                seen: seen,
+                verb: verb
+            );
         }
 
         if (missing) {
@@ -86,100 +242,4 @@ internal static class FileWalk {
     // line, the walk continues, and the exit code still reports only whether anything was found.
     public static void WarnUnreadable(string verb, string path, Exception exception) =>
         Console.Error.WriteLine(value: $"{verb}: cannot read {CliPaths.ToDisplay(fullPath: path)}: {exception.Message}");
-
-    private static void WalkDirectory(
-        string verb,
-        string dir,
-        IReadOnlyList<CliGlob> include,
-        IReadOnlyList<CliGlob> exclude,
-        string? extension,
-        Func<string, bool>? admit,
-        List<string> acc,
-        HashSet<string> seen
-    ) {
-        var stack = new Stack<string>();
-
-        stack.Push(item: dir);
-
-        while (stack.Count > 0) {
-            var current = stack.Pop();
-            IEnumerable<string> entries;
-
-            try {
-                entries = Directory.EnumerateFileSystemEntries(path: current);
-            } catch (Exception ex) when ((ex is UnauthorizedAccessException or IOException)) {
-                WarnUnreadable(exception: ex, path: current, verb: verb);
-
-                continue;
-            }
-
-            foreach (var entry in entries) {
-                if (Directory.Exists(path: entry)) {
-                    var name = Path.GetFileName(path: entry);
-
-                    // A '/'-less --not glob names a basename, and a directory has one too: pruning here is
-                    // what makes `--not publish` exclude the directory rather than nothing. Path-form globs
-                    // stay a file filter. Agent worktrees (.claude/worktrees) hold live duplicate checkouts
-                    // whose copies answer a query as if they were live consumers, so they are pruned for
-                    // every verb; naming one as a root still walks it.
-                    if (!SkipDirectories.Contains(item: name)
-                        && !MatchesAnyName(globs: exclude, name: name)
-                        && !IsAgentWorktreeRoot(name: name, parent: current)) {
-                        stack.Push(item: entry);
-                    }
-
-                    continue;
-                }
-
-                if (!HasExtension(extension: extension, path: entry)) {
-                    continue;
-                }
-
-                if ((include.Count > 0) && !MatchesAny(fullPath: entry, globs: include)) {
-                    continue;
-                }
-
-                if (MatchesAny(fullPath: entry, globs: exclude)) {
-                    continue;
-                }
-
-                if (seen.Add(item: entry) && (admit?.Invoke(arg: entry) ?? true)) {
-                    acc.Add(item: entry);
-                }
-            }
-        }
-    }
-    // The `.claude/worktrees` pair, matched as a pair so a `worktrees` directory anywhere else stays in.
-    private static bool IsAgentWorktreeRoot(string parent, string name) =>
-        (string.Equals(a: name, b: "worktrees", comparisonType: StringComparison.OrdinalIgnoreCase)
-        && string.Equals(a: Path.GetFileName(path: parent), b: ".claude", comparisonType: StringComparison.OrdinalIgnoreCase));
-    private static bool HasExtension(string path, string? extension) =>
-        ((extension is null) || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension));
-    private static bool MatchesAny(IReadOnlyList<CliGlob> globs, string fullPath) {
-        if (globs.Count == 0) {
-            return false;
-        }
-
-        var rel = CliPaths.RelForGlob(fullPath: fullPath);
-        var name = Path.GetFileName(path: fullPath);
-
-        foreach (var g in globs) {
-            if (g.IsMatch(value: (g.BasenameOnly ? name : rel))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // Directory-name form of MatchesAny: only the basename globs apply, since a path-form glob is written
-    // against a file's relative path.
-    private static bool MatchesAnyName(IReadOnlyList<CliGlob> globs, string name) {
-        foreach (var g in globs) {
-            if (g.BasenameOnly && g.IsMatch(value: name)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

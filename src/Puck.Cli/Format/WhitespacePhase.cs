@@ -29,21 +29,35 @@ internal static class WhitespacePhase {
         if (
             Path.IsPathRooted(path: relative) ||
             (relative == "..") ||
-            relative.StartsWith(comparisonType: StringComparison.Ordinal, value: "../")
+            relative.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "../"
+        )
         ) {
             return null;
         }
 
         return (relative.EndsWith(value: '/')
             ? relative
-            : $"{relative}/");
+            : $"{relative}/"
+        );
     }
 
     public static int Run(string rootArgument, bool verifyOnly, string[]? targets = null) {
         var files = targets;
-        var scanRoot = ((targets is null) ? string.Empty : Path.GetFullPath(path: rootArgument));
+        var scanRoot = ((targets is null)
+            ? string.Empty
+            : Path.GetFullPath(path: rootArgument)
+        );
 
-        if ((files is null) && !SourceFiles.TryEnumerate(files: out files, rootArgument: rootArgument, scanRoot: out scanRoot)) {
+        if (
+            (files is null) &&
+            !SourceFiles.TryEnumerate(
+            files: out files,
+            rootArgument: rootArgument,
+            scanRoot: out scanRoot
+        )
+        ) {
             return 2;
         }
 
@@ -57,11 +71,17 @@ internal static class WhitespacePhase {
         foreach (var file in files) {
             var directory = SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: file)!);
 
-            if ((directory is null) || !owningDirectories.Add(item: directory)) {
+            if (
+                (directory is null) ||
+                !owningDirectories.Add(item: directory)
+            ) {
                 continue;
             }
 
-            foreach (var project in Directory.EnumerateFiles(path: directory, searchPattern: "*.csproj")) {
+            foreach (var project in Directory.EnumerateFiles(
+                path: directory,
+                searchPattern: "*.csproj"
+            )) {
                 projects.Add(item: project);
             }
         }
@@ -72,7 +92,11 @@ internal static class WhitespacePhase {
         );
         var result = 0;
 
-        if ((targets is null) && (include is null) && (projects.Count > 0)) {
+        if (
+            (targets is null) &&
+            (include is null) &&
+            (projects.Count > 0)
+        ) {
             Console.Error.WriteLine(value: $"dotnet format whitespace: {CliPaths.ToDisplay(fullPath: scanRoot)} does not sit under the working directory — phase 0 runs UNSCOPED and may format compile items linked in from outside it.");
         }
 
@@ -86,23 +110,76 @@ internal static class WhitespacePhase {
                 arguments.Add(item: "--include");
                 arguments.AddRange(collection: targets
                     .Where(predicate: file => (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: file)!) == Path.GetDirectoryName(path: project)))
-                    .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: scanRoot).Replace(newChar: '/', oldChar: '\\')));
-                var selectedCode = CliProcess.RunStreamedInDirectory(fileName: "dotnet", workingDirectory: scanRoot, arguments: [.. arguments]);
+                    .Select(selector: file => Path.GetRelativePath(
+                    path: file,
+                    relativeTo: scanRoot
+                ).Replace(
+                    newChar: '/',
+                    oldChar: '\\'
+                )));
+                var selectedCode = CliProcess.RunStreamedInDirectory(
+                    fileName: "dotnet",
+                    workingDirectory: scanRoot,
+                    arguments: [.. arguments]
+                );
 
-                if (selectedCode != 0) { result = Math.Max(val1: result, val2: (verifyOnly ? 1 : 2)); }
+                if (selectedCode != 0) {
+                    result = Math.Max(
+                        val1: result,
+                        val2: (verifyOnly
+                        ? 1
+                        : 2)
+                    );
+                }
                 continue;
             }
 
             var code = ((include is null)
                 ? (verifyOnly
-                    ? CliProcess.RunStreamed(fileName: "dotnet", "format", "whitespace", project, "--no-restore", "--verify-no-changes")
-                    : CliProcess.RunStreamed(fileName: "dotnet", "format", "whitespace", project, "--no-restore"))
+                    ? CliProcess.RunStreamed(
+                        fileName: "dotnet",
+                        "format",
+                        "whitespace",
+                        project,
+                        "--no-restore",
+                        "--verify-no-changes"
+                    )
+                    : CliProcess.RunStreamed(
+                        fileName: "dotnet",
+                        "format",
+                        "whitespace",
+                        project,
+                        "--no-restore"
+                    ))
                 : (verifyOnly
-                    ? CliProcess.RunStreamed(fileName: "dotnet", "format", "whitespace", project, "--no-restore", "--verify-no-changes", "--include", include)
-                    : CliProcess.RunStreamed(fileName: "dotnet", "format", "whitespace", project, "--no-restore", "--include", include)));
+                    ? CliProcess.RunStreamed(
+                        fileName: "dotnet",
+                        "format",
+                        "whitespace",
+                        project,
+                        "--no-restore",
+                        "--verify-no-changes",
+                        "--include",
+                        include
+                    )
+                    : CliProcess.RunStreamed(
+                        fileName: "dotnet",
+                        "format",
+                        "whitespace",
+                        project,
+                        "--no-restore",
+                        "--include",
+                        include
+                    )
+            ));
 
             if (code != 0) {
-                result = Math.Max(val1: result, val2: (verifyOnly ? 1 : 2));
+                result = Math.Max(
+                    val1: result,
+                    val2: (verifyOnly
+                    ? 1
+                    : 2)
+                );
             }
         }
 

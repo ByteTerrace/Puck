@@ -10,7 +10,6 @@ namespace Puck.Physics;
 /// <param name="AlignmentAffinity">Heading-influence weight in [0,1], independent of affection.</param>
 public readonly record struct FixedFlockNeighbor(int Index, FixedVector3 Offset, FixedVector3 Velocity,
     FixedQ4816 CohesionAffinity, FixedQ4816 AlignmentAffinity);
-
 /// <summary>Caller-authored relative steering weights and personal separation distance.</summary>
 /// <param name="SeparationRadius">Nonnegative distance inside which repulsion increases linearly.</param>
 /// <param name="Separation">Repulsion weight in [0,1].</param>
@@ -20,7 +19,6 @@ public readonly record struct FixedFlockNeighbor(int Index, FixedVector3 Offset,
 /// <param name="Inertia">Current-heading weight in [0,1].</param>
 public readonly record struct FixedFlockWeights(FixedQ4816 SeparationRadius, FixedQ4816 Separation,
     FixedQ4816 Alignment, FixedQ4816 Cohesion, FixedQ4816 Goal, FixedQ4816 Inertia);
-
 /// <summary>Independent steering terms and their bounded blend, all in world axes.</summary>
 /// <param name="Separation">Mean local repulsion.</param>
 /// <param name="Alignment">Direction of the affinity-weighted mean velocity.</param>
@@ -28,7 +26,6 @@ public readonly record struct FixedFlockWeights(FixedQ4816 SeparationRadius, Fix
 /// <param name="Desired">Blended direction with magnitude capped at one, to fixed-point rounding precision.</param>
 public readonly record struct FixedFlockSteeringResult(FixedVector3 Separation, FixedVector3 Alignment,
     FixedVector3 Cohesion, FixedVector3 Desired);
-
 /// <summary>Policy-free flock steering over a frozen, bounded perception sample.</summary>
 /// <remarks>
 /// The caller owns perception, social affinities, route selection, locomotion, and collision correctness.
@@ -38,54 +35,74 @@ public readonly record struct FixedFlockSteeringResult(FixedVector3 Separation, 
 /// All accumulation is order-independent integer addition; weighted means round once through Puck.Maths.
 /// </remarks>
 public static class FixedFlockSteering {
-    /// <summary>Builds a bounded movement preference without changing any supplied observation.</summary>
-    /// <param name="selfIndex">Observer slot, used for coincident-pair antisymmetry and self exclusion.</param>
-    /// <param name="velocity">Current world-space velocity.</param>
-    /// <param name="goalDirection">Direction toward the selected target or route waypoint; zero means no goal.</param>
-    /// <param name="planeNormal">Nonzero for tangent-plane motion, zero for unconstrained 3D.</param>
-    /// <param name="neighbors">Already-perceived neighbors; the kernel performs no hidden world reads.</param>
-    /// <param name="weights">Authored steering weights.</param>
-    /// <returns>The component terms and movement preference.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A weight or affinity leaves [0,1], or separation radius is negative.</exception>
-    public static FixedFlockSteeringResult Evaluate(int selfIndex, in FixedVector3 velocity,
-        in FixedVector3 goalDirection, in FixedVector3 planeNormal, ReadOnlySpan<FixedFlockNeighbor> neighbors,
-        in FixedFlockWeights weights) {
-        ArgumentOutOfRangeException.ThrowIfNegative(weights.SeparationRadius);
-        Unit(weights.Separation);
-        Unit(weights.Alignment);
-        Unit(weights.Cohesion);
-        Unit(weights.Goal);
-        Unit(weights.Inertia);
-        var normal = planeNormal.Normalize();
-        var separation = new Mean();
-        var alignment = new Mean();
-        var cohesion = new Mean();
-        foreach (ref readonly var neighbor in neighbors) {
-            Unit(neighbor.CohesionAffinity);
-            Unit(neighbor.AlignmentAffinity);
-            if (neighbor.Index == selfIndex) { continue; }
-            cohesion.Add(neighbor.Offset, neighbor.CohesionAffinity);
-            alignment.Add(neighbor.Velocity, neighbor.AlignmentAffinity);
-            var repulsion = FixedVector3.Zero;
-            if (weights.SeparationRadius > FixedQ4816.Zero) {
-                var distance = neighbor.Offset.Length;
-                if (distance < weights.SeparationRadius) {
-                    var direction = neighbor.Offset == FixedVector3.Zero
-                        ? CoincidentDirection(selfIndex, neighbor.Index, normal)
-                        : -PlanarDirection(neighbor.Offset, normal);
-                    repulsion = direction * ((weights.SeparationRadius - distance) / weights.SeparationRadius);
-                }
-            }
-            separation.Add(repulsion, FixedQ4816.One);
+    private static FixedVector3 CoincidentDirection(int self, int other, in FixedVector3 normal) {
+        var lower = Math.Min(
+            val1: self,
+            val2: other
+        );
+        var upper = Math.Max(
+            val1: self,
+            val2: other
+        );
+        var axis = (unchecked(((((uint)lower) * 0x9E3779B9u) + (((uint)upper) * 0x85EBCA6Bu))) % 3);
+        var direction = axis switch {
+            0 => new FixedVector3(
+            X: FixedQ4816.One,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        ),
+            1 => new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.One,
+            Z: FixedQ4816.Zero
+        ),
+            _ => new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.One
+        ),
+        };
+
+        direction = PlanarDirection(
+            direction: direction,
+            normal: normal
+        );
+        if (direction == FixedVector3.Zero) {
+            FixedVector3.OrthonormalBasis(
+                normal: normal,
+                tangent1: out direction,
+                tangent2: out _
+            );
         }
-        var separate = separation.Value();
-        var align = PlanarDirection(alignment.Value(), normal);
-        var cohere = PlanarDirection(cohesion.Value(), normal);
-        var preference = separate * weights.Separation
-            + align * weights.Alignment
-            + cohere * weights.Cohesion;
-        var desired = BlendPreference(preference, velocity, goalDirection, normal, weights.Goal, weights.Inertia);
-        return new FixedFlockSteeringResult(separate, align, cohere, desired);
+        return ((self < other)
+            ? direction
+            : -direction
+        );
+    }
+    private static FixedVector3 PlanarDirection(in FixedVector3 direction, in FixedVector3 normal) {
+        // Normalize before projection: even full-width positions/velocities cannot overflow the dot or subtraction.
+        var unit = direction.Normalize();
+
+        return ((normal == FixedVector3.Zero)
+            ? unit
+            : FixedVector3.Cross(
+                left: normal,
+                right: FixedVector3.Cross(
+                    left: unit,
+                    right: normal
+                )
+            ).Normalize()
+        );
+    }
+    private static void Unit(FixedQ4816 value) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value,
+            FixedQ4816.Zero
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value,
+            FixedQ4816.One
+        );
     }
 
     /// <summary>Blends cached neighbor influence with the current goal and heading, then caps speed at one.</summary>
@@ -99,39 +116,121 @@ public static class FixedFlockSteering {
     /// <exception cref="ArgumentOutOfRangeException">Either weight leaves [0,1].</exception>
     public static FixedVector3 BlendPreference(in FixedVector3 neighborPreference, in FixedVector3 velocity,
         in FixedVector3 goalDirection, in FixedVector3 planeNormal, FixedQ4816 goalWeight, FixedQ4816 inertiaWeight) {
-        Unit(goalWeight);
-        Unit(inertiaWeight);
+        Unit(value: goalWeight);
+        Unit(value: inertiaWeight);
         var normal = planeNormal.Normalize();
-        var local = normal == FixedVector3.Zero ? neighborPreference :
-            FixedVector3.Cross(normal, FixedVector3.Cross(neighborPreference, normal));
-        var desired = local + PlanarDirection(goalDirection, normal) * goalWeight
-            + PlanarDirection(velocity, normal) * inertiaWeight;
-        return desired.LengthSquared > FixedQ4816.One ? desired.Normalize() : desired;
-    }
+        var local = ((normal == FixedVector3.Zero)
+            ? neighborPreference
+            : FixedVector3.Cross(
+                left: normal,
+                right: FixedVector3.Cross(
+                    left: neighborPreference,
+                    right: normal
+                )
+            )
+        );
+        var desired = ((local + (PlanarDirection(
+            direction: goalDirection,
+            normal: normal
+        ) * goalWeight))
+            + (PlanarDirection(
+            direction: velocity,
+            normal: normal
+        ) * inertiaWeight));
 
-    private static void Unit(FixedQ4816 value) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value, FixedQ4816.Zero);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value, FixedQ4816.One);
+        return ((desired.LengthSquared > FixedQ4816.One)
+            ? desired.Normalize()
+            : desired
+        );
     }
-    private static FixedVector3 PlanarDirection(in FixedVector3 direction, in FixedVector3 normal) {
-        // Normalize before projection: even full-width positions/velocities cannot overflow the dot or subtraction.
-        var unit = direction.Normalize();
-        return normal == FixedVector3.Zero ? unit : FixedVector3.Cross(normal, FixedVector3.Cross(unit, normal)).Normalize();
-    }
-    private static FixedVector3 CoincidentDirection(int self, int other, in FixedVector3 normal) {
-        var lower = Math.Min(self, other);
-        var upper = Math.Max(self, other);
-        var axis = unchecked((uint)lower * 0x9E3779B9u + (uint)upper * 0x85EBCA6Bu) % 3;
-        var direction = axis switch {
-            0 => new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.Zero),
-            1 => new FixedVector3(FixedQ4816.Zero, FixedQ4816.One, FixedQ4816.Zero),
-            _ => new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.One),
-        };
-        direction = PlanarDirection(direction, normal);
-        if (direction == FixedVector3.Zero) {
-            FixedVector3.OrthonormalBasis(normal, out direction, out _);
+    /// <summary>Builds a bounded movement preference without changing any supplied observation.</summary>
+    /// <param name="selfIndex">Observer slot, used for coincident-pair antisymmetry and self exclusion.</param>
+    /// <param name="velocity">Current world-space velocity.</param>
+    /// <param name="goalDirection">Direction toward the selected target or route waypoint; zero means no goal.</param>
+    /// <param name="planeNormal">Nonzero for tangent-plane motion, zero for unconstrained 3D.</param>
+    /// <param name="neighbors">Already-perceived neighbors; the kernel performs no hidden world reads.</param>
+    /// <param name="weights">Authored steering weights.</param>
+    /// <returns>The component terms and movement preference.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A weight or affinity leaves [0,1], or separation radius is negative.</exception>
+    public static FixedFlockSteeringResult Evaluate(int selfIndex, in FixedVector3 velocity,
+        in FixedVector3 goalDirection, in FixedVector3 planeNormal, ReadOnlySpan<FixedFlockNeighbor> neighbors,
+        in FixedFlockWeights weights) {
+        ArgumentOutOfRangeException.ThrowIfNegative(weights.SeparationRadius);
+        Unit(value: weights.Separation);
+        Unit(value: weights.Alignment);
+        Unit(value: weights.Cohesion);
+        Unit(value: weights.Goal);
+        Unit(value: weights.Inertia);
+        var normal = planeNormal.Normalize();
+        var separation = new Mean();
+        var alignment = new Mean();
+        var cohesion = new Mean();
+
+        foreach (ref readonly var neighbor in neighbors) {
+            Unit(value: neighbor.CohesionAffinity);
+            Unit(value: neighbor.AlignmentAffinity);
+            if (neighbor.Index == selfIndex) { continue; }
+            cohesion.Add(
+                value: neighbor.Offset,
+                weight: neighbor.CohesionAffinity
+            );
+            alignment.Add(
+                value: neighbor.Velocity,
+                weight: neighbor.AlignmentAffinity
+            );
+            var repulsion = FixedVector3.Zero;
+
+            if (weights.SeparationRadius > FixedQ4816.Zero) {
+                var distance = neighbor.Offset.Length;
+
+                if (distance < weights.SeparationRadius) {
+                    var direction = ((neighbor.Offset == FixedVector3.Zero)
+                        ? CoincidentDirection(
+                            selfIndex,
+                            neighbor.Index,
+                            normal
+                        )
+                        : -PlanarDirection(
+                            direction: neighbor.Offset,
+                            normal: normal
+                        )
+                    );
+
+                    repulsion = (direction * ((weights.SeparationRadius - distance) / weights.SeparationRadius));
+                }
+            }
+            separation.Add(
+                value: repulsion,
+                weight: FixedQ4816.One
+            );
         }
-        return self < other ? direction : -direction;
+        var separate = separation.Value();
+        var align = PlanarDirection(
+            direction: alignment.Value(),
+            normal: normal
+        );
+        var cohere = PlanarDirection(
+            direction: cohesion.Value(),
+            normal: normal
+        );
+        var preference = (((separate * weights.Separation)
+            + (align * weights.Alignment))
+            + (cohere * weights.Cohesion));
+        var desired = BlendPreference(
+            preference,
+            velocity,
+            goalDirection,
+            normal,
+            weights.Goal,
+            weights.Inertia
+        );
+
+        return new FixedFlockSteeringResult(
+            Alignment: align,
+            Cohesion: cohere,
+            Desired: desired,
+            Separation: separate
+        );
     }
 
     // A component contributes at most 2^63 * 2^16. Even Int32.MaxValue observations fit within Int128.
@@ -142,19 +241,36 @@ public static class FixedFlockSteering {
         private Int128 m_z;
         private ulong m_weight;
 
-        public void Add(in FixedVector3 value, FixedQ4816 weight) {
-            m_x += (Int128)value.X.Value * weight.Value;
-            m_y += (Int128)value.Y.Value * weight.Value;
-            m_z += (Int128)value.Z.Value * weight.Value;
-            m_weight += (ulong)weight.Value;
-        }
-        public readonly FixedVector3 Value() => m_weight == 0 ? FixedVector3.Zero : new(Round(m_x), Round(m_y), Round(m_z));
         private readonly FixedQ4816 Round(Int128 sum) {
-            if (!FusedArithmetic.TryDivideMagnitudeRounded((UInt128)Int128.Abs(sum), m_weight, 0, out var magnitude)) {
-                throw new InvalidOperationException("A bounded weighted mean could not be represented.");
+            if (!FusedArithmetic.TryDivideMagnitudeRounded(
+                ((UInt128)Int128.Abs(value: sum)),
+                m_weight,
+                0,
+                out var magnitude
+            )) {
+                throw new InvalidOperationException(message: "A bounded weighted mean could not be represented.");
             }
-            var signed = sum < 0 ? -(Int128)magnitude : (Int128)magnitude;
-            return FixedQ4816.FromRawBits(checked((long)signed));
+            var signed = ((sum < 0)
+                ? -((Int128)magnitude)
+                : (Int128)magnitude
+            );
+
+            return FixedQ4816.FromRawBits(value: checked((long)signed));
         }
+
+        public void Add(in FixedVector3 value, FixedQ4816 weight) {
+            m_x += (((Int128)value.X.Value) * weight.Value);
+            m_y += (((Int128)value.Y.Value) * weight.Value);
+            m_z += (((Int128)value.Z.Value) * weight.Value);
+            m_weight += ((ulong)weight.Value);
+        }
+        public readonly FixedVector3 Value() => ((m_weight == 0)
+            ? FixedVector3.Zero
+            : new(
+                X: Round(sum: m_x),
+                Y: Round(sum: m_y),
+                Z: Round(sum: m_z)
+            )
+        );
     }
 }

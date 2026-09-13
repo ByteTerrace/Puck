@@ -12,17 +12,27 @@ public sealed class MachineContentCarrierTests {
             Path: "game.cartridge.json",
             Image: image,
             ContentHash: "source-hash",
-            SourceBytes: source);
+            SourceBytes: source
+        );
 
-        Assert.Equal(source, asset.SourceBytes.ToArray());
-        Assert.Equal(image, asset.Image.ToArray());
-        Assert.False(asset.SourceBytes.Span.SequenceEqual(asset.Image.Span));
+        Assert.Equal(
+            source,
+            asset.SourceBytes.ToArray()
+        );
+        Assert.Equal(
+            image,
+            asset.Image.ToArray()
+        );
+        Assert.False(condition: asset.SourceBytes.Span.SequenceEqual(other: asset.Image.Span));
     }
-
     [Fact]
     public void UnassertedPreparedContentHasNoFormatProvenance() {
-        var content = new PreparedMachineContent(Image: [1], SourceHash: "hash", Symbols: new Dictionary<string, MachineContentSymbol>());
+        var content = new PreparedMachineContent(
+            Image: [1],
+            SourceHash: "hash",
+            Symbols: new Dictionary<string, MachineContentSymbol>()
+        );
 
-        Assert.Null(content.VerifiedSourceFormat);
+        Assert.Null(@object: content.VerifiedSourceFormat);
     }
 }

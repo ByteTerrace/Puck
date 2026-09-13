@@ -14,9 +14,11 @@ internal sealed class InitOrderRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node) {
         var visited = ((InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!);
 
-        if (!visited.IsKind(kind: SyntaxKind.ObjectInitializerExpression)
-            || (visited.Expressions.Count < 2)
-            || !visited.Expressions.All(predicate: static expression => (expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax }))) {
+        if (
+            !visited.IsKind(kind: SyntaxKind.ObjectInitializerExpression) ||
+            (visited.Expressions.Count < 2) ||
+            !visited.Expressions.All(predicate: static expression => (expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax }))
+        ) {
             return visited;
         }
 
@@ -26,8 +28,13 @@ internal sealed class InitOrderRewriter : CSharpSyntaxRewriter {
         var memberNames = visited.Expressions.Select(selector: static expression =>
             ((IdentifierNameSyntax)((AssignmentExpressionSyntax)expression).Left).Identifier.ValueText);
 
-        if (memberNames.SequenceEqual(second: memberNames.OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal))
-            || visited.Expressions.Any(predicate: static expression => ExpressionSafety.HasSideEffect(expression: ((AssignmentExpressionSyntax)expression).Right))) {
+        if (
+            memberNames.SequenceEqual(second: memberNames.OrderBy(
+            keySelector: static name => name,
+            comparer: StringComparer.Ordinal
+        )) ||
+            visited.Expressions.Any(predicate: static expression => ExpressionSafety.HasSideEffect(expression: ((AssignmentExpressionSyntax)expression).Right))
+        ) {
             return visited;
         }
 
@@ -40,10 +47,14 @@ internal sealed class InitOrderRewriter : CSharpSyntaxRewriter {
 
         var ordered = visited.Expressions
             .OrderBy(
-                keySelector: static expression => ((IdentifierNameSyntax)((AssignmentExpressionSyntax)expression).Left).Identifier.ValueText,
-                comparer: StringComparer.Ordinal)
+            keySelector: static expression => ((IdentifierNameSyntax)((AssignmentExpressionSyntax)expression).Left).Identifier.ValueText,
+            comparer: StringComparer.Ordinal
+        )
             .ToArray();
 
-        return visited.WithExpressions(expressions: RewriteShaping.ReorderInPlace(original: visited.Expressions, ordered: ordered));
+        return visited.WithExpressions(expressions: RewriteShaping.ReorderInPlace(
+            original: visited.Expressions,
+            ordered: ordered
+        ));
     }
 }

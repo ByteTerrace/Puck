@@ -6,24 +6,22 @@ using StackExchange.Redis;
 
 namespace Puck.Azure.Functions.HealthChecks;
 
-public sealed class RedisCacheHealthCheckOptions
-{
+public sealed class RedisCacheHealthCheckOptions {
     public string? ClientName { get; set; }
 }
-
-public sealed class RedisCacheHealthCheck(IServiceProvider serviceProvider) : IHealthCheck
-{
+public sealed class RedisCacheHealthCheck(IServiceProvider serviceProvider) : IHealthCheck {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default
     ) {
         try {
             var options = serviceProvider.GetRequiredService<IOptions<RedisCacheHealthCheckOptions>>();
-            var connectionMultiplexer = (options.Value.ClientName is null)
+            var connectionMultiplexer = ((options.Value.ClientName is null)
                 ? serviceProvider.GetRequiredService<IConnectionMultiplexer>()
                 : serviceProvider
                     .GetRequiredService<IAzureClientFactory<IConnectionMultiplexer>>()
-                    .CreateClient(name: options.Value.ClientName);
+                    .CreateClient(name: options.Value.ClientName)
+            );
 
             await Task
                 .WhenAll(tasks: connectionMultiplexer
@@ -31,18 +29,14 @@ public sealed class RedisCacheHealthCheck(IServiceProvider serviceProvider) : IH
                     .Select(selector: async endpoint => await connectionMultiplexer
                         .GetServer(endpoint: endpoint)
                         .PingAsync()
-                        .ConfigureAwait(continueOnCapturedContext: false)
-                    )
+                        .ConfigureAwait(continueOnCapturedContext: false))
                     .Append(element: connectionMultiplexer
                         .GetDatabase()
-                        .PingAsync()
-                    )
-                )
+                        .PingAsync()))
                 .WaitAsync(cancellationToken: cancellationToken);
 
             return HealthCheckResult.Healthy();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             return new HealthCheckResult(
                 exception: e,
                 status: context.Registration.FailureStatus

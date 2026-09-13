@@ -7,6 +7,33 @@ namespace Puck.HumbleGamingBrick.Forge.Tests;
 /// than patched with a zero.</summary>
 public sealed class Sm83EmitterLabelTests {
     [Fact]
+    public void AnUnboundAbsoluteTargetIsRefusedByMnemonic() {
+        var emitter = new Sm83Emitter();
+
+        emitter.Nop();
+        emitter.Call(label: emitter.NewLabel());
+
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray());
+
+        Assert.Equal(
+            actual: refusal.Message,
+            expected: "jp targets an unbound label 0."
+        );
+    }
+    [Fact]
+    public void AnUnboundRelativeTargetIsRefusedByMnemonic() {
+        var emitter = new Sm83Emitter();
+
+        emitter.JumpRelative(label: emitter.NewLabel());
+
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray());
+
+        Assert.Equal(
+            actual: refusal.Message,
+            expected: "jr targets an unbound label 0."
+        );
+    }
+    [Fact]
     public void LabelsAreAllocatedInOrderAndBothFixupFamiliesResolveThem() {
         var emitter = new Sm83Emitter();
         var start = emitter.NewLabel();
@@ -33,33 +60,6 @@ public sealed class Sm83EmitterLabelTests {
         Assert.Equal(
             actual: code,
             expected: new byte[] { 0x00, 0x20, 0xFD, 0xC3, 0x56, 0x01, 0xC9 }
-        );
-    }
-    [Fact]
-    public void AnUnboundRelativeTargetIsRefusedByMnemonic() {
-        var emitter = new Sm83Emitter();
-
-        emitter.JumpRelative(label: emitter.NewLabel());
-
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray());
-
-        Assert.Equal(
-            actual: refusal.Message,
-            expected: "jr targets an unbound label 0."
-        );
-    }
-    [Fact]
-    public void AnUnboundAbsoluteTargetIsRefusedByMnemonic() {
-        var emitter = new Sm83Emitter();
-
-        emitter.Nop();
-        emitter.Call(label: emitter.NewLabel());
-
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray());
-
-        Assert.Equal(
-            actual: refusal.Message,
-            expected: "jp targets an unbound label 0."
         );
     }
 }

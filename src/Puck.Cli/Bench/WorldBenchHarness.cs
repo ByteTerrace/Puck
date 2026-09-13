@@ -23,20 +23,44 @@ internal sealed class WorldBenchServer : IDisposable {
     public static WorldBenchServer Boot(WorldDefinition definition, WorldMachineCatalog? catalog = null, string? documentPath = null) {
         var population = new WorldPopulation(definition: definition);
         var machines = ((catalog is not null)
-            ? new WorldMachineHost(screens: definition.Screens, catalog: catalog, documentPath: documentPath)
-            : new WorldMachineHost(screens: definition.Screens, engines: []));
+            ? new WorldMachineHost(
+                screens: definition.Screens,
+                catalog: catalog,
+                documentPath: documentPath
+            )
+            : new WorldMachineHost(
+                screens: definition.Screens,
+                engines: []
+            )
+        );
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-bench-world-").FullName;
-        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
-        var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);
+        var profiles = new WorldOwnedWorlds(
+            template: definition,
+            directory: stateDirectory,
+            machineId: Guid.NewGuid()
+        );
+        var server = new WorldServer(
+            definition: definition,
+            population: population,
+            profiles: profiles,
+            envelope: new WorldRenderEnvelope(),
+            machines: machines
+        );
 
-        return new WorldBenchServer(server: server, machines: machines, stateDirectory: stateDirectory);
+        return new WorldBenchServer(
+            machines: machines,
+            server: server,
+            stateDirectory: stateDirectory
+        );
     }
-
     public void Dispose() {
         m_machines.Dispose();
 
         try {
-            Directory.Delete(path: m_stateDirectory, recursive: true);
+            Directory.Delete(
+                path: m_stateDirectory,
+                recursive: true
+            );
         } catch (IOException) {
         }
     }

@@ -135,8 +135,8 @@ public static class FontAtlasCatalogPacker {
         }
 
         var imageData = FontAtlasImageData.TakeOwnership(
-            rgbaPixels: rgba,
             height: height,
+            rgbaPixels: rgba,
             width: width
         );
 

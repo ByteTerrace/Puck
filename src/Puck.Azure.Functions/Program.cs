@@ -29,31 +29,29 @@ builder.ConfigureFunctionsWebApplication();
 services.AddAzureClients(configureClients: clientFactoryBuilder => {
     clientFactoryBuilder.UseCredential(tokenCredential: tokenCredential);
     clientFactoryBuilder
-        .AddClient<BlobServiceClient, BlobClientOptions>(
-            factory: (blobClientOptions, tokenCredential, serviceProvider) => {
+        .AddClient<BlobServiceClient, BlobClientOptions>(factory: (blobClientOptions, tokenCredential, serviceProvider) => {
                 var endpoint = serviceProvider
                     .GetRequiredService<IOptionsMonitor<PublicStorageOptions>>()
                     .CurrentValue
                     .Endpoint;
 
                 return (!Uri.TryCreate(
-                        result: out var endpointUri,
-                        uriKind: UriKind.Absolute,
-                        uriString: endpoint
-                    )
+                    result: out var endpointUri,
+                    uriKind: UriKind.Absolute,
+                    uriString: endpoint
+                )
                     ? throw new ArgumentException(message: $"Current public storage endpoint \"{endpoint}\" is not a valid absolute URI.")
                     : new BlobServiceClient(
                         credential: tokenCredential,
                         options: blobClientOptions,
                         serviceUri: endpointUri
-                    ));
-            }
-        )
+                    )
+                );
+            })
         .WithName(name: "PublicStorage");
     clientFactoryBuilder
         .AddClient<GraphServiceClient, GraphClientOptions>(factory: (_, tokenCredential) =>
-            new(tokenCredential: tokenCredential)
-        );
+            new(tokenCredential: tokenCredential));
 });
 if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLICATIONINSIGHTS_CONNECTION_STRING"))) {
     builder
@@ -92,11 +90,12 @@ services
                 const string BearerPrefix = $"{JwtBearerDefaults.AuthenticationScheme} ";
 
                 context.Token = (authorization.StartsWith(
-                        comparisonType: StringComparison.OrdinalIgnoreCase,
-                        value: BearerPrefix
-                    )
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: BearerPrefix
+                )
                     ? authorization[BearerPrefix.Length..]
-                    : authorization);
+                    : authorization
+                );
             }
 
             return Task.CompletedTask;
@@ -111,15 +110,15 @@ var resourceManagerTokenRequestContext = new TokenRequestContext(scopes: ["https
 services
     .AddHttpClient(name: "Actors")
     .AddHttpMessageHandler(configureHandler: serviceProvider => new BearerTokenDelegatingHandler(
-        tokenCredential: serviceProvider.GetRequiredKeyedService<TokenCredential>(serviceKey: "Default"),
-        tokenRequestContext: actorsTokenRequestContext
-    ));
+    tokenCredential: serviceProvider.GetRequiredKeyedService<TokenCredential>(serviceKey: "Default"),
+    tokenRequestContext: actorsTokenRequestContext
+));
 services
     .AddHttpClient(name: "AzureResourceManager")
     .AddHttpMessageHandler(configureHandler: serviceProvider => new BearerTokenDelegatingHandler(
-        tokenCredential: serviceProvider.GetRequiredKeyedService<TokenCredential>(serviceKey: "Default"),
-        tokenRequestContext: resourceManagerTokenRequestContext
-    ));
+    tokenCredential: serviceProvider.GetRequiredKeyedService<TokenCredential>(serviceKey: "Default"),
+    tokenRequestContext: resourceManagerTokenRequestContext
+));
 services.AddHybridCache(setupAction: static hybridCacheOptions => {
     hybridCacheOptions.MaximumKeyLength = 64;
     hybridCacheOptions.MaximumPayloadBytes = 32768;
@@ -133,9 +132,7 @@ services.TryAddDataProtection(
     applicationName: (configuration.GetValue<string>(key: "AZURE_CLIENT_ID") ?? builder.Environment.ApplicationName),
     configuration: configuration
 );
-services.TryAddRedisCache(
-    configuration: configuration
-);
+services.TryAddRedisCache(configuration: configuration);
 services
     .AddOptions<PublicStorageOptions>()
     .Bind(config: configuration.GetSection(key: "PublicStorage"));
@@ -157,11 +154,7 @@ services.AddOptions<OnBehalfOfOptions>().Bind(config: configuration.GetSection(k
 var umiClientAssertionId = configuration.GetValue<string>(key: "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID");
 if (!string.IsNullOrWhiteSpace(value: umiClientAssertionId)) {
     services.TryAddKeyedSingleton<TokenCredential>(
-        instance: new ManagedIdentityCredential(
-            id: ManagedIdentityId.FromUserAssignedClientId(
-                id: umiClientAssertionId
-            )
-        ),
+        instance: new ManagedIdentityCredential(id: ManagedIdentityId.FromUserAssignedClientId(id: umiClientAssertionId)),
         serviceKey: IdentityUtilities.ClientAssertionCredentialKey
     );
 }

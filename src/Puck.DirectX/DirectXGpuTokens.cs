@@ -12,13 +12,16 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXCommandBufferState {
     internal List<IDisposable> RetainedResources { get; } = [];
+
     internal void ReleaseRetainedResources() {
         foreach (var resource in RetainedResources) { resource.Dispose(); }
         RetainedResources.Clear();
     }
+
     public nint Allocator;
     public nint CommandList;
     public nint CurrentRenderTargetHandle;
+
     public D3D12_RESOURCE_STATES RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
 }
 /// <summary>
@@ -62,9 +65,15 @@ public sealed class DirectXPipelineLayout : IDisposable {
 
         if (hasDescriptorTable) {
             layout.DescriptorTableParamIndex = 0;
-            layout.RootConstantsParamIndex = (hasRootConstants ? 1 : -1);
+            layout.RootConstantsParamIndex = (hasRootConstants
+                ? 1
+                : -1
+            );
         } else {
-            layout.RootConstantsParamIndex = (hasRootConstants ? 0 : -1);
+            layout.RootConstantsParamIndex = (hasRootConstants
+                ? 0
+                : -1
+            );
         }
 
         if (hasRootConstants) {
@@ -133,9 +142,12 @@ public sealed class DirectXImageView {
 /// recorder keeps these in the <c>COMMON</c> layout, the only one such a texture may hold under Enhanced Barriers.
 /// The creating image registers on construction and withdraws on dispose.</summary>
 public static class DirectXSimultaneousAccessResources {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, byte> s_resources = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, byte> Resources = new();
 
-    public static bool Contains(nint resourceHandle) => s_resources.ContainsKey(key: resourceHandle);
-    public static void Register(nint resourceHandle) => s_resources[resourceHandle] = 0;
-    public static void Withdraw(nint resourceHandle) => _ = s_resources.TryRemove(key: resourceHandle, value: out _);
+    public static bool Contains(nint resourceHandle) => Resources.ContainsKey(key: resourceHandle);
+    public static void Register(nint resourceHandle) => Resources[resourceHandle] = 0;
+    public static void Withdraw(nint resourceHandle) => _ = Resources.TryRemove(
+        key: resourceHandle,
+        value: out _
+    );
 }

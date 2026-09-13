@@ -58,238 +58,57 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
         public delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> GetPhysicalDeviceMemoryProperties;
     }
 
-    /// <inheritdoc/>
-    public VulkanExternalImageImportResult ImportImage(VulkanExternalImageImportRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
-
-        var externalInfo = new VkExternalMemoryImageCreateInfo {
-            HandleTypes = ExternalMemoryHandleTypeD3D12ResourceBit,
-            SType = StructureTypeExternalMemoryImageCreateInfo,
-        };
-        var imageInfo = new VkImageCreateInfo {
-            ArrayLayers = 1,
-            Extent = new VkExtent3D(
-                width: request.Width,
-                height: request.Height,
-                depth: 1
-            ),
-            Format = request.Format,
-            ImageType = ImageType2d,
-            InitialLayout = 0,
-            MipLevels = 1,
-            PNext = ((nint)(&externalInfo)),
-            SType = StructureTypeImageCreateInfo,
-            Samples = SampleCount1Bit,
-            SharingMode = SharingModeExclusive,
-            Tiling = ImageTiling2dOptimal,
-            // The default samples a foreign render target; a non-zero UsageFlags imports it as a writable image
-            // instead (e.g. STORAGE, so Vulkan can produce a compute result INTO a Direct3D 12-owned resource).
-            Usage = ((request.UsageFlags != 0) ? request.UsageFlags : ImageUsageSampledBit | ImageUsageColorAttachmentBit),
-        };
-
-        pointers.CreateImage(
-            request.DeviceHandle,
-            in imageInfo,
-            0,
-            out var imageHandle
-        ).ThrowIfFailed(operation: "vkCreateImage");
-
-        try {
-            pointers.GetImageMemoryRequirements(
-                request.DeviceHandle,
-                imageHandle,
-                out var memoryRequirements
-            );
-
-            var handleProperties = new VkMemoryWin32HandlePropertiesKHR {
-                SType = StructureTypeMemoryWin32HandleProperties,
-            };
-
-            pointers.GetMemoryWin32HandleProperties(
-                request.DeviceHandle,
-                ExternalMemoryHandleTypeD3D12ResourceBit,
-                request.SharedHandle,
-                out handleProperties
-            ).ThrowIfFailed(operation: "vkGetMemoryWin32HandlePropertiesKHR");
-
-            GetInstancePointers(instanceHandle: request.InstanceHandle).GetPhysicalDeviceMemoryProperties(
-                request.PhysicalDeviceHandle,
-                out var memoryProperties
-            );
-
-            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
-                memoryProperties: in memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits & handleProperties.MemoryTypeBits,
-                preferredProperties: MemoryPropertyDeviceLocalBit,
-                requireProperties: false,
-                resourceDescription: "the imported external handle"
-            );
-            var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
-                Image = imageHandle,
-                SType = StructureTypeMemoryDedicatedAllocateInfo,
-            };
-            var importInfo = new VkImportMemoryWin32HandleInfoKHR {
-                Handle = request.SharedHandle,
-                HandleType = ExternalMemoryHandleTypeD3D12ResourceBit,
-                PNext = ((nint)(&dedicatedInfo)),
-                SType = StructureTypeImportMemoryWin32HandleInfo,
-            };
-            var allocateInfo = new VkMemoryAllocateInfo {
-                AllocationSize = memoryRequirements.Size,
-                MemoryTypeIndex = memoryTypeIndex,
-                PNext = ((nint)(&importInfo)),
-                SType = StructureTypeMemoryAllocateInfo,
-            };
-
-            pointers.AllocateMemory(
-                request.DeviceHandle,
-                in allocateInfo,
-                0,
-                out var memoryHandle
-            ).ThrowIfFailed(operation: "vkAllocateMemory");
-
-            try {
-                pointers.BindImageMemory(
-                    request.DeviceHandle,
-                    imageHandle,
-                    memoryHandle,
-                    0
-                ).ThrowIfFailed(operation: "vkBindImageMemory");
-
-                return new VulkanExternalImageImportResult(
-                    ImageHandle: imageHandle,
-                    MemoryHandle: memoryHandle
-                );
-            } catch {
-                pointers.FreeMemory(
-                    request.DeviceHandle,
-                    memoryHandle,
-                    0
-                );
-
-                throw;
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
+                instanceHandle: handle
+            )),
             }
-        } catch {
-            pointers.DestroyImage(
-                request.DeviceHandle,
-                imageHandle,
-                0
-            );
-
-            throw;
-        }
+        );
     }
-    /// <inheritdoc/>
-    public VulkanExternalImageImportResult ImportOpaqueImage(VulkanExternalImageImportRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
-
-        var externalInfo = new VkExternalMemoryImageCreateInfo {
-            HandleTypes = ExternalMemoryHandleTypeOpaqueWin32Bit,
-            SType = StructureTypeExternalMemoryImageCreateInfo,
-        };
-        var imageInfo = new VkImageCreateInfo {
-            ArrayLayers = 1,
-            Extent = new VkExtent3D(
-                width: request.Width,
-                height: request.Height,
-                depth: 1
-            ),
-            Format = request.Format,
-            ImageType = ImageType2d,
-            InitialLayout = 0,
-            MipLevels = 1,
-            PNext = ((nint)(&externalInfo)),
-            SType = StructureTypeImageCreateInfo,
-            Samples = SampleCount1Bit,
-            SharingMode = SharingModeExclusive,
-            Tiling = ImageTiling2dOptimal,
-            Usage = ImageUsageSampledBit | ImageUsageColorAttachmentBit | ImageUsageTransferSourceBit,
-        };
-
-        pointers.CreateImage(
-            request.DeviceHandle,
-            in imageInfo,
-            0,
-            out var imageHandle
-        ).ThrowIfFailed(operation: "vkCreateImage");
-
-        try {
-            pointers.GetImageMemoryRequirements(
-                request.DeviceHandle,
-                imageHandle,
-                out var memoryRequirements
-            );
-
-            GetInstancePointers(instanceHandle: request.InstanceHandle).GetPhysicalDeviceMemoryProperties(
-                request.PhysicalDeviceHandle,
-                out var memoryProperties
-            );
-
-            // An opaque Win32 handle came from a Vulkan allocation, so its compatible memory types are exactly the
-            // image's requirements. vkGetMemoryWin32HandlePropertiesKHR must NOT be called for an opaque handle type
-            // (the spec restricts it to foreign/non-opaque handles), unlike the Direct3D 12 import path.
-            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
-                memoryProperties: in memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits,
-                preferredProperties: MemoryPropertyDeviceLocalBit,
-                requireProperties: false,
-                resourceDescription: "the imported external handle"
-            );
-            var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
-                Image = imageHandle,
-                SType = StructureTypeMemoryDedicatedAllocateInfo,
-            };
-            var importInfo = new VkImportMemoryWin32HandleInfoKHR {
-                Handle = request.SharedHandle,
-                HandleType = ExternalMemoryHandleTypeOpaqueWin32Bit,
-                PNext = ((nint)(&dedicatedInfo)),
-                SType = StructureTypeImportMemoryWin32HandleInfo,
-            };
-            var allocateInfo = new VkMemoryAllocateInfo {
-                AllocationSize = memoryRequirements.Size,
-                MemoryTypeIndex = memoryTypeIndex,
-                PNext = ((nint)(&importInfo)),
-                SType = StructureTypeMemoryAllocateInfo,
-            };
-
-            pointers.AllocateMemory(
-                request.DeviceHandle,
-                in allocateInfo,
-                0,
-                out var memoryHandle
-            ).ThrowIfFailed(operation: "vkAllocateMemory");
-
-            try {
-                pointers.BindImageMemory(
-                    request.DeviceHandle,
-                    imageHandle,
-                    memoryHandle,
-                    0
-                ).ThrowIfFailed(operation: "vkBindImageMemory");
-
-                return new VulkanExternalImageImportResult(
-                    ImageHandle: imageHandle,
-                    MemoryHandle: memoryHandle
-                );
-            } catch {
-                pointers.FreeMemory(
-                    request.DeviceHandle,
-                    memoryHandle,
-                    0
-                );
-
-                throw;
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateImage"u8
+            )),
+                DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyImage"u8
+            )),
+                GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetImageMemoryRequirements"u8
+            )),
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkAllocateMemory"u8
+            )),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkFreeMemory"u8
+            )),
+                BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkBindImageMemory"u8
+            )),
+                GetMemoryWin32HandleProperties = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8
+            )),
+                GetMemoryWin32Handle = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetMemoryWin32HandleKHR"u8
+            )),
             }
-        } catch {
-            pointers.DestroyImage(
-                request.DeviceHandle,
-                imageHandle,
-                0
-            );
-
-            throw;
-        }
+        );
     }
+
     /// <inheritdoc/>
     public VulkanExternalImageExportResult CreateExportableImage(VulkanExternalImageExportRequest request) {
         var pointers = GetPointers(deviceHandle: request.DeviceHandle);
@@ -301,10 +120,10 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
         var imageInfo = new VkImageCreateInfo {
             ArrayLayers = 1,
             Extent = new VkExtent3D(
-                width: request.Width,
-                height: request.Height,
-                depth: 1
-            ),
+            width: request.Width,
+            height: request.Height,
+            depth: 1
+        ),
             Format = request.Format,
             ImageType = ImageType2d,
             InitialLayout = 0,
@@ -441,28 +260,238 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             );
         }
     }
+    /// <inheritdoc/>
+    public VulkanExternalImageImportResult ImportImage(VulkanExternalImageImportRequest request) {
+        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImage"u8)),
-                DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImage"u8)),
-                GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetImageMemoryRequirements"u8)),
-                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
-                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
-                BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindImageMemory"u8)),
-                GetMemoryWin32HandleProperties = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8)),
-                GetMemoryWin32Handle = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandleKHR"u8)),
+        var externalInfo = new VkExternalMemoryImageCreateInfo {
+            HandleTypes = ExternalMemoryHandleTypeD3D12ResourceBit,
+            SType = StructureTypeExternalMemoryImageCreateInfo,
+        };
+        var imageInfo = new VkImageCreateInfo {
+            ArrayLayers = 1,
+            Extent = new VkExtent3D(
+            width: request.Width,
+            height: request.Height,
+            depth: 1
+        ),
+            Format = request.Format,
+            ImageType = ImageType2d,
+            InitialLayout = 0,
+            MipLevels = 1,
+            PNext = ((nint)(&externalInfo)),
+            SType = StructureTypeImageCreateInfo,
+            Samples = SampleCount1Bit,
+            SharingMode = SharingModeExclusive,
+            Tiling = ImageTiling2dOptimal,
+            // The default samples a foreign render target; a non-zero UsageFlags imports it as a writable image
+            // instead (e.g. STORAGE, so Vulkan can produce a compute result INTO a Direct3D 12-owned resource).
+            Usage = ((request.UsageFlags != 0)
+            ? request.UsageFlags
+            : ImageUsageSampledBit | ImageUsageColorAttachmentBit),
+        };
+
+        pointers.CreateImage(
+            request.DeviceHandle,
+            in imageInfo,
+            0,
+            out var imageHandle
+        ).ThrowIfFailed(operation: "vkCreateImage");
+
+        try {
+            pointers.GetImageMemoryRequirements(
+                request.DeviceHandle,
+                imageHandle,
+                out var memoryRequirements
+            );
+
+            var handleProperties = new VkMemoryWin32HandlePropertiesKHR {
+                SType = StructureTypeMemoryWin32HandleProperties,
+            };
+
+            pointers.GetMemoryWin32HandleProperties(
+                request.DeviceHandle,
+                ExternalMemoryHandleTypeD3D12ResourceBit,
+                request.SharedHandle,
+                out handleProperties
+            ).ThrowIfFailed(operation: "vkGetMemoryWin32HandlePropertiesKHR");
+
+            GetInstancePointers(instanceHandle: request.InstanceHandle).GetPhysicalDeviceMemoryProperties(
+                request.PhysicalDeviceHandle,
+                out var memoryProperties
+            );
+
+            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
+                memoryProperties: in memoryProperties,
+                memoryTypeBits: memoryRequirements.MemoryTypeBits & handleProperties.MemoryTypeBits,
+                preferredProperties: MemoryPropertyDeviceLocalBit,
+                requireProperties: false,
+                resourceDescription: "the imported external handle"
+            );
+            var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
+                Image = imageHandle,
+                SType = StructureTypeMemoryDedicatedAllocateInfo,
+            };
+            var importInfo = new VkImportMemoryWin32HandleInfoKHR {
+                Handle = request.SharedHandle,
+                HandleType = ExternalMemoryHandleTypeD3D12ResourceBit,
+                PNext = ((nint)(&dedicatedInfo)),
+                SType = StructureTypeImportMemoryWin32HandleInfo,
+            };
+            var allocateInfo = new VkMemoryAllocateInfo {
+                AllocationSize = memoryRequirements.Size,
+                MemoryTypeIndex = memoryTypeIndex,
+                PNext = ((nint)(&importInfo)),
+                SType = StructureTypeMemoryAllocateInfo,
+            };
+
+            pointers.AllocateMemory(
+                request.DeviceHandle,
+                in allocateInfo,
+                0,
+                out var memoryHandle
+            ).ThrowIfFailed(operation: "vkAllocateMemory");
+
+            try {
+                pointers.BindImageMemory(
+                    request.DeviceHandle,
+                    imageHandle,
+                    memoryHandle,
+                    0
+                ).ThrowIfFailed(operation: "vkBindImageMemory");
+
+                return new VulkanExternalImageImportResult(
+                    ImageHandle: imageHandle,
+                    MemoryHandle: memoryHandle
+                );
+            } catch {
+                pointers.FreeMemory(
+                    request.DeviceHandle,
+                    memoryHandle,
+                    0
+                );
+
+                throw;
             }
-        );
+        } catch {
+            pointers.DestroyImage(
+                request.DeviceHandle,
+                imageHandle,
+                0
+            );
+
+            throw;
+        }
     }
-    private InstancePointers GetInstancePointers(nint instanceHandle) {
-        return m_instancePointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
+    /// <inheritdoc/>
+    public VulkanExternalImageImportResult ImportOpaqueImage(VulkanExternalImageImportRequest request) {
+        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
+
+        var externalInfo = new VkExternalMemoryImageCreateInfo {
+            HandleTypes = ExternalMemoryHandleTypeOpaqueWin32Bit,
+            SType = StructureTypeExternalMemoryImageCreateInfo,
+        };
+        var imageInfo = new VkImageCreateInfo {
+            ArrayLayers = 1,
+            Extent = new VkExtent3D(
+            width: request.Width,
+            height: request.Height,
+            depth: 1
+        ),
+            Format = request.Format,
+            ImageType = ImageType2d,
+            InitialLayout = 0,
+            MipLevels = 1,
+            PNext = ((nint)(&externalInfo)),
+            SType = StructureTypeImageCreateInfo,
+            Samples = SampleCount1Bit,
+            SharingMode = SharingModeExclusive,
+            Tiling = ImageTiling2dOptimal,
+            Usage = ImageUsageSampledBit | ImageUsageColorAttachmentBit | ImageUsageTransferSourceBit,
+        };
+
+        pointers.CreateImage(
+            request.DeviceHandle,
+            in imageInfo,
+            0,
+            out var imageHandle
+        ).ThrowIfFailed(operation: "vkCreateImage");
+
+        try {
+            pointers.GetImageMemoryRequirements(
+                request.DeviceHandle,
+                imageHandle,
+                out var memoryRequirements
+            );
+
+            GetInstancePointers(instanceHandle: request.InstanceHandle).GetPhysicalDeviceMemoryProperties(
+                request.PhysicalDeviceHandle,
+                out var memoryProperties
+            );
+
+            // An opaque Win32 handle came from a Vulkan allocation, so its compatible memory types are exactly the
+            // image's requirements. vkGetMemoryWin32HandlePropertiesKHR must NOT be called for an opaque handle type
+            // (the spec restricts it to foreign/non-opaque handles), unlike the Direct3D 12 import path.
+            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
+                memoryProperties: in memoryProperties,
+                memoryTypeBits: memoryRequirements.MemoryTypeBits,
+                preferredProperties: MemoryPropertyDeviceLocalBit,
+                requireProperties: false,
+                resourceDescription: "the imported external handle"
+            );
+            var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
+                Image = imageHandle,
+                SType = StructureTypeMemoryDedicatedAllocateInfo,
+            };
+            var importInfo = new VkImportMemoryWin32HandleInfoKHR {
+                Handle = request.SharedHandle,
+                HandleType = ExternalMemoryHandleTypeOpaqueWin32Bit,
+                PNext = ((nint)(&dedicatedInfo)),
+                SType = StructureTypeImportMemoryWin32HandleInfo,
+            };
+            var allocateInfo = new VkMemoryAllocateInfo {
+                AllocationSize = memoryRequirements.Size,
+                MemoryTypeIndex = memoryTypeIndex,
+                PNext = ((nint)(&importInfo)),
+                SType = StructureTypeMemoryAllocateInfo,
+            };
+
+            pointers.AllocateMemory(
+                request.DeviceHandle,
+                in allocateInfo,
+                0,
+                out var memoryHandle
+            ).ThrowIfFailed(operation: "vkAllocateMemory");
+
+            try {
+                pointers.BindImageMemory(
+                    request.DeviceHandle,
+                    imageHandle,
+                    memoryHandle,
+                    0
+                ).ThrowIfFailed(operation: "vkBindImageMemory");
+
+                return new VulkanExternalImageImportResult(
+                    ImageHandle: imageHandle,
+                    MemoryHandle: memoryHandle
+                );
+            } catch {
+                pointers.FreeMemory(
+                    request.DeviceHandle,
+                    memoryHandle,
+                    0
+                );
+
+                throw;
             }
-        );
+        } catch {
+            pointers.DestroyImage(
+                request.DeviceHandle,
+                imageHandle,
+                0
+            );
+
+            throw;
+        }
     }
 }

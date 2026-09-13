@@ -12,55 +12,120 @@ namespace Puck.Networking.Peers;
 /// it. Ordinary empty writes do nothing. The stream is not seekable and does not support synchronous I/O.</remarks>
 public sealed class PeerStream : Stream {
     private readonly PeerLink m_link;
-    private readonly SemaphoreSlim m_writeGate = new(1, 1);
-    private ReadOnlyMemory<byte> m_pending;
+    private readonly SemaphoreSlim m_writeGate = new(
+        initialCount: 1,
+        maxCount: 1
+    );
+
     private int m_disposed;
+    private ReadOnlyMemory<byte> m_pending;
     private bool m_readCompleted;
     private bool m_writeCompleted;
 
     /// <summary>Creates a stream owning one established link. Do not also consume the link's events or send messages.</summary>
     /// <param name="link">The exclusively owned, established peer link.</param>
-    public PeerStream(PeerLink link) => m_link = link ?? throw new ArgumentNullException(nameof(link));
+    public PeerStream(PeerLink link) => m_link = (link ?? throw new ArgumentNullException(paramName: nameof(link)));
 
-    /// <summary>Gets the authenticated link, for inspecting its remote identity and endpoint.</summary>
-    public PeerLink Link => m_link;
     /// <inheritdoc/>
-    public override bool CanRead => Volatile.Read(ref m_disposed) == 0;
+    public override bool CanRead => (Volatile.Read(location: ref m_disposed) == 0);
     /// <inheritdoc/>
     public override bool CanSeek => false;
     /// <inheritdoc/>
     public override bool CanWrite => CanRead;
     /// <inheritdoc/>
     public override long Length => throw new NotSupportedException();
+    /// <summary>Gets the authenticated link, for inspecting its remote identity and endpoint.</summary>
+    public PeerLink Link => m_link;
     /// <inheritdoc/>
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+    // Terminal cleanup owns the event reader just like ReadAsync. An authenticated empty message only ends the
+    // remote's sending direction; it says nothing about whether that peer has received our final reply. Discard
+    // events until the LINK closes (or the caller's deadline expires), including after a previously read EOF.
+    internal async Task DrainUntilClosedAsync(CancellationToken ct) {
+        ObjectDisposedException.ThrowIf(
+            condition: (Volatile.Read(location: ref m_disposed) != 0),
+            instance: this
+        );
+        m_pending = default;
+        m_readCompleted = true;
+        while (
+            !ct.IsCancellationRequested &&
+            await m_link.Events.WaitToReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)
+        ) {
+            while (
+                !ct.IsCancellationRequested &&
+                m_link.Events.TryRead(item: out var next)
+            ) {
+                if (next is PeerEvent.Closed) { return; }
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing) {
+        if (disposing) { DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        base.Dispose(disposing: disposing);
+    }
+
+    /// <summary>Completes this direction of the stream with an authenticated empty message. Reading the other
+    /// direction remains possible. Later writes are refused. Ordinary zero-length writes do not complete it.</summary>
+    /// <param name="ct">Cancellation while waiting to send.</param>
+    /// <returns>The completion send.</returns>
+    public async ValueTask CompleteWritesAsync(CancellationToken ct = default) {
+        ObjectDisposedException.ThrowIf(
+            condition: (Volatile.Read(location: ref m_disposed) != 0),
+            instance: this
+        );
+        await m_writeGate.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+        try {
+            if (m_writeCompleted) { return; }
+            await m_link.SendAsync(
+                ReadOnlyMemory<byte>.Empty,
+                ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            m_writeCompleted = true;
+        } finally { m_writeGate.Release(); }
+    }
+    /// <inheritdoc/>
+    public override async ValueTask DisposeAsync() {
+        if (Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        ) == 0) {
+            await m_link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+        }
+        GC.SuppressFinalize(obj: this);
+    }
     /// <inheritdoc/>
     public override void Flush() { }
     /// <inheritdoc/>
     public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     /// <inheritdoc/>
-    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException("Use asynchronous peer I/O.");
-    /// <inheritdoc/>
-    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException("Use asynchronous peer I/O.");
-    /// <inheritdoc/>
-    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-    /// <inheritdoc/>
-    public override void SetLength(long value) => throw new NotSupportedException();
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException(message: "Use asynchronous peer I/O.");
     /// <inheritdoc/>
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
-    /// <inheritdoc/>
-    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
-
+        ReadAsync(
+            buffer: buffer.AsMemory(
+                length: count,
+                start: offset
+            ),
+            cancellationToken: cancellationToken
+        ).AsTask();
     /// <inheritdoc/>
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
-        if (buffer.IsEmpty || m_readCompleted) { return 0; }
+        ObjectDisposedException.ThrowIf(
+            condition: (Volatile.Read(location: ref m_disposed) != 0),
+            instance: this
+        );
+        if (
+            buffer.IsEmpty ||
+            m_readCompleted
+        ) { return 0; }
         while (m_pending.IsEmpty) {
             PeerEvent next;
-            try { next = await m_link.Events.ReadAsync(cancellationToken).ConfigureAwait(false); }
-            catch (ChannelClosedException) { return 0; }
+
+            try { next = await m_link.Events.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (ChannelClosedException) { return 0; }
             switch (next) {
                 case PeerEvent.Received received:
                     if (received.Payload.IsEmpty) { m_readCompleted = true; return 0; }
@@ -69,75 +134,62 @@ public sealed class PeerStream : Stream {
                 case PeerEvent.Closed:
                     return 0;
                 case PeerEvent.Refused refused:
-                    await DisposeAsync().ConfigureAwait(false);
-                    throw new PeerRefusedException(refused.Failure);
+                    await DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+                    throw new PeerRefusedException(failure: refused.Failure);
             }
         }
-        var count = Math.Min(buffer.Length, m_pending.Length);
-        m_pending.Span[..count].CopyTo(buffer.Span);
+        var count = Math.Min(
+            val1: buffer.Length,
+            val2: m_pending.Length
+        );
+
+        m_pending.Span[..count].CopyTo(destination: buffer.Span);
         m_pending = m_pending[count..];
         return count;
     }
-
+    /// <inheritdoc/>
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    /// <inheritdoc/>
+    public override void SetLength(long value) => throw new NotSupportedException();
+    /// <inheritdoc/>
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException(message: "Use asynchronous peer I/O.");
+    /// <inheritdoc/>
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        WriteAsync(
+            buffer: buffer.AsMemory(
+                length: count,
+                start: offset
+            ),
+            cancellationToken: cancellationToken
+        ).AsTask();
     /// <inheritdoc/>
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
-        await m_writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        ObjectDisposedException.ThrowIf(
+            condition: (Volatile.Read(location: ref m_disposed) != 0),
+            instance: this
+        );
+        await m_writeGate.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         var started = false;
+
         try {
-            if (m_writeCompleted) { throw new InvalidOperationException("Peer stream writes have completed."); }
+            if (m_writeCompleted) { throw new InvalidOperationException(message: "Peer stream writes have completed."); }
             while (!buffer.IsEmpty) {
                 cancellationToken.ThrowIfCancellationRequested();
-                var count = Math.Min(buffer.Length, PeerWireProtocol.MaxMessagePayloadBytes);
+                var count = Math.Min(
+                    val1: buffer.Length,
+                    val2: PeerWireProtocol.MaxMessagePayloadBytes
+                );
+
                 started = true;
-                await m_link.SendAsync(buffer[..count], cancellationToken).ConfigureAwait(false);
+                await m_link.SendAsync(
+                    buffer[..count],
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
                 buffer = buffer[count..];
             }
         } catch {
-            if (started) { await DisposeAsync().ConfigureAwait(false); }
+            if (started) { await DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
             throw;
         } finally { m_writeGate.Release(); }
-    }
-
-    /// <summary>Completes this direction of the stream with an authenticated empty message. Reading the other
-    /// direction remains possible. Later writes are refused. Ordinary zero-length writes do not complete it.</summary>
-    /// <param name="ct">Cancellation while waiting to send.</param>
-    /// <returns>The completion send.</returns>
-    public async ValueTask CompleteWritesAsync(CancellationToken ct = default) {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
-        await m_writeGate.WaitAsync(ct).ConfigureAwait(false);
-        try {
-            if (m_writeCompleted) { return; }
-            await m_link.SendAsync(ReadOnlyMemory<byte>.Empty, ct).ConfigureAwait(false);
-            m_writeCompleted = true;
-        } finally { m_writeGate.Release(); }
-    }
-
-    // Terminal cleanup owns the event reader just like ReadAsync. An authenticated empty message only ends the
-    // remote's sending direction; it says nothing about whether that peer has received our final reply. Discard
-    // events until the LINK closes (or the caller's deadline expires), including after a previously read EOF.
-    internal async Task DrainUntilClosedAsync(CancellationToken ct) {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
-        m_pending = default;
-        m_readCompleted = true;
-        while (!ct.IsCancellationRequested && await m_link.Events.WaitToReadAsync(ct).ConfigureAwait(false)) {
-            while (!ct.IsCancellationRequested && m_link.Events.TryRead(out var next)) {
-                if (next is PeerEvent.Closed) { return; }
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public override async ValueTask DisposeAsync() {
-        if (Interlocked.Exchange(ref m_disposed, 1) == 0) {
-            await m_link.DisposeAsync().ConfigureAwait(false);
-        }
-        GC.SuppressFinalize(this);
-    }
-
-    /// <inheritdoc/>
-    protected override void Dispose(bool disposing) {
-        if (disposing) { DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-        base.Dispose(disposing);
     }
 }

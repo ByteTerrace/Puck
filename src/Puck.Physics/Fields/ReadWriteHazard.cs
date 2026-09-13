@@ -45,11 +45,29 @@ public static class ReadWriteHazard {
     )
         where TField : IEquatable<TField>
         where TState : IEquatable<TState> => (
-        Intersects(left: earlierFieldWrites, right: laterFieldReads) ||
-        Intersects(left: earlierFieldWrites, right: laterFieldWrites) ||
-        Intersects(left: earlierFieldReads, right: laterFieldWrites) ||
-        Intersects(left: earlierStateWrites, right: laterStateReads) ||
-        Intersects(left: earlierStateWrites, right: laterStateWrites) ||
-        Intersects(left: earlierStateReads, right: laterStateWrites)
+        Intersects(
+            left: earlierFieldWrites,
+            right: laterFieldReads
+        ) ||
+        Intersects(
+            left: earlierFieldWrites,
+            right: laterFieldWrites
+        ) ||
+        Intersects(
+            left: earlierFieldReads,
+            right: laterFieldWrites
+        ) ||
+        Intersects(
+            left: earlierStateWrites,
+            right: laterStateReads
+        ) ||
+        Intersects(
+            left: earlierStateWrites,
+            right: laterStateWrites
+        ) ||
+        Intersects(
+            left: earlierStateReads,
+            right: laterStateWrites
+        )
     );
 }

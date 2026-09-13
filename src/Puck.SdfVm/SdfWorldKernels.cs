@@ -46,13 +46,21 @@ public readonly record struct SdfWorldKernels(
     /// <c>Puck.SdfVm</c> reference copies its committed bytecode) — <see cref="Load(string)"/>'s default directory,
     /// exposed for callers that load an individual SDF-directory asset directly (e.g. the shared <c>fullscreen.vert</c>
     /// vertex stage a 2D overlay decorator reuses) rather than the whole kernel set.</summary>
-    public static string DefaultDirectory => Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: "Sdf");
+    public static string DefaultDirectory => Path.Combine(
+        path1: AppContext.BaseDirectory,
+        path2: "Assets",
+        path3: "Shaders",
+        path4: "Sdf"
+    );
 
     /// <summary>Loads the world kernel set from the standard deploy location (<see cref="DefaultDirectory"/>).</summary>
     /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
     /// <returns>The loaded kernel set.</returns>
     public static SdfWorldKernels Load(string bytecodeExtension) =>
-        Load(bytecodeExtension: bytecodeExtension, directory: DefaultDirectory);
+        Load(
+            bytecodeExtension: bytecodeExtension,
+            directory: DefaultDirectory
+        );
     /// <summary>Loads the world kernel set from an explicit directory (for hosts with a non-standard asset layout).</summary>
     /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
     /// <param name="directory">The directory holding the compiled <c>sdf-*.comp</c> kernels.</param>
@@ -62,20 +70,62 @@ public readonly record struct SdfWorldKernels(
         ArgumentException.ThrowIfNullOrEmpty(directory);
 
         return new SdfWorldKernels(
-            Ambient: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-ambient.comp{bytecodeExtension}")),
-            Beam: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-beam.comp{bytecodeExtension}")),
-            BrickBake: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-bake.comp{bytecodeExtension}")),
-            BrickUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-upload.comp{bytecodeExtension}")),
-            Composite: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-composite.comp{bytecodeExtension}")),
-            CullArgs: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-cull-args.comp{bytecodeExtension}")),
-            FrameUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-frame-upload.comp{bytecodeExtension}")),
-            InstanceCull: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-instance-cull.comp{bytecodeExtension}")),
-            Primary: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-primary.comp{bytecodeExtension}")),
-            Sky: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-sky.comp{bytecodeExtension}")),
-            Surface: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-surface.comp{bytecodeExtension}")),
-            Views: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views.comp{bytecodeExtension}")),
-            ViewsCore: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-core.comp{bytecodeExtension}")),
-            ViewsFolds: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-folds.comp{bytecodeExtension}"))
+            Ambient: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-ambient.comp{bytecodeExtension}"
+            )),
+            Beam: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-beam.comp{bytecodeExtension}"
+            )),
+            BrickBake: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-brick-bake.comp{bytecodeExtension}"
+            )),
+            BrickUpload: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-brick-upload.comp{bytecodeExtension}"
+            )),
+            Composite: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-composite.comp{bytecodeExtension}"
+            )),
+            CullArgs: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-cull-args.comp{bytecodeExtension}"
+            )),
+            FrameUpload: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-frame-upload.comp{bytecodeExtension}"
+            )),
+            InstanceCull: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-instance-cull.comp{bytecodeExtension}"
+            )),
+            Primary: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-primary.comp{bytecodeExtension}"
+            )),
+            Sky: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-sky.comp{bytecodeExtension}"
+            )),
+            Surface: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-surface.comp{bytecodeExtension}"
+            )),
+            Views: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-views.comp{bytecodeExtension}"
+            )),
+            ViewsCore: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-views-core.comp{bytecodeExtension}"
+            )),
+            ViewsFolds: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: $"sdf-world-views-folds.comp{bytecodeExtension}"
+            ))
         );
     }
 }

@@ -9,8 +9,7 @@ namespace Puck.Actors;
 /// [oid, discriminator]), which also cryptographically binds the escrow to the grain key —
 /// a blob protected for a different oid fails to unprotect.
 /// </summary>
-public static class ProtectedAssertion
-{
+public static class ProtectedAssertion {
     private const string Purpose = "users.tokens";
 
     public static string Unprotect(
@@ -20,12 +19,12 @@ public static class ProtectedAssertion
     ) {
         return dataProtectionProvider
             .CreateProtector(
-                purpose: Purpose,
-                subPurposes: [
+            purpose: Purpose,
+            subPurposes: [
                     userObjectId,
                     tokenEscrow.TokenDiscriminator,
                 ]
-            )
+        )
             .Unprotect(protectedData: tokenEscrow.ProtectedAssertion);
     }
 }

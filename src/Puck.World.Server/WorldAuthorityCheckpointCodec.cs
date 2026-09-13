@@ -52,7 +52,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
         body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? SearchCheckpoint.Empty)));
         body.WriteBlock(value: EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)));
-        body.WriteBlock(value: EncodeMachines(checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty));
+        body.WriteBlock(value: EncodeMachines(section: (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty)));
 
         var bodyBytes = body.ToArray();
         var writer = new WireWriter();
@@ -179,7 +179,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "board enforcement section",
             maxBytes: MaxSectionBytes
         );
-        var machineBytes = body.ReadBlock("machine section", MaxSectionBytes);
+        var machineBytes = body.ReadBlock(
+            field: "machine section",
+            maxBytes: MaxSectionBytes
+        );
 
         if (!body.TryFinish(failure: out var bodyFailure)) {
             reason = $"checkpoint body: {bodyFailure}";
@@ -282,21 +285,25 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        if (!TryDecodeMachines(machineBytes, out var machines, out reason)) { return false; }
+        if (!TryDecodeMachines(
+            bytes: machineBytes,
+            reason: out reason,
+            section: out var machines
+        )) { return false; }
 
         checkpoint = new WorldAuthorityCheckpoint(
+            BoardEnforcement: boardEnforcement,
             Escrow: escrow,
             EventFeed: eventFeed,
             Fields: fields,
             Grants: grants,
             HostRow: hostRow,
             InputHold: inputHold,
+            Machines: machines,
             OwnedWorlds: ownedWorlds,
             Population: population,
-            Server: server,
             Search: search,
-            BoardEnforcement: boardEnforcement,
-            Machines: machines
+            Server: server
         );
         reason = string.Empty;
 
@@ -307,7 +314,11 @@ public static partial class WorldAuthorityCheckpointCodec {
 
 
     private static byte[] EncodeLeafBlock<T>(T value, string what, TryEncodeLeaf<T> tryEncode) {
-        if (!tryEncode(value, out var bytes, out var failure)) {
+        if (!tryEncode(
+            value,
+            out var bytes,
+            out var failure
+        )) {
             throw new InvalidOperationException(message: $"{what} failed to encode — {failure}");
         }
 

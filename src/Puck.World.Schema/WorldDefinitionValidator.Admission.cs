@@ -163,8 +163,12 @@ public static partial class WorldDefinitionValidator {
             if (!seen.Add(item: (row.Domain, row.Subject, row.Mode))) {
                 errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, and mode.");
             }
-            if (row.Mode == WorldAdmissionTrustMode.OAuth && row.Domain is { } boundedIssuer && Encoding.UTF8.GetByteCount(boundedIssuer) > AttestationResourceLimits.TextStringUtf8Bytes) {
-                errors.Add($"{path}.domain exceeds the verified-identity limit of {AttestationResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
+            if (
+                (row.Mode == WorldAdmissionTrustMode.OAuth) &&
+                (row.Domain is { } boundedIssuer) &&
+                (Encoding.UTF8.GetByteCount(s: boundedIssuer) > AttestationResourceLimits.TextStringUtf8Bytes)
+            ) {
+                errors.Add(item: $"{path}.domain exceeds the verified-identity limit of {AttestationResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
             }
 
             if (
@@ -270,11 +274,17 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.subject is required for mode 'signsDirectly'.");
             }
 
-            if (row.Mode == WorldAdmissionTrustMode.OAuth &&
-                (!Uri.TryCreate(row.Domain, UriKind.Absolute, out var issuer) || issuer.Scheme != "https" ||
-                 !string.IsNullOrEmpty(issuer.UserInfo) || !string.IsNullOrEmpty(issuer.Query) || !string.IsNullOrEmpty(issuer.Fragment) ||
-                 string.IsNullOrWhiteSpace(row.Subject) || row.Subject == "*")) {
-                errors.Add($"{path}: OAuth admission requires an exact HTTPS issuer and a non-wildcard subject.");
+            if (
+                (row.Mode == WorldAdmissionTrustMode.OAuth) &&
+                (!Uri.TryCreate(
+                row.Domain,
+                UriKind.Absolute,
+                out var issuer
+            ) || (issuer.Scheme != "https") ||
+                 !string.IsNullOrEmpty(value: issuer.UserInfo) || !string.IsNullOrEmpty(value: issuer.Query) || !string.IsNullOrEmpty(value: issuer.Fragment) ||
+                 string.IsNullOrWhiteSpace(value: row.Subject) || (row.Subject == "*"))
+            ) {
+                errors.Add(item: $"{path}: OAuth admission requires an exact HTTPS issuer and a non-wildcard subject.");
             }
 
             if (
@@ -607,8 +617,16 @@ public static partial class WorldDefinitionValidator {
                 var member = row.Members[memberIndex];
                 var memberPath = $"{path}.members[{memberIndex}]";
 
-                if ((member is not null) && (member.Role is not null) && !kind.Roles.Any(role =>
-                    string.Equals(a: role.Name, b: member.Role, comparisonType: StringComparison.Ordinal))) {
+                if (
+                    (member is not null) &&
+                    (member.Role is not null) &&
+                    !kind.Roles.Any(predicate: role =>
+                    string.Equals(
+                    a: role.Name,
+                    b: member.Role,
+                    comparisonType: StringComparison.Ordinal
+                ))
+                ) {
                     errors.Add(item: $"{memberPath}.role '{member.Role}' names no role declared by kind '{kind.Name}'.");
                 }
             }

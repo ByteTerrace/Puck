@@ -32,6 +32,7 @@ internal static class ArmFuzzProbe {
 
         return (((marker != MarkerArm) && (marker != MarkerThumb))
             ? (true, "all tests passed")
-            : (false, $"failure marker '{((char)(marker & 0xFFu))}' dumped to EWRAM (0x{marker:X8})"));
+            : (false, $"failure marker '{((char)(marker & 0xFFu))}' dumped to EWRAM (0x{marker:X8})")
+        );
     }
 }

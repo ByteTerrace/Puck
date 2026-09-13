@@ -11,8 +11,24 @@ namespace Puck.HumbleGamingBrick.Post;
 /// breakpoint.) The machine is advanced one frame at a time and polled after each, exiting as soon as a signature appears.
 /// </summary>
 internal static class AcceptanceRomProbe {
-    private static readonly byte[] PassSignature = [3, 5, 8, 13, 21, 34];
     private static readonly byte[] FailSignature = [0x42, 0x42, 0x42, 0x42, 0x42, 0x42];
+    private static readonly byte[] PassSignature = [3, 5, 8, 13, 21, 34];
+
+    private static bool EndsWith(List<byte> sequence, byte[] suffix) {
+        if (sequence.Count < suffix.Length) {
+            return false;
+        }
+
+        var offset = (sequence.Count - suffix.Length);
+
+        for (var index = 0; (index < suffix.Length); ++index) {
+            if (sequence[(offset + index)] != suffix[index]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="romCase">The case to run.</param>
@@ -56,24 +72,8 @@ internal static class AcceptanceRomProbe {
         return (null, ((transmitted.Count == 0)
             ? $"no serial output within {romCase.FrameCap} frames"
             : $"no signature within {romCase.FrameCap} frames; serial=[{string.Join(
-            separator: ' ',
-            values: transmitted.Select(selector: static b => b.ToString(format: "X2"))
-        )}]"));
-    }
-
-    private static bool EndsWith(List<byte> sequence, byte[] suffix) {
-        if (sequence.Count < suffix.Length) {
-            return false;
-        }
-
-        var offset = (sequence.Count - suffix.Length);
-
-        for (var index = 0; (index < suffix.Length); ++index) {
-            if (sequence[(offset + index)] != suffix[index]) {
-                return false;
-            }
-        }
-
-        return true;
+                separator: ' ',
+                values: transmitted.Select(selector: static b => b.ToString(format: "X2"))
+            )}]"));
     }
 }

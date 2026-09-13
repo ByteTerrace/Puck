@@ -26,6 +26,7 @@ public static class AgbMachineFactory {
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
         var services = new ServiceCollection();
+
         _ = services.AddSingleton(implementationInstance: configuration.Options);
 
         // The composition callback runs first so its registrations win the TryAdd race in AddAdvancedGamingBrick — the
@@ -37,7 +38,10 @@ public static class AgbMachineFactory {
 
         // A fresh cartridge per machine, built from the configuration's ROM: the ROM bytes are shared verbatim (never
         // written), but each machine owns its own mutable backup/RTC state so a fork never aliases the source's saves.
-        _ = services.AddScoped<AgbCartridge>(implementationFactory: sp => new AgbCartridge(rom: configuration.Rom, options: sp.GetRequiredService<AgbMachineOptions>()));
+        _ = services.AddScoped<AgbCartridge>(implementationFactory: sp => new AgbCartridge(
+            rom: configuration.Rom,
+            options: sp.GetRequiredService<AgbMachineOptions>()
+        ));
 
         var provider = services.BuildServiceProvider();
         var scope = provider.CreateScope();

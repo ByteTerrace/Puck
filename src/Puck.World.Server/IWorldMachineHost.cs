@@ -23,7 +23,6 @@ namespace Puck.World.Server;
 /// <see langword="null"/> when the content booted as read (a ROM image) or no machine is assigned.</param>
 public readonly record struct WorldMachineState(bool Assigned, string? Engine, long FramesStepped,
     long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, WorldMachineCartridge? Cartridge = null);
-
 /// <summary>A compiled cartridge document behind a booted machine — the source the host compiled at bind and the
 /// two hashes that pin it, echoed by <c>screen.state</c> as <c>cartridge &lt;path&gt; hash &lt;source&gt; rom
 /// &lt;rom&gt;</c>. The file's own content pin (the replay CAS signature) is separate: it covers the bytes read
@@ -33,7 +32,6 @@ public readonly record struct WorldMachineState(bool Assigned, string? Engine, l
 /// <param name="SourceHash">The canonical source hash the forge computed.</param>
 /// <param name="RomHash">The compiled image's content hash, in the same <c>sha256-64/</c> form as the file pin.</param>
 public readonly record struct WorldMachineCartridge(string Path, string SourceHash, string RomHash);
-
 /// <summary>
 /// The seam <see cref="WorldServer"/> — and every replay/instance-host caller that boots a shadow world of its own —
 /// pumps every declared screen's machine through, mirroring <see cref="IWorldAddonHost"/>'s own shape for the WASM
@@ -49,6 +47,7 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     IMachineValidationCatalog ValidationCatalog { get; }
     /// <summary>Gets the declared machine names, including instances without display consumers.</summary>
     IEnumerable<string> InstanceNames { get; }
+
     /// <summary>Reads execution and generation state by instance identity.</summary>
     /// <param name="name">The authored instance name.</param>
     WorldMachineInstanceState? InstanceState(string name);
@@ -90,10 +89,10 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="value">The converted scalar bit pattern.</param>
     /// <param name="mode">Patch or bus semantics.</param>
     MachineAccessResult WriteHardware(string instance, ulong generation, MachineMemoryAddress address, ulong value, MachineAccessMode mode);
+
     /// <summary>A machine's core is re-executed at the same tick boundaries off the same pinned content and pad
     /// inputs, exactly like a WASM guest — see <see cref="IWorldExtensionRuntime.ReplayPolicy"/>.</summary>
     WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
-
     /// <summary>Gets a value indicating whether any booted machine has ever had a step/segment actually submitted to it — set the
     /// instant <see cref="Advance"/> steps a machine (individually or through a live cable link), never cleared. The
     /// boot-anchored replay arm predicate <see cref="WorldServer.AnyMachineEverPumped"/> reads (mirroring

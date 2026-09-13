@@ -91,9 +91,10 @@ public static class MachineStageProbes {
         return (firstSnapshot.ContentEquals(other: secondSnapshot)
             ? PostStageOutcome.Pass(detail: $"two independent machines byte-identical after {frames} frames ({firstSnapshot.Size} state bytes)")
             : PostStageOutcome.Fail(detail: $"two independent machines diverged after {frames} frames — {describeDivergence(
-            arg1: firstSnapshot,
-            arg2: secondSnapshot
-        )}"));
+                arg1: firstSnapshot,
+                arg2: secondSnapshot
+            )}")
+        );
     }
     /// <summary>Verifies the fork seam: a fork advanced in lock-step with its parent stays byte-identical, and no stale
     /// fork handle — an immediate double dispose or the delayed stale dispose of a re-rented sibling — can alias two
@@ -231,6 +232,7 @@ public static class MachineStageProbes {
 
         return ((delta == 0)
             ? PostStageOutcome.Pass(detail: $"0 B allocated over {measureFrames} frames after {warmFrames}-frame warm-up")
-            : PostStageOutcome.Fail(detail: $"{delta:N0} B allocated over {measureFrames} frames after {warmFrames}-frame warm-up (expected 0)"));
+            : PostStageOutcome.Fail(detail: $"{delta:N0} B allocated over {measureFrames} frames after {warmFrames}-frame warm-up (expected 0)")
+        );
     }
 }

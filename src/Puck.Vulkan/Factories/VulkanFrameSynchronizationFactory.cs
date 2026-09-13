@@ -10,23 +10,6 @@ namespace Puck.Vulkan.Factories;
 /// an owning <see cref="VulkanFrameSynchronization"/> and cleaning up partial progress on failure.
 /// </summary>
 public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizationFactory {
-    private static void EnsureHandle(nint handle, string message) {
-        if (handle == 0) {
-            throw new InvalidOperationException(message: message);
-        }
-    }
-
-    private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanFrameSynchronizationFactory"/> class.</summary>
-    /// <param name="frameSynchronizationApi">The synchronization API used to create the semaphores and fence.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="frameSynchronizationApi"/> is <see langword="null"/>.</exception>
-    public VulkanFrameSynchronizationFactory(IVulkanFrameSynchronizationApi frameSynchronizationApi) {
-        ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
-
-        m_frameSynchronizationApi = frameSynchronizationApi;
-    }
-
     private void Cleanup(
         nint deviceHandle,
         nint imageAvailableSemaphoreHandle,
@@ -54,6 +37,11 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
                 deviceHandle: deviceHandle,
                 fenceHandle: inFlightFenceHandle
             );
+        }
+    }
+    private static void EnsureHandle(nint handle, string message) {
+        if (handle == 0) {
+            throw new InvalidOperationException(message: message);
         }
     }
 
@@ -130,5 +118,16 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
             );
             throw;
         }
+    }
+
+    private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanFrameSynchronizationFactory"/> class.</summary>
+    /// <param name="frameSynchronizationApi">The synchronization API used to create the semaphores and fence.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="frameSynchronizationApi"/> is <see langword="null"/>.</exception>
+    public VulkanFrameSynchronizationFactory(IVulkanFrameSynchronizationApi frameSynchronizationApi) {
+        ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
+
+        m_frameSynchronizationApi = frameSynchronizationApi;
     }
 }

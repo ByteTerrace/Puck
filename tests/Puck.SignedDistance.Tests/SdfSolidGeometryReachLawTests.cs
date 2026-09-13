@@ -28,30 +28,6 @@ public sealed class SdfSolidGeometryReachLawTests {
         ));
 
     [Fact]
-    public void ReachReadsScaleMagnitudes() {
-        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
-            // apply to it; SweepLawTests covers its admission/emission agreement separately.
-            foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
-            foreach (var signs in new[] {
-                new Vector3(x: -1f, y: 1f, z: 1f),
-                new Vector3(x: 1f, y: -1f, z: 1f),
-                new Vector3(x: 1f, y: 1f, z: -1f),
-                new Vector3(value: -1f),
-            }) {
-                Assert.Equal(
-                    actual: SdfSolidGeometry.Reach(
-                        scale: (Anisotropic * signs),
-                        type: type
-                    ),
-                    expected: SdfSolidGeometry.Reach(
-                        scale: Anisotropic,
-                        type: type
-                    )
-                );
-            }
-        }
-    }
-    [Fact]
     public void ReachCoversTheEmittedSurfaceUnderAMirroredScale() {
         // The whole point of a reach: the emitted surface sits inside a sphere of that radius. A sign-flipped scale
         // emits the same geometry, so a reach that shrinks under the flip is a bound that no longer covers it.
@@ -88,46 +64,6 @@ public sealed class SdfSolidGeometryReachLawTests {
             condition: (reach >= 4f),
             userMessage: $"reach {reach} does not cover an emitted surface at |z| = 4"
         );
-    }
-    /// <summary>Emission raises every scale component to <see cref="SdfSolidGeometry.MinimumScale"/>, so the analyzer
-    /// reads the same effective scale: a reach taken from the authored value reports nothing for geometry the emission
-    /// still gives extent.</summary>
-    [Fact]
-    public void ReachReadsTheSameEffectiveScaleEmissionDoes() {
-        var minimum = new Vector3(value: SdfSolidGeometry.MinimumScale);
-
-        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
-            // apply to it; SweepLawTests covers its admission/emission agreement separately.
-            foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
-            var atMinimum = SdfSolidGeometry.Reach(
-                scale: minimum,
-                type: type
-            );
-
-            foreach (var below in new[] {
-                Vector3.Zero,
-                new Vector3(value: (SdfSolidGeometry.MinimumScale * 0.5f)),
-                new Vector3(value: (-SdfSolidGeometry.MinimumScale * 0.5f)),
-            }) {
-                Assert.Equal(
-                    actual: SdfSolidGeometry.Reach(
-                        scale: below,
-                        type: type
-                    ),
-                    expected: atMinimum
-                );
-            }
-
-            // Control: past the clamp the reach still tracks the authored scale, so the agreement above is not the
-            // clamp swallowing every scale.
-            Assert.Equal(
-                actual: SdfSolidGeometry.Reach(
-                    scale: (minimum * 4f),
-                    type: type
-                ),
-                expected: (atMinimum * 4f)
-            );
-        }
     }
     /// <summary>A cull bound must contain the geometry it labels: an instance's reach is folded into a running maximum
     /// that decides which tiles evaluate the instance at all.</summary>
@@ -166,5 +102,81 @@ public sealed class SdfSolidGeometryReachLawTests {
             ) >= probe),
             userMessage: "a zero-scale reach does not cover the surface a zero-scale emission produces"
         );
+    }
+    [Fact]
+    public void ReachReadsScaleMagnitudes() {
+        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
+        // apply to it; SweepLawTests covers its admission/emission agreement separately.
+        foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
+            foreach (var signs in new[] {
+                new Vector3(
+                x: -1f,
+                y: 1f,
+                z: 1f
+            ),
+                new Vector3(
+                x: 1f,
+                y: -1f,
+                z: 1f
+            ),
+                new Vector3(
+                x: 1f,
+                y: 1f,
+                z: -1f
+            ),
+                new Vector3(value: -1f),
+            }) {
+                Assert.Equal(
+                    actual: SdfSolidGeometry.Reach(
+                        scale: (Anisotropic * signs),
+                        type: type
+                    ),
+                    expected: SdfSolidGeometry.Reach(
+                        scale: Anisotropic,
+                        type: type
+                    )
+                );
+            }
+        }
+    }
+    /// <summary>Emission raises every scale component to <see cref="SdfSolidGeometry.MinimumScale"/>, so the analyzer
+    /// reads the same effective scale: a reach taken from the authored value reports nothing for geometry the emission
+    /// still gives extent.</summary>
+    [Fact]
+    public void ReachReadsTheSameEffectiveScaleEmissionDoes() {
+        var minimum = new Vector3(value: SdfSolidGeometry.MinimumScale);
+
+        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
+        // apply to it; SweepLawTests covers its admission/emission agreement separately.
+        foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
+            var atMinimum = SdfSolidGeometry.Reach(
+                scale: minimum,
+                type: type
+            );
+
+            foreach (var below in new[] {
+                Vector3.Zero,
+                new Vector3(value: (SdfSolidGeometry.MinimumScale * 0.5f)),
+                new Vector3(value: (-SdfSolidGeometry.MinimumScale * 0.5f)),
+            }) {
+                Assert.Equal(
+                    actual: SdfSolidGeometry.Reach(
+                        scale: below,
+                        type: type
+                    ),
+                    expected: atMinimum
+                );
+            }
+
+            // Control: past the clamp the reach still tracks the authored scale, so the agreement above is not the
+            // clamp swallowing every scale.
+            Assert.Equal(
+                actual: SdfSolidGeometry.Reach(
+                    scale: (minimum * 4f),
+                    type: type
+                ),
+                expected: (atMinimum * 4f)
+            );
+        }
     }
 }

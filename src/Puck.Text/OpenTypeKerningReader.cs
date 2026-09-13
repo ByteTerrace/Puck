@@ -55,7 +55,7 @@ internal static class OpenTypeKerningReader {
                         offset: (coverageOffset + 2)
                     );
 
-                    budget?.Work(glyphCount);
+                    budget?.Work(amount: glyphCount);
                     for (var index = 0; (index < glyphCount); index++) {
                         covered.Add(item: (
                             Glyph: OpenTypeFontFace.ReadUInt16(
@@ -76,7 +76,7 @@ internal static class OpenTypeKerningReader {
                         offset: (coverageOffset + 2)
                     );
 
-                    budget?.Work(rangeCount);
+                    budget?.Work(amount: rangeCount);
                     for (var index = 0; (index < rangeCount); index++) {
                         var rangeOffset = checked(((coverageOffset + 4) + (index * 6)));
                         var start = OpenTypeFontFace.ReadUInt16(
@@ -105,7 +105,7 @@ internal static class OpenTypeKerningReader {
                             throw new InvalidDataException(message: "A GPOS coverage table exceeds Puck's supported size.");
                         }
 
-                        budget?.Work(rangeLength);
+                        budget?.Work(amount: rangeLength);
                         for (var glyph = ((int)start); (glyph <= end); glyph++) {
                             covered.Add(item: (
                                 Glyph: ((ushort)glyph),
@@ -474,6 +474,7 @@ internal static class OpenTypeKerningReader {
                         Left: left,
                         Right: right
                     );
+
                     budget?.KerningPairs();
 
                     if (overridesEarlierValues) {

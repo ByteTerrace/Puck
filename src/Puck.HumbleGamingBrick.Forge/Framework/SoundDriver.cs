@@ -35,11 +35,11 @@ public sealed class NoOpSoundDriver : ISoundDriver {
         emitter.StoreAToHighPage(port: Hw.PortSoundOnOff);
     }
     /// <inheritdoc/>
-    public void EmitFrameTick(Sm83Emitter emitter) {
+    public void EmitEffect(Sm83Emitter emitter, byte effectId) {
         ArgumentNullException.ThrowIfNull(emitter);
     }
     /// <inheritdoc/>
-    public void EmitEffect(Sm83Emitter emitter, byte effectId) {
+    public void EmitFrameTick(Sm83Emitter emitter) {
         ArgumentNullException.ThrowIfNull(emitter);
     }
     /// <inheritdoc/>

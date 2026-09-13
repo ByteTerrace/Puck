@@ -59,6 +59,82 @@ public sealed class VulkanSurfaceImport : IDisposable {
         m_queueSubmitter = queueSubmitter;
     }
 
+    private void DisposeResources() {
+        var device = m_device;
+
+        m_commandResources?.Dispose();
+        m_commandResources = null;
+
+        if (
+            (device is not null) &&
+            (0 != m_imageViewHandle)
+        ) {
+            m_framebufferSetApi.DestroyImageView(
+                deviceHandle: device.Handle,
+                imageViewHandle: m_imageViewHandle
+            );
+        }
+
+        m_imageViewHandle = 0;
+
+        if (device is not null) {
+            m_externalMemoryApi.DestroyImage(
+                deviceHandle: device.Handle,
+                imageHandle: m_imageHandle,
+                memoryHandle: m_memoryHandle
+            );
+        }
+
+        m_imageHandle = 0;
+        m_memoryHandle = 0;
+        m_sharedHandle = 0;
+    }
+    // The shared image is produced by Direct3D 12 (which has no Vulkan layout). Bring it into the shader-read
+    // layout once; the producer's per-frame writes land in the same memory and are ordered by its GPU fence.
+    private void TransitionToShaderReadable(VulkanLogicalDevice device) {
+        var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
+
+        m_commandBufferRecordingApi.BeginCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: device.Handle
+        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+        m_commandBufferRecordingApi.TransitionImageLayout(
+            baseMipLevel: 0,
+            commandBufferHandle: commandBufferHandle,
+            destinationAccessMask: VulkanAccessFlags.ShaderRead,
+            destinationStageMask: VulkanPipelineStageFlags.FragmentShader,
+            deviceHandle: device.Handle,
+            imageHandle: m_imageHandle,
+            mipLevelCount: 1,
+            newLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
+            oldLayout: VulkanImageLayout.Undefined,
+            sourceAccessMask: 0,
+            sourceStageMask: VulkanPipelineStageFlags.TopOfPipe
+        );
+        m_commandBufferRecordingApi.EndCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: device.Handle
+        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+
+        Span<nint> commandBuffers = [commandBufferHandle];
+
+        m_queueSubmitter.SubmitAndWait(
+            commandBufferHandles: commandBuffers,
+            deviceHandle: device.Handle,
+            graphicsQueue: device.GraphicsQueue
+        );
+    }
+
+    /// <summary>Waits for device idle, then frees the image view, imported image, and imported memory. Safe to call more than once.</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+        m_device?.TryWaitIdle();
+        DisposeResources();
+    }
     /// <summary>Imports the shared surface (once) and returns the handle of a shader-readable image view over it.</summary>
     /// <param name="deviceContext">The device the image is imported on; must share the producer's adapter.</param>
     /// <param name="sharedHandle">The shared NT handle of the texture to import.</param>
@@ -134,82 +210,5 @@ public sealed class VulkanSurfaceImport : IDisposable {
         TransitionToShaderReadable(device: device);
 
         return m_imageViewHandle;
-    }
-
-    // The shared image is produced by Direct3D 12 (which has no Vulkan layout). Bring it into the shader-read
-    // layout once; the producer's per-frame writes land in the same memory and are ordered by its GPU fence.
-    private void TransitionToShaderReadable(VulkanLogicalDevice device) {
-        var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
-
-        m_commandBufferRecordingApi.BeginCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
-        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
-        m_commandBufferRecordingApi.TransitionImageLayout(
-            baseMipLevel: 0,
-            commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: VulkanAccessFlags.ShaderRead,
-            destinationStageMask: VulkanPipelineStageFlags.FragmentShader,
-            deviceHandle: device.Handle,
-            imageHandle: m_imageHandle,
-            mipLevelCount: 1,
-            newLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
-            oldLayout: VulkanImageLayout.Undefined,
-            sourceAccessMask: 0,
-            sourceStageMask: VulkanPipelineStageFlags.TopOfPipe
-        );
-        m_commandBufferRecordingApi.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
-
-        Span<nint> commandBuffers = [commandBufferHandle];
-
-        m_queueSubmitter.SubmitAndWait(
-            commandBufferHandles: commandBuffers,
-            deviceHandle: device.Handle,
-            graphicsQueue: device.GraphicsQueue
-        );
-    }
-    private void DisposeResources() {
-        var device = m_device;
-
-        m_commandResources?.Dispose();
-        m_commandResources = null;
-
-        if (
-            (device is not null) &&
-            (0 != m_imageViewHandle)
-        ) {
-            m_framebufferSetApi.DestroyImageView(
-                deviceHandle: device.Handle,
-                imageViewHandle: m_imageViewHandle
-            );
-        }
-
-        m_imageViewHandle = 0;
-
-        if (device is not null) {
-            m_externalMemoryApi.DestroyImage(
-                deviceHandle: device.Handle,
-                imageHandle: m_imageHandle,
-                memoryHandle: m_memoryHandle
-            );
-        }
-
-        m_imageHandle = 0;
-        m_memoryHandle = 0;
-        m_sharedHandle = 0;
-    }
-
-    /// <summary>Waits for device idle, then frees the image view, imported image, and imported memory. Safe to call more than once.</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_device?.TryWaitIdle();
-        DisposeResources();
     }
 }

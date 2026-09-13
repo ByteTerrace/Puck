@@ -16,13 +16,24 @@ internal static class LandingReflog {
         suggestion = string.Empty;
         when = string.Empty;
 
-        var output = Git.Capture("reflog", "--date=iso", "--format=%h|%gd|%gs|%cd", "-60");
+        var output = Git.Capture(
+            "reflog",
+            "--date=iso",
+            "--format=%h|%gd|%gs|%cd",
+            "-60"
+        );
 
         foreach (var line in output.Split(separator: '\n')) {
             var text = line.TrimEnd(trimChar: '\r');
             var fields = text.Split(separator: '|');
 
-            if ((fields.Length < 4) || !fields[2].StartsWith(comparisonType: StringComparison.Ordinal, value: "rebase (start): checkout ")) {
+            if (
+                (fields.Length < 4) ||
+                !fields[2].StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "rebase (start): checkout "
+            )
+            ) {
                 continue;
             }
 

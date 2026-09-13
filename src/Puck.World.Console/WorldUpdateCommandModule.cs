@@ -20,7 +20,10 @@ public sealed class WorldUpdateCommandModule(IWorldConsoleAuthority authority) :
             name: "world.update",
             description: "Reads the update section back: the authored channel/cacheRoot/checkIntervalSeconds/keepVersions, or 'none' when the section is absent (the app runs its own hardcoded self-update defaults). Authored data only — see update.status for the resolved, live configuration.",
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.update") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.update"
+                ) is { } refusal) {
                     return refusal;
                 }
 
@@ -51,10 +54,22 @@ public sealed class WorldUpdateCommandModule(IWorldConsoleAuthority authority) :
                 );
 
                 return new CommandResult(Output: CommandEcho.Open(verb: "world.update")
-                    .Field(key: "channel", value: channel)
-                    .Field(key: "cacheRoot", value: cacheRoot)
-                    .Field(key: "checkIntervalSeconds", value: checkIntervalSeconds)
-                    .Field(key: "keepVersions", value: keepVersions)
+                    .Field(
+                    key: "channel",
+                    value: channel
+                )
+                    .Field(
+                    key: "cacheRoot",
+                    value: cacheRoot
+                )
+                    .Field(
+                    key: "checkIntervalSeconds",
+                    value: checkIntervalSeconds
+                )
+                    .Field(
+                    key: "keepVersions",
+                    value: keepVersions
+                )
                     .Close());
             }
         );

@@ -35,12 +35,12 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public static class FixedFourierTransform {
-    // The inverse butterfly's narrow lane forms (u << 16) ± (two twiddle products) in a signed long: with the data
-    // below 2^45 each addend is below 2^62 and their sum below 2^63.
-    private const ulong InverseNarrowLimit = (1UL << 45);
     private const long HalvingHalf = (1L << (HalvingShift - 1));
     private const long HalvingMask = ((1L << HalvingShift) - 1L);
     private const int HalvingShift = (FixedQ4816.FractionBitCount + 1);
+    // The inverse butterfly's narrow lane forms (u << 16) ± (two twiddle products) in a signed long: with the data
+    // below 2^45 each addend is below 2^62 and their sum below 2^63.
+    private const ulong InverseNarrowLimit = (1UL << 45);
 
     private static void ForwardButterfly(ReadOnlySpan<FixedComplex> twiddles, Span<FixedComplex> values) {
         var n = values.Length;
@@ -77,6 +77,58 @@ public static class FixedFourierTransform {
             if (length == n) { break; }
         }
     }
+    // Returns ((u + w·v) / 2, (u − w·v) / 2) with one rounding per component: w·v at exact Q32, u lifted to Q32, the
+    // sum rounded once at a seventeen-bit shift (ties to even, sign-magnitude, matching RoundProductSum's discipline).
+    private static (FixedComplex Sum, FixedComplex Difference) HalvedButterfly(FixedComplex u, FixedComplex v, FixedComplex twiddle) {
+        var magnitude = FusedArithmetic.RawMagnitude(value: u.Real.Value) | FusedArithmetic.RawMagnitude(value: u.Imaginary.Value) |
+                         FusedArithmetic.RawMagnitude(value: v.Real.Value) | FusedArithmetic.RawMagnitude(value: v.Imaginary.Value);
+
+        if (magnitude < InverseNarrowLimit) {
+            var productReal = unchecked(((twiddle.Real.Value * v.Real.Value) - (twiddle.Imaginary.Value * v.Imaginary.Value)));
+            var productImaginary = unchecked(((twiddle.Real.Value * v.Imaginary.Value) + (twiddle.Imaginary.Value * v.Real.Value)));
+            var liftedReal = (u.Real.Value << FixedQ4816.FractionBitCount);
+            var liftedImaginary = (u.Imaginary.Value << FixedQ4816.FractionBitCount);
+
+            return (
+                Sum: new(
+                Real: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedReal + productReal))),
+                Imaginary: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedImaginary + productImaginary)))
+            ),
+                Difference: new(
+                Real: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedReal - productReal))),
+                Imaginary: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedImaginary - productImaginary)))
+            )
+            );
+        }
+
+        var wideReal = unchecked(((((Int128)twiddle.Real.Value) * v.Real.Value) - (((Int128)twiddle.Imaginary.Value) * v.Imaginary.Value)));
+        var wideImaginary = unchecked(((((Int128)twiddle.Real.Value) * v.Imaginary.Value) + (((Int128)twiddle.Imaginary.Value) * v.Real.Value)));
+        var wideLiftedReal = (((Int128)u.Real.Value) << FixedQ4816.FractionBitCount);
+        var wideLiftedImaginary = (((Int128)u.Imaginary.Value) << FixedQ4816.FractionBitCount);
+
+        return (
+            Sum: new(
+            Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+                fractionBitCount: HalvingShift,
+                product: (wideLiftedReal + wideReal)
+            )),
+            Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+                fractionBitCount: HalvingShift,
+                product: (wideLiftedImaginary + wideImaginary)
+            ))
+        ),
+            Difference: new(
+            Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+                fractionBitCount: HalvingShift,
+                product: (wideLiftedReal - wideReal)
+            )),
+            Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+                fractionBitCount: HalvingShift,
+                product: (wideLiftedImaginary - wideImaginary)
+            ))
+        )
+        );
+    }
     private static void InverseButterfly(ReadOnlySpan<FixedComplex> twiddles, Span<FixedComplex> values) {
         var n = values.Length;
 
@@ -111,46 +163,6 @@ public static class FixedFourierTransform {
 
             if (length == n) { break; }
         }
-    }
-    // Returns ((u + w·v) / 2, (u − w·v) / 2) with one rounding per component: w·v at exact Q32, u lifted to Q32, the
-    // sum rounded once at a seventeen-bit shift (ties to even, sign-magnitude, matching RoundProductSum's discipline).
-    private static (FixedComplex Sum, FixedComplex Difference) HalvedButterfly(FixedComplex u, FixedComplex v, FixedComplex twiddle) {
-        var magnitude = FusedArithmetic.RawMagnitude(value: u.Real.Value) | FusedArithmetic.RawMagnitude(value: u.Imaginary.Value) |
-                         FusedArithmetic.RawMagnitude(value: v.Real.Value) | FusedArithmetic.RawMagnitude(value: v.Imaginary.Value);
-
-        if (magnitude < InverseNarrowLimit) {
-            var productReal = unchecked(((twiddle.Real.Value * v.Real.Value) - (twiddle.Imaginary.Value * v.Imaginary.Value)));
-            var productImaginary = unchecked(((twiddle.Real.Value * v.Imaginary.Value) + (twiddle.Imaginary.Value * v.Real.Value)));
-            var liftedReal = (u.Real.Value << FixedQ4816.FractionBitCount);
-            var liftedImaginary = (u.Imaginary.Value << FixedQ4816.FractionBitCount);
-
-            return (
-                Sum: new(
-                    Real: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedReal + productReal))),
-                    Imaginary: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedImaginary + productImaginary)))
-                ),
-                Difference: new(
-                    Real: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedReal - productReal))),
-                    Imaginary: FixedQ4816.FromRawBits(value: RoundHalved(productSum: (liftedImaginary - productImaginary)))
-                )
-            );
-        }
-
-        var wideReal = unchecked(((((Int128)twiddle.Real.Value) * v.Real.Value) - (((Int128)twiddle.Imaginary.Value) * v.Imaginary.Value)));
-        var wideImaginary = unchecked(((((Int128)twiddle.Real.Value) * v.Imaginary.Value) + (((Int128)twiddle.Imaginary.Value) * v.Real.Value)));
-        var wideLiftedReal = (((Int128)u.Real.Value) << FixedQ4816.FractionBitCount);
-        var wideLiftedImaginary = (((Int128)u.Imaginary.Value) << FixedQ4816.FractionBitCount);
-
-        return (
-            Sum: new(
-                Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(fractionBitCount: HalvingShift, product: (wideLiftedReal + wideReal))),
-                Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(fractionBitCount: HalvingShift, product: (wideLiftedImaginary + wideImaginary)))
-            ),
-            Difference: new(
-                Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(fractionBitCount: HalvingShift, product: (wideLiftedReal - wideReal))),
-                Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(fractionBitCount: HalvingShift, product: (wideLiftedImaginary - wideImaginary)))
-            )
-        );
     }
     private static long RoundHalved(long productSum) {
         var sign = (productSum >> 63);
@@ -217,7 +229,9 @@ public static class FixedFourierTransform {
         PointwiseMultiply(
             destination: destination,
             left: left,
-            right: (sameOperands ? left : right)
+            right: (sameOperands
+            ? left
+            : right)
         );
         Inverse(
             plan: plan,

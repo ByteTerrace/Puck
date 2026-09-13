@@ -16,10 +16,10 @@ public sealed class Mbc5Cartridge : CartridgeBase {
 
     private readonly bool m_isRumbleVariant;
 
+    private bool m_motorOn;
     private int m_ramBank;
     private bool m_ramEnabled;
     private int m_romBank;
-    private bool m_motorOn;
 
     /// <summary>Creates an MBC5 cartridge with its registers at reset (ROM bank 1, RAM disabled, motor off).</summary>
     /// <param name="rom">The full ROM image.</param>
@@ -37,17 +37,43 @@ public sealed class Mbc5Cartridge : CartridgeBase {
     protected override bool RamAccessible =>
         (Header.HasRam && m_ramEnabled);
 
+    /// <inheritdoc/>
+    /// <remarks>The MBC5 rumble hardware is on/off only (no PWM), so this is always exactly 0 or 1.</remarks>
+    public override float MotorLevel =>
+        (MotorOn
+            ? 1f
+            : 0f
+        );
     /// <summary>Gets the latched rumble motor state — <see langword="true"/> while a rumble-variant cartridge is
     /// driving its motor on. Always <see langword="false"/> on a non-rumble cartridge. Host-facing feedback state
     /// only: it never influences emulated behavior, mirroring the joypad's read-only relationship to host input.</summary>
     public bool MotorOn =>
         (m_isRumbleVariant && m_motorOn);
+
     /// <inheritdoc/>
-    /// <remarks>The MBC5 rumble hardware is on/off only (no PWM), so this is always exactly 0 or 1.</remarks>
-    public override float MotorLevel =>
-        (MotorOn
-        ? 1f
-        : 0f);
+    protected override void LoadRegisters(StateReader reader) {
+        m_ramBank = reader.ReadInt32();
+        m_ramEnabled = reader.ReadBoolean();
+        m_romBank = reader.ReadInt32();
+        m_motorOn = reader.ReadBoolean();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        ((m_ramBank * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteInt32(value: m_ramBank);
+        writer.WriteBoolean(value: m_ramEnabled);
+        writer.WriteInt32(value: m_romBank);
+        writer.WriteBoolean(value: m_motorOn);
+    }
 
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
@@ -78,30 +104,5 @@ public sealed class Mbc5Cartridge : CartridgeBase {
             default:
                 break;
         }
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
-            address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
-        );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        ((m_ramBank * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
-        writer.WriteBoolean(value: m_motorOn);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_ramBank = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-        m_motorOn = reader.ReadBoolean();
     }
 }

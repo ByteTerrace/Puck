@@ -105,7 +105,10 @@ public sealed partial class WorldAddonRuntime {
         // sequence compare below is what decides whether THIS addon's projection actually moved. An overflowed set is
         // gated on the same coordinate: only a grant-table write can shrink it (the budget is fixed per instance), so
         // re-projecting every tick while it stays oversized would be two array allocations per tick forever.
-        if ((addon.DisclosedRevision == grants.Revision) || (addon.OverflowedAtRevision == grants.Revision)) {
+        if (
+            (addon.DisclosedRevision == grants.Revision) ||
+            (addon.OverflowedAtRevision == grants.Revision)
+        ) {
             return;
         }
 
@@ -276,7 +279,8 @@ public sealed partial class WorldAddonRuntime {
                 separator: ", ",
                 values: inert
             )}]"
-            : null);
+            : null
+        );
     }
     // Resolve an addon module path: absolute as-is, else relative to the executable directory (Assets/** is
     // Content-copied beside the output, exactly how the world document itself is found at boot).
@@ -455,7 +459,8 @@ public sealed partial class WorldAddonRuntime {
         var channelsChanged = !m_channelsSource.SequenceEqual(second: candidate.Channels);
         var stagedChannels = (channelsChanged
             ? WorldChannelTable.Compile(channels: candidate.Channels)
-            : m_channels);
+            : m_channels
+        );
 
         // Keyed by name so a row this pass reuses (or supersedes) can be looked up in O(1); whatever remains once
         // every candidate row has been considered is exactly the set this pass replaces or drops entirely. Left
@@ -494,14 +499,16 @@ public sealed partial class WorldAddonRuntime {
         var hostInstances = new List<AddonInstance>();
         var host = (channelsChanged
             ? null
-            : m_host);
+            : m_host
+        );
         var hostIsNew = false;
         // The host THIS pass is about to replace wholesale, only when channels moved and a host already existed —
         // disposed by Finish, never entered into `superseded` (its own Dispose() already tears down every instance
         // it still owns, so double-entering those same instances would double-dispose them).
         var supersededHost = (channelsChanged
             ? m_host
-            : null);
+            : null
+        );
         // Ownership guard: an exception anywhere in the loop below (an unexpected environment failure the guest
         // load path did not already convert into an ordinary fault) still reaches the finally, which releases
         // exactly what an explicit refusal already releases — every guest this pass compiled and the host it
@@ -812,10 +819,6 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets the full ordered mounted set this plan installs — reused guests and freshly-prepared ones
         /// interleaved in candidate document order.</summary>
         public List<MountedAddon> Mounted { get; } = mounted;
-
-        /// <inheritdoc/>
-        public int MountedCount => Mounted.Count;
-
         /// <summary>Gets the deferred stderr line producers (mount confirmations, capability disclosures,
         /// inert-channel reports), evaluated and printed by <see cref="WorldAddonRuntime.Finish"/> only, never by
         /// this type. A capability disclosure entry re-reads the grant table at the moment it is invoked, so a
@@ -833,6 +836,9 @@ public sealed partial class WorldAddonRuntime {
         /// when <see cref="Host"/> is reused or freshly built with nothing to replace. Disposed by
         /// <see cref="WorldAddonRuntime.Finish"/>, never entered into <see cref="Superseded"/>.</summary>
         public AddonHost? SupersededHost { get; } = supersededHost;
+
+        /// <inheritdoc/>
+        public int MountedCount => Mounted.Count;
 
         /// <summary>Disposes every freshly-prepared guest store this plan was never committed with, and the host this
         /// plan itself constructed, if any. A no-op once <see cref="MarkCommitted"/> has run, or on a second call.</summary>

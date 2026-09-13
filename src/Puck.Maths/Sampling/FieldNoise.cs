@@ -220,13 +220,6 @@ public static class FieldNoise {
             shift: FadeFractionBitCount,
             value: ((b - a) * fadeQ28)
         ));
-    private static long RoundShift(long value, int shift) {
-        var sign = (value >> 63);
-        var magnitude = ((value ^ sign) - sign);
-        var rounded = ((magnitude + (1L << (shift - 1))) >> shift);
-
-        return ((rounded ^ sign) - sign);
-    }
     // The gradient sampler's corner load: the terms SampleLattice forms, through the tree every sampler shares.
     private static void LoadCorners(in FieldNoiseSeed seed, long x0, long y0, long z0, Span<long> corners) {
         unchecked {
@@ -279,6 +272,13 @@ public static class FieldNoise {
                 : Mix(value: (state + (high * highMultiplier)))
             );
         }
+    }
+    private static long RoundShift(long value, int shift) {
+        var sign = (value >> 63);
+        var magnitude = ((value ^ sign) - sign);
+        var rounded = ((magnitude + (1L << (shift - 1))) >> shift);
+
+        return ((rounded ^ sign) - sign);
     }
     private static long SampleCore(in FieldNoiseSeed seed, long xRaw, long yRaw, long zRaw) =>
         SampleLattice(

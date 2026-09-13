@@ -1210,9 +1210,9 @@ internal static partial class Subjects {
 
         for (var lane = 4; (lane < 8); ++lane) {
             largestInputDual = BigInteger.Max(
-            left: largestInputDual,
-            right: BigInteger.Abs(value: new BigInteger(value: lanes[lane]))
-        );
+                left: largestInputDual,
+                right: BigInteger.Abs(value: new BigInteger(value: lanes[lane]))
+            );
         }
 
         // The scaled dual's largest lane, bounded from the EXACT ratio |dual|·2¹⁶/‖real‖ with a deliberately generous
@@ -1292,9 +1292,9 @@ internal static partial class Subjects {
 
         foreach (var lane in dual) {
             largest = BigInteger.Max(
-            left: largest,
-            right: BigInteger.Abs(value: new BigInteger(value: lane))
-        );
+                left: largest,
+                right: BigInteger.Abs(value: new BigInteger(value: lane))
+            );
         }
 
         return (((largest * largest) << 32) < (squaredSum << 124));

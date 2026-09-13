@@ -29,12 +29,86 @@ namespace Puck.Cli.Format.Rewriters;
 // Indentation is computed structurally, never read from the condition's own line, so sibling ternaries
 // in one expression cannot shift each other across runs.
 internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
+    // The indent this ternary's `? t` / `: f` branches hang from: the enclosing statement/member indent
+    // plus one level per enclosing ternary whose BRANCH holds this node.
+    private static string ConditionIndent(ConditionalExpressionSyntax node) => new(
+        c: ' ',
+        count: RewriteShaping.StructuralIndent(
+            node: node,
+            addsLevel: static (ancestor, child) => ((ancestor is ConditionalExpressionSyntax conditional) && ((conditional.WhenTrue == child) || (conditional.WhenFalse == child)))
+        )
+    );
+    // True when a trivia slot the layout resets carries prose or a directive: the condition's trailing
+    // side, either operator token, or either branch's outer trivia. The condition's own leading trivia
+    // and all inner trivia survive a rewrite, so neither is consulted.
+    private static bool IsAnnotated(ConditionalExpressionSyntax conditional) =>
+        (RewriteShaping.HasCommentOrDirective(trivia: conditional.Condition.GetTrailingTrivia())
+        || RewriteShaping.IsAnnotated(token: conditional.QuestionToken)
+        || RewriteShaping.IsAnnotated(token: conditional.ColonToken)
+        || IsAnnotatedBranch(branch: conditional.WhenTrue)
+        || IsAnnotatedBranch(branch: conditional.WhenFalse));
+    // A branch that is itself a chain link is rebuilt link by link, so its own slots count too.
+    private static bool IsAnnotatedBranch(ExpressionSyntax branch) => ((branch is ConditionalExpressionSyntax link)
+        ? (RewriteShaping.HasCommentOrDirective(trivia: link.GetLeadingTrivia()) || IsAnnotated(conditional: link))
+        : RewriteShaping.IsAnnotated(node: branch)
+    );
+    private static ConditionalExpressionSyntax Layout(ConditionalExpressionSyntax conditional, string conditionIndent) {
+        var branchIndent = (conditionIndent + "    ");
+        var branchLead = new[] { RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: branchIndent) };
+
+        var whenTrue = ((conditional.WhenTrue is ConditionalExpressionSyntax trueChain)
+            ? Layout(
+                conditionIndent: branchIndent,
+                conditional: trueChain
+            ).WithLeadingTrivia()
+            : conditional.WhenTrue.WithLeadingTrivia().WithTrailingTrivia()
+        );
+        var whenFalse = ((conditional.WhenFalse is ConditionalExpressionSyntax falseChain)
+            ? Layout(
+                conditionIndent: branchIndent,
+                conditional: falseChain
+            ).WithLeadingTrivia()
+            : conditional.WhenFalse.WithLeadingTrivia().WithTrailingTrivia()
+        );
+
+        return conditional
+            .WithCondition(condition: conditional.Condition.WithTrailingTrivia())
+            .WithQuestionToken(questionToken: conditional.QuestionToken.WithLeadingTrivia(trivia: branchLead).WithTrailingTrivia(SyntaxFactory.Space))
+            .WithWhenTrue(whenTrue: whenTrue)
+            .WithColonToken(colonToken: conditional.ColonToken.WithLeadingTrivia(trivia: branchLead).WithTrailingTrivia(SyntaxFactory.Space))
+            .WithWhenFalse(whenFalse: whenFalse);
+    }
+    // The construct-terminating close parens in source order (innermost first): descend while the final
+    // branch is itself a paren-wrapped, un-annotated chain link — an annotated link kept its authored
+    // layout, so its close paren must stay where the author put it.
+    private static List<SyntaxToken> TrailingCloseRun(ParenthesizedExpressionSyntax paren) {
+        var closes = new List<SyntaxToken> { paren.CloseParenToken };
+        var current = paren;
+
+        while (
+            (current.Expression is ConditionalExpressionSyntax conditional) &&
+            (conditional.WhenFalse is ParenthesizedExpressionSyntax inner) &&
+            (inner.Expression is ConditionalExpressionSyntax innerConditional) &&
+            !IsAnnotated(conditional: innerConditional)
+        ) {
+            closes.Add(item: inner.CloseParenToken);
+            current = inner;
+        }
+
+        closes.Reverse();
+
+        return closes;
+    }
+
     public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax node) {
         var visited = ((ConditionalExpressionSyntax)base.VisitConditionalExpression(node: node)!);
 
         // A conditional that is a branch of another conditional is a link in a `? : ? :` chain — its
         // root lays it out (one level deeper), so leave it alone here.
-        if ((node.Parent is ConditionalExpressionSyntax parent) && ((parent.WhenTrue == node) || (parent.WhenFalse == node))) {
+        if (
+            (node.Parent is ConditionalExpressionSyntax parent) &&
+            ((parent.WhenTrue == node) || (parent.WhenFalse == node))
+        ) {
             return visited;
         }
 
@@ -46,7 +120,10 @@ internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
             return visited;
         }
 
-        return Layout(conditional: visited, conditionIndent: ConditionIndent(node: node));
+        return Layout(
+            conditional: visited,
+            conditionIndent: ConditionIndent(node: node)
+        );
     }
     // Lays out the trailing close parens of a paren-wrapped laid-out ternary: the run of wrapper `)`s
     // that ends the construct (this paren's own close, plus the closes of nested chain-link wrappers that
@@ -58,12 +135,17 @@ internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node) {
         var visited = ((ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node: node)!);
 
-        if ((node.Expression is not ConditionalExpressionSyntax original)
-            || (visited.Expression is not ConditionalExpressionSyntax laidOut)) {
+        if (
+            (node.Expression is not ConditionalExpressionSyntax original) ||
+            (visited.Expression is not ConditionalExpressionSyntax laidOut)
+        ) {
             return visited;
         }
 
-        if ((node.Parent is ConditionalExpressionSyntax parent) && ((parent.WhenTrue == node) || (parent.WhenFalse == node))) {
+        if (
+            (node.Parent is ConditionalExpressionSyntax parent) &&
+            ((parent.WhenTrue == node) || (parent.WhenFalse == node))
+        ) {
             return visited;
         }
 
@@ -88,65 +170,11 @@ internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
         return visited.ReplaceTokens(
             tokens: closes,
             computeReplacementToken: (oldToken, _) => ((hangs && oldToken.Equals(other: first))
-                ? oldToken.WithLeadingTrivia(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: indent))
-                : oldToken.WithLeadingTrivia()));
+            ? oldToken.WithLeadingTrivia(
+                    RewriteShaping.EndOfLine,
+                    SyntaxFactory.Whitespace(text: indent)
+                )
+            : oldToken.WithLeadingTrivia())
+        );
     }
-
-    // The construct-terminating close parens in source order (innermost first): descend while the final
-    // branch is itself a paren-wrapped, un-annotated chain link — an annotated link kept its authored
-    // layout, so its close paren must stay where the author put it.
-    private static List<SyntaxToken> TrailingCloseRun(ParenthesizedExpressionSyntax paren) {
-        var closes = new List<SyntaxToken> { paren.CloseParenToken };
-        var current = paren;
-
-        while ((current.Expression is ConditionalExpressionSyntax conditional)
-            && (conditional.WhenFalse is ParenthesizedExpressionSyntax inner)
-            && (inner.Expression is ConditionalExpressionSyntax innerConditional)
-            && !IsAnnotated(conditional: innerConditional)) {
-            closes.Add(item: inner.CloseParenToken);
-            current = inner;
-        }
-
-        closes.Reverse();
-
-        return closes;
-    }
-    private static ConditionalExpressionSyntax Layout(ConditionalExpressionSyntax conditional, string conditionIndent) {
-        var branchIndent = (conditionIndent + "    ");
-        var branchLead = new[] { RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: branchIndent) };
-
-        var whenTrue = ((conditional.WhenTrue is ConditionalExpressionSyntax trueChain)
-            ? Layout(conditionIndent: branchIndent, conditional: trueChain).WithLeadingTrivia()
-            : conditional.WhenTrue.WithLeadingTrivia().WithTrailingTrivia());
-        var whenFalse = ((conditional.WhenFalse is ConditionalExpressionSyntax falseChain)
-            ? Layout(conditionIndent: branchIndent, conditional: falseChain).WithLeadingTrivia()
-            : conditional.WhenFalse.WithLeadingTrivia().WithTrailingTrivia());
-
-        return conditional
-            .WithCondition(condition: conditional.Condition.WithTrailingTrivia())
-            .WithQuestionToken(questionToken: conditional.QuestionToken.WithLeadingTrivia(trivia: branchLead).WithTrailingTrivia(SyntaxFactory.Space))
-            .WithWhenTrue(whenTrue: whenTrue)
-            .WithColonToken(colonToken: conditional.ColonToken.WithLeadingTrivia(trivia: branchLead).WithTrailingTrivia(SyntaxFactory.Space))
-            .WithWhenFalse(whenFalse: whenFalse);
-    }
-    // True when a trivia slot the layout resets carries prose or a directive: the condition's trailing
-    // side, either operator token, or either branch's outer trivia. The condition's own leading trivia
-    // and all inner trivia survive a rewrite, so neither is consulted.
-    private static bool IsAnnotated(ConditionalExpressionSyntax conditional) =>
-        (RewriteShaping.HasCommentOrDirective(trivia: conditional.Condition.GetTrailingTrivia())
-        || RewriteShaping.IsAnnotated(token: conditional.QuestionToken)
-        || RewriteShaping.IsAnnotated(token: conditional.ColonToken)
-        || IsAnnotatedBranch(branch: conditional.WhenTrue)
-        || IsAnnotatedBranch(branch: conditional.WhenFalse));
-    // A branch that is itself a chain link is rebuilt link by link, so its own slots count too.
-    private static bool IsAnnotatedBranch(ExpressionSyntax branch) => ((branch is ConditionalExpressionSyntax link)
-        ? (RewriteShaping.HasCommentOrDirective(trivia: link.GetLeadingTrivia()) || IsAnnotated(conditional: link))
-        : RewriteShaping.IsAnnotated(node: branch));
-    // The indent this ternary's `? t` / `: f` branches hang from: the enclosing statement/member indent
-    // plus one level per enclosing ternary whose BRANCH holds this node.
-    private static string ConditionIndent(ConditionalExpressionSyntax node) => new(
-        c: ' ',
-        count: RewriteShaping.StructuralIndent(
-            node: node,
-            addsLevel: static (ancestor, child) => ((ancestor is ConditionalExpressionSyntax conditional) && ((conditional.WhenTrue == child) || (conditional.WhenFalse == child)))));
 }

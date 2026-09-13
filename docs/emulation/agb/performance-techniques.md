@@ -8,6 +8,58 @@ Performance changes must preserve the machine's observable timing and replay
 contract. Optimize derived work and instance orchestration; do not approximate
 simulation state or introduce scheduling-dependent behavior.
 
+## Execution equivalence and candidate changes
+
+`RunCycles` must finish on the same instruction as repeated `Step` calls
+given the same cycle budget, including overshoot. Fetched instruction words
+and delayed IRQ recognition remain in the CPU pipeline. Memory accesses can
+trigger DMA, timers, or scheduled peripherals before an instruction ends.
+Compiling existing instruction handlers still pays these costs; removing
+opcode dispatch alone does not establish a performance improvement.
+
+The built-in timer and interrupt controllers publish clock readiness into
+one `AgbClockState` per bus. Ordinary clock charges check this derived status
+and the scheduler's next event deadline. Register writes, pending latches,
+IRQ transitions, and restore update readiness at their source; the bus keeps
+the existing per-cycle path for unsettled state and custom controllers.
+No charge crosses a scheduled event, including an event at its final cycle.
+The readiness cache adds no snapshot fields.
+
+A halted CPU step checks for a wake interrupt, then advances one idle cycle
+and pending DMA if it remains asleep. It returns control so the next host
+input or linked peer can produce the wake interrupt. `RunCycles` counts these
+idle steps alongside instruction and exception steps; a sleeping CPU does
+not wait indefinitely inside a call. STOP still uses the modeled restricted
+wake sources while peripheral clocks continue advancing.
+
+Text backgrounds without horizontal mosaic resolve one tile-map entry and
+read one packed tile row for up to eight pixels. These bytes are used only
+within the current scanline callback, so CPU and DMA writes before the next
+line are visible without maintaining a persistent graphics cache. Horizontal
+mosaic retains the scalar pixel sampler. The layer compositor and raster
+event schedule are unchanged.
+
+Further architectural opportunities have different benefits and boundaries:
+
+| Direction | Intended benefit | Required boundary |
+|---|---|---|
+| Execute CPU blocks up to the next observable event | Reduce repeated execution and timing work | Account for scheduler events, timer overflow, IRQ synchronization, DMA, fetch/prefetch effects, and the caller's budget. Preserve already fetched words when code changes. |
+| Retain decoded graphics across scanlines | Avoid repeated decoding of unchanged graphics | Invalidate affected data on CPU and DMA writes to VRAM, palettes, and OAM; preserve register-write timing and rebuild derived caches after restore. |
+| Prepare immutable cartridge data once per shared image | Reduce machine construction and fleet startup cost | Share ROM identity and save/sensor classification while keeping saves, RTC, GPIO, and other mutable state per machine. Establish image ownership before caching metadata. |
+
+Cartridge construction currently scans each ROM for library signatures, and
+machine construction hashes it for snapshot identity. An immutable image
+could perform that work once. It must identify the actual BIOS and cartridge
+supplied by custom composition and apply runtime diagnostic overrides
+separately from immutable metadata.
+
+The Post battery's
+[`cycle-budget-execution` stage and `--compare-execution` diagnostic](../../../src/Puck.AdvancedGamingBrick.Post/README.md#determinism-diagnostics)
+compare complete state and audio across execution paths. They supplement
+external conformance and frozen-build comparisons; comparing two paths through
+the same hardware model cannot prove hardware accuracy. Future acceleration
+should retain the interpreter and support runtimes without dynamic code.
+
 ## Interpreter dispatch
 
 The ARM and Thumb interpreters use precomputed unmanaged function-pointer tables.

@@ -27,9 +27,9 @@ public sealed class DirectXException : Exception {
     /// <exception cref="ArgumentException"><paramref name="operation"/> is <see langword="null"/>, empty, or white space.</exception>
     public DirectXException(string operation, int result)
         : base(CreateMessage(
-            operation: operation,
-            result: result
-        )) {
+        operation: operation,
+        result: result
+    )) {
         Operation = operation;
         Result = result;
     }

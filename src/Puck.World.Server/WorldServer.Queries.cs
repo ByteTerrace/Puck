@@ -14,7 +14,9 @@ public sealed partial class WorldServer {
         );
 
         return new QueryAnswer(
-            Text: $"[grant.allows: {query.Principal.Describe()} {query.Capability.ToString().ToLowerInvariant()} {query.Subject.Describe()} = {(verdict.IsAllowed ? "allowed" : "denied")} ({verdict.Describe()})]",
+            Text: $"[grant.allows: {query.Principal.Describe()} {query.Capability.ToString().ToLowerInvariant()} {query.Subject.Describe()} = {(verdict.IsAllowed
+            ? "allowed"
+            : "denied")} ({verdict.Describe()})]",
             Payload: verdict
         );
     }
@@ -36,9 +38,8 @@ public sealed partial class WorldServer {
 
         return new QueryAnswer(
             Text: ((minted is { } value)
-                ? $"[grant.handle.mint: index:{query.Index} -> handle:{value.Index}/{value.Generation}]"
-                : $"[grant.handle.mint: index:{query.Index} — no live slot]"
-            ),
+            ? $"[grant.handle.mint: index:{query.Index} -> handle:{value.Index}/{value.Generation}]"
+            : $"[grant.handle.mint: index:{query.Index} — no live slot]"),
             Payload: minted
         );
     }
@@ -59,9 +60,8 @@ public sealed partial class WorldServer {
 
         return new QueryAnswer(
             Text: ((resolved is { } value)
-                ? $"[grant.handle.resolve: handle:{query.Handle.Index}/{query.Handle.Generation} -> {value.Describe()}]"
-                : $"[grant.handle.resolve: handle:{query.Handle.Index}/{query.Handle.Generation} — no longer resolves]"
-            ),
+            ? $"[grant.handle.resolve: handle:{query.Handle.Index}/{query.Handle.Generation} -> {value.Describe()}]"
+            : $"[grant.handle.resolve: handle:{query.Handle.Index}/{query.Handle.Generation} — no longer resolves]"),
             Payload: resolved
         );
     }
@@ -90,9 +90,8 @@ public sealed partial class WorldServer {
 
         return new QueryAnswer(
             Text: ((found is { } value)
-                ? $"[identity.find: '{query.Name}' -> {value.Id}]"
-                : $"[identity.find: '{query.Name}' — no match]"
-            ),
+            ? $"[identity.find: '{query.Name}' -> {value.Id}]"
+            : $"[identity.find: '{query.Name}' — no match]"),
             Payload: found
         );
     }
@@ -101,9 +100,8 @@ public sealed partial class WorldServer {
 
         return new QueryAnswer(
             Text: ((preferred is { } value)
-                ? $"[player.preferred: {query.Device} -> {value.Name}]"
-                : $"[player.preferred: {query.Device} — no preference]"
-            ),
+            ? $"[player.preferred: {query.Device} -> {value.Name}]"
+            : $"[player.preferred: {query.Device} — no preference]"),
             Payload: preferred
         );
     }
@@ -111,8 +109,18 @@ public sealed partial class WorldServer {
     // arrived over WorldPeerHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
     // Console and pass through the same check using the permissive local seed rather than a separate bypass.
     private QueryAnswer AnswerStateObservations(WorldPrincipal? principal, string? row = null) {
-        var rows = (WorldStateDisclosure.Compose(m_definition, principal) ?? []).Where(r => row is null || r.Name == row).ToArray();
-        return new QueryAnswer(System.Text.Json.JsonSerializer.Serialize(rows, WorldJsonContext.Default.WorldObservedRowArray), Payload: rows);
+        var rows = (WorldStateDisclosure.Compose(
+            definition: m_definition,
+            recipient: principal
+        ) ?? []).Where(predicate: r => ((row is null) || (r.Name == row))).ToArray();
+
+        return new QueryAnswer(
+            System.Text.Json.JsonSerializer.Serialize(
+                rows,
+                WorldJsonContext.Default.WorldObservedRowArray
+            ),
+            Payload: rows
+        );
     }
     private QueryAnswer AnswerSubmittedQuery(WorldQuery query, WorldPrincipal principal) {
         var subject = query.ObservationSubject();
@@ -133,9 +141,15 @@ public sealed partial class WorldServer {
             );
         }
 
-        if (query is WorldQuery.StateObservations observation) { return AnswerStateObservations(principal, observation.Row); }
+        if (query is WorldQuery.StateObservations observation) { return AnswerStateObservations(
+            principal: principal,
+            row: observation.Row
+        ); }
         if (query is WorldQuery.ReflowPreview or WorldQuery.ReflowStatus or WorldQuery.ReflowCancel) {
-            return AnswerReflowQuery(query, principal);
+            return AnswerReflowQuery(
+                principal: principal,
+                query: query
+            );
         }
         return Answer(query: query);
     }
@@ -155,15 +169,15 @@ public sealed partial class WorldServer {
         );
     private FixedQ4816 ReadBodyDistance(int bodyA, int bodyB) => (
         ((Body(index: bodyA) is { } a) && (Body(index: bodyB) is { } b))
-            ? (b.FixedPosition - a.FixedPosition).Length
-            : NoBodyDistance
+        ? (b.FixedPosition - a.FixedPosition).Length
+        : NoBodyDistance
     );
     // The squared sibling for a range test that never needs the root; the same NoBodyDistance sentinel for a
     // missing side, which a caller must test for before comparing against an unbounded range.
     private FixedQ4816 ReadBodyDistanceSquared(int bodyA, int bodyB) => (
         ((Body(index: bodyA) is { } a) && (Body(index: bodyB) is { } b))
-            ? (b.FixedPosition - a.FixedPosition).LengthSquared
-            : NoBodyDistance
+        ? (b.FixedPosition - a.FixedPosition).LengthSquared
+        : NoBodyDistance
     );
     // $los: — the same WorldPopulation.HasLineOfSightBetween a sensed target's own RequiresLineOfSight check rides,
     // called against two RESOLVED body references. Either side resolving to no body (a negative index) reads as
@@ -198,7 +212,7 @@ public sealed partial class WorldServer {
 
         return ((Body(index: index) is { } body)
             ? FixedVector3.Dot(
-                left: body.FixedOrientation.Rotate(vector: s_localUp),
+                left: body.FixedOrientation.Rotate(vector: LocalUp),
                 right: body.FixedUp
             )
             : FixedQ4816.One
@@ -304,13 +318,13 @@ public sealed partial class WorldServer {
             tick: tick,
             state: (Server: this, Capacity: m_population.Capacity, HasFilter: hasFilter, FilterHandle: filterHandle, Tick: tick),
             isCandidateIndex: static (index, state) =>
-                (index < state.Capacity) &&
+                ((index < state.Capacity) &&
                 (state.Server.Body(index: index) is not null) &&
                 (!state.HasFilter || (state.Server.ReadStateCellByHandle(
-                    handle: state.FilterHandle,
-                    key: IndexKeyCache.Get(index: index),
-                    tick: state.Tick
-                ) != FixedQ4816.Zero))
+                handle: state.FilterHandle,
+                key: IndexKeyCache.Get(index: index),
+                tick: state.Tick
+            ) != FixedQ4816.Zero)))
         );
 
         return ((winner is null)
@@ -328,32 +342,47 @@ public sealed partial class WorldServer {
     // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
     // The integer part of a Q48.16 value — the key or index a cell's value names.
     private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
-
     // The static tables the definition references, in tables-row order; a validated document's rows are proven to
     // load, so a failure here is an invariant violation, never a reachable case.
     private static CompiledTable[] CompileTables(WorldDefinition definition) {
         var rows = (definition.Tables ?? []);
         var compiled = new CompiledTable[rows.Count];
-        for (var index = 0; index < compiled.Length; index++) {
-            if (!WorldTables.TryCompile(row: rows[index], table: out var table, error: out var error)) {
+
+        for (var index = 0; (index < compiled.Length); index++) {
+            if (!WorldTables.TryCompile(
+                row: rows[index],
+                table: out var table,
+                error: out var error
+            )) {
                 throw new InvalidOperationException(message: $"tables[{rows[index].Name}]: {error} (a validated document must still resolve at construction)");
             }
             compiled[index] = table!;
         }
         return compiled;
     }
+
     // A literal key was proven present at compile; a dynamic key reads the indirection cell's integer (or the bound
     // $each key) and a key the table does not carry reads as a forever fact.
     // Set by a table read whose dynamic key is absent; the enclosing gate evaluation or expression clears it and
     // fails, so a missing entry is a reported refusal rather than a value.
     private bool m_tableKeyMissing;
+
     /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
     public string DescribeTables() {
         if (m_tables.Length == 0) {
             return "[world.tables: none]";
         }
-        return $"[world.tables: {string.Join(separator: " | ", values: m_tables.Select(selector: static table => $"{table.Name} kind={StateSpelling.Kind(kind: table.Kind)} entries={table.Count}{((table.ColumnNames.Count > 0) ? $" columns=[{string.Join(separator: ",", values: table.ColumnNames)}]" : string.Empty)}"))}]";
+        return $"[world.tables: {string.Join(
+            separator: " | ",
+            values: m_tables.Select(selector: static table => $"{table.Name} kind={StateSpelling.Kind(kind: table.Kind)} entries={table.Count}{((table.ColumnNames.Count > 0)
+            ? $" columns=[{string.Join(
+                    separator: ",",
+                    values: table.ColumnNames
+                )}]"
+            : string.Empty)}")
+        )}]";
     }
+
     // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
     // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
     // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
@@ -361,10 +390,14 @@ public sealed partial class WorldServer {
     // first read of a never-before-seen pair mints its key once, and every later read of that same directed pair is
     // a dictionary hit.
     private readonly Dictionary<long, string> m_pairKeyCache = [];
-    private string ResolvePairKey(int a, int b) {
-        var packed = ((((long)a) << 32) | (uint)b);
 
-        if (!m_pairKeyCache.TryGetValue(key: packed, value: out var pairKey)) {
+    private string ResolvePairKey(int a, int b) {
+        var packed = (((long)a) << 32) | ((uint)b);
+
+        if (!m_pairKeyCache.TryGetValue(
+            key: packed,
+            value: out var pairKey
+        )) {
             pairKey = $"{a}_{b}";
             m_pairKeyCache[packed] = pairKey;
         }
@@ -429,7 +462,7 @@ public sealed partial class WorldServer {
         // 'placement:$each' — position-indexed, never the string key: an out-of-range position (outside a
         // forEach evaluation, or a stale compile against a shorter row) resolves no body rather than reading
         // ordinal 0 by accident.
-        ? (((uint)m_evaluator.BoundEachPosition < (uint)ordinals.Count)
+        ? ((((uint)m_evaluator.BoundEachPosition) < ((uint)ordinals.Count))
             ? m_population.BodyForPlacementOrdinal(ordinal: ordinals[m_evaluator.BoundEachPosition])
             : -1)
         // 'placement:<id>' — a fixed ordinal, resolved once at compile time.
@@ -507,7 +540,10 @@ public sealed partial class WorldServer {
             Text: $"[body.state: body:{state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.StateObservations observation => AnswerStateObservations(null, observation.Row),
+            WorldQuery.StateObservations observation => AnswerStateObservations(
+            principal: null,
+            row: observation.Row
+        ),
             WorldQuery.InputHolds => new QueryAnswer(Text: m_inputHold.Describe()),
             WorldQuery.Rules => new QueryAnswer(Text: DescribeRules()),
             WorldQuery.PlayerTargets targets when (Body(index: targets.Index) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: targets.Index)),

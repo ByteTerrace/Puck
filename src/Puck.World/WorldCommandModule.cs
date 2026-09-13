@@ -32,7 +32,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         var builder = new StringBuilder(value: "anchors=[");
 
         for (var index = 0; (index < candidates.Count); index++) {
-            _ = builder.Append(value: ((index == 0) ? "" : ",")).Append(value: CameraAnchorKind(anchor: candidates[index].Anchor));
+            _ = builder.Append(value: ((index == 0)
+                ? ""
+                : ",")).Append(value: CameraAnchorKind(anchor: candidates[index].Anchor));
         }
 
         _ = builder.Append(value: "] winner=");
@@ -52,12 +54,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             );
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{(any ? "," : "")}seat{PlayerRoster.DisplayNumber(slot: slot)}:{((winner >= 0) ? winner.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+                handler: $"{(any
+                ? ","
+                : "")}seat{PlayerRoster.DisplayNumber(slot: slot)}:{((winner >= 0)
+                ? winner.ToString(provider: CultureInfo.InvariantCulture)
+                : "none")}"
             );
             any = true;
         }
 
-        return (any ? builder.ToString() : builder.Append(value: "none").ToString());
+        return (any
+            ? builder.ToString()
+            : builder.Append(value: "none").ToString()
+        );
     }
     // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
     // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
@@ -142,59 +151,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
-    }
-    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
-    private static readonly string[] ExactOrQuality = ["exact", "quality"];
-    private static readonly string[] FastOrFleet = ["fast", "fleet"];
-    private static readonly string[] ExactOrGather = ["exact", "gather"];
-    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
-
-    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
-    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
-    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
-    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
-        if (args.Is(
-            index: 0,
-            value: "auto"
-        )) {
-            mode = autoMode;
-
-            return true;
-        }
-
-        if (MatchesAny(
-            args: in args,
-            spellings: exact
-        )) {
-            mode = exactMode;
-
-            return true;
-        }
-
-        if (MatchesAny(
-            args: in args,
-            spellings: fast
-        )) {
-            mode = fastMode;
-
-            return true;
-        }
-
-        mode = default;
-
-        return false;
-    }
-    private static bool MatchesAny(in WireArgs args, string[] spellings) {
-        foreach (var spelling in spellings) {
-            if (args.Is(
-                index: 0,
-                value: spelling
-            )) {
-                return true;
-            }
-        }
-
-        return false;
     }
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
@@ -312,6 +268,18 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"
             : "off")}]";
+    }
+    private static bool MatchesAny(in WireArgs args, string[] spellings) {
+        foreach (var spelling in spellings) {
+            if (args.Is(
+                index: 0,
+                value: spelling
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
     private static bool? ParseOnOff(ReadOnlySpan<char> token) {
@@ -441,6 +409,41 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         );
 
         return formatEcho();
+    }
+    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
+    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
+    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
+    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
+        if (args.Is(
+            index: 0,
+            value: "auto"
+        )) {
+            mode = autoMode;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: exact
+        )) {
+            mode = exactMode;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: fast
+        )) {
+            mode = fastMode;
+
+            return true;
+        }
+
+        mode = default;
+
+        return false;
     }
     private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
         if (WorldRenderScaleTiers.TryParse(
@@ -619,12 +622,15 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
                 }
                 try {
-                    if (!node.RequestShaderReload(directory: args.Count == 0 ? null : args.Tail(start: 0))) {
+                    if (!node.RequestShaderReload(directory: ((args.Count == 0)
+                        ? null
+                        : args.Tail(start: 0)))) {
                         return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
                     }
                     var status = node.ShaderReloadStatus;
+
                     return new CommandResult(Output: $"[world.shaders.reload: request={status.RequestId} pending directory={status.Directory}]");
-                } catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException) {
+                } catch (Exception exception) when ((exception is ArgumentException or IOException or UnauthorizedAccessException)) {
                     return CommandResult.Error(output: $"[world.shaders.reload: {exception.Message}]");
                 }
             }
@@ -641,7 +647,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
                 }
                 var status = node.ShaderReloadStatus;
-                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={status.Directory ?? "default"}{(status.Error is { } error ? $" error={error}" : "")}]");
+
+                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={(status.Directory ?? "default")}{((status.Error is { } error)
+                    ? $" error={error}"
+                    : "")}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -757,10 +766,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (!TryParseAdaptiveMode(
                     args: in args,
-                    exact: ExactOrGather,
-                    fast: CameraTileAliases,
                     autoMode: ShadowMaskMode.Auto,
+                    exact: ExactOrGather,
                     exactMode: ShadowMaskMode.ExactGather,
+                    fast: CameraTileAliases,
                     fastMode: ShadowMaskMode.CameraTile,
                     mode: out var mode
                 )) {
@@ -786,10 +795,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (!TryParseAdaptiveMode(
                     args: in args,
-                    exact: ExactOrQuality,
-                    fast: FastOrFleet,
                     autoMode: AmbientOcclusionMode.Auto,
+                    exact: ExactOrQuality,
                     exactMode: AmbientOcclusionMode.Exact,
+                    fast: FastOrFleet,
                     fastMode: AmbientOcclusionMode.Fast,
                     mode: out var mode
                 )) {
@@ -815,10 +824,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (!TryParseAdaptiveMode(
                     args: in args,
-                    exact: ExactOrQuality,
-                    fast: FastOrFleet,
                     autoMode: ShadowMarchMode.Auto,
+                    exact: ExactOrQuality,
                     exactMode: ShadowMarchMode.Exact,
+                    fast: FastOrFleet,
                     fastMode: ShadowMarchMode.Fast,
                     mode: out var mode
                 )) {
@@ -1080,4 +1089,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             }
         );
     }
+
+    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
+    private static readonly string[] ExactOrGather = ["exact", "gather"];
+    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
+    private static readonly string[] ExactOrQuality = ["exact", "quality"];
+    private static readonly string[] FastOrFleet = ["fast", "fleet"];
 }

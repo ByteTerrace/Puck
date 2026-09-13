@@ -77,7 +77,13 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
 
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null) {
-        return await AppendRootAsync(identity, entry, fence, receipt, cancellationToken).ConfigureAwait(false);
+        return await AppendRootAsync(
+            cancellationToken: cancellationToken,
+            entry: entry,
+            identity: identity,
+            receipt: receipt,
+            suppliedFence: fence
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Reads the exact published definition bytes without filling boot draws or creating runtime state.
     /// A present authority root selects and verifies its immutable definition; legacy bytes are read only before a root exists.</summary>
@@ -86,14 +92,27 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     /// <returns>An owned copy of the published bytes, or null when no definition is published.</returns>
     /// <exception cref="InvalidDataException">The authority root or its selected definition is missing or corrupt.</exception>
     public async Task<ReadOnlyMemory<byte>?> LoadPublishedDefinitionBytesAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var content = await WorldAuthorityRootReader.ReadDefinitionAsync(identity.Owner, identity.World, m_store, m_target, cancellationToken).ConfigureAwait(false);
-        if (content is not { } found) { return null; }
-        return new ReadOnlyMemory<byte>(found.Content.ToArray());
-    }
+        var content = await WorldAuthorityRootReader.ReadDefinitionAsync(
+            identity.Owner,
+            identity.World,
+            m_store,
+            m_target,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
+        if (content is not { } found) { return null; }
+        return new ReadOnlyMemory<byte>(array: found.Content.ToArray());
+    }
     /// <inheritdoc/>
     public async Task<WorldDefinition?> LoadDefinitionAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var rooted = await WorldAuthorityRootReader.ReadDefinitionAsync(identity.Owner, identity.World, m_store, m_target, cancellationToken).ConfigureAwait(false);
+        var rooted = await WorldAuthorityRootReader.ReadDefinitionAsync(
+            identity.Owner,
+            identity.World,
+            m_store,
+            m_target,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (rooted is null) { return null; }
         var origin = new WorldHostedOrigin(
             owner: identity.Owner,
@@ -126,10 +145,14 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     }
     /// <inheritdoc/>
     public async Task<WorldMutationJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) {
-        var rooted = await LoadRecoveryAsync(identity, cancellationToken).ConfigureAwait(false);
+        var rooted = await LoadRecoveryAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (rooted is { } recovery) {
             if (recovery.Root.Root.CheckpointOrdinal != afterOrdinal) {
-                throw new InvalidDataException("requested checkpoint ordinal is not the authoritative root checkpoint");
+                throw new InvalidDataException(message: "requested checkpoint ordinal is not the authoritative root checkpoint");
             }
             return recovery.Journal;
         }
@@ -170,7 +193,11 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     }
     /// <inheritdoc/>
     public async Task<WorldAuthorityCheckpointBlob?> LoadLatestAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var rooted = await LoadRecoveryAsync(identity, cancellationToken).ConfigureAwait(false);
+        var rooted = await LoadRecoveryAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (rooted is { } recovery) { return recovery.Checkpoint; }
         var pointerAddress = LatestPointerAddress(
             containerId: identity.Owner,
@@ -238,120 +265,377 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     }
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken, WorldAuthorityFence? fence = null) {
-        return await PublishDefinitionRootAsync(identity, composed, fence, cancellationToken).ConfigureAwait(false);
+        return await PublishDefinitionRootAsync(
+            cancellationToken: cancellationToken,
+            composed: composed,
+            identity: identity,
+            suppliedFence: fence
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> WriteCheckpointAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null, long? capturedJournalSequence = null) {
-        return await WriteCheckpointRootAsync(identity, encoded, tick, fence, receipt, capturedJournalSequence, cancellationToken).ConfigureAwait(false);
+        return await WriteCheckpointRootAsync(
+            cancellationToken: cancellationToken,
+            capturedJournalSequence: capturedJournalSequence,
+            encoded: encoded,
+            identity: identity,
+            receipt: receipt,
+            suppliedFence: fence,
+            tick: tick
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
-    #pragma warning disable IDE0011
+#pragma warning disable IDE0011
     private static ObjectBlobAddress AuthorityAddress(WorldAuthorityIdentity identity, string leaf) => new(
         ObjectId: identity.Owner,
         Key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/{identity.World.Value}/authority/{leaf}"
     );
-    private static ObjectBlobAddress RootAddress(WorldAuthorityIdentity identity) => AuthorityAddress(identity, "root");
-    private static ObjectBlobAddress DefinitionCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(identity, $"definitions/{ExtractHex(hash)}.json");
-    private static ObjectBlobAddress CheckpointCandidateAddress(WorldAuthorityIdentity identity, long ordinal, string hash) => AuthorityAddress(identity, $"checkpoints/{ordinal:D12}-{ExtractHex(hash)}.pckp");
-    private static ObjectBlobAddress JournalCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(identity, $"journal/{ExtractHex(hash)}.bin");
-    private static ObjectBlobAddress ReceiptCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(identity, $"receipts/{ExtractHex(hash)}.rcpt");
-    private static ObjectBlobAddress ReceiptIndexAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(identity, $"receipt-index/{ExtractHex(hash)}.json");
-    private static ObjectBlobAddress RecoveryRootAddress(WorldAuthorityIdentity identity, Guid operationId) => AuthorityAddress(identity, $"recovery/{operationId:D}/root.json");
-
-    private async Task<ObjectBlobContent?> ReadAsync(ObjectBlobAddress address, CancellationToken cancellationToken) => await UnderTimeoutAsync(cancellationToken, ct => m_store.ReadAsync(m_target, address, ct)).ConfigureAwait(false);
+    private static ObjectBlobAddress RootAddress(WorldAuthorityIdentity identity) => AuthorityAddress(
+        identity: identity,
+        leaf: "root"
+    );
+    private static ObjectBlobAddress DefinitionCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(
+        identity: identity,
+        leaf: $"definitions/{ExtractHex(hash: hash)}.json"
+    );
+    private static ObjectBlobAddress CheckpointCandidateAddress(WorldAuthorityIdentity identity, long ordinal, string hash) => AuthorityAddress(
+        identity: identity,
+        leaf: $"checkpoints/{ordinal:D12}-{ExtractHex(hash: hash)}.pckp"
+    );
+    private static ObjectBlobAddress JournalCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(
+        identity: identity,
+        leaf: $"journal/{ExtractHex(hash: hash)}.bin"
+    );
+    private static ObjectBlobAddress ReceiptCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(
+        identity: identity,
+        leaf: $"receipts/{ExtractHex(hash: hash)}.rcpt"
+    );
+    private static ObjectBlobAddress ReceiptIndexAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(
+        identity: identity,
+        leaf: $"receipt-index/{ExtractHex(hash: hash)}.json"
+    );
+    private static ObjectBlobAddress RecoveryRootAddress(WorldAuthorityIdentity identity, Guid operationId) => AuthorityAddress(
+        identity: identity,
+        leaf: $"recovery/{operationId:D}/root.json"
+    );
+    private async Task<ObjectBlobContent?> ReadAsync(ObjectBlobAddress address, CancellationToken cancellationToken) => await UnderTimeoutAsync(
+        cancellationToken: cancellationToken,
+        op: ct => m_store.ReadAsync(
+            address: address,
+            cancellationToken: ct,
+            target: m_target
+        )
+    ).ConfigureAwait(continueOnCapturedContext: false);
     private async Task<WorldAuthorityRootSnapshot?> ReadRootSnapshotAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var content = await ReadAsync(RootAddress(identity), cancellationToken).ConfigureAwait(false);
+        var content = await ReadAsync(
+            address: RootAddress(identity: identity),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (content is not { } found) return null;
-        if (found.VersionToken is not { Length: > 0 } token) throw new InvalidDataException("authority root has no CAS version token");
-        if (!WorldAuthorityRootCodec.TryDecode(found.Content.Span, out var root, out var reason)) throw new InvalidDataException($"authority root is corrupt — {reason}");
-        return new WorldAuthorityRootSnapshot(root, token);
+        if (found.VersionToken is not { Length: > 0 } token) throw new InvalidDataException(message: "authority root has no CAS version token");
+        if (!WorldAuthorityRootCodec.TryDecode(
+            found.Content.Span,
+            out var root,
+            out var reason
+        )) throw new InvalidDataException(message: $"authority root is corrupt — {reason}");
+        return new WorldAuthorityRootSnapshot(
+            Root: root,
+            VersionToken: token
+        );
     }
     private async Task<WorldAuthorityRootSnapshot?> EnsureInitialRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
         var root = WorldAuthorityRoot.Empty;
-        var legacyPointer = await ReadAsync(LatestPointerAddress(identity.Owner, identity.World), cancellationToken).ConfigureAwait(false);
+        var legacyPointer = await ReadAsync(
+            address: LatestPointerAddress(
+                containerId: identity.Owner,
+                world: identity.World
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (legacyPointer is { } pointer) {
-            if (!WorldAuthorityStoreWireCodec.TryDecodeLatestPointer(pointer.Content.Span, ordinal: out var ordinal, tick: out var tick, hash: out var hash, reason: out var legacyReason)) throw new InvalidDataException($"legacy checkpoint pointer is corrupt — {legacyReason}");
-            var legacyCheckpoint = await ReadAsync(CheckpointAddress(identity.Owner, identity.World, ordinal, hash), cancellationToken).ConfigureAwait(false);
-            if (legacyCheckpoint is not { } checkpoint) throw new InvalidDataException("legacy checkpoint pointer names a missing blob");
-            if (!string.Equals(WorldDefinitionFileSource.ComputeContentHash(checkpoint.Content.Span), hash, StringComparison.Ordinal)) throw new InvalidDataException("legacy checkpoint pointer hash does not match its blob");
-            var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(checkpoint.Content.Span);
-            var checkpointCandidate = await PutImmutableAsync(CheckpointCandidateAddress(identity, ordinal, checkpointHash), checkpoint.Content, cancellationToken).ConfigureAwait(false);
-            if (!checkpointCandidate.Ok) throw new InvalidDataException(checkpointCandidate.Detail);
-            var journal = await ReadAsync(JournalAddress(identity.Owner, identity.World, ordinal), cancellationToken).ConfigureAwait(false);
+            if (!WorldAuthorityStoreWireCodec.TryDecodeLatestPointer(
+                pointer.Content.Span,
+                ordinal: out var ordinal,
+                tick: out var tick,
+                hash: out var hash,
+                reason: out var legacyReason
+            )) throw new InvalidDataException(message: $"legacy checkpoint pointer is corrupt — {legacyReason}");
+            var legacyCheckpoint = await ReadAsync(
+                address: CheckpointAddress(
+                    identity.Owner,
+                    identity.World,
+                    ordinal,
+                    hash
+                ),
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (legacyCheckpoint is not { } checkpoint) throw new InvalidDataException(message: "legacy checkpoint pointer names a missing blob");
+            if (!string.Equals(
+                a: WorldDefinitionFileSource.ComputeContentHash(content: checkpoint.Content.Span),
+                b: hash,
+                comparisonType: StringComparison.Ordinal
+            )) throw new InvalidDataException(message: "legacy checkpoint pointer hash does not match its blob");
+            var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(content: checkpoint.Content.Span);
+            var checkpointCandidate = await PutImmutableAsync(
+                address: CheckpointCandidateAddress(
+                    hash: checkpointHash,
+                    identity: identity,
+                    ordinal: ordinal
+                ),
+                bytes: checkpoint.Content,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (!checkpointCandidate.Ok) throw new InvalidDataException(message: checkpointCandidate.Detail);
+            var journal = await ReadAsync(
+                address: JournalAddress(
+                    identity.Owner,
+                    identity.World,
+                    ordinal
+                ),
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
             var count = 0;
             string? journalHash = null;
+
             if (journal is { } page) {
-                if (!WorldAuthorityStoreWireCodec.TryDecodeJournalPage(page.Content.Span, out var entries, out var reason)) throw new InvalidDataException($"legacy journal is corrupt — {reason}");
+                if (!WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
+                    bytes: page.Content.Span,
+                    entries: out var entries,
+                    reason: out var reason
+                )) throw new InvalidDataException(message: $"legacy journal is corrupt — {reason}");
                 count = entries.Count;
-                if (count > 0) { journalHash = WorldDefinitionFileSource.ComputeContentHash(page.Content.Span); var journalCandidate = await PutImmutableAsync(JournalCandidateAddress(identity, journalHash), page.Content, cancellationToken).ConfigureAwait(false); if (!journalCandidate.Ok) throw new InvalidDataException(journalCandidate.Detail); }
+                if (count > 0) { journalHash = WorldDefinitionFileSource.ComputeContentHash(content: page.Content.Span); var journalCandidate = await PutImmutableAsync(
+                    address: JournalCandidateAddress(
+                        hash: journalHash,
+                        identity: identity
+                    ),
+                    bytes: page.Content,
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false); if (!journalCandidate.Ok) throw new InvalidDataException(message: journalCandidate.Detail); }
             }
-            root = root with { CheckpointHash = checkpointHash, CheckpointOrdinal = ordinal, CheckpointTick = tick, JournalHash = journalHash, JournalEntryCount = count, JournalSequence = count - 1L, CheckpointCoverageSequence = -1L };
+            root = root with { CheckpointHash = checkpointHash, CheckpointOrdinal = ordinal, CheckpointTick = tick, JournalHash = journalHash, JournalEntryCount = count, JournalSequence = (count - 1L), CheckpointCoverageSequence = -1L };
         }
-        var legacyDefinition = await ReadAsync(WorldOwnedWorldSync.HostedAddressFor(identity.Owner, identity.World, "definition.json"), cancellationToken).ConfigureAwait(false);
+        var legacyDefinition = await ReadAsync(
+            address: WorldOwnedWorldSync.HostedAddressFor(
+                identity.Owner,
+                identity.World,
+                "definition.json"
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (legacyDefinition is { } definition) {
-            var definitionHash = WorldDefinitionFileSource.ComputeContentHash(definition.Content.Span);
-            var definitionCandidate = await PutImmutableAsync(DefinitionCandidateAddress(identity, definitionHash), definition.Content, cancellationToken).ConfigureAwait(false);
-            if (!definitionCandidate.Ok) throw new InvalidDataException(definitionCandidate.Detail);
+            var definitionHash = WorldDefinitionFileSource.ComputeContentHash(content: definition.Content.Span);
+            var definitionCandidate = await PutImmutableAsync(
+                address: DefinitionCandidateAddress(
+                    hash: definitionHash,
+                    identity: identity
+                ),
+                bytes: definition.Content,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (!definitionCandidate.Ok) throw new InvalidDataException(message: definitionCandidate.Detail);
             root = root with { DefinitionHash = definitionHash };
         }
-        return new WorldAuthorityRootSnapshot(root, string.Empty);
+        return new WorldAuthorityRootSnapshot(
+            Root: root,
+            VersionToken: string.Empty
+        );
     }
-    private async Task<ObjectBlobWriteResult> WriteRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, string? ifMatchVersion, ObjectBlobWriteMode mode, CancellationToken cancellationToken) => await UnderTimeoutAsync(cancellationToken, ct => m_store.WriteAsync(m_target, RootAddress(identity), WorldAuthorityRootCodec.Encode(root), mode, ifMatchVersion, ct)).ConfigureAwait(false);
+    private async Task<ObjectBlobWriteResult> WriteRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, string? ifMatchVersion, ObjectBlobWriteMode mode, CancellationToken cancellationToken) => await UnderTimeoutAsync(
+        cancellationToken: cancellationToken,
+        op: ct => m_store.WriteAsync(
+            m_target,
+            RootAddress(identity: identity),
+            WorldAuthorityRootCodec.Encode(root: root),
+            mode,
+            ifMatchVersion,
+            ct
+        )
+    ).ConfigureAwait(continueOnCapturedContext: false);
     private async Task<WorldAuthorityStoreOutcome> PutImmutableAsync(ObjectBlobAddress address, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken) {
-        var result = await UnderTimeoutAsync(cancellationToken, ct => m_store.WriteAsync(m_target, address, bytes, ObjectBlobWriteMode.CreateOnly, null, ct)).ConfigureAwait(false);
+        var result = await UnderTimeoutAsync(
+            cancellationToken: cancellationToken,
+            op: ct => m_store.WriteAsync(
+                address: address,
+                cancellationToken: ct,
+                content: bytes,
+                ifMatchVersion: null,
+                mode: ObjectBlobWriteMode.CreateOnly,
+                target: m_target
+            )
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (result.Succeeded) return WorldAuthorityStoreOutcome.Success();
-        var current = await ReadAsync(address, cancellationToken).ConfigureAwait(false);
-        if (current is { } found && found.Content.Span.SequenceEqual(bytes.Span)) return WorldAuthorityStoreOutcome.Success("already present");
-        return WorldAuthorityStoreOutcome.AlreadyExists($"'{address.Key}' exists with different content");
+        var current = await ReadAsync(
+            address: address,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (
+            (current is { } found) &&
+            found.Content.Span.SequenceEqual(other: bytes.Span)
+        ) return WorldAuthorityStoreOutcome.Success("already present");
+        return WorldAuthorityStoreOutcome.AlreadyExists(detail: $"'{address.Key}' exists with different content");
     }
+
     private readonly record struct RootWriteSnapshot(WorldAuthorityRootSnapshot Snapshot, bool CreateOnly);
-    private static bool IsUnownedFence(WorldAuthorityFence fence) => fence.Epoch == 0 && fence.Token == Guid.Empty;
-    private static bool FenceMatches(WorldAuthorityRootSnapshot snapshot, WorldAuthorityFence fence) => IsUnownedFence(fence) ? snapshot.Root.FenceToken == Guid.Empty : snapshot.Root.Epoch == fence.Epoch && snapshot.Root.FenceToken == fence.Token;
+
+    private static bool IsUnownedFence(WorldAuthorityFence fence) => ((fence.Epoch == 0) && (fence.Token == Guid.Empty));
+    private static bool FenceMatches(WorldAuthorityRootSnapshot snapshot, WorldAuthorityFence fence) => (IsUnownedFence(fence: fence)
+        ? (snapshot.Root.FenceToken == Guid.Empty)
+        : ((snapshot.Root.Epoch == fence.Epoch) && (snapshot.Root.FenceToken == fence.Token))
+    );
     private async Task<RootWriteSnapshot?> ReadMutationSnapshotAsync(WorldAuthorityIdentity identity, WorldAuthorityFence fence, CancellationToken cancellationToken) {
-        var current = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-        if (current is { } snapshot) return new RootWriteSnapshot(snapshot, false);
-        if (!IsUnownedFence(fence)) return null;
+        var current = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (current is { } snapshot) return new RootWriteSnapshot(
+            CreateOnly: false,
+            Snapshot: snapshot
+        );
+        if (!IsUnownedFence(fence: fence)) return null;
         // Initialize from the legacy private/public pointers before the epoch-zero root CAS. This keeps a
         // pre-root checkpoint and its later journal tail visible to the first unowned publisher; the root CAS
         // still decides which concurrent initializer becomes authoritative.
-        var initial = await EnsureInitialRootAsync(identity, cancellationToken).ConfigureAwait(false);
-        return initial is { } migrated ? new RootWriteSnapshot(migrated, true) : null;
+        var initial = await EnsureInitialRootAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return ((initial is { } migrated)
+            ? new RootWriteSnapshot(
+                CreateOnly: true,
+                Snapshot: migrated
+            )
+            : null
+        );
     }
     private async Task<WorldAuthorityFence?> EnsureFenceAsync(WorldAuthorityIdentity identity, WorldAuthorityFence? supplied, CancellationToken cancellationToken) {
-        if (supplied is { } fence) return IsUnownedFence(fence) || (fence.Epoch > 0 && fence.Token != Guid.Empty) ? fence : null;
-        var current = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-        return current is { } snapshot && snapshot.Root.FenceToken != Guid.Empty ? null : WorldAuthorityFence.Unowned;
+        if (supplied is { } fence) return ((IsUnownedFence(fence: fence) || ((fence.Epoch > 0) && (fence.Token != Guid.Empty)))
+            ? fence
+            : null
+        );
+        var current = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (((current is { } snapshot) && (snapshot.Root.FenceToken != Guid.Empty))
+            ? null
+            : WorldAuthorityFence.Unowned
+        );
     }
     private async Task<WorldAuthorityStoreOutcome> ReconcileAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot expected, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {
         try {
-            var current = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-            if (current is { } found && found.Root == expected) return WorldAuthorityStoreOutcome.Success("CAS outcome reconciled", found);
-            if (receipt is { } wanted && current is { } root && await FindReceiptFromRootAsync(identity, root.Root, wanted.OperationId, cancellationToken).ConfigureAwait(false) is { } actual && actual == wanted) return WorldAuthorityStoreOutcome.Success("receipt reconciled", root);
+            var current = await ReadRootSnapshotAsync(
+                cancellationToken: cancellationToken,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                (current is { } found) &&
+                (found.Root == expected)
+            ) return WorldAuthorityStoreOutcome.Success(
+                detail: "CAS outcome reconciled",
+                root: found
+            );
+            if (
+                (receipt is { } wanted) &&
+                (current is { } root) &&
+                (await FindReceiptFromRootAsync(
+                identity,
+                root.Root,
+                wanted.OperationId,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false) is { } actual) &&
+                (actual == wanted)
+            ) return WorldAuthorityStoreOutcome.Success(
+                detail: "receipt reconciled",
+                root: root
+            );
         } catch { }
-        return WorldAuthorityStoreOutcome.RecoveryRequired("root CAS outcome is uncertain; reconcile by reading the root and receipt chain");
+        return WorldAuthorityStoreOutcome.RecoveryRequired(detail: "root CAS outcome is uncertain; reconcile by reading the root and receipt chain");
     }
 
     /// <inheritdoc/>
-    public async Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) => await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-
+    public async Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) => await ReadRootSnapshotAsync(
+        cancellationToken: cancellationToken,
+        identity: identity
+    ).ConfigureAwait(continueOnCapturedContext: false);
     /// <inheritdoc/>
     public async Task<WorldRecoveryRootReference?> CaptureRecoveryRootAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
-        ValidateRecoveryRequest(identity, operationId);
-        var address = RecoveryRootAddress(identity, operationId);
-        if (await ReadAsync(address, cancellationToken).ConfigureAwait(false) is { } existing) {
-            return await ReadRecoveryReferenceAsync(identity, operationId, existing.Content, cancellationToken).ConfigureAwait(false);
-        }
-        var snapshot = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-        if (snapshot is not { } captured) return null;
-        await VerifyRecoveryPayloadsAsync(identity, captured.Root, cancellationToken).ConfigureAwait(false);
-        var bytes = WorldAuthorityRecoveryRootCodec.Encode(identity, operationId, captured);
-        var written = await UnderTimeoutAsync(cancellationToken, ct => m_store.WriteAsync(m_target, address, bytes, ObjectBlobWriteMode.CreateOnly, cancellationToken: ct)).ConfigureAwait(false);
-        var durable = written.Succeeded ? new ObjectBlobContent(bytes, written.VersionToken) :
-            await ReadAsync(address, cancellationToken).ConfigureAwait(false) ?? throw new IOException("recovery root could not be persisted");
-        // One point per world and operation. A retry never replaces the first frozen source with a later candidate.
-        return await ReadRecoveryReferenceAsync(identity, operationId, durable.Content, cancellationToken).ConfigureAwait(false);
-    }
+        ValidateRecoveryRequest(
+            identity: identity,
+            operationId: operationId
+        );
+        var address = RecoveryRootAddress(
+            identity: identity,
+            operationId: operationId
+        );
 
+        if (await ReadAsync(
+            address: address,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false) is { } existing) {
+            return await ReadRecoveryReferenceAsync(
+                identity,
+                operationId,
+                existing.Content,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+        var snapshot = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (snapshot is not { } captured) return null;
+        await VerifyRecoveryPayloadsAsync(
+            identity,
+            captured.Root,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var bytes = WorldAuthorityRecoveryRootCodec.Encode(
+            identity: identity,
+            operationId: operationId,
+            root: captured
+        );
+        var written = await UnderTimeoutAsync(
+            cancellationToken: cancellationToken,
+            op: ct => m_store.WriteAsync(
+                m_target,
+                address,
+                bytes,
+                ObjectBlobWriteMode.CreateOnly,
+                cancellationToken: ct
+            )
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var durable = (written.Succeeded
+            ? new ObjectBlobContent(
+                Content: bytes,
+                VersionToken: written.VersionToken
+            )
+            : (await ReadAsync(
+                address: address,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false) ?? throw new IOException(message: "recovery root could not be persisted"))
+        );
+        // One point per world and operation. A retry never replaces the first frozen source with a later candidate.
+        return await ReadRecoveryReferenceAsync(
+            identity,
+            operationId,
+            durable.Content,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
     /// <summary>Finds an already protected operation root without capturing current state. A release controller
     /// uses this after losing the source worker's drain response or restarting after that worker stopped.</summary>
     /// <param name="identity">The stable world identity.</param>
@@ -359,323 +643,974 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     /// <param name="cancellationToken">Cancels the storage read.</param>
     /// <returns>The validated immutable root, or null if this operation has not protected the world.</returns>
     public async Task<WorldRecoveryRootReference?> FindRecoveryRootAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
-        ValidateRecoveryRequest(identity, operationId);
-        var existing = await ReadAsync(RecoveryRootAddress(identity, operationId), cancellationToken).ConfigureAwait(false);
-        return existing is null ? null : await ReadRecoveryReferenceAsync(identity, operationId, existing.Value.Content, cancellationToken).ConfigureAwait(false);
-    }
+        ValidateRecoveryRequest(
+            identity: identity,
+            operationId: operationId
+        );
+        var existing = await ReadAsync(
+            address: RecoveryRootAddress(
+                identity: identity,
+                operationId: operationId
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
+        return ((existing is null)
+            ? null
+            : await ReadRecoveryReferenceAsync(
+                identity,
+                operationId,
+                existing.Value.Content,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false)
+        );
+    }
     /// <inheritdoc/>
     public async Task<WorldRecoveryRootReference?> LoadRecoveryRootAsync(WorldAuthorityIdentity identity, string pin, Guid operationId, CancellationToken cancellationToken) {
-        ValidateRecoveryRequest(identity, operationId);
-        if (!WorldAuthorityRecoveryRootCodec.IsPin(pin)) throw new InvalidDataException("recovery-root pin is not a full sha256 pin");
-        var content = await ReadAsync(RecoveryRootAddress(identity, operationId), cancellationToken).ConfigureAwait(false);
+        ValidateRecoveryRequest(
+            identity: identity,
+            operationId: operationId
+        );
+        if (!WorldAuthorityRecoveryRootCodec.IsPin(pin: pin)) throw new InvalidDataException(message: "recovery-root pin is not a full sha256 pin");
+        var content = await ReadAsync(
+            address: RecoveryRootAddress(
+                identity: identity,
+                operationId: operationId
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (content is not { } found) return null;
-        if (!string.Equals(WorldAuthorityRecoveryRootCodec.ComputePin(found.Content.Span), pin, StringComparison.Ordinal)) throw new InvalidDataException("recovery-root content does not match its pin");
-        return await ReadRecoveryReferenceAsync(identity, operationId, found.Content, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(
+            a: WorldAuthorityRecoveryRootCodec.ComputePin(bytes: found.Content.Span),
+            b: pin,
+            comparisonType: StringComparison.Ordinal
+        )) throw new InvalidDataException(message: "recovery-root content does not match its pin");
+        return await ReadRecoveryReferenceAsync(
+            identity,
+            operationId,
+            found.Content,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
     private async Task<WorldRecoveryRootReference> ReadRecoveryReferenceAsync(WorldAuthorityIdentity identity, Guid operationId, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken) {
-        if (!WorldAuthorityRecoveryRootCodec.TryDecode(bytes.Span, identity, operationId, out var reference, out var reason)) throw new InvalidDataException($"recovery-root is corrupt — {reason}");
-        await VerifyRecoveryPayloadsAsync(identity, reference.Root, cancellationToken).ConfigureAwait(false);
+        if (!WorldAuthorityRecoveryRootCodec.TryDecode(
+            bytes.Span,
+            identity,
+            operationId,
+            out var reference,
+            out var reason
+        )) throw new InvalidDataException(message: $"recovery-root is corrupt — {reason}");
+        await VerifyRecoveryPayloadsAsync(
+            identity,
+            reference.Root,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
         return reference;
     }
-
     private async Task VerifyRecoveryPayloadsAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
         async Task VerifyAsync(ObjectBlobAddress address, string hash) {
-            var bytes = await ReadAsync(address, cancellationToken).ConfigureAwait(false);
-            if (bytes is not { } found || !string.Equals(WorldDefinitionFileSource.ComputeContentHash(found.Content.Span), hash, StringComparison.Ordinal)) {
-                throw new InvalidDataException($"protected recovery payload '{address.Key}' is missing or corrupt");
+            var bytes = await ReadAsync(
+                address: address,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                (bytes is not { } found) ||
+                !string.Equals(
+                a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+                b: hash,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                throw new InvalidDataException(message: $"protected recovery payload '{address.Key}' is missing or corrupt");
             }
         }
-        if (root.DefinitionHash is { } definition) { await VerifyAsync(DefinitionCandidateAddress(identity, definition), definition).ConfigureAwait(false); }
-        if (root.CheckpointHash is { } checkpoint) { await VerifyAsync(CheckpointCandidateAddress(identity, root.CheckpointOrdinal, checkpoint), checkpoint).ConfigureAwait(false); }
-        _ = await ReadJournalForRootAsync(identity, root, cancellationToken).ConfigureAwait(false);
-        var receipts = await LoadReceiptIndexAsync(identity, root, cancellationToken).ConfigureAwait(false);
+        if (root.DefinitionHash is { } definition) { await VerifyAsync(
+            address: DefinitionCandidateAddress(
+                hash: definition,
+                identity: identity
+            ),
+            hash: definition
+        ).ConfigureAwait(continueOnCapturedContext: false); }
+        if (root.CheckpointHash is { } checkpoint) { await VerifyAsync(
+            address: CheckpointCandidateAddress(
+                identity,
+                root.CheckpointOrdinal,
+                checkpoint
+            ),
+            hash: checkpoint
+        ).ConfigureAwait(continueOnCapturedContext: false); }
+        _ = await ReadJournalForRootAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            root: root
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var receipts = await LoadReceiptIndexAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            root: root
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         foreach (var receipt in receipts) {
-            if ((await ReadReceiptAsync(identity, receipt.Value, cancellationToken).ConfigureAwait(false)).OperationId != receipt.Key) {
-                throw new InvalidDataException("protected receipt index does not match its payload");
+            if ((await ReadReceiptAsync(
+                identity,
+                receipt.Value,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false)).OperationId != receipt.Key) {
+                throw new InvalidDataException(message: "protected receipt index does not match its payload");
             }
         }
-        if (root.ReceiptHash is { } head && !receipts.Values.Contains(head, StringComparer.Ordinal)) {
-            throw new InvalidDataException("protected receipt chain is missing from its index");
+        if (
+            (root.ReceiptHash is { } head) &&
+            !receipts.Values.Contains(
+            head,
+            StringComparer.Ordinal
+        )
+        ) {
+            throw new InvalidDataException(message: "protected receipt chain is missing from its index");
         }
     }
 
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> RestoreRecoveryRootAsync(WorldAuthorityIdentity identity, string pin, Guid operationId, WorldAuthorityFence expectedCurrentFence, CancellationToken cancellationToken) {
-        ValidateRecoveryRequest(identity, operationId);
-        if (expectedCurrentFence.Epoch <= 0 || expectedCurrentFence.Token == Guid.Empty) return WorldAuthorityStoreOutcome.StaleFence("recovery requires a current owned activation fence");
-        var reference = await LoadRecoveryRootAsync(identity, pin, operationId, cancellationToken).ConfigureAwait(false);
-        if (reference is not { } saved) return WorldAuthorityStoreOutcome.Failed("recovery-root pin is missing");
-        var current = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-        if (current is not { } present || !FenceMatches(present, expectedCurrentFence)) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
+        ValidateRecoveryRequest(
+            identity: identity,
+            operationId: operationId
+        );
+        if (
+            (expectedCurrentFence.Epoch <= 0) ||
+            (expectedCurrentFence.Token == Guid.Empty)
+        ) return WorldAuthorityStoreOutcome.StaleFence(detail: "recovery requires a current owned activation fence");
+        var reference = await LoadRecoveryRootAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            operationId: operationId,
+            pin: pin
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (reference is not { } saved) return WorldAuthorityStoreOutcome.Failed(detail: "recovery-root pin is missing");
+        var current = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (
+            (current is not { } present) ||
+            !FenceMatches(
+            fence: expectedCurrentFence,
+            snapshot: present
+        )
+        ) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
         var restored = saved.Root with {
-            Epoch = checked(Math.Max(present.Root.Epoch, saved.Root.Epoch) + 1L),
+            Epoch = checked((Math.Max(
+            val1: present.Root.Epoch,
+            val2: saved.Root.Epoch
+        ) + 1L)),
             FenceToken = Guid.Empty,
-            Sequence = checked(Math.Max(present.Root.Sequence, saved.Root.Sequence) + 1L)
+            Sequence = checked((Math.Max(
+            val1: present.Root.Sequence,
+            val2: saved.Root.Sequence
+        ) + 1L)),
         };
-        var write = await WriteRootAsync(identity, restored, present.VersionToken, ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-        if (write.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(restored, write.VersionToken ?? string.Empty));
-        return write.PreconditionFailed
-            ? WorldAuthorityStoreOutcome.PreconditionFailed("authority root moved before recovery restore")
-            : WorldAuthorityStoreOutcome.Failed("recovery restore root write was refused");
+        var write = await WriteRootAsync(
+            identity,
+            restored,
+            present.VersionToken,
+            ObjectBlobWriteMode.Overwrite,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (write.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(
+            Root: restored,
+            VersionToken: (write.VersionToken ?? string.Empty)
+        ));
+        return (write.PreconditionFailed
+            ? WorldAuthorityStoreOutcome.PreconditionFailed(detail: "authority root moved before recovery restore")
+            : WorldAuthorityStoreOutcome.Failed(detail: "recovery restore root write was refused")
+        );
     }
 
     private static void ValidateRecoveryRequest(WorldAuthorityIdentity identity, Guid operationId) {
-        if (identity.Owner == Guid.Empty) throw new ArgumentException("recovery-root owner must be non-empty", nameof(identity));
-        if (string.IsNullOrWhiteSpace(identity.World.Value)) throw new ArgumentException("recovery-root world must be non-empty", nameof(identity));
-        if (operationId == Guid.Empty) throw new ArgumentException("recovery-root operation must be non-empty", nameof(operationId));
+        if (identity.Owner == Guid.Empty) throw new ArgumentException(
+            message: "recovery-root owner must be non-empty",
+            paramName: nameof(identity)
+        );
+        if (string.IsNullOrWhiteSpace(value: identity.World.Value)) throw new ArgumentException(
+            message: "recovery-root world must be non-empty",
+            paramName: nameof(identity)
+        );
+        if (operationId == Guid.Empty) throw new ArgumentException(
+            message: "recovery-root operation must be non-empty",
+            paramName: nameof(operationId)
+        );
     }
 
     /// <inheritdoc/>
     public async Task<WorldAuthorityFence?> AcquireActivationAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
-            var current = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
+        for (var attempt = 0; (attempt < MaxCasAttempts); attempt++) {
+            var current = await ReadRootSnapshotAsync(
+                cancellationToken: cancellationToken,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (current is null) {
-                var initial = await EnsureInitialRootAsync(identity, cancellationToken).ConfigureAwait(false);
+                var initial = await EnsureInitialRootAsync(
+                    cancellationToken: cancellationToken,
+                    identity: identity
+                ).ConfigureAwait(continueOnCapturedContext: false);
                 var token = Guid.NewGuid();
                 var candidate = initial!.Value.Root with { Epoch = 1, FenceToken = token, Sequence = 1 };
-                var created = await WriteRootAsync(identity, candidate, null, ObjectBlobWriteMode.CreateOnly, cancellationToken).ConfigureAwait(false);
-                if (created.Succeeded && created.VersionToken is { Length: > 0 } createdVersion) return new WorldAuthorityFence(candidate.Epoch, token, createdVersion);
+                var created = await WriteRootAsync(
+                    cancellationToken: cancellationToken,
+                    identity: identity,
+                    ifMatchVersion: null,
+                    mode: ObjectBlobWriteMode.CreateOnly,
+                    root: candidate
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (
+                    created.Succeeded &&
+                    (created.VersionToken is { Length: > 0 } createdVersion)
+                ) return new WorldAuthorityFence(
+                    candidate.Epoch,
+                    token,
+                    createdVersion
+                );
                 continue;
             }
             var nextToken = Guid.NewGuid();
-            var next = current.Value.Root with { Epoch = checked(current.Value.Root.Epoch + 1), FenceToken = nextToken, Sequence = checked(current.Value.Root.Sequence + 1) };
-            var result = await WriteRootAsync(identity, next, current.Value.VersionToken, ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-            if (result.Succeeded && result.VersionToken is { Length: > 0 } version) return new WorldAuthorityFence(next.Epoch, nextToken, version);
+            var next = current.Value.Root with { Epoch = checked((current.Value.Root.Epoch + 1)), FenceToken = nextToken, Sequence = checked((current.Value.Root.Sequence + 1)) };
+            var result = await WriteRootAsync(
+                identity,
+                next,
+                current.Value.VersionToken,
+                ObjectBlobWriteMode.Overwrite,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                result.Succeeded &&
+                (result.VersionToken is { Length: > 0 } version)
+            ) return new WorldAuthorityFence(
+                next.Epoch,
+                nextToken,
+                version
+            );
         }
         return null;
     }
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> ReleaseActivationAsync(WorldAuthorityIdentity identity, WorldAuthorityFence fence, CancellationToken cancellationToken) {
-        var current = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-        if (current is not { } snapshot || !FenceMatches(snapshot, fence)) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
-        var released = snapshot.Root with { Epoch = checked(snapshot.Root.Epoch + 1), FenceToken = Guid.Empty, Sequence = checked(snapshot.Root.Sequence + 1) };
-        var result = await WriteRootAsync(identity, released, snapshot.VersionToken, ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-        return result.Succeeded ? WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(released, result.VersionToken ?? string.Empty)) : WorldAuthorityStoreOutcome.PreconditionFailed("activation root moved before release");
+        var current = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (
+            (current is not { } snapshot) ||
+            !FenceMatches(
+            fence: fence,
+            snapshot: snapshot
+        )
+        ) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
+        var released = snapshot.Root with { Epoch = checked((snapshot.Root.Epoch + 1)), FenceToken = Guid.Empty, Sequence = checked((snapshot.Root.Sequence + 1)) };
+        var result = await WriteRootAsync(
+            identity,
+            released,
+            snapshot.VersionToken,
+            ObjectBlobWriteMode.Overwrite,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (result.Succeeded
+            ? WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(
+                Root: released,
+                VersionToken: (result.VersionToken ?? string.Empty)
+            ))
+            : WorldAuthorityStoreOutcome.PreconditionFailed(detail: "activation root moved before release")
+        );
     }
 
     private async Task<WorldAuthorityOperationReceipt?> FindReceiptFromRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, Guid operationId, CancellationToken cancellationToken) {
         if (root.ReceiptIndexHash is { Length: > 0 }) {
-            var index = await LoadReceiptIndexAsync(identity, root, cancellationToken).ConfigureAwait(false);
-            if (!index.TryGetValue(operationId, out var indexedHash)) return null;
-            var indexedReceipt = await ReadReceiptAsync(identity, indexedHash, cancellationToken).ConfigureAwait(false);
-            if (indexedReceipt.OperationId != operationId) throw new InvalidDataException("receipt index target operation does not match its dictionary key");
+            var index = await LoadReceiptIndexAsync(
+                cancellationToken: cancellationToken,
+                identity: identity,
+                root: root
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (!index.TryGetValue(
+                key: operationId,
+                value: out var indexedHash
+            )) return null;
+            var indexedReceipt = await ReadReceiptAsync(
+                cancellationToken: cancellationToken,
+                hash: indexedHash,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (indexedReceipt.OperationId != operationId) throw new InvalidDataException(message: "receipt index target operation does not match its dictionary key");
             return indexedReceipt;
         }
         var hash = root.ReceiptHash;
-        for (var count = 0; hash is { Length: > 0 }; count++) {
-            if (count >= 100_000) throw new InvalidDataException("receipt chain exceeds its traversal bound");
-            var content = await ReadAsync(ReceiptCandidateAddress(identity, hash), cancellationToken).ConfigureAwait(false);
-            if (content is not { } found) throw new InvalidDataException("receipt chain names a missing blob");
-            if (!string.Equals(WorldDefinitionFileSource.ComputeContentHash(found.Content.Span), hash, StringComparison.Ordinal)) throw new InvalidDataException("receipt chain content pin mismatch");
-            if (!WorldAuthorityRootCodec.TryDecodeReceipt(found.Content.Span, out var receipt, out var previous, out var reason)) throw new InvalidDataException($"receipt chain is corrupt — {reason}");
+
+        for (var count = 0; (hash is { Length: > 0 }); count++) {
+            if (count >= 100_000) throw new InvalidDataException(message: "receipt chain exceeds its traversal bound");
+            var content = await ReadAsync(
+                address: ReceiptCandidateAddress(
+                    hash: hash,
+                    identity: identity
+                ),
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (content is not { } found) throw new InvalidDataException(message: "receipt chain names a missing blob");
+            if (!string.Equals(
+                a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+                b: hash,
+                comparisonType: StringComparison.Ordinal
+            )) throw new InvalidDataException(message: "receipt chain content pin mismatch");
+            if (!WorldAuthorityRootCodec.TryDecodeReceipt(
+                found.Content.Span,
+                out var receipt,
+                out var previous,
+                out var reason
+            )) throw new InvalidDataException(message: $"receipt chain is corrupt — {reason}");
             if (receipt.OperationId == operationId) return receipt;
             hash = previous;
         }
         return null;
     }
     private async Task<WorldAuthorityOperationReceipt> ReadReceiptAsync(WorldAuthorityIdentity identity, string hash, CancellationToken cancellationToken) {
-        var indexed = await ReadAsync(ReceiptCandidateAddress(identity, hash), cancellationToken).ConfigureAwait(false);
-        if (indexed is not { } indexedBlob) throw new InvalidDataException("receipt index target is missing");
-        if (!string.Equals(WorldDefinitionFileSource.ComputeContentHash(indexedBlob.Content.Span), hash, StringComparison.Ordinal)) throw new InvalidDataException("receipt index target does not match its content pin");
-        if (!WorldAuthorityRootCodec.TryDecodeReceipt(indexedBlob.Content.Span, out var indexedReceipt, out _, out var indexedReason)) throw new InvalidDataException($"receipt index target is corrupt — {indexedReason}");
+        var indexed = await ReadAsync(
+            address: ReceiptCandidateAddress(
+                hash: hash,
+                identity: identity
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (indexed is not { } indexedBlob) throw new InvalidDataException(message: "receipt index target is missing");
+        if (!string.Equals(
+            a: WorldDefinitionFileSource.ComputeContentHash(content: indexedBlob.Content.Span),
+            b: hash,
+            comparisonType: StringComparison.Ordinal
+        )) throw new InvalidDataException(message: "receipt index target does not match its content pin");
+        if (!WorldAuthorityRootCodec.TryDecodeReceipt(
+            indexedBlob.Content.Span,
+            out var indexedReceipt,
+            out _,
+            out var indexedReason
+        )) throw new InvalidDataException(message: $"receipt index target is corrupt — {indexedReason}");
         return indexedReceipt;
     }
+
     /// <inheritdoc/>
     public async Task<WorldAuthorityOperationReceipt?> FindOperationReceiptAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
-        var root = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
-        return root is { } snapshot ? await FindReceiptFromRootAsync(identity, snapshot.Root, operationId, cancellationToken).ConfigureAwait(false) : null;
+        var root = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return ((root is { } snapshot)
+            ? await FindReceiptFromRootAsync(
+                identity,
+                snapshot.Root,
+                operationId,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false)
+            : null
+        );
     }
-    private static bool SameOperation(WorldAuthorityOperationReceipt left, WorldAuthorityOperationReceipt right) => left.OperationId == right.OperationId && string.Equals(left.Actor, right.Actor, StringComparison.Ordinal) && string.Equals(left.PayloadDigest, right.PayloadDigest, StringComparison.Ordinal);
+
+    private static bool SameOperation(WorldAuthorityOperationReceipt left, WorldAuthorityOperationReceipt right) => ((left.OperationId == right.OperationId) && string.Equals(
+        a: left.Actor,
+        b: right.Actor,
+        comparisonType: StringComparison.Ordinal
+    ) && string.Equals(
+        a: left.PayloadDigest,
+        b: right.PayloadDigest,
+        comparisonType: StringComparison.Ordinal
+    ));
     private async Task<Dictionary<Guid, string>> LoadReceiptIndexAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
         var index = new Dictionary<Guid, string>();
+
         if (root.ReceiptIndexHash is not { Length: > 0 } hash) return index;
-        var content = await ReadAsync(ReceiptIndexAddress(identity, hash), cancellationToken).ConfigureAwait(false);
-        if (content is not { } found || !string.Equals(WorldDefinitionFileSource.ComputeContentHash(found.Content.Span), hash, StringComparison.Ordinal)) throw new InvalidDataException("receipt index does not match the root content pin");
-        var parsed = JsonSerializer.Deserialize<Dictionary<Guid, string>>(found.Content.Span) ?? throw new InvalidDataException("receipt index is empty or malformed");
+        var content = await ReadAsync(
+            address: ReceiptIndexAddress(
+                hash: hash,
+                identity: identity
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (
+            (content is not { } found) ||
+            !string.Equals(
+            a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+            b: hash,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) throw new InvalidDataException(message: "receipt index does not match the root content pin");
+        var parsed = (JsonSerializer.Deserialize<Dictionary<Guid, string>>(found.Content.Span) ?? throw new InvalidDataException(message: "receipt index is empty or malformed"));
+
         foreach (var pair in parsed) {
-            if (pair.Key == Guid.Empty || !IsContentPin(pair.Value)) throw new InvalidDataException("receipt index contains an invalid entry");
-            index.Add(pair.Key, pair.Value);
+            if (
+                (pair.Key == Guid.Empty) ||
+                !IsContentPin(value: pair.Value)
+            ) throw new InvalidDataException(message: "receipt index contains an invalid entry");
+            index.Add(
+                key: pair.Key,
+                value: pair.Value
+            );
         }
         return index;
     }
     private static bool IsContentPin(string value) {
-        const string prefix = "sha256-64/";
-        if (value.Length != prefix.Length + 16 || !value.StartsWith(prefix, StringComparison.Ordinal)) return false;
-        for (var index = prefix.Length; index < value.Length; index++) if (!Uri.IsHexDigit(value[index])) return false;
+        const string Prefix = "sha256-64/";
+
+        if (
+            (value.Length != (Prefix.Length + 16)) ||
+            !value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: Prefix
+        )
+        ) return false;
+        for (var index = Prefix.Length; (index < value.Length); index++) if (!Uri.IsHexDigit(character: value[index])) return false;
         return true;
     }
     private async Task<(WorldAuthorityStoreOutcome Outcome, string? ReceiptHash, string? ReceiptIndexHash)> PrepareReceiptAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, WorldAuthorityOperationReceipt? receipt, bool requireApplied, CancellationToken cancellationToken) {
         if (receipt is not { } value) return (WorldAuthorityStoreOutcome.Success(), root.ReceiptHash, root.ReceiptIndexHash);
-        if (value.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(value.Actor) || string.IsNullOrWhiteSpace(value.PayloadDigest) || string.IsNullOrWhiteSpace(value.DecisionCode)) return (WorldAuthorityStoreOutcome.Failed("receipt fields are incomplete"), null, null);
-        var receiptIndex = await LoadReceiptIndexAsync(identity, root, cancellationToken).ConfigureAwait(false);
+        if (
+            (value.OperationId == Guid.Empty) ||
+            string.IsNullOrWhiteSpace(value: value.Actor) ||
+            string.IsNullOrWhiteSpace(value: value.PayloadDigest) ||
+            string.IsNullOrWhiteSpace(value: value.DecisionCode)
+        ) return (WorldAuthorityStoreOutcome.Failed(detail: "receipt fields are incomplete"), null, null);
+        var receiptIndex = await LoadReceiptIndexAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            root: root
+        ).ConfigureAwait(continueOnCapturedContext: false);
         WorldAuthorityOperationReceipt? existing = null;
-        if (receiptIndex.TryGetValue(value.OperationId, out var existingHash)) {
-            existing = await ReadReceiptAsync(identity, existingHash, cancellationToken).ConfigureAwait(false);
-            if (existing.Value.OperationId != value.OperationId) throw new InvalidDataException("receipt index target operation does not match its dictionary key");
+
+        if (receiptIndex.TryGetValue(
+            key: value.OperationId,
+            value: out var existingHash
+        )) {
+            existing = await ReadReceiptAsync(
+                cancellationToken: cancellationToken,
+                hash: existingHash,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            if (existing.Value.OperationId != value.OperationId) throw new InvalidDataException(message: "receipt index target operation does not match its dictionary key");
         }
-        if (existing is { } found) return (SameOperation(found, value) ? (WorldAuthorityStoreOutcome.Success("operation already durable"), root.ReceiptHash, root.ReceiptIndexHash) : (WorldAuthorityStoreOutcome.OperationConflict("operation id is bound to a different actor or payload"), null, null));
-        if (requireApplied != value.Applied) return (WorldAuthorityStoreOutcome.PreconditionFailed(requireApplied ? "journal or checkpoint receipts must record an applied mutation" : "standalone receipts may record refusals only"), null, null);
-        var bytes = WorldAuthorityRootCodec.EncodeReceipt(value, root.ReceiptHash);
-        var hash = WorldDefinitionFileSource.ComputeContentHash(bytes);
-        var write = await PutImmutableAsync(ReceiptCandidateAddress(identity, hash), bytes, cancellationToken).ConfigureAwait(false);
+        if (existing is { } found) return (SameOperation(
+            left: found,
+            right: value
+        )
+            ? (WorldAuthorityStoreOutcome.Success("operation already durable"), root.ReceiptHash, root.ReceiptIndexHash)
+            : (WorldAuthorityStoreOutcome.OperationConflict(detail: "operation id is bound to a different actor or payload"), null, null)
+        );
+        if (requireApplied != value.Applied) return (WorldAuthorityStoreOutcome.PreconditionFailed(detail: (requireApplied
+            ? "journal or checkpoint receipts must record an applied mutation"
+            : "standalone receipts may record refusals only")), null, null);
+        var bytes = WorldAuthorityRootCodec.EncodeReceipt(
+            value,
+            root.ReceiptHash
+        );
+        var hash = WorldDefinitionFileSource.ComputeContentHash(content: bytes);
+        var write = await PutImmutableAsync(
+            address: ReceiptCandidateAddress(
+                hash: hash,
+                identity: identity
+            ),
+            bytes: bytes,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (!write.Ok) return (write, null, null);
         var index = receiptIndex;
-        index[value.OperationId] = hash;
-        var indexBytes = JsonSerializer.SerializeToUtf8Bytes(new SortedDictionary<Guid, string>(index));
-        var indexHash = WorldDefinitionFileSource.ComputeContentHash(indexBytes);
-        var indexWrite = await PutImmutableAsync(ReceiptIndexAddress(identity, indexHash), indexBytes, cancellationToken).ConfigureAwait(false);
-        return (indexWrite.Ok ? (indexWrite, hash, indexHash) : (indexWrite, null, null));
-    }
 
+        index[value.OperationId] = hash;
+        var indexBytes = JsonSerializer.SerializeToUtf8Bytes(new SortedDictionary<Guid, string>(dictionary: index));
+        var indexHash = WorldDefinitionFileSource.ComputeContentHash(content: indexBytes);
+        var indexWrite = await PutImmutableAsync(
+            address: ReceiptIndexAddress(
+                hash: indexHash,
+                identity: identity
+            ),
+            bytes: indexBytes,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (indexWrite.Ok
+            ? (indexWrite, hash, indexHash)
+            : (indexWrite, null, null)
+        );
+    }
     private async Task<(IReadOnlyList<WorldMutationJournalEntry> Entries, string? Hash)> ReadJournalForRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
         if (root.JournalHash is not { Length: > 0 } hash) {
-            if (root.JournalEntryCount != 0 || root.JournalSequence != root.CheckpointCoverageSequence) throw new InvalidDataException("root has journal metadata without a journal blob");
+            if (
+                (root.JournalEntryCount != 0) ||
+                (root.JournalSequence != root.CheckpointCoverageSequence)
+            ) throw new InvalidDataException(message: "root has journal metadata without a journal blob");
             return ([], null);
         }
-        var content = await ReadAsync(JournalCandidateAddress(identity, hash), cancellationToken).ConfigureAwait(false);
-        if (content is not { } found) throw new InvalidDataException("root names a missing journal blob");
-        if (!string.Equals(WorldDefinitionFileSource.ComputeContentHash(found.Content.Span), hash, StringComparison.Ordinal)) throw new InvalidDataException("journal blob does not match the root content pin");
-        if (!WorldAuthorityStoreWireCodec.TryDecodeJournalPage(found.Content.Span, out var entries, out var reason)) throw new InvalidDataException($"journal blob is corrupt — {reason}");
-        if (entries.Count != root.JournalEntryCount || ((long)entries.Count != root.JournalSequence - root.CheckpointCoverageSequence)) throw new InvalidDataException("root journal count and sequence disagree");
+        var content = await ReadAsync(
+            address: JournalCandidateAddress(
+                hash: hash,
+                identity: identity
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (content is not { } found) throw new InvalidDataException(message: "root names a missing journal blob");
+        if (!string.Equals(
+            a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+            b: hash,
+            comparisonType: StringComparison.Ordinal
+        )) throw new InvalidDataException(message: "journal blob does not match the root content pin");
+        if (!WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
+            bytes: found.Content.Span,
+            entries: out var entries,
+            reason: out var reason
+        )) throw new InvalidDataException(message: $"journal blob is corrupt — {reason}");
+        if (
+            (entries.Count != root.JournalEntryCount) ||
+            (((long)entries.Count) != (root.JournalSequence - root.CheckpointCoverageSequence))
+        ) throw new InvalidDataException(message: "root journal count and sequence disagree");
         return (entries, hash);
     }
+
     /// <inheritdoc/>
     public async Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var snapshot = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
+        var snapshot = await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (snapshot is not { } rooted) return null;
         WorldAuthorityCheckpointBlob? checkpoint = null;
+
         if (rooted.Root.CheckpointHash is { Length: > 0 } hash) {
-            var content = await ReadAsync(CheckpointCandidateAddress(identity, rooted.Root.CheckpointOrdinal, hash), cancellationToken).ConfigureAwait(false);
-            if (content is not { } found) throw new InvalidDataException("root names a missing checkpoint blob");
-            if (!string.Equals(WorldDefinitionFileSource.ComputeContentHash(found.Content.Span), hash, StringComparison.Ordinal)) throw new InvalidDataException("checkpoint blob does not match the root content pin");
-            checkpoint = new WorldAuthorityCheckpointBlob(found.Content, rooted.Root.CheckpointOrdinal, rooted.Root.CheckpointTick);
+            var content = await ReadAsync(
+                address: CheckpointCandidateAddress(
+                    identity,
+                    rooted.Root.CheckpointOrdinal,
+                    hash
+                ),
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (content is not { } found) throw new InvalidDataException(message: "root names a missing checkpoint blob");
+            if (!string.Equals(
+                a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+                b: hash,
+                comparisonType: StringComparison.Ordinal
+            )) throw new InvalidDataException(message: "checkpoint blob does not match the root content pin");
+            checkpoint = new WorldAuthorityCheckpointBlob(
+                Encoded: found.Content,
+                Ordinal: rooted.Root.CheckpointOrdinal,
+                Tick: rooted.Root.CheckpointTick
+            );
         }
-        var journal = await ReadJournalForRootAsync(identity, rooted.Root, cancellationToken).ConfigureAwait(false);
+        var journal = await ReadJournalForRootAsync(
+            identity,
+            rooted.Root,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
         ObjectBlobContent? definitionBytes = null;
+
         if (rooted.Root.DefinitionHash is { } definitionHash) {
-            var content = await ReadAsync(DefinitionCandidateAddress(identity, definitionHash), cancellationToken).ConfigureAwait(false);
-            if (content is not { } found) throw new InvalidDataException("root names a missing definition blob");
-            if (!string.Equals(WorldDefinitionFileSource.ComputeContentHash(found.Content.Span), definitionHash, StringComparison.Ordinal)) throw new InvalidDataException("definition blob does not match the root content pin");
+            var content = await ReadAsync(
+                address: DefinitionCandidateAddress(
+                    hash: definitionHash,
+                    identity: identity
+                ),
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (content is not { } found) throw new InvalidDataException(message: "root names a missing definition blob");
+            if (!string.Equals(
+                a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+                b: definitionHash,
+                comparisonType: StringComparison.Ordinal
+            )) throw new InvalidDataException(message: "definition blob does not match the root content pin");
             definitionBytes = found;
         }
         WorldDefinition? definition = null;
+
         if (definitionBytes is { } bytes) {
-            var resolver = new WorldStorageNeighbourResolver(m_store, m_target, identity.Owner, WorldStorageNamespace.Hosted);
-            var loaded = await WorldDefinitionLoader.LoadAsync(bytes.Content, $"authority/{identity.World.Value}/definition", identity.World.Value, resolver.ResolveHostedAsync, cancellationToken).ConfigureAwait(false);
-            if (loaded.Definition is null) throw new InvalidDataException($"root-qualified definition is invalid — {loaded.Reason}");
+            var resolver = new WorldStorageNeighbourResolver(
+                m_store,
+                m_target,
+                identity.Owner,
+                WorldStorageNamespace.Hosted
+            );
+            var loaded = await WorldDefinitionLoader.LoadAsync(
+                bytes.Content,
+                $"authority/{identity.World.Value}/definition",
+                identity.World.Value,
+                resolver.ResolveHostedAsync,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (loaded.Definition is null) throw new InvalidDataException(message: $"root-qualified definition is invalid — {loaded.Reason}");
             definition = loaded.Definition;
         }
-        return new WorldAuthorityRecovery(rooted, checkpoint, new WorldMutationJournalTail(rooted.Root.CheckpointOrdinal, journal.Entries)) { Definition = definition };
+        return new WorldAuthorityRecovery(
+            rooted,
+            checkpoint,
+            new WorldMutationJournalTail(
+                CheckpointOrdinal: rooted.Root.CheckpointOrdinal,
+                Entries: journal.Entries
+            )
+        ) { Definition = definition };
     }
+
     private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {
-        var fence = await EnsureFenceAsync(identity, suppliedFence, cancellationToken).ConfigureAwait(false);
-        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed("could not acquire activation fence");
-        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
-            var writable = await ReadMutationSnapshotAsync(identity, active, cancellationToken).ConfigureAwait(false);
-            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
+        var fence = await EnsureFenceAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            supplied: suppliedFence
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed(detail: "could not acquire activation fence");
+        for (var attempt = 0; (attempt < MaxCasAttempts); attempt++) {
+            var writable = await ReadMutationSnapshotAsync(
+                cancellationToken: cancellationToken,
+                fence: active,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
             var current = state.Snapshot;
-            if (!FenceMatches(current, active)) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
-            if (current.Root.CheckpointHash is null) return WorldAuthorityStoreOutcome.Failed("no checkpoint exists yet — a journal is relative to one");
-            var existing = await ReadJournalForRootAsync(identity, current.Root, cancellationToken).ConfigureAwait(false);
-            var prepared = await PrepareReceiptAsync(identity, current.Root, receipt, requireApplied: true, cancellationToken).ConfigureAwait(false);
+
+            if (!FenceMatches(
+                fence: active,
+                snapshot: current
+            )) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
+            if (current.Root.CheckpointHash is null) return WorldAuthorityStoreOutcome.Failed(detail: "no checkpoint exists yet — a journal is relative to one");
+            var existing = await ReadJournalForRootAsync(
+                identity,
+                current.Root,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            var prepared = await PrepareReceiptAsync(
+                identity,
+                current.Root,
+                receipt,
+                requireApplied: true,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!prepared.Outcome.Ok) return prepared.Outcome;
-            if (receipt is { } && prepared.Outcome.Detail == "operation already durable") return WorldAuthorityStoreOutcome.Success(prepared.Outcome.Detail, current);
-            var entries = new List<WorldMutationJournalEntry>(existing.Entries.Count + 1);
-            entries.AddRange(existing.Entries); entries.Add(entry);
-            var journalBytes = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries);
-            var journalHash = WorldDefinitionFileSource.ComputeContentHash(journalBytes);
-            var immutable = await PutImmutableAsync(JournalCandidateAddress(identity, journalHash), journalBytes, cancellationToken).ConfigureAwait(false);
+            if (
+                (receipt is { }) &&
+                (prepared.Outcome.Detail == "operation already durable")
+            ) return WorldAuthorityStoreOutcome.Success(
+                detail: prepared.Outcome.Detail,
+                root: current
+            );
+            var entries = new List<WorldMutationJournalEntry>(capacity: (existing.Entries.Count + 1));
+
+            entries.AddRange(collection: existing.Entries); entries.Add(item: entry);
+            var journalBytes = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: entries);
+            var journalHash = WorldDefinitionFileSource.ComputeContentHash(content: journalBytes);
+            var immutable = await PutImmutableAsync(
+                address: JournalCandidateAddress(
+                    hash: journalHash,
+                    identity: identity
+                ),
+                bytes: journalBytes,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!immutable.Ok) return immutable;
-            var next = current.Root with { JournalHash = journalHash, JournalEntryCount = entries.Count, JournalSequence = checked(current.Root.JournalSequence + 1), ReceiptHash = prepared.ReceiptHash, ReceiptIndexHash = prepared.ReceiptIndexHash, Sequence = checked(current.Root.Sequence + 1) };
+            var next = current.Root with { JournalHash = journalHash, JournalEntryCount = entries.Count, JournalSequence = checked((current.Root.JournalSequence + 1)), ReceiptHash = prepared.ReceiptHash, ReceiptIndexHash = prepared.ReceiptIndexHash, Sequence = checked((current.Root.Sequence + 1)) };
             ObjectBlobWriteResult result;
-            try { result = await WriteRootAsync(identity, next, state.CreateOnly ? null : current.VersionToken, state.CreateOnly ? ObjectBlobWriteMode.CreateOnly : ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false); }
-            catch { return await ReconcileAsync(identity, next, receipt, cancellationToken).ConfigureAwait(false); }
-            if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(next, result.VersionToken ?? string.Empty));
+
+            try { result = await WriteRootAsync(
+                identity,
+                next,
+                (state.CreateOnly
+                ? null
+                : current.VersionToken),
+                (state.CreateOnly
+                ? ObjectBlobWriteMode.CreateOnly
+                : ObjectBlobWriteMode.Overwrite),
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false); } catch { return await ReconcileAsync(
+                cancellationToken: cancellationToken,
+                expected: next,
+                identity: identity,
+                receipt: receipt
+            ).ConfigureAwait(continueOnCapturedContext: false); }
+            if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(
+                Root: next,
+                VersionToken: (result.VersionToken ?? string.Empty)
+            ));
         }
-        return WorldAuthorityStoreOutcome.PreconditionFailed("journal append lost the root compare-and-swap race");
+        return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "journal append lost the root compare-and-swap race");
     }
     private async Task<WorldAuthorityStoreOutcome> WriteCheckpointRootAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, long? capturedJournalSequence, CancellationToken cancellationToken) {
-        var fence = await EnsureFenceAsync(identity, suppliedFence, cancellationToken).ConfigureAwait(false);
-        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed("could not acquire activation fence");
-        var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(encoded.Span);
-        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
-            var writable = await ReadMutationSnapshotAsync(identity, active, cancellationToken).ConfigureAwait(false);
-            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
+        var fence = await EnsureFenceAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            supplied: suppliedFence
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed(detail: "could not acquire activation fence");
+        var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(content: encoded.Span);
+
+        for (var attempt = 0; (attempt < MaxCasAttempts); attempt++) {
+            var writable = await ReadMutationSnapshotAsync(
+                cancellationToken: cancellationToken,
+                fence: active,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
             var current = state.Snapshot;
-            if (!FenceMatches(current, active)) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
-            if (current.Root.CheckpointOrdinal >= 0 && tick < current.Root.CheckpointTick) return WorldAuthorityStoreOutcome.PreconditionFailed("checkpoint tick regresses the authoritative checkpoint");
-            var coverage = capturedJournalSequence ?? ((current.Root.JournalSequence == current.Root.CheckpointCoverageSequence) ? current.Root.JournalSequence : long.MinValue);
-            if (coverage == long.MinValue) return WorldAuthorityStoreOutcome.PreconditionFailed("checkpoint requires an explicit captured journal sequence while a later tail exists");
-            if (coverage < current.Root.CheckpointCoverageSequence || coverage > current.Root.JournalSequence) return WorldAuthorityStoreOutcome.PreconditionFailed("checkpoint capture is stale or ahead of the authoritative journal");
-            var existing = await ReadJournalForRootAsync(identity, current.Root, cancellationToken).ConfigureAwait(false);
-            var firstSequence = checked(current.Root.CheckpointCoverageSequence + 1);
-            var suffixOffset = checked((int)Math.Max(0L, coverage - firstSequence + 1));
-            if (suffixOffset > existing.Entries.Count) return WorldAuthorityStoreOutcome.Failed("checkpoint journal coverage is inconsistent");
-            var suffix = existing.Entries.Skip(suffixOffset).ToArray();
+
+            if (!FenceMatches(
+                fence: active,
+                snapshot: current
+            )) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
+            if (
+                (current.Root.CheckpointOrdinal >= 0) &&
+                (tick < current.Root.CheckpointTick)
+            ) return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "checkpoint tick regresses the authoritative checkpoint");
+            var coverage = (capturedJournalSequence ?? ((current.Root.JournalSequence == current.Root.CheckpointCoverageSequence)
+                ? current.Root.JournalSequence
+                : long.MinValue));
+
+            if (coverage == long.MinValue) return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "checkpoint requires an explicit captured journal sequence while a later tail exists");
+            if (
+                (coverage < current.Root.CheckpointCoverageSequence) ||
+                (coverage > current.Root.JournalSequence)
+            ) return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "checkpoint capture is stale or ahead of the authoritative journal");
+            var existing = await ReadJournalForRootAsync(
+                identity,
+                current.Root,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            var firstSequence = checked((current.Root.CheckpointCoverageSequence + 1));
+            var suffixOffset = checked((int)Math.Max(
+                val1: 0L,
+                val2: ((coverage - firstSequence) + 1)
+            ));
+
+            if (suffixOffset > existing.Entries.Count) return WorldAuthorityStoreOutcome.Failed(detail: "checkpoint journal coverage is inconsistent");
+            var suffix = existing.Entries.Skip(count: suffixOffset).ToArray();
             string? journalHash = null;
+
             if (suffix.Length > 0) {
-                var journalBytes = WorldAuthorityStoreWireCodec.EncodeJournalPage(suffix);
-                journalHash = WorldDefinitionFileSource.ComputeContentHash(journalBytes);
-                var journalWrite = await PutImmutableAsync(JournalCandidateAddress(identity, journalHash), journalBytes, cancellationToken).ConfigureAwait(false);
+                var journalBytes = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: suffix);
+
+                journalHash = WorldDefinitionFileSource.ComputeContentHash(content: journalBytes);
+                var journalWrite = await PutImmutableAsync(
+                    address: JournalCandidateAddress(
+                        hash: journalHash,
+                        identity: identity
+                    ),
+                    bytes: journalBytes,
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
                 if (!journalWrite.Ok) return journalWrite;
             }
-            var ordinal = checked(current.Root.CheckpointOrdinal + 1);
-            var checkpointWrite = await PutImmutableAsync(CheckpointCandidateAddress(identity, ordinal, checkpointHash), encoded, cancellationToken).ConfigureAwait(false);
+            var ordinal = checked((current.Root.CheckpointOrdinal + 1));
+            var checkpointWrite = await PutImmutableAsync(
+                address: CheckpointCandidateAddress(
+                    hash: checkpointHash,
+                    identity: identity,
+                    ordinal: ordinal
+                ),
+                bytes: encoded,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!checkpointWrite.Ok) return checkpointWrite;
-            var prepared = await PrepareReceiptAsync(identity, current.Root, receipt, requireApplied: true, cancellationToken).ConfigureAwait(false);
+            var prepared = await PrepareReceiptAsync(
+                identity,
+                current.Root,
+                receipt,
+                requireApplied: true,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!prepared.Outcome.Ok) return prepared.Outcome;
-            if (receipt is { } && prepared.Outcome.Detail == "operation already durable") return WorldAuthorityStoreOutcome.Success(prepared.Outcome.Detail, current);
-            var next = current.Root with { CheckpointHash = checkpointHash, CheckpointOrdinal = ordinal, CheckpointTick = tick, JournalHash = journalHash, JournalEntryCount = suffix.Length, CheckpointCoverageSequence = coverage, ReceiptHash = prepared.ReceiptHash, ReceiptIndexHash = prepared.ReceiptIndexHash, DurableOrdinal = ordinal, DurableTick = tick, Sequence = checked(current.Root.Sequence + 1) };
+            if (
+                (receipt is { }) &&
+                (prepared.Outcome.Detail == "operation already durable")
+            ) return WorldAuthorityStoreOutcome.Success(
+                detail: prepared.Outcome.Detail,
+                root: current
+            );
+            var next = current.Root with { CheckpointHash = checkpointHash, CheckpointOrdinal = ordinal, CheckpointTick = tick, JournalHash = journalHash, JournalEntryCount = suffix.Length, CheckpointCoverageSequence = coverage, ReceiptHash = prepared.ReceiptHash, ReceiptIndexHash = prepared.ReceiptIndexHash, DurableOrdinal = ordinal, DurableTick = tick, Sequence = checked((current.Root.Sequence + 1)) };
+
             try {
-                var result = await WriteRootAsync(identity, next, state.CreateOnly ? null : current.VersionToken, state.CreateOnly ? ObjectBlobWriteMode.CreateOnly : ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-                if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(next, result.VersionToken ?? string.Empty));
-            } catch { return await ReconcileAsync(identity, next, receipt, cancellationToken).ConfigureAwait(false); }
+                var result = await WriteRootAsync(
+                    identity,
+                    next,
+                    (state.CreateOnly
+                    ? null
+                    : current.VersionToken),
+                    (state.CreateOnly
+                    ? ObjectBlobWriteMode.CreateOnly
+                    : ObjectBlobWriteMode.Overwrite),
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(
+                    Root: next,
+                    VersionToken: (result.VersionToken ?? string.Empty)
+                ));
+            } catch { return await ReconcileAsync(
+                cancellationToken: cancellationToken,
+                expected: next,
+                identity: identity,
+                receipt: receipt
+            ).ConfigureAwait(continueOnCapturedContext: false); }
         }
-        return WorldAuthorityStoreOutcome.PreconditionFailed("checkpoint publication lost the root compare-and-swap race");
+        return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "checkpoint publication lost the root compare-and-swap race");
     }
     private async Task<WorldAuthorityStoreOutcome> PublishDefinitionRootAsync(WorldAuthorityIdentity identity, WorldDefinition composed, WorldAuthorityFence? suppliedFence, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(composed);
-        var fence = await EnsureFenceAsync(identity, suppliedFence, cancellationToken).ConfigureAwait(false);
-        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed("could not acquire activation fence");
-        var bytes = WorldDefinitionSerialization.Serialize(composed);
-        var hash = WorldDefinitionFileSource.ComputeContentHash(bytes);
-        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
-            var writable = await ReadMutationSnapshotAsync(identity, active, cancellationToken).ConfigureAwait(false);
-            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
+        var fence = await EnsureFenceAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            supplied: suppliedFence
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed(detail: "could not acquire activation fence");
+        var bytes = WorldDefinitionSerialization.Serialize(definition: composed);
+        var hash = WorldDefinitionFileSource.ComputeContentHash(content: bytes);
+
+        for (var attempt = 0; (attempt < MaxCasAttempts); attempt++) {
+            var writable = await ReadMutationSnapshotAsync(
+                cancellationToken: cancellationToken,
+                fence: active,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
             var current = state.Snapshot;
-            if (!FenceMatches(current, active)) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
-            if (current.Root.DefinitionHash == hash) return WorldAuthorityStoreOutcome.Success("definition already durable", current);
-            var immutable = await PutImmutableAsync(DefinitionCandidateAddress(identity, hash), bytes, cancellationToken).ConfigureAwait(false);
+
+            if (!FenceMatches(
+                fence: active,
+                snapshot: current
+            )) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
+            if (current.Root.DefinitionHash == hash) return WorldAuthorityStoreOutcome.Success(
+                detail: "definition already durable",
+                root: current
+            );
+            var immutable = await PutImmutableAsync(
+                address: DefinitionCandidateAddress(
+                    hash: hash,
+                    identity: identity
+                ),
+                bytes: bytes,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!immutable.Ok) return immutable;
-            var next = current.Root with { DefinitionHash = hash, Sequence = checked(current.Root.Sequence + 1) };
+            var next = current.Root with { DefinitionHash = hash, Sequence = checked((current.Root.Sequence + 1)) };
+
             try {
-                var result = await WriteRootAsync(identity, next, state.CreateOnly ? null : current.VersionToken, state.CreateOnly ? ObjectBlobWriteMode.CreateOnly : ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-                if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(next, result.VersionToken ?? string.Empty));
-            } catch { return await ReconcileAsync(identity, next, null, cancellationToken).ConfigureAwait(false); }
+                var result = await WriteRootAsync(
+                    identity,
+                    next,
+                    (state.CreateOnly
+                    ? null
+                    : current.VersionToken),
+                    (state.CreateOnly
+                    ? ObjectBlobWriteMode.CreateOnly
+                    : ObjectBlobWriteMode.Overwrite),
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(
+                    Root: next,
+                    VersionToken: (result.VersionToken ?? string.Empty)
+                ));
+            } catch { return await ReconcileAsync(
+                cancellationToken: cancellationToken,
+                expected: next,
+                identity: identity,
+                receipt: null
+            ).ConfigureAwait(continueOnCapturedContext: false); }
         }
-        return WorldAuthorityStoreOutcome.PreconditionFailed("definition publication lost the root compare-and-swap race");
+        return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "definition publication lost the root compare-and-swap race");
     }
+
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> RecordReceiptAsync(WorldAuthorityIdentity identity, WorldAuthorityOperationReceipt receipt, CancellationToken cancellationToken, WorldAuthorityFence? suppliedFence = null) {
-        var fence = await EnsureFenceAsync(identity, suppliedFence, cancellationToken).ConfigureAwait(false);
-        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed("could not acquire activation fence");
-        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
-            var writable = await ReadMutationSnapshotAsync(identity, active, cancellationToken).ConfigureAwait(false);
-            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
+        var fence = await EnsureFenceAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            supplied: suppliedFence
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (fence is not { } active) return WorldAuthorityStoreOutcome.Failed(detail: "could not acquire activation fence");
+        for (var attempt = 0; (attempt < MaxCasAttempts); attempt++) {
+            var writable = await ReadMutationSnapshotAsync(
+                cancellationToken: cancellationToken,
+                fence: active,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (writable is not { } state) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
             var current = state.Snapshot;
-            if (!FenceMatches(current, active)) return WorldAuthorityStoreOutcome.StaleFence("activation fence is no longer current");
-            var prepared = await PrepareReceiptAsync(identity, current.Root, receipt, requireApplied: false, cancellationToken).ConfigureAwait(false);
+
+            if (!FenceMatches(
+                fence: active,
+                snapshot: current
+            )) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
+            var prepared = await PrepareReceiptAsync(
+                identity,
+                current.Root,
+                receipt,
+                requireApplied: false,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!prepared.Outcome.Ok) return prepared.Outcome;
-            if (prepared.Outcome.Detail == "operation already durable") return WorldAuthorityStoreOutcome.Success(prepared.Outcome.Detail, current);
-            var next = current.Root with { ReceiptHash = prepared.ReceiptHash, ReceiptIndexHash = prepared.ReceiptIndexHash, Sequence = checked(current.Root.Sequence + 1) };
+            if (prepared.Outcome.Detail == "operation already durable") return WorldAuthorityStoreOutcome.Success(
+                detail: prepared.Outcome.Detail,
+                root: current
+            );
+            var next = current.Root with { ReceiptHash = prepared.ReceiptHash, ReceiptIndexHash = prepared.ReceiptIndexHash, Sequence = checked((current.Root.Sequence + 1)) };
+
             try {
-                var result = await WriteRootAsync(identity, next, state.CreateOnly ? null : current.VersionToken, state.CreateOnly ? ObjectBlobWriteMode.CreateOnly : ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-                if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(next, result.VersionToken ?? string.Empty));
-            } catch { return await ReconcileAsync(identity, next, receipt, cancellationToken).ConfigureAwait(false); }
+                var result = await WriteRootAsync(
+                    identity,
+                    next,
+                    (state.CreateOnly
+                    ? null
+                    : current.VersionToken),
+                    (state.CreateOnly
+                    ? ObjectBlobWriteMode.CreateOnly
+                    : ObjectBlobWriteMode.Overwrite),
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (result.Succeeded) return WorldAuthorityStoreOutcome.Success(root: new WorldAuthorityRootSnapshot(
+                    Root: next,
+                    VersionToken: (result.VersionToken ?? string.Empty)
+                ));
+            } catch { return await ReconcileAsync(
+                cancellationToken: cancellationToken,
+                expected: next,
+                identity: identity,
+                receipt: receipt
+            ).ConfigureAwait(continueOnCapturedContext: false); }
         }
-        return WorldAuthorityStoreOutcome.PreconditionFailed("receipt publication lost the root compare-and-swap race");
+        return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "receipt publication lost the root compare-and-swap race");
     }
-    #pragma warning restore IDE0011
+#pragma warning restore IDE0011
 }

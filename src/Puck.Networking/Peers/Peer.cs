@@ -30,6 +30,18 @@ public sealed class Peer : IAsyncDisposable {
     private const int HandshakeRefusalsRetained = 64;
     private const int IncomingLinksRetained = 64;
 
+    private readonly PeerIdentity m_local;
+    private readonly Func<DateTimeOffset>? m_now;
+    private readonly TimeProvider m_timeProvider;
+    private readonly IPeerTransport m_transport;
+
+    private Task? m_acceptLoop;
+    private int m_disposed;
+    private int m_handshakesInFlight;
+    private IPeerListener? m_listener;
+    private Exception? m_listenerFault;
+    private bool m_listening;
+
     private readonly SemaphoreSlim m_handshakeGate = new(
         initialCount: PeerWireProtocol.MaxConcurrentHandshakes,
         maxCount: PeerWireProtocol.MaxConcurrentHandshakes
@@ -47,20 +59,8 @@ public sealed class Peer : IAsyncDisposable {
     // Cancelled by DisposeAsync once m_disposed is set, and disposed only after every handshake has drained: every
     // dial and every accepted handshake links its deadline to this token, so disposal unwinds them promptly.
     private readonly CancellationTokenSource m_lifetime = new();
-    private readonly TimeProvider m_timeProvider;
     private readonly Lock m_linksLock = new();
     private readonly List<PeerLink> m_links = [];
-
-    private readonly PeerIdentity m_local;
-    private readonly Func<DateTimeOffset>? m_now;
-    private readonly IPeerTransport m_transport;
-
-    private Task? m_acceptLoop;
-    private int m_disposed;
-    private int m_handshakesInFlight;
-    private IPeerListener? m_listener;
-    private Exception? m_listenerFault;
-    private bool m_listening;
 
     /// <summary>Initializes a peer over an identity and a transport it owns and disposes.</summary>
     /// <param name="identity">This peer's identity.</param>
@@ -68,7 +68,7 @@ public sealed class Peer : IAsyncDisposable {
     /// <param name="now">The verification-boundary clock read, overridable for tests.</param>
     /// <param name="timeProvider">The control-stream, handshake, and send deadline clock; defaults to system time.</param>
     public Peer(PeerIdentity identity, IPeerTransport transport, Func<DateTimeOffset>? now = null, TimeProvider? timeProvider = null) {
-        m_timeProvider = timeProvider ?? TimeProvider.System;
+        m_timeProvider = (timeProvider ?? TimeProvider.System);
         ArgumentNullException.ThrowIfNull(argument: identity);
         ArgumentNullException.ThrowIfNull(argument: transport);
 
@@ -76,6 +76,8 @@ public sealed class Peer : IAsyncDisposable {
         m_transport = transport;
         m_now = now;
     }
+
+    private bool IsDisposed => (Volatile.Read(location: ref m_disposed) != 0);
 
     /// <summary>Gets a channel of inbound connections that passed the transport but were refused at the handshake,
     /// each with its named refusal — a refusal by either side, a deadline (<see cref="PeerRefusal.HandshakeTimedOut"/>),
@@ -108,48 +110,6 @@ public sealed class Peer : IAsyncDisposable {
     /// accepts nothing further until it is disposed.</summary>
     public Exception? ListenerFault => Volatile.Read(location: ref m_listenerFault);
 
-    private PeerDeadline Deadline(CancellationToken ct, TimeSpan timeout) => new(ct, timeout, m_timeProvider);
-    private static async ValueTask DisposeQuietlyAsync(IAsyncDisposable disposable) {
-        try {
-            await disposable.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
-        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
-        }
-    }
-    /// <summary>Counts one handshake, dialed or accepted, as finished; the last one to finish after disposal began
-    /// releases <see cref="DisposeAsync"/>'s drain wait. The accept loop holds one count of its own for its whole
-    /// life, so the drain can never be released while the loop can still spawn a handshake: an accept that had
-    /// already returned a connection when disposal began still gets counted before the loop's own count is
-    /// released.</summary>
-    private void HandshakeFinished() {
-        if (
-            (Interlocked.Decrement(location: ref m_handshakesInFlight) == 0) &&
-            IsDisposed
-        ) {
-            m_handshakesDrained.TrySetResult();
-        }
-    }
-
-    private bool IsDisposed => (Volatile.Read(location: ref m_disposed) != 0);
-
-    private async ValueTask<bool> RegisterAsync(PeerLink link) {
-        lock (m_linksLock) {
-            if (m_disposed == 0) {
-                m_links.Add(item: link);
-                link.Start();
-
-                return true;
-            }
-        }
-
-        await link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
-
-        return false;
-    }
-    private void Unregister(PeerLink link) {
-        lock (m_linksLock) {
-            m_links.Remove(item: link);
-        }
-    }
     private async Task AcceptLoopAsync(IPeerListener listener, CancellationToken ct) {
         try {
             while (!ct.IsCancellationRequested) {
@@ -277,6 +237,11 @@ public sealed class Peer : IAsyncDisposable {
             HandshakeFinished();
         }
     }
+    private PeerDeadline Deadline(CancellationToken ct, TimeSpan timeout) => new(
+        caller: ct,
+        timeProvider: m_timeProvider,
+        timeout: timeout
+    );
     /// <summary>The body of <see cref="DialAsync"/>, run while the dial is counted in flight: every wait in it is
     /// linked to the peer's lifetime, so disposal unwinds it as <see cref="PeerRefusal.Disposed"/>.</summary>
     private async Task<PeerLink> DialCountedAsync(EndPoint endpoint, CancellationToken ct) {
@@ -363,6 +328,44 @@ public sealed class Peer : IAsyncDisposable {
 
         return link;
     }
+    private static async ValueTask DisposeQuietlyAsync(IAsyncDisposable disposable) {
+        try {
+            await disposable.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
+        }
+    }
+    /// <summary>Counts one handshake, dialed or accepted, as finished; the last one to finish after disposal began
+    /// releases <see cref="DisposeAsync"/>'s drain wait. The accept loop holds one count of its own for its whole
+    /// life, so the drain can never be released while the loop can still spawn a handshake: an accept that had
+    /// already returned a connection when disposal began still gets counted before the loop's own count is
+    /// released.</summary>
+    private void HandshakeFinished() {
+        if (
+            (Interlocked.Decrement(location: ref m_handshakesInFlight) == 0) &&
+            IsDisposed
+        ) {
+            m_handshakesDrained.TrySetResult();
+        }
+    }
+    private async ValueTask<bool> RegisterAsync(PeerLink link) {
+        lock (m_linksLock) {
+            if (m_disposed == 0) {
+                m_links.Add(item: link);
+                link.Start();
+
+                return true;
+            }
+        }
+
+        await link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+
+        return false;
+    }
+    private void Unregister(PeerLink link) {
+        lock (m_linksLock) {
+            m_links.Remove(item: link);
+        }
+    }
 
     /// <summary>Dials another peer and runs the same symmetric handshake an acceptor runs. The handshake deadline
     /// (<see cref="PeerWireProtocol.HandshakeTimeout"/>) starts once the transport has connected, so a slow transport
@@ -401,6 +404,53 @@ public sealed class Peer : IAsyncDisposable {
         } finally {
             HandshakeFinished();
         }
+    }
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync() {
+        IPeerListener? listener;
+        Task? loop;
+
+        lock (m_linksLock) {
+            if (Interlocked.Exchange(
+                location1: ref m_disposed,
+                value: 1
+            ) != 0) {
+                return;
+            }
+
+            // Snapshotted under the same lock ListenAsync publishes them under, so a listen racing this dispose is
+            // either fully visible here or refused there; nothing below reads the fields again.
+            listener = m_listener;
+            loop = m_acceptLoop;
+        }
+
+        m_lifetime.Cancel();
+
+        if (listener is not null) {
+            await DisposeQuietlyAsync(disposable: listener).ConfigureAwait(continueOnCapturedContext: false);
+        }
+
+        if (loop is not null) {
+            try {
+                await loop.ConfigureAwait(continueOnCapturedContext: false);
+            } catch (Exception) {
+            }
+        }
+
+        if (Volatile.Read(location: ref m_handshakesInFlight) == 0) {
+            m_handshakesDrained.TrySetResult();
+        }
+
+        await m_handshakesDrained.Task.ConfigureAwait(continueOnCapturedContext: false);
+
+        m_incoming.Writer.TryComplete();
+        m_handshakeRefusals.Writer.TryComplete();
+
+        await Task.WhenAll(tasks: Links.Select(selector: static link => link.DisposeAsync().AsTask())).ConfigureAwait(continueOnCapturedContext: false);
+
+        m_lifetime.Dispose();
+        await m_transport.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+        m_local.Dispose();
     }
     /// <summary>Binds a listener and starts accepting connections in the background. A peer listens at most once.</summary>
     /// <param name="endpoint">The endpoint to bind; port 0 picks a free port.</param>
@@ -460,52 +510,5 @@ public sealed class Peer : IAsyncDisposable {
         await DisposeQuietlyAsync(disposable: listener).ConfigureAwait(continueOnCapturedContext: false);
 
         throw new ObjectDisposedException(objectName: nameof(Peer));
-    }
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync() {
-        IPeerListener? listener;
-        Task? loop;
-
-        lock (m_linksLock) {
-            if (Interlocked.Exchange(
-                location1: ref m_disposed,
-                value: 1
-            ) != 0) {
-                return;
-            }
-
-            // Snapshotted under the same lock ListenAsync publishes them under, so a listen racing this dispose is
-            // either fully visible here or refused there; nothing below reads the fields again.
-            listener = m_listener;
-            loop = m_acceptLoop;
-        }
-
-        m_lifetime.Cancel();
-
-        if (listener is not null) {
-            await DisposeQuietlyAsync(disposable: listener).ConfigureAwait(continueOnCapturedContext: false);
-        }
-
-        if (loop is not null) {
-            try {
-                await loop.ConfigureAwait(continueOnCapturedContext: false);
-            } catch (Exception) {
-            }
-        }
-
-        if (Volatile.Read(location: ref m_handshakesInFlight) == 0) {
-            m_handshakesDrained.TrySetResult();
-        }
-
-        await m_handshakesDrained.Task.ConfigureAwait(continueOnCapturedContext: false);
-
-        m_incoming.Writer.TryComplete();
-        m_handshakeRefusals.Writer.TryComplete();
-
-        await Task.WhenAll(tasks: Links.Select(selector: static link => link.DisposeAsync().AsTask())).ConfigureAwait(continueOnCapturedContext: false);
-
-        m_lifetime.Dispose();
-        await m_transport.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
-        m_local.Dispose();
     }
 }

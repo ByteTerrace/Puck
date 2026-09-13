@@ -56,7 +56,10 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             HashRaw: canonical.Hash
         );
     }
-    private static StateCell TextCell(string key) => new(Key: CellName.Parse(candidate: key), Text: key);
+    private static StateCell TextCell(string key) => new(
+        Key: CellName.Parse(candidate: key),
+        Text: key
+    );
     private static WorldStateRow AccountsRow(params string[] keys) => new(
         Name: CellName.Parse(candidate: RowName),
         Kind: CellKind.Text,
@@ -66,17 +69,33 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     // A four-offset lattice along +X: offsets (0,0,0), (2,0,0), (4,0,0), (6,0,0) in deal order.
     private static WorldDistribution Lattice(int count = 4) => new(
         Region: new WorldDistributionRegion.Lattice(
-            StepA: new DocumentVector3(value: new Vector3(x: 2f, y: 0f, z: 0f)),
+            StepA: new DocumentVector3(value: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 0f
+            )),
             CountA: count,
-            StepB: new DocumentVector3(value: new Vector3(x: 0f, y: 0f, z: 1f)),
+            StepB: new DocumentVector3(value: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 1f
+            )),
             CountB: 1
         ),
-        Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)
+        Fill: new WorldSequence(
+            Name: WorldSequence.None,
+            Offset: 0,
+            Step: 0f
+        )
     );
     private static WorldPlacement Template(WorldPlacementDeal? deal, WorldDistribution? distribution = null) => new(
         Id: TemplateId,
         PrototypeId: StoreCreation,
-        Position: new DocumentVector3(value: new Vector3(x: 10f, y: 0f, z: 10f)),
+        Position: new DocumentVector3(value: new Vector3(
+            x: 10f,
+            y: 0f,
+            z: 10f
+        )),
         YawDegrees: 0f,
         Scale: 1f,
         Distribution: (distribution ?? Lattice()),
@@ -87,7 +106,9 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         var document = Fixtures.BuildDocument();
 
         return (document with {
-            StateRaw = new WorldStateSection(World: ((variantRow is null) ? [row] : [row, variantRow])),
+            StateRaw = new WorldStateSection(World: ((variantRow is null)
+            ? [row]
+            : [row, variantRow])),
             CreationsRaw = [Creation(id: StoreCreation), Creation(id: AnchorCreation)],
             PlacementRowsRaw = [template],
         });
@@ -97,13 +118,29 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         template: Template(deal: new WorldPlacementDeal(Row: RowName))
     );
     private static List<WorldPlacement> Children(WorldServer server) {
-        var template = WorldDefinitionRows.FindPlacement(id: TemplateId, placements: server.Definition.Placements);
+        var template = WorldDefinitionRows.FindPlacement(
+            id: TemplateId,
+            placements: server.Definition.Placements
+        );
 
-        return [.. server.Definition.Placements.Where(predicate: placement => WorldPlacementDeal.IsChild(placement: placement, parent: template))];
+        return [.. server.Definition.Placements.Where(predicate: placement => WorldPlacementDeal.IsChild(
+                parent: template,
+                placement: placement
+            ))];
     }
     private static WorldPlacement Child(WorldServer server, string key) =>
-        Assert.Single(collection: Children(server: server), predicate: child => (child.Id == WorldPlacementDeal.ChildId(template: TemplateId, key: key)));
-    private static Vector3 Offset(int slot) => new(x: (2f * slot), y: 0f, z: 0f);
+        Assert.Single(
+            collection: Children(server: server),
+            predicate: child => (child.Id == WorldPlacementDeal.ChildId(
+                key: key,
+                template: TemplateId
+            ))
+        );
+    private static Vector3 Offset(int slot) => new(
+        x: (2f * slot),
+        y: 0f,
+        z: 0f
+    );
     private static WorldMutation.UpsertStateCell Upsert(string key) => new(
         Principal: WorldPrincipal.Console,
         Row: RowName,
@@ -114,65 +151,172 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     );
     private static string Describe(WorldServer server) => string.Join(
         separator: "|",
-        values: Children(server: server).OrderBy(keySelector: child => child.Id, comparer: StringComparer.Ordinal).Select(selector: child => $"{child.Id}@{child.Position.Value}:{child.PrototypeId}")
+        values: Children(server: server).OrderBy(
+            keySelector: child => child.Id,
+            comparer: StringComparer.Ordinal
+        ).Select(selector: child => $"{child.Id}@{child.Position.Value}:{child.PrototypeId}")
     );
 
     [Fact]
     public void InstanceOwnedTransformAndFacetsSurviveInventoryAndVariantChanges() {
-        var template = Template(new WorldPlacementDeal(RowName,
-            new WorldPlacementDealVariants(VariantRowName, new Dictionary<string, string> { ["1"] = AnchorCreation }),
-            new WorldPlacementDealPreserve(Transform: true, Facets: true)));
-        var variants = new WorldStateRow(Name: CellName.Parse(VariantRowName), Kind: CellKind.Int, Capacity: 4, Cells: []);
-        using var fixture = Fixtures.FreshServer(definition: Document(template, AccountsRow("a", "b"), variants));
-        fixture.Step();
-        var moved = Child(fixture.Server, "a") with { Position = new Vector3(17, 0, 9), YawDegrees = 45, Region = new WorldPlacementRegion(3) };
-        fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, moved));
-        fixture.Step();
-        fixture.Server.EnqueueMutation(Upsert("c"));
-        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(WorldPrincipal.Console, VariantRowName, "a", 1, WorldDocumentWriteKind.Set));
-        fixture.Step();
-        var actual = Child(fixture.Server, "a");
-        Assert.Equal(moved.Position, actual.Position);
-        Assert.Equal(moved.YawDegrees, actual.YawDegrees);
-        Assert.Equal(moved.Region, actual.Region);
-        Assert.Equal(AnchorCreation, actual.PrototypeId);
-        Assert.Equal(moved.DealSlot, actual.DealSlot);
-        Assert.Equal(2, Child(fixture.Server, "c").DealSlot);
-    }
+        var template = Template(new WorldPlacementDeal(
+            RowName,
+            new WorldPlacementDealVariants(
+                VariantRowName,
+                new Dictionary<string, string> { ["1"] = AnchorCreation }
+            ),
+            new WorldPlacementDealPreserve(
+                Transform: true,
+                Facets: true
+            )
+        ));
+        var variants = new WorldStateRow(
+            Name: CellName.Parse(candidate: VariantRowName),
+            Kind: CellKind.Int,
+            Capacity: 4,
+            Cells: []
+        );
+        using var fixture = Fixtures.FreshServer(definition: Document(
+            template,
+            AccountsRow(
+                "a",
+                "b"
+            ),
+            variants
+        ));
 
+        fixture.Step();
+        var moved = Child(
+            fixture.Server,
+            "a"
+        ) with { Position = new Vector3(
+            x: 17,
+            y: 0,
+            z: 9
+        ), YawDegrees = 45, Region = new WorldPlacementRegion(Radius: 3) };
+
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
+            WorldPrincipal.Console,
+            moved
+        ));
+        fixture.Step();
+        fixture.Server.EnqueueMutation(Upsert(key: "c"));
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
+            WorldPrincipal.Console,
+            VariantRowName,
+            "a",
+            1,
+            WorldDocumentWriteKind.Set
+        ));
+        fixture.Step();
+        var actual = Child(
+            fixture.Server,
+            "a"
+        );
+
+        Assert.Equal(
+            moved.Position,
+            actual.Position
+        );
+        Assert.Equal(
+            moved.YawDegrees,
+            actual.YawDegrees
+        );
+        Assert.Equal(
+            moved.Region,
+            actual.Region
+        );
+        Assert.Equal(
+            AnchorCreation,
+            actual.PrototypeId
+        );
+        Assert.Equal(
+            moved.DealSlot,
+            actual.DealSlot
+        );
+        Assert.Equal(
+            2,
+            Child(
+                fixture.Server,
+                "c"
+            ).DealSlot
+        );
+    }
     /// <summary>Three cells deal three children on the first sweep: <c>stores/a</c>, <c>stores/b</c>, <c>stores/c</c>,
     /// each parented to the template at the region's first three offsets, yaw 0, scale 1, carrying the template's
     /// prototype and solid facet. The template itself stays a single row. CONTROL: the same row with no deal facet
     /// deals nothing.</summary>
     [Fact]
     public void ThreeCellsDealThreeChildrenAtTheFirstThreeOffsets() {
-        using var fixture = Fixtures.FreshServer(definition: Dealt("a", "b", "c"));
+        using var fixture = Fixtures.FreshServer(definition: Dealt(
+            "a",
+            "b",
+            "c"
+        ));
 
         fixture.Step();
 
         var children = Children(server: fixture.Server);
 
-        Assert.Equal(expected: 3, actual: children.Count);
+        Assert.Equal(
+            expected: 3,
+            actual: children.Count
+        );
 
         foreach (var (key, slot) in new[] { ("a", 0), ("b", 1), ("c", 2) }) {
-            var child = Child(server: fixture.Server, key: key);
+            var child = Child(
+                server: fixture.Server,
+                key: key
+            );
 
-            Assert.Equal(expected: Offset(slot: slot), actual: child.Position.Value);
-            Assert.Equal(expected: TemplateId, actual: child.Parent);
-            Assert.Equal(expected: StoreCreation, actual: child.PrototypeId);
-            Assert.Equal(expected: 0f, actual: child.YawDegrees);
-            Assert.Equal(expected: 1f, actual: child.Scale);
-            Assert.Equal(expected: new WorldSolid(Margin: 0f), actual: child.Solid);
+            Assert.Equal(
+                expected: Offset(slot: slot),
+                actual: child.Position.Value
+            );
+            Assert.Equal(
+                expected: TemplateId,
+                actual: child.Parent
+            );
+            Assert.Equal(
+                expected: StoreCreation,
+                actual: child.PrototypeId
+            );
+            Assert.Equal(
+                expected: 0f,
+                actual: child.YawDegrees
+            );
+            Assert.Equal(
+                expected: 1f,
+                actual: child.Scale
+            );
+            Assert.Equal(
+                expected: new WorldSolid(Margin: 0f),
+                actual: child.Solid
+            );
             Assert.Null(@object: child.Deal);
             Assert.Null(@object: child.Distribution);
             // The child's world frame composes over the template's: the template stands at (10, 0, 10).
             Assert.Equal(
-                expected: (new Vector3(x: 10f, y: 0f, z: 10f) + Offset(slot: slot)),
-                actual: WorldDefinitionRows.ResolvedPosition(definition: fixture.Server.Definition, placement: child)
+                expected: (new Vector3(
+                    x: 10f,
+                    y: 0f,
+                    z: 10f
+                ) + Offset(slot: slot)),
+                actual: WorldDefinitionRows.ResolvedPosition(
+                    definition: fixture.Server.Definition,
+                    placement: child
+                )
             );
         }
 
-        using var control = Fixtures.FreshServer(definition: Document(row: AccountsRow("a", "b", "c"), template: Template(deal: null)));
+        using var control = Fixtures.FreshServer(definition: Document(
+            row: AccountsRow(
+                "a",
+                "b",
+                "c"
+            ),
+            template: Template(deal: null)
+        ));
 
         control.Step();
 
@@ -182,7 +326,11 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     /// the next sweep; the three already dealt stay where they were.</summary>
     [Fact]
     public void UpsertingAFourthCellAddsTheFourthChildOnTheNextSweep() {
-        using var fixture = Fixtures.FreshServer(definition: Dealt("a", "b", "c"));
+        using var fixture = Fixtures.FreshServer(definition: Dealt(
+            "a",
+            "b",
+            "c"
+        ));
 
         fixture.Step();
 
@@ -191,9 +339,21 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         fixture.Server.EnqueueMutation(mutation: Upsert(key: "d"));
         fixture.Step();
 
-        Assert.Equal(expected: 4, actual: Children(server: fixture.Server).Count);
-        Assert.Equal(expected: Offset(slot: 3), actual: Child(server: fixture.Server, key: "d").Position.Value);
-        Assert.StartsWith(expectedStartString: before, actualString: Describe(server: fixture.Server));
+        Assert.Equal(
+            expected: 4,
+            actual: Children(server: fixture.Server).Count
+        );
+        Assert.Equal(
+            expected: Offset(slot: 3),
+            actual: Child(
+                server: fixture.Server,
+                key: "d"
+            ).Position.Value
+        );
+        Assert.StartsWith(
+            expectedStartString: before,
+            actualString: Describe(server: fixture.Server)
+        );
     }
     /// <summary>Removing the second cell removes its child and leaves the others at their own offsets — a child never
     /// moves when a sibling leaves. The next cell dealt takes the offset the departure freed, the lowest free one,
@@ -202,22 +362,60 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     /// offset 2.</summary>
     [Fact]
     public void RemovingTheSecondCellRemovesItsChildAndLeavesTheOthersInPlace() {
-        using var fixture = Fixtures.FreshServer(definition: Dealt("a", "b", "c"));
+        using var fixture = Fixtures.FreshServer(definition: Dealt(
+            "a",
+            "b",
+            "c"
+        ));
 
         fixture.Step();
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.Console, Row: RowName, Key: "b"));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
+            Principal: WorldPrincipal.Console,
+            Row: RowName,
+            Key: "b"
+        ));
         fixture.Step();
 
-        Assert.Equal(expected: 2, actual: Children(server: fixture.Server).Count);
-        Assert.Equal(expected: Offset(slot: 0), actual: Child(server: fixture.Server, key: "a").Position.Value);
-        Assert.Equal(expected: Offset(slot: 2), actual: Child(server: fixture.Server, key: "c").Position.Value);
+        Assert.Equal(
+            expected: 2,
+            actual: Children(server: fixture.Server).Count
+        );
+        Assert.Equal(
+            expected: Offset(slot: 0),
+            actual: Child(
+                server: fixture.Server,
+                key: "a"
+            ).Position.Value
+        );
+        Assert.Equal(
+            expected: Offset(slot: 2),
+            actual: Child(
+                server: fixture.Server,
+                key: "c"
+            ).Position.Value
+        );
 
         fixture.Server.EnqueueMutation(mutation: Upsert(key: "e"));
         fixture.Step();
 
-        Assert.Equal(expected: 3, actual: Children(server: fixture.Server).Count);
-        Assert.Equal(expected: Offset(slot: 1), actual: Child(server: fixture.Server, key: "e").Position.Value);
-        Assert.Equal(expected: Offset(slot: 2), actual: Child(server: fixture.Server, key: "c").Position.Value);
+        Assert.Equal(
+            expected: 3,
+            actual: Children(server: fixture.Server).Count
+        );
+        Assert.Equal(
+            expected: Offset(slot: 1),
+            actual: Child(
+                server: fixture.Server,
+                key: "e"
+            ).Position.Value
+        );
+        Assert.Equal(
+            expected: Offset(slot: 2),
+            actual: Child(
+                server: fixture.Server,
+                key: "c"
+            ).Position.Value
+        );
     }
     /// <summary>A variant row selects the prototype: a text cell whose text maps, and an integer cell whose value
     /// spelled as text maps, deal the mapped creation; every other cell deals the template's own. Changing the
@@ -225,48 +423,110 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     [Fact]
     public void AVariantRowSelectsThePrototype() {
         var byText = Document(
-            row: AccountsRow("a", "b", "c"),
+            row: AccountsRow(
+                "a",
+                "b",
+                "c"
+            ),
             template: Template(deal: new WorldPlacementDeal(
                 Row: RowName,
-                Variants: new WorldPlacementDealVariants(Row: RowName, Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["b"] = AnchorCreation })
+                Variants: new WorldPlacementDealVariants(
+                    Row: RowName,
+                    Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["b"] = AnchorCreation }
+                )
             ))
         );
 
         using (var fixture = Fixtures.FreshServer(definition: byText)) {
             fixture.Step();
 
-            Assert.Equal(expected: StoreCreation, actual: Child(server: fixture.Server, key: "a").PrototypeId);
-            Assert.Equal(expected: AnchorCreation, actual: Child(server: fixture.Server, key: "b").PrototypeId);
-            Assert.Equal(expected: StoreCreation, actual: Child(server: fixture.Server, key: "c").PrototypeId);
+            Assert.Equal(
+                expected: StoreCreation,
+                actual: Child(
+                    server: fixture.Server,
+                    key: "a"
+                ).PrototypeId
+            );
+            Assert.Equal(
+                expected: AnchorCreation,
+                actual: Child(
+                    server: fixture.Server,
+                    key: "b"
+                ).PrototypeId
+            );
+            Assert.Equal(
+                expected: StoreCreation,
+                actual: Child(
+                    server: fixture.Server,
+                    key: "c"
+                ).PrototypeId
+            );
         }
 
         var byInteger = Document(
-            row: AccountsRow("a", "b", "c"),
+            row: AccountsRow(
+                "a",
+                "b",
+                "c"
+            ),
             variantRow: new WorldStateRow(
                 Name: CellName.Parse(candidate: VariantRowName),
                 Kind: CellKind.Int,
                 Capacity: 4,
-                Cells: [new StateCell(Key: CellName.Parse(candidate: "c"), Value: 2L)]
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: "c"),
+                        Value: 2L
+                    )]
             ),
             template: Template(deal: new WorldPlacementDeal(
                 Row: RowName,
-                Variants: new WorldPlacementDealVariants(Row: VariantRowName, Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["2"] = AnchorCreation })
+                Variants: new WorldPlacementDealVariants(
+                    Row: VariantRowName,
+                    Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["2"] = AnchorCreation }
+                )
             ))
         );
 
         using (var fixture = Fixtures.FreshServer(definition: byInteger)) {
             fixture.Step();
 
-            Assert.Equal(expected: StoreCreation, actual: Child(server: fixture.Server, key: "b").PrototypeId);
-            Assert.Equal(expected: AnchorCreation, actual: Child(server: fixture.Server, key: "c").PrototypeId);
+            Assert.Equal(
+                expected: StoreCreation,
+                actual: Child(
+                    server: fixture.Server,
+                    key: "b"
+                ).PrototypeId
+            );
+            Assert.Equal(
+                expected: AnchorCreation,
+                actual: Child(
+                    server: fixture.Server,
+                    key: "c"
+                ).PrototypeId
+            );
 
-            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: VariantRowName, Key: "c", Value: 1L, Kind: WorldDocumentWriteKind.Set));
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+                Principal: WorldPrincipal.Console,
+                Row: VariantRowName,
+                Key: "c",
+                Value: 1L,
+                Kind: WorldDocumentWriteKind.Set
+            ));
             fixture.Step();
 
-            var redealt = Child(server: fixture.Server, key: "c");
+            var redealt = Child(
+                server: fixture.Server,
+                key: "c"
+            );
 
-            Assert.Equal(expected: StoreCreation, actual: redealt.PrototypeId);
-            Assert.Equal(expected: Offset(slot: 2), actual: redealt.Position.Value);
+            Assert.Equal(
+                expected: StoreCreation,
+                actual: redealt.PrototypeId
+            );
+            Assert.Equal(
+                expected: Offset(slot: 2),
+                actual: redealt.Position.Value
+            );
         }
     }
     /// <summary>An undo removes the children a sweep added as one journal entry, and they stay removed while the row
@@ -274,14 +534,27 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     /// change deals every child again.</summary>
     [Fact]
     public void UndoRemovesTheChildrenASweepAdded() {
-        using var fixture = Fixtures.FreshServer(definition: Dealt("a", "b", "c"));
+        using var fixture = Fixtures.FreshServer(definition: Dealt(
+            "a",
+            "b",
+            "c"
+        ));
 
         fixture.Step();
 
-        Assert.Equal(expected: 3, actual: Children(server: fixture.Server).Count);
-        Assert.Equal(expected: 1, actual: fixture.Server.JournalLength);
+        Assert.Equal(
+            expected: 3,
+            actual: Children(server: fixture.Server).Count
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: fixture.Server.JournalLength
+        );
 
-        fixture.Server.EnqueueUndo(count: 1, principal: WorldPrincipal.Console);
+        fixture.Server.EnqueueUndo(
+            count: 1,
+            principal: WorldPrincipal.Console
+        );
         fixture.Step();
 
         Assert.Empty(collection: Children(server: fixture.Server));
@@ -295,7 +568,10 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         fixture.Server.EnqueueMutation(mutation: Upsert(key: "d"));
         fixture.Step();
 
-        Assert.Equal(expected: 4, actual: Children(server: fixture.Server).Count);
+        Assert.Equal(
+            expected: 4,
+            actual: Children(server: fixture.Server).Count
+        );
     }
     /// <summary>A recorded session whose cells arrive and leave on given ticks replays to the same children on the
     /// same ticks: the tape carries the cell writes, and the sweep re-derives the children from them.</summary>
@@ -315,7 +591,13 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         );
         var name = $"deal-replay-{Guid.NewGuid():N}";
 
-        Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
 
         var recorded = new List<string>();
 
@@ -330,7 +612,11 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
 
                     break;
                 case 3:
-                    _ = transport.SubmitWorldMutation(mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.Console, Row: RowName, Key: "b"));
+                    _ = transport.SubmitWorldMutation(mutation: new WorldMutation.RemoveStateCell(
+                        Principal: WorldPrincipal.Console,
+                        Row: RowName,
+                        Key: "b"
+                    ));
 
                     break;
             }
@@ -343,11 +629,29 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         _ = tape.StopRecording();
 
         // The recorded trajectory is not trivial: children arrive and leave across the ticks.
-        Assert.Equal(expected: 4, actual: recorded.Distinct(comparer: StringComparer.Ordinal).Count());
-        Assert.Contains(expected: "stores/b", collection: recorded[1].Split(separator: '|').Select(selector: static entry => entry.Split(separator: '@')[0]));
-        Assert.DoesNotContain(expected: "stores/b", collection: recorded[3].Split(separator: '|').Select(selector: static entry => entry.Split(separator: '@')[0]));
+        Assert.Equal(
+            expected: 4,
+            actual: recorded.Distinct(comparer: StringComparer.Ordinal).Count()
+        );
+        Assert.Contains(
+            expected: "stores/b",
+            collection: recorded[1].Split(separator: '|').Select(selector: static entry => entry.Split(separator: '@')[0])
+        );
+        Assert.DoesNotContain(
+            expected: "stores/b",
+            collection: recorded[3].Split(separator: '|').Select(selector: static entry => entry.Split(separator: '@')[0])
+        );
 
-        Assert.True(condition: tape.TryBeginDrive(name: name, toTick: null, forkName: $"{name}-fork", documentPath: null, refusal: out refusal), userMessage: $"refused to drive: {refusal}");
+        Assert.True(
+            condition: tape.TryBeginDrive(
+                documentPath: null,
+                forkName: $"{name}-fork",
+                name: name,
+                refusal: out refusal,
+                toTick: null
+            ),
+            userMessage: $"refused to drive: {refusal}"
+        );
 
         var replayed = new List<string>();
 
@@ -360,7 +664,10 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
 
         _ = tape.StopRecording();
 
-        Assert.Equal(expected: recorded, actual: replayed);
+        Assert.Equal(
+            actual: replayed,
+            expected: recorded
+        );
     }
     /// <summary>An authored placement id spelling the child separator refuses by name; the identical row parented
     /// to a dealt template, spelled as that template's child, validates — the one shape the sweep mints.</summary>
@@ -369,47 +676,136 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         var stray = (Dealt("a") with {
             PlacementRowsRaw = [
                 Template(deal: new WorldPlacementDeal(Row: RowName)),
-                new WorldPlacement(Id: "shed/a", PrototypeId: StoreCreation, Position: new DocumentVector3(value: Vector3.Zero), YawDegrees: 0f, Scale: 1f),
+                new WorldPlacement(
+                Id: "shed/a",
+                PrototypeId: StoreCreation,
+                Position: new DocumentVector3(value: Vector3.Zero),
+                YawDegrees: 0f,
+                Scale: 1f
+            ),
             ],
         });
         var dealt = (Dealt("a") with {
             PlacementRowsRaw = [
                 Template(deal: new WorldPlacementDeal(Row: RowName)),
-                new WorldPlacement(Id: WorldPlacementDeal.ChildId(template: TemplateId, key: "a"), PrototypeId: StoreCreation, Position: new DocumentVector3(value: Vector3.Zero), YawDegrees: 0f, Scale: 1f, Parent: TemplateId, DealSlot: 0),
+                new WorldPlacement(
+                Id: WorldPlacementDeal.ChildId(
+                    key: "a",
+                    template: TemplateId
+                ),
+                PrototypeId: StoreCreation,
+                Position: new DocumentVector3(value: Vector3.Zero),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Parent: TemplateId,
+                DealSlot: 0
+            ),
             ],
         });
 
         Laws.RefusalWithControl(
             lawId: "placement-deal.authored-child-id",
-            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(definition: stray, reason: out _),
-            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(definition: dealt, reason: out _)
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: stray,
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: dealt,
+                reason: out _
+            )
         );
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: stray, reason: out var reason));
-        Assert.Contains(expectedSubstring: "'shed/a' spells the dealt-child separator", actualString: reason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: stray,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "'shed/a' spells the dealt-child separator"
+        );
     }
     /// <summary>The deal facet's own refusals, each by name: a row the document does not declare, a slot row, a
     /// capacity past the region's offsets (quoting both), a disc region, a missing distribution, a variant prototype
     /// that resolves to nothing, and the facets a template cannot carry. CONTROL: the well-formed template validates.</summary>
     [Fact]
     public void TheDealFacetRefusesByName() {
-        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: Dealt("a"), reason: out var accepted), userMessage: accepted);
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: Dealt("a"),
+                reason: out var accepted
+            ),
+            userMessage: accepted
+        );
 
-        AssertRefusedNaming(Document(row: AccountsRow("a"), template: Template(deal: new WorldPlacementDeal(Row: "ledger"))), "names state row 'ledger', which state.world does not declare");
-        AssertRefusedNaming(Document(row: new WorldStateRow(Name: CellName.Parse(candidate: RowName), Kind: CellKind.Int), template: Template(deal: new WorldPlacementDeal(Row: RowName))), "which is a slot");
-        AssertRefusedNaming(Document(row: AccountsRow("a"), template: Template(deal: new WorldPlacementDeal(Row: RowName), distribution: Lattice(count: 3))), "has capacity 4, but placements[0].distribution materializes 3 instance(s)");
         AssertRefusedNaming(
-            Document(row: AccountsRow("a"), template: Template(deal: new WorldPlacementDeal(Row: RowName), distribution: new WorldDistribution(Region: new WorldDistributionRegion.Disc(Radius: 2f), Fill: WorldSequence.AdditiveDefault))),
-            "'disc' does not"
-        );
-        AssertRefusedNaming(Document(row: AccountsRow("a"), template: (Template(deal: new WorldPlacementDeal(Row: RowName)) with { Distribution = null })), "requires placements[0].distribution");
-        AssertRefusedNaming(
-            Document(row: AccountsRow("a"), template: Template(deal: new WorldPlacementDeal(Row: RowName, Variants: new WorldPlacementDealVariants(Row: RowName, Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["a"] = "silo" })))),
-            "deal.variants.map['a'] 'silo' names no creation row"
+            definition: Document(
+                row: AccountsRow("a"),
+                template: Template(deal: new WorldPlacementDeal(Row: "ledger"))
+            ),
+            needle: "names state row 'ledger', which state.world does not declare"
         );
         AssertRefusedNaming(
-            Document(row: AccountsRow("a"), template: (Template(deal: new WorldPlacementDeal(Row: RowName)) with { Region = new WorldPlacementRegion(Radius: 1f), Mirror = new WorldPlacementMirror(Normal: new DocumentVector3(value: Vector3.UnitX), Offset: 0f) })),
-            "refused alongside inhabit/attach/respond/mirror/faceSources"
+            definition: Document(
+                row: new WorldStateRow(
+                    Name: CellName.Parse(candidate: RowName),
+                    Kind: CellKind.Int
+                ),
+                template: Template(deal: new WorldPlacementDeal(Row: RowName))
+            ),
+            needle: "which is a slot"
+        );
+        AssertRefusedNaming(
+            definition: Document(
+                row: AccountsRow("a"),
+                template: Template(
+                    deal: new WorldPlacementDeal(Row: RowName),
+                    distribution: Lattice(count: 3)
+                )
+            ),
+            needle: "has capacity 4, but placements[0].distribution materializes 3 instance(s)"
+        );
+        AssertRefusedNaming(
+            definition: Document(
+                row: AccountsRow("a"),
+                template: Template(
+                    deal: new WorldPlacementDeal(Row: RowName),
+                    distribution: new WorldDistribution(
+                        Region: new WorldDistributionRegion.Disc(Radius: 2f),
+                        Fill: WorldSequence.AdditiveDefault
+                    )
+                )
+            ),
+            needle: "'disc' does not"
+        );
+        AssertRefusedNaming(
+            definition: Document(
+                row: AccountsRow("a"),
+                template: (Template(deal: new WorldPlacementDeal(Row: RowName)) with { Distribution = null })
+            ),
+            needle: "requires placements[0].distribution"
+        );
+        AssertRefusedNaming(
+            definition: Document(
+                row: AccountsRow("a"),
+                template: Template(deal: new WorldPlacementDeal(
+                    Row: RowName,
+                    Variants: new WorldPlacementDealVariants(
+                        Row: RowName,
+                        Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["a"] = "silo" }
+                    )
+                ))
+            ),
+            needle: "deal.variants.map['a'] 'silo' names no creation row"
+        );
+        AssertRefusedNaming(
+            definition: Document(
+                row: AccountsRow("a"),
+                template: (Template(deal: new WorldPlacementDeal(Row: RowName)) with { Region = new WorldPlacementRegion(Radius: 1f), Mirror = new WorldPlacementMirror(
+                    Normal: new DocumentVector3(value: Vector3.UnitX),
+                    Offset: 0f
+                ) })
+            ),
+            needle: "refused alongside inhabit/attach/respond/mirror/faceSources"
         );
     }
     /// <summary>A quiet tick — no row change, no other mutation — allocates nothing in the sweep: the per-tick
@@ -417,35 +813,97 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     /// on the code-built document and on the shipped granary court isolated from unrelated island simulation.</summary>
     [Fact]
     public void AQuietTickAllocatesNothingInTheSweep() {
-        var small = Measure(definition: Dealt("a", "b", "c"), seed: null);
-        var smallControl = Measure(definition: Document(row: AccountsRow("a", "b", "c"), template: Template(deal: null)), seed: null);
+        var small = Measure(
+            definition: Dealt(
+                "a",
+                "b",
+                "c"
+            ),
+            seed: null
+        );
+        var smallControl = Measure(
+            definition: Document(
+                row: AccountsRow(
+                    "a",
+                    "b",
+                    "c"
+                ),
+                template: Template(deal: null)
+            ),
+            seed: null
+        );
 
-        output.WriteLine($"fixture: dealt median {small:N0} bytes/tick, control median {smallControl:N0} bytes/tick");
-        Assert.True(condition: (small <= smallControl), userMessage: $"a dealt fixture's quiet tick allocated {small:N0} bytes against the control's {smallControl:N0}");
+        output.WriteLine(message: $"fixture: dealt median {small:N0} bytes/tick, control median {smallControl:N0} bytes/tick");
+        Assert.True(
+            condition: (small <= smallControl),
+            userMessage: $"a dealt fixture's quiet tick allocated {small:N0} bytes against the control's {smallControl:N0}"
+        );
 
         var source = AuthoredGameFixtures.Nexus;
-        var ids = new HashSet<string>(StringComparer.Ordinal) { "granaryCourt", "granaryStore", "granaryAnchor" };
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal) { "granaryCourt", "granaryStore", "granaryAnchor" };
         var island = Fixtures.BuildDocument() with {
             Text = source.Text,
-            CreationsRaw = [.. source.Creations.Where(row => ids.Contains(row.Id))],
-            PlacementRowsRaw = [.. source.Placements.Where(row => row.Id is "granaryCourt" or "granaryStores")],
-            StateRaw = new WorldStateSection(World: [.. source.State.Where(row => row.Name.Value.StartsWith("granaries_", StringComparison.Ordinal))])
+            CreationsRaw = [.. source.Creations.Where(predicate: row => ids.Contains(item: row.Id))],
+            PlacementRowsRaw = [.. source.Placements.Where(predicate: row => (row.Id is "granaryCourt" or "granaryStores"))],
+            StateRaw = new WorldStateSection(World: [.. source.State.Where(predicate: row => row.Name.Value.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "granaries_"
+            ))]),
         };
-        var template = Assert.Single(collection: island.Placements, predicate: static placement => placement.Deal is not null);
-        var seed = new WorldMutation.Batch(Principal: WorldPrincipal.Console, Mutations: [
-            new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: template.Deal!.Row, Key: "bytrcstp001", Value: 0L, Kind: WorldDocumentWriteKind.Set, Text: "bytrcstp001"),
-            new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: template.Deal!.Row, Key: "bytrcstp002", Value: 0L, Kind: WorldDocumentWriteKind.Set, Text: "bytrcstp002"),
-            new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: template.Deal!.Row, Key: "bytrcstp003", Value: 0L, Kind: WorldDocumentWriteKind.Set, Text: "bytrcstp003"),
-        ]);
-        var granaries = Measure(definition: island, seed: seed);
+        var template = Assert.Single(
+            collection: island.Placements,
+            predicate: static placement => (placement.Deal is not null)
+        );
+        var seed = new WorldMutation.Batch(
+            Principal: WorldPrincipal.Console,
+            Mutations: [
+            new WorldMutation.UpsertStateCell(
+                    Principal: WorldPrincipal.Console,
+                    Row: template.Deal!.Row,
+                    Key: "bytrcstp001",
+                    Value: 0L,
+                    Kind: WorldDocumentWriteKind.Set,
+                    Text: "bytrcstp001"
+                ),
+            new WorldMutation.UpsertStateCell(
+                    Principal: WorldPrincipal.Console,
+                    Row: template.Deal!.Row,
+                    Key: "bytrcstp002",
+                    Value: 0L,
+                    Kind: WorldDocumentWriteKind.Set,
+                    Text: "bytrcstp002"
+                ),
+            new WorldMutation.UpsertStateCell(
+                    Principal: WorldPrincipal.Console,
+                    Row: template.Deal!.Row,
+                    Key: "bytrcstp003",
+                    Value: 0L,
+                    Kind: WorldDocumentWriteKind.Set,
+                    Text: "bytrcstp003"
+                ),
+        ]
+        );
+        var granaries = Measure(
+            definition: island,
+            seed: seed
+        );
         var granariesControl = Measure(
-            definition: (island with { PlacementRowsRaw = [.. island.Placements.Select(selector: placement => (ReferenceEquals(objA: placement, objB: template) ? (placement with { Deal = null }) : placement))] }),
+            definition: (island with { PlacementRowsRaw = [.. island.Placements.Select(selector: placement => (ReferenceEquals(
+                    objA: placement,
+                    objB: template
+                )
+            ? (placement with { Deal = null })
+            : placement))] }),
             seed: seed
         );
 
-        output.WriteLine($"granaries: dealt median {granaries:N0} bytes/tick, control median {granariesControl:N0} bytes/tick");
-        Assert.True(condition: (granaries <= granariesControl), userMessage: $"the granaries' quiet tick allocated {granaries:N0} bytes against the control's {granariesControl:N0}");
+        output.WriteLine(message: $"granaries: dealt median {granaries:N0} bytes/tick, control median {granariesControl:N0} bytes/tick");
+        Assert.True(
+            condition: (granaries <= granariesControl),
+            userMessage: $"the granaries' quiet tick allocated {granaries:N0} bytes against the control's {granariesControl:N0}"
+        );
     }
+
     private static long Measure(WorldDefinition definition, WorldMutation? seed) {
         using var fixture = Fixtures.FreshServer(definition: definition);
         var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
@@ -472,7 +930,13 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         return samples[(samples.Length / 2)];
     }
     private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
-        Assert.Contains(expectedSubstring: needle, actualString: reason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: definition,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: needle
+        );
     }
 }

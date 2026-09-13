@@ -18,7 +18,10 @@ public sealed class HumbleGamingBrickExtension : IMachineExtension {
     public void Initialize(IMachineExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterEngine(engine: new GamingBrickEngine(), contentProvider: new HgbCartridgeCompiler());
+        registry.RegisterEngine(
+            engine: new GamingBrickEngine(),
+            contentProvider: new HgbCartridgeCompiler()
+        );
         registry.RegisterEngine(engine: new TuneInstrumentEngine());
     }
 }

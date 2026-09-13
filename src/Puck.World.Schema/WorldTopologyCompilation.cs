@@ -5,7 +5,7 @@ namespace Puck.World;
 /// <summary>The document-anchored entrance to <see cref="TopologyCompilation"/>: a Grid topology a placement's
 /// <c>board</c> facet names takes its world origin from that placement's resolved frame.</summary>
 public static class WorldTopologyCompilation {
-    private static readonly ConditionalWeakTable<LatticeTopology, AnchoredCompile> s_cache = new();
+    private static readonly ConditionalWeakTable<LatticeTopology, AnchoredCompile> Cache = new();
 
     // Anchor is the resolving placement instance, not merely its id — see Find's remarks on why identity (not name)
     // is the correct staleness test.
@@ -14,16 +14,19 @@ public static class WorldTopologyCompilation {
         public CompiledTopology? Compiled;
     }
 
-    /// <summary>Finds the physical topology, if any. Discrete boards never allocate a fluid field.</summary>
-    /// <param name="state">The state section.</param>
-    /// <returns>The first physical topology or null.</returns>
-    public static WorldFieldTopology? FindPhysical(IStateSection? state) {
-        var topologies = state?.Lattices;
-        for (var index = 0; index < (topologies?.Count ?? 0); index++) {
-            if (topologies![index] is WorldFieldTopology field) {
-                return field;
+    // Every real placement carries at most one board facet naming this topology (validated: WorldDefinitionValidator.
+    // Board.cs refuses a second placement claiming the same topology) — the first match is the only one there can be.
+    private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) {
+        foreach (var placement in definition.Placements) {
+            if (string.Equals(
+                a: placement.Board?.Topology,
+                b: topologyName,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return placement;
             }
         }
+
         return null;
     }
 
@@ -45,27 +48,52 @@ public static class WorldTopologyCompilation {
 
         var topologies = definition.StateRaw?.Lattices;
 
-        for (var index = 0; index < (topologies?.Count ?? 0); index++) {
+        for (var index = 0; (index < (topologies?.Count ?? 0)); index++) {
             var topology = topologies![index];
 
-            if ((topology is null) || (topology.Name != name) || !TopologyCompilation.TryValidate(topology, out _)) {
+            if (
+                (topology is null) ||
+                (topology.Name != name) ||
+                !TopologyCompilation.TryValidate(
+                reason: out _,
+                topology: topology
+            )
+            ) {
                 continue;
             }
 
-            var anchor = FindAnchor(definition: definition, topologyName: name);
+            var anchor = FindAnchor(
+                definition: definition,
+                topologyName: name
+            );
 
             if (anchor is null) {
-                return TopologyCompilation.Find(lattices: topologies, name: name);
+                return TopologyCompilation.Find(
+                    lattices: topologies,
+                    name: name
+                );
             }
 
-            var cache = s_cache.GetValue(topology, static _ => new AnchoredCompile());
+            var cache = Cache.GetValue(
+                topology,
+                static _ => new AnchoredCompile()
+            );
 
             lock (cache) {
-                if (!ReferenceEquals(objA: cache.Anchor, objB: anchor) || (cache.Compiled is null)) {
+                if (
+                    !ReferenceEquals(
+                    objA: cache.Anchor,
+                    objB: anchor
+                ) ||
+                    (cache.Compiled is null)
+                ) {
                     cache.Anchor = anchor;
                     cache.Compiled = TopologyCompilation.Compile(
                         topology: topology,
-                        anchorOffset: WorldDefinitionRows.ResolvedFrame(definition: definition, placement: anchor).Position
+                        anchorOffset: WorldDefinitionRows.ResolvedFrame(
+                            definition: definition,
+                            placement: anchor
+                        ).Position
                     );
                 }
 
@@ -75,15 +103,17 @@ public static class WorldTopologyCompilation {
 
         return null;
     }
-    // Every real placement carries at most one board facet naming this topology (validated: WorldDefinitionValidator.
-    // Board.cs refuses a second placement claiming the same topology) — the first match is the only one there can be.
-    private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) {
-        foreach (var placement in definition.Placements) {
-            if (string.Equals(a: placement.Board?.Topology, b: topologyName, comparisonType: StringComparison.Ordinal)) {
-                return placement;
+    /// <summary>Finds the physical topology, if any. Discrete boards never allocate a fluid field.</summary>
+    /// <param name="state">The state section.</param>
+    /// <returns>The first physical topology or null.</returns>
+    public static WorldFieldTopology? FindPhysical(IStateSection? state) {
+        var topologies = state?.Lattices;
+
+        for (var index = 0; (index < (topologies?.Count ?? 0)); index++) {
+            if (topologies![index] is WorldFieldTopology field) {
+                return field;
             }
         }
-
         return null;
     }
 }

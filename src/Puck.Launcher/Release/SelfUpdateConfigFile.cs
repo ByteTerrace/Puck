@@ -27,14 +27,14 @@ public sealed record SelfUpdateConfigFile(
     string TrustAnchorPublicKeySubjectPublicKeyInfoBase64,
     string? CacheRoot = null
 ) {
+    /// <summary>Builds the <see cref="DirectoryReleaseSource"/> this bundle points at.</summary>
+    public DirectoryReleaseSource ToReleaseSource() => new(root: ReleaseSourceDirectory);
     /// <summary>Builds the <see cref="ReleaseTrustAnchor"/> this bundle names.</summary>
     public ReleaseTrustAnchor ToTrustAnchor() => new(
         Algorithm: TrustAnchorAlgorithm,
         Domain: TrustAnchorDomain,
         PublicKeySubjectPublicKeyInfoBase64: TrustAnchorPublicKeySubjectPublicKeyInfoBase64
     );
-    /// <summary>Builds the <see cref="DirectoryReleaseSource"/> this bundle points at.</summary>
-    public DirectoryReleaseSource ToReleaseSource() => new(root: ReleaseSourceDirectory);
     /// <summary>Reads and parses a self-update config file.</summary>
     /// <param name="path">The file's path.</param>
     /// <param name="config">The parsed bundle, when this returns <see langword="true"/>.</param>

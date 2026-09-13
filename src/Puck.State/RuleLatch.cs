@@ -11,7 +11,10 @@ namespace Puck.State;
 /// <param name="Right">The right participant index, or -1.</param>
 public readonly record struct LatchKey(int Left, int Right) {
     /// <summary>The binding of a rule evaluated once per tick.</summary>
-    public static readonly LatchKey None = new(Left: -1, Right: -1);
+    public static readonly LatchKey None = new(
+        Left: -1,
+        Right: -1
+    );
 
     /// <summary>Formats the binding for a checkpoint: empty for <see cref="None"/>, else <c>:left</c> or
     /// <c>:left:right</c>. <c>':'</c> is reserved out of <see cref="CellName"/>, so the rule name it trails can never
@@ -19,9 +22,15 @@ public readonly record struct LatchKey(int Left, int Right) {
     public string Format() => ((Left < 0)
         ? string.Empty
         : ((Right < 0)
-            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $":{Left}")
-            : string.Create(provider: CultureInfo.InvariantCulture, handler: $":{Left}:{Right}")));
-
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $":{Left}"
+            )
+            : string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $":{Left}:{Right}"
+            )
+    ));
     /// <summary>Parses the spelling <see cref="Format"/> produces.</summary>
     /// <param name="text">The spelling.</param>
     /// <param name="binding">The binding.</param>
@@ -40,25 +49,46 @@ public readonly record struct LatchKey(int Left, int Right) {
         text = text[1..];
 
         var split = text.IndexOf(value: ':');
-        var leftText = ((split < 0) ? text : text[..split]);
-        var rightText = ((split < 0) ? ReadOnlySpan<char>.Empty : text[(split + 1)..]);
+        var leftText = ((split < 0)
+            ? text
+            : text[..split]
+        );
+        var rightText = ((split < 0)
+            ? ReadOnlySpan<char>.Empty
+            : text[(split + 1)..]
+        );
 
-        if (!int.TryParse(s: leftText, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var left)) {
+        if (!int.TryParse(
+            s: leftText,
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out var left
+        )) {
             return false;
         }
 
         var right = -1;
 
-        if ((split >= 0) && !int.TryParse(s: rightText, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out right)) {
+        if (
+            (split >= 0) &&
+            !int.TryParse(
+            s: rightText,
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out right
+        )
+        ) {
             return false;
         }
 
-        binding = new LatchKey(Left: left, Right: right);
+        binding = new LatchKey(
+            Left: left,
+            Right: right
+        );
 
         return true;
     }
 }
-
 /// <summary>One rule family's edge latch — per rule name and per binding, whether the gate held at the last
 /// evaluation — kept outside the compiled array because a rule's own effect recompiles it. A bound entry not touched
 /// between <see cref="BeginSweep"/> and <see cref="EndSweep(Dictionary{LatchKey,bool})"/> is closed: that is how a pair that left range, or a
@@ -67,15 +97,16 @@ public sealed class RuleLatch {
     /// <summary>One binding's memoized value and the row versions it was computed against — a scheduler's cache
     /// entry, mutated in place so a steady binding costs one array reuse rather than a fresh allocation.</summary>
     internal sealed class BindingMemo {
-        /// <summary>The binding's cached raw value.</summary>
-        public long Value;
-        /// <summary>The row versions observed when <see cref="Value"/> was computed.</summary>
-        public ulong[] Versions = [];
         /// <summary>The <see cref="RuleSchedule"/> instance <see cref="Versions"/> was captured against — a rule
         /// recompiled under the same name mints a new schedule instance, so an entry whose owner no longer matches
         /// the caller's current schedule names a stale cache, never a coincidental match on row count alone.</summary>
         public object? Owner;
+        /// <summary>The binding's cached raw value.</summary>
+        public long Value;
+        /// <summary>The row versions observed when <see cref="Value"/> was computed.</summary>
+        public ulong[] Versions = [];
     }
+
     /// <summary>The row versions a rule's gate observed the last time it closed, tied to the exact schedule instance
     /// that computed them — the same owner discipline as <see cref="BindingMemo.Owner"/>, and for the same reason.</summary>
     private sealed class GateVersionEntry {
@@ -105,9 +136,92 @@ public sealed class RuleLatch {
         }
     }
 
-    /// <summary>Opens a sweep over one rule's bindings; entries the sweep does not <see cref="Touch"/> are closed by
-    /// <see cref="EndSweep(Dictionary{LatchKey,bool})"/>.</summary>
-    public void BeginSweep() => m_touched.Clear();
+    /// <summary>Returns one rule's per-ordinal binding memo array, sized to <paramref name="count"/> — a stale array
+    /// (a recompile changed the binding count) is replaced, discarding its cached values.</summary>
+    /// <param name="name">The rule's name.</param>
+    /// <param name="binding">The binding this evaluation runs under.</param>
+    /// <param name="count">The rule's current binding count.</param>
+    internal BindingMemo?[] BindingMemos(string name, LatchKey binding, int count) {
+        ref var byBinding = ref CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: m_bindingMemos,
+            exists: out _,
+            key: name
+        );
+
+        byBinding ??= [];
+
+        ref var memos = ref CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: byBinding,
+            exists: out _,
+            key: binding
+        );
+
+        if (
+            (memos is null) ||
+            (memos.Length != count)
+        ) {
+            memos = new BindingMemo?[count];
+        }
+
+        return memos;
+    }
+    /// <summary>Returns the row versions a rule's binding observed the last time its gate closed under the same
+    /// schedule instance, or <see langword="null"/> when never recorded or the recorded entry's owner no longer
+    /// matches <paramref name="owner"/> (a recompile minted a new schedule for this rule name).</summary>
+    /// <param name="name">The rule's name.</param>
+    /// <param name="binding">The binding.</param>
+    /// <param name="owner">The schedule instance the caller will compare the versions against.</param>
+    internal ulong[]? GateVersions(string name, LatchKey binding, object owner) =>
+        ((m_gateVersions.TryGetValue(
+            key: name,
+            value: out var bindings
+        ) &&
+            bindings.TryGetValue(
+            key: binding,
+            value: out var entry
+        ) &&
+            ReferenceEquals(
+            objA: entry.Owner,
+            objB: owner
+        ))
+            ? entry.Versions
+            : null
+        );
+    /// <summary>Records the row versions a rule's binding observed when its gate closed, against the schedule
+    /// instance that computed them.</summary>
+    /// <param name="name">The rule's name.</param>
+    /// <param name="binding">The binding.</param>
+    /// <param name="owner">The schedule instance the versions were captured against.</param>
+    /// <param name="versions">The versions.</param>
+    internal void SetGateVersions(string name, LatchKey binding, object owner, ulong[] versions) {
+        ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: m_gateVersions,
+            exists: out _,
+            key: name
+        );
+        ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: (bindings ??= []),
+            key: binding,
+            exists: out _
+        );
+
+        entry ??= new GateVersionEntry();
+        entry.Owner = owner;
+        entry.Versions = versions;
+    }
+
+    private static void PruneRuleNames<TValue>(Dictionary<string, TValue> dictionary, HashSet<string> live) {
+        if (dictionary.Count == 0) {
+            return;
+        }
+
+        foreach (var name in dictionary.Keys) {
+            if (!live.Contains(item: name)) {
+                _ = dictionary.Remove(key: name);
+            }
+        }
+    }
+
     /// <summary>Folds the latch into a state hash, in compiled order with bindings sorted, so two servers holding the
     /// same latch hash the same regardless of insertion order.</summary>
     /// <param name="hash">The running hash.</param>
@@ -118,7 +232,10 @@ public sealed class RuleLatch {
         foreach (var rule in compiled) {
             hash.Add(value: Fnv1aHash.Compute(values: rule.Name.AsSpan()));
 
-            if (!m_byRule.TryGetValue(key: rule.Name, value: out var bindings)) {
+            if (!m_byRule.TryGetValue(
+                key: rule.Name,
+                value: out var bindings
+            )) {
                 hash.Add(value: 0U);
                 continue;
             }
@@ -126,24 +243,37 @@ public sealed class RuleLatch {
             m_hashScratch.Clear();
             foreach (var pair in bindings) { m_hashScratch.Add(item: pair); }
             var ordered = CollectionsMarshal.AsSpan(list: m_hashScratch);
+
             ordered.Sort(comparison: static (left, right) => {
                 var result = left.Key.Left.CompareTo(value: right.Key.Left);
 
-                return ((result != 0) ? result : left.Key.Right.CompareTo(value: right.Key.Right));
+                return ((result != 0)
+                    ? result
+                    : left.Key.Right.CompareTo(value: right.Key.Right)
+                );
             });
             hash.Add(value: ((uint)ordered.Length));
 
             foreach (var (binding, held) in ordered) {
                 hash.Add(value: ((uint)binding.Left));
                 hash.Add(value: ((uint)binding.Right));
-                hash.Add(value: ((byte)(held ? 1 : 0)));
+                hash.Add(value: ((byte)(held
+                    ? 1
+                    : 0)));
             }
         }
     }
+    /// <summary>Opens a sweep over one rule's bindings; entries the sweep does not <see cref="Touch"/> are closed by
+    /// <see cref="EndSweep(Dictionary{LatchKey,bool})"/>.</summary>
+    public void BeginSweep() => m_touched.Clear();
     /// <summary>Returns one rule's bindings, minting the dictionary on first use.</summary>
     /// <param name="name">The rule's name.</param>
     public Dictionary<LatchKey, bool> Bindings(string name) {
-        ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_byRule, key: name, exists: out _);
+        ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: m_byRule,
+            exists: out _,
+            key: name
+        );
 
         return (bindings ??= []);
     }
@@ -170,60 +300,22 @@ public sealed class RuleLatch {
     public void EndSweep(string name, Dictionary<LatchKey, bool> bindings) {
         EndSweep(bindings: bindings);
 
-        if (m_gateVersions.TryGetValue(key: name, value: out var versions)) {
+        if (m_gateVersions.TryGetValue(
+            key: name,
+            value: out var versions
+        )) {
             foreach (var key in versions) {
                 if (!m_touched.Contains(item: key.Key)) { _ = versions.Remove(key: key.Key); }
             }
         }
-        if (m_bindingMemos.TryGetValue(key: name, value: out var memos)) {
+        if (m_bindingMemos.TryGetValue(
+            key: name,
+            value: out var memos
+        )) {
             foreach (var key in memos) {
                 if (!m_touched.Contains(item: key.Key)) { _ = memos.Remove(key: key.Key); }
             }
         }
-    }
-    /// <summary>Returns the row versions a rule's binding observed the last time its gate closed under the same
-    /// schedule instance, or <see langword="null"/> when never recorded or the recorded entry's owner no longer
-    /// matches <paramref name="owner"/> (a recompile minted a new schedule for this rule name).</summary>
-    /// <param name="name">The rule's name.</param>
-    /// <param name="binding">The binding.</param>
-    /// <param name="owner">The schedule instance the caller will compare the versions against.</param>
-    internal ulong[]? GateVersions(string name, LatchKey binding, object owner) =>
-        ((m_gateVersions.TryGetValue(key: name, value: out var bindings) &&
-            bindings.TryGetValue(key: binding, value: out var entry) &&
-            ReferenceEquals(objA: entry.Owner, objB: owner))
-                ? entry.Versions
-                : null);
-    /// <summary>Records the row versions a rule's binding observed when its gate closed, against the schedule
-    /// instance that computed them.</summary>
-    /// <param name="name">The rule's name.</param>
-    /// <param name="binding">The binding.</param>
-    /// <param name="owner">The schedule instance the versions were captured against.</param>
-    /// <param name="versions">The versions.</param>
-    internal void SetGateVersions(string name, LatchKey binding, object owner, ulong[] versions) {
-        ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_gateVersions, key: name, exists: out _);
-        ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: (bindings ??= []), key: binding, exists: out _);
-
-        entry ??= new GateVersionEntry();
-        entry.Owner = owner;
-        entry.Versions = versions;
-    }
-    /// <summary>Returns one rule's per-ordinal binding memo array, sized to <paramref name="count"/> — a stale array
-    /// (a recompile changed the binding count) is replaced, discarding its cached values.</summary>
-    /// <param name="name">The rule's name.</param>
-    /// <param name="binding">The binding this evaluation runs under.</param>
-    /// <param name="count">The rule's current binding count.</param>
-    internal BindingMemo?[] BindingMemos(string name, LatchKey binding, int count) {
-        ref var byBinding = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_bindingMemos, key: name, exists: out _);
-
-        byBinding ??= [];
-
-        ref var memos = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: byBinding, key: binding, exists: out _);
-
-        if ((memos is null) || (memos.Length != count)) {
-            memos = new BindingMemo?[count];
-        }
-
-        return memos;
     }
     /// <summary>Appends every entry as (<c>name</c> + <see cref="LatchKey.Format"/>, held) — the checkpoint spelling
     /// <see cref="Restore"/> reads back.</summary>
@@ -231,14 +323,20 @@ public sealed class RuleLatch {
     public void Flatten(List<(string, bool)> into) {
         foreach (var (name, bindings) in m_byRule) {
             foreach (var (binding, held) in bindings) {
-                into.Add(item: (string.Concat(str0: name, str1: binding.Format()), held));
+                into.Add(item: (string.Concat(
+                    str0: name,
+                    str1: binding.Format()
+                ), held));
             }
         }
     }
     /// <summary>Returns whether the gate held at the last evaluation of any binding of the rule.</summary>
     /// <param name="name">The rule's name.</param>
     public bool Held(string name) {
-        if (!m_byRule.TryGetValue(key: name, value: out var bindings)) {
+        if (!m_byRule.TryGetValue(
+            key: name,
+            value: out var bindings
+        )) {
             return false;
         }
 
@@ -269,28 +367,31 @@ public sealed class RuleLatch {
             }
         }
 
-        PruneRuleNames(dictionary: m_gateVersions, live: live);
-        PruneRuleNames(dictionary: m_bindingMemos, live: live);
-    }
-    private static void PruneRuleNames<TValue>(Dictionary<string, TValue> dictionary, HashSet<string> live) {
-        if (dictionary.Count == 0) {
-            return;
-        }
-
-        foreach (var name in dictionary.Keys) {
-            if (!live.Contains(item: name)) {
-                _ = dictionary.Remove(key: name);
-            }
-        }
+        PruneRuleNames(
+            dictionary: m_gateVersions,
+            live: live
+        );
+        PruneRuleNames(
+            dictionary: m_bindingMemos,
+            live: live
+        );
     }
     /// <summary>Restores one flattened entry; a spelling that does not parse is dropped rather than mis-keyed.</summary>
     /// <param name="key">The flattened key.</param>
     /// <param name="held">Whether the gate held.</param>
     public void Restore(string key, bool held) {
         var split = key.IndexOf(value: ':');
-        var name = ((split < 0) ? key : key[..split]);
+        var name = ((split < 0)
+            ? key
+            : key[..split]
+        );
 
-        if (LatchKey.TryParse(text: ((split < 0) ? ReadOnlySpan<char>.Empty : key.AsSpan(start: split)), binding: out var binding)) {
+        if (LatchKey.TryParse(
+            text: ((split < 0)
+            ? ReadOnlySpan<char>.Empty
+            : key.AsSpan(start: split)),
+            binding: out var binding
+        )) {
             Bindings(name: name)[binding] = held;
         }
     }

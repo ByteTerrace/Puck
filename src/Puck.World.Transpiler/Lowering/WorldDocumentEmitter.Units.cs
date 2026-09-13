@@ -1,4 +1,4 @@
-﻿using Puck.Transpiler.Units;
+using Puck.Transpiler.Units;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -11,21 +11,18 @@ namespace Puck.World.Transpiler.Lowering;
 /// its bare name. Two fields can therefore share a bare name without sharing a dimension — <c>orbit(yaw:)</c> is
 /// radians, a <c>yaw:</c> property on a pose row is not, and only the qualified form converts.</remarks>
 public static class WorldDocumentEmitterUnits {
-    private static readonly HashSet<string> s_degreesNativeFields = new(StringComparer.Ordinal) {
+    private static readonly HashSet<string> DegreesNativeFields = new(comparer: StringComparer.Ordinal) {
         "yawDegrees", "localYawDegrees", "outwardYawDegrees", "outwardPitchDegrees",
     };
-
     // Qualified `call.argument` keys only: `pitch`/`yaw` are radians as `orbit` arguments and degrees-or-anything
     // as a bare property elsewhere, so a bare name must never reach the radians conversion.
-    private static readonly HashSet<string> s_radiansCallArguments = new(StringComparer.Ordinal) {
+    private static readonly HashSet<string> RadiansCallArguments = new(comparer: StringComparer.Ordinal) {
         "orbit.pitch", "orbit.yaw",
     };
-
-    private static readonly HashSet<string> s_metersFields = new(StringComparer.Ordinal) {
+    private static readonly HashSet<string> MetersFields = new(comparer: StringComparer.Ordinal) {
         "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing", "distance",
     };
-
-    private static readonly HashSet<string> s_fractionFields = new(StringComparer.Ordinal) {
+    private static readonly HashSet<string> FractionFields = new(comparer: StringComparer.Ordinal) {
         "alpha", "opacity", "fraction", "ratio", "percent", "chance", "probability",
     };
 
@@ -36,29 +33,71 @@ public static class WorldDocumentEmitterUnits {
     public static UnitDimension Classify(string fieldKey) {
         ArgumentNullException.ThrowIfNull(fieldKey);
 
-        if (s_radiansCallArguments.Contains(fieldKey)) {
+        if (RadiansCallArguments.Contains(item: fieldKey)) {
             return UnitDimension.Radians;
         }
 
-        var separator = fieldKey.LastIndexOf('.');
-        var bare = ((separator >= 0) ? fieldKey[(separator + 1)..] : fieldKey);
+        var separator = fieldKey.LastIndexOf(value: '.');
+        var bare = ((separator >= 0)
+            ? fieldKey[(separator + 1)..]
+            : fieldKey
+        );
 
-        if (s_degreesNativeFields.Contains(bare) || bare.EndsWith(value: "YawDegrees", comparisonType: StringComparison.Ordinal) || bare.EndsWith(value: "PitchDegrees", comparisonType: StringComparison.Ordinal)) {
+        if (
+            DegreesNativeFields.Contains(item: bare) ||
+            bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "YawDegrees"
+        ) ||
+            bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "PitchDegrees"
+        )
+        ) {
             return UnitDimension.Degrees;
         }
-        if (bare.EndsWith(value: "Radians", comparisonType: StringComparison.Ordinal)) {
+        if (bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Radians"
+        )) {
             return UnitDimension.Radians;
         }
-        if (bare.EndsWith(value: "Seconds", comparisonType: StringComparison.Ordinal)) {
+        if (bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Seconds"
+        )) {
             return UnitDimension.Seconds;
         }
-        if (s_metersFields.Contains(bare) || bare.EndsWith(value: "Meters", comparisonType: StringComparison.Ordinal)) {
+        if (
+            MetersFields.Contains(item: bare) ||
+            bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Meters"
+        )
+        ) {
             return UnitDimension.Meters;
         }
-        if (bare.EndsWith(value: "Hertz", comparisonType: StringComparison.Ordinal)) {
+        if (bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Hertz"
+        )) {
             return UnitDimension.Hertz;
         }
-        if (s_fractionFields.Contains(bare) || bare.EndsWith(value: "Fraction", comparisonType: StringComparison.Ordinal) || bare.EndsWith(value: "Ratio", comparisonType: StringComparison.Ordinal) || bare.EndsWith(value: "Percent", comparisonType: StringComparison.Ordinal)) {
+        if (
+            FractionFields.Contains(item: bare) ||
+            bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Fraction"
+        ) ||
+            bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Ratio"
+        ) ||
+            bare.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Percent"
+        )
+        ) {
             return UnitDimension.Fraction;
         }
 

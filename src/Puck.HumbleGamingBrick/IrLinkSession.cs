@@ -102,6 +102,19 @@ public sealed class IrLinkSession : IDisposable {
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
     }
 
+    /// <summary>Severs the cable: both transceivers lose their peer and the machines step independently again (their
+    /// received line reverts to dark). The machines themselves are untouched (they are owned by the caller, not the
+    /// session).</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+
+        InfraredPort.Disconnect(port: m_firstPort);
+        InfraredPort.Disconnect(port: m_secondPort);
+    }
     /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically — the
     /// seam a host drives in place of the two machines' own <see cref="Machine.Run"/> while they are linked.</summary>
     /// <param name="tCycles">The number of T-cycles to advance each machine this call.</param>
@@ -142,18 +155,5 @@ public sealed class IrLinkSession : IDisposable {
         Dispose();
 
         return token;
-    }
-    /// <summary>Severs the cable: both transceivers lose their peer and the machines step independently again (their
-    /// received line reverts to dark). The machines themselves are untouched (they are owned by the caller, not the
-    /// session).</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        InfraredPort.Disconnect(port: m_firstPort);
-        InfraredPort.Disconnect(port: m_secondPort);
     }
 }

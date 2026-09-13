@@ -16,6 +16,8 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
     // named failure rather than a cryptic crash later. All four GPUs Puck supports clear it on current drivers.
     private const uint RequiredApiVersion = (1u << 22) | (3u << 12);
 
+    private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
+
     private static string FormatApiVersion(uint version) {
         return $"{(version >> 22)}.{(version >> 12) & 0x3FFu}.{version & 0xFFFu}";
     }
@@ -37,18 +39,6 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
 
         return score;
     }
-
-    private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanPhysicalDeviceSelector"/> class.</summary>
-    /// <param name="physicalDeviceApi">The API used to enumerate and inspect physical devices.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="physicalDeviceApi"/> is <see langword="null"/>.</exception>
-    public VulkanPhysicalDeviceSelector(IVulkanPhysicalDeviceApi physicalDeviceApi) {
-        ArgumentNullException.ThrowIfNull(physicalDeviceApi);
-
-        m_physicalDeviceApi = physicalDeviceApi;
-    }
-
     private bool TryCreateCandidate(
         nint instanceHandle,
         nint surfaceHandle,
@@ -193,6 +183,15 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
         }
 
         return bestCandidate.Value.Device;
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanPhysicalDeviceSelector"/> class.</summary>
+    /// <param name="physicalDeviceApi">The API used to enumerate and inspect physical devices.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="physicalDeviceApi"/> is <see langword="null"/>.</exception>
+    public VulkanPhysicalDeviceSelector(IVulkanPhysicalDeviceApi physicalDeviceApi) {
+        ArgumentNullException.ThrowIfNull(physicalDeviceApi);
+
+        m_physicalDeviceApi = physicalDeviceApi;
     }
 
     private readonly record struct Candidate(VkPhysicalDevice Device, int Score);

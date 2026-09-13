@@ -4,6 +4,11 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class HudFrameSourceGenerationLawTests {
+    private static OverlayFrameSourceGeneration NewGeneration(List<string> events) => new(
+        retain: key => events.Add(item: $"retain:{key}"),
+        release: key => events.Add(item: $"release:{key}")
+    );
+
     [Fact]
     public void ASourceRetainsAcrossVisibleGenerationsAndReleasesWhenAbsent() {
         var events = new List<string>();
@@ -18,25 +23,11 @@ public sealed class HudFrameSourceGenerationLawTests {
         generation.BeginGeneration();
         generation.EndGeneration();
 
-        Assert.Equal(actual: events, expected: ["retain:2", "release:2"]);
+        Assert.Equal(
+            actual: events,
+            expected: ["retain:2", "release:2"]
+        );
         Assert.False(condition: generation.IsActive(key: 2));
-    }
-    [Fact]
-    public void RepeatedElementsShareOneGenerationReference() {
-        var events = new List<string>();
-        var generation = NewGeneration(events: events);
-
-        generation.BeginGeneration();
-        generation.MarkActive(key: 0);
-        generation.MarkActive(key: 0);
-        generation.MarkActive(key: 1);
-        generation.EndGeneration();
-        generation.BeginGeneration();
-        generation.MarkActive(key: 1);
-        generation.EndGeneration();
-
-        Assert.Equal(actual: events, expected: ["retain:0", "retain:1", "release:0"]);
-        Assert.True(condition: generation.IsActive(key: 1));
     }
     [Fact]
     public void ASourceReturningAfterRetirementIsRetainedAgain() {
@@ -52,11 +43,29 @@ public sealed class HudFrameSourceGenerationLawTests {
         generation.MarkActive(key: 3);
         generation.EndGeneration();
 
-        Assert.Equal(actual: events, expected: ["retain:3", "release:3", "retain:3"]);
+        Assert.Equal(
+            actual: events,
+            expected: ["retain:3", "release:3", "retain:3"]
+        );
     }
+    [Fact]
+    public void RepeatedElementsShareOneGenerationReference() {
+        var events = new List<string>();
+        var generation = NewGeneration(events: events);
 
-    private static OverlayFrameSourceGeneration NewGeneration(List<string> events) => new(
-        retain: key => events.Add(item: $"retain:{key}"),
-        release: key => events.Add(item: $"release:{key}")
-    );
+        generation.BeginGeneration();
+        generation.MarkActive(key: 0);
+        generation.MarkActive(key: 0);
+        generation.MarkActive(key: 1);
+        generation.EndGeneration();
+        generation.BeginGeneration();
+        generation.MarkActive(key: 1);
+        generation.EndGeneration();
+
+        Assert.Equal(
+            actual: events,
+            expected: ["retain:0", "retain:1", "release:0"]
+        );
+        Assert.True(condition: generation.IsActive(key: 1));
+    }
 }

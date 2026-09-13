@@ -7,7 +7,6 @@ namespace Puck.World.Server;
 /// <param name="CompletedSteps">The host's synchronous step count.</param>
 /// <param name="RuntimeState">The complete provider-owned checkpoint encoding.</param>
 public sealed record WorldMachineCheckpoint(string Name, string Engine, ulong Generation, long CompletedSteps, byte[] RuntimeState);
-
 /// <summary>Durable state owned by a world's machine host, captured at an authoritative world boundary.</summary>
 /// <param name="Revision">The machine inventory revision.</param>
 /// <param name="NextGeneration">The next generation available to a replacement machine.</param>
@@ -16,9 +15,13 @@ public sealed record WorldMachineCheckpoint(string Name, string Engine, ulong Ge
 public sealed record WorldMachineHostCheckpoint(ulong Revision, ulong NextGeneration, bool AnyEverPumped,
     IReadOnlyList<WorldMachineCheckpoint> Instances) {
     /// <summary>An empty machine inventory for compositions without a machine host.</summary>
-    public static WorldMachineHostCheckpoint Empty { get; } = new(0, 1, false, []);
+    public static WorldMachineHostCheckpoint Empty { get; } = new(
+        AnyEverPumped: false,
+        Instances: [],
+        NextGeneration: 1,
+        Revision: 0
+    );
 }
-
 /// <summary>Optional complete-state persistence for a world machine host. Unsupported live state refuses capture;
 /// a failed restore requires disposal of the private, newly created host.</summary>
 public interface IWorldMachineCheckpointHost {

@@ -9,6 +9,7 @@ public interface IShaderPipelinePassConstants {
     uint SizeBytes { get; }
     /// <summary>Gets the stages that consume the block.</summary>
     GpuShaderStage Stages { get; }
+
     /// <summary>Writes one complete block into the supplied destination.</summary>
     void Write(in FrameContext context, in ShaderFrameInput input, uint passWidth, uint passHeight, ulong frameCounter, Span<byte> destination);
 }

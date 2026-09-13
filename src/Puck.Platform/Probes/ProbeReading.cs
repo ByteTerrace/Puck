@@ -38,8 +38,14 @@ public readonly struct ProbeReading {
     /// <see cref="ProbeReadingLimits.MaxChannels"/>, or <paramref name="outputSlot"/> is less than <c>-1</c>.</exception>
     public ProbeReading(long sequence, long captureTimestamp, long completionTimestamp, FixedQ4816 confidence, int channelCount, in ProbeChannelValues channels, int outputSlot = -1) {
         ArgumentOutOfRangeException.ThrowIfNegative(channelCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(channelCount, ProbeReadingLimits.MaxChannels);
-        ArgumentOutOfRangeException.ThrowIfLessThan(outputSlot, -1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            channelCount,
+            ProbeReadingLimits.MaxChannels
+        );
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            outputSlot,
+            -1
+        );
 
         Sequence = sequence;
         CaptureTimestamp = captureTimestamp;
@@ -50,20 +56,20 @@ public readonly struct ProbeReading {
         OutputSlot = outputSlot;
     }
 
-    /// <summary>Gets the publication ordinal.</summary>
-    public long Sequence { get; }
     /// <summary>Gets the analyzed frame's capture timestamp, in the <see cref="System.Diagnostics.Stopwatch"/> domain.</summary>
     public long CaptureTimestamp { get; }
-    /// <summary>Gets this reading's completion timestamp, in the <see cref="System.Diagnostics.Stopwatch"/> domain.</summary>
-    public long CompletionTimestamp { get; }
-    /// <summary>Gets the unipolar confidence.</summary>
-    public FixedQ4816 Confidence { get; }
     /// <summary>Gets the number of valid channels.</summary>
     public int ChannelCount { get; }
     /// <summary>Gets the channel values; only the first <see cref="ChannelCount"/> slots are valid.</summary>
     public ProbeChannelValues Channels { get; }
+    /// <summary>Gets this reading's completion timestamp, in the <see cref="System.Diagnostics.Stopwatch"/> domain.</summary>
+    public long CompletionTimestamp { get; }
+    /// <summary>Gets the unipolar confidence.</summary>
+    public FixedQ4816 Confidence { get; }
     /// <summary>Gets the mask texture slot, or <c>-1</c> when this reading carries no mask.</summary>
     public int OutputSlot { get; }
+    /// <summary>Gets the publication ordinal.</summary>
+    public long Sequence { get; }
 
     /// <summary>Reads one channel's value by ordinal.</summary>
     /// <param name="channel">The channel ordinal (<c>0..</c><see cref="ChannelCount"/><c>-1</c>).</param>

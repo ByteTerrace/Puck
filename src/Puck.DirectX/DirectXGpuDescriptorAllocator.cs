@@ -51,7 +51,9 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         var totalDescriptors = (((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount) + sizes.AccelerationStructureCount);
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-            NumDescriptors = ((totalDescriptors > 0) ? totalDescriptors : 1),
+            NumDescriptors = ((totalDescriptors > 0)
+            ? totalDescriptors
+            : 1),
             Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         };
 
@@ -62,9 +64,7 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         );
 
         var heapPtr = ((ID3D12DescriptorHeap*)heap);
-        var descriptorSize = device->GetDescriptorHandleIncrementSize(
-            DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-        );
+        var descriptorSize = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         var pool = new DirectXDescriptorPool {
             HeapHandle = ((nint)heap),
             DescriptorSize = descriptorSize,
@@ -143,7 +143,11 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
     ) {
         // The acceleration-structure SRV path is DXR (Windows 10 1809+); a caller only reaches it after the
         // acceleration structure reported supported, which implies that OS, so an older OS is a no-op.
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)) {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            10,
+            0,
+            17763
+        )) {
             return;
         }
 

@@ -11,95 +11,38 @@ namespace Puck.World.Tests;
 /// per-frame render path.
 /// </summary>
 public sealed class WorldLookLaneEvaluatorLawTests {
-    [Theory]
-    [InlineData("clamp(0.5, 1, 0)")]
-    [InlineData("sign((9999999999999999999999999999 * 9999999999999999999999999999) - (9999999999999999999999999999 * 9999999999999999999999999999))")]
-    public void InvalidArithmeticReadsZero(string expression) =>
-        Assert.Equal(0f, WorldLookLaneEvaluator.Evaluate(ValueExpression.Parse(expression), Fixtures.BuildDocument(), 0, -1));
-
-    [Fact]
-    public void LanesRoundTripThroughTheWorldSourceGeneratedContext() {
-        var document = Fixtures.BuildDocument() with {
-            LooksRaw = new(Rows: [new("probe", new WorldLookSource.Catalog(0), 1f,
-                WorldLookMotion.Default with { Lanes = [ValueExpression.Parse("0.6"), null, ValueExpression.Parse("1")] })]),
-        };
-        var json = System.Text.Json.JsonSerializer.Serialize(document, WorldJsonContext.Default.WorldDefinition);
-        var restored = System.Text.Json.JsonSerializer.Deserialize(json, WorldJsonContext.Default.WorldDefinition)!;
-        Assert.Equal(new System.Numerics.Vector4(0.6f, 0f, 1f, 0f),
-            WorldLookLaneEvaluator.EvaluateLanes(restored.Looks[0].Motion.Lanes, restored, 0, -1));
-    }
-
-    [Fact]
-    public void FourAnonymousLanesPreserveInteriorGapsAndTheFourthValue() {
-        ValueExpression?[] lanes = [ValueExpression.Parse("0.25"), null, ValueExpression.Parse("0.75"), ValueExpression.Parse("1")];
-        Assert.Equal(new System.Numerics.Vector4(0.25f, 0f, 0.75f, 1f),
-            WorldLookLaneEvaluator.EvaluateLanes(lanes, Fixtures.BuildDocument(), 0, -1));
-        var options = new System.Text.Json.JsonSerializerOptions();
-        options.Converters.Add(new WorldRenderLanesConverter());
-        var encoded = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ValueExpression?>>(lanes, options);
-        var decoded = System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ValueExpression?>>(encoded, options);
-        Assert.Equal(4, decoded!.Count);
-        Assert.Null(decoded[1]);
-        var trimmed = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ValueExpression?>>([lanes[0], null, null, null], options);
-        using var json = System.Text.Json.JsonDocument.Parse(trimmed);
-        Assert.Equal(1, json.RootElement.GetArrayLength());
-        Assert.Throws<System.Text.Json.JsonException>(() =>
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ValueExpression?>>("[null,null,null,null,null]", options));
-    }
     [Fact]
     public void ALiteralExpressionEvaluatesToItsOwnValue() {
         var definition = Fixtures.BuildDocument();
         var expression = ValueExpression.Parse(text: "0.5");
 
         var value = WorldLookLaneEvaluator.Evaluate(
-            expression: expression,
+            bodyIndex: -1,
             definition: definition,
-            tick: 0ul,
-            bodyIndex: -1
+            expression: expression,
+            tick: 0ul
         );
 
-        Assert.Equal(expected: 0.5f, actual: value);
+        Assert.Equal(
+            actual: value,
+            expected: 0.5f
+        );
     }
     [Fact]
     public void ANullExpressionEvaluatesToZero() {
         var definition = Fixtures.BuildDocument();
 
         var value = WorldLookLaneEvaluator.Evaluate(
+            bodyIndex: -1,
+            definition: definition,
             expression: null,
-            definition: definition,
-            tick: 0ul,
-            bodyIndex: -1
+            tick: 0ul
         );
 
-        Assert.Equal(expected: 0f, actual: value);
-    }
-    [Fact]
-    public void ArithmeticOverLiteralsEvaluatesExactly() {
-        var definition = Fixtures.BuildDocument();
-        var expression = ValueExpression.Parse(text: "clamp(0.2 + 0.9, 0, 1)");
-
-        var value = WorldLookLaneEvaluator.Evaluate(
-            expression: expression,
-            definition: definition,
-            tick: 0ul,
-            bodyIndex: -1
+        Assert.Equal(
+            actual: value,
+            expected: 0f
         );
-
-        Assert.Equal(expected: 1f, actual: value);
-    }
-    [Fact]
-    public void DivisionByZeroReadsZeroRatherThanThrowing() {
-        var definition = Fixtures.BuildDocument();
-        var expression = ValueExpression.Parse(text: "1 / 0");
-
-        var value = WorldLookLaneEvaluator.Evaluate(
-            expression: expression,
-            definition: definition,
-            tick: 0ul,
-            bodyIndex: -1
-        );
-
-        Assert.Equal(expected: 0f, actual: value);
     }
     [Fact]
     public void AnUnsupportedTokenReadsZeroRatherThanThrowing() {
@@ -112,12 +55,147 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         ]);
 
         var value = WorldLookLaneEvaluator.Evaluate(
-            expression: expression,
+            bodyIndex: -1,
             definition: definition,
-            tick: 0ul,
-            bodyIndex: -1
+            expression: expression,
+            tick: 0ul
         );
 
-        Assert.Equal(expected: 0f, actual: value);
+        Assert.Equal(
+            actual: value,
+            expected: 0f
+        );
+    }
+    [Fact]
+    public void ArithmeticOverLiteralsEvaluatesExactly() {
+        var definition = Fixtures.BuildDocument();
+        var expression = ValueExpression.Parse(text: "clamp(0.2 + 0.9, 0, 1)");
+
+        var value = WorldLookLaneEvaluator.Evaluate(
+            bodyIndex: -1,
+            definition: definition,
+            expression: expression,
+            tick: 0ul
+        );
+
+        Assert.Equal(
+            actual: value,
+            expected: 1f
+        );
+    }
+    [Fact]
+    public void DivisionByZeroReadsZeroRatherThanThrowing() {
+        var definition = Fixtures.BuildDocument();
+        var expression = ValueExpression.Parse(text: "1 / 0");
+
+        var value = WorldLookLaneEvaluator.Evaluate(
+            bodyIndex: -1,
+            definition: definition,
+            expression: expression,
+            tick: 0ul
+        );
+
+        Assert.Equal(
+            actual: value,
+            expected: 0f
+        );
+    }
+    [Fact]
+    public void FourAnonymousLanesPreserveInteriorGapsAndTheFourthValue() {
+        ValueExpression?[] lanes = [ValueExpression.Parse(text: "0.25"), null, ValueExpression.Parse(text: "0.75"), ValueExpression.Parse(text: "1")];
+
+        Assert.Equal(
+            new System.Numerics.Vector4(
+                w: 1f,
+                x: 0.25f,
+                y: 0f,
+                z: 0.75f
+            ),
+            WorldLookLaneEvaluator.EvaluateLanes(
+                lanes,
+                Fixtures.BuildDocument(),
+                0,
+                -1
+            )
+        );
+        var options = new System.Text.Json.JsonSerializerOptions();
+
+        options.Converters.Add(item: new WorldRenderLanesConverter());
+        var encoded = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ValueExpression?>>(
+            options: options,
+            value: lanes
+        );
+        var decoded = System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ValueExpression?>>(
+            json: encoded,
+            options: options
+        );
+
+        Assert.Equal(
+            4,
+            decoded!.Count
+        );
+        Assert.Null(@object: decoded[1]);
+        var trimmed = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ValueExpression?>>(
+            [lanes[0], null, null, null],
+            options
+        );
+        using var json = System.Text.Json.JsonDocument.Parse(trimmed);
+
+        Assert.Equal(
+            1,
+            json.RootElement.GetArrayLength()
+        );
+        Assert.Throws<System.Text.Json.JsonException>(testCode: () =>
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ValueExpression?>>(
+            json: "[null,null,null,null,null]",
+            options: options
+        ));
+    }
+    [InlineData("clamp(0.5, 1, 0)")]
+    [InlineData("sign((9999999999999999999999999999 * 9999999999999999999999999999) - (9999999999999999999999999999 * 9999999999999999999999999999))")]
+    [Theory]
+    public void InvalidArithmeticReadsZero(string expression) =>
+        Assert.Equal(
+            0f,
+            WorldLookLaneEvaluator.Evaluate(
+                ValueExpression.Parse(text: expression),
+                Fixtures.BuildDocument(),
+                0,
+                -1
+            )
+        );
+    [Fact]
+    public void LanesRoundTripThroughTheWorldSourceGeneratedContext() {
+        var document = Fixtures.BuildDocument() with {
+            LooksRaw = new(Rows: [new(
+                "probe",
+                new WorldLookSource.Catalog(Index: 0),
+                1f,
+                WorldLookMotion.Default with { Lanes = [ValueExpression.Parse(text: "0.6"), null, ValueExpression.Parse(text: "1")] }
+            )]),
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            document,
+            WorldJsonContext.Default.WorldDefinition
+        );
+        var restored = System.Text.Json.JsonSerializer.Deserialize(
+            json: json,
+            jsonTypeInfo: WorldJsonContext.Default.WorldDefinition
+        )!;
+
+        Assert.Equal(
+            new System.Numerics.Vector4(
+                w: 0f,
+                x: 0.6f,
+                y: 0f,
+                z: 1f
+            ),
+            WorldLookLaneEvaluator.EvaluateLanes(
+                restored.Looks[0].Motion.Lanes,
+                restored,
+                0,
+                -1
+            )
+        );
     }
 }

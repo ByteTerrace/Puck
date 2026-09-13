@@ -22,7 +22,6 @@ public interface IDocumentVocabulary {
     /// <param name="fieldKey">The bare property name, or the qualified <c>call.argument</c> key.</param>
     /// <returns>The field's dimension, or <see cref="UnitDimension.None"/> when it admits no unit.</returns>
     UnitDimension ClassifyField(string fieldKey);
-
     /// <summary>Returns the JSON key a call's positional argument fills.</summary>
     /// <param name="callName">The call's name as written.</param>
     /// <param name="positionalIndex">The argument's 0-based position.</param>
@@ -51,125 +50,185 @@ public sealed class DocumentScope(
 ) {
     /// <summary>Gets the document vocabulary being lowered against.</summary>
     public IDocumentVocabulary Vocabulary { get; } = vocabulary;
-
     /// <summary>Gets the base directory relative asset paths resolve against.</summary>
     public string? BasePath { get; } = basePath;
-
     /// <summary>Gets the <c>let</c> bindings in scope.</summary>
     public Dictionary<string, ExpressionNode> Constants { get; } = (constants ?? []);
-
     /// <summary>Gets the <c>template</c> declarations in scope.</summary>
     public Dictionary<string, TemplateNode> Templates { get; } = (templates ?? []);
-
     /// <summary>Gets the JSON-pointer-to-span map being filled, or <see langword="null"/>.</summary>
     public SourceMap? SourceMap { get; } = sourceMap;
-
     /// <summary>Gets the bag refusals are reported into.</summary>
     public DiagnosticBag Diagnostics { get; } = (diagnostics ?? new DiagnosticBag());
-
     /// <summary>Gets the document's declared schema.</summary>
     public string? Schema { get; } = schema;
-
     /// <summary>Gets or sets the JSON pointer lowering is currently positioned at.</summary>
     public string CurrentPointer { get; set; } = currentPointer;
-
     /// <summary>Gets the lambda parameters bound in this scope, as already-lowered values.</summary>
     /// <remarks>Separate from <see cref="Constants"/> because a bound value is a JSON node, not an expression that
     /// could be lowered again; a local shadows a constant of the same name.</remarks>
     public Dictionary<string, JsonNode?> Locals { get; private init; } = [];
 
     private Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> m_values = [];
-    private Dictionary<string, DocumentScope> m_arguments = new(StringComparer.Ordinal);
-    private Dictionary<string, DocumentScope> m_templateScopes = new(StringComparer.Ordinal);
-    private HashSet<string> m_evaluating = new(StringComparer.Ordinal);
+    private Dictionary<string, DocumentScope> m_arguments = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, DocumentScope> m_templateScopes = new(comparer: StringComparer.Ordinal);
+    private HashSet<string> m_evaluating = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Gets the work budget shared by every scope of this compilation.</summary>
     public DocumentEvaluationBudget Budget { get; init; } = new();
 
+    internal void BindArgument(string name, ExpressionNode expression, DocumentScope caller) {
+        Constants[name] = expression;
+        m_arguments[name] = caller;
+    }
+    internal DocumentScope TemplateDefinitionScope(string name) => m_templateScopes.GetValueOrDefault(
+        defaultValue: this,
+        key: name
+    );
+    // Evaluator-only borrowed values: never mutate or attach these nodes to an output container.
+    internal bool TryEvaluateBinding(string name, string? fieldKey, out JsonNode? value) {
+        if (Locals.TryGetValue(
+            key: name,
+            value: out value
+        )) {
+            return true;
+        }
+        if (!Constants.TryGetValue(
+            key: name,
+            value: out var expression
+        )) {
+            return false;
+        }
+        var key = (name, fieldKey);
+
+        if (
+            m_values.TryGetValue(
+            key: key,
+            value: out var cached
+        ) &&
+            ReferenceEquals(
+            objA: cached.Expression,
+            objB: expression
+        )
+        ) {
+            value = cached.Value;
+            return true;
+        }
+        if (!m_evaluating.Add(item: name)) {
+            throw new DocumentEvaluationException(
+                $"The binding '{name}' refers to itself.",
+                expression.Span,
+                PuckDiagnosticCodes.InvalidValue
+            );
+        }
+        try {
+            var lexical = (m_arguments.TryGetValue(
+                key: name,
+                value: out var caller
+            )
+                ? caller
+                : ForConstant()
+            );
+
+            value = DocumentLowering.EvaluateValue(
+                expr: expression,
+                fieldKey: fieldKey,
+                scope: lexical
+            );
+            m_values[key] = (expression, value);
+            return true;
+        } finally {
+            m_evaluating.Remove(item: name);
+        }
+    }
+
+    /// <summary>Gets a scope for lowering a CONSTANT: the same constants and templates, with no locals in scope.</summary>
+    /// <remarks>A <c>let</c> is a document-level value and cannot read a loop binding or a lambda parameter — which
+    /// is both what a reader expects of it and what makes its lowered value safe to keep.</remarks>
+    /// <returns>This scope when it already binds no locals, or a locals-free one.</returns>
+    public DocumentScope ForConstant() => ((Locals.Count == 0)
+        ? this
+        : new(
+            vocabulary: Vocabulary,
+            basePath: BasePath,
+            constants: Constants,
+            templates: Templates,
+            sourceMap: SourceMap,
+            diagnostics: Diagnostics,
+            schema: Schema,
+            currentPointer: CurrentPointer
+        ) {
+        Budget = Budget,
+        m_arguments = m_arguments,
+        m_evaluating = m_evaluating,
+        m_templateScopes = m_templateScopes,
+        m_values = m_values,
+    }
+    );
     /// <summary>Indexes document-level declarations before either vocabulary emits rows.</summary>
     /// <param name="statements">The statements in this lexical document scope.</param>
     public void IndexDeclarations(IReadOnlyList<StatementNode> statements) {
         foreach (var statement in statements) {
             if (statement is LetNode let) {
-                if (!Constants.TryAdd(let.Name, let.Value)) {
-                    Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Duplicate constant '{let.Name}'.", let.Span);
+                if (!Constants.TryAdd(
+                    key: let.Name,
+                    value: let.Value
+                )) {
+                    Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.InvalidValue,
+                        message: $"Duplicate constant '{let.Name}'.",
+                        span: let.Span
+                    );
                 } else { m_arguments[let.Name] = ForConstant(); }
             } else if (statement is TemplateNode template) {
-                if (!Templates.TryAdd(template.Name, template)) {
-                    Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Duplicate template '{template.Name}'.", template.Span);
+                if (!Templates.TryAdd(
+                    key: template.Name,
+                    value: template
+                )) {
+                    Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.InvalidValue,
+                        message: $"Duplicate template '{template.Name}'.",
+                        span: template.Span
+                    );
                 } else { m_templateScopes[template.Name] = ForConstant(); }
-                if (template.Parameters.Select(parameter => parameter.Name).Distinct(StringComparer.Ordinal).Count() != template.Parameters.Count) {
-                    Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Template '{template.Name}' repeats a parameter name.", template.Span);
+                if (template.Parameters.Select(selector: parameter => parameter.Name).Distinct(comparer: StringComparer.Ordinal).Count() != template.Parameters.Count) {
+                    Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.InvalidValue,
+                        message: $"Template '{template.Name}' repeats a parameter name.",
+                        span: template.Span
+                    );
                 }
             }
         }
     }
-
     /// <summary>Resolves a lexical binding into an independently owned JSON value.</summary>
     /// <param name="name">The binding's name.</param>
     /// <param name="value">The resolved value, which may be null.</param>
     /// <param name="fieldKey">The destination field used to validate unit suffixes.</param>
     /// <returns>True when a local, template argument or constant bears the name.</returns>
     public bool TryLowerBinding(string name, out JsonNode? value, string? fieldKey = null) {
-        var found = TryEvaluateBinding(name, fieldKey, out value);
-        value = Budget.Copy(value, Constants.TryGetValue(name, out var expression) ? expression.Span : new SourceSpan(0, 1, 1, 1));
+        var found = TryEvaluateBinding(
+            fieldKey: fieldKey,
+            name: name,
+            value: out value
+        );
+
+        value = Budget.Copy(
+            value,
+            (Constants.TryGetValue(
+                key: name,
+                value: out var expression
+            )
+            ? expression.Span
+            : new SourceSpan(
+                    Column: 1,
+                    Length: 1,
+                    Line: 1,
+                    Offset: 0
+                ))
+        );
         return found;
     }
-
-    // Evaluator-only borrowed values: never mutate or attach these nodes to an output container.
-    internal bool TryEvaluateBinding(string name, string? fieldKey, out JsonNode? value) {
-        if (Locals.TryGetValue(name, out value)) {
-            return true;
-        }
-        if (!Constants.TryGetValue(name, out var expression)) {
-            return false;
-        }
-        var key = (name, fieldKey);
-        if (m_values.TryGetValue(key, out var cached) && ReferenceEquals(cached.Expression, expression)) {
-            value = cached.Value;
-            return true;
-        }
-        if (!m_evaluating.Add(name)) {
-            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue);
-        }
-        try {
-            var lexical = m_arguments.TryGetValue(name, out var caller) ? caller : ForConstant();
-            value = DocumentLowering.EvaluateValue(expression, lexical, fieldKey);
-            m_values[key] = (expression, value);
-            return true;
-        } finally {
-            m_evaluating.Remove(name);
-        }
-    }
-
-    internal void BindArgument(string name, ExpressionNode expression, DocumentScope caller) {
-        Constants[name] = expression;
-        m_arguments[name] = caller;
-    }
-
-    internal DocumentScope TemplateDefinitionScope(string name) => m_templateScopes.GetValueOrDefault(name, this);
-
-    /// <summary>Gets a scope for lowering a CONSTANT: the same constants and templates, with no locals in scope.</summary>
-    /// <remarks>A <c>let</c> is a document-level value and cannot read a loop binding or a lambda parameter — which
-    /// is both what a reader expects of it and what makes its lowered value safe to keep.</remarks>
-    /// <returns>This scope when it already binds no locals, or a locals-free one.</returns>
-    public DocumentScope ForConstant() => ((Locals.Count == 0) ? this : new(
-        vocabulary: Vocabulary,
-        basePath: BasePath,
-        constants: Constants,
-        templates: Templates,
-        sourceMap: SourceMap,
-        diagnostics: Diagnostics,
-        schema: Schema,
-        currentPointer: CurrentPointer
-    ) {
-        m_values = m_values,
-        m_arguments = m_arguments,
-        m_templateScopes = m_templateScopes,
-        m_evaluating = m_evaluating,
-        Budget = Budget,
-    });
-
     /// <summary>Creates a scope identical to this one but carrying a different constant set, for a template
     /// invocation's bound parameters.</summary>
     /// <param name="invocationConstants">The constants the nested scope sees.</param>
@@ -184,11 +243,13 @@ public sealed class DocumentScope(
         schema: Schema,
         currentPointer: CurrentPointer
     ) {
-        m_arguments = new(m_arguments, StringComparer.Ordinal),
+        m_arguments = new(
+        m_arguments,
+        StringComparer.Ordinal
+    ),
         m_templateScopes = m_templateScopes,
         Budget = Budget,
     };
-
     /// <summary>Creates a scope identical to this one but carrying a different local set, for one application of a
     /// lambda.</summary>
     /// <param name="lambdaLocals">The locals the nested scope sees.</param>
@@ -203,12 +264,12 @@ public sealed class DocumentScope(
         schema: Schema,
         currentPointer: CurrentPointer
     ) {
-        Locals = lambdaLocals,
-        m_values = m_values,
-        m_arguments = m_arguments,
-        m_templateScopes = m_templateScopes,
-        m_evaluating = m_evaluating,
         Budget = Budget,
+        Locals = lambdaLocals,
+        m_arguments = m_arguments,
+        m_evaluating = m_evaluating,
+        m_templateScopes = m_templateScopes,
+        m_values = m_values,
     };
 }
 /// <summary>JSON helpers every lowering pass needs and none should restate.</summary>
@@ -219,6 +280,6 @@ public static class JsonNodeExtensions {
     public static void AppendNode(this JsonArray array, JsonNode? item) {
         ArgumentNullException.ThrowIfNull(array);
 
-        ((IList<JsonNode?>)array).Add(item);
+        ((IList<JsonNode?>)array).Add(item: item);
     }
 }

@@ -7,8 +7,7 @@ using Puck.Maths;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
-public sealed class BlobLoadBalancer
-{
+public sealed class BlobLoadBalancer {
     private static bool TryValidatePartitionerInputs(
         IQueryCollection query,
         [NotNullWhen(returnValue: false)]
@@ -23,15 +22,14 @@ public sealed class BlobLoadBalancer
 
         if (
             !int.TryParse(
-                result: out bucketCount,
-                s: query["bucketCount"]
-            )
-            || (bucketCount is < 1 or > 1024)
+            result: out bucketCount,
+            s: query["bucketCount"]
+        ) ||
+            (bucketCount is < 1 or > 1024)
         ) {
             errorAction = new BadRequestObjectResult(error: "bucketCount must be between 1 and 1024");
             isValid = false;
-        }
-        else if (!Guid.TryParseExact(
+        } else if (!Guid.TryParseExact(
             input: query["value"],
             format: "D",
             result: out value

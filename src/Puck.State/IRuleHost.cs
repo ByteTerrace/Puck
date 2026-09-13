@@ -60,7 +60,6 @@ public interface IRuleHost : IRuleReader {
     /// <param name="diagnostic">The category's first entry.</param>
     void RefusalRecorded(in RuleRuntimeDiagnostic diagnostic);
 }
-
 /// <summary>What a fired effect did, as the host answers it for the arms it owns.</summary>
 public enum EffectOutcome : byte {
     /// <summary>Nothing installed: the effect emitted (a cue, a pose), or could not move its destination.</summary>
@@ -70,7 +69,6 @@ public enum EffectOutcome : byte {
     /// <summary>The effect could not fire; under preflight this fails the enclosing transaction.</summary>
     Refused,
 }
-
 /// <summary>A state-neutral mutation a firing effect asks its host to run: the four shapes the library's own effects
 /// produce. The host maps each onto its own mutation vocabulary, stamped with whatever principal a rule's own act
 /// carries there.</summary>

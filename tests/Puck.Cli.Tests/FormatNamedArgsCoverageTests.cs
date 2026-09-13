@@ -18,20 +18,67 @@ public sealed class FormatNamedArgsCoverageTests : IDisposable {
 
     /// <summary>Creates the scratch project directory this fixture's cases build their layouts inside.</summary>
     public FormatNamedArgsCoverageTests() {
-        m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-cli-tests-named-args-{Guid.NewGuid():N}");
+        m_root = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-cli-tests-named-args-{Guid.NewGuid():N}"
+        );
 
         Directory.CreateDirectory(path: m_root);
     }
 
-    /// <summary>Removes the scratch project directory.</summary>
-    public void Dispose() {
-        try {
-            Directory.Delete(path: m_root, recursive: true);
-        } catch (DirectoryNotFoundException) {
-        }
+    // The layout phase 0 leaves behind: a project file, one source file holding a positional call the pass would
+    // name, the SDK-generated global-usings file, and a `bin` that is empty unless the project's own output is asked
+    // for. A zero-byte assembly is enough — the degraded probe asks whether it EXISTS, and the reference loader drops
+    // anything that is not readable metadata.
+    private void WriteProjectLayout(bool withOwnOutput) {
+        var binDirectory = Path.Combine(
+            path1: m_root,
+            path2: "bin",
+            path3: "Debug",
+            path4: "net10.0"
+        );
+        var objDirectory = Path.Combine(
+            path1: m_root,
+            path2: "obj",
+            path3: "Debug",
+            path4: "net10.0"
+        );
 
-        GC.SuppressFinalize(obj: this);
+        Directory.CreateDirectory(path: binDirectory);
+        Directory.CreateDirectory(path: objDirectory);
+        File.WriteAllText(
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\" />\n",
+            path: Path.Combine(
+                path1: m_root,
+                path2: "Sample.csproj"
+            )
+        );
+        File.WriteAllText(
+            contents: "global using System;\n",
+            path: Path.Combine(
+                path1: objDirectory,
+                path2: "Sample.GlobalUsings.g.cs"
+            )
+        );
+        File.WriteAllText(
+            contents: "namespace Sample;\n\ninternal static class Widget {\n    public static int Add(int left, int right) => (left + right);\n\n    public static int Use() => Add(1, 2);\n}\n",
+            path: Path.Combine(
+                path1: m_root,
+                path2: "Sample.cs"
+            )
+        );
+
+        if (withOwnOutput) {
+            File.WriteAllBytes(
+                bytes: [],
+                path: Path.Combine(
+                    path1: binDirectory,
+                    path2: "Sample.dll"
+                )
+            );
+        }
     }
+
     /// <summary>
     /// The exact state phase 0 leaves an unbuilt project in: a global-usings file under <c>obj</c> and an empty
     /// <c>bin</c>. The closure is framework-only, so the run must call itself degraded — otherwise the "not built"
@@ -40,9 +87,26 @@ public sealed class FormatNamedArgsCoverageTests : IDisposable {
     [Fact]
     public void AnEmptyBinDirectoryIsNotEvidenceOfABuild() {
         WriteProjectLayout(withOwnOutput: false);
-        NamedArgsPhase.BuildProjectCompilation(degraded: out var degraded, parseOptions: new CSharpParseOptions(languageVersion: LanguageVersion.Preview), projectRoot: m_root, trees: []);
+        NamedArgsPhase.BuildProjectCompilation(
+            degraded: out var degraded,
+            parseOptions: new CSharpParseOptions(languageVersion: LanguageVersion.Preview),
+            projectRoot: m_root,
+            trees: []
+        );
 
         Assert.True(condition: degraded);
+    }
+    /// <summary>Removes the scratch project directory.</summary>
+    public void Dispose() {
+        try {
+            Directory.Delete(
+                path: m_root,
+                recursive: true
+            );
+        } catch (DirectoryNotFoundException) {
+        }
+
+        GC.SuppressFinalize(obj: this);
     }
     /// <summary>
     /// The control for the case above: the project's own output assembly under <c>bin</c> IS evidence of a build, so
@@ -51,7 +115,12 @@ public sealed class FormatNamedArgsCoverageTests : IDisposable {
     [Fact]
     public void TheProjectsOwnOutputAssemblyIsEvidenceOfABuild() {
         WriteProjectLayout(withOwnOutput: true);
-        NamedArgsPhase.BuildProjectCompilation(degraded: out var degraded, parseOptions: new CSharpParseOptions(languageVersion: LanguageVersion.Preview), projectRoot: m_root, trees: []);
+        NamedArgsPhase.BuildProjectCompilation(
+            degraded: out var degraded,
+            parseOptions: new CSharpParseOptions(languageVersion: LanguageVersion.Preview),
+            projectRoot: m_root,
+            trees: []
+        );
 
         Assert.False(condition: degraded);
     }
@@ -64,32 +133,24 @@ public sealed class FormatNamedArgsCoverageTests : IDisposable {
     public void WriteModeDeclinesAProjectThatIsNotBuilt() {
         WriteProjectLayout(withOwnOutput: false);
 
-        var file = Path.Combine(path1: m_root, path2: "Sample.cs");
+        var file = Path.Combine(
+            path1: m_root,
+            path2: "Sample.cs"
+        );
         var before = File.ReadAllText(path: file);
-        var code = NamedArgsPhase.Run(rootArgument: m_root, verify: false, whatIf: false);
+        var code = NamedArgsPhase.Run(
+            rootArgument: m_root,
+            verify: false,
+            whatIf: false
+        );
 
-        Assert.Equal(actual: File.ReadAllText(path: file), expected: before);
-        Assert.Equal(actual: code, expected: 1);
-    }
-
-    // The layout phase 0 leaves behind: a project file, one source file holding a positional call the pass would
-    // name, the SDK-generated global-usings file, and a `bin` that is empty unless the project's own output is asked
-    // for. A zero-byte assembly is enough — the degraded probe asks whether it EXISTS, and the reference loader drops
-    // anything that is not readable metadata.
-    private void WriteProjectLayout(bool withOwnOutput) {
-        var binDirectory = Path.Combine(path1: m_root, path2: "bin", path3: "Debug", path4: "net10.0");
-        var objDirectory = Path.Combine(path1: m_root, path2: "obj", path3: "Debug", path4: "net10.0");
-
-        Directory.CreateDirectory(path: binDirectory);
-        Directory.CreateDirectory(path: objDirectory);
-        File.WriteAllText(contents: "<Project Sdk=\"Microsoft.NET.Sdk\" />\n", path: Path.Combine(path1: m_root, path2: "Sample.csproj"));
-        File.WriteAllText(contents: "global using System;\n", path: Path.Combine(path1: objDirectory, path2: "Sample.GlobalUsings.g.cs"));
-        File.WriteAllText(
-            contents: "namespace Sample;\n\ninternal static class Widget {\n    public static int Add(int left, int right) => (left + right);\n\n    public static int Use() => Add(1, 2);\n}\n",
-            path: Path.Combine(path1: m_root, path2: "Sample.cs"));
-
-        if (withOwnOutput) {
-            File.WriteAllBytes(bytes: [], path: Path.Combine(path1: binDirectory, path2: "Sample.dll"));
-        }
+        Assert.Equal(
+            actual: File.ReadAllText(path: file),
+            expected: before
+        );
+        Assert.Equal(
+            actual: code,
+            expected: 1
+        );
     }
 }

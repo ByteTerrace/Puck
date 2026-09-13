@@ -42,8 +42,7 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
                 .Append(value: " creation=").Append(value: placement.PrototypeId)
                 .Append(value: (contribution.IsFilled
                 ? " state=filled"
-                : " state=empty"
-            ))
+                : " state=empty"))
                 .Append(value: " contributor=").Append(value: (contribution.Contributor?.Describe() ?? "(none)"));
 
             if (contribution.Tenure == WorldContributionTenure.Presence) {
@@ -60,11 +59,9 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
                         staleTicks: out var staleTicks
                     )
                         ? $"{(dropped
-                        ? "dropped"
-                        : "live"
-                    )}(stale {staleTicks} ticks)"
-                        : "unauthored"
-                    ));
+                            ? "dropped"
+                            : "live")}(stale {staleTicks} ticks)"
+                        : "unauthored"));
                 }
 
                 _ = text.Append(value: " deadlineTick=").Append(value: (contribution.RetractDeadlineTick?.ToString() ?? "none"));
@@ -76,11 +73,13 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
         if (matched == 0) {
             _ = echo.Text(text: ((filter is { } missing)
                 ? $"no contribution slot '{missing}'"
-                : "(no contribution slots)"
-            ));
+                : "(no contribution slots)"));
         }
 
-        _ = echo.Field(key: "tick", value: (server.NextInputTick - 1UL));
+        _ = echo.Field(
+            key: "tick",
+            value: (server.NextInputTick - 1UL)
+        );
 
         return echo.Close();
     }
@@ -108,8 +107,7 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
                 return new CommandResult(Output: Describe(
                     filter: ((args.Count == 1)
                     ? args[0].ToString()
-                    : null
-                ),
+                    : null),
                     server: server
                 ));
             }

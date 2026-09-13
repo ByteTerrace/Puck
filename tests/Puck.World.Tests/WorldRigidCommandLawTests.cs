@@ -21,37 +21,63 @@ public sealed class WorldRigidCommandLawTests {
         var command = new WorldCommand.RigidImpulse(
             Principal: WorldPrincipal.Seat(slot: 2),
             EntityIndex: 7,
-            Impulse: new Vector3(x: 1.5f, y: -2.25f, z: 0.125f)
+            Impulse: new Vector3(
+                x: 1.5f,
+                y: -2.25f,
+                z: 0.125f
+            )
         );
 
-        Assert.True(condition: WorldSubmissionCodec.TryEncodeCommand(
-            command: command,
-            bytes: out var bytes,
-            failure: out var encodeFailure
-        ), userMessage: encodeFailure.ToString());
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeCommand(
-            bytes: bytes,
-            command: out var decoded,
-            failure: out var decodeFailure
-        ), userMessage: decodeFailure.ToString());
+        Assert.True(
+            condition: WorldSubmissionCodec.TryEncodeCommand(
+                bytes: out var bytes,
+                command: command,
+                failure: out var encodeFailure
+            ),
+            userMessage: encodeFailure.ToString()
+        );
+        Assert.True(
+            condition: WorldSubmissionCodec.TryDecodeCommand(
+                bytes: bytes,
+                command: out var decoded,
+                failure: out var decodeFailure
+            ),
+            userMessage: decodeFailure.ToString()
+        );
 
         var roundTripped = Assert.IsType<WorldCommand.RigidImpulse>(@object: decoded);
 
-        Assert.Equal(expected: command.Principal, actual: roundTripped.Principal);
-        Assert.Equal(expected: command.EntityIndex, actual: roundTripped.EntityIndex);
-        Assert.Equal(expected: command.Impulse, actual: roundTripped.Impulse);
+        Assert.Equal(
+            expected: command.Principal,
+            actual: roundTripped.Principal
+        );
+        Assert.Equal(
+            expected: command.EntityIndex,
+            actual: roundTripped.EntityIndex
+        );
+        Assert.Equal(
+            expected: command.Impulse,
+            actual: roundTripped.Impulse
+        );
     }
-
     [Fact]
     public void RigidImpulseAgainstNonRigidBodyIsRefusedByNameAndLeavesVelocityUntouched() {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument());
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var body = fixture.Server.Body(index: 0)!;
 
-        Assert.False(condition: body.IsRigid, userMessage: "the fixture's default kit must stay a locomotion kit for this control to discriminate anything");
+        Assert.False(
+            condition: body.IsRigid,
+            userMessage: "the fixture's default kit must stay a locomotion kit for this control to discriminate anything"
+        );
 
         var originalError = Console.Error;
         using var captured = new StringWriter();
@@ -62,7 +88,11 @@ public sealed class WorldRigidCommandLawTests {
             fixture.Server.ApplyCommand(command: new WorldCommand.RigidImpulse(
                 Principal: seat,
                 EntityIndex: 0,
-                Impulse: new Vector3(x: 5f, y: 0f, z: 0f)
+                Impulse: new Vector3(
+                    x: 5f,
+                    y: 0f,
+                    z: 0f
+                )
             ));
         } finally {
             Console.SetError(newError: originalError);
@@ -76,7 +106,10 @@ public sealed class WorldRigidCommandLawTests {
         // A non-rigid body's RigidVelocity always reads Zero by construction (see WorldBody.Rigid.cs), so the real
         // proof the impulse never reached a solver is the refusal narration above; this is the un-refused CONTROL
         // side — a rigid body's velocity DOES move (WorldRigidDynamicsLawTests' own collision proof).
-        Assert.Equal(expected: FixedVector3.Zero, actual: body.RigidVelocity);
+        Assert.Equal(
+            expected: FixedVector3.Zero,
+            actual: body.RigidVelocity
+        );
     }
 
     // A flat solid floor plus uniform downward gravity, mirroring WorldRigidDynamicsLawTests' own falling-ball
@@ -89,34 +122,64 @@ public sealed class WorldRigidCommandLawTests {
             Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
-            Scale: new Vector3(x: 24f, y: 0.1f, z: 24f),
+            Scale: new Vector3(
+                x: 24f,
+                y: 0.1f,
+                z: 24f
+            ),
             Material: 0,
             Blend: SdfBlendOp.Union,
             Smooth: 0f,
-            Group: 0);
+            Group: 0
+        );
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "rigid-floor",
             Palette: null,
             Shapes: [shape],
-            Frames: null);
-        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "rigid-floor");
-        var creation = new WorldPrototype(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
-        var rigid = new WorldRigid(Mass: 1f, Restitution: 0.1f, Friction: 0.4f, RollingFriction: 0.2f, LinearDamping: 0.05f, AngularDamping: 0.05f);
+            Frames: null
+        );
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: document,
+            source: "rigid-floor"
+        );
+        var creation = new WorldPrototype(
+            Id: "floor",
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
+        var rigid = new WorldRigid(
+            AngularDamping: 0.05f,
+            Friction: 0.4f,
+            LinearDamping: 0.05f,
+            Mass: 1f,
+            Restitution: 0.1f,
+            RollingFriction: 0.2f
+        );
 
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(x: 0f, y: -9.8f, z: 0f)) },
+            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            x: 0f,
+            y: -9.8f,
+            z: 0f
+        )) },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Sphere(Radius: 0.4f),
                 Rigid = rigid,
             })],
-            PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(
+                Id: "floor",
+                PrototypeId: creation.Id,
+                Position: Vector3.Zero,
+                YawDegrees: 0f,
+                Scale: 1f,
+                Solid: new WorldSolid(Margin: 0f)
+            )],
         };
     }
-
     // FallingRigidBallDocument plus an authored bodies.scaleRow naming a keyed kind=Fixed "scale" row for body 0 —
     // the same shape BodyScaleLawTests.WithScaleRow builds, added onto the falling-ball fixture rather than the
     // bare-locomotion one so the scaled body actually has a rigid facet to advance.
@@ -128,7 +191,10 @@ public sealed class WorldRigidCommandLawTests {
             Min: FixedQ4816.FromDouble(value: 0.05).Value,
             Max: FixedQ4816.One.Value,
             Capacity: 8,
-            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new StateCell(
+                    Key: CellName.Parse(candidate: "0"),
+                    Value: cellValue.Value
+                )]
         );
 
         return (source with {
@@ -148,25 +214,49 @@ public sealed class WorldRigidCommandLawTests {
         using var control = Fixtures.FreshServer(definition: FallingRigidBallDocument());
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: control.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: control.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var controlBall = control.Server.Body(index: 0)!;
 
-        Assert.Equal(expected: authoredMass, actual: controlBall.RigidMass);
-        Assert.Equal(expected: authoredRadius, actual: controlBall.RigidBoundingRadius);
+        Assert.Equal(
+            expected: authoredMass,
+            actual: controlBall.RigidMass
+        );
+        Assert.Equal(
+            expected: authoredRadius,
+            actual: controlBall.RigidBoundingRadius
+        );
 
         using var shrunk = Fixtures.FreshServer(definition: ScaledFallingRigidBallDocument(cellValue: half));
 
-        Assert.True(condition: shrunk.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: shrunk.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var shrunkBall = shrunk.Server.Body(index: 0)!;
 
-        Assert.Equal(expected: half, actual: shrunkBall.Scale);
+        Assert.Equal(
+            expected: half,
+            actual: shrunkBall.Scale
+        );
         // mass ∝ Scale³: 1 · 0.5³ = 0.125. Bounding radius ∝ Scale: 0.4 · 0.5 = 0.2.
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.125), actual: shrunkBall.RigidMass);
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.2), actual: shrunkBall.RigidBoundingRadius);
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 0.125),
+            actual: shrunkBall.RigidMass
+        );
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 0.2),
+            actual: shrunkBall.RigidBoundingRadius
+        );
     }
-
     // Scale 0.05 is the garden's own authored envelope floor (state.world 'scale' row's own min); its scale^5
     // rounds to a zero raw at Q16, the case ScaleRigid's reciprocal-of-scale construction must not divide by. A
     // shrunk body also takes more static-contact substeps per tick (its bounding radius bounds the substep travel),
@@ -177,17 +267,34 @@ public sealed class WorldRigidCommandLawTests {
         using var fixture = Fixtures.FreshServer(definition: ScaledFallingRigidBallDocument(cellValue: FixedQ4816.FromDouble(value: 0.05)));
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var ball = fixture.Server.Body(index: 0)!;
 
-        ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        ball.Pose(
+            pitchRadians: 0f,
+            rollRadians: 0f,
+            x: 0f,
+            y: 3f,
+            yawRadians: 0f,
+            z: 0f
+        );
 
-        _ = fixture.StepUntil(ceiling: 4000, settled: () => ball.Resting);
+        _ = fixture.StepUntil(
+            ceiling: 4000,
+            settled: () => ball.Resting
+        );
 
-        Assert.True(condition: ball.Resting, userMessage: $"the scale-0.05 ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}");
+        Assert.True(
+            condition: ball.Resting,
+            userMessage: $"the scale-0.05 ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}"
+        );
     }
-
     // A settled ball struck horizontally must never have its linear velocity cross back through zero into the
     // opposite sign — the artifact a starved InverseInertia (kept at the FULL-SIZE body's magnitude while
     // InverseMass already reflects the shrunk one) produces when friction keeps subtracting linear momentum with
@@ -214,27 +321,48 @@ public sealed class WorldRigidCommandLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var ball = fixture.Server.Body(index: 0)!;
 
-        ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        ball.Pose(
+            pitchRadians: 0f,
+            rollRadians: 0f,
+            x: 0f,
+            y: 3f,
+            yawRadians: 0f,
+            z: 0f
+        );
 
-        _ = fixture.StepUntil(ceiling: 4000, settled: () => ball.Resting);
+        _ = fixture.StepUntil(
+            ceiling: 4000,
+            settled: () => ball.Resting
+        );
 
-        Assert.True(condition: ball.Resting, userMessage: $"scale={scale}: ball never settled before the strike — resting={ball.Resting}");
+        Assert.True(
+            condition: ball.Resting,
+            userMessage: $"scale={scale}: ball never settled before the strike — resting={ball.Resting}"
+        );
 
         // Scaled by scale³ — mass ∝ Scale³, so an impulse scaled the SAME way keeps the resulting velocity
         // (impulse/mass) roughly comparable across scales, matching a cue strike rather than a body-length-per-tick
         // teleport that flies the ball off the ground before friction ever touches it.
-        Assert.True(condition: ball.TryApplyRigidImpulse(
-            impulse: new FixedVector3(
-                X: (FixedQ4816.FromDouble(value: -0.85d) * scaleValue * scaleValue * scaleValue),
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.Zero
+        Assert.True(
+            condition: ball.TryApplyRigidImpulse(
+                impulse: new FixedVector3(
+                    X: (((FixedQ4816.FromDouble(value: -0.85d) * scaleValue) * scaleValue) * scaleValue),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)
             ),
-            velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)
-        ), userMessage: $"scale={scale}: the strike impulse was refused");
+            userMessage: $"scale={scale}: the strike impulse was refused"
+        );
 
         var sawSpin = false;
 
@@ -252,91 +380,151 @@ public sealed class WorldRigidCommandLawTests {
         }
 
         if (expectSpin) {
-            Assert.True(condition: sawSpin, userMessage: $"scale={scale}: ball never developed angular velocity from a horizontal strike while grounded");
+            Assert.True(
+                condition: sawSpin,
+                userMessage: $"scale={scale}: ball never developed angular velocity from a horizontal strike while grounded"
+            );
         }
     }
-
     [Fact]
     public void TryApplyRigidImpulseRefusesAResultingVelocityOverTheCeilingWithoutThrowingAndControlStillApplies() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var ball = fixture.Server.Body(index: 0)!;
         var ceiling = FixedQ4816.FromDouble(value: 20d);
 
-        Assert.False(condition: ball.TryApplyRigidImpulse(
-            impulse: new FixedVector3(
-                X: FixedQ4816.FromDouble(value: 1_000_000_000_000d),
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.Zero
+        Assert.False(
+            condition: ball.TryApplyRigidImpulse(
+                impulse: new FixedVector3(
+                    X: FixedQ4816.FromDouble(value: 1_000_000_000_000d),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                velocityCeiling: ceiling
             ),
-            velocityCeiling: ceiling
-        ), userMessage: "a degenerate impulse magnitude must be refused rather than applied");
-        Assert.Equal(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
+            userMessage: "a degenerate impulse magnitude must be refused rather than applied"
+        );
+        Assert.Equal(
+            expected: FixedVector3.Zero,
+            actual: ball.RigidVelocity
+        );
 
-        Assert.True(condition: ball.TryApplyRigidImpulse(
-            impulse: new FixedVector3(
-                X: FixedQ4816.FromDouble(value: 2d),
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.Zero
+        Assert.True(
+            condition: ball.TryApplyRigidImpulse(
+                impulse: new FixedVector3(
+                    X: FixedQ4816.FromDouble(value: 2d),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                velocityCeiling: ceiling
             ),
-            velocityCeiling: ceiling
-        ), userMessage: "an ordinary impulse well under the ceiling must still apply");
-        Assert.NotEqual(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
+            userMessage: "an ordinary impulse well under the ceiling must still apply"
+        );
+        Assert.NotEqual(
+            expected: FixedVector3.Zero,
+            actual: ball.RigidVelocity
+        );
 
         for (var tick = 0; (tick < 8); tick++) {
             fixture.Step();
         }
     }
-
     [Fact]
     public void TryApplyRigidImpulseRefusesComponentAdditionOverflowWithoutChangingVelocity() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var ball = fixture.Server.Body(index: 0)!;
         var nearMaximum = FixedQ4816.FromRawBits(value: (long.MaxValue - 32L));
 
-        Assert.True(condition: ball.TryApplyRigidImpulse(
-            impulse: new FixedVector3(X: nearMaximum, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
-            velocityCeiling: FixedQ4816.MaxValue
-        ), userMessage: "the representable control impulse must establish the near-limit velocity");
+        Assert.True(
+            condition: ball.TryApplyRigidImpulse(
+                impulse: new FixedVector3(
+                    X: nearMaximum,
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                velocityCeiling: FixedQ4816.MaxValue
+            ),
+            userMessage: "the representable control impulse must establish the near-limit velocity"
+        );
 
         var before = ball.RigidVelocity;
 
-        Assert.False(condition: ball.TryApplyRigidImpulse(
-            impulse: new FixedVector3(X: FixedQ4816.FromRawBits(value: 64L), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
-            velocityCeiling: FixedQ4816.MaxValue
-        ), userMessage: "adding a representable delta to a near-limit velocity must refuse instead of wrapping negative");
-        Assert.Equal(expected: before, actual: ball.RigidVelocity);
+        Assert.False(
+            condition: ball.TryApplyRigidImpulse(
+                impulse: new FixedVector3(
+                    X: FixedQ4816.FromRawBits(value: 64L),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                velocityCeiling: FixedQ4816.MaxValue
+            ),
+            userMessage: "adding a representable delta to a near-limit velocity must refuse instead of wrapping negative"
+        );
+        Assert.Equal(
+            expected: before,
+            actual: ball.RigidVelocity
+        );
     }
-
     [Fact]
     public void PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var ball = fixture.Server.Body(index: 0)!;
 
-        ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        ball.Pose(
+            pitchRadians: 0f,
+            rollRadians: 0f,
+            x: 0f,
+            y: 3f,
+            yawRadians: 0f,
+            z: 0f
+        );
 
         // Mid-fall: not grounded, well above the resting-hold window — the fact must read false, never a vacuous
         // true a body-count-only implementation would report from tick 0.
         for (var tick = 0; ((tick < 20) && !fixture.Server.Population.RigidBodiesQuiescent()); tick++) {
             fixture.Step();
         }
-        Assert.False(condition: fixture.Server.Population.RigidBodiesQuiescent(), userMessage: "the ball is still falling — quiescent must not read true mid-fall");
+        Assert.False(
+            condition: fixture.Server.Population.RigidBodiesQuiescent(),
+            userMessage: "the ball is still falling — quiescent must not read true mid-fall"
+        );
 
         // Bounded by what it takes (at 240 Hz) to land, bleed the bounce through the authored damping/friction, and
         // clear the rest-hold window — and finished the moment it has.
-        _ = fixture.StepUntil(ceiling: 3000, settled: fixture.Server.Population.RigidBodiesQuiescent);
+        _ = fixture.StepUntil(
+            ceiling: 3000,
+            settled: fixture.Server.Population.RigidBodiesQuiescent
+        );
 
-        Assert.True(condition: fixture.Server.Population.RigidBodiesQuiescent(), userMessage: $"the ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}");
+        Assert.True(
+            condition: fixture.Server.Population.RigidBodiesQuiescent(),
+            userMessage: $"the ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}"
+        );
     }
 }

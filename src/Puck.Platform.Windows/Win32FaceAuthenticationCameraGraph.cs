@@ -28,7 +28,10 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
     private TimeSpan m_lastInfraredTime = TimeSpan.MinValue;
 
     protected Win32FaceAuthenticationCameraGraph(string deviceId, ReadOnlySpan<CameraStreamRequest> requests, MediaCaptureMemoryPreference memoryPreference) : base(deviceId: deviceId) {
-        m_capture = Win32FaceAuthenticationCapture.Open(deviceId: deviceId, memoryPreference: memoryPreference);
+        m_capture = Win32FaceAuthenticationCapture.Open(
+            deviceId: deviceId,
+            memoryPreference: memoryPreference
+        );
 
         try {
             m_streams = new TStream[requests.Length];
@@ -36,7 +39,10 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
             for (var index = 0; (index < requests.Length); index++) {
                 var sensor = requests[index].Sensor;
 
-                m_streams[index] = CreateStream(sensor: sensor, stream: Stream(sensor: sensor));
+                m_streams[index] = CreateStream(
+                    sensor: sensor,
+                    stream: Stream(sensor: sensor)
+                );
             }
         } catch {
             m_capture.Dispose();
@@ -84,11 +90,19 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
                 var progressed = false;
 
                 using (var frame = Color.Reader.TryAcquireLatestFrame()) {
-                    progressed |= Process(frame: frame, lastTime: ref m_lastColorTime, sensor: CameraSensor.Color);
+                    progressed |= Process(
+                        frame: frame,
+                        lastTime: ref m_lastColorTime,
+                        sensor: CameraSensor.Color
+                    );
                 }
 
                 using (var frame = Infrared.Reader.TryAcquireLatestFrame()) {
-                    progressed |= Process(frame: frame, lastTime: ref m_lastInfraredTime, sensor: CameraSensor.Infrared);
+                    progressed |= Process(
+                        frame: frame,
+                        lastTime: ref m_lastInfraredTime,
+                        sensor: CameraSensor.Infrared
+                    );
                 }
 
                 if (IsLive) {
@@ -116,14 +130,21 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
         }
 
         lastTime = time;
-        Deliver(sensor: sensor, video: video);
+        Deliver(
+            sensor: sensor,
+            video: video
+        );
 
         return true;
     }
     private Win32FaceAuthenticationStream Stream(CameraSensor sensor) => (sensor switch {
         CameraSensor.Color => Color,
         CameraSensor.Infrared => Infrared,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(sensor), actualValue: sensor, message: "Unknown camera sensor."),
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(sensor),
+        actualValue: sensor,
+        message: "Unknown camera sensor."
+    ),
     });
 }
 /// <summary>The CPU-pixel tier: the frame server places frames in system memory; each illuminated frame is repacked
@@ -133,7 +154,11 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
     private byte[] m_colorScratch = [];
     private byte[] m_infraredScratch = [];
 
-    public Win32FaceAuthenticationPixelGraph(string deviceId, ReadOnlySpan<CameraStreamRequest> requests) : base(deviceId: deviceId, memoryPreference: MediaCaptureMemoryPreference.Cpu, requests: requests) {
+    public Win32FaceAuthenticationPixelGraph(string deviceId, ReadOnlySpan<CameraStreamRequest> requests) : base(
+        deviceId: deviceId,
+        memoryPreference: MediaCaptureMemoryPreference.Cpu,
+        requests: requests
+    ) {
         try {
             Start(threadName: "camera-dual-poll");
         } catch {
@@ -161,17 +186,28 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         if (CameraSensor.Infrared == sensor) {
             // The unlit half of a strobing stream never publishes; an unstamped frame publishes.
             if (video.InfraredMediaFrame is not { IsIlluminated: false }) {
-                PublishInfraredBitmap(bitmap: bitmap, buffer: StreamFor(sensor: sensor).Frames);
+                PublishInfraredBitmap(
+                    bitmap: bitmap,
+                    buffer: StreamFor(sensor: sensor).Frames
+                );
             }
         } else {
-            PublishBitmap(bitmap: bitmap, buffer: StreamFor(sensor: sensor).Frames, scratch: ref m_colorScratch);
+            PublishBitmap(
+                bitmap: bitmap,
+                buffer: StreamFor(sensor: sensor).Frames,
+                scratch: ref m_colorScratch
+            );
         }
     }
 
     // L8 is already the one-byte luminance shape; expanding it directly avoids a converted SoftwareBitmap per frame.
     private unsafe void PublishInfraredBitmap(SoftwareBitmap bitmap, LatestFrameBuffer buffer) {
         if (BitmapPixelFormat.Gray8 != bitmap.BitmapPixelFormat) {
-            PublishBitmap(bitmap: bitmap, buffer: buffer, scratch: ref m_infraredScratch);
+            PublishBitmap(
+                bitmap: bitmap,
+                buffer: buffer,
+                scratch: ref m_infraredScratch
+            );
 
             return;
         }
@@ -184,9 +220,16 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
 
         var plane = locked.GetPlaneDescription(index: 0);
 
-        reference.As<IMemoryBufferByteAccess>().GetBuffer(buffer: out var pixels, capacity: out var capacity);
+        reference.As<IMemoryBufferByteAccess>().GetBuffer(
+            buffer: out var pixels,
+            capacity: out var capacity
+        );
 
-        if ((plane.Stride < width) || (plane.StartIndex < 0) || (((((long)plane.StartIndex) + (((long)(height - 1)) * plane.Stride)) + width) > capacity)) {
+        if (
+            (plane.Stride < width) ||
+            (plane.StartIndex < 0) ||
+            (((((long)plane.StartIndex) + (((long)(height - 1)) * plane.Stride)) + width) > capacity)
+        ) {
             throw new InvalidOperationException(message: "the camera returned an invalid L8 bitmap plane");
         }
 
@@ -201,7 +244,10 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
                 length: width,
                 pointer: ((pixels + plane.StartIndex) + (((long)row) * plane.Stride))
             );
-            var output = destination.Slice(length: width, start: (row * width));
+            var output = destination.Slice(
+                length: width,
+                start: (row * width)
+            );
 
             for (var column = 0; (column < width); column++) {
                 var luminance = ((uint)source[column]);
@@ -210,13 +256,20 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
             }
         }
 
-        buffer.Publish(height: height, pixels: m_infraredScratch, width: width);
+        buffer.Publish(
+            height: height,
+            pixels: m_infraredScratch,
+            width: width
+        );
     }
     // Tightly repacks the (possibly padded) BGRA rows into the reusable scratch and publishes.
     private static unsafe void PublishBitmap(SoftwareBitmap bitmap, LatestFrameBuffer buffer, ref byte[] scratch) {
         using var converted = ((BitmapPixelFormat.Bgra8 == bitmap.BitmapPixelFormat)
             ? null
-            : SoftwareBitmap.Convert(format: BitmapPixelFormat.Bgra8, source: bitmap)
+            : SoftwareBitmap.Convert(
+                format: BitmapPixelFormat.Bgra8,
+                source: bitmap
+            )
         );
 
         var source = (converted ?? bitmap);
@@ -234,9 +287,16 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         }
 
         // CsWinRT wrappers answer classic COM interop interfaces through As<T>, never a runtime cast.
-        reference.As<IMemoryBufferByteAccess>().GetBuffer(buffer: out var pixels, capacity: out var capacity);
+        reference.As<IMemoryBufferByteAccess>().GetBuffer(
+            buffer: out var pixels,
+            capacity: out var capacity
+        );
 
-        if ((plane.Stride < tight) || (plane.StartIndex < 0) || (((((long)plane.StartIndex) + (((long)(height - 1)) * plane.Stride)) + tight) > capacity)) {
+        if (
+            (plane.Stride < tight) ||
+            (plane.StartIndex < 0) ||
+            (((((long)plane.StartIndex) + (((long)(height - 1)) * plane.Stride)) + tight) > capacity)
+        ) {
             throw new InvalidOperationException(message: "the camera returned an invalid BGRA bitmap plane");
         }
 
@@ -249,7 +309,11 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
             );
         }
 
-        buffer.Publish(height: height, pixels: scratch, width: width);
+        buffer.Publish(
+            height: height,
+            pixels: scratch,
+            width: width
+        );
     }
 
     [ComImport]
@@ -271,7 +335,11 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
     private Win32D3D11CameraFrameConverter? m_colorConverter;
     private Win32D3D11CameraFrameConverter? m_infraredConverter;
 
-    public Win32FaceAuthenticationSharedGraph(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> requests) : base(deviceId: deviceId, memoryPreference: MediaCaptureMemoryPreference.Auto, requests: requests) {
+    public Win32FaceAuthenticationSharedGraph(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> requests) : base(
+        deviceId: deviceId,
+        memoryPreference: MediaCaptureMemoryPreference.Auto,
+        requests: requests
+    ) {
         m_adapterLuid = adapterLuid;
         Start(threadName: "camera-dual-gpu-poll");
         Console.Out.WriteLine(value: $"[camera] dual GPU negotiation: color {Color.Description} + infrared {Infrared.Description}, native Direct3D surfaces on adapter 0x{adapterLuid:X16}.");
@@ -294,11 +362,20 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
         }
 
         var infrared = (CameraSensor.Infrared == sensor);
-        var native = (infrared ? Infrared : Color);
-        var texture = Win32D3D11CameraFrameConverter.GetTexture(access: out var access, surface: surface);
+        var native = (infrared
+            ? Infrared
+            : Color
+        );
+        var texture = Win32D3D11CameraFrameConverter.GetTexture(
+            access: out var access,
+            surface: surface
+        );
 
         try {
-            ref var converter = ref (infrared ? ref m_infraredConverter : ref m_colorConverter);
+            ref var converter = ref (infrared
+                ? ref m_infraredConverter
+                : ref m_colorConverter
+            );
 
             converter ??= new Win32D3D11CameraFrameConverter(
                 adapterLuid: m_adapterLuid,
@@ -315,7 +392,10 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                 return;
             }
 
-            if (infrared && (video.InfraredMediaFrame is { IsIlluminated: false })) {
+            if (
+                infrared &&
+                (video.InfraredMediaFrame is { IsIlluminated: false })
+            ) {
                 converter.ConvertPrevious(sourceTexture: texture);
 
                 return;
@@ -327,16 +407,27 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                 return;
             }
 
-            converter.Convert(sourceTexture: texture, targetSlot: slot);
+            converter.Convert(
+                sourceTexture: texture,
+                targetSlot: slot
+            );
             stream.Slots.Publish(slot: slot);
-            m_bench.OnFrame(captureTimestamp: stream.LastFrameTimestamp, device: converter, resolver: this, sensor: sensor);
+            m_bench.OnFrame(
+                captureTimestamp: stream.LastFrameTimestamp,
+                device: converter,
+                resolver: this,
+                sensor: sensor
+            );
         } finally {
             Win32D3D11VideoDevice.ReleaseTexture(texture: texture);
             _ = Marshal.ReleaseComObject(o: access);
         }
     }
     protected override void Service() {
-        if (Stopping || m_colorConverter!.IsStarted) {
+        if (
+            Stopping ||
+            m_colorConverter!.IsStarted
+        ) {
             return;
         }
 
@@ -403,7 +494,10 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
             return false;
         }
 
-        run = m_bench.Attach(request: in request, ring: ring);
+        run = m_bench.Attach(
+            request: in request,
+            ring: ring
+        );
         fault = "";
 
         return true;
@@ -411,7 +505,9 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
 
     nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (sensor switch {
         CameraSensor.Color => (m_colorConverter?.OutputView ?? 0),
-        CameraSensor.Infrared => (previous ? (m_infraredConverter?.PreviousView ?? 0) : (m_infraredConverter?.OutputView ?? 0)),
+        CameraSensor.Infrared => (previous
+        ? (m_infraredConverter?.PreviousView ?? 0)
+        : (m_infraredConverter?.OutputView ?? 0)),
         _ => 0,
     });
     (int Width, int Height) IProbeInputResolver.Extent(CameraSensor sensor) => ((CameraSensor.Infrared == sensor)

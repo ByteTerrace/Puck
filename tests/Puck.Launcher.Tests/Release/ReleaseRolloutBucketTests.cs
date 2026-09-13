@@ -10,8 +10,6 @@ namespace Puck.Launcher.Tests.Release;
 public sealed class ReleaseRolloutBucketTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() => m_root.Dispose();
-
     // Finds an install id whose bucket value is EXACTLY the requested modulo-100 remainder, by trying candidate
     // hex ids in order — deterministic (no RNG at assertion time) and independent of the production hash path
     // beyond calling the exact function under test.
@@ -29,27 +27,46 @@ public sealed class ReleaseRolloutBucketTests : IDisposable {
         throw new InvalidOperationException(message: $"no candidate installId found with bucket {targetBucket} within the search budget.");
     }
 
+    public void Dispose() => m_root.Dispose();
     [Fact]
     public void IsIncluded_ExactBoundary_AcceptsBelowPercentRefusesAtPercent() {
         const int Percent = 37;
         var justBelow = FindInstallIdWithBucket(targetBucket: (Percent - 1));
         var atPercent = FindInstallIdWithBucket(targetBucket: Percent);
 
-        Assert.True(condition: ReleaseRolloutBucket.IsIncluded(installId: justBelow, percent: Percent));
-        Assert.False(condition: ReleaseRolloutBucket.IsIncluded(installId: atPercent, percent: Percent));
+        Assert.True(condition: ReleaseRolloutBucket.IsIncluded(
+            installId: justBelow,
+            percent: Percent
+        ));
+        Assert.False(condition: ReleaseRolloutBucket.IsIncluded(
+            installId: atPercent,
+            percent: Percent
+        ));
     }
     [Fact]
-    public void IsIncluded_ZeroPercent_AlwaysExcludes() =>
-        Assert.False(condition: ReleaseRolloutBucket.IsIncluded(installId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", percent: 0));
-    [Fact]
     public void IsIncluded_HundredPercent_AlwaysIncludes() =>
-        Assert.True(condition: ReleaseRolloutBucket.IsIncluded(installId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", percent: 100));
+        Assert.True(condition: ReleaseRolloutBucket.IsIncluded(
+            installId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            percent: 100
+        ));
+    [Fact]
+    public void IsIncluded_ZeroPercent_AlwaysExcludes() =>
+        Assert.False(condition: ReleaseRolloutBucket.IsIncluded(
+            installId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            percent: 0
+        ));
     [Fact]
     public void MintOrLoad_PersistsAcrossCalls() {
         var first = ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_root.RootPath);
         var second = ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_root.RootPath);
 
-        Assert.Equal(actual: second, expected: first);
-        Assert.Equal(expected: 32, actual: first.Length);
+        Assert.Equal(
+            actual: second,
+            expected: first
+        );
+        Assert.Equal(
+            expected: 32,
+            actual: first.Length
+        );
     }
 }

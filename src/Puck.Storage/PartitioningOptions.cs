@@ -14,14 +14,6 @@ public sealed class PartitioningOptions {
     public const int AnchorPartition = 0;
 
     /// <summary>
-    /// Gets or sets the number of storage-account partitions (buckets), 1-1024. A user's oid routes to
-    /// a bucket via <c>MonotonicPartitioner16x1024</c>; the same router runs in the edge, in the silo,
-    /// and (as WASM) in the browser, so every tier agrees on a user's account without coordinating,
-    /// and the monotonic invariant means growing the count only migrates users landing in a new bucket.
-    /// <c>Count = 1</c> collapses to a single account.
-    /// </summary>
-    public int Count { get; set; } = 1;
-    /// <summary>
     /// Gets or sets the offset added to the bucket index to produce the account index in
     /// <see cref="BlobEndpointFormat" />. Bucket 0 maps to account 1 by default, since
     /// <c>bytrcstp000</c> is the fabric account.
@@ -33,6 +25,14 @@ public sealed class PartitioningOptions {
     /// so the endpoint is derivable for any bucket up to 1024 without enumerating them.
     /// </summary>
     public string BlobEndpointFormat { get; set; } = "https://bytrcstp{0:D3}.blob.core.windows.net";
+    /// <summary>
+    /// Gets or sets the number of storage-account partitions (buckets), 1-1024. A user's oid routes to
+    /// a bucket via <c>MonotonicPartitioner16x1024</c>; the same router runs in the edge, in the silo,
+    /// and (as WASM) in the browser, so every tier agrees on a user's account without coordinating,
+    /// and the monotonic invariant means growing the count only migrates users landing in a new bucket.
+    /// <c>Count = 1</c> collapses to a single account.
+    /// </summary>
+    public int Count { get; set; } = 1;
 
     /// <summary>
     /// Returns the blob endpoint of the storage account at the given account index.

@@ -9,9 +9,7 @@ namespace Puck.Azure.Functions.Middleware;
 public sealed record class ExceptionResponse(
     string Message
 );
-
-public sealed class HttpExceptionMiddleware(ILogger<HttpExceptionMiddleware> logger) : IFunctionsWorkerMiddleware
-{
+public sealed class HttpExceptionMiddleware(ILogger<HttpExceptionMiddleware> logger) : IFunctionsWorkerMiddleware {
     private const string UnhandledExceptionMessage = "Unhandled exception during HTTP trigger.";
 
     private static readonly ExceptionResponse ExceptionResponse = new(Message: UnhandledExceptionMessage);
@@ -19,8 +17,7 @@ public sealed class HttpExceptionMiddleware(ILogger<HttpExceptionMiddleware> log
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next) {
         try {
             await next(context: context);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             if (logger.IsEnabled(logLevel: LogLevel.Error)) {
                 logger.LogError(
                     exception: e,

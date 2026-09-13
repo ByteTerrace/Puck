@@ -41,6 +41,11 @@ internal sealed record WorldCaptureManifest(string Schema, string Backend, strin
 internal sealed class WorldCaptureScheduler {
     private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
 
+    private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+    };
+
     private readonly string m_backend;
     private readonly string m_directory;
     private readonly List<WorldCaptureManifestEntry> m_landed = [];
@@ -94,50 +99,29 @@ internal sealed class WorldCaptureScheduler {
         }
     }
 
-    /// <summary>The authority tick-complete hook. The composition root publishes the server's completed tick here;
-    /// console waits use a separate monotonic host-work counter that does not rewind during replay.</summary>
-    /// <param name="tick">The just-completed simulation tick.</param>
-    public void PublishTick(ulong tick) {
-        FinalizePending();
-
-        if (
-            (m_schedule.Count == 0) ||
-            !m_schedule.TryGetValue(
-            key: tick,
-            value: out var rows
-        )
-        ) {
-            return;
-        }
-
-        foreach (var row in rows) {
-            Arm(
-                row: row,
-                tick: tick
-            );
-        }
-    }
-
-    /// <summary>The run-end drain. A capture whose readback lands on the LAST composed frame before the host stops
-    /// has no later tick-complete hook to finalize it — the parity leg's <c>quit</c> is consumed at the top of the
-    /// host loop, before the pump would publish another tick — so the scheduler finalizes it here instead. Called
-    /// at <c>ApplicationStopped</c>, when every hosted service has stopped and the render chain is disposed: a
-    /// completed request is manifested exactly as a tick-complete hook would; an unserved one is reported by name,
-    /// since no frame will ever serve it.</summary>
-    public void Drain() {
-        if (m_pending is not { } pending) {
-            return;
-        }
-
-        if (pending.Request.Completion.IsCompleted) {
-            FinalizePending();
-
-            return;
-        }
-
-        m_pending = null;
-        Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: the capture was still pending when the run ended — no frame composed after it was armed, so the manifest omits it.");
-    }
+    // Reuses WorldReplaySnapshot.HashState (the population trajectory's diagnostic fold) as the population half,
+    // then chains
+    // state.world's every declared row/cell in document order onto the SAME running fold — extending the summary
+    // WorldReplayTape already trusts rather than inventing a second one. Body/identity state lanes are ephemeral
+    // per-body counters/timers outside the world-scoped decision surface a capture cares about (state.world is what
+    // a rule/capture-station row lives in) and are left out, same as the population hash's own documented scope.
+    internal static ulong ComputeStateHash(WorldServer server, ulong tick) => WorldRuntimeStateHash.Hash(
+        scope: WorldStateHashScope.Capture,
+        server: server,
+        tick: tick
+    );
+    internal static ulong ComputeStateHash(WorldServer server, ulong tick, WorldStateHashScope scope) => scope switch {
+        WorldStateHashScope.Capture => ComputeStateHash(
+        server: server,
+        tick: tick
+    ),
+        WorldStateHashScope.Pose or WorldStateHashScope.World or WorldStateHashScope.Authoritative => WorldRuntimeStateHash.Hash(
+        scope: scope,
+        server: server,
+        tick: tick
+    ),
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(scope)),
+    };
 
     private void Arm(WorldCaptureRow row, ulong tick) {
         if (string.IsNullOrEmpty(value: m_directory)) {
@@ -220,6 +204,63 @@ internal sealed class WorldCaptureScheduler {
             Tick: tick
         );
     }
+    // Nearest-color match against the station's own authored palette — the mechanically honest census the render
+    // path supports: the composed frame is a flat color surface, carrying no per-pixel material-id buffer to read.
+    private static Dictionary<string, long> ComputeCensus(PngImage image, IReadOnlyList<WorldCapturePaletteEntry> palette) {
+        var swatchMaterial = new int[palette.Count];
+        var swatchR = new byte[palette.Count];
+        var swatchG = new byte[palette.Count];
+        var swatchB = new byte[palette.Count];
+
+        for (var index = 0; (index < palette.Count); index++) {
+            _ = HexColor.TryParseRgba(
+                rgba: out var rgba,
+                value: palette[index].Color
+            );
+
+            swatchMaterial[index] = palette[index].Material;
+            swatchR[index] = ((byte)MathF.Round(x: (rgba.X * 255f)));
+            swatchG[index] = ((byte)MathF.Round(x: (rgba.Y * 255f)));
+            swatchB[index] = ((byte)MathF.Round(x: (rgba.Z * 255f)));
+        }
+
+        var counts = new Dictionary<string, long>();
+        var pixels = image.RgbaPixels;
+        var pixelCount = (image.Width * image.Height);
+
+        for (var pixel = 0; (pixel < pixelCount); pixel++) {
+            var offset = (pixel * 4);
+            var r = pixels[offset];
+            var g = pixels[(offset + 1)];
+            var b = pixels[(offset + 2)];
+            var bestIndex = 0;
+            var bestDistance = long.MaxValue;
+
+            for (var swatch = 0; (swatch < swatchMaterial.Length); swatch++) {
+                var dr = (r - swatchR[swatch]);
+                var dg = (g - swatchG[swatch]);
+                var db = (b - swatchB[swatch]);
+                var distance = (((((long)dr) * dr) + (((long)dg) * dg)) + (((long)db) * db));
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = swatch;
+                }
+            }
+
+            var key = swatchMaterial[bestIndex].ToString(provider: CultureInfo.InvariantCulture);
+
+            counts[key] = (counts.TryGetValue(
+                key: key,
+                value: out var existing
+            )
+                ? (existing + 1)
+                : 1
+            );
+        }
+
+        return counts;
+    }
     private void FinalizePending() {
         if (m_pending is not { } pending) {
             return;
@@ -231,6 +272,7 @@ internal sealed class WorldCaptureScheduler {
 
         m_pending = null;
         var result = pending.Request.Completion.GetAwaiter().GetResult();
+
         if (result.Error is { } error) {
             Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: capture failed ({error.Message}) — dropping this capture.");
             return;
@@ -269,36 +311,6 @@ internal sealed class WorldCaptureScheduler {
         ));
         WriteManifest();
     }
-    private void WriteManifest() {
-        var manifest = new WorldCaptureManifest(
-            Backend: m_backend,
-            Captures: m_landed,
-            Schema: WorldCaptureManifest.SchemaId,
-            World: m_worldFile
-        );
-        var path = Path.Combine(
-            path1: m_directory,
-            path2: "manifest.json"
-        );
-
-        try {
-            File.WriteAllText(
-                contents: JsonSerializer.Serialize(
-                    options: ManifestSerializerOptions,
-                    value: manifest
-                ),
-                path: path
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[captures] could not write {path} ({exception.Message}).");
-        }
-    }
-
-    private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
-
     // The camera position feeding the inside-check is read straight off the document — the same worldPoint a
     // 'select' op's winning case's program anchors at — rather than the compiled render rig, so this needs nothing
     // client-side. Every authored station camera therefore needs a leading 'anchor' op naming a worldPoint subject
@@ -333,6 +345,58 @@ internal sealed class WorldCaptureScheduler {
         }
 
         return ((distance <= FixedQ4816.Zero), null);
+    }
+    private static string ToHex(ulong hash) => hash.ToString(
+        format: "x16",
+        provider: CultureInfo.InvariantCulture
+    );
+    private static bool TryFindCameraProgram(WorldDefinition definition, string name, out WorldCameraProgram program) {
+        foreach (var camera in definition.Cameras) {
+            if (
+                (camera?.Rig is { } rig) &&
+                string.Equals(
+                a: rig.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                program = rig;
+
+                return true;
+            }
+        }
+
+        var views = definition.ViewsRaw;
+
+        if (
+            (views?.SeatRig is { } seatRig) &&
+            string.Equals(
+            a: seatRig.Name,
+            b: name,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            program = seatRig;
+
+            return true;
+        }
+
+        if (
+            (views?.CameraRig is { } cameraRig) &&
+            string.Equals(
+            a: cameraRig.Name,
+            b: name,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            program = cameraRig;
+
+            return true;
+        }
+
+        program = null!;
+
+        return false;
     }
     private static bool TryResolveActiveCameraPosition(WorldDefinition definition, ulong tick, out Vector3 position, out string reason) {
         position = default;
@@ -430,135 +494,72 @@ internal sealed class WorldCaptureScheduler {
 
         return false;
     }
-    private static bool TryFindCameraProgram(WorldDefinition definition, string name, out WorldCameraProgram program) {
-        foreach (var camera in definition.Cameras) {
-            if (
-                (camera?.Rig is { } rig) &&
-                string.Equals(
-                a: rig.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                program = rig;
+    private void WriteManifest() {
+        var manifest = new WorldCaptureManifest(
+            Backend: m_backend,
+            Captures: m_landed,
+            Schema: WorldCaptureManifest.SchemaId,
+            World: m_worldFile
+        );
+        var path = Path.Combine(
+            path1: m_directory,
+            path2: "manifest.json"
+        );
 
-                return true;
-            }
-        }
-
-        var views = definition.ViewsRaw;
-
-        if (
-            (views?.SeatRig is { } seatRig) &&
-            string.Equals(
-            a: seatRig.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            program = seatRig;
-
-            return true;
-        }
-
-        if (
-            (views?.CameraRig is { } cameraRig) &&
-            string.Equals(
-            a: cameraRig.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            program = cameraRig;
-
-            return true;
-        }
-
-        program = null!;
-
-        return false;
-    }
-    // Nearest-color match against the station's own authored palette — the mechanically honest census the render
-    // path supports: the composed frame is a flat color surface, carrying no per-pixel material-id buffer to read.
-    private static Dictionary<string, long> ComputeCensus(PngImage image, IReadOnlyList<WorldCapturePaletteEntry> palette) {
-        var swatchMaterial = new int[palette.Count];
-        var swatchR = new byte[palette.Count];
-        var swatchG = new byte[palette.Count];
-        var swatchB = new byte[palette.Count];
-
-        for (var index = 0; (index < palette.Count); index++) {
-            _ = HexColor.TryParseRgba(
-                rgba: out var rgba,
-                value: palette[index].Color
+        try {
+            File.WriteAllText(
+                contents: JsonSerializer.Serialize(
+                    options: ManifestSerializerOptions,
+                    value: manifest
+                ),
+                path: path
             );
-
-            swatchMaterial[index] = palette[index].Material;
-            swatchR[index] = ((byte)MathF.Round(x: (rgba.X * 255f)));
-            swatchG[index] = ((byte)MathF.Round(x: (rgba.Y * 255f)));
-            swatchB[index] = ((byte)MathF.Round(x: (rgba.Z * 255f)));
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            Console.Error.WriteLine(value: $"[captures] could not write {path} ({exception.Message}).");
         }
-
-        var counts = new Dictionary<string, long>();
-        var pixels = image.RgbaPixels;
-        var pixelCount = (image.Width * image.Height);
-
-        for (var pixel = 0; (pixel < pixelCount); pixel++) {
-            var offset = (pixel * 4);
-            var r = pixels[offset];
-            var g = pixels[(offset + 1)];
-            var b = pixels[(offset + 2)];
-            var bestIndex = 0;
-            var bestDistance = long.MaxValue;
-
-            for (var swatch = 0; (swatch < swatchMaterial.Length); swatch++) {
-                var dr = (r - swatchR[swatch]);
-                var dg = (g - swatchG[swatch]);
-                var db = (b - swatchB[swatch]);
-                var distance = (((((long)dr) * dr) + (((long)dg) * dg)) + (((long)db) * db));
-
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestIndex = swatch;
-                }
-            }
-
-            var key = swatchMaterial[bestIndex].ToString(provider: CultureInfo.InvariantCulture);
-
-            counts[key] = (counts.TryGetValue(
-                key: key,
-                value: out var existing)
-                ? (existing + 1)
-                : 1
-            );
-        }
-
-        return counts;
     }
 
-    // Reuses WorldReplaySnapshot.HashState (the population trajectory's diagnostic fold) as the population half,
-    // then chains
-    // state.world's every declared row/cell in document order onto the SAME running fold — extending the summary
-    // WorldReplayTape already trusts rather than inventing a second one. Body/identity state lanes are ephemeral
-    // per-body counters/timers outside the world-scoped decision surface a capture cares about (state.world is what
-    // a rule/capture-station row lives in) and are left out, same as the population hash's own documented scope.
-    internal static ulong ComputeStateHash(WorldServer server, ulong tick) => WorldRuntimeStateHash.Hash(
-        scope: WorldStateHashScope.Capture,
-        server: server,
-        tick: tick
-    );
+    /// <summary>The run-end drain. A capture whose readback lands on the LAST composed frame before the host stops
+    /// has no later tick-complete hook to finalize it — the parity leg's <c>quit</c> is consumed at the top of the
+    /// host loop, before the pump would publish another tick — so the scheduler finalizes it here instead. Called
+    /// at <c>ApplicationStopped</c>, when every hosted service has stopped and the render chain is disposed: a
+    /// completed request is manifested exactly as a tick-complete hook would; an unserved one is reported by name,
+    /// since no frame will ever serve it.</summary>
+    public void Drain() {
+        if (m_pending is not { } pending) {
+            return;
+        }
 
-    internal static ulong ComputeStateHash(WorldServer server, ulong tick, WorldStateHashScope scope) => scope switch {
-        WorldStateHashScope.Capture => ComputeStateHash(server: server, tick: tick),
-        WorldStateHashScope.Pose or WorldStateHashScope.World or WorldStateHashScope.Authoritative => WorldRuntimeStateHash.Hash(
-            scope: scope,
-            server: server,
-            tick: tick
-        ),
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(scope)),
-    };
+        if (pending.Request.Completion.IsCompleted) {
+            FinalizePending();
 
-    private static string ToHex(ulong hash) => hash.ToString(
-        format: "x16",
-        provider: CultureInfo.InvariantCulture
-    );
+            return;
+        }
+
+        m_pending = null;
+        Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: the capture was still pending when the run ended — no frame composed after it was armed, so the manifest omits it.");
+    }
+    /// <summary>The authority tick-complete hook. The composition root publishes the server's completed tick here;
+    /// console waits use a separate monotonic host-work counter that does not rewind during replay.</summary>
+    /// <param name="tick">The just-completed simulation tick.</param>
+    public void PublishTick(ulong tick) {
+        FinalizePending();
+
+        if (
+            (m_schedule.Count == 0) ||
+            !m_schedule.TryGetValue(
+            key: tick,
+            value: out var rows
+        )
+        ) {
+            return;
+        }
+
+        foreach (var row in rows) {
+            Arm(
+                row: row,
+                tick: tick
+            );
+        }
+    }
 }

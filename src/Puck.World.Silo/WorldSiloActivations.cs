@@ -11,9 +11,10 @@ internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrai
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         try {
             // The tick host and Orleans membership must both be ready before requesting a grain placement.
-            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
-            await started.Task.WaitAsync(stoppingToken);
+            var started = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            using var registration = lifetime.ApplicationStarted.Register(callback: () => started.TrySetResult());
+
+            await started.Task.WaitAsync(cancellationToken: stoppingToken);
             foreach (var world in definition.Worlds) {
                 if (!world.Pinned) {
                     continue;
@@ -26,22 +27,32 @@ internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrai
                 var activated = await grain.ActivateAsync();
 
                 // Establish a durable baseline before reporting startup success: journals require a checkpoint.
-                if (!activated || !await grain.CheckpointNowAsync()) {
+                if (
+                    !activated ||
+                    !await grain.CheckpointNowAsync()
+                ) {
                     Environment.ExitCode = 1;
-                    throw new InvalidOperationException($"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
+                    throw new InvalidOperationException(message: $"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
                 }
             }
             if (definition.Release is null) {
-                foreach (var world in definition.Worlds.Where(static row => row.Pinned)) {
-                    await silo.ReloadAsync(new(world.Owner, world.World), stoppingToken);
+                foreach (var world in definition.Worlds.Where(predicate: static row => row.Pinned)) {
+                    await silo.ReloadAsync(
+                        new(
+                            Owner: world.Owner,
+                            World: world.World
+                        ),
+                        stoppingToken
+                    );
                 }
             }
             // Private health describes the fully loaded candidate before the group barrier opens public ingress.
             silo.Ready = true;
             var publication = await silo.PublishManagedReleaseAdmissionAsync(stoppingToken);
+
             if (publication == WorldReleaseAdmissionPublication.Refused) {
                 Environment.ExitCode = 1;
-                throw new InvalidOperationException("Managed release admission could not be published after private candidate verification.");
+                throw new InvalidOperationException(message: "Managed release admission could not be published after private candidate verification.");
             }
         } catch (Exception) when (!stoppingToken.IsCancellationRequested) {
             Environment.ExitCode = 1;

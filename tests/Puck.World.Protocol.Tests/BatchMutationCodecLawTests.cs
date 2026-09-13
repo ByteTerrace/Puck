@@ -6,47 +6,173 @@ namespace Puck.World.Protocol.Tests;
 /// <summary>A batch crosses the checkpoint journal as one committed leaf whose members keep their concrete kinds.</summary>
 public sealed class BatchMutationCodecLawTests {
     [Fact]
-    public void GuardsRoundTripAndNestedActorsCannotEscalate() {
-        var member = new WorldMutation.UpsertStateCell(WorldPrincipal.Console, "gold", "$value", 1, WorldDocumentWriteKind.Add);
-        var valid = new WorldMutation.Batch(WorldPrincipal.Console, [member], new string('A', 64),
-            [new WorldStateExpectation("gold", null, 5, ActionStateComparison.GreaterOrEqual, 1, CellKind.Int)], ["gold"],
-            [new WorldSpatialReadDependency(0, 0, 65536, 65536, new string('B', 64))]);
-        Assert.True(WorldSubmissionCodec.TryEncodeMutation(valid, out var bytes, out var error), error.Detail);
-        Assert.True(WorldSubmissionCodec.TryDecodeMutation(bytes, out var decoded, out error), error.Detail);
-        var round = Assert.IsType<WorldMutation.Batch>(decoded);
-        Assert.Equal(valid.ExpectedDefinition, round.ExpectedDefinition);
-        Assert.Equal(valid.ExpectedCells, round.ExpectedCells);
-        Assert.Equal(valid.ExpectedStateRows, round.ExpectedStateRows);
-        Assert.Equal(valid.ExpectedSpatialReads, round.ExpectedSpatialReads);
-        var wrongActor = valid with { Principal = WorldPrincipal.Seat(0) };
-        Assert.False(WorldSubmissionCodec.TryEncodeMutation(wrongActor, out _, out _));
-        Assert.False(WorldSubmissionCodec.TryEncodeCommittedMutation(wrongActor, out _, out _));
-        var nested = valid with { Mutations = [wrongActor] };
-        Assert.False(WorldSubmissionCodec.TryEncodeMutation(nested, out _, out _));
-        var malformed = valid with { ExpectedCells = [null!] };
-        Assert.False(WorldSubmissionCodec.TryEncodeMutation(malformed, out _, out _));
-        Assert.False(WorldSubmissionCodec.TryEncodeMutation(valid with { Mutations = [] }, out _, out _));
-    }
-    [Fact]
     public void ABatchRoundTripsWithEveryMemberKind() {
         var batch = new WorldMutation.Batch(
             Principal: WorldPrincipal.World,
             Mutations: [
-                new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: "gold", Key: "$value", Value: 5L, Kind: WorldDocumentWriteKind.Add),
-                new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: "hand", Key: "7"),
-                new WorldMutation.TransformState(WorldPrincipal.World, new StateTransform.Push(Row: "history", Value: 3L)),
+                new WorldMutation.UpsertStateCell(
+                    Principal: WorldPrincipal.World,
+                    Row: "gold",
+                    Key: "$value",
+                    Value: 5L,
+                    Kind: WorldDocumentWriteKind.Add
+                ),
+                new WorldMutation.RemoveStateCell(
+                    Principal: WorldPrincipal.World,
+                    Row: "hand",
+                    Key: "7"
+                ),
+                new WorldMutation.TransformState(
+                    WorldPrincipal.World,
+                    new StateTransform.Push(
+                        Row: "history",
+                        Value: 3L
+                    )
+                ),
             ]
         );
 
-        Assert.True(WorldSubmissionCodec.TryEncodeCommittedMutation(mutation: batch, bytes: out var bytes, failure: out var encodeFailure), encodeFailure.Detail);
-        Assert.True(WorldSubmissionCodec.TryDecodeCommittedMutation(bytes: bytes, mutation: out var decoded, failure: out var decodeFailure), decodeFailure.Detail);
+        Assert.True(
+            condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
+                bytes: out var bytes,
+                failure: out var encodeFailure,
+                mutation: batch
+            ),
+            userMessage: encodeFailure.Detail
+        );
+        Assert.True(
+            condition: WorldSubmissionCodec.TryDecodeCommittedMutation(
+                bytes: bytes,
+                failure: out var decodeFailure,
+                mutation: out var decoded
+            ),
+            userMessage: decodeFailure.Detail
+        );
 
-        var round = Assert.IsType<WorldMutation.Batch>(decoded);
-        Assert.Equal(3, round.Mutations.Count);
-        var cell = Assert.IsType<WorldMutation.UpsertStateCell>(round.Mutations[0]);
-        Assert.Equal(("gold", "$value", 5L, WorldDocumentWriteKind.Add), (cell.Row, cell.Key, cell.Value, cell.Kind));
-        Assert.Equal("hand", Assert.IsType<WorldMutation.RemoveStateCell>(round.Mutations[1]).Row);
-        var push = Assert.IsType<StateTransform.Push>(Assert.IsType<WorldMutation.TransformState>(round.Mutations[2]).Transform);
-        Assert.Equal(("history", 3L), (push.Row, push.Value));
+        var round = Assert.IsType<WorldMutation.Batch>(@object: decoded);
+
+        Assert.Equal(
+            3,
+            round.Mutations.Count
+        );
+        var cell = Assert.IsType<WorldMutation.UpsertStateCell>(@object: round.Mutations[0]);
+
+        Assert.Equal(
+            ("gold", "$value", 5L, WorldDocumentWriteKind.Add),
+            (cell.Row, cell.Key, cell.Value, cell.Kind)
+        );
+        Assert.Equal(
+            "hand",
+            Assert.IsType<WorldMutation.RemoveStateCell>(@object: round.Mutations[1]).Row
+        );
+        var push = Assert.IsType<StateTransform.Push>(@object: Assert.IsType<WorldMutation.TransformState>(@object: round.Mutations[2]).Transform);
+
+        Assert.Equal(
+            ("history", 3L),
+            (push.Row, push.Value)
+        );
+    }
+    [Fact]
+    public void GuardsRoundTripAndNestedActorsCannotEscalate() {
+        var member = new WorldMutation.UpsertStateCell(
+            WorldPrincipal.Console,
+            "gold",
+            "$value",
+            1,
+            WorldDocumentWriteKind.Add
+        );
+        var valid = new WorldMutation.Batch(
+            WorldPrincipal.Console,
+            [member],
+            new string(
+                c: 'A',
+                count: 64
+            ),
+            [new WorldStateExpectation(
+                    Change: 1,
+                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Key: null,
+                    Kind: CellKind.Int,
+                    Row: "gold",
+                    Value: 5
+                )],
+            ["gold"],
+            [new WorldSpatialReadDependency(
+                    0,
+                    0,
+                    65536,
+                    65536,
+                    new string(
+                        c: 'B',
+                        count: 64
+                    )
+                )]
+        );
+
+        Assert.True(
+            condition: WorldSubmissionCodec.TryEncodeMutation(
+                bytes: out var bytes,
+                failure: out var error,
+                mutation: valid
+            ),
+            userMessage: error.Detail
+        );
+        Assert.True(
+            condition: WorldSubmissionCodec.TryDecodeMutation(
+                bytes: bytes,
+                failure: out error,
+                mutation: out var decoded
+            ),
+            userMessage: error.Detail
+        );
+        var round = Assert.IsType<WorldMutation.Batch>(@object: decoded);
+
+        Assert.Equal(
+            valid.ExpectedDefinition,
+            round.ExpectedDefinition
+        );
+        Assert.Equal(
+            valid.ExpectedCells,
+            round.ExpectedCells
+        );
+        Assert.Equal(
+            valid.ExpectedStateRows,
+            round.ExpectedStateRows
+        );
+        Assert.Equal(
+            valid.ExpectedSpatialReads,
+            round.ExpectedSpatialReads
+        );
+        var wrongActor = valid with { Principal = WorldPrincipal.Seat(slot: 0) };
+
+        Assert.False(condition: WorldSubmissionCodec.TryEncodeMutation(
+            bytes: out _,
+            failure: out _,
+            mutation: wrongActor
+        ));
+        Assert.False(condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
+            bytes: out _,
+            failure: out _,
+            mutation: wrongActor
+        ));
+        var nested = valid with { Mutations = [wrongActor] };
+
+        Assert.False(condition: WorldSubmissionCodec.TryEncodeMutation(
+            bytes: out _,
+            failure: out _,
+            mutation: nested
+        ));
+        var malformed = valid with { ExpectedCells = [null!] };
+
+        Assert.False(condition: WorldSubmissionCodec.TryEncodeMutation(
+            bytes: out _,
+            failure: out _,
+            mutation: malformed
+        ));
+        Assert.False(condition: WorldSubmissionCodec.TryEncodeMutation(
+            valid with { Mutations = [] },
+            out _,
+            out _
+        ));
     }
 }

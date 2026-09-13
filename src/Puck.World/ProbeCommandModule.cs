@@ -69,10 +69,16 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
             return CommandResult.Error(output: $"[probe.set: {reason}]");
         }
 
-        return new CommandResult(Output: $"[probe.set: {probeRef}.{field}={value.ToString(format: "0.0000", provider: CultureInfo.InvariantCulture)}]");
+        return new CommandResult(Output: $"[probe.set: {probeRef}.{field}={value.ToString(
+            format: "0.0000",
+            provider: CultureInfo.InvariantCulture
+        )}]");
     }
     private CommandResult StatusHandler(CommandContext context, WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "probe.status") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "probe.status"
+        ) is { } refusal) {
             return refusal;
         }
 

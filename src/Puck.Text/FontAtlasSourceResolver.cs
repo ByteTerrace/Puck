@@ -24,7 +24,7 @@ namespace Puck.Text;
 public sealed class FontAtlasSourceResolver(
     IFontAtlasGenerator fontAtlasGenerator,
     IAssetSource assetSource,
-    long maxCachedPixelBytes = 64L * 1024 * 1024
+    long maxCachedPixelBytes = ((64L * 1024) * 1024)
 )
     : IFontAtlasSourceResolver {
     private const int MaxCachedFonts = 256;
@@ -33,7 +33,9 @@ public sealed class FontAtlasSourceResolver(
     private readonly IFontAtlasGenerator m_fontAtlasGenerator = (fontAtlasGenerator ?? throw new ArgumentNullException(paramName: nameof(fontAtlasGenerator)));
     private readonly ContentAddressedLruCache<FontAtlas> m_fontAtlasCache = new(
         capacity: MaxCachedFonts,
-        getWeight: static atlas => atlas.ImageData is { } image ? image.RgbaPixels.Length : 0,
+        getWeight: static atlas => ((atlas.ImageData is { } image)
+        ? image.RgbaPixels.Length
+        : 0),
         weightCapacity: maxCachedPixelBytes
     );
     private readonly FontAtlasLoader m_fontAtlasLoader = new();
@@ -85,6 +87,7 @@ public sealed class FontAtlasSourceResolver(
         );
 
         var codePoints = expanded;
+
         if (wildcardSelected) {
             foreach (var codePoint in UnicodeCodePointRangeExpander.EnumerateBmpCodePoints()) {
                 codePoints.Add(item: codePoint);

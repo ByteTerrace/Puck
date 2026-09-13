@@ -17,17 +17,23 @@ public sealed class PlacementInfluenceOperand : WorldOperandFact {
 
     /// <summary>Gets the shared author label.</summary>
     public string Channel { get; }
-    /// <summary>Gets the fixed target or child template.</summary>
-    public string PlacementId { get; }
     /// <summary>Gets the literal child key.</summary>
     public string? Key { get; }
     /// <summary>Gets the dynamic child key.</summary>
     public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets the fixed target or child template.</summary>
+    public string PlacementId { get; }
+
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => ((IWorldRuleReader)reader).Read(this);
+    public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(
+        KeyFrom,
+        into
+    );
     /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => Math.Max(1,
-        ((WorldRuleCompileContext)context).Definition.Placements.Sum(placement => (long)(placement.Spatial?.Count ?? 0)));
+    public override long Cost(RuleCompileContext context) => Math.Max(
+        val1: 1,
+        val2: ((WorldRuleCompileContext)context).Definition.Placements.Sum(selector: placement => ((long)(placement.Spatial?.Count ?? 0)))
+    );
     /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(KeyFrom, into);
+    public override RuleFact Read(IRuleReader reader) => ((IWorldRuleReader)reader).Read(operand: this);
 }

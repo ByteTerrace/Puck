@@ -17,6 +17,9 @@ public sealed class AdvancedGamingBrickExtension : IMachineExtension {
     public void Initialize(IMachineExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterEngine(engine: new AdvancedGamingBrickEngine(), contentProvider: new AgbCartridgeCompiler());
+        registry.RegisterEngine(
+            engine: new AdvancedGamingBrickEngine(),
+            contentProvider: new AgbCartridgeCompiler()
+        );
     }
 }

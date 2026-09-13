@@ -19,7 +19,11 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rid);
 
-        var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Rid, b: rid, comparisonType: StringComparison.Ordinal));
+        var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(
+            a: candidate.Rid,
+            b: rid,
+            comparisonType: StringComparison.Ordinal
+        ));
 
         if (payload is null) {
             return UpdateStageResult.Refuse(reason: $"manifest for version '{manifest.Version}' declares no payload for rid '{rid}'");
@@ -36,7 +40,11 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             }
 
             using var buffer = new MemoryStream();
-            var found = await m_source.TryGetFileAsync(hash: file.Hash, destination: buffer, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            var found = await m_source.TryGetFileAsync(
+                hash: file.Hash,
+                destination: buffer,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (!found) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' (hash {file.Hash}) could not be fetched");
@@ -45,7 +53,11 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             var bytes = buffer.ToArray();
             var actualHash = $"sha256/{ContentAddressedStore.ComputeHash(content: bytes)}";
 
-            if (!string.Equals(a: actualHash, b: file.Hash, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: actualHash,
+                b: file.Hash,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' fetched with hash {actualHash}, expected {file.Hash} — refused rather than staged");
             }
 
@@ -53,25 +65,49 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             downloaded++;
         }
 
-        var versionDirectory = Path.Combine(path1: m_cacheRoot, path2: "versions", path3: manifest.Version);
+        var versionDirectory = Path.Combine(
+            path1: m_cacheRoot,
+            path2: "versions",
+            path3: manifest.Version
+        );
 
         foreach (var file in payload.Files) {
-            if (!m_cache.TryGet(hash: file.Hash, content: out var bytes)) {
+            if (!m_cache.TryGet(
+                hash: file.Hash,
+                content: out var bytes
+            )) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' (hash {file.Hash}) is missing from the cache after staging — refused rather than writing a partial install");
             }
 
             var actualHash = $"sha256/{ContentAddressedStore.ComputeHash(content: bytes)}";
 
-            if (!string.Equals(a: actualHash, b: file.Hash, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: actualHash,
+                b: file.Hash,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
             }
 
-            var destinationPath = Path.Combine(path1: versionDirectory, path2: file.Path);
+            var destinationPath = Path.Combine(
+                path1: versionDirectory,
+                path2: file.Path
+            );
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: destinationPath)!);
-            await File.WriteAllBytesAsync(bytes: bytes, cancellationToken: cancellationToken, path: destinationPath).ConfigureAwait(continueOnCapturedContext: false);
+            await File.WriteAllBytesAsync(
+                bytes: bytes,
+                cancellationToken: cancellationToken,
+                path: destinationPath
+            ).ConfigureAwait(continueOnCapturedContext: false);
         }
 
-        return new UpdateStageResult(FilesDownloaded: downloaded, FilesReused: reused, RefusalReason: null, Staged: true, StagedPath: versionDirectory);
+        return new UpdateStageResult(
+            FilesDownloaded: downloaded,
+            FilesReused: reused,
+            RefusalReason: null,
+            Staged: true,
+            StagedPath: versionDirectory
+        );
     }
 }

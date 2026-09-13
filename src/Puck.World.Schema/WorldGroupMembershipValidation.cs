@@ -25,9 +25,13 @@ public static class WorldGroupMembershipValidation {
             return false;
         }
 
-        if (member.Ref.Kind == MemberRefKind.Local && member.Ref.Principal is { } principal && principal.Kind is not (
+        if (
+            (member.Ref.Kind == MemberRefKind.Local) &&
+            (member.Ref.Principal is { } principal) &&
+            (principal.Kind is not (
             PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer
-        )) {
+        ))
+        ) {
             reason = $"{principal.Describe()} is not a real actor and cannot hold membership";
 
             return false;
@@ -39,7 +43,10 @@ public static class WorldGroupMembershipValidation {
             return false;
         }
 
-        if ((member.Role is not null) && string.IsNullOrWhiteSpace(value: member.Role)) {
+        if (
+            (member.Role is not null) &&
+            string.IsNullOrWhiteSpace(value: member.Role)
+        ) {
             reason = "role must be omitted or non-empty";
 
             return false;
@@ -52,10 +59,13 @@ public static class WorldGroupMembershipValidation {
         }
 
         if (member.Tags is { Count: > 0 } tags) {
-            var seenTags = new HashSet<string>(StringComparer.Ordinal);
+            var seenTags = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var tag in tags) {
-                if (string.IsNullOrWhiteSpace(tag) || !seenTags.Add(tag)) {
+                if (
+                    string.IsNullOrWhiteSpace(value: tag) ||
+                    !seenTags.Add(item: tag)
+                ) {
                     reason = "tags must be non-empty and distinct";
 
                     return false;
@@ -65,7 +75,6 @@ public static class WorldGroupMembershipValidation {
 
         return true;
     }
-
     /// <summary>Validates a group's roster capacity, reference uniqueness, and monotonic ordinal bounds.</summary>
     /// <param name="members">The roster to validate.</param>
     /// <param name="capacity">The kind's admitted capacity.</param>
@@ -86,13 +95,19 @@ public static class WorldGroupMembershipValidation {
             return false;
         }
 
-        if ((capacity < 1) || (capacity > WorldGroupCapacity.MaxMembersPerGroup)) {
+        if (
+            (capacity < 1) ||
+            (capacity > WorldGroupCapacity.MaxMembersPerGroup)
+        ) {
             reason = $"capacity {capacity} is outside 1..{WorldGroupCapacity.MaxMembersPerGroup}";
 
             return false;
         }
 
-        if ((nextJoinOrdinal < 0) || ((members.Count > 0) && (nextJoinOrdinal == 0))) {
+        if (
+            (nextJoinOrdinal < 0) ||
+            ((members.Count > 0) && (nextJoinOrdinal == 0))
+        ) {
             reason = "nextJoinOrdinal must be positive when the roster is non-empty";
 
             return false;
@@ -108,13 +123,19 @@ public static class WorldGroupMembershipValidation {
         var seenOrdinals = new HashSet<int>();
 
         foreach (var member in members) {
-            if (!TryValidateMember(member: member, reason: out reason) ||
-                !seenRefs.Add(member.Ref) ||
-                !seenOrdinals.Add(member.JoinOrdinal) ||
-                (member.JoinOrdinal >= nextJoinOrdinal)) {
-                reason = (!string.IsNullOrEmpty(reason)
+            if (
+                !TryValidateMember(
+                member: member,
+                reason: out reason
+            ) ||
+                !seenRefs.Add(item: member.Ref) ||
+                !seenOrdinals.Add(item: member.JoinOrdinal) ||
+                (member.JoinOrdinal >= nextJoinOrdinal)
+            ) {
+                reason = (!string.IsNullOrEmpty(value: reason)
                     ? reason
-                    : "member references and join ordinals must be distinct and inside nextJoinOrdinal");
+                    : "member references and join ordinals must be distinct and inside nextJoinOrdinal"
+                );
 
                 return false;
             }

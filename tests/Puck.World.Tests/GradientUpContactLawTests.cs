@@ -29,6 +29,32 @@ public sealed class GradientUpContactLawTests {
     // solver's own settle time without materially slowing the suite.
     private const int SettleTicks = 480;
 
+    // Boots a fresh fixture over Fixtures.BuildGradientUpDocument(gradientUp), joins the ONE seat the fixture
+    // relocated onto the ball's flank (mirrors EngageAuthorityLawTests' seat-activation pattern to reach a LIVE
+    // body — ActivateSeat only mints one on Join), steps SettleTicks ticks for gravity + contact to settle, and
+    // reads back the body's Grounded fact (the honest observable — WorldServer.Body(index) is the same access path
+    // EngageAuthorityLawTests documents) plus its horizontal (X-Z) distance from the ball's Y axis.
+    private static (bool Grounded, float HorizontalOffset) Settle(bool gradientUp) {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: gradientUp));
+        var actor = WorldPrincipal.Seat(slot: Fixtures.GradientUpSeatSlot);
+
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        for (var tick = 0; (tick < SettleTicks); tick++) {
+            fixture.Step();
+        }
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var position = body.Position;
+
+        return (body.Grounded, MathF.Sqrt(x: ((position.X * position.X) + (position.Z * position.Z))));
+    }
+
     [Fact]
     public void GradientDerivedUpGroundsTheSteepFlank_FlatUpNeverDoes() {
         var gradientHorizontalOffset = 0f;
@@ -42,32 +68,12 @@ public sealed class GradientUpContactLawTests {
                 gradientHorizontalOffset = settled.HorizontalOffset;
 
                 return settled.Grounded;
-            });
+            }
+        );
 
         Assert.True(
             condition: (gradientHorizontalOffset > OffAxisFloor),
             userMessage: $"gradient-up settled {gradientHorizontalOffset} world units off the ball's axis, expected > {OffAxisFloor} (grounded ON THE FLANK, not after sliding to a pole)"
         );
-    }
-
-    // Boots a fresh fixture over Fixtures.BuildGradientUpDocument(gradientUp), joins the ONE seat the fixture
-    // relocated onto the ball's flank (mirrors EngageAuthorityLawTests' seat-activation pattern to reach a LIVE
-    // body — ActivateSeat only mints one on Join), steps SettleTicks ticks for gravity + contact to settle, and
-    // reads back the body's Grounded fact (the honest observable — WorldServer.Body(index) is the same access path
-    // EngageAuthorityLawTests documents) plus its horizontal (X-Z) distance from the ball's Y axis.
-    private static (bool Grounded, float HorizontalOffset) Settle(bool gradientUp) {
-        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: gradientUp));
-        var actor = WorldPrincipal.Seat(slot: Fixtures.GradientUpSeatSlot);
-
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
-
-        for (var tick = 0; (tick < SettleTicks); tick++) {
-            fixture.Step();
-        }
-
-        var body = fixture.Server.Body(index: actor.Index)!;
-        var position = body.Position;
-
-        return (body.Grounded, MathF.Sqrt(x: ((position.X * position.X) + (position.Z * position.Z))));
     }
 }

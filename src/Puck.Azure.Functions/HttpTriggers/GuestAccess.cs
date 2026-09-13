@@ -50,10 +50,10 @@ public sealed class GuestAccess(
         var actorResponse = await httpClientFactory
             .CreateClient(name: "Actors")
             .PutAsJsonAsync(
-                cancellationToken: cancellationToken,
-                requestUri: $"{configuration.GetRequiredActorsBaseUrl()}/users/{userObjectId}/guest-access",
-                value: new { guestAccess = request.GuestAccess, }
-            );
+            cancellationToken: cancellationToken,
+            requestUri: $"{configuration.GetRequiredActorsBaseUrl()}/users/{userObjectId}/guest-access",
+            value: new { guestAccess = request.GuestAccess, }
+        );
 
         if (HttpStatusCode.BadRequest == actorResponse.StatusCode) {
             var response = httpRequestData.CreateResponse();

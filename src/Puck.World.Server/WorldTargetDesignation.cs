@@ -12,17 +12,17 @@ public readonly record struct WorldTargetDesignation(int Index, FixedVector3 Poi
     /// <summary>The <see cref="Index"/> sentinel marking a point designation.</summary>
     public const int PointIndex = -2;
 
-    /// <summary>Gets the cleared slot.</summary>
-    public static WorldTargetDesignation None { get; } = new(
-        Index: -1,
-        Point: default
-    );
     /// <summary>Gets a value indicating whether this slot designates anything.</summary>
     public bool Exists => (HasBody || IsPoint);
     /// <summary>Gets a value indicating whether this slot designates a concrete body.</summary>
     public bool HasBody => (Index >= 0);
     /// <summary>Gets a value indicating whether this slot designates a world-space point.</summary>
     public bool IsPoint => (Index == PointIndex);
+    /// <summary>Gets the cleared slot.</summary>
+    public static WorldTargetDesignation None { get; } = new(
+        Index: -1,
+        Point: default
+    );
 
     /// <summary>Creates a point designation.</summary>
     public static WorldTargetDesignation AtPoint(FixedVector3 point) => new(

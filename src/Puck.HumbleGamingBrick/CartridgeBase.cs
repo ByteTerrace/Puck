@@ -35,19 +35,125 @@ public abstract class CartridgeBase : ICartridge {
         m_rom = rom;
     }
 
-    /// <inheritdoc/>
-    public CartridgeHeader Header { get; }
-    /// <inheritdoc/>
-    public int ExternalRamByteCount => m_ram.Length;
-    /// <inheritdoc/>
-    public bool ExternalRamDirty { get; private set; }
-
     /// <summary>Gets whether the external RAM window currently responds (RAM exists and the mapper has enabled it).</summary>
     protected abstract bool RamAccessible { get; }
 
     /// <inheritdoc/>
+    public int ExternalRamByteCount => m_ram.Length;
+    /// <inheritdoc/>
+    public bool ExternalRamDirty { get; private set; }
+    /// <inheritdoc/>
+    public CartridgeHeader Header { get; }
+    /// <inheritdoc/>
+    /// <remarks>Virtual so a rumble-capable mapper (<see cref="Mbc5Cartridge"/>) can override it; see
+    /// <see cref="Interfaces.ICartridge.MotorLevel"/>'s remarks for why the base class must expose this rather than
+    /// relying on the interface's own default body.</remarks>
+    public virtual float MotorLevel => 0f;
+    /// <inheritdoc/>
+    public virtual int PersistentClockByteCount => 0;
+    /// <inheritdoc/>
+    public byte[] RamImage =>
+        m_ram;
+    /// <inheritdoc/>
+    public byte[] RomImage =>
+        m_rom;
+
+    /// <summary>Computes the wrap mask for a bank select whose decoded chip mirrors on a power-of-two bank count: the
+    /// mask is <c>bankCount - 1</c> when the count is a power of two greater than one, otherwise zero (every select
+    /// resolves to bank zero, the single-bank/absent-chip wiring). Mappers whose bank arithmetic can go out of range —
+    /// or negative, like the MMM01's boot mapping of the image's last two banks — wrap through this mask.</summary>
+    /// <param name="byteCount">The chip's total size in bytes.</param>
+    /// <param name="bankSize">The size of one bank in bytes.</param>
+    /// <returns>The wrap mask.</returns>
+    protected static int ComputeBankWrapMask(int byteCount, int bankSize) {
+        var bankCount = (byteCount / bankSize);
+
+        return (((bankCount > 1) && BitOperations.IsPow2(value: ((uint)bankCount)))
+            ? (bankCount - 1)
+            : 0
+        );
+    }
+    /// <summary>Deposits a block straight into save RAM at an absolute byte offset, bypassing the address decode and the
+    /// dirty flag. This is the seam a sensor mapper (the camera cartridge) uses to write its freshly captured image into
+    /// bank&#160;0: that image is <b>regenerated hardware output</b>, not a player-authored store, so it must NOT trip the
+    /// battery-save flush — <see cref="WriteRam"/> stays the one dirty site. A snapshot still captures the deposited
+    /// bytes because the whole RAM array is serialized. An out-of-range span is dropped whole.</summary>
+    /// <param name="offset">The absolute byte offset into save RAM (independent of the current bank selection).</param>
+    /// <param name="source">The bytes to deposit.</param>
+    protected void DepositExternalRam(int offset, ReadOnlySpan<byte> source) {
+        if (
+            (offset < 0) ||
+            ((((long)offset) + source.Length) > m_ram.Length)
+        ) {
+            return;
+        }
+
+        source.CopyTo(destination: m_ram.AsSpan(start: offset));
+    }
+    /// <summary>Reads the mapper's register state back from a snapshot.</summary>
+    /// <param name="reader">The snapshot source.</param>
+    protected abstract void LoadRegisters(StateReader reader);
+    /// <summary>Maps a RAM-window address to an absolute byte offset into the save RAM.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The absolute RAM offset; a value outside the populated size reads open-bus and drops writes.</returns>
+    protected abstract int MapRamOffset(ushort address);
+    /// <summary>Maps a ROM-region address to an absolute byte offset into the ROM image (mirrored on read).</summary>
+    /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
+    /// <returns>The absolute ROM offset.</returns>
+    protected abstract int MapRomOffset(ushort address);
+    /// <summary>Maps a ROM-region address through the standard MBC banking window every plain-banking mapper shares: the
+    /// fixed <c>[0x0000, 0x3FFF]</c> region reads bank zero at its own address, and the switchable
+    /// <c>[0x4000, 0x7FFF]</c> window reads <paramref name="romBank"/> at the window-relative offset. Mappers whose fixed
+    /// region can itself move (MBC1's advanced mode, the MMM01's menu/game split) map their own offsets instead.</summary>
+    /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
+    /// <param name="romBank">The bank currently selected into the switchable window.</param>
+    /// <param name="bankSize">The size of one ROM bank in bytes.</param>
+    /// <returns>The absolute ROM offset.</returns>
+    protected static int MapStandardRomOffset(ushort address, int romBank, int bankSize) =>
+        ((address <= MemoryMap.RomBank0End)
+            ? address
+            : ((romBank * bankSize) + (address - MemoryMap.RomBankNStart))
+        );
+    /// <summary>Writes the mapper's register state to a snapshot.</summary>
+    /// <param name="writer">The snapshot sink.</param>
+    protected abstract void SaveRegisters(StateWriter writer);
+
+    /// <inheritdoc/>
+    public void ComputeRomWindows(out int bank0Offset, out int bankNOffset) {
+        bank0Offset = (MapRomOffset(address: MemoryMap.RomBank0Start) % m_rom.Length);
+        bankNOffset = (MapRomOffset(address: MemoryMap.RomBankNStart) % m_rom.Length);
+    }
+    /// <inheritdoc/>
     public byte[] ExportExternalRam() {
         return [.. m_ram];
+    }
+    /// <inheritdoc/>
+    public virtual byte[] ExportPersistentClock(long unixTimestampSeconds) {
+        return [];
+    }
+    /// <inheritdoc/>
+    public void ImportExternalRam(ReadOnlySpan<byte> source) {
+        source[..Math.Min(
+            val1: source.Length,
+            val2: m_ram.Length
+        )].CopyTo(destination: m_ram);
+        ExternalRamDirty = false;
+    }
+    /// <inheritdoc/>
+    public virtual void ImportPersistentClock(ReadOnlySpan<byte> source) {
+    }
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        reader.ReadBytes(destination: m_ram);
+        LoadRegisters(reader: reader);
+    }
+    /// <inheritdoc/>
+    public void MarkExternalRamClean() {
+        ExternalRamDirty = false;
+    }
+    /// <inheritdoc/>
+    public void MarkExternalRamDirty() {
+        ExternalRamDirty = true;
     }
     /// <inheritdoc/>
     public void ReadExternalRam(int offset, Span<byte> destination) {
@@ -75,32 +181,6 @@ public abstract class CartridgeBase : ICartridge {
         ).CopyTo(destination: destination);
     }
     /// <inheritdoc/>
-    public void ImportExternalRam(ReadOnlySpan<byte> source) {
-        source[..Math.Min(
-            val1: source.Length,
-            val2: m_ram.Length
-        )].CopyTo(destination: m_ram);
-        ExternalRamDirty = false;
-    }
-    /// <inheritdoc/>
-    public void MarkExternalRamClean() {
-        ExternalRamDirty = false;
-    }
-
-    /// <inheritdoc/>
-    public virtual int PersistentClockByteCount => 0;
-
-    /// <inheritdoc/>
-    public virtual byte[] ExportPersistentClock(long unixTimestampSeconds) {
-        return [];
-    }
-    /// <inheritdoc/>
-    public virtual void ImportPersistentClock(ReadOnlySpan<byte> source) {
-    }
-    /// <inheritdoc/>
-    public byte ReadRom(ushort address) =>
-        m_rom[(MapRomOffset(address: address) % m_rom.Length)];
-    /// <inheritdoc/>
     public virtual byte ReadRam(ushort address) {
         if (!RamAccessible) {
             return 0xFF;
@@ -110,40 +190,17 @@ public abstract class CartridgeBase : ICartridge {
 
         return ((((uint)offset) < ((uint)m_ram.Length))
             ? m_ram[offset]
-            : (byte)0xFF);
+            : (byte)0xFF
+        );
     }
     /// <inheritdoc/>
-    public virtual void WriteRam(ushort address, byte value) {
-        if (!RamAccessible) {
-            return;
-        }
-
-        var offset = MapRamOffset(address: address);
-
-        if (((uint)offset) < ((uint)m_ram.Length)) {
-            m_ram[offset] = value;
-            // Every mapper's RAM store funnels through here (m_ram is private), so this is the ONE dirty site the
-            // host's battery-save flush watches.
-            ExternalRamDirty = true;
-        }
+    public byte ReadRom(ushort address) =>
+        m_rom[(MapRomOffset(address: address) % m_rom.Length)];
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteBytes(value: m_ram);
+        SaveRegisters(writer: writer);
     }
-    /// <inheritdoc/>
-    public abstract void WriteControl(ushort address, byte value);
-
-    /// <inheritdoc/>
-    public byte[] RomImage =>
-        m_rom;
-
-    /// <inheritdoc/>
-    public void ComputeRomWindows(out int bank0Offset, out int bankNOffset) {
-        bank0Offset = (MapRomOffset(address: MemoryMap.RomBank0Start) % m_rom.Length);
-        bankNOffset = (MapRomOffset(address: MemoryMap.RomBankNStart) % m_rom.Length);
-    }
-
-    /// <inheritdoc/>
-    public byte[] RamImage =>
-        m_ram;
-
     /// <inheritdoc/>
     /// <remarks>The default for every mapper whose <see cref="ReadRam"/>/<see cref="WriteRam"/> are the unmodified
     /// base implementation below: the window is exactly <see cref="MapRamOffset"/>'s bank-resolved offset, clamped to
@@ -170,82 +227,20 @@ public abstract class CartridgeBase : ICartridge {
         return true;
     }
     /// <inheritdoc/>
-    public void MarkExternalRamDirty() {
-        ExternalRamDirty = true;
-    }
-
+    public abstract void WriteControl(ushort address, byte value);
     /// <inheritdoc/>
-    /// <remarks>Virtual so a rumble-capable mapper (<see cref="Mbc5Cartridge"/>) can override it; see
-    /// <see cref="Interfaces.ICartridge.MotorLevel"/>'s remarks for why the base class must expose this rather than
-    /// relying on the interface's own default body.</remarks>
-    public virtual float MotorLevel => 0f;
-
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBytes(value: m_ram);
-        SaveRegisters(writer: writer);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        reader.ReadBytes(destination: m_ram);
-        LoadRegisters(reader: reader);
-    }
-
-    /// <summary>Deposits a block straight into save RAM at an absolute byte offset, bypassing the address decode and the
-    /// dirty flag. This is the seam a sensor mapper (the camera cartridge) uses to write its freshly captured image into
-    /// bank&#160;0: that image is <b>regenerated hardware output</b>, not a player-authored store, so it must NOT trip the
-    /// battery-save flush — <see cref="WriteRam"/> stays the one dirty site. A snapshot still captures the deposited
-    /// bytes because the whole RAM array is serialized. An out-of-range span is dropped whole.</summary>
-    /// <param name="offset">The absolute byte offset into save RAM (independent of the current bank selection).</param>
-    /// <param name="source">The bytes to deposit.</param>
-    protected void DepositExternalRam(int offset, ReadOnlySpan<byte> source) {
-        if (
-            (offset < 0) ||
-            ((((long)offset) + source.Length) > m_ram.Length)
-        ) {
+    public virtual void WriteRam(ushort address, byte value) {
+        if (!RamAccessible) {
             return;
         }
 
-        source.CopyTo(destination: m_ram.AsSpan(start: offset));
-    }
-    /// <summary>Computes the wrap mask for a bank select whose decoded chip mirrors on a power-of-two bank count: the
-    /// mask is <c>bankCount - 1</c> when the count is a power of two greater than one, otherwise zero (every select
-    /// resolves to bank zero, the single-bank/absent-chip wiring). Mappers whose bank arithmetic can go out of range —
-    /// or negative, like the MMM01's boot mapping of the image's last two banks — wrap through this mask.</summary>
-    /// <param name="byteCount">The chip's total size in bytes.</param>
-    /// <param name="bankSize">The size of one bank in bytes.</param>
-    /// <returns>The wrap mask.</returns>
-    protected static int ComputeBankWrapMask(int byteCount, int bankSize) {
-        var bankCount = (byteCount / bankSize);
+        var offset = MapRamOffset(address: address);
 
-        return (((bankCount > 1) && BitOperations.IsPow2(value: ((uint)bankCount)))
-            ? (bankCount - 1)
-            : 0);
+        if (((uint)offset) < ((uint)m_ram.Length)) {
+            m_ram[offset] = value;
+            // Every mapper's RAM store funnels through here (m_ram is private), so this is the ONE dirty site the
+            // host's battery-save flush watches.
+            ExternalRamDirty = true;
+        }
     }
-    /// <summary>Maps a ROM-region address through the standard MBC banking window every plain-banking mapper shares: the
-    /// fixed <c>[0x0000, 0x3FFF]</c> region reads bank zero at its own address, and the switchable
-    /// <c>[0x4000, 0x7FFF]</c> window reads <paramref name="romBank"/> at the window-relative offset. Mappers whose fixed
-    /// region can itself move (MBC1's advanced mode, the MMM01's menu/game split) map their own offsets instead.</summary>
-    /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
-    /// <param name="romBank">The bank currently selected into the switchable window.</param>
-    /// <param name="bankSize">The size of one ROM bank in bytes.</param>
-    /// <returns>The absolute ROM offset.</returns>
-    protected static int MapStandardRomOffset(ushort address, int romBank, int bankSize) =>
-        ((address <= MemoryMap.RomBank0End)
-        ? address
-        : ((romBank * bankSize) + (address - MemoryMap.RomBankNStart)));
-    /// <summary>Maps a ROM-region address to an absolute byte offset into the ROM image (mirrored on read).</summary>
-    /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
-    /// <returns>The absolute ROM offset.</returns>
-    protected abstract int MapRomOffset(ushort address);
-    /// <summary>Maps a RAM-window address to an absolute byte offset into the save RAM.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The absolute RAM offset; a value outside the populated size reads open-bus and drops writes.</returns>
-    protected abstract int MapRamOffset(ushort address);
-    /// <summary>Writes the mapper's register state to a snapshot.</summary>
-    /// <param name="writer">The snapshot sink.</param>
-    protected abstract void SaveRegisters(StateWriter writer);
-    /// <summary>Reads the mapper's register state back from a snapshot.</summary>
-    /// <param name="reader">The snapshot source.</param>
-    protected abstract void LoadRegisters(StateReader reader);
 }

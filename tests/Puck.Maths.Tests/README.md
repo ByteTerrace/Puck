@@ -122,4 +122,4 @@ repository's own machines. Restore timing to any other block only with that mach
 
 ## Documentation
 
-📚 [Puck.Maths](../../src/Puck.Maths/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)
+📚 [Deterministic numerics](../../docs/reference/maths.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

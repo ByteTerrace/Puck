@@ -50,78 +50,6 @@ public enum WorldAdmissionRefusal : byte {
 /// claims, issuer re-attestation).</para>
 /// </summary>
 public static class WorldAdmissionDoor {
-    /// <summary>Matches a trusted host's already validated OAuth identity against this World's explicit policy. Performs no token validation.</summary>
-    /// <param name="entries">The current immutable admission rows.</param>
-    /// <param name="issuer">The exact validated HTTPS issuer.</param>
-    /// <param name="subject">The validated subject within that issuer.</param>
-    /// <param name="verdict">The World's own grants and disclosure tier.</param>
-    /// <returns>Whether an exact OAuth row admits this identity; no wildcard or attestation row can authorize it.</returns>
-    public static bool TryMatchOAuthEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string issuer, string subject, out WorldAdmissionVerdict verdict) {
-        foreach (var row in entries ?? []) {
-            if (row.Mode == WorldAdmissionTrustMode.OAuth && row.Domain == issuer && row.Subject == subject) {
-                verdict = new(issuer, subject, row.Grants, row.Tier);
-                return true;
-            }
-        }
-        verdict = null!;
-        return false;
-    }
-    private static readonly IAttestationCodec Codec = new CborAttestationCodec();
-    private static readonly AttestationProfile Profile = AttestationProfile.Base;
-    // Reach is deliberately empty for every entry: this door never consults Puck.Attestation's own slot-reach
-    // mechanism (that vocabulary is for a carried CLAIM's downstream authorization — see TrustListEntry.Reach's own
-    // remarks), because this door already carries its OWN, more specific authorization vocabulary —
-    // WorldAdmissionEntry.Grants, resolved directly into WorldGrant rows once a peer is admitted. Reusing Reach for
-    // that would be the SAME decision expressed twice in two different string vocabularies, free to drift apart.
-    private static readonly IReadOnlySet<string> NoReach = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-    /// <summary>The fixed audience every admission claim must be directed at. A placeholder single-audience value
-    /// until worlds carry an addressable per-document identity of their own (docs/architecture/worlds.md's "Authenticating
-    /// the game wire" row, and the open "unembodied session authority" question) — today every World process's
-    /// admission door is the same addressable thing, so one constant names it honestly rather than inventing
-    /// per-world scoping this change does not need yet.</summary>
-    public const string Audience = "puck.world";
-    /// <summary>The challenge nonce's byte width — generous against a birthday collision across any realistic
-    /// connection volume, and small enough to stay a rounding error against the attestation bytes around it.</summary>
-    public const int ChallengeBytes = 32;
-    /// <summary>The fixed purpose every admission claim must declare — stops a claim minted for anything else (a
-    /// different game, a different purpose within this one) being replayed here as an admission proof.</summary>
-    public const string Purpose = "puck.world.tcp-admission";
-
-    /// <summary>The outcome of one identity-door decision.</summary>
-    /// <param name="Admitted">Whether the claim verified, matched an authored entry, and carried the challenge.</param>
-    /// <param name="Refusal">The named refusal on failure; <see langword="null"/> when admitted.</param>
-    /// <param name="Detail">Narration only — never used for control flow.</param>
-    /// <param name="Verdict">What the admission authorizes, when admitted; <see langword="null"/> on refusal.</param>
-    public readonly record struct AdmissionOutcome(bool Admitted, WorldAdmissionRefusal? Refusal, string Detail, WorldAdmissionVerdict? Verdict) {
-        /// <summary>Gets the verified identity's domain, when admitted.</summary>
-        public string? Domain => Verdict?.IdentityDomain;
-        /// <summary>Gets the admitting entry's own authored grant templates, when admitted.</summary>
-        public IReadOnlyList<WorldAdmissionGrant>? Grants => Verdict?.Templates;
-        /// <summary>Gets the verified identity's subject, when admitted — empty, never null, for a
-        /// <see cref="WorldAdmissionTrustMode.Vouches"/> entry's own chain-resolved subject, which the entry itself
-        /// does not pin.</summary>
-        public string? Subject => Verdict?.IdentitySubject;
-        /// <summary>Gets how much of this world's document the admitted peer receives; on refusal,
-        /// <see cref="WorldDisclosureTier.Frames"/> — a refused peer receives no document at all.</summary>
-        public WorldDisclosureTier Tier => (Verdict?.Tier ?? WorldDisclosureTier.Frames);
-
-        /// <summary>Builds an admitted outcome.</summary>
-        public static AdmissionOutcome Admit(WorldAdmissionVerdict verdict) => new(
-            Admitted: true,
-            Detail: string.Empty,
-            Refusal: null,
-            Verdict: verdict
-        );
-        /// <summary>Builds a refusal outcome.</summary>
-        public static AdmissionOutcome Refuse(WorldAdmissionRefusal refusal, string detail) => new(
-            Admitted: false,
-            Detail: detail,
-            Refusal: refusal,
-            Verdict: null
-        );
-    }
-
     private static TrustList BuildTrustList(IReadOnlyList<WorldAdmissionEntry> entries, TimeSpan? defaultMaximumAge) {
         var list = new List<TrustListEntry>(capacity: entries.Count);
 
@@ -413,5 +341,86 @@ public static class WorldAdmissionDoor {
         verdict = null;
 
         return false;
+    }
+    /// <summary>Matches a trusted host's already validated OAuth identity against this World's explicit policy. Performs no token validation.</summary>
+    /// <param name="entries">The current immutable admission rows.</param>
+    /// <param name="issuer">The exact validated HTTPS issuer.</param>
+    /// <param name="subject">The validated subject within that issuer.</param>
+    /// <param name="verdict">The World's own grants and disclosure tier.</param>
+    /// <returns>Whether an exact OAuth row admits this identity; no wildcard or attestation row can authorize it.</returns>
+    public static bool TryMatchOAuthEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string issuer, string subject, out WorldAdmissionVerdict verdict) {
+        foreach (var row in (entries ?? [])) {
+            if (
+                (row.Mode == WorldAdmissionTrustMode.OAuth) &&
+                (row.Domain == issuer) &&
+                (row.Subject == subject)
+            ) {
+                verdict = new(
+                    identityDomain: issuer,
+                    identitySubject: subject,
+                    templates: row.Grants,
+                    tier: row.Tier
+                );
+                return true;
+            }
+        }
+        verdict = null!;
+        return false;
+    }
+
+    private static readonly IAttestationCodec Codec = new CborAttestationCodec();
+    private static readonly AttestationProfile Profile = AttestationProfile.Base;
+    // Reach is deliberately empty for every entry: this door never consults Puck.Attestation's own slot-reach
+    // mechanism (that vocabulary is for a carried CLAIM's downstream authorization — see TrustListEntry.Reach's own
+    // remarks), because this door already carries its OWN, more specific authorization vocabulary —
+    // WorldAdmissionEntry.Grants, resolved directly into WorldGrant rows once a peer is admitted. Reusing Reach for
+    // that would be the SAME decision expressed twice in two different string vocabularies, free to drift apart.
+    private static readonly IReadOnlySet<string> NoReach = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+    /// <summary>The fixed audience every admission claim must be directed at. A placeholder single-audience value
+    /// until worlds carry an addressable per-document identity of their own (docs/architecture/worlds.md's "Authenticating
+    /// the game wire" row, and the open "unembodied session authority" question) — today every World process's
+    /// admission door is the same addressable thing, so one constant names it honestly rather than inventing
+    /// per-world scoping this change does not need yet.</summary>
+    public const string Audience = "puck.world";
+    /// <summary>The challenge nonce's byte width — generous against a birthday collision across any realistic
+    /// connection volume, and small enough to stay a rounding error against the attestation bytes around it.</summary>
+    public const int ChallengeBytes = 32;
+    /// <summary>The fixed purpose every admission claim must declare — stops a claim minted for anything else (a
+    /// different game, a different purpose within this one) being replayed here as an admission proof.</summary>
+    public const string Purpose = "puck.world.tcp-admission";
+
+    /// <summary>The outcome of one identity-door decision.</summary>
+    /// <param name="Admitted">Whether the claim verified, matched an authored entry, and carried the challenge.</param>
+    /// <param name="Refusal">The named refusal on failure; <see langword="null"/> when admitted.</param>
+    /// <param name="Detail">Narration only — never used for control flow.</param>
+    /// <param name="Verdict">What the admission authorizes, when admitted; <see langword="null"/> on refusal.</param>
+    public readonly record struct AdmissionOutcome(bool Admitted, WorldAdmissionRefusal? Refusal, string Detail, WorldAdmissionVerdict? Verdict) {
+        /// <summary>Gets the verified identity's domain, when admitted.</summary>
+        public string? Domain => Verdict?.IdentityDomain;
+        /// <summary>Gets the admitting entry's own authored grant templates, when admitted.</summary>
+        public IReadOnlyList<WorldAdmissionGrant>? Grants => Verdict?.Templates;
+        /// <summary>Gets the verified identity's subject, when admitted — empty, never null, for a
+        /// <see cref="WorldAdmissionTrustMode.Vouches"/> entry's own chain-resolved subject, which the entry itself
+        /// does not pin.</summary>
+        public string? Subject => Verdict?.IdentitySubject;
+        /// <summary>Gets how much of this world's document the admitted peer receives; on refusal,
+        /// <see cref="WorldDisclosureTier.Frames"/> — a refused peer receives no document at all.</summary>
+        public WorldDisclosureTier Tier => (Verdict?.Tier ?? WorldDisclosureTier.Frames);
+
+        /// <summary>Builds an admitted outcome.</summary>
+        public static AdmissionOutcome Admit(WorldAdmissionVerdict verdict) => new(
+            Admitted: true,
+            Detail: string.Empty,
+            Refusal: null,
+            Verdict: verdict
+        );
+        /// <summary>Builds a refusal outcome.</summary>
+        public static AdmissionOutcome Refuse(WorldAdmissionRefusal refusal, string detail) => new(
+            Admitted: false,
+            Detail: detail,
+            Refusal: refusal,
+            Verdict: null
+        );
     }
 }

@@ -9,49 +9,123 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed class CartridgeToolingTests {
-    [Theory]
+    private static string Source(string target) => CartridgeDecompiler.Decompile(document: JsonNode.Parse(CartridgeDocuments.Canonicalize(document: CartridgeDocuments.Create(
+        target: target,
+        title: "TEST"
+    )).Bytes)!.AsObject());
+
     [InlineData("cgb")]
     [InlineData("agb")]
+    [Theory]
     public void CompileAndLintDispatchCartridgeSchema(string target) {
-        var directory = Path.Combine(Path.GetTempPath(), "puck-cartridge-tooling-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try {
-            var path = Path.Combine(directory, "example.puck");
-            File.WriteAllText(path, Source(target));
-            Assert.Equal(0, CompileCommand.Run(path, null, false, true, true, false));
-            Assert.True(File.Exists(Path.ChangeExtension(path, ".cartridge.json")));
-            Assert.False(File.Exists(Path.ChangeExtension(path, ".world.json")));
-            Assert.Equal(0, LintCommand.Execute(path, true));
-            File.AppendAllText(path, "\nvariable \"invalid\" { initial: 99999 }\n");
-            Assert.Equal(1, LintCommand.Execute(path, true));
-            Assert.Equal(1, CompileCommand.Run(path, null, false, true, true, false));
-        } finally { Directory.Delete(directory, recursive: true); }
-    }
+        var directory = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: ("puck-cartridge-tooling-" + Guid.NewGuid().ToString(format: "N"))
+        );
 
+        Directory.CreateDirectory(path: directory);
+        try {
+            var path = Path.Combine(
+                path1: directory,
+                path2: "example.puck"
+            );
+
+            File.WriteAllText(
+                path,
+                Source(target: target)
+            );
+            Assert.Equal(
+                0,
+                CompileCommand.Run(
+                    path,
+                    null,
+                    false,
+                    true,
+                    true,
+                    false
+                )
+            );
+            Assert.True(condition: File.Exists(path: Path.ChangeExtension(
+                extension: ".cartridge.json",
+                path: path
+            )));
+            Assert.False(condition: File.Exists(path: Path.ChangeExtension(
+                extension: ".world.json",
+                path: path
+            )));
+            Assert.Equal(
+                0,
+                LintCommand.Execute(
+                    path,
+                    true
+                )
+            );
+            File.AppendAllText(
+                contents: "\nvariable \"invalid\" { initial: 99999 }\n",
+                path: path
+            );
+            Assert.Equal(
+                1,
+                LintCommand.Execute(
+                    path,
+                    true
+                )
+            );
+            Assert.Equal(
+                1,
+                CompileCommand.Run(
+                    path,
+                    null,
+                    false,
+                    true,
+                    true,
+                    false
+                )
+            );
+        } finally { Directory.Delete(
+            directory,
+            recursive: true
+        ); }
+    }
     [Fact]
     public async Task UnsavedCartridgeBufferUsesForgeDiagnostics() {
         var request = new JsonObject {
-            ["jsonrpc"] = "2.0", ["method"] = "textDocument/didOpen",
+            ["jsonrpc"] = "2.0",
+            ["method"] = "textDocument/didOpen",
             ["params"] = new JsonObject {
                 ["textDocument"] = new JsonObject {
-                    ["uri"] = "untitled:cartridge", ["text"] = Source("cgb") + "\nvariable \"invalid\" { initial: 99999 }\n",
+                    ["uri"] = "untitled:cartridge",
+                    ["text"] = (Source(target: "cgb") + "\nvariable \"invalid\" { initial: 99999 }\n"),
                 },
             },
         }.ToJsonString();
-        var body = Encoding.UTF8.GetBytes(request);
+        var body = Encoding.UTF8.GetBytes(s: request);
         using var input = new MemoryStream();
-        input.Write(Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n"));
-        input.Write(body);
+
+        input.Write(buffer: Encoding.ASCII.GetBytes(s: $"Content-Length: {body.Length}\r\n\r\n"));
+        input.Write(buffer: body);
         input.Position = 0;
         using var output = new MemoryStream();
-        var server = new PuckLanguageServer(input, output, CartridgeLanguageServices.Diagnose);
-        await server.RunAsync(TestContext.Current.CancellationToken);
-        var messages = Encoding.UTF8.GetString(output.ToArray());
-        Assert.Contains("textDocument/publishDiagnostics", messages);
-        Assert.Contains("initial", messages);
-        Assert.DoesNotContain("LSP parse error", messages);
-    }
+        var server = new PuckLanguageServer(
+            input,
+            output,
+            CartridgeLanguageServices.Diagnose
+        );
 
-    private static string Source(string target) => CartridgeDecompiler.Decompile(
-        JsonNode.Parse(CartridgeDocuments.Canonicalize(CartridgeDocuments.Create(target, "TEST")).Bytes)!.AsObject());
+        await server.RunAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var messages = Encoding.UTF8.GetString(bytes: output.ToArray());
+
+        Assert.Contains(
+            actualString: messages,
+            expectedSubstring: "textDocument/publishDiagnostics"
+        );
+        Assert.Contains(
+            actualString: messages,
+            expectedSubstring: "initial"
+        );
+        Assert.DoesNotContain(
+            actualString: messages,
+            expectedSubstring: "LSP parse error"
+        );
+    }
 }

@@ -38,8 +38,9 @@ public readonly record struct BootRomCalibration(int DividerTail, int EnableToHa
     /// <returns>The adjusted calibration.</returns>
     public BootRomCalibration WithEnableAdjustment(int machineCycles, bool colorCartridge) =>
         (colorCartridge
-        ? (this with { EnableToHandoffColor = (EnableToHandoffColor + machineCycles) })
-        : (this with { EnableToHandoffMonochrome = (EnableToHandoffMonochrome + machineCycles) }));
+            ? (this with { EnableToHandoffColor = (EnableToHandoffColor + machineCycles) })
+            : (this with { EnableToHandoffMonochrome = (EnableToHandoffMonochrome + machineCycles) })
+        );
 }
 /// <summary>
 /// Everything about a revision's boot program that the emitter reads: the register file it hands the cartridge, which
@@ -52,22 +53,32 @@ public sealed class BootRomLayout {
         Probes = probes;
     }
 
+    /// <summary>Gets the handoff counter every cartridge produces on this revision, for a revision whose boot time is a
+    /// constant.</summary>
+    public ushort ConstantCounter =>
+        ((Model == ConsoleModel.Dmg0)
+            ? BootDivPrediction.Dmg0Counter
+            : BootDivPrediction.DmgCounter
+        );
+    /// <summary>Gets the T-cycles this revision's boot ROM runs beyond what the shared Color tables give for the same
+    /// header, which the emitted program adds to its own table walk rather than leaving to the solved tail.</summary>
+    public ushort HandoffCounterExtra =>
+        ((Model == ConsoleModel.Cgb0)
+            ? BootDivPrediction.Cgb0Extra
+            : (Model.HasAgbBootHandoff()
+                ? BootDivPrediction.AgbExtra
+                : (ushort)0
+        ));
     /// <summary>Gets the revision the program is emitted for.</summary>
     public ConsoleModel Model { get; }
     /// <summary>Gets the probe cartridges the builder boots to solve the program's timing. Every header class whose
     /// timing or handoff line differs needs one, and a second probe in the same class proves the solved constant is
     /// header-independent.</summary>
     public BootRomProbe[] Probes { get; }
-
     /// <summary>Gets a value indicating whether the revision has Color hardware, which selects the 2304-byte image
     /// shape.</summary>
     public bool SupportsColor =>
         Model.SupportsColor();
-    /// <summary>Gets a value indicating whether the boot program verifies the header checksum and, under a strict
-    /// <see cref="BootRomMark"/> policy, the cartridge logo. The companion console's boot ROM forwards the header
-    /// instead of checking it.</summary>
-    public bool VerifiesHeader =>
-        !Model.IsSuperGameBoy();
     /// <summary>Gets a value indicating whether the handoff counter is a function of the cartridge header rather than a
     /// per-revision constant, so the program must carry the prediction tables and compute its own target.</summary>
     public bool TimesFromHeader =>
@@ -76,29 +87,11 @@ public sealed class BootRomLayout {
     /// blank, rather than re-enabling in the epilogue to hand off on the first line.</summary>
     public bool TimesLcdEnable =>
         (Probes[0].HandoffLine != 0);
-    /// <summary>Gets the T-cycles this revision's boot ROM runs beyond what the shared Color tables give for the same
-    /// header, which the emitted program adds to its own table walk rather than leaving to the solved tail.</summary>
-    public ushort HandoffCounterExtra =>
-        ((Model == ConsoleModel.Cgb0)
-        ? BootDivPrediction.Cgb0Extra
-        : (Model.HasAgbBootHandoff()
-            ? BootDivPrediction.AgbExtra
-            : (ushort)0));
-    /// <summary>Gets the handoff counter every cartridge produces on this revision, for a revision whose boot time is a
-    /// constant.</summary>
-    public ushort ConstantCounter =>
-        ((Model == ConsoleModel.Dmg0)
-        ? BootDivPrediction.Dmg0Counter
-        : BootDivPrediction.DmgCounter);
-
-    /// <summary>Creates the layout for a revision.</summary>
-    /// <param name="model">The revision.</param>
-    /// <returns>The layout.</returns>
-    public static BootRomLayout For(ConsoleModel model) =>
-        new(
-        model: model,
-        probes: ProbesFor(model: model)
-    );
+    /// <summary>Gets a value indicating whether the boot program verifies the header checksum and, under a strict
+    /// <see cref="BootRomMark"/> policy, the cartridge logo. The companion console's boot ROM forwards the header
+    /// instead of checking it.</summary>
+    public bool VerifiesHeader =>
+        !Model.IsSuperGameBoy();
 
     private static BootRomProbe[] ProbesFor(ConsoleModel model) {
         if (model.SupportsColor()) {
@@ -147,12 +140,21 @@ public sealed class BootRomLayout {
             new BootRomProbe(
                 ColorFlag: 0x00,
                 HandoffLine: ((model == ConsoleModel.Dmg0)
-                    ? ((byte)0x91)
-                    : ((byte)0x00)),
+            ? ((byte)0x91)
+            : ((byte)0x00)),
                 NewLicenseeCode: "  ",
                 OldLicenseeCode: 0x01,
                 Title: "PUCK"
             ),
         ];
     }
+
+    /// <summary>Creates the layout for a revision.</summary>
+    /// <param name="model">The revision.</param>
+    /// <returns>The layout.</returns>
+    public static BootRomLayout For(ConsoleModel model) =>
+        new(
+            model: model,
+            probes: ProbesFor(model: model)
+        );
 }

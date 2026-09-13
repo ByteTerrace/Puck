@@ -107,8 +107,9 @@ internal static class SaveRoundTripProbe {
         return ((failures.Count == 0)
             ? (true, "SRAM export/import round-trip, dirty-flag transitions, legacy-prefix load, oversized rejection")
             : (false, $"failed: {string.Join(
-            separator: ", ",
-            values: failures
-        )}"));
+                separator: ", ",
+                values: failures
+            )}")
+        );
     }
 }

@@ -52,7 +52,8 @@ internal static class SyntheticRom {
 
         rom[0x0143] = (supportsColor
             ? (byte)0x80
-            : (byte)0x00);
+            : (byte)0x00
+        );
         rom[0x0147] = cartridgeType;
         rom[0x0149] = ramSize;
 

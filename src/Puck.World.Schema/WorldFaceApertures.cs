@@ -27,15 +27,15 @@ public static class WorldFaceApertures {
             // The one-sided slab: the drawn face's own frame extruded along its normal, never thinner than one step
             // of the fastest declared travel (the crossing floor).
             [SdfSolidPrimitive.Box] = new WorldFaceApertureRecipe(
-                Open: static (frame, crossingFloor) => new WorldFaceAperture.Box(
-                    Depth: FixedQ4816.Max(
-                        x: frame.HalfDepth,
-                        y: crossingFloor
-                    ),
-                    Frame: frame
-                ),
-                Primitive: SdfSolidPrimitive.Box
+        Open: static (frame, crossingFloor) => new WorldFaceAperture.Box(
+            Depth: FixedQ4816.Max(
+                x: frame.HalfDepth,
+                y: crossingFloor
             ),
+            Frame: frame
+        ),
+        Primitive: SdfSolidPrimitive.Box
+    ),
         }.ToFrozenDictionary();
 
     /// <summary>Gets the aperture recipe a face's named shape kind opens, or <see langword="null"/> when it opens
@@ -49,8 +49,7 @@ public static class WorldFaceApertures {
             value: out var recipe
         )
             ? recipe
-            : null
-        )
+            : null        )
         : null
     );
 }

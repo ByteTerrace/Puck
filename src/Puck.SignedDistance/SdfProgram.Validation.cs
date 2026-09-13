@@ -44,30 +44,62 @@ public sealed partial class SdfProgram {
     // and warp rate into one scalar) and the cull bounds derived from the same lanes, and the shader propagates it
     // through every blend. SdfProgramBuilder refuses the same values one layer earlier, naming the caller's argument.
     private static void RequireFiniteOperands(SdfInstruction instruction, int index, string paramName) {
-        if (instruction.Op == SdfOp.ShapeBlend && instruction.Shape == (uint)SdfShapeType.Glyph &&
-            (instruction.Data1.Y <= 0f || instruction.Data1.Z <= 0f || instruction.Data0.Z < 0f || instruction.Data0.W < 0f ||
-             instruction.Data1.W <= 0f || instruction.Data1.W > 1f)) {
-            throw new ArgumentException($"Instruction {index} requires positive glyph extents and a sampling correction in (0, 1].", paramName);
+        if (
+            (instruction.Op == SdfOp.ShapeBlend) &&
+            (instruction.Shape == ((uint)SdfShapeType.Glyph)) &&
+            ((instruction.Data1.Y <= 0f) || (instruction.Data1.Z <= 0f) || (instruction.Data0.Z < 0f) || (instruction.Data0.W < 0f) ||
+             (instruction.Data1.W <= 0f) || (instruction.Data1.W > 1f))
+        ) {
+            throw new ArgumentException(
+                message: $"Instruction {index} requires positive glyph extents and a sampling correction in (0, 1].",
+                paramName: paramName
+            );
         }
         if (instruction.Op == SdfOp.CellDisplace) {
-            new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
-                (SdfCellMode)instruction.Blend, instruction.Data0.Z).Validate();
+            new SdfCellDisplacement(
+                instruction.Data0.X,
+                instruction.Data0.Y,
+                instruction.Shape,
+                ((SdfCellMode)instruction.Blend),
+                instruction.Data0.Z
+            ).Validate();
         }
-        if (instruction.Op == SdfOp.GaussianPush &&
-            (!float.IsFinite(BitConverter.UInt32BitsToSingle(instruction.Shape)) ||
-             instruction.Data1.X <= 0f || instruction.Data1.Y <= 0f || instruction.Data1.Z <= 0f)) {
-            throw new ArgumentException($"Instruction {index} requires a finite Gaussian push and positive radii.", paramName);
+        if (
+            (instruction.Op == SdfOp.GaussianPush) &&
+            (!float.IsFinite(f: BitConverter.UInt32BitsToSingle(value: instruction.Shape)) ||
+             (instruction.Data1.X <= 0f) || (instruction.Data1.Y <= 0f) || (instruction.Data1.Z <= 0f))
+        ) {
+            throw new ArgumentException(
+                message: $"Instruction {index} requires a finite Gaussian push and positive radii.",
+                paramName: paramName
+            );
         }
-        if (instruction.Op == SdfOp.RotatePlane && (instruction.Shape > 2u || instruction.Blend > 2u)) {
-            throw new ArgumentException($"Instruction {index} requires plane and driver indices in [0, 2].", paramName);
+        if (
+            (instruction.Op == SdfOp.RotatePlane) &&
+            ((instruction.Shape > 2u) || (instruction.Blend > 2u))
+        ) {
+            throw new ArgumentException(
+                message: $"Instruction {index} requires plane and driver indices in [0, 2].",
+                paramName: paramName
+            );
         }
-        if (instruction.Op == SdfOp.Shear &&
-            (instruction.Shape > 2u || instruction.Blend > 2u || instruction.Shape == instruction.Blend)) {
-            throw new ArgumentException($"Instruction {index} requires distinct shear axes in [0, 2].", paramName);
+        if (
+            (instruction.Op == SdfOp.Shear) &&
+            ((instruction.Shape > 2u) || (instruction.Blend > 2u) || (instruction.Shape == instruction.Blend))
+        ) {
+            throw new ArgumentException(
+                message: $"Instruction {index} requires distinct shear axes in [0, 2].",
+                paramName: paramName
+            );
         }
-        if (instruction.Op == SdfOp.AxialProfile &&
-            (instruction.Shape > 2u || instruction.Data1.Y <= 0f || instruction.Data0.W <= 0f)) {
-            throw new ArgumentException($"Instruction {index} requires an axis in [0, 2], positive start scale and inverse span.", paramName);
+        if (
+            (instruction.Op == SdfOp.AxialProfile) &&
+            ((instruction.Shape > 2u) || (instruction.Data1.Y <= 0f) || (instruction.Data0.W <= 0f))
+        ) {
+            throw new ArgumentException(
+                message: $"Instruction {index} requires an axis in [0, 2], positive start scale and inverse span.",
+                paramName: paramName
+            );
         }
         var reinterpreted = ((instruction.Op == SdfOp.ShapeBlend)
             ? (((SdfShapeType)instruction.Shape) switch {
@@ -267,7 +299,10 @@ public sealed partial class SdfProgram {
                 (material.Bounce.X < 0f) ||
                 (material.Bounce.Y < 0f) ||
                 (material.Bounce.Z < 0f) ||
-                !SdfMaterialLayers.IsValid(material.Inset, material.Weathering)
+                !SdfMaterialLayers.IsValid(
+                inset: material.Inset,
+                weathering: material.Weathering
+            )
             ) {
                 throw new ArgumentOutOfRangeException(
                     message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and bounce tint, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], and valid material layers; got {material}.",
@@ -417,13 +452,13 @@ public sealed partial class SdfProgram {
 
         if (
             !float.IsFinite(f: lane) ||
-            (lane != MathF.Round(lane)) ||
+            (lane != MathF.Round(x: lane)) ||
             (lane < ((float)0)) ||
             (lane > ((float)3))
         ) {
             throw new ArgumentOutOfRangeException(
-                paramName: paramName,
-                message: $"Instruction {index} is a LaneErode carrying lane index {lane} in Data0.x; it must be an exact integer in [{(uint)0}, {(uint)3}] ."
+                message: $"Instruction {index} is a LaneErode carrying lane index {lane} in Data0.x; it must be an exact integer in [{((uint)0)}, {((uint)3)}] .",
+                paramName: paramName
             );
         }
     }
@@ -507,7 +542,12 @@ public sealed partial class SdfProgram {
                 if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
                     var lane = instruction.Data0.X;
 
-                    if (!float.IsFinite(lane) || (lane < 0f) || (lane > 3f) || (lane != MathF.Floor(lane))) {
+                    if (
+                        !float.IsFinite(f: lane) ||
+                        (lane < 0f) ||
+                        (lane > 3f) ||
+                        (lane != MathF.Floor(x: lane))
+                    ) {
                         throw new ArgumentException(
                             message: $"Instruction {index} is a PopField Morph carrying lane index {lane} in Data0.x; it must be an exact integer in [0, 3].",
                             paramName: instructionsParamName
@@ -523,7 +563,11 @@ public sealed partial class SdfProgram {
                 } else if (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
                     var steps = instruction.Data1.Z;
 
-                    if (!float.IsFinite(steps) || (steps < 1f) || (steps != MathF.Floor(steps))) {
+                    if (
+                        !float.IsFinite(f: steps) ||
+                        (steps < 1f) ||
+                        (steps != MathF.Floor(x: steps))
+                    ) {
                         throw new ArgumentException(
                             message: $"Instruction {index} is a PopField Stairs carrying step count {steps} in Data1.z; it must be an integer >= 1.",
                             paramName: instructionsParamName
@@ -566,7 +610,7 @@ public sealed partial class SdfProgram {
 
             if (instruction.Blend is ((uint)SdfBlendOp.Morph) or ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
                 throw new ArgumentException(
-                    message: $"Instruction {index} is a ShapeBlend carrying blend {(SdfBlendOp)instruction.Blend}; Morph, StairsUnion, and StairsSubtraction are valid only on PopField instructions.",
+                    message: $"Instruction {index} is a ShapeBlend carrying blend {((SdfBlendOp)instruction.Blend)}; Morph, StairsUnion, and StairsSubtraction are valid only on PopField instructions.",
                     paramName: instructionsParamName
                 );
             }

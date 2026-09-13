@@ -9,6 +9,7 @@ public interface IMachineVideoOutput {
     nint NativeImageViewHandle { get; }
     /// <summary>Gets the frame's average emitted color, normalized to 0..1.</summary>
     Vector3 EmittedLight { get; }
+
     /// <summary>Publishes the most recent complete frame on the selected GPU. Unchanged frames need no upload.</summary>
     /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="gpu">Backend-neutral upload services.</param>
@@ -16,7 +17,6 @@ public interface IMachineVideoOutput {
     /// <summary>Retires GPU resources without changing the machine's simulation state.</summary>
     void NotifyDeviceLost();
 }
-
 /// <summary>Optional named video outputs. Names and output identities remain stable for the runtime's lifetime.</summary>
 public interface IMachineVideoOutputs {
     /// <summary>Gets the available outputs by provider-owned name.</summary>

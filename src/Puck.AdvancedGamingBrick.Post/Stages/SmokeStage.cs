@@ -10,14 +10,14 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal sealed class SmokeStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "smoke";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -25,13 +25,15 @@ internal sealed class SmokeStage : IPostStage<PostContext> {
         var total = (result.Passed + result.Failed);
         var skipNote = ((result.Skipped > 0)
             ? $", {result.Skipped} skipped (no real BIOS)"
-            : string.Empty);
+            : string.Empty
+        );
 
         return ((result.Failed == 0)
             ? PostStageOutcome.Pass(detail: $"{result.Passed}/{total} CPU/PPU/APU/IRQ/DMA/DI vectors passed{skipNote}")
             : PostStageOutcome.Fail(detail: $"{result.Passed}/{total} passed{skipNote}; failed: {string.Join(
-            separator: ", ",
-            values: result.Failures
-        )}"));
+                separator: ", ",
+                values: result.Failures
+            )}")
+        );
     }
 }

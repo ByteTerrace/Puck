@@ -109,8 +109,8 @@ seam being a boundary where a value passes from one world into another. The
 lands on the same result everywhere.
 
 The folder is an organizational unit and nothing more—every public type here
-lives flat in `namespace Puck.Maths`. The parent [`Puck.Maths`
-README](../README.md) is the library's entry point; this file is the contract
+lives flat in `namespace Puck.Maths`. The parent [Deterministic
+numerics](../../../docs/reference/maths.md) is the library's entry point; this file is the contract
 for the folder.
 
 ---
@@ -1399,4 +1399,4 @@ to a narrow-lane threshold should move nothing observable at all.
 
 ## Documentation
 
-📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)
+📚 [Puck.Maths](../../../docs/reference/maths.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

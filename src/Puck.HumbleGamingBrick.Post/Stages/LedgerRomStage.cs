@@ -37,8 +37,8 @@ internal sealed class LedgerRomStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) =>
         LedgerEvaluator.Evaluate(
-        cases: m_discover(context),
-        context: context,
-        suites: m_suites
-    );
+            cases: m_discover(context),
+            context: context,
+            suites: m_suites
+        );
 }

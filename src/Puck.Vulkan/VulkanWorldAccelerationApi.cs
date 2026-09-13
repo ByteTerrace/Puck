@@ -11,10 +11,10 @@ namespace Puck.Vulkan;
 /// counterpart, so there is no neutral-seam equivalent.
 /// </summary>
 public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructureApi accelerationStructureApi) : IVulkanWorldAccelerationApi {
-    // Values verified against the Vulkan SDK 1.4 header (vulkan_core.h).
-    private const uint AccelerationStructureTypeTopLevel = 0;
     private const uint AabbByteSize = 24;
     private const uint AccelerationStructureTypeBottomLevel = 1;
+    // Values verified against the Vulkan SDK 1.4 header (vulkan_core.h).
+    private const uint AccelerationStructureTypeTopLevel = 0;
     private const uint AccessAccelerationStructureReadBit = 0x00200000;
     private const uint AccessAccelerationStructureWriteBit = 0x00400000;
     private const uint AccessShaderReadBit = 0x00000020;
@@ -33,10 +33,61 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
     private const uint StructureTypeAccelerationStructureGeometryInstancesDataKhr = 1000150004;
     private const uint StructureTypeAccelerationStructureGeometryKhr = 1000150006;
 
-    /// <inheritdoc/>
-    public bool SupportsDevice(nint deviceHandle) {
-        return accelerationStructureApi.SupportsDevice(deviceHandle: deviceHandle);
+    private static VkAccelerationStructureGeometryAabbsKhr CreateAabbGeometry(ulong aabbDeviceAddress) {
+        return new VkAccelerationStructureGeometryAabbsKhr {
+            AabbsSType = StructureTypeAccelerationStructureGeometryAabbsDataKhr,
+            DataDeviceAddress = aabbDeviceAddress,
+            GeometryType = GeometryTypeAabbs,
+            SType = StructureTypeAccelerationStructureGeometryKhr,
+            Stride = AabbByteSize,
+        };
     }
+    private (nint BufferHandle, nint MemoryHandle) CreateBuffer(VulkanWorldAccelerationCreateRequest request, ulong sizeBytes, uint usage, bool hostVisible) {
+        return accelerationStructureApi.CreateBuffer(request: new VulkanAccelerationBufferCreateRequest(
+            DeviceHandle: request.DeviceHandle,
+            HostVisible: hostVisible,
+            InstanceHandle: request.InstanceHandle,
+            PhysicalDeviceHandle: request.PhysicalDeviceHandle,
+            SizeBytes: sizeBytes,
+            Usage: usage
+        ));
+    }
+    private static VkAccelerationStructureGeometryInstancesKhr CreateInstancesGeometry(ulong instanceBufferDeviceAddress) {
+        return new VkAccelerationStructureGeometryInstancesKhr {
+            DataDeviceAddress = instanceBufferDeviceAddress,
+            GeometryType = GeometryTypeInstances,
+            InstancesSType = StructureTypeAccelerationStructureGeometryInstancesDataKhr,
+            SType = StructureTypeAccelerationStructureGeometryKhr,
+        };
+    }
+    private (nint BufferHandle, nint MemoryHandle, ulong AlignedDeviceAddress) CreateScratchBuffer(
+        VulkanWorldAccelerationCreateRequest request,
+        ulong scratchSize,
+        uint scratchAlignment
+    ) {
+        // Over-allocate by the alignment and round the device address up: the spec aligns
+        // the SCRATCH ADDRESS (minAccelerationStructureScratchOffsetAlignment), not the
+        // buffer object.
+        var alignment = Math.Max(
+            val1: scratchAlignment,
+            val2: 1u
+        );
+
+        var (bufferHandle, memoryHandle) = CreateBuffer(
+            hostVisible: false,
+            request: request,
+            sizeBytes: (scratchSize + alignment),
+            usage: BufferUsageStorageBufferBit | BufferUsageShaderDeviceAddressBit
+        );
+        var address = accelerationStructureApi.GetBufferDeviceAddress(
+            bufferHandle: bufferHandle,
+            deviceHandle: request.DeviceHandle
+        );
+        var alignedAddress = ((address + alignment) - 1) & ~(((ulong)alignment) - 1);
+
+        return (bufferHandle, memoryHandle, alignedAddress);
+    }
+
     /// <inheritdoc/>
     public VulkanWorldAccelerationResources CreateResources(VulkanWorldAccelerationCreateRequest request) {
         if (
@@ -376,6 +427,10 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
         );
     }
     /// <inheritdoc/>
+    public bool SupportsDevice(nint deviceHandle) {
+        return accelerationStructureApi.SupportsDevice(deviceHandle: deviceHandle);
+    }
+    /// <inheritdoc/>
     public void WriteInstance(
         nint instanceBufferMappedPointer,
         int index,
@@ -413,60 +468,5 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
         instance->InstanceCustomIndexAndMask = (instanceCustomIndex & 0x00FFFFFF) | (visibilityMask << 24);
         instance->SbtRecordOffsetAndFlags = 0;
         instance->AccelerationStructureReference = blasDeviceAddress;
-    }
-
-    private (nint BufferHandle, nint MemoryHandle) CreateBuffer(VulkanWorldAccelerationCreateRequest request, ulong sizeBytes, uint usage, bool hostVisible) {
-        return accelerationStructureApi.CreateBuffer(request: new VulkanAccelerationBufferCreateRequest(
-            DeviceHandle: request.DeviceHandle,
-            HostVisible: hostVisible,
-            InstanceHandle: request.InstanceHandle,
-            PhysicalDeviceHandle: request.PhysicalDeviceHandle,
-            SizeBytes: sizeBytes,
-            Usage: usage
-        ));
-    }
-    private (nint BufferHandle, nint MemoryHandle, ulong AlignedDeviceAddress) CreateScratchBuffer(
-        VulkanWorldAccelerationCreateRequest request,
-        ulong scratchSize,
-        uint scratchAlignment
-    ) {
-        // Over-allocate by the alignment and round the device address up: the spec aligns
-        // the SCRATCH ADDRESS (minAccelerationStructureScratchOffsetAlignment), not the
-        // buffer object.
-        var alignment = Math.Max(
-            val1: scratchAlignment,
-            val2: 1u
-        );
-
-        var (bufferHandle, memoryHandle) = CreateBuffer(
-            hostVisible: false,
-            request: request,
-            sizeBytes: (scratchSize + alignment),
-            usage: BufferUsageStorageBufferBit | BufferUsageShaderDeviceAddressBit
-        );
-        var address = accelerationStructureApi.GetBufferDeviceAddress(
-            bufferHandle: bufferHandle,
-            deviceHandle: request.DeviceHandle
-        );
-        var alignedAddress = ((address + alignment) - 1) & ~(((ulong)alignment) - 1);
-
-        return (bufferHandle, memoryHandle, alignedAddress);
-    }
-    private static VkAccelerationStructureGeometryAabbsKhr CreateAabbGeometry(ulong aabbDeviceAddress) {
-        return new VkAccelerationStructureGeometryAabbsKhr {
-            AabbsSType = StructureTypeAccelerationStructureGeometryAabbsDataKhr,
-            DataDeviceAddress = aabbDeviceAddress,
-            GeometryType = GeometryTypeAabbs,
-            SType = StructureTypeAccelerationStructureGeometryKhr,
-            Stride = AabbByteSize,
-        };
-    }
-    private static VkAccelerationStructureGeometryInstancesKhr CreateInstancesGeometry(ulong instanceBufferDeviceAddress) {
-        return new VkAccelerationStructureGeometryInstancesKhr {
-            DataDeviceAddress = instanceBufferDeviceAddress,
-            GeometryType = GeometryTypeInstances,
-            InstancesSType = StructureTypeAccelerationStructureGeometryInstancesDataKhr,
-            SType = StructureTypeAccelerationStructureGeometryKhr,
-        };
     }
 }

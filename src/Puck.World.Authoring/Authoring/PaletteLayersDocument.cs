@@ -7,7 +7,11 @@ namespace Puck.World.Authoring;
 /// <summary>An authored surface tint and reflectance.</summary>
 public sealed record PaletteSurfaceDocument(string Color, float Roughness, float Metal) {
     /// <summary>Resolves literal colors or containing-world color bindings.</summary>
-    public SdfSurface ToSurface(Func<string, Vector3> resolve) => new(resolve(Color), Roughness, Metal);
+    public SdfSurface ToSurface(Func<string, Vector3> resolve) => new(
+        resolve(Color),
+        Roughness,
+        Metal
+    );
 }
 /// <summary>One ascending coverage threshold and the surface it reveals.</summary>
 public sealed record PaletteRevealDocument(float Threshold, PaletteSurfaceDocument Surface);
@@ -20,16 +24,49 @@ public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopD
 public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuaternion Rotation, float Depth, float Ior, PaletteRadialPaintDocument Paint) {
     /// <summary>Resolves the generic engine layer.</summary>
     public SdfInset ToInset(Func<string, Vector3> resolve) => new(
-        new(Origin.X, Origin.Y, Origin.Z), new(Rotation.X, Rotation.Y, Rotation.Z, Rotation.W), Depth, Ior,
-        new(Paint.Stops.Select(s => new SdfRadialStop(s.Radius, resolve(s.Color))).ToArray(),
-            Paint.Softness, Paint.ModulationAmplitude, Paint.ModulationFrequency, Paint.Seed));
+        new(
+            x: Origin.X,
+            y: Origin.Y,
+            z: Origin.Z
+        ),
+        new(
+            Rotation.X,
+            Rotation.Y,
+            Rotation.Z,
+            Rotation.W
+        ),
+        Depth,
+        Ior,
+        new(
+            Paint.Stops.Select(selector: s => new SdfRadialStop(
+                s.Radius,
+                resolve(s.Color)
+            )).ToArray(),
+            Paint.Softness,
+            Paint.ModulationAmplitude,
+            Paint.ModulationFrequency,
+            Paint.Seed
+        )
+    );
 }
 /// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces.</summary>
 public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
     IReadOnlyList<PaletteRevealDocument>? Under = null, PaletteSurfaceDocument? Deposit = null) {
     /// <summary>Resolves the generic engine response.</summary>
-    public SdfWeathering ToWeathering(Func<string, Vector3> resolve) => new(Edge, Lines, Settle, Reach, Seed, Scale,
-        Floor, Lane, Under?.Select(s => new SdfRevealStage(s.Threshold, s.Surface.ToSurface(resolve))).ToArray(),
-        Deposit?.ToSurface(resolve));
+    public SdfWeathering ToWeathering(Func<string, Vector3> resolve) => new(
+        Edge,
+        Lines,
+        Settle,
+        Reach,
+        Seed,
+        Scale,
+        Floor,
+        Lane,
+        Under?.Select(selector: s => new SdfRevealStage(
+            s.Threshold,
+            s.Surface.ToSurface(resolve: resolve)
+        )).ToArray(),
+        Deposit?.ToSurface(resolve: resolve)
+    );
 }

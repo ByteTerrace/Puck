@@ -58,36 +58,34 @@ public sealed class FieldLattice {
         Z: FixedQ4816.Zero
     );
 
+    private readonly FixedQ4816 m_bodyCouplingCeiling;
     private readonly FixedQ4816 m_cellSize;
-    private readonly int m_depth;
-    private readonly List<int> m_deltas = [];
     private readonly bool[][] m_deltaDirty;
-
-    private FieldLatticeInput m_input;
-    private ReactionSets[] m_reactionSets;
-
+    private readonly List<int> m_deltas = [];
+    private readonly int m_depth;
+    private readonly Int128[] m_flowDelta;
+    private readonly int m_flowDirections;
+    private readonly FixedQ4816[] m_flowHeights;
     private readonly FixedQ4816[] m_heightScale;
     private readonly bool[] m_isMedium;
     private readonly int m_layers;
-    private readonly FixedQ4816 m_bodyCouplingCeiling;
     private readonly FixedQ4816[] m_max;
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
     private readonly FixedVector3 m_origin;
     private readonly FixedQ4816[] m_scratch;
-    private readonly Int128[] m_flowDelta;
-    private readonly FixedQ4816[] m_flowHeights;
-    private readonly int m_flowDirections;
     private readonly int m_stepEveryTicks;
-    private readonly FixedQ4816[][] m_values;
     private readonly ulong[] m_valueRevisions;
+    private readonly FixedQ4816[][] m_values;
     private readonly int m_width;
 
-    private bool m_fullResync = true;
-    private int m_revision;
+    private int m_bodyPassCount;
     private int m_cellNodeCount;
     private int m_cellPassCount;
-    private int m_bodyPassCount;
+    private bool m_fullResync = true;
+    private FieldLatticeInput m_input;
+    private ReactionSets[] m_reactionSets;
+    private int m_revision;
 
     /// <summary>One captured lattice: raw Q48.16 cell values per field, field-major.</summary>
     /// <param name="Raw">The raw values, one array per declared field.</param>
@@ -134,9 +132,15 @@ public sealed class FieldLattice {
         // Every cell donates an equal share to each of the lattice's active-axis directions -- an axis with a
         // single cell (Layers = 1 on a ground lattice) has no directions at all, never a "missing neighbour".
         m_flowDirections = (
-            (((m_width > 1) ? 2 : 0) +
-            ((m_depth > 1) ? 2 : 0)) +
-            ((m_layers > 1) ? 2 : 0)
+            (((m_width > 1)
+            ? 2
+            : 0) +
+            ((m_depth > 1)
+            ? 2
+            : 0)) +
+            ((m_layers > 1)
+            ? 2
+            : 0)
         );
 
         for (var field = 0; (field < fields.Count); field++) {
@@ -183,28 +187,891 @@ public sealed class FieldLattice {
 
     }
 
-    /// <summary>Gets the declared reaction count.</summary>
-    public int ReactionCount => m_input.Reactions.Count;
-    /// <summary>Gets the declared step cadence in simulation ticks.</summary>
-    public int StepEveryTicks => m_stepEveryTicks;
     /// <summary>Gets the lattice's cell count (width × layers × depth).</summary>
     public int CellCount => ((m_width * m_layers) * m_depth);
     /// <summary>Gets the declared cubic cell edge.</summary>
     public FixedQ4816 CellSize => m_cellSize;
-    /// <summary>Gets the installed input.</summary>
-    public FieldLatticeInput Input => m_input;
+    /// <summary>Gets the lattice's depth in cells.</summary>
+    public int Depth => m_depth;
     /// <summary>Gets the number of declared fields.</summary>
     public int FieldCount => m_values.Length;
+    /// <summary>Gets the installed input.</summary>
+    public FieldLatticeInput Input => m_input;
+    /// <summary>Gets the lattice's layer count.</summary>
+    public int Layers => m_layers;
     /// <summary>Gets the lattice's minimum corner.</summary>
     public FixedVector3 Origin => m_origin;
+    /// <summary>Gets the declared reaction count.</summary>
+    public int ReactionCount => m_input.Reactions.Count;
     /// <summary>Gets a counter that moves on every cell write.</summary>
     public int Revision => m_revision;
+    /// <summary>Gets the declared step cadence in simulation ticks.</summary>
+    public int StepEveryTicks => m_stepEveryTicks;
+    /// <summary>Gets the lattice's width in cells.</summary>
+    public int Width => m_width;
 
-    /// <summary>Gets a derived invalidation stamp for one field, not simulation truth — a caller compares it against
-    /// a value it last observed rather than reading it as a value in its own right. Restore stamps it anew after
-    /// installing the saved values.</summary>
-    /// <param name="field">The field index.</param>
-    public ulong ValueRevision(int field) => m_valueRevisions[field];
+    private FixedQ4816 AddClamped(int field, FixedQ4816 x, FixedQ4816 y) {
+        var raw = (((Int128)x.Value) + y.Value);
+
+        if (raw <= m_min[field].Value) {
+            return m_min[field];
+        }
+
+        if (raw >= m_max[field].Value) {
+            return m_max[field];
+        }
+
+        return FixedQ4816.FromRawBits(value: ((long)raw));
+    }
+    private void ApplyNoiseFill(int field, FieldFillInput.Noise fill, bool trackDeltas, ulong worldSeed) {
+        var value = Clamp(
+            field: field,
+            value: fill.Value
+        );
+        var one = FixedQ4816.One;
+        var span = (one - fill.Threshold);
+        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var x = 0; (x < m_width); x++) {
+                // fBm: per-octave halved amplitude, halved noise-cell edge (floored at 1), decorrelated seed stream.
+                var amplitude = FixedQ4816.One;
+                var total = FixedQ4816.Zero;
+                var weight = FixedQ4816.Zero;
+                var cells = fill.Frequency;
+
+                for (var octave = 0; (octave < fill.Octaves); octave++) {
+                    total += (amplitude * Pcg3dLatticeNoise.ValueNoise01(
+                        cellX: x,
+                        cellZ: z,
+                        noiseCells: System.Math.Max(
+                            val1: 1,
+                            val2: cells
+                        ),
+                        seed: unchecked((seed + (((uint)octave) * 0x9E3779B9u)))
+                    ));
+                    weight += amplitude;
+                    amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
+                    cells = System.Math.Max(
+                        val1: 1,
+                        val2: (cells >> 1)
+                    );
+                }
+
+                var n = (total / weight);
+
+                if (n < fill.Threshold) {
+                    continue;
+                }
+
+                var scaled = ((span.Value > 0)
+                    ? (value * ((n - fill.Threshold) / span))
+                    : value
+                );
+
+                for (var y = 0; (y < m_layers); y++) {
+                    SetPaintValue(
+                        cell: CellIndex(
+                            x: x,
+                            y: y,
+                            z: z
+                        ),
+                        field: field,
+                        trackDeltas: trackDeltas,
+                        value: Clamp(
+                            field: field,
+                            value: scaled
+                        )
+                    );
+                }
+            }
+        }
+    }
+    private void ApplyPaintFill(int field, FieldFillInput fill, bool trackDeltas, ulong worldSeed) {
+        switch (fill) {
+            case FieldFillInput.Noise noise:
+                ApplyNoiseFill(
+                    field: field,
+                    fill: noise,
+                    trackDeltas: trackDeltas,
+                    worldSeed: worldSeed
+                );
+                break;
+            case FieldFillInput.Scatter scatter:
+                ApplyScatterFill(
+                    field: field,
+                    fill: scatter,
+                    trackDeltas: trackDeltas,
+                    worldSeed: worldSeed
+                );
+                break;
+            case FieldFillInput.Rect rect:
+                ApplyRectFill(
+                    field: field,
+                    fill: rect,
+                    trackDeltas: trackDeltas
+                );
+                break;
+        }
+    }
+    private void ApplyRectFill(int field, FieldFillInput.Rect fill, bool trackDeltas) {
+        var value = Clamp(
+            field: field,
+            value: fill.Value
+        );
+        var half = (m_cellSize / FixedQ4816.FromInteger(value: 2));
+
+        for (var z = 0; (z < m_depth); z++) {
+            var centreZ = ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: z))) + half);
+
+            if (
+                (centreZ < fill.MinZ) ||
+                (centreZ > fill.MaxZ)
+            ) {
+                continue;
+            }
+
+            for (var x = 0; (x < m_width); x++) {
+                var centreX = ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: x))) + half);
+
+                if (
+                    (centreX < fill.MinX) ||
+                    (centreX > fill.MaxX)
+                ) {
+                    continue;
+                }
+
+                for (var y = 0; (y < m_layers); y++) {
+                    SetPaintValue(
+                        cell: CellIndex(
+                            x: x,
+                            y: y,
+                            z: z
+                        ),
+                        field: field,
+                        trackDeltas: trackDeltas,
+                        value: value
+                    );
+                }
+            }
+        }
+    }
+    private void ApplyScatterFill(int field, FieldFillInput.Scatter fill, bool trackDeltas, ulong worldSeed) {
+        var value = Clamp(
+            field: field,
+            value: fill.Value
+        );
+        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
+        var spacing = System.Math.Max(
+            val1: 2,
+            val2: fill.Spacing
+        );
+        var radius = System.Math.Max(
+            val1: 1,
+            val2: fill.Radius
+        );
+        var radiusSquared = (radius * radius);
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var x = 0; (x < m_width); x++) {
+                // The cell tests its own block and the 8 neighbours — a jittered point near a block edge reaches
+                // across it, and 3×3 covers every reachable point while radius stays within one block.
+                var blockX = (x / spacing);
+                var blockZ = (z / spacing);
+                var hit = false;
+
+                for (var dz = -1; (!hit && (dz <= 1)); dz++) {
+                    for (var dx = -1; (!hit && (dx <= 1)); dx++) {
+                        var bx = (blockX + dx);
+                        var bz = (blockZ + dz);
+                        var h = Pcg3dLatticeNoise.Pcg3d(
+                            x: unchecked((uint)bx),
+                            y: unchecked((uint)bz),
+                            z: seed
+                        );
+                        // The point sits inside its block, radius-inset so a disc never leaves the block.
+                        var inset = System.Math.Max(
+                            val1: 0,
+                            val2: (spacing - (2 * radius))
+                        );
+                        var px = (((bx * spacing) + radius) + ((inset > 0)
+                            ? (int)(h.X % ((uint)inset))
+                            : 0));
+                        var pz = (((bz * spacing) + radius) + ((inset > 0)
+                            ? (int)(h.Y % ((uint)inset))
+                            : 0));
+                        var ddx = (x - px);
+                        var ddz = (z - pz);
+
+                        hit = (((ddx * ddx) + (ddz * ddz)) <= radiusSquared);
+                    }
+                }
+
+                if (!hit) {
+                    continue;
+                }
+
+                for (var y = 0; (y < m_layers); y++) {
+                    SetPaintValue(
+                        cell: CellIndex(
+                            x: x,
+                            y: y,
+                            z: z
+                        ),
+                        field: field,
+                        trackDeltas: trackDeltas,
+                        value: value
+                    );
+                }
+            }
+        }
+    }
+    private static int[] CanonicalFields(IEnumerable<int> fields) => [.. fields.Distinct().OrderBy(keySelector: static field => field)];
+    private static StateHandle[] CanonicalStates(IEnumerable<FieldScalarInput> inputs) => [.. inputs
+        .Where(predicate: static input => input.IsState)
+        .Select(selector: static input => input.State)
+        .Distinct()
+        .OrderBy(keySelector: static handle => handle.Ordinal)];
+    private int CellIndex(int x, int y, int z) => ((((z * m_layers) + y) * m_width) + x);
+    private FixedQ4816 Clamp(int field, FixedQ4816 value) => FixedQ4816.Clamp(
+        maximum: m_max[field],
+        minimum: m_min[field],
+        value: value
+    );
+    private static FixedQ4816 ClampRate(FixedQ4816 rate) => ((rate < FixedQ4816.Zero)
+        ? FixedQ4816.Zero
+        : ((rate > FixedQ4816.One)
+            ? FixedQ4816.One
+            : rate
+    ));
+    private void ClearDeltas() {
+        foreach (var key in m_deltas) {
+            var field = (key / CellCount);
+            var cell = (key - (field * CellCount));
+
+            m_deltaDirty[field][cell] = false;
+        }
+
+        m_deltas.Clear();
+    }
+    private static ReactionSets CompileFlowSets(FieldReactionInput.Flow flow) {
+        var stateInputs = new List<FieldScalarInput> { flow.Rate };
+
+        if (flow.SpillRow.IsValid) {
+            stateInputs.Add(item: new FieldScalarInput(
+                Literal: default,
+                State: flow.SpillRow
+            ));
+        }
+
+        return new ReactionSets(
+            true,
+            CanonicalFields(fields: flow.Over.Append(element: flow.Field)),
+            [flow.Field],
+            CanonicalStates(inputs: stateInputs),
+            (flow.SpillRow.IsValid
+            ? [flow.SpillRow]
+            : [])
+        );
+    }
+    // Mirrors the document-side compiler's canonical read/write set derivation over the plain reaction records, so
+    // the dependency plan a read-back reports never depends on which layer compiled the reactions.
+    private static ReactionSets[] CompileReactionSets(IReadOnlyList<FieldReactionInput> reactions) {
+        var sets = new ReactionSets[reactions.Count];
+
+        for (var index = 0; (index < reactions.Count); index++) {
+            sets[index] = reactions[index] switch {
+                FieldReactionInput.Diffuse diffuse => new ReactionSets(
+                true,
+                [diffuse.Field],
+                [diffuse.Field],
+                StateReads(input: diffuse.Rate),
+                []
+            ),
+                FieldReactionInput.Decay decay => new ReactionSets(
+                true,
+                [decay.Field],
+                [decay.Field],
+                StateReads(input: decay.Rate),
+                []
+            ),
+                FieldReactionInput.Transform transform => CompileTransformSets(transform: transform),
+                FieldReactionInput.Emit emit => new ReactionSets(
+                false,
+                [emit.Field],
+                [emit.Field],
+                CanonicalStates(inputs: [new FieldScalarInput(
+                        Literal: default,
+                        State: emit.Tag
+                    ), emit.Amount]),
+                []
+            ),
+                FieldReactionInput.Expose expose => new ReactionSets(
+                false,
+                [expose.Field],
+                [],
+                StateReads(input: expose.Value),
+                [expose.Row]
+            ),
+                FieldReactionInput.Flow flow => CompileFlowSets(flow: flow),
+                _ => throw new InvalidOperationException(message: "unknown field reaction kind."),
+            };
+        }
+
+        return sets;
+    }
+    private static ReactionSets CompileTransformSets(FieldReactionInput.Transform transform) {
+        var fieldReads = transform.When
+            .Select(selector: static condition => condition.Field)
+            .Concat(second: transform.Then
+                .Where(predicate: static write => (write.Op == FieldWriteOp.Add))
+                .Select(selector: static write => write.Field));
+        var stateReads = transform.When.Select(selector: static condition => condition.Value)
+            .Concat(second: transform.Then.Select(selector: static write => write.Value));
+
+        return new ReactionSets(
+            true,
+            CanonicalFields(fields: fieldReads),
+            CanonicalFields(fields: transform.Then.Select(selector: static write => write.Field)),
+            CanonicalStates(inputs: stateReads),
+            []
+        );
+    }
+    private static bool Conflicts(ReactionSets earlier, ReactionSets later) => ReadWriteHazard.Conflicts(
+        earlierFieldReads: earlier.FieldReads,
+        earlierFieldWrites: earlier.FieldWrites,
+        earlierStateReads: earlier.StateReads,
+        earlierStateWrites: earlier.StateWrites,
+        laterFieldReads: later.FieldReads,
+        laterFieldWrites: later.FieldWrites,
+        laterStateReads: later.StateReads,
+        laterStateWrites: later.StateWrites
+    );
+    // The exact wide division every reaction that must round a sum without a second rounding pass shares:
+    // round-half-to-even on the remainder, computed in UInt128 magnitude then resigned. divisor is always positive.
+    private static Int128 DivideRoundHalfEven(Int128 numerator, Int128 divisor) {
+        var negative = (numerator < Int128.Zero);
+        var magnitude = ((UInt128)(negative
+            ? -numerator
+            : numerator));
+        var divisorMagnitude = ((UInt128)divisor);
+        var quotient = (magnitude / divisorMagnitude);
+        var remainder = (magnitude % divisorMagnitude);
+
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (divisorMagnitude - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
+
+        return (negative
+            ? -((Int128)quotient)
+            : ((Int128)quotient)
+        );
+    }
+    // A field's free surface (value * heightScale over the origin) is unbounded by its own topology's layer count
+    // — the same reach TryBodyCellOf already admits for reaction coupling — so the coupled cell is resolved through
+    // it (clamped onto the top layer) rather than through a bare TryCellOf, which would refuse any column whose
+    // surface rises past one voxel.
+    private bool IsInsideMediumPoint(int field, in FixedVector3 position) {
+        if (
+            (((uint)field) >= ((uint)m_isMedium.Length)) ||
+            !m_isMedium[field] ||
+            !TryBodyCellOf(
+            cell: out var cell,
+            position: in position
+        )
+        ) {
+            return false;
+        }
+        var value = m_values[field][cell];
+
+        return (
+            (value > FixedQ4816.Zero) &&
+            (position.Y <= (m_origin.Y + (value * m_heightScale[field])))
+        );
+    }
+    // Every voxel layer the box actually spans is checked on its own value: a dry cap between wet layers must
+    // still refuse. Only the TOP visited layer is special: a field's free surface (value * heightScale over the
+    // origin) is unbounded by its own topology's layer count — the same reach TryBodyCellOf admits for reaction
+    // coupling — so a box whose top rises past the voxel grid (up to the body-coupling ceiling) checks that
+    // layer's value against the box's true top rather than the layer's own slab top; every layer below it must
+    // be wet clear to ITS own slab top, since the box continues past it regardless of what lies above.
+    private bool IsMediumBox(int field, Int128 minX, Int128 minY, Int128 minZ, Int128 maxX, Int128 maxY, Int128 maxZ) {
+        if (
+            (((uint)field) >= ((uint)m_isMedium.Length)) ||
+            !m_isMedium[field]
+        ) { return false; }
+        minX -= m_origin.X.Value; maxX -= m_origin.X.Value;
+        minY -= m_origin.Y.Value; maxY -= m_origin.Y.Value;
+        minZ -= m_origin.Z.Value; maxZ -= m_origin.Z.Value;
+        var size = m_cellSize.Value;
+
+        if (
+            (minX < 0) ||
+            (minY < 0) ||
+            (minZ < 0) ||
+            (maxX >= (((Int128)size) * m_width)) ||
+            (maxY > m_bodyCouplingCeiling.Value) ||
+            (maxZ >= (((Int128)size) * m_depth))
+        ) { return false; }
+        var x0 = ((int)(minX / size)); var x1 = ((int)(maxX / size));
+        var z0 = ((int)(minZ / size)); var z1 = ((int)(maxZ / size));
+        var y0 = ((int)Int128.Min(
+            x: (minY / size),
+            y: (m_layers - 1)
+        ));
+        var y1 = ((int)Int128.Min(
+            x: (maxY / size),
+            y: (m_layers - 1)
+        ));
+
+        for (var z = z0; (z <= z1); z++) {
+            for (var y = y0; (y <= y1); y++) {
+                var requiredHeight = ((y == (m_layers - 1))
+                    ? maxY
+                    : Int128.Min(
+                        x: maxY,
+                        y: (((Int128)(y + 1)) * size)
+                    )
+                );
+
+                for (var x = x0; (x <= x1); x++) {
+                    var value = m_values[field][CellIndex(
+                        x: x,
+                        y: y,
+                        z: z
+                    )];
+
+                    if (
+                        (value <= FixedQ4816.Zero) ||
+                        (requiredHeight > (value * m_heightScale[field]).Value)
+                    ) { return false; }
+                }
+            }
+        }
+        return true;
+    }
+    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: DivideRoundHalfEven(
+        divisor: count,
+        numerator: rawSum
+    )));
+    private void RecomputePassCounts() {
+        m_cellNodeCount = m_reactionSets.Count(predicate: static sets => sets.IsCellWork);
+        m_cellPassCount = 0;
+
+        for (var index = 0; (index < m_input.Reactions.Count); index++) {
+            m_cellPassCount += m_input.Reactions[index] switch {
+                FieldReactionInput.Diffuse => 2,
+                FieldReactionInput.Flow => 2,
+                _ when m_reactionSets[index].IsCellWork => 1,
+                _ => 0,
+            };
+        }
+
+        m_bodyPassCount = (m_reactionSets.Length - m_cellNodeCount);
+    }
+    private static FixedQ4816 Resolve(IFieldLatticeHost host, FieldScalarInput input, ulong tick) => (input.IsState
+        ? host.ReadScalar(
+            row: input.State,
+            tick: tick
+        )
+        : input.Literal
+    );
+    private static void SegmentAxisBounds(long from, long to, int piece, int count, long clearance, out Int128 minimum, out Int128 maximum) {
+        // Keep the segment parameter rational until the final outward round. Multiplication is at most 96 bits.
+        var delta = (((Int128)to) - from);
+        var first = ((((Int128)from) * count) + (delta * piece));
+        var second = (first + delta);
+        var low = Int128.Min(
+            x: first,
+            y: second
+        );
+        var high = Int128.Max(
+            x: first,
+            y: second
+        );
+
+        minimum = (((low / count) - (((low % count) < 0)
+            ? 1
+            : 0)) - clearance);
+        maximum = (((high / count) + (((high % count) > 0)
+            ? 1
+            : 0)) + clearance);
+    }
+    private void SetPaintValue(int field, int cell, FixedQ4816 value, bool trackDeltas) {
+        if (trackDeltas) {
+            Write(
+                cell: cell,
+                field: field,
+                value: value
+            );
+        } else {
+            m_values[field][cell] = value;
+            m_valueRevisions[field]++;
+        }
+    }
+    private static StateHandle[] StateReads(FieldScalarInput input) => (input.IsState
+        ? [input.State]
+        : []
+    );
+    private void StepDecay(int field, FixedQ4816 rate) {
+        var values = m_values[field];
+
+        for (var cell = 0; (cell < values.Length); cell++) {
+            var current = values[cell];
+
+            if (current == FixedQ4816.Zero) {
+                continue;
+            }
+
+            Write(
+                cell: cell,
+                field: field,
+                value: (current - (current * rate))
+            );
+        }
+    }
+    private void StepDiffuse(int field, FixedQ4816 rate) {
+        var values = m_values[field];
+
+        Array.Copy(
+            sourceArray: values,
+            destinationArray: m_scratch,
+            length: values.Length
+        );
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var y = 0; (y < m_layers); y++) {
+                for (var x = 0; (x < m_width); x++) {
+                    var cell = CellIndex(
+                        x: x,
+                        y: y,
+                        z: z
+                    );
+                    Int128 rawSum = 0;
+                    var count = 0;
+
+                    if (x > 0) { rawSum += m_scratch[CellIndex(
+                        x: (x - 1),
+                        y: y,
+                        z: z
+                    )].Value; count++; }
+                    if (x < (m_width - 1)) { rawSum += m_scratch[CellIndex(
+                        x: (x + 1),
+                        y: y,
+                        z: z
+                    )].Value; count++; }
+                    if (z > 0) { rawSum += m_scratch[CellIndex(
+                        x: x,
+                        y: y,
+                        z: (z - 1)
+                    )].Value; count++; }
+                    if (z < (m_depth - 1)) { rawSum += m_scratch[CellIndex(
+                        x: x,
+                        y: y,
+                        z: (z + 1)
+                    )].Value; count++; }
+                    if (y > 0) { rawSum += m_scratch[CellIndex(
+                        x: x,
+                        y: (y - 1),
+                        z: z
+                    )].Value; count++; }
+                    if (y < (m_layers - 1)) { rawSum += m_scratch[CellIndex(
+                        x: x,
+                        y: (y + 1),
+                        z: z
+                    )].Value; count++; }
+
+                    if (count == 0) {
+                        continue;
+                    }
+
+                    var mean = Mean(
+                        count: count,
+                        rawSum: rawSum
+                    );
+                    var current = m_scratch[cell];
+
+                    Write(
+                        cell: cell,
+                        field: field,
+                        value: (current + ((mean - current) * rate))
+                    );
+                }
+            }
+        }
+    }
+    // Mass-conserving directional transport. h_i (m_flowHeights) is snapshotted once per step: this field's own
+    // PREVIOUS-step value (Jacobi, like StepDiffuse) plus every 'over' field's LIVE value -- Flow never writes an
+    // over field, so live and snapshot agree there.
+    //
+    // A donor's fair share toward one direction is rate * (its previous-step value / m_flowDirections) -- because
+    // rate <= 1, the sum of every direction's share never exceeds a donor's own previous-step value, so a donor can
+    // never be driven negative by this reaction alone. A boundary direction (spills into SpillRow when declared,
+    // else the edge is a wall and the share stays put) always moves exactly this fair share.
+    //
+    // A paired direction (a real downhill neighbour) additionally caps the fair share at HALF the pair's own height
+    // gap -- at rate 1 an isolated pair moves exactly to a shared height, never past it -- whenever the field's own
+    // value feeds back into height (HeightScale > 0): without that cap, a cell donating its full fair share to
+    // several downhill neighbours at once can overshoot past their shared level and rebound next step, since the
+    // very act of moving mass changes the height ordering that decided it. A field with HeightScale 0 never
+    // contributes to its own height (Flow transports it, but only an 'over' field's static terrain decides
+    // direction), so that feedback cannot occur and the half-gap cap is skipped.
+    //
+    // Deltas accumulate exactly in Int128 and clamp only once, at the final write, so mass is conserved exactly
+    // whenever that clamp does not bind.
+    private void StepFlow(FieldReactionInput.Flow reaction, FixedQ4816 rate, IFieldLatticeHost host, ulong tick) {
+        if (m_flowDirections == 0) {
+            return;
+        }
+
+        var field = reaction.Field;
+        var values = m_values[field];
+
+        Array.Copy(
+            sourceArray: values,
+            destinationArray: m_scratch,
+            length: values.Length
+        );
+
+        for (var cell = 0; (cell < CellCount); cell++) {
+            var height = (m_scratch[cell] * m_heightScale[field]);
+
+            foreach (var over in reaction.Over) {
+                height += (m_values[over][cell] * m_heightScale[over]);
+            }
+
+            m_flowHeights[cell] = height;
+        }
+
+        Array.Clear(array: m_flowDelta);
+
+        var directionDivisor = FixedQ4816.FromInteger(value: m_flowDirections);
+        var ownHeightScale = m_heightScale[field];
+        var hasSpill = reaction.SpillRow.IsValid;
+        var spilled = Int128.Zero;
+
+        FixedQ4816 FairShare(int donorCell) => (m_scratch[donorCell] / directionDivisor);
+
+        void Pair(int a, int b) {
+            if (m_flowHeights[a] == m_flowHeights[b]) {
+                return;
+            }
+
+            var aIsDonor = (m_flowHeights[a] > m_flowHeights[b]);
+            var donor = (aIsDonor
+                ? a
+                : b
+            );
+            var receiver = (aIsDonor
+                ? b
+                : a
+            );
+            var capped = FairShare(donorCell: donor);
+
+            if (ownHeightScale > FixedQ4816.Zero) {
+                var gap = FixedQ4816.Abs(value: (m_flowHeights[donor] - m_flowHeights[receiver]));
+                var halfGapShare = (gap / (ownHeightScale + ownHeightScale));
+
+                capped = FixedQ4816.Min(
+                    x: capped,
+                    y: halfGapShare
+                );
+            }
+
+            var flux = (capped * rate).Value;
+
+            m_flowDelta[donor] -= flux;
+            m_flowDelta[receiver] += flux;
+        }
+
+        void Spill(int cell) {
+            var flux = (FairShare(donorCell: cell) * rate).Value;
+
+            m_flowDelta[cell] -= flux;
+            spilled += flux;
+        }
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var y = 0; (y < m_layers); y++) {
+                for (var x = 0; (x < m_width); x++) {
+                    var cell = CellIndex(
+                        x: x,
+                        y: y,
+                        z: z
+                    );
+
+                    if (m_width > 1) {
+                        if (x < (m_width - 1)) {
+                            Pair(
+                                a: cell,
+                                b: CellIndex(
+                                    x: (x + 1),
+                                    y: y,
+                                    z: z
+                                )
+                            );
+                        } else if (hasSpill) {
+                            Spill(cell: cell);
+                        }
+
+                        if (
+                            (x == 0) &&
+                            hasSpill
+                        ) {
+                            Spill(cell: cell);
+                        }
+                    }
+
+                    if (m_depth > 1) {
+                        if (z < (m_depth - 1)) {
+                            Pair(
+                                a: cell,
+                                b: CellIndex(
+                                    x: x,
+                                    y: y,
+                                    z: (z + 1)
+                                )
+                            );
+                        } else if (hasSpill) {
+                            Spill(cell: cell);
+                        }
+
+                        if (
+                            (z == 0) &&
+                            hasSpill
+                        ) {
+                            Spill(cell: cell);
+                        }
+                    }
+
+                    if (m_layers > 1) {
+                        if (y < (m_layers - 1)) {
+                            Pair(
+                                a: cell,
+                                b: CellIndex(
+                                    x: x,
+                                    y: (y + 1),
+                                    z: z
+                                )
+                            );
+                        } else if (hasSpill) {
+                            Spill(cell: cell);
+                        }
+
+                        if (
+                            (y == 0) &&
+                            hasSpill
+                        ) {
+                            Spill(cell: cell);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (var cell = 0; (cell < CellCount); cell++) {
+            if (m_flowDelta[cell] == Int128.Zero) {
+                continue;
+            }
+
+            Write(
+                cell: cell,
+                field: field,
+                value: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: (((Int128)m_scratch[cell].Value) + m_flowDelta[cell])))
+            );
+        }
+
+        if (
+            hasSpill &&
+            (spilled != Int128.Zero)
+        ) {
+            host.AddScalar(
+                row: reaction.SpillRow,
+                amount: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: spilled)),
+                tick: tick
+            );
+        }
+    }
+    private void StepTransform(FieldReactionInput.Transform reaction, IFieldLatticeHost host, ulong tick) {
+        // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
+        // constant, never a per-cell read.
+        var whenValues = new FixedQ4816[reaction.When.Count];
+        var thenValues = new FixedQ4816[reaction.Then.Count];
+
+        for (var index = 0; (index < reaction.When.Count); index++) {
+            whenValues[index] = Resolve(
+                host: host,
+                input: reaction.When[index].Value,
+                tick: tick
+            );
+        }
+        for (var index = 0; (index < reaction.Then.Count); index++) {
+            thenValues[index] = Resolve(
+                host: host,
+                input: reaction.Then[index].Value,
+                tick: tick
+            );
+        }
+
+        for (var cell = 0; (cell < CellCount); cell++) {
+            var holds = true;
+
+            for (var index = 0; (index < reaction.When.Count); index++) {
+                var condition = reaction.When[index];
+
+                if (!condition.Comparison.Holds(
+                    expected: whenValues[index],
+                    value: m_values[condition.Field][cell]
+                )) {
+                    holds = false;
+                    break;
+                }
+            }
+
+            if (!holds) {
+                continue;
+            }
+
+            for (var index = 0; (index < reaction.Then.Count); index++) {
+                var write = reaction.Then[index];
+
+                Write(
+                    cell: cell,
+                    field: write.Field,
+                    value: ((write.Op == FieldWriteOp.Add)
+                    ? AddClamped(
+                            field: write.Field,
+                            x: m_values[write.Field][cell],
+                            y: thenValues[index]
+                        )
+                    : thenValues[index])
+                );
+            }
+        }
+    }
+    private void Write(int field, int cell, FixedQ4816 value) {
+        var clamped = Clamp(
+            field: field,
+            value: value
+        );
+
+        if (m_values[field][cell] == clamped) {
+            return;
+        }
+
+        m_values[field][cell] = clamped;
+        m_valueRevisions[field]++;
+
+        if (!m_deltaDirty[field][cell]) {
+            m_deltaDirty[field][cell] = true;
+            m_deltas.Add(item: ((field * CellCount) + cell));
+        }
+
+        m_revision++;
+    }
+
     // The field portion of the host's authoritative state-hash boundary. Field-major/cell-major is the same
     // canonical order Capture and the checkpoint codec use, without allocating a checkpoint-shaped jagged array.
     /// <summary>Folds every field's declared name and cell value into a running hash, in field-major/cell-major
@@ -221,29 +1088,6 @@ public sealed class FieldLattice {
                 hash.Add(value: m_values[field][cell].Value);
             }
         }
-    }
-    /// <summary>Describes the exact structural field-program work performed on one cadence step.</summary>
-    /// <param name="activeBodyCount">The number of active body slots.</param>
-    /// <param name="bodyCapacity">The body-table capacity every body node scans.</param>
-    /// <returns>The node, cadence, cell-visit, and body-slot-visit cost line.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The counts are negative or <paramref name="activeBodyCount"/>
-    /// exceeds <paramref name="bodyCapacity"/>.</exception>
-    public string DescribeCost(int activeBodyCount, int bodyCapacity) {
-        if (
-            (activeBodyCount < 0) ||
-            (bodyCapacity < 0) ||
-            (activeBodyCount > bodyCapacity)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(activeBodyCount),
-                message: "Active body count must be within the body-table capacity."
-            );
-        }
-
-        var cellVisits = checked((((long)CellCount) * m_cellPassCount));
-        var bodySlotVisits = checked((((long)bodyCapacity) * m_bodyPassCount));
-
-        return $"lattice {m_input.Reactions.Count} node(s) every {m_stepEveryTicks} tick(s): {CellCount} cell(s) x {m_cellPassCount} pass(es) = {cellVisits} cell visit(s); bodies {activeBodyCount}/{bodyCapacity} active/capacity x {m_bodyPassCount} pass(es) = {bodySlotVisits} slot visit(s)";
     }
     /// <summary>Checks whether a replacement input can be installed without reallocating or reseeding cell storage.
     /// Reaction-only, colour, and paint changes are compatible; topology, cadence, and field envelope changes
@@ -269,7 +1113,11 @@ public sealed class FieldLattice {
             var candidate = input.Fields[index];
 
             if (
-                !string.Equals(a: current.Name, b: candidate.Name, comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(
+                a: current.Name,
+                b: candidate.Name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
                 (current.Initial != candidate.Initial) ||
                 (current.Minimum != candidate.Minimum) ||
                 (current.Maximum != candidate.Maximum) ||
@@ -285,6 +1133,198 @@ public sealed class FieldLattice {
         reason = null;
 
         return true;
+    }
+    /// <summary>Captures every cell.</summary>
+    /// <returns>The checkpoint.</returns>
+    public Checkpoint Capture() {
+        var raw = new long[FieldCount][];
+
+        for (var field = 0; (field < FieldCount); field++) {
+            raw[field] = new long[CellCount];
+
+            for (var cell = 0; (cell < CellCount); cell++) {
+                raw[field][cell] = m_values[field][cell].Value;
+            }
+        }
+
+        return new Checkpoint(Raw: raw);
+    }
+    /// <summary>Gets the solid surface height of a column — the greatest height any height field raises there, or
+    /// the lattice origin's Y when none does.</summary>
+    /// <param name="x">The column's X cell index.</param>
+    /// <param name="z">The column's Z cell index.</param>
+    /// <returns>The surface height, world units; <see langword="null"/> when no height field is nonzero.</returns>
+    public FixedQ4816? ColumnHeight(int x, int z) {
+        FixedQ4816? best = null;
+
+        for (var field = 0; (field < m_values.Length); field++) {
+            if (m_heightScale[field] == FixedQ4816.Zero) {
+                continue;
+            }
+
+            // A ground lattice's column is its layer-0 cell; a volume's column height stacks every layer.
+            var raised = FixedQ4816.Zero;
+
+            for (var y = 0; (y < m_layers); y++) {
+                raised += (m_values[field][CellIndex(
+                    x: x,
+                    y: y,
+                    z: z
+                )] * m_heightScale[field]);
+            }
+
+            if (raised <= FixedQ4816.Zero) {
+                continue;
+            }
+
+            var top = (m_origin.Y + raised);
+
+            if (
+                (best is not { } current) ||
+                (top > current)
+            ) {
+                best = top;
+            }
+        }
+
+        return best;
+    }
+    /// <summary>Describes the lattice for a console read-back.</summary>
+    /// <returns>One line.</returns>
+    public string Describe() {
+        var parts = new List<string>(capacity: FieldCount);
+
+        for (var field = 0; (field < FieldCount); field++) {
+            var sum = 0.0;
+            var nonzero = 0;
+
+            foreach (var value in m_values[field]) {
+                sum += ((double)value);
+
+                if (value != FixedQ4816.Zero) {
+                    nonzero++;
+                }
+            }
+
+            var color = (((m_heightScale[field] > FixedQ4816.Zero) && (m_input.Fields[field].Color is { } token))
+                ? $" color={token}"
+                : string.Empty
+            );
+
+            parts.Add(item: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###}{color}"
+            ));
+        }
+
+        var plan = new StringBuilder();
+
+        for (var index = 0; (index < m_input.Reactions.Count); index++) {
+            if (index > 0) {
+                plan.Append(value: ',');
+            }
+
+            plan.Append(value: index).Append(value: ':').Append(value: m_input.Reactions[index] switch {
+                FieldReactionInput.Diffuse => "diffuse",
+                FieldReactionInput.Decay => "decay",
+                FieldReactionInput.Transform => "transform",
+                FieldReactionInput.Emit => "emit",
+                FieldReactionInput.Expose => "expose",
+                FieldReactionInput.Flow => "flow",
+                _ => "unknown",
+            });
+        }
+
+        var dependencies = new StringBuilder();
+
+        for (var after = 0; (after < m_reactionSets.Length); after++) {
+            for (var before = 0; (before < after); before++) {
+                if (Conflicts(
+                    earlier: m_reactionSets[before],
+                    later: m_reactionSets[after]
+                )) {
+                    if (dependencies.Length > 0) {
+                        dependencies.Append(value: ',');
+                    }
+
+                    dependencies.Append(value: before).Append(value: '>').Append(value: after);
+                }
+            }
+        }
+
+        return $"lattice {m_width}x{m_layers}x{m_depth} @ {((double)m_cellSize)} every {m_stepEveryTicks} ticks: {string.Join(
+            separator: " | ",
+            values: parts
+        )} | plan nodes={m_input.Reactions.Count} cellPasses={m_cellPassCount} bodyPasses={m_bodyPassCount} order=[{plan}] dependencies=[{dependencies}]";
+    }
+    /// <summary>Describes the exact structural field-program work performed on one cadence step.</summary>
+    /// <param name="activeBodyCount">The number of active body slots.</param>
+    /// <param name="bodyCapacity">The body-table capacity every body node scans.</param>
+    /// <returns>The node, cadence, cell-visit, and body-slot-visit cost line.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The counts are negative or <paramref name="activeBodyCount"/>
+    /// exceeds <paramref name="bodyCapacity"/>.</exception>
+    public string DescribeCost(int activeBodyCount, int bodyCapacity) {
+        if (
+            (activeBodyCount < 0) ||
+            (bodyCapacity < 0) ||
+            (activeBodyCount > bodyCapacity)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(activeBodyCount),
+                message: "Active body count must be within the body-table capacity."
+            );
+        }
+
+        var cellVisits = checked((((long)CellCount) * m_cellPassCount));
+        var bodySlotVisits = checked((((long)bodyCapacity) * m_bodyPassCount));
+
+        return $"lattice {m_input.Reactions.Count} node(s) every {m_stepEveryTicks} tick(s): {CellCount} cell(s) x {m_cellPassCount} pass(es) = {cellVisits} cell visit(s); bodies {activeBodyCount}/{bodyCapacity} active/capacity x {m_bodyPassCount} pass(es) = {bodySlotVisits} slot visit(s)";
+    }
+    /// <summary>Writes one whole-field pass of drawn cell values — <paramref name="raw"/> holds one raw
+    /// <see cref="FixedQ4816"/> value per cell in cell-index order — then reapplies every later authored paint for
+    /// the same field, preserving document order. Every changed cell is marked for the next snapshot delta.</summary>
+    /// <param name="field">The field index (see <see cref="TryFieldIndex"/>).</param>
+    /// <param name="raw">The drawn raw values, exactly <see cref="CellCount"/> long.</param>
+    /// <param name="worldSeed">The deterministic seed later noise/scatter fills use.</param>
+    /// <exception cref="ArgumentException"><paramref name="raw"/> is not one value per cell.</exception>
+    public void FillFromDraw(int field, ReadOnlySpan<long> raw, ulong worldSeed) {
+        if (raw.Length != CellCount) {
+            throw new ArgumentException(
+                message: $"a draw fill supplies one value per cell ({CellCount}); received {raw.Length}",
+                paramName: nameof(raw)
+            );
+        }
+
+        for (var cell = 0; (cell < raw.Length); cell++) {
+            Write(
+                cell: cell,
+                field: field,
+                value: FixedQ4816.FromRawBits(value: raw[cell])
+            );
+        }
+
+        var afterDraw = false;
+
+        foreach (var fill in m_input.Paint) {
+            if (fill.Field != field) {
+                continue;
+            }
+
+            if (fill is FieldFillInput.DrawMarker) {
+                afterDraw = true;
+
+                continue;
+            }
+
+            if (afterDraw) {
+                ApplyPaintFill(
+                    field: field,
+                    fill: fill,
+                    trackDeltas: true,
+                    worldSeed: worldSeed
+                );
+            }
+        }
     }
     /// <summary>Installs a compatible replacement input while retaining every live cell, pending delta, revision,
     /// and checkpoint shape.</summary>
@@ -303,164 +1343,181 @@ public sealed class FieldLattice {
         m_reactionSets = CompileReactionSets(reactions: input.Reactions);
         RecomputePassCounts();
     }
-
-    private void RecomputePassCounts() {
-        m_cellNodeCount = m_reactionSets.Count(predicate: static sets => sets.IsCellWork);
-        m_cellPassCount = 0;
-
-        for (var index = 0; (index < m_input.Reactions.Count); index++) {
-            m_cellPassCount += m_input.Reactions[index] switch {
-                FieldReactionInput.Diffuse => 2,
-                FieldReactionInput.Flow => 2,
-                _ when m_reactionSets[index].IsCellWork => 1,
-                _ => 0,
-            };
-        }
-
-        m_bodyPassCount = (m_reactionSets.Length - m_cellNodeCount);
-    }
-    // Mirrors the document-side compiler's canonical read/write set derivation over the plain reaction records, so
-    // the dependency plan a read-back reports never depends on which layer compiled the reactions.
-    private static ReactionSets[] CompileReactionSets(IReadOnlyList<FieldReactionInput> reactions) {
-        var sets = new ReactionSets[reactions.Count];
-
-        for (var index = 0; (index < reactions.Count); index++) {
-            sets[index] = reactions[index] switch {
-                FieldReactionInput.Diffuse diffuse => new ReactionSets(true, [diffuse.Field], [diffuse.Field], StateReads(input: diffuse.Rate), []),
-                FieldReactionInput.Decay decay => new ReactionSets(true, [decay.Field], [decay.Field], StateReads(input: decay.Rate), []),
-                FieldReactionInput.Transform transform => CompileTransformSets(transform: transform),
-                FieldReactionInput.Emit emit => new ReactionSets(
-                    false,
-                    [emit.Field],
-                    [emit.Field],
-                    CanonicalStates(inputs: [new FieldScalarInput(Literal: default, State: emit.Tag), emit.Amount]),
-                    []
-                ),
-                FieldReactionInput.Expose expose => new ReactionSets(false, [expose.Field], [], StateReads(input: expose.Value), [expose.Row]),
-                FieldReactionInput.Flow flow => CompileFlowSets(flow: flow),
-                _ => throw new InvalidOperationException(message: "unknown field reaction kind."),
-            };
-        }
-
-        return sets;
-    }
-    private static ReactionSets CompileTransformSets(FieldReactionInput.Transform transform) {
-        var fieldReads = transform.When
-            .Select(selector: static condition => condition.Field)
-            .Concat(second: transform.Then
-                .Where(predicate: static write => (write.Op == FieldWriteOp.Add))
-                .Select(selector: static write => write.Field));
-        var stateReads = transform.When.Select(selector: static condition => condition.Value)
-            .Concat(second: transform.Then.Select(selector: static write => write.Value));
-
-        return new ReactionSets(
-            true,
-            CanonicalFields(fields: fieldReads),
-            CanonicalFields(fields: transform.Then.Select(selector: static write => write.Field)),
-            CanonicalStates(inputs: stateReads),
-            []
-        );
-    }
-    private static ReactionSets CompileFlowSets(FieldReactionInput.Flow flow) {
-        var stateInputs = new List<FieldScalarInput> { flow.Rate };
-
-        if (flow.SpillRow.IsValid) {
-            stateInputs.Add(item: new FieldScalarInput(Literal: default, State: flow.SpillRow));
-        }
-
-        return new ReactionSets(
-            true,
-            CanonicalFields(fields: flow.Over.Append(element: flow.Field)),
-            [flow.Field],
-            CanonicalStates(inputs: stateInputs),
-            (flow.SpillRow.IsValid ? [flow.SpillRow] : [])
-        );
-    }
-    private static int[] CanonicalFields(IEnumerable<int> fields) => [.. fields.Distinct().OrderBy(keySelector: static field => field)];
-    private static StateHandle[] CanonicalStates(IEnumerable<FieldScalarInput> inputs) => [.. inputs
-        .Where(predicate: static input => input.IsState)
-        .Select(selector: static input => input.State)
-        .Distinct()
-        .OrderBy(keySelector: static handle => handle.Ordinal)];
-    private static StateHandle[] StateReads(FieldScalarInput input) => (input.IsState ? [input.State] : []);
-    private static bool Conflicts(ReactionSets earlier, ReactionSets later) => ReadWriteHazard.Conflicts(
-        earlierFieldReads: earlier.FieldReads,
-        earlierFieldWrites: earlier.FieldWrites,
-        earlierStateReads: earlier.StateReads,
-        earlierStateWrites: earlier.StateWrites,
-        laterFieldReads: later.FieldReads,
-        laterFieldWrites: later.FieldWrites,
-        laterStateReads: later.StateReads,
-        laterStateWrites: later.StateWrites
-    );
-    private int CellIndex(int x, int y, int z) => ((((z * m_layers) + y) * m_width) + x);
-    private FixedQ4816 Clamp(int field, FixedQ4816 value) => FixedQ4816.Clamp(
-        maximum: m_max[field],
-        minimum: m_min[field],
-        value: value
-    );
-    private FixedQ4816 AddClamped(int field, FixedQ4816 x, FixedQ4816 y) {
-        var raw = (((Int128)x.Value) + y.Value);
-
-        if (raw <= m_min[field].Value) {
-            return m_min[field];
-        }
-
-        if (raw >= m_max[field].Value) {
-            return m_max[field];
-        }
-
-        return FixedQ4816.FromRawBits(value: ((long)raw));
-    }
-    // The exact wide division every reaction that must round a sum without a second rounding pass shares:
-    // round-half-to-even on the remainder, computed in UInt128 magnitude then resigned. divisor is always positive.
-    private static Int128 DivideRoundHalfEven(Int128 numerator, Int128 divisor) {
-        var negative = (numerator < Int128.Zero);
-        var magnitude = ((UInt128)(negative ? -numerator : numerator));
-        var divisorMagnitude = ((UInt128)divisor);
-        var quotient = (magnitude / divisorMagnitude);
-        var remainder = (magnitude % divisorMagnitude);
-
-        quotient = FixedPointRounding.RoundToNearestTiesToEven(
-            distanceToNext: (divisorMagnitude - remainder),
-            distanceToTruncated: remainder,
-            truncated: quotient
-        );
-
-        return (negative ? -((Int128)quotient) : ((Int128)quotient));
-    }
-    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: DivideRoundHalfEven(divisor: count, numerator: rawSum)));
-    private void ClearDeltas() {
-        foreach (var key in m_deltas) {
-            var field = (key / CellCount);
-            var cell = (key - (field * CellCount));
-
-            m_deltaDirty[field][cell] = false;
-        }
-
-        m_deltas.Clear();
-    }
-    private void Write(int field, int cell, FixedQ4816 value) {
-        var clamped = Clamp(
+    /// <summary>Reports whether a point lies inside one named live medium field: the same authored-field identity
+    /// and body-coupling ceiling <see cref="MediumSurface"/> resolves through, narrowed to one field rather than
+    /// the tallest wet one; medium-constrained navigation uses it to keep swimmer routes in their fluid.</summary>
+    public bool IsInsideMedium(string name, in FixedVector3 position) {
+        return (
+            TryFieldIndex(
+            field: out var field,
+            name: name
+        ) &&
+            IsInsideMedium(
             field: field,
-            value: value
+            position: in position
+        )
+        );
+    }
+    /// <summary>Reports whether a point lies inside one compiled live medium-field ordinal. This is the hot-path
+    /// counterpart of <see cref="IsInsideMedium(string, in FixedVector3)"/>: navigation resolves the authored name
+    /// once when its domain is built, then avoids a name-table scan for every node an A* search examines.</summary>
+    public bool IsInsideMedium(int field, in FixedVector3 position) {
+        return IsInsideMediumPoint(
+            field: field,
+            position: in position
+        );
+    }
+    /// <summary>Reports whether an axis-aligned clearance cube around a point remains inside a live medium. Clearance
+    /// must be in [0, half a lattice cell]. Every intersected voxel and its local free surface are checked; wet corners
+    /// alone cannot prove the interior wet. The cube conservatively encloses an agent sphere.</summary>
+    public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) {
+        if (
+            (clearance < FixedQ4816.Zero) ||
+            (clearance.Value > (m_cellSize.Value / 2))
+        ) {
+            return false;
+        }
+        return IsMediumBox(
+            field,
+            (((Int128)position.X.Value) - clearance.Value),
+            (((Int128)position.Y.Value) - clearance.Value),
+            (((Int128)position.Z.Value) - clearance.Value),
+            (((Int128)position.X.Value) + clearance.Value),
+            (((Int128)position.Y.Value) + clearance.Value),
+            (((Int128)position.Z.Value) + clearance.Value)
+        );
+    }
+    /// <summary>Conservatively proves an entire clearance-cube sweep inside one live medium's free surface. Each
+    /// half-cell-or-shorter piece checks its swept bounding box against the coupled column's surface height, not
+    /// just sample points. Clearance above half a cell, an invalid field, or a segment exceeding the caller's
+    /// subdivision ceiling refuses. Outward-rounded endpoints cannot leave a sub-quantum gap in the proof.</summary>
+    public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) {
+        if (
+            (maximumSubdivisions <= 0) ||
+            (clearance < FixedQ4816.Zero) ||
+            (clearance.Value > (m_cellSize.Value / 2)) ||
+            (((uint)field) >= ((uint)m_isMedium.Length)) ||
+            !m_isMedium[field]
+        ) {
+            return false;
+        }
+        var maximum = Int128.Max(
+            x: Int128.Abs(value: (((Int128)to.X.Value) - from.X.Value)),
+            y: Int128.Max(
+                x: Int128.Abs(value: (((Int128)to.Y.Value) - from.Y.Value)),
+                y: Int128.Abs(value: (((Int128)to.Z.Value) - from.Z.Value))
+            )
+        );
+        var interval = Math.Max(
+            val1: 1,
+            val2: (m_cellSize.Value / 2)
+        );
+        var subdivisions = ((maximum / interval) + (((maximum % interval) == 0)
+            ? 0
+            : 1));
+
+        if (subdivisions > maximumSubdivisions) {
+            return false;
+        }
+        var count = Math.Max(
+            val1: 1,
+            val2: checked((int)subdivisions)
         );
 
-        if (m_values[field][cell] == clamped) {
-            return;
+        for (var index = 0; (index < count); index++) {
+            SegmentAxisBounds(
+                from.X.Value,
+                to.X.Value,
+                index,
+                count,
+                clearance.Value,
+                out var minX,
+                out var maxX
+            );
+            SegmentAxisBounds(
+                from.Y.Value,
+                to.Y.Value,
+                index,
+                count,
+                clearance.Value,
+                out var minY,
+                out var maxY
+            );
+            SegmentAxisBounds(
+                from.Z.Value,
+                to.Z.Value,
+                index,
+                count,
+                clearance.Value,
+                out var minZ,
+                out var maxZ
+            );
+            if (!IsMediumBox(
+                field: field,
+                maxX: maxX,
+                maxY: maxY,
+                maxZ: maxZ,
+                minX: minX,
+                minY: minY,
+                minZ: minZ
+            )) {
+                return false;
+            }
         }
-
-        m_values[field][cell] = clamped;
-        m_valueRevisions[field]++;
-
-        if (!m_deltaDirty[field][cell]) {
-            m_deltaDirty[field][cell] = true;
-            m_deltas.Add(item: ((field * CellCount) + cell));
-        }
-
-        m_revision++;
+        return true;
     }
+    /// <summary>Resolves the free surface a body at <paramref name="position"/> would float against: the highest
+    /// medium field's value times its height scale, over the lattice origin, at the body's coupled cell (the same
+    /// coupling <see cref="TryBodyCellOf"/> resolves for <see cref="FieldReactionInput.Emit"/>/<see cref="FieldReactionInput.Expose"/>).
+    /// <see langword="null"/> when the body lies outside the lattice's coupling ceiling, or every medium field reads
+    /// zero or less there. Returns a point over <paramref name="position"/>'s own column at that height, and the
+    /// lattice's own frame normal — a caller measuring depth under a tilted gravity area projects along its OWN
+    /// resolved up instead of this normal.</summary>
+    /// <param name="position">The body's world position.</param>
+    /// <returns>The surface, or <see langword="null"/> for no medium.</returns>
+    public FixedFieldSurface? MediumSurface(in FixedVector3 position) {
+        if (!TryBodyCellOf(
+            cell: out var cell,
+            position: in position
+        )) {
+            return null;
+        }
 
+        FixedQ4816? best = null;
+
+        for (var field = 0; (field < m_values.Length); field++) {
+            if (!m_isMedium[field]) {
+                continue;
+            }
+
+            var value = m_values[field][cell];
+
+            if (value <= FixedQ4816.Zero) {
+                continue;
+            }
+
+            var surface = (m_origin.Y + (value * m_heightScale[field]));
+
+            if (
+                (best is not { } current) ||
+                (surface > current)
+            ) {
+                best = surface;
+            }
+        }
+
+        return ((best is { } height)
+            ? new FixedFieldSurface(
+                Normal: UnitY,
+                Point: new FixedVector3(
+                    X: position.X,
+                    Y: height,
+                    Z: position.Z
+                )
+            )
+            : null
+        );
+    }
     /// <summary>Sets or adds one bounded spherical neighborhood. Coordinates and radius are lattice-cell units;
     /// cells outside the topology are clipped and every written value is clamped to the field envelope.</summary>
     /// <param name="fieldName">The declared field row to paint.</param>
@@ -474,20 +1531,45 @@ public sealed class FieldLattice {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative or
     /// <paramref name="operation"/> is not defined.</exception>
     public int PaintSphere(string fieldName, int centerX, int centerY, int centerZ, int radius, FieldWriteOp operation, FixedQ4816 value) {
-        if (!TryFieldIndex(field: out var field, name: fieldName)) {
+        if (!TryFieldIndex(
+            field: out var field,
+            name: fieldName
+        )) {
             return 0;
         }
         ArgumentOutOfRangeException.ThrowIfNegative(value: radius);
         if (!Enum.IsDefined(value: operation)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(operation), actualValue: operation, message: "The field write operation is not defined.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(operation),
+                actualValue: operation,
+                message: "The field write operation is not defined."
+            );
         }
 
-        var minimumX = Math.Max(val1: 0, val2: (centerX - radius));
-        var maximumX = Math.Min(val1: (m_width - 1), val2: (centerX + radius));
-        var minimumY = Math.Max(val1: 0, val2: (centerY - radius));
-        var maximumY = Math.Min(val1: (m_layers - 1), val2: (centerY + radius));
-        var minimumZ = Math.Max(val1: 0, val2: (centerZ - radius));
-        var maximumZ = Math.Min(val1: (m_depth - 1), val2: (centerZ + radius));
+        var minimumX = Math.Max(
+            val1: 0,
+            val2: (centerX - radius)
+        );
+        var maximumX = Math.Min(
+            val1: (m_width - 1),
+            val2: (centerX + radius)
+        );
+        var minimumY = Math.Max(
+            val1: 0,
+            val2: (centerY - radius)
+        );
+        var maximumY = Math.Min(
+            val1: (m_layers - 1),
+            val2: (centerY + radius)
+        );
+        var minimumZ = Math.Max(
+            val1: 0,
+            val2: (centerZ - radius)
+        );
+        var maximumZ = Math.Min(
+            val1: (m_depth - 1),
+            val2: (centerZ + radius)
+        );
         var radiusSquared = checked((radius * radius));
         var changed = 0;
 
@@ -504,14 +1586,26 @@ public sealed class FieldLattice {
                         continue;
                     }
 
-                    var cell = CellIndex(x: x, y: y, z: z);
+                    var cell = CellIndex(
+                        x: x,
+                        y: y,
+                        z: z
+                    );
                     var before = m_values[field][cell];
                     var requested = ((operation == FieldWriteOp.Add)
-                        ? AddClamped(field: field, x: before, y: value)
+                        ? AddClamped(
+                            field: field,
+                            x: before,
+                            y: value
+                        )
                         : value
                     );
 
-                    Write(cell: cell, field: field, value: requested);
+                    Write(
+                        cell: cell,
+                        field: field,
+                        value: requested
+                    );
                     if (m_values[field][cell] != before) {
                         changed++;
                     }
@@ -520,6 +1614,199 @@ public sealed class FieldLattice {
         }
 
         return changed;
+    }
+    /// <summary>Restores every cell from a checkpoint whose shape and values match this lattice.</summary>
+    /// <param name="checkpoint">The checkpoint.</param>
+    public void Restore(Checkpoint checkpoint) {
+        ValidateCheckpoint(checkpoint: checkpoint);
+
+        for (var field = 0; (field < FieldCount); field++) {
+            for (var cell = 0; (cell < CellCount); cell++) {
+                m_values[field][cell] = FixedQ4816.FromRawBits(value: checkpoint.Raw[field][cell]);
+            }
+        }
+
+        ClearDeltas();
+        m_fullResync = true;
+        for (var field = 0; (field < m_valueRevisions.Length); field++) { m_valueRevisions[field]++; }
+        m_revision++;
+    }
+    /// <summary>Steps the reactions once when <paramref name="tick"/> falls on the cadence; a no-op otherwise. The
+    /// host is invoked directly (no per-call delegate is allocated) so a lattice pays nothing beyond the cadence
+    /// check on the ticks it does not react on.</summary>
+    /// <param name="tick">The simulation tick.</param>
+    /// <param name="bodyCount">The entity-table capacity; bodies are visited by index.</param>
+    /// <param name="host">The body-position and state-row seam.</param>
+    public void Step(ulong tick, int bodyCount, IFieldLatticeHost host) {
+        if ((tick % ((ulong)m_stepEveryTicks)) != 0UL) {
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(argument: host);
+
+        foreach (var reaction in m_input.Reactions) {
+            switch (reaction) {
+                case FieldReactionInput.Diffuse diffuse:
+                    StepDiffuse(
+                        field: diffuse.Field,
+                        rate: ClampRate(rate: Resolve(
+                            host: host,
+                            input: diffuse.Rate,
+                            tick: tick
+                        ))
+                    );
+                    break;
+                case FieldReactionInput.Decay decay:
+                    StepDecay(
+                        field: decay.Field,
+                        rate: ClampRate(rate: Resolve(
+                            host: host,
+                            input: decay.Rate,
+                            tick: tick
+                        ))
+                    );
+                    break;
+                case FieldReactionInput.Transform transform:
+                    StepTransform(
+                        host: host,
+                        reaction: transform,
+                        tick: tick
+                    );
+                    break;
+                case FieldReactionInput.Emit emit:
+                    for (var body = 0; (body < bodyCount); body++) {
+                        if (
+                            (host.BodyPosition(body: body) is not { } position) ||
+                            (host.ReadTag(
+                            row: emit.Tag,
+                            body: body,
+                            tick: tick
+                        ) == 0L) ||
+                            !TryBodyCellOf(
+                            cell: out var cell,
+                            position: in position
+                        )
+                        ) {
+                            continue;
+                        }
+
+                        Write(
+                            cell: cell,
+                            field: emit.Field,
+                            value: AddClamped(
+                                field: emit.Field,
+                                x: m_values[emit.Field][cell],
+                                y: Resolve(
+                                    host: host,
+                                    input: emit.Amount,
+                                    tick: tick
+                                )
+                            )
+                        );
+                    }
+
+                    break;
+                case FieldReactionInput.Flow flow:
+                    StepFlow(
+                        reaction: flow,
+                        rate: ClampRate(rate: Resolve(
+                            host: host,
+                            input: flow.Rate,
+                            tick: tick
+                        )),
+                        host: host,
+                        tick: tick
+                    );
+                    break;
+                case FieldReactionInput.Expose expose:
+                    for (var body = 0; (body < bodyCount); body++) {
+                        if (host.BodyPosition(body: body) is not { } position) {
+                            continue;
+                        }
+
+                        var exposed = (TryBodyCellOf(
+                            cell: out var cell,
+                            position: in position
+                        ) && expose.Comparison.Holds(
+                            expected: Resolve(
+                                host: host,
+                                input: expose.Value,
+                                tick: tick
+                            ),
+                            value: m_values[expose.Field][cell]
+                        ));
+
+                        host.WriteTag(
+                            body: body,
+                            row: expose.Row,
+                            tick: tick,
+                            value: (exposed
+                            ? 1L
+                            : 0L)
+                        );
+                    }
+
+                    break;
+            }
+        }
+    }
+    /// <summary>Takes the cell deltas written since the last take — or every cell, when a full resync is owed
+    /// (construction, restore, or a primer snapshot).</summary>
+    /// <param name="full">Whether to send every cell rather than the pending deltas.</param>
+    /// <param name="isFull">Whether the returned set covers every cell.</param>
+    /// <returns>The deltas.</returns>
+    public Delta[] TakeDeltas(bool full, out bool isFull) {
+        if (
+            full ||
+            m_fullResync
+        ) {
+            var all = new Delta[(FieldCount * CellCount)];
+            var index = 0;
+
+            for (var field = 0; (field < FieldCount); field++) {
+                for (var cell = 0; (cell < CellCount); cell++) {
+                    all[index++] = new Delta(
+                        Cell: cell,
+                        Field: ((byte)field),
+                        Raw: m_values[field][cell].Value
+                    );
+                }
+            }
+
+            // An explicit full take is a per-sink primer and must not steal the shared incremental stream. Only the
+            // lattice-owned resync flag (construction/restore) consumes pending writes for everybody.
+            if (!full) {
+                ClearDeltas();
+                m_fullResync = false;
+            }
+            isFull = true;
+
+            return all;
+        }
+
+        isFull = false;
+
+        if (m_deltas.Count == 0) {
+            return [];
+        }
+
+        var taken = new Delta[m_deltas.Count];
+
+        for (var index = 0; (index < m_deltas.Count); index++) {
+            var key = m_deltas[index];
+            var field = (key / CellCount);
+            var cell = (key - (field * CellCount));
+
+            taken[index] = new Delta(
+                Cell: cell,
+                Field: ((byte)field),
+                Raw: m_values[field][cell].Value
+            );
+        }
+
+        ClearDeltas();
+
+        return taken;
     }
     /// <summary>Resolves the cell a BODY couples to for the <see cref="FieldReactionInput.Emit"/>/
     /// <see cref="FieldReactionInput.Expose"/> reactions: the column under the body, with Y admitted up to the
@@ -611,168 +1898,6 @@ public sealed class FieldLattice {
 
         return true;
     }
-    /// <summary>Reads one cell.</summary>
-    /// <param name="field">The field index.</param>
-    /// <param name="cell">The cell index.</param>
-    /// <returns>The value.</returns>
-    public FixedQ4816 Value(int field, int cell) => m_values[field][cell];
-    /// <summary>Resolves the free surface a body at <paramref name="position"/> would float against: the highest
-    /// medium field's value times its height scale, over the lattice origin, at the body's coupled cell (the same
-    /// coupling <see cref="TryBodyCellOf"/> resolves for <see cref="FieldReactionInput.Emit"/>/<see cref="FieldReactionInput.Expose"/>).
-    /// <see langword="null"/> when the body lies outside the lattice's coupling ceiling, or every medium field reads
-    /// zero or less there. Returns a point over <paramref name="position"/>'s own column at that height, and the
-    /// lattice's own frame normal — a caller measuring depth under a tilted gravity area projects along its OWN
-    /// resolved up instead of this normal.</summary>
-    /// <param name="position">The body's world position.</param>
-    /// <returns>The surface, or <see langword="null"/> for no medium.</returns>
-    public FixedFieldSurface? MediumSurface(in FixedVector3 position) {
-        if (!TryBodyCellOf(cell: out var cell, position: in position)) {
-            return null;
-        }
-
-        FixedQ4816? best = null;
-
-        for (var field = 0; (field < m_values.Length); field++) {
-            if (!m_isMedium[field]) {
-                continue;
-            }
-
-            var value = m_values[field][cell];
-
-            if (value <= FixedQ4816.Zero) {
-                continue;
-            }
-
-            var surface = (m_origin.Y + (value * m_heightScale[field]));
-
-            if (
-                (best is not { } current) ||
-                (surface > current)
-            ) {
-                best = surface;
-            }
-        }
-
-        return ((best is { } height)
-            ? new FixedFieldSurface(
-                Normal: UnitY,
-                Point: new FixedVector3(X: position.X, Y: height, Z: position.Z)
-            )
-            : null
-        );
-    }
-    /// <summary>Reports whether a point lies inside one named live medium field: the same authored-field identity
-    /// and body-coupling ceiling <see cref="MediumSurface"/> resolves through, narrowed to one field rather than
-    /// the tallest wet one; medium-constrained navigation uses it to keep swimmer routes in their fluid.</summary>
-    public bool IsInsideMedium(string name, in FixedVector3 position) {
-        return (TryFieldIndex(field: out var field, name: name) && IsInsideMedium(field: field, position: in position));
-    }
-    /// <summary>Reports whether a point lies inside one compiled live medium-field ordinal. This is the hot-path
-    /// counterpart of <see cref="IsInsideMedium(string, in FixedVector3)"/>: navigation resolves the authored name
-    /// once when its domain is built, then avoids a name-table scan for every node an A* search examines.</summary>
-    public bool IsInsideMedium(int field, in FixedVector3 position) {
-        return IsInsideMediumPoint(field: field, position: in position);
-    }
-    /// <summary>Reports whether an axis-aligned clearance cube around a point remains inside a live medium. Clearance
-    /// must be in [0, half a lattice cell]. Every intersected voxel and its local free surface are checked; wet corners
-    /// alone cannot prove the interior wet. The cube conservatively encloses an agent sphere.</summary>
-    public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) {
-        if ((clearance < FixedQ4816.Zero) || (clearance.Value > (m_cellSize.Value / 2))) {
-            return false;
-        }
-        return IsMediumBox(field, (((Int128)position.X.Value) - clearance.Value), (((Int128)position.Y.Value) - clearance.Value),
-            (((Int128)position.Z.Value) - clearance.Value), (((Int128)position.X.Value) + clearance.Value),
-            (((Int128)position.Y.Value) + clearance.Value), (((Int128)position.Z.Value) + clearance.Value));
-    }
-
-    // A field's free surface (value * heightScale over the origin) is unbounded by its own topology's layer count
-    // — the same reach TryBodyCellOf already admits for reaction coupling — so the coupled cell is resolved through
-    // it (clamped onto the top layer) rather than through a bare TryCellOf, which would refuse any column whose
-    // surface rises past one voxel.
-    private bool IsInsideMediumPoint(int field, in FixedVector3 position) {
-        if ((((uint)field) >= ((uint)m_isMedium.Length)) || !m_isMedium[field] || !TryBodyCellOf(cell: out var cell, position: in position)) {
-            return false;
-        }
-        var value = m_values[field][cell];
-
-        return ((value > FixedQ4816.Zero) && (position.Y <= (m_origin.Y + (value * m_heightScale[field]))));
-    }
-
-    /// <summary>Conservatively proves an entire clearance-cube sweep inside one live medium's free surface. Each
-    /// half-cell-or-shorter piece checks its swept bounding box against the coupled column's surface height, not
-    /// just sample points. Clearance above half a cell, an invalid field, or a segment exceeding the caller's
-    /// subdivision ceiling refuses. Outward-rounded endpoints cannot leave a sub-quantum gap in the proof.</summary>
-    public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) {
-        if ((maximumSubdivisions <= 0) || (clearance < FixedQ4816.Zero) || (clearance.Value > (m_cellSize.Value / 2)) ||
-            (((uint)field) >= ((uint)m_isMedium.Length)) || !m_isMedium[field]) {
-            return false;
-        }
-        var maximum = Int128.Max(x: Int128.Abs(value: (((Int128)to.X.Value) - from.X.Value)),
-            y: Int128.Max(x: Int128.Abs(value: (((Int128)to.Y.Value) - from.Y.Value)), y: Int128.Abs(value: (((Int128)to.Z.Value) - from.Z.Value))));
-        var interval = Math.Max(val1: 1, val2: (m_cellSize.Value / 2));
-        var subdivisions = ((maximum / interval) + (((maximum % interval) == 0) ? 0 : 1));
-
-        if (subdivisions > maximumSubdivisions) {
-            return false;
-        }
-        var count = Math.Max(val1: 1, val2: checked((int)subdivisions));
-
-        for (var index = 0; (index < count); index++) {
-            SegmentAxisBounds(from.X.Value, to.X.Value, index, count, clearance.Value, out var minX, out var maxX);
-            SegmentAxisBounds(from.Y.Value, to.Y.Value, index, count, clearance.Value, out var minY, out var maxY);
-            SegmentAxisBounds(from.Z.Value, to.Z.Value, index, count, clearance.Value, out var minZ, out var maxZ);
-            if (!IsMediumBox(field: field, maxX: maxX, maxY: maxY, maxZ: maxZ, minX: minX, minY: minY, minZ: minZ)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static void SegmentAxisBounds(long from, long to, int piece, int count, long clearance, out Int128 minimum, out Int128 maximum) {
-        // Keep the segment parameter rational until the final outward round. Multiplication is at most 96 bits.
-        var delta = (((Int128)to) - from);
-        var first = ((((Int128)from) * count) + (delta * piece));
-        var second = (first + delta);
-        var low = Int128.Min(x: first, y: second);
-        var high = Int128.Max(x: first, y: second);
-
-        minimum = (((low / count) - (((low % count) < 0) ? 1 : 0)) - clearance);
-        maximum = (((high / count) + (((high % count) > 0) ? 1 : 0)) + clearance);
-    }
-    // Every voxel layer the box actually spans is checked on its own value: a dry cap between wet layers must
-    // still refuse. Only the TOP visited layer is special: a field's free surface (value * heightScale over the
-    // origin) is unbounded by its own topology's layer count — the same reach TryBodyCellOf admits for reaction
-    // coupling — so a box whose top rises past the voxel grid (up to the body-coupling ceiling) checks that
-    // layer's value against the box's true top rather than the layer's own slab top; every layer below it must
-    // be wet clear to ITS own slab top, since the box continues past it regardless of what lies above.
-    private bool IsMediumBox(int field, Int128 minX, Int128 minY, Int128 minZ, Int128 maxX, Int128 maxY, Int128 maxZ) {
-        if ((((uint)field) >= ((uint)m_isMedium.Length)) || !m_isMedium[field]) { return false; }
-        minX -= m_origin.X.Value; maxX -= m_origin.X.Value;
-        minY -= m_origin.Y.Value; maxY -= m_origin.Y.Value;
-        minZ -= m_origin.Z.Value; maxZ -= m_origin.Z.Value;
-        var size = m_cellSize.Value;
-
-        if ((minX < 0) || (minY < 0) || (minZ < 0) || (maxX >= (((Int128)size) * m_width)) ||
-            (maxY > m_bodyCouplingCeiling.Value) || (maxZ >= (((Int128)size) * m_depth))) { return false; }
-        var x0 = ((int)(minX / size)); var x1 = ((int)(maxX / size));
-        var z0 = ((int)(minZ / size)); var z1 = ((int)(maxZ / size));
-        var y0 = ((int)Int128.Min(x: (minY / size), y: (m_layers - 1)));
-        var y1 = ((int)Int128.Min(x: (maxY / size), y: (m_layers - 1)));
-
-        for (var z = z0; (z <= z1); z++) {
-            for (var y = y0; (y <= y1); y++) {
-                var requiredHeight = ((y == (m_layers - 1)) ? maxY : Int128.Min(x: maxY, y: (((Int128)(y + 1)) * size)));
-
-                for (var x = x0; (x <= x1); x++) {
-                    var value = m_values[field][CellIndex(x: x, y: y, z: z)];
-
-                    if ((value <= FixedQ4816.Zero) || (requiredHeight > (value * m_heightScale[field]).Value)) { return false; }
-                }
-            }
-        }
-        return true;
-    }
-
     /// <summary>Resolves a declared field's index by name.</summary>
     /// <param name="name">The field name.</param>
     /// <param name="field">The field index.</param>
@@ -784,692 +1909,6 @@ public sealed class FieldLattice {
         );
 
         return (field >= 0);
-    }
-    /// <summary>Gets the solid surface height of a column — the greatest height any height field raises there, or
-    /// the lattice origin's Y when none does.</summary>
-    /// <param name="x">The column's X cell index.</param>
-    /// <param name="z">The column's Z cell index.</param>
-    /// <returns>The surface height, world units; <see langword="null"/> when no height field is nonzero.</returns>
-    public FixedQ4816? ColumnHeight(int x, int z) {
-        FixedQ4816? best = null;
-
-        for (var field = 0; (field < m_values.Length); field++) {
-            if (m_heightScale[field] == FixedQ4816.Zero) {
-                continue;
-            }
-
-            // A ground lattice's column is its layer-0 cell; a volume's column height stacks every layer.
-            var raised = FixedQ4816.Zero;
-
-            for (var y = 0; (y < m_layers); y++) {
-                raised += (m_values[field][CellIndex(x: x, y: y, z: z)] * m_heightScale[field]);
-            }
-
-            if (raised <= FixedQ4816.Zero) {
-                continue;
-            }
-
-            var top = (m_origin.Y + raised);
-
-            if (
-                (best is not { } current) ||
-                (top > current)
-            ) {
-                best = top;
-            }
-        }
-
-        return best;
-    }
-    /// <summary>Writes one whole-field pass of drawn cell values — <paramref name="raw"/> holds one raw
-    /// <see cref="FixedQ4816"/> value per cell in cell-index order — then reapplies every later authored paint for
-    /// the same field, preserving document order. Every changed cell is marked for the next snapshot delta.</summary>
-    /// <param name="field">The field index (see <see cref="TryFieldIndex"/>).</param>
-    /// <param name="raw">The drawn raw values, exactly <see cref="CellCount"/> long.</param>
-    /// <param name="worldSeed">The deterministic seed later noise/scatter fills use.</param>
-    /// <exception cref="ArgumentException"><paramref name="raw"/> is not one value per cell.</exception>
-    public void FillFromDraw(int field, ReadOnlySpan<long> raw, ulong worldSeed) {
-        if (raw.Length != CellCount) {
-            throw new ArgumentException(message: $"a draw fill supplies one value per cell ({CellCount}); received {raw.Length}", paramName: nameof(raw));
-        }
-
-        for (var cell = 0; (cell < raw.Length); cell++) {
-            Write(
-                cell: cell,
-                field: field,
-                value: FixedQ4816.FromRawBits(value: raw[cell])
-            );
-        }
-
-        var afterDraw = false;
-
-        foreach (var fill in m_input.Paint) {
-            if (fill.Field != field) {
-                continue;
-            }
-
-            if (fill is FieldFillInput.DrawMarker) {
-                afterDraw = true;
-
-                continue;
-            }
-
-            if (afterDraw) {
-                ApplyPaintFill(
-                    field: field,
-                    fill: fill,
-                    trackDeltas: true,
-                    worldSeed: worldSeed
-                );
-            }
-        }
-    }
-
-    /// <summary>Gets the lattice's width in cells.</summary>
-    public int Width => m_width;
-    /// <summary>Gets the lattice's depth in cells.</summary>
-    public int Depth => m_depth;
-    /// <summary>Gets the lattice's layer count.</summary>
-    public int Layers => m_layers;
-
-    private void ApplyPaintFill(int field, FieldFillInput fill, bool trackDeltas, ulong worldSeed) {
-        switch (fill) {
-            case FieldFillInput.Noise noise:
-                ApplyNoiseFill(
-                    field: field,
-                    fill: noise,
-                    trackDeltas: trackDeltas,
-                    worldSeed: worldSeed
-                );
-                break;
-            case FieldFillInput.Scatter scatter:
-                ApplyScatterFill(
-                    field: field,
-                    fill: scatter,
-                    trackDeltas: trackDeltas,
-                    worldSeed: worldSeed
-                );
-                break;
-            case FieldFillInput.Rect rect:
-                ApplyRectFill(
-                    field: field,
-                    fill: rect,
-                    trackDeltas: trackDeltas
-                );
-                break;
-        }
-    }
-    private void SetPaintValue(int field, int cell, FixedQ4816 value, bool trackDeltas) {
-        if (trackDeltas) {
-            Write(
-                cell: cell,
-                field: field,
-                value: value
-            );
-        } else {
-            m_values[field][cell] = value;
-            m_valueRevisions[field]++;
-        }
-    }
-    private void ApplyRectFill(int field, FieldFillInput.Rect fill, bool trackDeltas) {
-        var value = Clamp(
-            field: field,
-            value: fill.Value
-        );
-        var half = (m_cellSize / FixedQ4816.FromInteger(value: 2));
-
-        for (var z = 0; (z < m_depth); z++) {
-            var centreZ = ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: z))) + half);
-
-            if ((centreZ < fill.MinZ) || (centreZ > fill.MaxZ)) {
-                continue;
-            }
-
-            for (var x = 0; (x < m_width); x++) {
-                var centreX = ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: x))) + half);
-
-                if ((centreX < fill.MinX) || (centreX > fill.MaxX)) {
-                    continue;
-                }
-
-                for (var y = 0; (y < m_layers); y++) {
-                    SetPaintValue(
-                        cell: CellIndex(x: x, y: y, z: z),
-                        field: field,
-                        trackDeltas: trackDeltas,
-                        value: value
-                    );
-                }
-            }
-        }
-    }
-    private void ApplyNoiseFill(int field, FieldFillInput.Noise fill, bool trackDeltas, ulong worldSeed) {
-        var value = Clamp(
-            field: field,
-            value: fill.Value
-        );
-        var one = FixedQ4816.One;
-        var span = (one - fill.Threshold);
-        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
-
-        for (var z = 0; (z < m_depth); z++) {
-            for (var x = 0; (x < m_width); x++) {
-                // fBm: per-octave halved amplitude, halved noise-cell edge (floored at 1), decorrelated seed stream.
-                var amplitude = FixedQ4816.One;
-                var total = FixedQ4816.Zero;
-                var weight = FixedQ4816.Zero;
-                var cells = fill.Frequency;
-
-                for (var octave = 0; (octave < fill.Octaves); octave++) {
-                    total += (amplitude * Pcg3dLatticeNoise.ValueNoise01(
-                        cellX: x,
-                        cellZ: z,
-                        noiseCells: System.Math.Max(val1: 1, val2: cells),
-                        seed: unchecked((seed + (((uint)octave) * 0x9E3779B9u)))
-                    ));
-                    weight += amplitude;
-                    amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
-                    cells = System.Math.Max(val1: 1, val2: (cells >> 1));
-                }
-
-                var n = (total / weight);
-
-                if (n < fill.Threshold) {
-                    continue;
-                }
-
-                var scaled = ((span.Value > 0) ? (value * ((n - fill.Threshold) / span)) : value);
-
-                for (var y = 0; (y < m_layers); y++) {
-                    SetPaintValue(
-                        cell: CellIndex(x: x, y: y, z: z),
-                        field: field,
-                        trackDeltas: trackDeltas,
-                        value: Clamp(field: field, value: scaled)
-                    );
-                }
-            }
-        }
-    }
-    private void ApplyScatterFill(int field, FieldFillInput.Scatter fill, bool trackDeltas, ulong worldSeed) {
-        var value = Clamp(
-            field: field,
-            value: fill.Value
-        );
-        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
-        var spacing = System.Math.Max(val1: 2, val2: fill.Spacing);
-        var radius = System.Math.Max(val1: 1, val2: fill.Radius);
-        var radiusSquared = (radius * radius);
-
-        for (var z = 0; (z < m_depth); z++) {
-            for (var x = 0; (x < m_width); x++) {
-                // The cell tests its own block and the 8 neighbours — a jittered point near a block edge reaches
-                // across it, and 3×3 covers every reachable point while radius stays within one block.
-                var blockX = (x / spacing);
-                var blockZ = (z / spacing);
-                var hit = false;
-
-                for (var dz = -1; (!hit && (dz <= 1)); dz++) {
-                    for (var dx = -1; (!hit && (dx <= 1)); dx++) {
-                        var bx = (blockX + dx);
-                        var bz = (blockZ + dz);
-                        var h = Pcg3dLatticeNoise.Pcg3d(
-                            x: unchecked((uint)bx),
-                            y: unchecked((uint)bz),
-                            z: seed
-                        );
-                        // The point sits inside its block, radius-inset so a disc never leaves the block.
-                        var inset = System.Math.Max(val1: 0, val2: (spacing - (2 * radius)));
-                        var px = (((bx * spacing) + radius) + ((inset > 0) ? (int)(h.X % ((uint)inset)) : 0));
-                        var pz = (((bz * spacing) + radius) + ((inset > 0) ? (int)(h.Y % ((uint)inset)) : 0));
-                        var ddx = (x - px);
-                        var ddz = (z - pz);
-
-                        hit = (((ddx * ddx) + (ddz * ddz)) <= radiusSquared);
-                    }
-                }
-
-                if (!hit) {
-                    continue;
-                }
-
-                for (var y = 0; (y < m_layers); y++) {
-                    SetPaintValue(
-                        cell: CellIndex(x: x, y: y, z: z),
-                        field: field,
-                        trackDeltas: trackDeltas,
-                        value: value
-                    );
-                }
-            }
-        }
-    }
-
-    /// <summary>Steps the reactions once when <paramref name="tick"/> falls on the cadence; a no-op otherwise. The
-    /// host is invoked directly (no per-call delegate is allocated) so a lattice pays nothing beyond the cadence
-    /// check on the ticks it does not react on.</summary>
-    /// <param name="tick">The simulation tick.</param>
-    /// <param name="bodyCount">The entity-table capacity; bodies are visited by index.</param>
-    /// <param name="host">The body-position and state-row seam.</param>
-    public void Step(ulong tick, int bodyCount, IFieldLatticeHost host) {
-        if ((tick % ((ulong)m_stepEveryTicks)) != 0UL) {
-            return;
-        }
-
-        ArgumentNullException.ThrowIfNull(argument: host);
-
-        foreach (var reaction in m_input.Reactions) {
-            switch (reaction) {
-                case FieldReactionInput.Diffuse diffuse:
-                    StepDiffuse(
-                        field: diffuse.Field,
-                        rate: ClampRate(rate: Resolve(host: host, input: diffuse.Rate, tick: tick))
-                    );
-                    break;
-                case FieldReactionInput.Decay decay:
-                    StepDecay(
-                        field: decay.Field,
-                        rate: ClampRate(rate: Resolve(host: host, input: decay.Rate, tick: tick))
-                    );
-                    break;
-                case FieldReactionInput.Transform transform:
-                    StepTransform(
-                        host: host,
-                        reaction: transform,
-                        tick: tick
-                    );
-                    break;
-                case FieldReactionInput.Emit emit:
-                    for (var body = 0; (body < bodyCount); body++) {
-                        if (
-                            (host.BodyPosition(body: body) is not { } position) ||
-                            (host.ReadTag(row: emit.Tag, body: body, tick: tick) == 0L) ||
-                            !TryBodyCellOf(
-                            cell: out var cell,
-                            position: in position
-                        )
-                        ) {
-                            continue;
-                        }
-
-                        Write(
-                            cell: cell,
-                            field: emit.Field,
-                            value: AddClamped(
-                                field: emit.Field,
-                                x: m_values[emit.Field][cell],
-                                y: Resolve(host: host, input: emit.Amount, tick: tick)
-                            )
-                        );
-                    }
-
-                    break;
-                case FieldReactionInput.Flow flow:
-                    StepFlow(
-                        reaction: flow,
-                        rate: ClampRate(rate: Resolve(host: host, input: flow.Rate, tick: tick)),
-                        host: host,
-                        tick: tick
-                    );
-                    break;
-                case FieldReactionInput.Expose expose:
-                    for (var body = 0; (body < bodyCount); body++) {
-                        if (host.BodyPosition(body: body) is not { } position) {
-                            continue;
-                        }
-
-                        var exposed = (TryBodyCellOf(
-                            cell: out var cell,
-                            position: in position
-                        ) && expose.Comparison.Holds(
-                            expected: Resolve(host: host, input: expose.Value, tick: tick),
-                            value: m_values[expose.Field][cell]
-                        ));
-
-                        host.WriteTag(
-                            body: body,
-                            row: expose.Row,
-                            tick: tick,
-                            value: (exposed
-                                ? 1L
-                                : 0L)
-                        );
-                    }
-
-                    break;
-            }
-        }
-    }
-
-    private static FixedQ4816 Resolve(IFieldLatticeHost host, FieldScalarInput input, ulong tick) => (input.IsState
-        ? host.ReadScalar(row: input.State, tick: tick)
-        : input.Literal
-    );
-    private static FixedQ4816 ClampRate(FixedQ4816 rate) => ((rate < FixedQ4816.Zero)
-        ? FixedQ4816.Zero
-        : ((rate > FixedQ4816.One) ? FixedQ4816.One : rate)
-    );
-    private void StepDiffuse(int field, FixedQ4816 rate) {
-        var values = m_values[field];
-
-        Array.Copy(
-            sourceArray: values,
-            destinationArray: m_scratch,
-            length: values.Length
-        );
-
-        for (var z = 0; (z < m_depth); z++) {
-            for (var y = 0; (y < m_layers); y++) {
-                for (var x = 0; (x < m_width); x++) {
-                    var cell = CellIndex(x: x, y: y, z: z);
-                    Int128 rawSum = 0;
-                    var count = 0;
-
-                    if (x > 0) { rawSum += m_scratch[CellIndex(x: (x - 1), y: y, z: z)].Value; count++; }
-                    if (x < (m_width - 1)) { rawSum += m_scratch[CellIndex(x: (x + 1), y: y, z: z)].Value; count++; }
-                    if (z > 0) { rawSum += m_scratch[CellIndex(x: x, y: y, z: (z - 1))].Value; count++; }
-                    if (z < (m_depth - 1)) { rawSum += m_scratch[CellIndex(x: x, y: y, z: (z + 1))].Value; count++; }
-                    if (y > 0) { rawSum += m_scratch[CellIndex(x: x, y: (y - 1), z: z)].Value; count++; }
-                    if (y < (m_layers - 1)) { rawSum += m_scratch[CellIndex(x: x, y: (y + 1), z: z)].Value; count++; }
-
-                    if (count == 0) {
-                        continue;
-                    }
-
-                    var mean = Mean(count: count, rawSum: rawSum);
-                    var current = m_scratch[cell];
-
-                    Write(
-                        cell: cell,
-                        field: field,
-                        value: (current + ((mean - current) * rate))
-                    );
-                }
-            }
-        }
-    }
-    private void StepDecay(int field, FixedQ4816 rate) {
-        var values = m_values[field];
-
-        for (var cell = 0; (cell < values.Length); cell++) {
-            var current = values[cell];
-
-            if (current == FixedQ4816.Zero) {
-                continue;
-            }
-
-            Write(
-                cell: cell,
-                field: field,
-                value: (current - (current * rate))
-            );
-        }
-    }
-    private void StepTransform(FieldReactionInput.Transform reaction, IFieldLatticeHost host, ulong tick) {
-        // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
-        // constant, never a per-cell read.
-        var whenValues = new FixedQ4816[reaction.When.Count];
-        var thenValues = new FixedQ4816[reaction.Then.Count];
-
-        for (var index = 0; (index < reaction.When.Count); index++) {
-            whenValues[index] = Resolve(host: host, input: reaction.When[index].Value, tick: tick);
-        }
-        for (var index = 0; (index < reaction.Then.Count); index++) {
-            thenValues[index] = Resolve(host: host, input: reaction.Then[index].Value, tick: tick);
-        }
-
-        for (var cell = 0; (cell < CellCount); cell++) {
-            var holds = true;
-
-            for (var index = 0; (index < reaction.When.Count); index++) {
-                var condition = reaction.When[index];
-
-                if (!condition.Comparison.Holds(
-                    expected: whenValues[index],
-                    value: m_values[condition.Field][cell]
-                )) {
-                    holds = false;
-                    break;
-                }
-            }
-
-            if (!holds) {
-                continue;
-            }
-
-            for (var index = 0; (index < reaction.Then.Count); index++) {
-                var write = reaction.Then[index];
-
-                Write(
-                    cell: cell,
-                    field: write.Field,
-                    value: ((write.Op == FieldWriteOp.Add)
-                        ? AddClamped(
-                            field: write.Field,
-                            x: m_values[write.Field][cell],
-                            y: thenValues[index]
-                        )
-                        : thenValues[index])
-                );
-            }
-        }
-    }
-    // Mass-conserving directional transport. h_i (m_flowHeights) is snapshotted once per step: this field's own
-    // PREVIOUS-step value (Jacobi, like StepDiffuse) plus every 'over' field's LIVE value -- Flow never writes an
-    // over field, so live and snapshot agree there.
-    //
-    // A donor's fair share toward one direction is rate * (its previous-step value / m_flowDirections) -- because
-    // rate <= 1, the sum of every direction's share never exceeds a donor's own previous-step value, so a donor can
-    // never be driven negative by this reaction alone. A boundary direction (spills into SpillRow when declared,
-    // else the edge is a wall and the share stays put) always moves exactly this fair share.
-    //
-    // A paired direction (a real downhill neighbour) additionally caps the fair share at HALF the pair's own height
-    // gap -- at rate 1 an isolated pair moves exactly to a shared height, never past it -- whenever the field's own
-    // value feeds back into height (HeightScale > 0): without that cap, a cell donating its full fair share to
-    // several downhill neighbours at once can overshoot past their shared level and rebound next step, since the
-    // very act of moving mass changes the height ordering that decided it. A field with HeightScale 0 never
-    // contributes to its own height (Flow transports it, but only an 'over' field's static terrain decides
-    // direction), so that feedback cannot occur and the half-gap cap is skipped.
-    //
-    // Deltas accumulate exactly in Int128 and clamp only once, at the final write, so mass is conserved exactly
-    // whenever that clamp does not bind.
-    private void StepFlow(FieldReactionInput.Flow reaction, FixedQ4816 rate, IFieldLatticeHost host, ulong tick) {
-        if (m_flowDirections == 0) {
-            return;
-        }
-
-        var field = reaction.Field;
-        var values = m_values[field];
-
-        Array.Copy(
-            sourceArray: values,
-            destinationArray: m_scratch,
-            length: values.Length
-        );
-
-        for (var cell = 0; (cell < CellCount); cell++) {
-            var height = (m_scratch[cell] * m_heightScale[field]);
-
-            foreach (var over in reaction.Over) {
-                height += (m_values[over][cell] * m_heightScale[over]);
-            }
-
-            m_flowHeights[cell] = height;
-        }
-
-        Array.Clear(array: m_flowDelta);
-
-        var directionDivisor = FixedQ4816.FromInteger(value: m_flowDirections);
-        var ownHeightScale = m_heightScale[field];
-        var hasSpill = reaction.SpillRow.IsValid;
-        var spilled = Int128.Zero;
-
-        FixedQ4816 FairShare(int donorCell) => (m_scratch[donorCell] / directionDivisor);
-
-        void Pair(int a, int b) {
-            if (m_flowHeights[a] == m_flowHeights[b]) {
-                return;
-            }
-
-            var aIsDonor = (m_flowHeights[a] > m_flowHeights[b]);
-            var donor = (aIsDonor ? a : b);
-            var receiver = (aIsDonor ? b : a);
-            var capped = FairShare(donorCell: donor);
-
-            if (ownHeightScale > FixedQ4816.Zero) {
-                var gap = FixedQ4816.Abs(value: (m_flowHeights[donor] - m_flowHeights[receiver]));
-                var halfGapShare = (gap / (ownHeightScale + ownHeightScale));
-
-                capped = FixedQ4816.Min(x: capped, y: halfGapShare);
-            }
-
-            var flux = (capped * rate).Value;
-
-            m_flowDelta[donor] -= flux;
-            m_flowDelta[receiver] += flux;
-        }
-
-        void Spill(int cell) {
-            var flux = (FairShare(donorCell: cell) * rate).Value;
-
-            m_flowDelta[cell] -= flux;
-            spilled += flux;
-        }
-
-        for (var z = 0; (z < m_depth); z++) {
-            for (var y = 0; (y < m_layers); y++) {
-                for (var x = 0; (x < m_width); x++) {
-                    var cell = CellIndex(x: x, y: y, z: z);
-
-                    if (m_width > 1) {
-                        if (x < (m_width - 1)) {
-                            Pair(a: cell, b: CellIndex(x: (x + 1), y: y, z: z));
-                        } else if (hasSpill) {
-                            Spill(cell: cell);
-                        }
-
-                        if ((x == 0) && hasSpill) {
-                            Spill(cell: cell);
-                        }
-                    }
-
-                    if (m_depth > 1) {
-                        if (z < (m_depth - 1)) {
-                            Pair(a: cell, b: CellIndex(x: x, y: y, z: (z + 1)));
-                        } else if (hasSpill) {
-                            Spill(cell: cell);
-                        }
-
-                        if ((z == 0) && hasSpill) {
-                            Spill(cell: cell);
-                        }
-                    }
-
-                    if (m_layers > 1) {
-                        if (y < (m_layers - 1)) {
-                            Pair(a: cell, b: CellIndex(x: x, y: (y + 1), z: z));
-                        } else if (hasSpill) {
-                            Spill(cell: cell);
-                        }
-
-                        if ((y == 0) && hasSpill) {
-                            Spill(cell: cell);
-                        }
-                    }
-                }
-            }
-        }
-
-        for (var cell = 0; (cell < CellCount); cell++) {
-            if (m_flowDelta[cell] == Int128.Zero) {
-                continue;
-            }
-
-            Write(
-                cell: cell,
-                field: field,
-                value: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: (((Int128)m_scratch[cell].Value) + m_flowDelta[cell])))
-            );
-        }
-
-        if (hasSpill && (spilled != Int128.Zero)) {
-            host.AddScalar(
-                row: reaction.SpillRow,
-                amount: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: spilled)),
-                tick: tick
-            );
-        }
-    }
-
-    /// <summary>Takes the cell deltas written since the last take — or every cell, when a full resync is owed
-    /// (construction, restore, or a primer snapshot).</summary>
-    /// <param name="full">Whether to send every cell rather than the pending deltas.</param>
-    /// <param name="isFull">Whether the returned set covers every cell.</param>
-    /// <returns>The deltas.</returns>
-    public Delta[] TakeDeltas(bool full, out bool isFull) {
-        if (full || m_fullResync) {
-            var all = new Delta[(FieldCount * CellCount)];
-            var index = 0;
-
-            for (var field = 0; (field < FieldCount); field++) {
-                for (var cell = 0; (cell < CellCount); cell++) {
-                    all[index++] = new Delta(
-                        Cell: cell,
-                        Field: ((byte)field),
-                        Raw: m_values[field][cell].Value
-                    );
-                }
-            }
-
-            // An explicit full take is a per-sink primer and must not steal the shared incremental stream. Only the
-            // lattice-owned resync flag (construction/restore) consumes pending writes for everybody.
-            if (!full) {
-                ClearDeltas();
-                m_fullResync = false;
-            }
-            isFull = true;
-
-            return all;
-        }
-
-        isFull = false;
-
-        if (m_deltas.Count == 0) {
-            return [];
-        }
-
-        var taken = new Delta[m_deltas.Count];
-
-        for (var index = 0; (index < m_deltas.Count); index++) {
-            var key = m_deltas[index];
-            var field = (key / CellCount);
-            var cell = (key - (field * CellCount));
-
-            taken[index] = new Delta(
-                Cell: cell,
-                Field: ((byte)field),
-                Raw: m_values[field][cell].Value
-            );
-        }
-
-        ClearDeltas();
-
-        return taken;
-    }
-    /// <summary>Captures every cell.</summary>
-    /// <returns>The checkpoint.</returns>
-    public Checkpoint Capture() {
-        var raw = new long[FieldCount][];
-
-        for (var field = 0; (field < FieldCount); field++) {
-            raw[field] = new long[CellCount];
-
-            for (var cell = 0; (cell < CellCount); cell++) {
-                raw[field][cell] = m_values[field][cell].Value;
-            }
-        }
-
-        return new Checkpoint(Raw: raw);
     }
     /// <summary>Validates that a checkpoint has this lattice's shape and declared value ranges.</summary>
     /// <param name="checkpoint">The checkpoint.</param>
@@ -1497,87 +1936,16 @@ public sealed class FieldLattice {
             }
         }
     }
-    /// <summary>Restores every cell from a checkpoint whose shape and values match this lattice.</summary>
-    /// <param name="checkpoint">The checkpoint.</param>
-    public void Restore(Checkpoint checkpoint) {
-        ValidateCheckpoint(checkpoint: checkpoint);
-
-        for (var field = 0; (field < FieldCount); field++) {
-            for (var cell = 0; (cell < CellCount); cell++) {
-                m_values[field][cell] = FixedQ4816.FromRawBits(value: checkpoint.Raw[field][cell]);
-            }
-        }
-
-        ClearDeltas();
-        m_fullResync = true;
-        for (var field = 0; (field < m_valueRevisions.Length); field++) { m_valueRevisions[field]++; }
-        m_revision++;
-    }
-    /// <summary>Describes the lattice for a console read-back.</summary>
-    /// <returns>One line.</returns>
-    public string Describe() {
-        var parts = new List<string>(capacity: FieldCount);
-
-        for (var field = 0; (field < FieldCount); field++) {
-            var sum = 0.0;
-            var nonzero = 0;
-
-            foreach (var value in m_values[field]) {
-                sum += ((double)value);
-
-                if (value != FixedQ4816.Zero) {
-                    nonzero++;
-                }
-            }
-
-            var color = (((m_heightScale[field] > FixedQ4816.Zero) && (m_input.Fields[field].Color is { } token))
-                ? $" color={token}"
-                : string.Empty
-            );
-
-            parts.Add(item: string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###}{color}"
-            ));
-        }
-
-        var plan = new StringBuilder();
-
-        for (var index = 0; (index < m_input.Reactions.Count); index++) {
-            if (index > 0) {
-                plan.Append(value: ',');
-            }
-
-            plan.Append(value: index).Append(value: ':').Append(value: m_input.Reactions[index] switch {
-                FieldReactionInput.Diffuse => "diffuse",
-                FieldReactionInput.Decay => "decay",
-                FieldReactionInput.Transform => "transform",
-                FieldReactionInput.Emit => "emit",
-                FieldReactionInput.Expose => "expose",
-                FieldReactionInput.Flow => "flow",
-                _ => "unknown",
-            });
-        }
-
-        var dependencies = new StringBuilder();
-
-        for (var after = 0; (after < m_reactionSets.Length); after++) {
-            for (var before = 0; (before < after); before++) {
-                if (Conflicts(earlier: m_reactionSets[before], later: m_reactionSets[after])) {
-                    if (dependencies.Length > 0) {
-                        dependencies.Append(value: ',');
-                    }
-
-                    dependencies.Append(value: before).Append(value: '>').Append(value: after);
-                }
-            }
-        }
-
-        return $"lattice {m_width}x{m_layers}x{m_depth} @ {((double)m_cellSize)} every {m_stepEveryTicks} ticks: {string.Join(
-            separator: " | ",
-            values: parts
-        )} | plan nodes={m_input.Reactions.Count} cellPasses={m_cellPassCount} bodyPasses={m_bodyPassCount} order=[{plan}] dependencies=[{dependencies}]";
-    }
+    /// <summary>Reads one cell.</summary>
+    /// <param name="field">The field index.</param>
+    /// <param name="cell">The cell index.</param>
+    /// <returns>The value.</returns>
+    public FixedQ4816 Value(int field, int cell) => m_values[field][cell];
+    /// <summary>Gets a derived invalidation stamp for one field, not simulation truth — a caller compares it against
+    /// a value it last observed rather than reading it as a value in its own right. Restore stamps it anew after
+    /// installing the saved values.</summary>
+    /// <param name="field">The field index.</param>
+    public ulong ValueRevision(int field) => m_valueRevisions[field];
 }
 /// <summary>A contact field over a <see cref="FieldLattice"/>'s height columns: the signed distance to the union
 /// of column boxes, exact within two cells of a column and a conservative lower bound beyond.</summary>
@@ -1609,14 +1977,26 @@ public sealed class FieldLatticeSolid : IFieldEvaluator {
             y: (point.Z - max.Z)
         );
         var outside = new FixedVector3(
-            X: FixedQ4816.Max(x: dx, y: FixedQ4816.Zero),
-            Y: FixedQ4816.Max(x: dy, y: FixedQ4816.Zero),
-            Z: FixedQ4816.Max(x: dz, y: FixedQ4816.Zero)
+            X: FixedQ4816.Max(
+                x: dx,
+                y: FixedQ4816.Zero
+            ),
+            Y: FixedQ4816.Max(
+                x: dy,
+                y: FixedQ4816.Zero
+            ),
+            Z: FixedQ4816.Max(
+                x: dz,
+                y: FixedQ4816.Zero
+            )
         );
         var inside = FixedQ4816.Min(
             x: FixedQ4816.Max(
                 x: dx,
-                y: FixedQ4816.Max(x: dy, y: dz)
+                y: FixedQ4816.Max(
+                    x: dy,
+                    y: dz
+                )
             ),
             y: FixedQ4816.Zero
         );
@@ -1642,7 +2022,10 @@ public sealed class FieldLatticeSolid : IFieldEvaluator {
                 if (
                     (x < 0) ||
                     (x >= m_lattice.Width) ||
-                    (m_lattice.ColumnHeight(x: x, z: z) is not { } top)
+                    (m_lattice.ColumnHeight(
+                    x: x,
+                    z: z
+                ) is not { } top)
                 ) {
                     continue;
                 }
@@ -1713,9 +2096,21 @@ public sealed class FieldLatticeSolid : IFieldEvaluator {
             epsilon = FixedQ4816.FromDouble(value: 0.01);
         }
 
-        var ex = new FixedVector3(X: epsilon, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
-        var ey = new FixedVector3(X: FixedQ4816.Zero, Y: epsilon, Z: FixedQ4816.Zero);
-        var ez = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: epsilon);
+        var ex = new FixedVector3(
+            X: epsilon,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        );
+        var ey = new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: epsilon,
+            Z: FixedQ4816.Zero
+        );
+        var ez = new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: epsilon
+        );
         var two = (epsilon + epsilon);
         var px = (point + ex); var mx = (point - ex);
         var py = (point + ey); var my = (point - ey);
@@ -1760,7 +2155,10 @@ public sealed class UnionField : IFieldEvaluator {
 
         useB = (hasB && (!hasA || (db < da)));
 
-        return (hasA || hasB);
+        return (
+            hasA ||
+            hasB
+        );
     }
 
     /// <inheritdoc/>
@@ -1776,42 +2174,70 @@ public sealed class UnionField : IFieldEvaluator {
             position: position
         );
 
-        if (hasA && hasB) {
+        if (
+            hasA &&
+            hasB
+        ) {
             var useB = (db < da);
 
-            distance = (useB ? db : da);
-            material = (useB ? mb : ma);
+            distance = (useB
+                ? db
+                : da
+            );
+            material = (useB
+                ? mb
+                : ma
+            );
 
             return true;
         }
 
-        distance = (hasA ? da : db);
-        material = (hasA ? ma : mb);
+        distance = (hasA
+            ? da
+            : db
+        );
+        material = (hasA
+            ? ma
+            : mb
+        );
 
-        return (hasA || hasB);
+        return (
+            hasA ||
+            hasB
+        );
     }
     /// <inheritdoc/>
     public bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient) {
-        if (!Nearer(position: position, useB: out var useB)) {
+        if (!Nearer(
+            position: position,
+            useB: out var useB
+        )) {
             gradient = default;
 
             return false;
         }
 
-        return (useB ? m_b : m_a).TryFieldGradient(
+        return (useB
+            ? m_b
+            : m_a).TryFieldGradient(
             gradient: out gradient,
             position: position
         );
     }
     /// <inheritdoc/>
     public bool TryFieldGradient(FixedPosition position, FixedQ4816 epsilon, out FixedVector3 gradient) {
-        if (!Nearer(position: position, useB: out var useB)) {
+        if (!Nearer(
+            position: position,
+            useB: out var useB
+        )) {
             gradient = default;
 
             return false;
         }
 
-        return (useB ? m_b : m_a).TryFieldGradient(
+        return (useB
+            ? m_b
+            : m_a).TryFieldGradient(
             epsilon: epsilon,
             gradient: out gradient,
             position: position

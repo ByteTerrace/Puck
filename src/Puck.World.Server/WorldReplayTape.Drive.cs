@@ -18,6 +18,7 @@ namespace Puck.World;
 public readonly record struct WorldReplayDriveProgress(string SourceName, int Cursor, int Target, int TapeTicks, string? ForkName, bool FastForward, int DivergedAt);
 public sealed partial class WorldReplayTape {
     private DriveState? m_drive;
+
     /// <summary>Raised after a live drive installs its starting authority timeline. The composition root refreshes
     /// local route epochs so input deduplication and presentation do not retain the replaced timeline's cursor.</summary>
     public event Action? TimelineRestored;
@@ -25,15 +26,16 @@ public sealed partial class WorldReplayTape {
     // One live drive's whole mutable state — dropped the instant the drive ends, so no field of it can leak into
     // the recording a fork hands over to.
     private sealed class DriveState {
-        public required WorldReplaySnapshot Source { get; init; }
-        public required string SourceName { get; init; }
-        public required int Target { get; init; }
-        public string? ForkName { get; init; }
-        public bool FastForward { get; init; }
         public int Cursor { get; set; }
+        public bool FastForward { get; init; }
+        public string? ForkName { get; init; }
         // Set by InjectDriveTick, cleared by NoteDriveTick: the recorded tick at Cursor is in the server's doors and
         // the next step consumes it. Guards a shell that steps without injecting (or injects twice).
         public bool Injected { get; set; }
+        public required WorldReplaySnapshot Source { get; init; }
+        public required string SourceName { get; init; }
+        public required int Target { get; init; }
+
         public int DivergedAt { get; set; } = -1;
         public List<ulong> LiveHashes { get; } = [];
         public List<ulong> LiveAuthoritativeHashes { get; } = [];
@@ -70,7 +72,7 @@ public sealed partial class WorldReplayTape {
     );
     /// <summary>Gets a value indicating whether the shell should step the live server again inside the same call —
     /// a fast-forwarding drive that has not reached its target yet.</summary>
-    public bool WantsFastForwardStep => (m_drive is { FastForward: true } drive && (drive.Cursor < drive.Target));
+    public bool WantsFastForwardStep => ((m_drive is { FastForward: true } drive) && (drive.Cursor < drive.Target));
 
     // Every live drive ends here: seats return to live input, and a completed fork hands its prefix over to a fresh
     // recording; anything else — a plain drive's end, or a cancel — leaves the tape Idle.
@@ -90,8 +92,8 @@ public sealed partial class WorldReplayTape {
             m_liveServer.Output.Narrate(
                 channel: "replay.drive",
                 text: $"[replay.drive: '{drive.SourceName}' {(completed
-                    ? "reached"
-                    : "cancelled at")} tick {drive.Cursor} of {drive.Target} — {verdict}; local seats returned to live input]"
+                ? "reached"
+                : "cancelled at")} tick {drive.Cursor} of {drive.Target} — {verdict}; local seats returned to live input]"
             );
         }
 
@@ -261,10 +263,14 @@ public sealed partial class WorldReplayTape {
         );
         // A population-only reset leaves the old clock, latches, decisions, and held input alive.
         // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
-        if (!shadow.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason)) {
+        if (!shadow.TryCaptureCheckpoint(
+            WorldAuthorityHostRowCheckpoint.Empty,
+            out var checkpoint,
+            out var reason
+        )) {
             return $"the replay boot image could not be captured: {reason}";
         }
-        return m_liveServer.ExecuteAuthorityOperation<string?>(() => {
+        return m_liveServer.ExecuteAuthorityOperation<string?>(operation: () => {
             if (m_liveServer.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
             m_liveServer.EnterExtensionReplay();
             m_liveServer.EnqueueRebuild(
@@ -273,14 +279,19 @@ public sealed partial class WorldReplayTape {
                     Definition: definition,
                     PathHint: documentPath,
                     Force: true,
-                    ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)),
-                principal: WorldPrincipal.Console);
+                    ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
+                ),
+                principal: WorldPrincipal.Console
+            );
             _ = m_liveServer.DrainAdministrative();
-            if (!ReferenceEquals(m_liveServer.Definition, definition)) {
+            if (!ReferenceEquals(
+                objA: m_liveServer.Definition,
+                objB: definition
+            )) {
                 m_liveServer.CompleteExtensionReplay();
                 return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
             }
-            m_liveServer.RestoreCheckpoint(checkpoint!);
+            m_liveServer.RestoreCheckpoint(checkpoint: checkpoint!);
             return null;
         });
     }
@@ -404,9 +415,11 @@ public sealed partial class WorldReplayTape {
         if (!liveSeats.SequenceEqual(second: tapeSeats)) {
             refusal = $"'{name}' pins seats [{string.Join(
                 separator: ", ",
-                values: tapeSeats.Select(selector: static slot => (slot + 1)))}] but the live session has players [{string.Join(
+                values: tapeSeats.Select(selector: static slot => (slot + 1))
+            )}] but the live session has players [{string.Join(
                 separator: ", ",
-                values: liveSeats.Select(selector: static slot => (slot + 1)))}] joined — player.join/player.leave to match first";
+                values: liveSeats.Select(selector: static slot => (slot + 1))
+            )}] joined — player.join/player.leave to match first";
             return false;
         }
 

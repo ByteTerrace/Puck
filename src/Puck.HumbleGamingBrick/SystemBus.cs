@@ -35,18 +35,17 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     private readonly OamDmaController m_oamDma;
     private readonly Ppu m_ppu;
     private readonly SerialComponent m_serial;
-
-    // Mutable so a LIVE device swap re-gates the Color I/O page: with this false, every color register write (palette
-    // RAM, KEY1, HDMA, VRAM/WRAM bank selects, PCM ports) is already dropped by the existing `if (m_supportsColor)`
-    // guards and reads return 0xFF — sealing off Color hardware after a demote with no per-register change.
-    private bool m_supportsColor;
-
     private readonly TimerComponent m_timer;
+    private readonly List<(ushort Address, bool Read, bool Write)> m_watches = [];
 
     // The FF50 latch: the boot ROM overlay is readable until the first nonzero write, which unmaps it for the life of
     // the machine (only a reset — a fresh machine — brings it back). Fast startup begins with the latch already
     // tripped even when an image is retained, so the seeded path reads FF50 exactly as hardware does after boot.
     private bool m_bootRomMapped;
+    // The CURRENT instruction dispatch's start PC (M-06): the CPU calls NoteInstructionStart once per StepInstruction,
+    // before any access that dispatch makes, so a mid-instruction watch hit latches the PC of the instruction actually
+    // making the access rather than whatever the CPU's live PC has advanced to by drain time.
+    private ushort m_currentInstructionPc;
     // The derived cartridge-window cache (F2): ROM fetch — the dominant bus traffic — and the pure-array-access
     // mappers' RAM window are resolved once per control write instead of chasing the slot property + mapper virtual
     // dispatch on every byte. NEVER serialized: RefreshCartridgeWindowCache rebuilds it from the just-loaded mapper
@@ -56,9 +55,25 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     private byte[] m_ramImage = [];
     private int m_ramWindowLength;
     private int m_ramWindowOffset;
-    private byte[] m_romImage = [];
     private int m_romBank0Offset = -1;
     private int m_romBankNOffset = -1;
+    private byte[] m_romImage = [];
+    // Mutable so a LIVE device swap re-gates the Color I/O page: with this false, every color register write (palette
+    // RAM, KEY1, HDMA, VRAM/WRAM bank selects, PCM ports) is already dropped by the existing `if (m_supportsColor)`
+    // guards and reads return 0xFF — sealing off Color hardware after a demote with no per-register change.
+    private bool m_supportsColor;
+    // ---- Debug watchpoints ------------------------------------------------------------------------------------------
+    // Host-side debug state, NEVER serialized (excluded from every snapshot, exactly like the AGB bus's DebugRead peeks):
+    // a poke/rewind never carries them, and their presence cannot perturb the simulation. m_watchArmed is the single
+    // dormant guard the hot ReadByte/WriteByte paths test; when false (the default, and the batteries' every run) the
+    // watch machinery is untouched. A hit latches ONE pending record (first hit wins until drained) so the host can
+    // report PC + access + value and pause the cabinet.
+    private bool m_watchArmed;
+    private bool m_watchHit;
+    private ushort m_watchHitAddress;
+    private ushort m_watchHitPc;
+    private byte m_watchHitValue;
+    private bool m_watchHitWrite;
 
     /// <summary>Assembles the bus from the devices it routes to.</summary>
     /// <param name="apu">The audio processing unit backing NR10–NR52 and wave RAM.</param>
@@ -135,16 +150,598 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         RefreshCartridgeWindowCache();
     }
 
-    /// <inheritdoc/>
-    /// <remarks>The record and the commit phase both belong to the display, which owns the registers and every
-    /// consumer of them; the bus only routes the address. No watchpoint witness: a write in flight is one transition
-    /// inside a single access, not an access of its own.</remarks>
-    public int RecordDisplayWrite(ushort address, byte value, out bool settles) =>
-        m_ppu.RecordWrite(
-            address: address,
-            settles: out settles,
-            value: value
+    // The audio registers and wave RAM form one contiguous block the APU owns end to end.
+    private static bool IsAudioBlock(ushort address) =>
+        ((address >= MemoryMap.AudioStart) && (address <= MemoryMap.WaveRamEnd));
+    // Whether an address falls inside the boot overlay's read windows while it is still mapped. The image itself is
+    // immutable configuration; only the FF50 latch is machine state.
+    private bool IsBootRomAddress(ushort address) {
+        if (
+            !m_bootRomMapped ||
+            (m_bootRom is null)
+        ) {
+            return false;
+        }
+
+        return (
+            (address <= BootRomLowEnd) ||
+            (m_supportsColor && (address >= CgbBootRomHighStart) && (address <= CgbBootRomHighEnd))
         );
+    }
+    // The Color-only register page: everything here reads open bus (0xFF) on a monochrome machine, as does any
+    // unmapped I/O address on either model, regardless of any write that landed there.
+    private byte ReadColorIoRegister(ushort address) {
+        if (!m_supportsColor) {
+            return 0xFF;
+        }
+
+        switch (address) {
+            case MemoryMap.BackgroundColorPaletteIndex:
+            case MemoryMap.BackgroundColorPaletteData:
+            case MemoryMap.ObjectColorPaletteIndex:
+            case MemoryMap.ObjectColorPaletteData:
+                return m_ppu.ReadRegister(address: address);
+            case MemoryMap.SpeedSwitch:
+                return (IsColorNative
+                    ? m_key1.ReadRegister()
+                    : (byte)0xFF
+                );
+            case MemoryMap.HdmaSourceHigh:
+            case MemoryMap.HdmaSourceLow:
+            case MemoryMap.HdmaDestinationHigh:
+            case MemoryMap.HdmaDestinationLow:
+            case MemoryMap.HdmaControl:
+                return (IsColorNative
+                    ? m_hdma.ReadRegister(address: address)
+                    : (byte)0xFF
+                );
+            case MemoryMap.InfraredPort:
+                return (IsColorNative
+                    ? m_infrared.ReadRegister()
+                    : (byte)0xFF
+                );
+            // VBK stays live in DMG-compatibility mode (Mooneye's misc/boot_hwio-C pins 0xFE there, unlike KEY1/RP/
+            // HDMA/SVBK): the bank-select bit exists on the silicon either way, it is only bank-0 VRAM that
+            // compatibility-mode rendering ever reads (Ppu.m_cgbNative).
+            case MemoryMap.VramBankSelect:
+                return ((byte)(0xFE | m_memory.VideoRamBank));
+            case MemoryMap.WorkRamBankSelect:
+                return (IsColorNative
+                    ? ((byte)(0xF8 | m_memory.WorkRamBank))
+                    : (byte)0xFF
+                );
+            case 0xFF74:
+                // Sealed in DMG-compatibility mode (Pan Docs "CGB Registers": "Otherwise, this register is
+                // read-only, and locked at value $FF") — unlike FF72/FF73/FF75, which stay live either way.
+                return (IsColorNative
+                    ? m_ioRegisters[(address - MemoryMap.IoRegistersStart)]
+                    : (byte)0xFF
+                );
+            case MemoryMap.ObjectPriorityMode:
+                // Not independently backed: this engine already derives object-priority mode from the same
+                // compatibility fact (Ppu's m_cgbNative), so a native machine's fixed CGB-style answer (bit 0 clear)
+                // is the only value there is to read back.
+                return (IsColorNative
+                    ? (byte)0xFE
+                    : (byte)0xFF
+                );
+            case 0xFF72:
+            case 0xFF73:
+                // The Color's undocumented fully-readable/writable registers.
+                return m_ioRegisters[(address - MemoryMap.IoRegistersStart)];
+            case 0xFF75:
+                // Only bits 4-6 are backed; the rest read as ones.
+                return ((byte)(0x8F | m_ioRegisters[(address - MemoryMap.IoRegistersStart)]));
+            default:
+                return 0xFF;
+        }
+    }
+    private byte ReadIoRegister(ushort address) {
+        switch (address) {
+            case MemoryMap.Joypad:
+                return m_joypad.ReadRegister();
+            case MemoryMap.SerialData:
+            case MemoryMap.SerialControl:
+                return m_serial.ReadRegister(address: address);
+            case MemoryMap.Divider:
+            case MemoryMap.TimerCounter:
+            case MemoryMap.TimerModulo:
+            case MemoryMap.TimerControl:
+                return m_timer.ReadRegister(address: address);
+            case MemoryMap.OamDmaSource:
+                return m_oamDma.ReadRegister();
+            case MemoryMap.LcdControl:
+            case MemoryMap.LcdStatus:
+            case MemoryMap.ScrollY:
+            case MemoryMap.ScrollX:
+            case MemoryMap.LcdY:
+            case MemoryMap.LcdYCompare:
+            case MemoryMap.BackgroundPalette:
+            case MemoryMap.ObjectPalette0:
+            case MemoryMap.ObjectPalette1:
+            case MemoryMap.WindowY:
+            case MemoryMap.WindowX:
+                return m_ppu.ReadRegister(address: address);
+            case MemoryMap.InterruptFlag:
+                return ((byte)(0xE0 | ((byte)m_interrupts.Requested)));
+            case MemoryMap.BootRomDisable:
+                // Bit 0 is the latch (set once the overlay is gone); the undecoded bits read high.
+                return ((byte)(0xFE | (m_bootRomMapped
+                    ? 0x00
+                    : 0x01)));
+            default:
+                return ReadColorIoRegister(address: address);
+        }
+    }
+    // Recomputes the derived ROM/RAM window cache from the currently-inserted cartridge's live bank registers. A
+    // window is used only when it stays within the cartridge's actual image/RAM bounds (RomImage.Length / RamImage
+    // slice) — an out-of-range result (a malformed or non-bank-aligned image) falls back to the interface path rather
+    // than indexing past the array, so the fast path never trades correctness for speed.
+    private void RefreshCartridgeWindowCache() {
+        var cartridge = m_cartridgeSlot.Cartridge;
+
+        m_romImage = cartridge.RomImage;
+
+        cartridge.ComputeRomWindows(
+            bank0Offset: out var bank0Offset,
+            bankNOffset: out var bankNOffset
+        );
+
+        var romLength = m_romImage.Length;
+
+        m_romBank0Offset = (((bank0Offset >= 0) && ((bank0Offset + RomWindowByteCount) <= romLength))
+            ? bank0Offset
+            : -1
+        );
+        m_romBankNOffset = (((bankNOffset >= 0) && ((bankNOffset + RomWindowByteCount) <= romLength))
+            ? bankNOffset
+            : -1
+        );
+
+        m_ramImage = cartridge.RamImage;
+
+        if (cartridge.TryComputeRamWindow(
+            length: out var ramLength,
+            offset: out var ramOffset
+        )) {
+            m_ramWindowOffset = ramOffset;
+            m_ramWindowLength = ramLength;
+        } else {
+            m_ramWindowOffset = 0;
+            m_ramWindowLength = 0;
+        }
+    }
+    private void TrackWatchRead(ushort address) {
+        if (m_watchHit) {
+            return;
+        }
+
+        foreach (var watch in m_watches) {
+            if (
+                watch.Read &&
+                (watch.Address == address)
+            ) {
+                m_watchHit = true;
+                m_watchHitAddress = address;
+                m_watchHitValue = DebugReadByte(address: address);
+                m_watchHitWrite = false;
+                m_watchHitPc = m_currentInstructionPc;
+
+                return;
+            }
+        }
+    }
+    private void TrackWatchWrite(ushort address, byte value) {
+        if (m_watchHit) {
+            return;
+        }
+
+        foreach (var watch in m_watches) {
+            if (
+                watch.Write &&
+                (watch.Address == address)
+            ) {
+                m_watchHit = true;
+                m_watchHitAddress = address;
+                m_watchHitValue = value;
+                m_watchHitWrite = true;
+                m_watchHitPc = m_currentInstructionPc;
+
+                return;
+            }
+        }
+    }
+    // The Color-only register page's write side, mirroring ReadColorIoRegister: the decoded registers are dropped on a
+    // monochrome machine, and anything undecoded lands in the fallback byte page on either model.
+    private void WriteColorIoRegister(ushort address, byte value) {
+        switch (address) {
+            case MemoryMap.BackgroundColorPaletteIndex:
+            case MemoryMap.BackgroundColorPaletteData:
+            case MemoryMap.ObjectColorPaletteIndex:
+            case MemoryMap.ObjectColorPaletteData:
+                if (m_supportsColor) {
+                    m_ppu.WriteRegister(
+                        address: address,
+                        value: value
+                    );
+                }
+
+                break;
+            case MemoryMap.SpeedSwitch:
+                if (IsColorNative) {
+                    m_key1.WriteRegister(value: value);
+                }
+
+                break;
+            case MemoryMap.HdmaSourceHigh:
+            case MemoryMap.HdmaSourceLow:
+            case MemoryMap.HdmaDestinationHigh:
+            case MemoryMap.HdmaDestinationLow:
+            case MemoryMap.HdmaControl:
+                if (IsColorNative) {
+                    m_hdma.WriteRegister(
+                        address: address,
+                        value: value
+                    );
+                }
+
+                break;
+            case MemoryMap.InfraredPort:
+                if (IsColorNative) {
+                    m_infrared.WriteRegister(value: value);
+                }
+
+                break;
+            case MemoryMap.VramBankSelect:
+                // Stays live in DMG-compatibility mode — see the matching read case's remarks.
+                if (m_supportsColor) {
+                    m_memory.VideoRamBank = value;
+                }
+
+                break;
+            case MemoryMap.WorkRamBankSelect:
+                if (IsColorNative) {
+                    m_memory.WorkRamBank = value;
+                }
+
+                break;
+            case MemoryMap.SystemModeSelect:
+                // A real boot ROM's one-time write: confirms (or, for a hand-authored header a boot ROM disagrees
+                // with, corrects) the DMG-compatibility fact every other Color-only register above answers through.
+                // The register is sealed once the overlay unmaps, so a cartridge cannot re-enter or leave the mode.
+                if (
+                    m_supportsColor &&
+                    m_bootRomMapped
+                ) {
+                    m_dmgCompatibility.ApplyKey0(value: value);
+                    // The render path caches the answer, so the display is told when the latch moves rather than
+                    // re-reading the authority on every dot.
+                    m_ppu.RefreshCompatibilityMode();
+                }
+
+                break;
+            case MemoryMap.ObjectPriorityMode:
+                // Not independently backed — see ReadColorIoRegister. Accepted (matching hardware, which leaves the
+                // write itself harmless once the mode is fixed) with nothing further to record.
+                break;
+            default:
+                m_ioRegisters[(address - MemoryMap.IoRegistersStart)] = value;
+
+                break;
+        }
+    }
+    // Land a conflict-redirected store directly on the DMA's bus: the mapper for the ROM region, then VRAM (still
+    // subject to the PPU's drawing lock), external RAM, and work RAM with its echo fold.
+    private void WriteConflictTarget(ushort address, byte value) {
+        if (address <= MemoryMap.RomBankNEnd) {
+            m_cartridgeSlot.Cartridge.WriteControl(
+                address: address,
+                value: value
+            );
+            RefreshCartridgeWindowCache();
+        } else if (address <= MemoryMap.VideoRamEnd) {
+            if (!m_ppu.BlocksVideoRamWrites) {
+                m_memory.WriteVideoRam(
+                    address: address,
+                    value: value
+                );
+            }
+        } else if (address <= MemoryMap.ExternalRamEnd) {
+            var ramRelative = (address - MemoryMap.ExternalRamStart);
+
+            if (ramRelative < m_ramWindowLength) {
+                m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
+                m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
+            } else {
+                m_cartridgeSlot.Cartridge.WriteRam(
+                    address: address,
+                    value: value
+                );
+            }
+        } else if (address <= MemoryMap.WorkRamBankNEnd) {
+            m_memory.WriteWorkRam(
+                address: address,
+                value: value
+            );
+        } else {
+            m_memory.WriteWorkRam(
+                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
+                value: value
+            );
+        }
+    }
+    private void WriteIoRegister(ushort address, byte value) {
+        switch (address) {
+            case MemoryMap.Joypad:
+                m_joypad.WriteRegister(value: value);
+
+                break;
+            case MemoryMap.SerialData:
+            case MemoryMap.SerialControl:
+                m_serial.WriteRegister(
+                    address: address,
+                    value: value
+                );
+
+                break;
+            case MemoryMap.Divider:
+            case MemoryMap.TimerCounter:
+            case MemoryMap.TimerModulo:
+            case MemoryMap.TimerControl:
+                m_timer.WriteRegister(
+                    address: address,
+                    value: value
+                );
+
+                break;
+            case MemoryMap.OamDmaSource:
+                m_oamDma.WriteRegister(value: value);
+
+                break;
+            case MemoryMap.LcdControl:
+            case MemoryMap.LcdStatus:
+            case MemoryMap.ScrollY:
+            case MemoryMap.ScrollX:
+            case MemoryMap.LcdY:
+            case MemoryMap.LcdYCompare:
+            case MemoryMap.BackgroundPalette:
+            case MemoryMap.ObjectPalette0:
+            case MemoryMap.ObjectPalette1:
+            case MemoryMap.WindowY:
+            case MemoryMap.WindowX:
+                m_ppu.WriteRegister(
+                    address: address,
+                    value: value
+                );
+
+                break;
+            case MemoryMap.InterruptFlag:
+                m_interrupts.Requested = ((InterruptKind)value);
+
+                break;
+            case MemoryMap.BootRomDisable:
+                // A one-way latch: any nonzero write unmaps the boot overlay permanently; zero writes are ignored and
+                // nothing ever maps it back.
+                if (value != 0) {
+                    m_bootRomMapped = false;
+                }
+
+                break;
+            default:
+                WriteColorIoRegister(
+                    address: address,
+                    value: value
+                );
+
+                break;
+        }
+    }
+
+    /// <summary>Arms (or re-arms, replacing the same address's kinds) a read/write watchpoint. Dormant until the first
+    /// arm flips the hot-path guard on.</summary>
+    /// <param name="address">The watched bus address.</param>
+    /// <param name="read">Whether a read of the address fires the watch.</param>
+    /// <param name="write">Whether a write to the address fires the watch.</param>
+    public void AddWatch(ushort address, bool read, bool write) {
+        for (var index = 0; (index < m_watches.Count); ++index) {
+            if (m_watches[index].Address == address) {
+                m_watches[index] = (address, read, write);
+                m_watchArmed = true;
+
+                return;
+            }
+        }
+
+        m_watches.Add(item: (address, read, write));
+        m_watchArmed = true;
+    }
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) {
+        m_supportsColor = model.SupportsColor();
+
+        // ApplyModel runs at exactly the two points the mapper's own registers can have just changed underneath the
+        // cache without a WriteControl call passing through this bus: a snapshot restore (after every component,
+        // including the cartridge slot, has loaded its bytes) and a live model swap. Rebuilding here — rather than
+        // trying to catch every such call site individually — keeps the cache correct by construction.
+        RefreshCartridgeWindowCache();
+    }
+    /// <summary>Clears every watchpoint and returns the hot path to its dormant (zero-cost) state.</summary>
+    public void ClearWatches() {
+        m_watches.Clear();
+        m_watchArmed = false;
+        m_watchHit = false;
+    }
+    /// <summary>Reads one byte from anywhere in the bus address space WITHOUT the side effects of a live fetch — no
+    /// clock advance, no OAM-DMA conflict tracking, and none of the PPU/DMA lock masking that returns open bus during a
+    /// live access: it shows the true byte a region holds (RAM/ROM/OAM/HRAM as stored, I/O through the register getters).
+    /// The side-effect-free read behind <c>hgb.peek</c> / <c>screen.peek</c> and the debug disassembler's byte source.</summary>
+    /// <param name="address">The 16-bit bus address.</param>
+    /// <returns>The byte the region holds.</returns>
+    public byte DebugReadByte(ushort address) {
+        if (address <= MemoryMap.RomBankNEnd) {
+            if (IsBootRomAddress(address: address)) {
+                return m_bootRom![address];
+            }
+
+            return ((address <= MemoryMap.RomBank0End)
+                ? ((m_romBank0Offset >= 0)
+                    ? m_romImage[(m_romBank0Offset + address)]
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address))
+                : ((m_romBankNOffset >= 0)
+                    ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))]
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address)
+            ));
+        }
+
+        if (address <= MemoryMap.VideoRamEnd) {
+            return m_memory.ReadVideoRam(address: address);
+        }
+
+        if (address <= MemoryMap.ExternalRamEnd) {
+            var ramRelative = (address - MemoryMap.ExternalRamStart);
+
+            return ((ramRelative < m_ramWindowLength)
+                ? m_ramImage[(m_ramWindowOffset + ramRelative)]
+                : m_cartridgeSlot.Cartridge.ReadRam(address: address)
+            );
+        }
+
+        if (address <= MemoryMap.WorkRamBankNEnd) {
+            return m_memory.ReadWorkRam(address: address);
+        }
+
+        if (address <= MemoryMap.EchoRamEnd) {
+            return m_memory.ReadWorkRam(address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)));
+        }
+
+        if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
+            return m_memory.ReadObjectAttributeMemory(address: address);
+        }
+
+        if (address <= MemoryMap.UnusableEnd) {
+            return 0xFF;
+        }
+
+        if (address <= MemoryMap.IoRegistersEnd) {
+            if (IsAudioBlock(address: address)) {
+                return m_apu.ReadRegister(address: address);
+            }
+
+            if (
+                (address == MemoryMap.PcmAmplitude12) ||
+                (address == MemoryMap.PcmAmplitude34)
+            ) {
+                return (m_supportsColor
+                    ? m_apu.ReadPcm(address: address)
+                    : (byte)0xFF
+                );
+            }
+
+            return ReadIoRegister(address: address);
+        }
+
+        if (address <= MemoryMap.HighRamEnd) {
+            return m_memory.ReadHighRam(address: address);
+        }
+
+        return ((byte)m_interrupts.Enabled);
+    }
+    /// <summary>Forces one byte into a WRITABLE bus region — the debug MUTATION behind <c>hgb.poke</c>, outside the
+    /// replay-determinism contract. RAM regions (VRAM, external RAM, work RAM + echo, OAM, high RAM) and the IE latch
+    /// take the value; the ROM-region mapper-control window and the I/O page are refused (a memory poke must not drive
+    /// banking or trip a hardware register). A caller that pokes must drop any captured rewind/replay history.</summary>
+    /// <param name="address">The 16-bit bus address.</param>
+    /// <param name="value">The byte to store.</param>
+    public void DebugWriteByte(ushort address, byte value) {
+        if (address <= MemoryMap.RomBankNEnd) {
+            return;
+        }
+
+        if (address <= MemoryMap.VideoRamEnd) {
+            m_memory.WriteVideoRam(
+                address: address,
+                value: value
+            );
+        } else if (address <= MemoryMap.ExternalRamEnd) {
+            var ramRelative = (address - MemoryMap.ExternalRamStart);
+
+            if (ramRelative < m_ramWindowLength) {
+                m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
+                m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
+            } else {
+                m_cartridgeSlot.Cartridge.WriteRam(
+                    address: address,
+                    value: value
+                );
+            }
+        } else if (address <= MemoryMap.WorkRamBankNEnd) {
+            m_memory.WriteWorkRam(
+                address: address,
+                value: value
+            );
+        } else if (address <= MemoryMap.EchoRamEnd) {
+            m_memory.WriteWorkRam(
+                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
+                value: value
+            );
+        } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
+            m_memory.WriteObjectAttributeMemory(
+                address: address,
+                value: value
+            );
+        } else if (address <= MemoryMap.UnusableEnd) {
+            // Dropped: the unusable region is not memory.
+        } else if (address <= MemoryMap.IoRegistersEnd) {
+            // Refused: an I/O poke would drive hardware, not memory.
+        } else if (address <= MemoryMap.HighRamEnd) {
+            m_memory.WriteHighRam(
+                address: address,
+                value: value
+            );
+        } else {
+            m_interrupts.Enabled = ((InterruptKind)value);
+        }
+    }
+    /// <summary>Describes the armed watchpoints as <c>0xADDR:kind</c> tokens (kind = r/w/rw), for <c>hgb.watch.list</c>.</summary>
+    /// <returns>A space-joined description, or an empty string when none are armed.</returns>
+    public string DescribeWatches() {
+        if (m_watches.Count == 0) {
+            return "";
+        }
+
+        var parts = new string[m_watches.Count];
+
+        for (var index = 0; (index < m_watches.Count); ++index) {
+            var watch = m_watches[index];
+
+            parts[index] = $"0x{watch.Address:X4}:{(watch.Read
+                ? "r"
+                : "")}{(watch.Write
+                ? "w"
+                : "")}";
+        }
+
+        return string.Join(
+            separator: ' ',
+            values: parts
+        );
+    }
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        reader.ReadBytes(destination: m_ioRegisters);
+        m_bootRomMapped = reader.ReadBoolean();
+    }
+    /// <inheritdoc/>
+    public void NoteInstructionStart(ushort pc) =>
+        m_currentInstructionPc = pc;
+    /// <inheritdoc/>
+    // A running (or warming-up) OAM DMA already owns the OAM bus ahead of the CPU (the same ordering ReadByte/
+    // WriteByte gate OAM behind); the IDU's address-bus output loses that race just like an ordinary CPU access would.
+    public void NoteRegisterAddressBus(ushort address) {
+        if (!m_oamDma.IsActiveOrWarmingUp) {
+            m_ppu.NoteRegisterAddressBus(address: address);
+        }
+    }
     /// <inheritdoc/>
     public void OpenDisplayWriteSettle() =>
         m_ppu.OpenWriteSettle();
@@ -166,10 +763,11 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             return (forceOpenBus
                 ? (byte)0xFF
                 : DmaSource.Read(
-                address: redirect,
-                cartridgeSlot: m_cartridgeSlot,
-                memory: m_memory
-            ));
+                    address: redirect,
+                    cartridgeSlot: m_cartridgeSlot,
+                    memory: m_memory
+                )
+            );
         }
 
         if (address <= MemoryMap.RomBankNEnd) {
@@ -190,7 +788,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                     : m_cartridgeSlot.Cartridge.ReadRom(address: address))
                 : ((m_romBankNOffset >= 0)
                     ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))]
-                    : m_cartridgeSlot.Cartridge.ReadRom(address: address)));
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address)
+            ));
         }
 
         if (address <= MemoryMap.VideoRamEnd) {
@@ -198,7 +797,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             // internal mode-0 edge by the PPU's unlock lag.
             return (m_ppu.BlocksVideoRamReads
                 ? (byte)0xFF
-                : m_memory.ReadVideoRam(address: address));
+                : m_memory.ReadVideoRam(address: address)
+            );
         }
 
         if (address <= MemoryMap.ExternalRamEnd) {
@@ -209,7 +809,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
             return ((ramRelative < m_ramWindowLength)
                 ? m_ramImage[(m_ramWindowOffset + ramRelative)]
-                : m_cartridgeSlot.Cartridge.ReadRam(address: address));
+                : m_cartridgeSlot.Cartridge.ReadRam(address: address)
+            );
         }
 
         if (address <= MemoryMap.WorkRamBankNEnd) {
@@ -263,7 +864,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             ) {
                 return (m_supportsColor
                     ? m_apu.ReadPcm(address: address)
-                    : (byte)0xFF);
+                    : (byte)0xFF
+                );
             }
 
             return ReadIoRegister(address: address);
@@ -274,6 +876,46 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         }
 
         return ((byte)m_interrupts.Enabled);
+    }
+    /// <inheritdoc/>
+    /// <remarks>The record and the commit phase both belong to the display, which owns the registers and every
+    /// consumer of them; the bus only routes the address. No watchpoint witness: a write in flight is one transition
+    /// inside a single access, not an access of its own.</remarks>
+    public int RecordDisplayWrite(ushort address, byte value, out bool settles) =>
+        m_ppu.RecordWrite(
+            address: address,
+            settles: out settles,
+            value: value
+        );
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteBytes(value: m_ioRegisters);
+        writer.WriteBoolean(value: m_bootRomMapped);
+    }
+    /// <summary>Takes the one pending watch hit (if any), reporting its address, the byte, whether it was a write, and
+    /// the accessing instruction's PC. Clears the pending slot so a subsequent access can latch the next hit.</summary>
+    /// <param name="address">The hit address.</param>
+    /// <param name="value">The byte read or written.</param>
+    /// <param name="isWrite">Whether the hit was a write (else a read).</param>
+    /// <param name="pc">The program counter of the instruction that made the access.</param>
+    /// <returns>Whether a hit was pending.</returns>
+    public bool TryTakeWatchHit(out ushort address, out byte value, out bool isWrite, out ushort pc) {
+        if (!m_watchHit) {
+            address = 0;
+            value = 0;
+            isWrite = false;
+            pc = 0;
+
+            return false;
+        }
+
+        m_watchHit = false;
+        address = m_watchHitAddress;
+        value = m_watchHitValue;
+        isWrite = m_watchHitWrite;
+        pc = m_watchHitPc;
+
+        return true;
     }
     /// <inheritdoc/>
     public void WriteByte(ushort address, byte value) {
@@ -398,437 +1040,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             m_interrupts.Enabled = ((InterruptKind)value);
         }
     }
-    /// <inheritdoc/>
-    public void ApplyModel(ConsoleModel model) {
-        m_supportsColor = model.SupportsColor();
 
-        // ApplyModel runs at exactly the two points the mapper's own registers can have just changed underneath the
-        // cache without a WriteControl call passing through this bus: a snapshot restore (after every component,
-        // including the cartridge slot, has loaded its bytes) and a live model swap. Rebuilding here — rather than
-        // trying to catch every such call site individually — keeps the cache correct by construction.
-        RefreshCartridgeWindowCache();
-    }
-    /// <summary>Reads one byte from anywhere in the bus address space WITHOUT the side effects of a live fetch — no
-    /// clock advance, no OAM-DMA conflict tracking, and none of the PPU/DMA lock masking that returns open bus during a
-    /// live access: it shows the true byte a region holds (RAM/ROM/OAM/HRAM as stored, I/O through the register getters).
-    /// The side-effect-free read behind <c>hgb.peek</c> / <c>screen.peek</c> and the debug disassembler's byte source.</summary>
-    /// <param name="address">The 16-bit bus address.</param>
-    /// <returns>The byte the region holds.</returns>
-    public byte DebugReadByte(ushort address) {
-        if (address <= MemoryMap.RomBankNEnd) {
-            if (IsBootRomAddress(address: address)) {
-                return m_bootRom![address];
-            }
-
-            return ((address <= MemoryMap.RomBank0End)
-                ? ((m_romBank0Offset >= 0)
-                    ? m_romImage[(m_romBank0Offset + address)]
-                    : m_cartridgeSlot.Cartridge.ReadRom(address: address))
-                : ((m_romBankNOffset >= 0)
-                    ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))]
-                    : m_cartridgeSlot.Cartridge.ReadRom(address: address)));
-        }
-
-        if (address <= MemoryMap.VideoRamEnd) {
-            return m_memory.ReadVideoRam(address: address);
-        }
-
-        if (address <= MemoryMap.ExternalRamEnd) {
-            var ramRelative = (address - MemoryMap.ExternalRamStart);
-
-            return ((ramRelative < m_ramWindowLength)
-                ? m_ramImage[(m_ramWindowOffset + ramRelative)]
-                : m_cartridgeSlot.Cartridge.ReadRam(address: address));
-        }
-
-        if (address <= MemoryMap.WorkRamBankNEnd) {
-            return m_memory.ReadWorkRam(address: address);
-        }
-
-        if (address <= MemoryMap.EchoRamEnd) {
-            return m_memory.ReadWorkRam(address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)));
-        }
-
-        if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
-            return m_memory.ReadObjectAttributeMemory(address: address);
-        }
-
-        if (address <= MemoryMap.UnusableEnd) {
-            return 0xFF;
-        }
-
-        if (address <= MemoryMap.IoRegistersEnd) {
-            if (IsAudioBlock(address: address)) {
-                return m_apu.ReadRegister(address: address);
-            }
-
-            if (
-                (address == MemoryMap.PcmAmplitude12) ||
-                (address == MemoryMap.PcmAmplitude34)
-            ) {
-                return (m_supportsColor
-                    ? m_apu.ReadPcm(address: address)
-                    : (byte)0xFF);
-            }
-
-            return ReadIoRegister(address: address);
-        }
-
-        if (address <= MemoryMap.HighRamEnd) {
-            return m_memory.ReadHighRam(address: address);
-        }
-
-        return ((byte)m_interrupts.Enabled);
-    }
-    /// <summary>Forces one byte into a WRITABLE bus region — the debug MUTATION behind <c>hgb.poke</c>, outside the
-    /// replay-determinism contract. RAM regions (VRAM, external RAM, work RAM + echo, OAM, high RAM) and the IE latch
-    /// take the value; the ROM-region mapper-control window and the I/O page are refused (a memory poke must not drive
-    /// banking or trip a hardware register). A caller that pokes must drop any captured rewind/replay history.</summary>
-    /// <param name="address">The 16-bit bus address.</param>
-    /// <param name="value">The byte to store.</param>
-    public void DebugWriteByte(ushort address, byte value) {
-        if (address <= MemoryMap.RomBankNEnd) {
-            return;
-        }
-
-        if (address <= MemoryMap.VideoRamEnd) {
-            m_memory.WriteVideoRam(
-                address: address,
-                value: value
-            );
-        } else if (address <= MemoryMap.ExternalRamEnd) {
-            var ramRelative = (address - MemoryMap.ExternalRamStart);
-
-            if (ramRelative < m_ramWindowLength) {
-                m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
-                m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
-            } else {
-                m_cartridgeSlot.Cartridge.WriteRam(
-                    address: address,
-                    value: value
-                );
-            }
-        } else if (address <= MemoryMap.WorkRamBankNEnd) {
-            m_memory.WriteWorkRam(
-                address: address,
-                value: value
-            );
-        } else if (address <= MemoryMap.EchoRamEnd) {
-            m_memory.WriteWorkRam(
-                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
-                value: value
-            );
-        } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
-            m_memory.WriteObjectAttributeMemory(
-                address: address,
-                value: value
-            );
-        } else if (address <= MemoryMap.UnusableEnd) {
-            // Dropped: the unusable region is not memory.
-        } else if (address <= MemoryMap.IoRegistersEnd) {
-            // Refused: an I/O poke would drive hardware, not memory.
-        } else if (address <= MemoryMap.HighRamEnd) {
-            m_memory.WriteHighRam(
-                address: address,
-                value: value
-            );
-        } else {
-            m_interrupts.Enabled = ((InterruptKind)value);
-        }
-    }
-
-    // ---- Debug watchpoints ------------------------------------------------------------------------------------------
-    // Host-side debug state, NEVER serialized (excluded from every snapshot, exactly like the AGB bus's DebugRead peeks):
-    // a poke/rewind never carries them, and their presence cannot perturb the simulation. m_watchArmed is the single
-    // dormant guard the hot ReadByte/WriteByte paths test; when false (the default, and the batteries' every run) the
-    // watch machinery is untouched. A hit latches ONE pending record (first hit wins until drained) so the host can
-    // report PC + access + value and pause the cabinet.
-    private bool m_watchArmed;
-
-    private readonly List<(ushort Address, bool Read, bool Write)> m_watches = [];
-
-    private bool m_watchHit;
-    private ushort m_watchHitAddress;
-    private byte m_watchHitValue;
-    private bool m_watchHitWrite;
-    private ushort m_watchHitPc;
-    // The CURRENT instruction dispatch's start PC (M-06): the CPU calls NoteInstructionStart once per StepInstruction,
-    // before any access that dispatch makes, so a mid-instruction watch hit latches the PC of the instruction actually
-    // making the access rather than whatever the CPU's live PC has advanced to by drain time.
-    private ushort m_currentInstructionPc;
-
-    /// <inheritdoc/>
-    public void NoteInstructionStart(ushort pc) =>
-        m_currentInstructionPc = pc;
-    /// <inheritdoc/>
-    // A running (or warming-up) OAM DMA already owns the OAM bus ahead of the CPU (the same ordering ReadByte/
-    // WriteByte gate OAM behind); the IDU's address-bus output loses that race just like an ordinary CPU access would.
-    public void NoteRegisterAddressBus(ushort address) {
-        if (!m_oamDma.IsActiveOrWarmingUp) {
-            m_ppu.NoteRegisterAddressBus(address: address);
-        }
-    }
-    /// <summary>Arms (or re-arms, replacing the same address's kinds) a read/write watchpoint. Dormant until the first
-    /// arm flips the hot-path guard on.</summary>
-    /// <param name="address">The watched bus address.</param>
-    /// <param name="read">Whether a read of the address fires the watch.</param>
-    /// <param name="write">Whether a write to the address fires the watch.</param>
-    public void AddWatch(ushort address, bool read, bool write) {
-        for (var index = 0; (index < m_watches.Count); ++index) {
-            if (m_watches[index].Address == address) {
-                m_watches[index] = (address, read, write);
-                m_watchArmed = true;
-
-                return;
-            }
-        }
-
-        m_watches.Add(item: (address, read, write));
-        m_watchArmed = true;
-    }
-    /// <summary>Clears every watchpoint and returns the hot path to its dormant (zero-cost) state.</summary>
-    public void ClearWatches() {
-        m_watches.Clear();
-        m_watchArmed = false;
-        m_watchHit = false;
-    }
-
-    /// <summary>Gets the number of armed watchpoints.</summary>
-    public int WatchCount => m_watches.Count;
-
-    /// <summary>Describes the armed watchpoints as <c>0xADDR:kind</c> tokens (kind = r/w/rw), for <c>hgb.watch.list</c>.</summary>
-    /// <returns>A space-joined description, or an empty string when none are armed.</returns>
-    public string DescribeWatches() {
-        if (m_watches.Count == 0) {
-            return "";
-        }
-
-        var parts = new string[m_watches.Count];
-
-        for (var index = 0; (index < m_watches.Count); ++index) {
-            var watch = m_watches[index];
-
-            parts[index] = $"0x{watch.Address:X4}:{(watch.Read
-                ? "r"
-                : "")}{(watch.Write
-                ? "w"
-                : "")}";
-        }
-
-        return string.Join(
-            separator: ' ',
-            values: parts
-        );
-    }
-    /// <summary>Takes the one pending watch hit (if any), reporting its address, the byte, whether it was a write, and
-    /// the accessing instruction's PC. Clears the pending slot so a subsequent access can latch the next hit.</summary>
-    /// <param name="address">The hit address.</param>
-    /// <param name="value">The byte read or written.</param>
-    /// <param name="isWrite">Whether the hit was a write (else a read).</param>
-    /// <param name="pc">The program counter of the instruction that made the access.</param>
-    /// <returns>Whether a hit was pending.</returns>
-    public bool TryTakeWatchHit(out ushort address, out byte value, out bool isWrite, out ushort pc) {
-        if (!m_watchHit) {
-            address = 0;
-            value = 0;
-            isWrite = false;
-            pc = 0;
-
-            return false;
-        }
-
-        m_watchHit = false;
-        address = m_watchHitAddress;
-        value = m_watchHitValue;
-        isWrite = m_watchHitWrite;
-        pc = m_watchHitPc;
-
-        return true;
-    }
-
-    private void TrackWatchRead(ushort address) {
-        if (m_watchHit) {
-            return;
-        }
-
-        foreach (var watch in m_watches) {
-            if (
-                watch.Read &&
-                (watch.Address == address)
-            ) {
-                m_watchHit = true;
-                m_watchHitAddress = address;
-                m_watchHitValue = DebugReadByte(address: address);
-                m_watchHitWrite = false;
-                m_watchHitPc = m_currentInstructionPc;
-
-                return;
-            }
-        }
-    }
-    private void TrackWatchWrite(ushort address, byte value) {
-        if (m_watchHit) {
-            return;
-        }
-
-        foreach (var watch in m_watches) {
-            if (
-                watch.Write &&
-                (watch.Address == address)
-            ) {
-                m_watchHit = true;
-                m_watchHitAddress = address;
-                m_watchHitValue = value;
-                m_watchHitWrite = true;
-                m_watchHitPc = m_currentInstructionPc;
-
-                return;
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBytes(value: m_ioRegisters);
-        writer.WriteBoolean(value: m_bootRomMapped);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        reader.ReadBytes(destination: m_ioRegisters);
-        m_bootRomMapped = reader.ReadBoolean();
-    }
-
-    // Whether an address falls inside the boot overlay's read windows while it is still mapped. The image itself is
-    // immutable configuration; only the FF50 latch is machine state.
-    private bool IsBootRomAddress(ushort address) {
-        if (
-            !m_bootRomMapped ||
-            (m_bootRom is null)
-        ) {
-            return false;
-        }
-
-        return (
-            (address <= BootRomLowEnd) ||
-            (m_supportsColor && (address >= CgbBootRomHighStart) && (address <= CgbBootRomHighEnd))
-        );
-    }
-    // Land a conflict-redirected store directly on the DMA's bus: the mapper for the ROM region, then VRAM (still
-    // subject to the PPU's drawing lock), external RAM, and work RAM with its echo fold.
-    private void WriteConflictTarget(ushort address, byte value) {
-        if (address <= MemoryMap.RomBankNEnd) {
-            m_cartridgeSlot.Cartridge.WriteControl(
-                address: address,
-                value: value
-            );
-            RefreshCartridgeWindowCache();
-        } else if (address <= MemoryMap.VideoRamEnd) {
-            if (!m_ppu.BlocksVideoRamWrites) {
-                m_memory.WriteVideoRam(
-                    address: address,
-                    value: value
-                );
-            }
-        } else if (address <= MemoryMap.ExternalRamEnd) {
-            var ramRelative = (address - MemoryMap.ExternalRamStart);
-
-            if (ramRelative < m_ramWindowLength) {
-                m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
-                m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
-            } else {
-                m_cartridgeSlot.Cartridge.WriteRam(
-                    address: address,
-                    value: value
-                );
-            }
-        } else if (address <= MemoryMap.WorkRamBankNEnd) {
-            m_memory.WriteWorkRam(
-                address: address,
-                value: value
-            );
-        } else {
-            m_memory.WriteWorkRam(
-                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
-                value: value
-            );
-        }
-    }
-    // Recomputes the derived ROM/RAM window cache from the currently-inserted cartridge's live bank registers. A
-    // window is used only when it stays within the cartridge's actual image/RAM bounds (RomImage.Length / RamImage
-    // slice) — an out-of-range result (a malformed or non-bank-aligned image) falls back to the interface path rather
-    // than indexing past the array, so the fast path never trades correctness for speed.
-    private void RefreshCartridgeWindowCache() {
-        var cartridge = m_cartridgeSlot.Cartridge;
-
-        m_romImage = cartridge.RomImage;
-
-        cartridge.ComputeRomWindows(
-            bank0Offset: out var bank0Offset,
-            bankNOffset: out var bankNOffset
-        );
-
-        var romLength = m_romImage.Length;
-
-        m_romBank0Offset = (((bank0Offset >= 0) && ((bank0Offset + RomWindowByteCount) <= romLength))
-            ? bank0Offset
-            : -1);
-        m_romBankNOffset = (((bankNOffset >= 0) && ((bankNOffset + RomWindowByteCount) <= romLength))
-            ? bankNOffset
-            : -1);
-
-        m_ramImage = cartridge.RamImage;
-
-        if (cartridge.TryComputeRamWindow(
-            length: out var ramLength,
-            offset: out var ramOffset
-        )) {
-            m_ramWindowOffset = ramOffset;
-            m_ramWindowLength = ramLength;
-        } else {
-            m_ramWindowOffset = 0;
-            m_ramWindowLength = 0;
-        }
-    }
-    // The audio registers and wave RAM form one contiguous block the APU owns end to end.
-    private static bool IsAudioBlock(ushort address) =>
-        ((address >= MemoryMap.AudioStart) && (address <= MemoryMap.WaveRamEnd));
-    private byte ReadIoRegister(ushort address) {
-        switch (address) {
-            case MemoryMap.Joypad:
-                return m_joypad.ReadRegister();
-            case MemoryMap.SerialData:
-            case MemoryMap.SerialControl:
-                return m_serial.ReadRegister(address: address);
-            case MemoryMap.Divider:
-            case MemoryMap.TimerCounter:
-            case MemoryMap.TimerModulo:
-            case MemoryMap.TimerControl:
-                return m_timer.ReadRegister(address: address);
-            case MemoryMap.OamDmaSource:
-                return m_oamDma.ReadRegister();
-            case MemoryMap.LcdControl:
-            case MemoryMap.LcdStatus:
-            case MemoryMap.ScrollY:
-            case MemoryMap.ScrollX:
-            case MemoryMap.LcdY:
-            case MemoryMap.LcdYCompare:
-            case MemoryMap.BackgroundPalette:
-            case MemoryMap.ObjectPalette0:
-            case MemoryMap.ObjectPalette1:
-            case MemoryMap.WindowY:
-            case MemoryMap.WindowX:
-                return m_ppu.ReadRegister(address: address);
-            case MemoryMap.InterruptFlag:
-                return ((byte)(0xE0 | ((byte)m_interrupts.Requested)));
-            case MemoryMap.BootRomDisable:
-                // Bit 0 is the latch (set once the overlay is gone); the undecoded bits read high.
-                return ((byte)(0xFE | (m_bootRomMapped
-                    ? 0x00
-                    : 0x01)));
-            default:
-                return ReadColorIoRegister(address: address);
-        }
-    }
     // Whether Color-only hardware is both present AND reachable: false either on monochrome silicon or while Color
     // silicon is running DMG-compatibility mode, where KEY1/RP/VBK/SVBK/HDMA/OPRI are the same "not on this console"
     // fact a compatibility-mode cartridge already can't tell apart from monochrome hardware (Pan Docs "Power-Up
@@ -836,208 +1048,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // exception (Ppu.ReadRegister answers those directly; only the DATA ports fold this same gate in there).
     private bool IsColorNative =>
         (m_supportsColor && !m_dmgCompatibility.IsActive);
-    // The Color-only register page: everything here reads open bus (0xFF) on a monochrome machine, as does any
-    // unmapped I/O address on either model, regardless of any write that landed there.
-    private byte ReadColorIoRegister(ushort address) {
-        if (!m_supportsColor) {
-            return 0xFF;
-        }
 
-        switch (address) {
-            case MemoryMap.BackgroundColorPaletteIndex:
-            case MemoryMap.BackgroundColorPaletteData:
-            case MemoryMap.ObjectColorPaletteIndex:
-            case MemoryMap.ObjectColorPaletteData:
-                return m_ppu.ReadRegister(address: address);
-            case MemoryMap.SpeedSwitch:
-                return (IsColorNative
-                    ? m_key1.ReadRegister()
-                    : (byte)0xFF);
-            case MemoryMap.HdmaSourceHigh:
-            case MemoryMap.HdmaSourceLow:
-            case MemoryMap.HdmaDestinationHigh:
-            case MemoryMap.HdmaDestinationLow:
-            case MemoryMap.HdmaControl:
-                return (IsColorNative
-                    ? m_hdma.ReadRegister(address: address)
-                    : (byte)0xFF);
-            case MemoryMap.InfraredPort:
-                return (IsColorNative
-                    ? m_infrared.ReadRegister()
-                    : (byte)0xFF);
-            // VBK stays live in DMG-compatibility mode (Mooneye's misc/boot_hwio-C pins 0xFE there, unlike KEY1/RP/
-            // HDMA/SVBK): the bank-select bit exists on the silicon either way, it is only bank-0 VRAM that
-            // compatibility-mode rendering ever reads (Ppu.m_cgbNative).
-            case MemoryMap.VramBankSelect:
-                return ((byte)(0xFE | m_memory.VideoRamBank));
-            case MemoryMap.WorkRamBankSelect:
-                return (IsColorNative
-                    ? ((byte)(0xF8 | m_memory.WorkRamBank))
-                    : (byte)0xFF);
-            case 0xFF74:
-                // Sealed in DMG-compatibility mode (Pan Docs "CGB Registers": "Otherwise, this register is
-                // read-only, and locked at value $FF") — unlike FF72/FF73/FF75, which stay live either way.
-                return (IsColorNative
-                    ? m_ioRegisters[(address - MemoryMap.IoRegistersStart)]
-                    : (byte)0xFF);
-            case MemoryMap.ObjectPriorityMode:
-                // Not independently backed: this engine already derives object-priority mode from the same
-                // compatibility fact (Ppu's m_cgbNative), so a native machine's fixed CGB-style answer (bit 0 clear)
-                // is the only value there is to read back.
-                return (IsColorNative
-                    ? (byte)0xFE
-                    : (byte)0xFF);
-            case 0xFF72:
-            case 0xFF73:
-                // The Color's undocumented fully-readable/writable registers.
-                return m_ioRegisters[(address - MemoryMap.IoRegistersStart)];
-            case 0xFF75:
-                // Only bits 4-6 are backed; the rest read as ones.
-                return ((byte)(0x8F | m_ioRegisters[(address - MemoryMap.IoRegistersStart)]));
-            default:
-                return 0xFF;
-        }
-    }
-    private void WriteIoRegister(ushort address, byte value) {
-        switch (address) {
-            case MemoryMap.Joypad:
-                m_joypad.WriteRegister(value: value);
-
-                break;
-            case MemoryMap.SerialData:
-            case MemoryMap.SerialControl:
-                m_serial.WriteRegister(
-                    address: address,
-                    value: value
-                );
-
-                break;
-            case MemoryMap.Divider:
-            case MemoryMap.TimerCounter:
-            case MemoryMap.TimerModulo:
-            case MemoryMap.TimerControl:
-                m_timer.WriteRegister(
-                    address: address,
-                    value: value
-                );
-
-                break;
-            case MemoryMap.OamDmaSource:
-                m_oamDma.WriteRegister(value: value);
-
-                break;
-            case MemoryMap.LcdControl:
-            case MemoryMap.LcdStatus:
-            case MemoryMap.ScrollY:
-            case MemoryMap.ScrollX:
-            case MemoryMap.LcdY:
-            case MemoryMap.LcdYCompare:
-            case MemoryMap.BackgroundPalette:
-            case MemoryMap.ObjectPalette0:
-            case MemoryMap.ObjectPalette1:
-            case MemoryMap.WindowY:
-            case MemoryMap.WindowX:
-                m_ppu.WriteRegister(
-                    address: address,
-                    value: value
-                );
-
-                break;
-            case MemoryMap.InterruptFlag:
-                m_interrupts.Requested = ((InterruptKind)value);
-
-                break;
-            case MemoryMap.BootRomDisable:
-                // A one-way latch: any nonzero write unmaps the boot overlay permanently; zero writes are ignored and
-                // nothing ever maps it back.
-                if (value != 0) {
-                    m_bootRomMapped = false;
-                }
-
-                break;
-            default:
-                WriteColorIoRegister(
-                    address: address,
-                    value: value
-                );
-
-                break;
-        }
-    }
-    // The Color-only register page's write side, mirroring ReadColorIoRegister: the decoded registers are dropped on a
-    // monochrome machine, and anything undecoded lands in the fallback byte page on either model.
-    private void WriteColorIoRegister(ushort address, byte value) {
-        switch (address) {
-            case MemoryMap.BackgroundColorPaletteIndex:
-            case MemoryMap.BackgroundColorPaletteData:
-            case MemoryMap.ObjectColorPaletteIndex:
-            case MemoryMap.ObjectColorPaletteData:
-                if (m_supportsColor) {
-                    m_ppu.WriteRegister(
-                        address: address,
-                        value: value
-                    );
-                }
-
-                break;
-            case MemoryMap.SpeedSwitch:
-                if (IsColorNative) {
-                    m_key1.WriteRegister(value: value);
-                }
-
-                break;
-            case MemoryMap.HdmaSourceHigh:
-            case MemoryMap.HdmaSourceLow:
-            case MemoryMap.HdmaDestinationHigh:
-            case MemoryMap.HdmaDestinationLow:
-            case MemoryMap.HdmaControl:
-                if (IsColorNative) {
-                    m_hdma.WriteRegister(
-                        address: address,
-                        value: value
-                    );
-                }
-
-                break;
-            case MemoryMap.InfraredPort:
-                if (IsColorNative) {
-                    m_infrared.WriteRegister(value: value);
-                }
-
-                break;
-            case MemoryMap.VramBankSelect:
-                // Stays live in DMG-compatibility mode — see the matching read case's remarks.
-                if (m_supportsColor) {
-                    m_memory.VideoRamBank = value;
-                }
-
-                break;
-            case MemoryMap.WorkRamBankSelect:
-                if (IsColorNative) {
-                    m_memory.WorkRamBank = value;
-                }
-
-                break;
-            case MemoryMap.SystemModeSelect:
-                // A real boot ROM's one-time write: confirms (or, for a hand-authored header a boot ROM disagrees
-                // with, corrects) the DMG-compatibility fact every other Color-only register above answers through.
-                // The register is sealed once the overlay unmaps, so a cartridge cannot re-enter or leave the mode.
-                if (m_supportsColor && m_bootRomMapped) {
-                    m_dmgCompatibility.ApplyKey0(value: value);
-                    // The render path caches the answer, so the display is told when the latch moves rather than
-                    // re-reading the authority on every dot.
-                    m_ppu.RefreshCompatibilityMode();
-                }
-
-                break;
-            case MemoryMap.ObjectPriorityMode:
-                // Not independently backed — see ReadColorIoRegister. Accepted (matching hardware, which leaves the
-                // write itself harmless once the mode is fixed) with nothing further to record.
-                break;
-            default:
-                m_ioRegisters[(address - MemoryMap.IoRegistersStart)] = value;
-
-                break;
-        }
-    }
+    /// <summary>Gets the number of armed watchpoints.</summary>
+    public int WatchCount => m_watches.Count;
 }

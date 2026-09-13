@@ -837,11 +837,11 @@ internal static partial class Subjects {
         ) { return $"the raw {raw} formatted into a span one character short"; }
         if (!Throws<FormatException>(action: () => {
             Span<char> local = stackalloc char[UnsignedFormattedCeiling]; _ = value.TryFormat(
-            charsWritten: out _,
-            destination: local,
-            format: "N2",
-            provider: null
-        );
+                charsWritten: out _,
+                destination: local,
+                format: "N2",
+                provider: null
+            );
         })) { return $"the raw {raw} accepted an unsupported format specifier"; }
 
         foreach (var (separator, provider) in UnsignedSeparators) {

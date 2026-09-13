@@ -185,9 +185,20 @@ public sealed class AgbLinkSession : IDisposable {
         return (controllers, machines);
     }
 
-    /// <summary>Gets the number of consoles in the session (2–4; the parent is index 0).</summary>
-    public int PlayerCount => m_machines.Length;
+    /// <summary>Severs the cable: every serial controller reverts to the lone-console <see cref="NullAgbLink"/> and
+    /// the machines step independently again. The machines themselves are untouched (they are owned by the caller,
+    /// not the session).</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
 
+        m_disposed = true;
+
+        foreach (var controller in m_controllers) {
+            controller.Connect(link: NullAgbLink.Instance);
+        }
+    }
     /// <summary>Advances ALL machines forward by a shared budget of master-clock cycles, interleaved
     /// deterministically — the seam a host drives in place of the machines' own
     /// <see cref="AdvancedGamingBrickMachine.RunCycles"/> while they are linked.</summary>
@@ -249,20 +260,9 @@ public sealed class AgbLinkSession : IDisposable {
 
         return token;
     }
-    /// <summary>Severs the cable: every serial controller reverts to the lone-console <see cref="NullAgbLink"/> and
-    /// the machines step independently again. The machines themselves are untouched (they are owned by the caller,
-    /// not the session).</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
 
-        m_disposed = true;
-
-        foreach (var controller in m_controllers) {
-            controller.Connect(link: NullAgbLink.Instance);
-        }
-    }
+    /// <summary>Gets the number of consoles in the session (2–4; the parent is index 0).</summary>
+    public int PlayerCount => m_machines.Length;
 
     // The chain as the shared pacer sees it. Cycles and targets are signed, so a console that overshot its target on
     // its last step reports a negative remainder and is simply not selected.

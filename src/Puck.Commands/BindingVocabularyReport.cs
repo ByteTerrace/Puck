@@ -9,7 +9,10 @@ namespace Puck.Commands;
 /// than accumulating them. A caller collecting refusals from several doors concatenates the reports it gets.</remarks>
 /// <param name="Errors">The refusal lines, in the order the document produced them.</param>
 public readonly record struct BindingVocabularyReport(ImmutableArray<string> Errors) {
-    private readonly ImmutableArray<string> m_errors = (Errors.IsDefault ? [] : Errors);
+    private readonly ImmutableArray<string> m_errors = (Errors.IsDefault
+        ? []
+        : Errors
+    );
 
     /// <summary>Gets the refusal lines, in the order the document produced them; empty when the document earned
     /// none.</summary>
@@ -20,8 +23,14 @@ public readonly record struct BindingVocabularyReport(ImmutableArray<string> Err
     /// were recorded". This accessor answers <see cref="ImmutableArray{T}.Empty"/> for that case, so a report is
     /// readable however it was made.</remarks>
     public ImmutableArray<string> Errors {
-        get => (m_errors.IsDefault ? [] : m_errors);
-        init => m_errors = (value.IsDefault ? [] : value);
+        get => (m_errors.IsDefault
+            ? []
+            : m_errors
+        );
+        init => m_errors = (value.IsDefault
+            ? []
+            : value
+        );
     }
     /// <summary>Gets whether the document earned no refusal at all under the lookups it was checked with. A clean
     /// report is never a claim that the checks a caller withheld would have passed — see

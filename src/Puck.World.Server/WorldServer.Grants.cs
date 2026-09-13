@@ -58,8 +58,8 @@ public sealed partial class WorldServer {
                 m_output.Narrate(
                     channel: "world.grant",
                     text: $"[world.grant: {label}{(grant.Exclusive
-                        ? " exclusive"
-                        : string.Empty)}]"
+                    ? " exclusive"
+                    : string.Empty)}]"
                 );
             }
 
@@ -211,8 +211,8 @@ public sealed partial class WorldServer {
             m_output.Narrate(
                 channel: "world.revoke",
                 text: (removed
-                    ? $"[world.revoke: {label}]"
-                    : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
+                ? $"[world.revoke: {label}]"
+                : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
             );
         }
         EchoTap?.Invoke(obj: new WorldEditEcho(

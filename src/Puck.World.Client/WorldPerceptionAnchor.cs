@@ -31,6 +31,14 @@ public sealed class WorldPerceptionAnchor {
         }
     }
 
+    /// <summary>The body index seat <paramref name="slot"/> perceives from.</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <returns>The 0-based body index that seat's presentation derives from — the seat's bound body, or a
+    /// possessed body while a body-targeted application stands without the own-body application beside it.</returns>
+    public int PerceivedBody(int slot) => ((((uint)slot) < ((uint)m_perceivedBody.Length))
+        ? m_perceivedBody[slot]
+        : slot
+    );
     /// <summary>Publishes seat <paramref name="slot"/>'s resolved anchor. Called only from
     /// <c>WorldSeatContextSync.Publish</c>, the one per-tick (and boot-seed) loopback read of the grant
     /// table's control-application set.</summary>
@@ -41,12 +49,4 @@ public sealed class WorldPerceptionAnchor {
             m_perceivedBody[slot] = bodyIndex;
         }
     }
-    /// <summary>The body index seat <paramref name="slot"/> perceives from.</summary>
-    /// <param name="slot">The 0-based local seat slot.</param>
-    /// <returns>The 0-based body index that seat's presentation derives from — the seat's bound body, or a
-    /// possessed body while a body-targeted application stands without the own-body application beside it.</returns>
-    public int PerceivedBody(int slot) => ((((uint)slot) < ((uint)m_perceivedBody.Length))
-        ? m_perceivedBody[slot]
-        : slot
-    );
 }

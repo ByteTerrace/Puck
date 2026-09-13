@@ -17,6 +17,11 @@ namespace Puck.World.Client;
 /// (or elapsed time) sets the rate; the weight eases on wall time using the driver's authored blend times
 /// (default <see cref="CreationDriverDocument.WeightSeconds"/>) instead of freezing mid-stride when the gate flips.</remarks>
 public static class WorldGaitDrivers {
+    private const float TwoPi = (2f * MathF.PI);
+
+    /// <summary>The cell-key token a presentation state reference spells the wearing body's own index with:
+    /// <c>state.&lt;row&gt;.$body</c> reads the cell keyed by that body's 0-based index.</summary>
+    public const string BodyKeyToken = "$body";
     /// <summary>The travel one frame may charge to an integrating phase, world units — clamps a teleport or an
     /// authority snap so it cannot spin a limb through dozens of cycles in one frame. Shared with the procedural
     /// catalog rig's own gait so a creation limb and a catalog limb answer a jump the same way.</summary>
@@ -25,13 +30,85 @@ public static class WorldGaitDrivers {
     /// speed it tests is low-passed over <see cref="CreationDriverDocument.WeightSeconds"/>, so a body crossing the
     /// threshold does not flicker the gate frame to frame.</summary>
     public const float MovingSpeed = 0.05f;
-
     /// <summary>The weight below which an easing-out driver is at rest: the exponential approach never reaches zero,
     /// and a driver whose weight is merely denormal still advances its phase forever. Snapping there stops the phase
     /// as well as the pose, and a milliradian of residual swing is invisible.</summary>
     public const float RestWeight = 1e-3f;
 
-    private const float TwoPi = (2f * MathF.PI);
+    private static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, bool eased, int bodyIndex, out float value) {
+        value = 0f;
+
+        if (
+            !WorldColor.TryParseBinding(
+            key: out var authoredKey,
+            row: out var rowName,
+            value: reference
+        ) ||
+            !TryResolveBodyKey(
+            bodyIndex: bodyIndex,
+            key: authoredKey,
+            resolved: out var key
+        )
+        ) {
+            return false;
+        }
+
+        var resolved = (eased
+            ? WorldStateReader.TryReadEased(
+                definition: definition,
+                key: key,
+                rawValue: out var raw,
+                row: out var row,
+                rowName: rowName,
+                text: out _,
+                tick: tick
+            )
+            : WorldStateReader.TryRead(
+                definition: definition,
+                key: key,
+                rawValue: out raw,
+                row: out row,
+                rowName: rowName,
+                text: out _,
+                tick: tick
+            )
+        );
+
+        if (
+            !resolved ||
+            (row is null) ||
+            (raw is not { } bits)
+        ) {
+            return false;
+        }
+
+        value = (row.Kind switch {
+            CellKind.Fixed => ((float)((double)FixedQ4816.FromRawBits(value: bits))),
+            CellKind.Text => 0f,
+            _ => ((float)bits),
+        });
+
+        return (row.Kind != CellKind.Text);
+    }
+    private static float Wrap(float radians) {
+        var wrapped = MathF.IEEERemainder(
+            x: radians,
+            y: TwoPi
+        );
+
+        return ((wrapped < 0f)
+            ? (wrapped + TwoPi)
+            : wrapped
+        );
+    }
+    private static float WrapAngle(float radians) {
+        var wrapped = Wrap(radians: radians);
+
+        return ((wrapped > MathF.PI)
+            ? (wrapped - TwoPi)
+            : wrapped
+        );
+    }
 
     /// <summary>Advances one registration's driver phases and weights for a frame. Reseeds — every phase and weight to zero,
     /// no signal charged — when the entity address changes or this is the first call for the registration, so a
@@ -123,8 +200,17 @@ public static class WorldGaitDrivers {
                 bodyIndex: address.Index
             );
 
-            var seconds = holds ? driver.BlendInSeconds : driver.BlendOutSeconds;
-            var driverBlend = seconds is { } authoredSeconds ? WeightBlend(deltaSeconds, authoredSeconds) : blend;
+            var seconds = (holds
+                ? driver.BlendInSeconds
+                : driver.BlendOutSeconds
+            );
+            var driverBlend = ((seconds is { } authoredSeconds)
+                ? WeightBlend(
+                    deltaSeconds: deltaSeconds,
+                    seconds: authoredSeconds
+                )
+                : blend
+            );
             var weight = (weights[index] + (((holds
                 ? 1f
                 : 0f) - weights[index]) * driverBlend));
@@ -173,31 +259,6 @@ public static class WorldGaitDrivers {
             }))));
         }
     }
-    /// <summary>Composes every swing and slide a shape declares onto its creation-space rest pose. Swings apply in
-    /// authored order, then slides, so a slide reads as an offset along its own axis rather than one the swings
-    /// have turned.</summary>
-    /// <param name="shape">The shape whose facets are composed.</param>
-    /// <param name="drivers">The creation's declared drivers — a facet naming none composes nothing.</param>
-    /// <param name="phases">The per-driver phases.</param>
-    /// <param name="weights">The per-driver weights.</param>
-    /// <param name="position">The shape's position; replaced by the animated position.</param>
-    /// <param name="rotation">The shape's orientation; replaced by the animated orientation.</param>
-    public static void Compose(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
-        ComposeDelta(
-            drivers: drivers,
-            phases: phases,
-            rotation: out var deltaRotation,
-            shape: shape,
-            translation: out var deltaTranslation,
-            weights: weights
-        );
-        Apply(
-            deltaRotation: deltaRotation,
-            deltaTranslation: deltaTranslation,
-            position: ref position,
-            rotation: ref rotation
-        );
-    }
     /// <summary>Applies a rigid delta (<c>x → R·x + t</c>) to a shape's creation-space pose.</summary>
     /// <param name="deltaRotation">The delta's rotation.</param>
     /// <param name="deltaTranslation">The delta's translation.</param>
@@ -222,6 +283,31 @@ public static class WorldGaitDrivers {
             value: translation
         ) + parentTranslation);
         rotation = (parentRotation * rotation);
+    }
+    /// <summary>Composes every swing and slide a shape declares onto its creation-space rest pose. Swings apply in
+    /// authored order, then slides, so a slide reads as an offset along its own axis rather than one the swings
+    /// have turned.</summary>
+    /// <param name="shape">The shape whose facets are composed.</param>
+    /// <param name="drivers">The creation's declared drivers — a facet naming none composes nothing.</param>
+    /// <param name="phases">The per-driver phases.</param>
+    /// <param name="weights">The per-driver weights.</param>
+    /// <param name="position">The shape's position; replaced by the animated position.</param>
+    /// <param name="rotation">The shape's orientation; replaced by the animated orientation.</param>
+    public static void Compose(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
+        ComposeDelta(
+            drivers: drivers,
+            phases: phases,
+            rotation: out var deltaRotation,
+            shape: shape,
+            translation: out var deltaTranslation,
+            weights: weights
+        );
+        Apply(
+            deltaRotation: deltaRotation,
+            deltaTranslation: deltaTranslation,
+            position: ref position,
+            rotation: ref rotation
+        );
     }
     /// <summary>Computes the rigid delta (<c>x → R·x + t</c>, engine-frame creation space) a shape's swings and
     /// slides produce this frame, independent of the shape's own rest pose — what a child shape rides.</summary>
@@ -258,11 +344,11 @@ public static class WorldGaitDrivers {
                 }
 
                 var turn = Quaternion.CreateFromAxisAngle(
-                    angle: (swing.Amplitude.Value * Wave(
-                    argument: (phase + (swing.Phase?.Value ?? 0f)),
-                    definition: definition,
-                    wave: swing.Wave
-                ) * weight),
+                    angle: ((swing.Amplitude.Value * Wave(
+                        argument: (phase + (swing.Phase?.Value ?? 0f)),
+                        definition: definition,
+                        wave: swing.Wave
+                    )) * weight),
                     axis: swing.Axis.Value
                 );
                 var pivot = swing.Pivot.Value;
@@ -294,68 +380,148 @@ public static class WorldGaitDrivers {
                     continue;
                 }
 
-                translation += (slide.Axis.Value * (slide.Amplitude.Value * Wave(
+                translation += (slide.Axis.Value * ((slide.Amplitude.Value * Wave(
                     argument: (phase + (slide.Phase?.Value ?? 0f)),
                     definition: definition,
                     wave: slide.Wave
-                ) * weight));
+                )) * weight));
             }
         }
     }
-    /// <summary>Evaluates a facet's waveform: the built-in shapes through <see cref="CreationWave.Evaluate"/>, a
-    /// <c>curve:&lt;row&gt;</c> form by sampling the world's row at the argument's fraction of a turn along its arc
-    /// (Z is the value). A curve the world does not declare evaluates to zero — the validator refuses it at boot.</summary>
-    /// <param name="wave">The waveform name.</param>
-    /// <param name="argument">The driver phase plus the facet's phase offset, radians.</param>
-    /// <param name="definition">The live definition the curve rows come from.</param>
-    /// <returns>The waveform value.</returns>
-    public static float Wave(string? wave, float argument, WorldDefinition? definition) {
-        if (!CreationWave.TryCurveName(
-            name: out var name,
-            wave: wave
-        )) {
-            return CreationWave.Evaluate(
-                argument: argument,
-                wave: wave
-            );
-        }
-        if ((definition is null) || (WorldDefinitionRows.FindCurve(
-            curves: definition.Curves,
-            name: name
-        ) is not { } row)) {
-            return 0f;
-        }
-
-        var turns = (argument / (2f * MathF.PI));
-        var fraction = (turns - MathF.Floor(x: turns));
-        var compiled = row.Compiled;
-        var sample = compiled.Evaluate(arcLength: FixedQ4816.FromDouble(value: (((double)compiled.TotalLength) * fraction)));
-
-        return ((float)((double)sample.Position.Z));
-    }
-    /// <summary>The cell-key token a presentation state reference spells the wearing body's own index with:
-    /// <c>state.&lt;row&gt;.$body</c> reads the cell keyed by that body's 0-based index.</summary>
-    public const string BodyKeyToken = "$body";
-    /// <summary>Resolves a reference's cell key against the body reading it: every <see cref="BodyKeyToken"/> becomes
-    /// the body's decimal index.</summary>
-    /// <param name="key">The parsed key, or <see langword="null"/> for the slot cell.</param>
-    /// <param name="bodyIndex">The reading body's 0-based index, or negative for no body.</param>
-    /// <param name="resolved">The key to read.</param>
-    /// <returns><see langword="false"/> when the key names the body but no body is reading.</returns>
-    public static bool TryResolveBodyKey(string? key, int bodyIndex, out string? resolved) {
-        resolved = key;
-
-        if ((key is null) || !key.Contains(value: BodyKeyToken, comparisonType: StringComparison.Ordinal)) {
+    /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
+    /// A <c>state.&lt;row&gt;[.&lt;key&gt;]</c> token holds while the cell's STORED value is nonzero (the truth a rule
+    /// reads, never an eased sample). The world validator refuses a token naming no fact or row before a document
+    /// reaches here; one that still arrives fails the conjunction, so the driver rests rather than running
+    /// unconditionally.</summary>
+    /// <param name="gate">The authored gate tokens.</param>
+    /// <param name="facts">The body's sim facts this frame.</param>
+    /// <param name="moving">Whether the body's eased speed is above <see cref="MovingSpeed"/>.</param>
+    /// <param name="definition">The live definition a state token reads, or <see langword="null"/> (a state token
+    /// then fails).</param>
+    /// <param name="tick">The tick a state token reads at.</param>
+    /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/>.</param>
+    /// <returns><see langword="true"/> when every token holds.</returns>
+    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldDefinition? definition = null, ulong tick = 0UL, int bodyIndex = -1) {
+        if (gate is not { Count: > 0 } tokens) {
             return true;
         }
 
-        if (bodyIndex < 0) {
-            return false;
+        for (var index = 0; (index < tokens.Count); index++) {
+            var token = tokens[index];
+
+            if (CreationDriverDocument.IsStateSignal(signal: token)) {
+                if (
+                    (definition is null) ||
+                    !TryReadStateNumber(
+                    bodyIndex: bodyIndex,
+                    definition: definition,
+                    eased: false,
+                    reference: token,
+                    tick: tick,
+                    value: out var truth
+                ) ||
+                    (truth == 0f)
+                ) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (string.Equals(
+                a: token,
+                b: CreationDriverDocument.TokenMoving,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                if (!moving) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (string.Equals(
+                a: token,
+                b: CreationDriverDocument.TokenStill,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                if (moving) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (
+                !BodyFactVocabulary.TryResolve(
+                gate: out var bit,
+                name: token
+            ) ||
+                !BodyFactVocabulary.Holds(
+                facts: facts,
+                gate: bit
+            )
+            ) {
+                return false;
+            }
         }
 
-        resolved = key.Replace(oldValue: BodyKeyToken, newValue: bodyIndex.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal);
-
         return true;
+    }
+    /// <summary>Reads a body's live scale multiplier — the same <c>bodies.scaleRow</c> cell
+    /// <c>WorldPopulation.SyncBodyScale</c> reads server-side — for a presentation consumer that scales something OTHER
+    /// than the rendered stamp itself (a chase camera's orbit distance, say). A world authoring no scale row, or a
+    /// body with no cell of its own, reads 1.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="index">The 0-based body index.</param>
+    /// <param name="tick">The tick a cycling scale row is read at.</param>
+    /// <returns>The body's live scale, or 1 when unauthored.</returns>
+    public static float LiveBodyScale(WorldDefinition definition, int index, ulong tick) {
+        if (definition.Population.ScaleRow is not { } scaleRow) {
+            return 1f;
+        }
+
+        return (TryReadStateNumber(
+            definition: definition,
+            reference: $"state.{scaleRow}.{index}",
+            tick: tick,
+            value: out var value
+        )
+            ? value
+            : 1f
+        );
+    }
+    /// <summary>Reads a named driver's current phase and weight.</summary>
+    /// <param name="rows">The creation's declared drivers.</param>
+    /// <param name="driver">The driver name a facet, or an effector's plant window, resolves against.</param>
+    /// <param name="phases">The per-driver phases.</param>
+    /// <param name="weights">The per-driver weights.</param>
+    /// <param name="phase">The driver's phase, radians; zero when the name resolves to no driver.</param>
+    /// <param name="weight">The driver's eased weight in [0, 1]; zero when the name resolves to no driver.</param>
+    /// <returns><see langword="true"/> when the name resolves.</returns>
+    public static bool TryDriver(IReadOnlyList<CreationDriverDocument> rows, string driver, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out float phase, out float weight) {
+        var count = Math.Min(
+            val1: rows.Count,
+            val2: phases.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            if (string.Equals(
+                a: rows[index].Name,
+                b: driver,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                phase = phases[index];
+                weight = weights[index];
+
+                return true;
+            }
+        }
+
+        phase = 0f;
+        weight = 0f;
+
+        return false;
     }
     /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> numeric cell at a tick as a float — the eased sample
     /// when the cell carries a dynamics trait, else its stored value.</summary>
@@ -389,76 +555,6 @@ public static class WorldGaitDrivers {
         tick: tick,
         value: out value
     );
-    private static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, bool eased, int bodyIndex, out float value) {
-        value = 0f;
-
-        if (
-            !WorldColor.TryParseBinding(
-            key: out var authoredKey,
-            row: out var rowName,
-            value: reference
-        ) ||
-            !TryResolveBodyKey(
-            bodyIndex: bodyIndex,
-            key: authoredKey,
-            resolved: out var key
-        )
-        ) {
-            return false;
-        }
-
-        var resolved = (eased
-            ? WorldStateReader.TryReadEased(
-                definition: definition,
-                key: key,
-                rawValue: out var raw,
-                row: out var row,
-                rowName: rowName,
-                text: out _,
-                tick: tick
-            )
-            : WorldStateReader.TryRead(
-                definition: definition,
-                key: key,
-                rawValue: out raw,
-                row: out row,
-                rowName: rowName,
-                text: out _,
-                tick: tick
-            ));
-
-        if (!resolved || (row is null) || (raw is not { } bits)) {
-            return false;
-        }
-
-        value = (row.Kind switch {
-            CellKind.Fixed => ((float)((double)FixedQ4816.FromRawBits(value: bits))),
-            CellKind.Text => 0f,
-            _ => ((float)bits),
-        });
-
-        return (row.Kind != CellKind.Text);
-    }
-    /// <summary>Reads a body's live scale multiplier — the same <c>bodies.scaleRow</c> cell
-    /// <c>WorldPopulation.SyncBodyScale</c> reads server-side — for a presentation consumer that scales something OTHER
-    /// than the rendered stamp itself (a chase camera's orbit distance, say). A world authoring no scale row, or a
-    /// body with no cell of its own, reads 1.</summary>
-    /// <param name="definition">The live definition.</param>
-    /// <param name="index">The 0-based body index.</param>
-    /// <param name="tick">The tick a cycling scale row is read at.</param>
-    /// <returns>The body's live scale, or 1 when unauthored.</returns>
-    public static float LiveBodyScale(WorldDefinition definition, int index, ulong tick) {
-        if (definition.Population.ScaleRow is not { } scaleRow) {
-            return 1f;
-        }
-
-        return (TryReadStateNumber(
-            definition: definition,
-            reference: $"state.{scaleRow}.{index}",
-            tick: tick,
-            value: out var value
-        ) ? value : 1f);
-    }
     /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> text cell spelling a world-space <c>[x, y, z]</c>.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="reference">The state reference.</param>
@@ -538,85 +634,82 @@ public static class WorldGaitDrivers {
 
         return true;
     }
-    /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
-    /// A <c>state.&lt;row&gt;[.&lt;key&gt;]</c> token holds while the cell's STORED value is nonzero (the truth a rule
-    /// reads, never an eased sample). The world validator refuses a token naming no fact or row before a document
-    /// reaches here; one that still arrives fails the conjunction, so the driver rests rather than running
-    /// unconditionally.</summary>
-    /// <param name="gate">The authored gate tokens.</param>
-    /// <param name="facts">The body's sim facts this frame.</param>
-    /// <param name="moving">Whether the body's eased speed is above <see cref="MovingSpeed"/>.</param>
-    /// <param name="definition">The live definition a state token reads, or <see langword="null"/> (a state token
-    /// then fails).</param>
-    /// <param name="tick">The tick a state token reads at.</param>
-    /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/>.</param>
-    /// <returns><see langword="true"/> when every token holds.</returns>
-    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldDefinition? definition = null, ulong tick = 0UL, int bodyIndex = -1) {
-        if (gate is not { Count: > 0 } tokens) {
+    /// <summary>Resolves a reference's cell key against the body reading it: every <see cref="BodyKeyToken"/> becomes
+    /// the body's decimal index.</summary>
+    /// <param name="key">The parsed key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="bodyIndex">The reading body's 0-based index, or negative for no body.</param>
+    /// <param name="resolved">The key to read.</param>
+    /// <returns><see langword="false"/> when the key names the body but no body is reading.</returns>
+    public static bool TryResolveBodyKey(string? key, int bodyIndex, out string? resolved) {
+        resolved = key;
+
+        if (
+            (key is null) ||
+            !key.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: BodyKeyToken
+        )
+        ) {
             return true;
         }
 
-        for (var index = 0; (index < tokens.Count); index++) {
-            var token = tokens[index];
-
-            if (CreationDriverDocument.IsStateSignal(signal: token)) {
-                if (
-                    (definition is null) ||
-                    !TryReadStateNumber(
-                    bodyIndex: bodyIndex,
-                    definition: definition,
-                    eased: false,
-                    reference: token,
-                    tick: tick,
-                    value: out var truth
-                ) ||
-                    (truth == 0f)
-                ) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (string.Equals(
-                a: token,
-                b: CreationDriverDocument.TokenMoving,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                if (!moving) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (string.Equals(
-                a: token,
-                b: CreationDriverDocument.TokenStill,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                if (moving) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (
-                !BodyFactVocabulary.TryResolve(
-                gate: out var bit,
-                name: token
-            ) || !BodyFactVocabulary.Holds(
-                facts: facts,
-                gate: bit
-            )
-            ) {
-                return false;
-            }
+        if (bodyIndex < 0) {
+            return false;
         }
+
+        resolved = key.Replace(
+            oldValue: BodyKeyToken,
+            newValue: bodyIndex.ToString(provider: CultureInfo.InvariantCulture),
+            comparisonType: StringComparison.Ordinal
+        );
 
         return true;
     }
+    /// <summary>Evaluates a facet's waveform: the built-in shapes through <see cref="CreationWave.Evaluate"/>, a
+    /// <c>curve:&lt;row&gt;</c> form by sampling the world's row at the argument's fraction of a turn along its arc
+    /// (Z is the value). A curve the world does not declare evaluates to zero — the validator refuses it at boot.</summary>
+    /// <param name="wave">The waveform name.</param>
+    /// <param name="argument">The driver phase plus the facet's phase offset, radians.</param>
+    /// <param name="definition">The live definition the curve rows come from.</param>
+    /// <returns>The waveform value.</returns>
+    public static float Wave(string? wave, float argument, WorldDefinition? definition) {
+        if (!CreationWave.TryCurveName(
+            name: out var name,
+            wave: wave
+        )) {
+            return CreationWave.Evaluate(
+                argument: argument,
+                wave: wave
+            );
+        }
+        if (
+            (definition is null) ||
+            (WorldDefinitionRows.FindCurve(
+            curves: definition.Curves,
+            name: name
+        ) is not { } row)
+        ) {
+            return 0f;
+        }
+
+        var turns = (argument / (2f * MathF.PI));
+        var fraction = (turns - MathF.Floor(x: turns));
+        var compiled = row.Compiled;
+        var sample = compiled.Evaluate(arcLength: FixedQ4816.FromDouble(value: (((double)compiled.TotalLength) * fraction)));
+
+        return ((float)((double)sample.Position.Z));
+    }
+    /// <summary>Returns the fraction of the remaining error a weight closes in one frame — the frame-rate independent
+    /// exponential approach over <see cref="CreationDriverDocument.WeightSeconds"/>.</summary>
+    /// <param name="deltaSeconds">The frame delta; a non-positive delta closes nothing.</param>
+    /// <param name="seconds">The non-negative exponential time constant. Zero closes the full error on a positive delta.</param>
+    /// <returns>The blend factor in [0, 1].</returns>
+    public static float WeightBlend(float deltaSeconds, float seconds = CreationDriverDocument.WeightSeconds) => ((deltaSeconds > 0f)
+        ? ((seconds == 0f)
+            ? 1f
+            : (1f - MathF.Exp(x: (-deltaSeconds / seconds))))
+        : 0f
+    );
     /// <summary>Returns the yaw of a rotation about world up, radians, under the engine's −Z-forward convention.</summary>
     /// <param name="rotation">The attitude.</param>
     /// <returns>The yaw in (−π, π].</returns>
@@ -631,67 +724,6 @@ public static class WorldGaitDrivers {
         return MathF.Atan2(
             x: -forward.Z,
             y: -forward.X
-        );
-    }
-    /// <summary>Returns the fraction of the remaining error a weight closes in one frame — the frame-rate independent
-    /// exponential approach over <see cref="CreationDriverDocument.WeightSeconds"/>.</summary>
-    /// <param name="deltaSeconds">The frame delta; a non-positive delta closes nothing.</param>
-    /// <param name="seconds">The non-negative exponential time constant. Zero closes the full error on a positive delta.</param>
-    /// <returns>The blend factor in [0, 1].</returns>
-    public static float WeightBlend(float deltaSeconds, float seconds = CreationDriverDocument.WeightSeconds) => ((deltaSeconds > 0f)
-        ? (seconds == 0f ? 1f : (1f - MathF.Exp(x: (-deltaSeconds / seconds))))
-        : 0f
-    );
-
-    /// <summary>Reads a named driver's current phase and weight.</summary>
-    /// <param name="rows">The creation's declared drivers.</param>
-    /// <param name="driver">The driver name a facet, or an effector's plant window, resolves against.</param>
-    /// <param name="phases">The per-driver phases.</param>
-    /// <param name="weights">The per-driver weights.</param>
-    /// <param name="phase">The driver's phase, radians; zero when the name resolves to no driver.</param>
-    /// <param name="weight">The driver's eased weight in [0, 1]; zero when the name resolves to no driver.</param>
-    /// <returns><see langword="true"/> when the name resolves.</returns>
-    public static bool TryDriver(IReadOnlyList<CreationDriverDocument> rows, string driver, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out float phase, out float weight) {
-        var count = Math.Min(
-            val1: rows.Count,
-            val2: phases.Length
-        );
-
-        for (var index = 0; (index < count); index++) {
-            if (string.Equals(
-                a: rows[index].Name,
-                b: driver,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                phase = phases[index];
-                weight = weights[index];
-
-                return true;
-            }
-        }
-
-        phase = 0f;
-        weight = 0f;
-
-        return false;
-    }
-    private static float Wrap(float radians) {
-        var wrapped = MathF.IEEERemainder(
-            x: radians,
-            y: TwoPi
-        );
-
-        return ((wrapped < 0f)
-            ? (wrapped + TwoPi)
-            : wrapped
-        );
-    }
-    private static float WrapAngle(float radians) {
-        var wrapped = Wrap(radians: radians);
-
-        return ((wrapped > MathF.PI)
-            ? (wrapped - TwoPi)
-            : wrapped
         );
     }
 }

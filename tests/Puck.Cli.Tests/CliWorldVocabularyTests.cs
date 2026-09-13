@@ -29,46 +29,88 @@ public sealed class CliWorldVocabularyTests {
         }
         """;
 
-    [Theory]
+    [Fact]
+    public void AnUnregisteredScreenMachineEngineIsStillRefused() {
+        var catalog = CliWorldVocabulary.EnsureInstalled();
+
+        Assert.False(condition: catalog.IsRegistered(engineId: "no-such-brick"));
+
+        var diagnostics = new DiagnosticBag();
+        var root = JsonNode.Parse(ScreenJsonTemplate.Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: "no-such-brick",
+            oldValue: "{ENGINE}"
+        ))!.AsObject();
+
+        var validated = WorldSemanticValidator.ValidateWorld(
+            root,
+            sourceMap: null,
+            diagnostics: diagnostics,
+            machines: catalog
+        );
+
+        Assert.False(condition: validated);
+        Assert.Contains(
+            collection: diagnostics,
+            filter: d => d.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "'no-such-brick' names no registered screen-machine engine"
+            )
+        );
+    }
     [InlineData("gaming-brick")]
     [InlineData("advanced-gaming-brick")]
+    [Theory]
     public void EnsureInstalledRegistersEveryShippedScreenMachineEngine(string engine) {
         var catalog = CliWorldVocabulary.EnsureInstalled();
 
-        Assert.True(catalog.IsRegistered(engine));
+        Assert.True(condition: catalog.IsRegistered(engineId: engine));
 
         var diagnostics = new DiagnosticBag();
-        var root = JsonNode.Parse(ScreenJsonTemplate.Replace("{ENGINE}", engine, StringComparison.Ordinal))!.AsObject();
+        var root = JsonNode.Parse(ScreenJsonTemplate.Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: engine,
+            oldValue: "{ENGINE}"
+        ))!.AsObject();
 
-        var validated = WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics, machines: catalog);
+        var validated = WorldSemanticValidator.ValidateWorld(
+            root,
+            sourceMap: null,
+            diagnostics: diagnostics,
+            machines: catalog
+        );
 
-        Assert.True(validated, userMessage: string.Join(separator: Environment.NewLine, values: diagnostics.Select(selector: d => d.Message)));
+        Assert.True(
+            validated,
+            userMessage: string.Join(
+                separator: Environment.NewLine,
+                values: diagnostics.Select(selector: d => d.Message)
+            )
+        );
     }
-
     // The refusal half: with the hooks installed, an engine nobody registered is still rejected, so a passing
     // registration assertion above cannot be an inert check that accepts anything.
     [Fact]
     public void SemanticValidationReportsAnUnavailableProviderCatalog() {
         _ = CliWorldVocabulary.EnsureInstalled();
         var diagnostics = new DiagnosticBag();
-        var root = JsonNode.Parse(ScreenJsonTemplate.Replace("{ENGINE}", "gaming-brick", StringComparison.Ordinal))!.AsObject();
+        var root = JsonNode.Parse(ScreenJsonTemplate.Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: "gaming-brick",
+            oldValue: "{ENGINE}"
+        ))!.AsObject();
 
-        Assert.False(WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics));
-        Assert.Contains(diagnostics, diagnostic => diagnostic.Message.Contains("no machine catalog", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void AnUnregisteredScreenMachineEngineIsStillRefused() {
-        var catalog = CliWorldVocabulary.EnsureInstalled();
-
-        Assert.False(catalog.IsRegistered("no-such-brick"));
-
-        var diagnostics = new DiagnosticBag();
-        var root = JsonNode.Parse(ScreenJsonTemplate.Replace("{ENGINE}", "no-such-brick", StringComparison.Ordinal))!.AsObject();
-
-        var validated = WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics, machines: catalog);
-
-        Assert.False(validated);
-        Assert.Contains(diagnostics, d => d.Message.Contains("'no-such-brick' names no registered screen-machine engine", StringComparison.Ordinal));
+        Assert.False(condition: WorldSemanticValidator.ValidateWorld(
+            root,
+            sourceMap: null,
+            diagnostics: diagnostics
+        ));
+        Assert.Contains(
+            collection: diagnostics,
+            filter: diagnostic => diagnostic.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "no machine catalog"
+            )
+        );
     }
 }

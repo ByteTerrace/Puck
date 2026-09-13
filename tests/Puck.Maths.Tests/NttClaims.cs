@@ -13,13 +13,33 @@ internal static class NttClaims {
     // any single machine word's worth of butterflies.
     private static readonly int[] Lengths = [1, 2, 4, 8, 16, 64, 256, 1024];
 
+    /// <summary>Runs an action that must throw, and reports what it did instead.</summary>
+    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
+        try {
+            action();
+        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
+            if (parameterName is null) { return null; }
+
+            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
+                ? null
+                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'"
+            );
+        } catch (Exception thrown) {
+            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
+        }
+
+        return $"{what} did not throw at all";
+    }
     /// <summary>Fills a length-<paramref name="length"/> sequence with reduced field elements from a seeded
     /// <see cref="Pcg32XshRr"/> stream, so a sweep is deterministic without repeating one operand pattern.</summary>
     /// <param name="length">The sequence length.</param>
     /// <param name="stream">The generator stream id, so two sequences drawn for one case do not share content.</param>
     /// <returns>The generated sequence.</returns>
     private static ulong[] Sequence(int length, ulong stream) {
-        var rng = Pcg32XshRr.Create(state: 0x4E5454_2D4657544DUL, stream: stream);
+        var rng = Pcg32XshRr.Create(
+            state: 0x4E5454_2D4657544DUL,
+            stream: stream
+        );
         var values = new ulong[length];
 
         for (var i = 0; (i < length); ++i) {
@@ -30,23 +50,406 @@ internal static class NttClaims {
 
         return values;
     }
-    /// <summary>Runs an action that must throw, and reports what it did instead.</summary>
-    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
-        try {
-            action();
-        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
-            if (parameterName is null) { return null; }
 
-            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
-                ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'");
-        } catch (Exception thrown) {
-            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
+    /// <summary>Proves exact same-span operands take the self-convolution path, while partial operand overlap and any
+    /// destination overlap are refused before an operand is mutated.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ConvolutionAliasingContract() {
+        foreach (var length in Lengths) {
+            var plan = NumberTheoreticTransformPlan.Create(length: length);
+            var input = Sequence(
+                length: length,
+                stream: (800UL + ((ulong)length))
+            );
+            var separateLeft = ((ulong[])input.Clone());
+            var separateRight = ((ulong[])input.Clone());
+            var expected = new ulong[length];
+
+            NumberTheoreticTransform.Convolve(
+                destination: expected,
+                left: separateLeft,
+                plan: plan,
+                right: separateRight
+            );
+
+            var aliased = ((ulong[])input.Clone());
+            var actual = new ulong[length];
+
+            NumberTheoreticTransform.Convolve(
+                destination: actual,
+                left: aliased,
+                plan: plan,
+                right: aliased
+            );
+
+            if (!actual.AsSpan().SequenceEqual(other: expected)) {
+                return $"length {length}: exact same-span self-convolution disagrees with two equal disjoint operands";
+            }
         }
 
-        return $"{what} did not throw at all";
-    }
+        var plan8 = NumberTheoreticTransformPlan.Create(length: 8);
+        var partial = Sequence(
+            length: 9,
+            stream: 900UL
+        );
+        var partialBefore = ((ulong[])partial.Clone());
+        var partialDestination = new ulong[8];
+        var refusal = Refuses(
+            action: () => NumberTheoreticTransform.Convolve(
+                destination: partialDestination,
+                left: partial.AsSpan(
+                    length: 8,
+                    start: 0
+                ),
+                plan: plan8,
+                right: partial.AsSpan(
+                    length: 8,
+                    start: 1
+                )
+            ),
+            parameterName: "right",
+            type: typeof(ArgumentException),
+            what: "Convolve with partially overlapping operands"
+        );
 
+        if (refusal is not null) { return refusal; }
+        if (!partial.AsSpan().SequenceEqual(other: partialBefore)) {
+            return "Convolve mutated an operand before refusing partially overlapping operands";
+        }
+
+        var left = Sequence(
+            length: 8,
+            stream: 901UL
+        );
+        var right = Sequence(
+            length: 8,
+            stream: 902UL
+        );
+        var leftBefore = ((ulong[])left.Clone());
+        var rightBefore = ((ulong[])right.Clone());
+
+        refusal = Refuses(
+            action: () => NumberTheoreticTransform.Convolve(
+                destination: left,
+                left: left,
+                plan: plan8,
+                right: right
+            ),
+            parameterName: "destination",
+            type: typeof(ArgumentException),
+            what: "Convolve with destination aliasing left"
+        );
+
+        if (refusal is not null) { return refusal; }
+        if (
+            !left.AsSpan().SequenceEqual(other: leftBefore) ||
+            !right.AsSpan().SequenceEqual(other: rightBefore)
+        ) {
+            return "Convolve mutated an operand before refusing an overlapping destination";
+        }
+
+        return null;
+    }
+    /// <summary>Proves <see cref="NumberTheoreticTransform.Convolve"/> matches <see cref="Oracles.CyclicConvolutionModulus"/>'s
+    /// O(N^2) definition-form sum EXACTLY, at every swept length, over both freshly drawn content and the modulus'
+    /// own boundary values (zero and one below the modulus).</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ConvolutionVsOracle() {
+        foreach (var length in Lengths) {
+            var plan = NumberTheoreticTransformPlan.Create(length: length);
+            var a = Sequence(
+                length: length,
+                stream: (300UL + ((ulong)length))
+            );
+            var b = Sequence(
+                length: length,
+                stream: (400UL + ((ulong)length))
+            );
+
+            // Boundary values on the first couple of lanes, wherever the length has them: zero and the modulus' own
+            // top representative, which the O(N^2) reference's reduction must handle the same way the field does.
+            a[0] = 0UL;
+            b[0] = (NumberTheoreticTransform.Modulus - 1UL);
+
+            if (length > 1) {
+                a[1] = (NumberTheoreticTransform.Modulus - 1UL);
+                b[1] = 0UL;
+            }
+
+            var expected = Oracles.CyclicConvolutionModulus(
+                left: a,
+                modulus: NumberTheoreticTransform.Modulus,
+                right: b
+            );
+            var left = ((ulong[])a.Clone());
+            var right = ((ulong[])b.Clone());
+            var actual = new ulong[length];
+
+            NumberTheoreticTransform.Convolve(
+                destination: actual,
+                left: left,
+                plan: plan,
+                right: right
+            );
+
+            for (var i = 0; (i < length); ++i) {
+                if (actual[i] != expected[i]) {
+                    return $"length {length}, index {i}: Convolve gave {actual[i]}, O(N^2) oracle gives {expected[i]}";
+                }
+            }
+        }
+
+        return null;
+    }
+    /// <summary>Proves every documented refusal: a non-power-of-two, zero or negative
+    /// <see cref="NumberTheoreticTransformPlan.Create"/> length; and a <see cref="NumberTheoreticTransform.Forward"/>,
+    /// <see cref="NumberTheoreticTransform.Inverse"/>, <see cref="NumberTheoreticTransform.Convolve"/> or
+    /// <see cref="NumberTheoreticTransform.PointwiseMultiply"/> span whose length does not match the plan (or, for
+    /// <c>PointwiseMultiply</c>, does not match its sibling spans).</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? LengthRefusals() {
+        return (Refuses(
+            action: () => NumberTheoreticTransformPlan.Create(length: 0),
+            type: typeof(ArgumentOutOfRangeException),
+            parameterName: "length",
+            what: "NumberTheoreticTransformPlan.Create(0)"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransformPlan.Create(length: -4),
+            type: typeof(ArgumentOutOfRangeException),
+            parameterName: "length",
+            what: "NumberTheoreticTransformPlan.Create(-4)"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransformPlan.Create(length: 3),
+            type: typeof(ArgumentOutOfRangeException),
+            parameterName: "length",
+            what: "NumberTheoreticTransformPlan.Create(3) (not a power of two)"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransformPlan.Create(length: 6),
+            type: typeof(ArgumentOutOfRangeException),
+            parameterName: "length",
+            what: "NumberTheoreticTransformPlan.Create(6) (not a power of two)"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransform.Forward(
+                plan: NumberTheoreticTransformPlan.Create(length: 8),
+                values: new ulong[4]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "values",
+            what: "Forward with a mis-sized span"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransform.Inverse(
+                plan: NumberTheoreticTransformPlan.Create(length: 8),
+                values: new ulong[16]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "values",
+            what: "Inverse with a mis-sized span"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransform.Convolve(
+                plan: NumberTheoreticTransformPlan.Create(length: 8),
+                left: new ulong[4],
+                right: new ulong[8],
+                destination: new ulong[8]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "left",
+            what: "Convolve with a mis-sized left span"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransform.Convolve(
+                plan: NumberTheoreticTransformPlan.Create(length: 8),
+                left: new ulong[8],
+                right: new ulong[4],
+                destination: new ulong[8]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "right",
+            what: "Convolve with a mis-sized right span"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransform.Convolve(
+                plan: NumberTheoreticTransformPlan.Create(length: 8),
+                left: new ulong[8],
+                right: new ulong[8],
+                destination: new ulong[4]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "destination",
+            what: "Convolve with a mis-sized destination span"
+        ) ??
+               (Refuses(
+            action: () => NumberTheoreticTransform.PointwiseMultiply(
+                destination: new ulong[8],
+                left: new ulong[8],
+                right: new ulong[4]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "right",
+            what: "PointwiseMultiply with a mis-sized right span"
+        ) ??
+               Refuses(
+            action: () => NumberTheoreticTransform.PointwiseMultiply(
+                destination: new ulong[4],
+                left: new ulong[8],
+                right: new ulong[8]
+            ),
+            type: typeof(ArgumentException),
+            parameterName: "destination",
+            what: "PointwiseMultiply with a mis-sized destination span"
+        )))))))))));
+    }
+    /// <summary>Proves <see cref="NumberTheoreticTransform.Forward"/> is EXACTLY linear —
+    /// <c>Forward(a) + Forward(b) == Forward(a + b)</c> pointwise, in the field — at every swept length.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? LinearityExact() {
+        var field = NumberTheoreticTransform.Field;
+
+        foreach (var length in Lengths) {
+            var plan = NumberTheoreticTransformPlan.Create(length: length);
+            var a = Sequence(
+                length: length,
+                stream: (100UL + ((ulong)length))
+            );
+            var b = Sequence(
+                length: length,
+                stream: (200UL + ((ulong)length))
+            );
+            var sum = new ulong[length];
+
+            for (var i = 0; (i < length); ++i) { sum[i] = field.Add(
+                left: a[i],
+                right: b[i]
+            ); }
+
+            var forwardA = ((ulong[])a.Clone());
+            var forwardB = ((ulong[])b.Clone());
+            var forwardSum = sum;
+
+            NumberTheoreticTransform.Forward(
+                plan: plan,
+                values: forwardA
+            );
+            NumberTheoreticTransform.Forward(
+                plan: plan,
+                values: forwardB
+            );
+            NumberTheoreticTransform.Forward(
+                plan: plan,
+                values: forwardSum
+            );
+
+            for (var i = 0; (i < length); ++i) {
+                var expected = field.Add(
+                    left: forwardA[i],
+                    right: forwardB[i]
+                );
+
+                if (forwardSum[i] != expected) {
+                    return $"length {length}, bin {i}: Forward(a+b) = {forwardSum[i]}, Forward(a)+Forward(b) = {expected}";
+                }
+            }
+        }
+
+        return null;
+    }
+    /// <summary>Proves <see cref="NumberTheoreticTransform.PointwiseMultiply"/> is exactly the field product at each
+    /// lane, including either documented exact-span destination alias, and refuses shifted overlaps before writing.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? PointwiseMultiplyIsElementwiseProduct() {
+        var field = NumberTheoreticTransform.Field;
+
+        foreach (var length in Lengths) {
+            var a = Sequence(
+                length: length,
+                stream: (500UL + ((ulong)length))
+            );
+            var b = Sequence(
+                length: length,
+                stream: (600UL + ((ulong)length))
+            );
+            var destination = new ulong[length];
+
+            NumberTheoreticTransform.PointwiseMultiply(
+                destination: destination,
+                left: a,
+                right: b
+            );
+
+            for (var i = 0; (i < length); ++i) {
+                var expected = field.Multiply(
+                    left: a[i],
+                    right: b[i]
+                );
+
+                if (destination[i] != expected) {
+                    return $"length {length}, lane {i}: PointwiseMultiply gave {destination[i]}, Field.Multiply gives {expected}";
+                }
+            }
+
+            var leftAliased = ((ulong[])a.Clone());
+
+            NumberTheoreticTransform.PointwiseMultiply(
+                destination: leftAliased,
+                left: leftAliased,
+                right: b
+            );
+
+            if (!leftAliased.AsSpan().SequenceEqual(other: destination)) {
+                return $"length {length}: destination exactly aliasing left disagrees with the non-aliased product";
+            }
+
+            var rightAliased = ((ulong[])b.Clone());
+
+            NumberTheoreticTransform.PointwiseMultiply(
+                destination: rightAliased,
+                left: a,
+                right: rightAliased
+            );
+
+            if (!rightAliased.AsSpan().SequenceEqual(other: destination)) {
+                return $"length {length}: destination exactly aliasing right disagrees with the non-aliased product";
+            }
+        }
+
+        var overlap = Sequence(
+            length: 9,
+            stream: 700UL
+        );
+        var overlapBefore = ((ulong[])overlap.Clone());
+        var disjoint = Sequence(
+            length: 8,
+            stream: 701UL
+        );
+        var refusal = Refuses(
+            action: () => NumberTheoreticTransform.PointwiseMultiply(
+                destination: overlap.AsSpan(
+                    length: 8,
+                    start: 1
+                ),
+                left: overlap.AsSpan(
+                    length: 8,
+                    start: 0
+                ),
+                right: disjoint
+            ),
+            parameterName: "destination",
+            type: typeof(ArgumentException),
+            what: "PointwiseMultiply with a shifted destination overlap"
+        );
+
+        if (refusal is not null) { return refusal; }
+
+        return (overlap.AsSpan().SequenceEqual(other: overlapBefore)
+            ? null
+            : "PointwiseMultiply mutated an operand before refusing a shifted destination overlap"
+        );
+    }
     /// <summary>Proves <see cref="NumberTheoreticTransform.Modulus"/> is prime, that
     /// <c>Modulus - 1</c> factors as <c>PrimeFactor * 2^MaximumLog2Length</c> with <c>PrimeFactor</c> itself prime,
     /// and that <see cref="NumberTheoreticTransform.PrimitiveRoot"/> generates the whole multiplicative group — the
@@ -83,19 +486,31 @@ internal static class NttClaims {
         // Independent order check: BigInteger.ModPow, sharing no code with PrimeField64.Pow's Montgomery-ring chain.
         var order = (wideModulus - BigInteger.One);
         var root = new BigInteger(value: NumberTheoreticTransform.PrimitiveRoot);
-        var full = BigInteger.ModPow(exponent: order, modulus: wideModulus, value: root);
+        var full = BigInteger.ModPow(
+            exponent: order,
+            modulus: wideModulus,
+            value: root
+        );
 
         if (!full.IsOne) {
             return $"PrimitiveRoot^(Modulus - 1) = {full}, not one, so it is not even a group element of the right order";
         }
 
-        var atHalfOrder = BigInteger.ModPow(exponent: (order / 2), modulus: wideModulus, value: root);
+        var atHalfOrder = BigInteger.ModPow(
+            exponent: (order / 2),
+            modulus: wideModulus,
+            value: root
+        );
 
         if (atHalfOrder.IsOne) {
             return "PrimitiveRoot^((Modulus - 1) / 2) = 1, so PrimitiveRoot's order divides (Modulus - 1) / 2 and it is not primitive";
         }
 
-        var atFactorOrder = BigInteger.ModPow(exponent: (order / PrimeFactor), modulus: wideModulus, value: root);
+        var atFactorOrder = BigInteger.ModPow(
+            exponent: (order / PrimeFactor),
+            modulus: wideModulus,
+            value: root
+        );
 
         if (atFactorOrder.IsOne) {
             return "PrimitiveRoot^((Modulus - 1) / PrimeFactor) = 1, so PrimitiveRoot's order divides (Modulus - 1) / PrimeFactor and it is not primitive";
@@ -110,11 +525,20 @@ internal static class NttClaims {
     public static string? RoundTripExact() {
         foreach (var length in Lengths) {
             var plan = NumberTheoreticTransformPlan.Create(length: length);
-            var original = Sequence(length: length, stream: ((ulong)length));
+            var original = Sequence(
+                length: length,
+                stream: ((ulong)length)
+            );
             var working = ((ulong[])original.Clone());
 
-            NumberTheoreticTransform.Forward(plan: plan, values: working);
-            NumberTheoreticTransform.Inverse(plan: plan, values: working);
+            NumberTheoreticTransform.Forward(
+                plan: plan,
+                values: working
+            );
+            NumberTheoreticTransform.Inverse(
+                plan: plan,
+                values: working
+            );
 
             for (var i = 0; (i < length); ++i) {
                 if (working[i] != original[i]) {
@@ -124,205 +548,5 @@ internal static class NttClaims {
         }
 
         return null;
-    }
-    /// <summary>Proves <see cref="NumberTheoreticTransform.Forward"/> is EXACTLY linear —
-    /// <c>Forward(a) + Forward(b) == Forward(a + b)</c> pointwise, in the field — at every swept length.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? LinearityExact() {
-        var field = NumberTheoreticTransform.Field;
-
-        foreach (var length in Lengths) {
-            var plan = NumberTheoreticTransformPlan.Create(length: length);
-            var a = Sequence(length: length, stream: (100UL + ((ulong)length)));
-            var b = Sequence(length: length, stream: (200UL + ((ulong)length)));
-            var sum = new ulong[length];
-
-            for (var i = 0; (i < length); ++i) { sum[i] = field.Add(left: a[i], right: b[i]); }
-
-            var forwardA = ((ulong[])a.Clone());
-            var forwardB = ((ulong[])b.Clone());
-            var forwardSum = sum;
-
-            NumberTheoreticTransform.Forward(plan: plan, values: forwardA);
-            NumberTheoreticTransform.Forward(plan: plan, values: forwardB);
-            NumberTheoreticTransform.Forward(plan: plan, values: forwardSum);
-
-            for (var i = 0; (i < length); ++i) {
-                var expected = field.Add(left: forwardA[i], right: forwardB[i]);
-
-                if (forwardSum[i] != expected) {
-                    return $"length {length}, bin {i}: Forward(a+b) = {forwardSum[i]}, Forward(a)+Forward(b) = {expected}";
-                }
-            }
-        }
-
-        return null;
-    }
-    /// <summary>Proves <see cref="NumberTheoreticTransform.Convolve"/> matches <see cref="Oracles.CyclicConvolutionModulus"/>'s
-    /// O(N^2) definition-form sum EXACTLY, at every swept length, over both freshly drawn content and the modulus'
-    /// own boundary values (zero and one below the modulus).</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? ConvolutionVsOracle() {
-        foreach (var length in Lengths) {
-            var plan = NumberTheoreticTransformPlan.Create(length: length);
-            var a = Sequence(length: length, stream: (300UL + ((ulong)length)));
-            var b = Sequence(length: length, stream: (400UL + ((ulong)length)));
-
-            // Boundary values on the first couple of lanes, wherever the length has them: zero and the modulus' own
-            // top representative, which the O(N^2) reference's reduction must handle the same way the field does.
-            a[0] = 0UL;
-            b[0] = (NumberTheoreticTransform.Modulus - 1UL);
-
-            if (length > 1) {
-                a[1] = (NumberTheoreticTransform.Modulus - 1UL);
-                b[1] = 0UL;
-            }
-
-            var expected = Oracles.CyclicConvolutionModulus(left: a, modulus: NumberTheoreticTransform.Modulus, right: b);
-            var left = ((ulong[])a.Clone());
-            var right = ((ulong[])b.Clone());
-            var actual = new ulong[length];
-
-            NumberTheoreticTransform.Convolve(destination: actual, left: left, plan: plan, right: right);
-
-            for (var i = 0; (i < length); ++i) {
-                if (actual[i] != expected[i]) {
-                    return $"length {length}, index {i}: Convolve gave {actual[i]}, O(N^2) oracle gives {expected[i]}";
-                }
-            }
-        }
-
-        return null;
-    }
-    /// <summary>Proves <see cref="NumberTheoreticTransform.PointwiseMultiply"/> is exactly the field product at each
-    /// lane, including either documented exact-span destination alias, and refuses shifted overlaps before writing.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? PointwiseMultiplyIsElementwiseProduct() {
-        var field = NumberTheoreticTransform.Field;
-
-        foreach (var length in Lengths) {
-            var a = Sequence(length: length, stream: (500UL + ((ulong)length)));
-            var b = Sequence(length: length, stream: (600UL + ((ulong)length)));
-            var destination = new ulong[length];
-
-            NumberTheoreticTransform.PointwiseMultiply(destination: destination, left: a, right: b);
-
-            for (var i = 0; (i < length); ++i) {
-                var expected = field.Multiply(left: a[i], right: b[i]);
-
-                if (destination[i] != expected) {
-                    return $"length {length}, lane {i}: PointwiseMultiply gave {destination[i]}, Field.Multiply gives {expected}";
-                }
-            }
-
-            var leftAliased = ((ulong[])a.Clone());
-
-            NumberTheoreticTransform.PointwiseMultiply(destination: leftAliased, left: leftAliased, right: b);
-
-            if (!leftAliased.AsSpan().SequenceEqual(other: destination)) {
-                return $"length {length}: destination exactly aliasing left disagrees with the non-aliased product";
-            }
-
-            var rightAliased = ((ulong[])b.Clone());
-
-            NumberTheoreticTransform.PointwiseMultiply(destination: rightAliased, left: a, right: rightAliased);
-
-            if (!rightAliased.AsSpan().SequenceEqual(other: destination)) {
-                return $"length {length}: destination exactly aliasing right disagrees with the non-aliased product";
-            }
-        }
-
-        var overlap = Sequence(length: 9, stream: 700UL);
-        var overlapBefore = ((ulong[])overlap.Clone());
-        var disjoint = Sequence(length: 8, stream: 701UL);
-        var refusal = Refuses(
-            action: () => NumberTheoreticTransform.PointwiseMultiply(destination: overlap.AsSpan(start: 1, length: 8), left: overlap.AsSpan(start: 0, length: 8), right: disjoint),
-            parameterName: "destination",
-            type: typeof(ArgumentException),
-            what: "PointwiseMultiply with a shifted destination overlap"
-        );
-
-        if (refusal is not null) { return refusal; }
-
-        return overlap.AsSpan().SequenceEqual(other: overlapBefore)
-            ? null
-            : "PointwiseMultiply mutated an operand before refusing a shifted destination overlap";
-    }
-    /// <summary>Proves exact same-span operands take the self-convolution path, while partial operand overlap and any
-    /// destination overlap are refused before an operand is mutated.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? ConvolutionAliasingContract() {
-        foreach (var length in Lengths) {
-            var plan = NumberTheoreticTransformPlan.Create(length: length);
-            var input = Sequence(length: length, stream: (800UL + ((ulong)length)));
-            var separateLeft = ((ulong[])input.Clone());
-            var separateRight = ((ulong[])input.Clone());
-            var expected = new ulong[length];
-
-            NumberTheoreticTransform.Convolve(destination: expected, left: separateLeft, plan: plan, right: separateRight);
-
-            var aliased = ((ulong[])input.Clone());
-            var actual = new ulong[length];
-
-            NumberTheoreticTransform.Convolve(destination: actual, left: aliased, plan: plan, right: aliased);
-
-            if (!actual.AsSpan().SequenceEqual(other: expected)) {
-                return $"length {length}: exact same-span self-convolution disagrees with two equal disjoint operands";
-            }
-        }
-
-        var plan8 = NumberTheoreticTransformPlan.Create(length: 8);
-        var partial = Sequence(length: 9, stream: 900UL);
-        var partialBefore = ((ulong[])partial.Clone());
-        var partialDestination = new ulong[8];
-        var refusal = Refuses(
-            action: () => NumberTheoreticTransform.Convolve(destination: partialDestination, left: partial.AsSpan(start: 0, length: 8), plan: plan8, right: partial.AsSpan(start: 1, length: 8)),
-            parameterName: "right",
-            type: typeof(ArgumentException),
-            what: "Convolve with partially overlapping operands"
-        );
-
-        if (refusal is not null) { return refusal; }
-        if (!partial.AsSpan().SequenceEqual(other: partialBefore)) {
-            return "Convolve mutated an operand before refusing partially overlapping operands";
-        }
-
-        var left = Sequence(length: 8, stream: 901UL);
-        var right = Sequence(length: 8, stream: 902UL);
-        var leftBefore = ((ulong[])left.Clone());
-        var rightBefore = ((ulong[])right.Clone());
-
-        refusal = Refuses(
-            action: () => NumberTheoreticTransform.Convolve(destination: left, left: left, plan: plan8, right: right),
-            parameterName: "destination",
-            type: typeof(ArgumentException),
-            what: "Convolve with destination aliasing left"
-        );
-
-        if (refusal is not null) { return refusal; }
-        if (!left.AsSpan().SequenceEqual(other: leftBefore) || !right.AsSpan().SequenceEqual(other: rightBefore)) {
-            return "Convolve mutated an operand before refusing an overlapping destination";
-        }
-
-        return null;
-    }
-    /// <summary>Proves every documented refusal: a non-power-of-two, zero or negative
-    /// <see cref="NumberTheoreticTransformPlan.Create"/> length; and a <see cref="NumberTheoreticTransform.Forward"/>,
-    /// <see cref="NumberTheoreticTransform.Inverse"/>, <see cref="NumberTheoreticTransform.Convolve"/> or
-    /// <see cref="NumberTheoreticTransform.PointwiseMultiply"/> span whose length does not match the plan (or, for
-    /// <c>PointwiseMultiply</c>, does not match its sibling spans).</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? LengthRefusals() {
-        return (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: 0), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(0)") ??
-               (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: -4), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(-4)") ??
-               (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: 3), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(3) (not a power of two)") ??
-               (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: 6), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(6) (not a power of two)") ??
-               (Refuses(action: () => NumberTheoreticTransform.Forward(plan: NumberTheoreticTransformPlan.Create(length: 8), values: new ulong[4]), type: typeof(ArgumentException), parameterName: "values", what: "Forward with a mis-sized span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Inverse(plan: NumberTheoreticTransformPlan.Create(length: 8), values: new ulong[16]), type: typeof(ArgumentException), parameterName: "values", what: "Inverse with a mis-sized span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NumberTheoreticTransformPlan.Create(length: 8), left: new ulong[4], right: new ulong[8], destination: new ulong[8]), type: typeof(ArgumentException), parameterName: "left", what: "Convolve with a mis-sized left span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NumberTheoreticTransformPlan.Create(length: 8), left: new ulong[8], right: new ulong[4], destination: new ulong[8]), type: typeof(ArgumentException), parameterName: "right", what: "Convolve with a mis-sized right span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NumberTheoreticTransformPlan.Create(length: 8), left: new ulong[8], right: new ulong[8], destination: new ulong[4]), type: typeof(ArgumentException), parameterName: "destination", what: "Convolve with a mis-sized destination span") ??
-               (Refuses(action: () => NumberTheoreticTransform.PointwiseMultiply(destination: new ulong[8], left: new ulong[8], right: new ulong[4]), type: typeof(ArgumentException), parameterName: "right", what: "PointwiseMultiply with a mis-sized right span") ??
-               Refuses(action: () => NumberTheoreticTransform.PointwiseMultiply(destination: new ulong[4], left: new ulong[8], right: new ulong[8]), type: typeof(ArgumentException), parameterName: "destination", what: "PointwiseMultiply with a mis-sized destination span")))))))))));
     }
 }

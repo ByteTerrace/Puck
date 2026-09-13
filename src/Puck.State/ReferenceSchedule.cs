@@ -10,5 +10,5 @@ public static class ReferenceSchedule {
     /// <param name="kind">The numeric kind of the expression.</param>
     /// <param name="board">The compiled topology and traversal shape, if required.</param>
     public static CostBound OperationCostBound(ExpressionOp operation, CellKind kind = CellKind.Int, BoardQuery? board = null) =>
-        CostBound.Unmodeled($"ExpressionOp.{operation} ({kind}) has no calibrated portable cycle price.");
+        CostBound.Unmodeled(reason: $"ExpressionOp.{operation} ({kind}) has no calibrated portable cycle price.");
 }

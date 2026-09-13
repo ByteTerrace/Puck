@@ -11,14 +11,14 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class RumbleDeviceStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "rumble-device";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

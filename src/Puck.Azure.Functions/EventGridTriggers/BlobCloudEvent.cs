@@ -11,20 +11,26 @@ using System.Text.Json;
 
 namespace Puck.Azure.Functions.EventGridTriggers;
 
-internal sealed class BatchMapEntry
-{
+internal sealed class BatchMapEntry {
     private static readonly IEqualityComparer<CloudEvent> CloudEventEqualityComparer = EqualityComparer<CloudEvent>.Create(
-        equals: static (x, y) => StringComparer.Ordinal.Equals(x: x!.Id, y: y!.Id),
+        equals: static (x, y) => StringComparer.Ordinal.Equals(
+            x: x!.Id,
+            y: y!.Id
+        ),
         getHashCode: static @event => StringComparer.Ordinal.GetHashCode(obj: @event.Id)
     );
 
     private readonly HashSet<CloudEvent> m_events = new(comparer: CloudEventEqualityComparer);
 
-    public IEnumerable<CloudEvent> Events => m_events;
     public DateTimeOffset MaxTime { get; private set; } = DateTimeOffset.MinValue;
 
+    public IEnumerable<CloudEvent> Events => m_events;
+
     public void Add(CloudEvent @event) {
-        if (m_events.Add(item: @event) && (MaxTime < @event.Time!.Value)) {
+        if (
+            m_events.Add(item: @event) &&
+            (MaxTime < @event.Time!.Value)
+        ) {
             MaxTime = @event.Time.Value;
         }
     }
@@ -33,8 +39,7 @@ internal sealed class BatchMapEntry
 public sealed class BlobCloudEvent(
     ILogger<BlobCloudEvent> logger,
     [FromKeyedServices(key: "Default")] TokenCredential tokenCredential
-)
-{
+) {
     private const int BatchTimeoutInSeconds = 23;
     private const string DestinationSegment = "system";
     private const int MaxDegreeOfParallelism = 7;
@@ -46,7 +51,7 @@ public sealed class BlobCloudEvent(
             Delay = TimeSpan.FromMilliseconds(milliseconds: 500),
             MaxRetries = 3,
             Mode = RetryMode.Exponential,
-            NetworkTimeout = TimeSpan.FromSeconds(seconds: 3)
+            NetworkTimeout = TimeSpan.FromSeconds(seconds: 3),
         },
     };
     private static readonly JsonSerializerOptions JsonSerializerOptions = new() {
@@ -85,7 +90,7 @@ public sealed class BlobCloudEvent(
 
         // NOTE: first iteration skips the domain name, second iteration skips the container name
         for (var i = 0; (2 > i); ++i) {
-            var jump = span.IndexOf('/') + 1;
+            var jump = (span.IndexOf(value: '/') + 1);
 
             offset += jump;
             span = span[jump..];
@@ -109,10 +114,12 @@ public sealed class BlobCloudEvent(
 
         containerName = span[..nextSlashIndex];
         span = span[(nextSlashIndex + 7)..]; // NOTE: continues parsing after "/blobs/"
-        nextSlashIndex = span.IndexOf('/');
-        firstBlobPathSegment = ((nextSlashIndex == -1) ? span : span[..nextSlashIndex]); // NOTE: drops trailing slash if necessary
+        nextSlashIndex = span.IndexOf(value: '/');
+        firstBlobPathSegment = ((nextSlashIndex == -1)
+            ? span
+            : span[..nextSlashIndex]
+        ); // NOTE: drops trailing slash if necessary
     }
-
     [Function(nameof(BlobCloudEvent))]
     public async Task Run([EventGridTrigger(IsBatched = true)] CloudEvent[] cloudEvents) {
         try {
@@ -171,14 +178,14 @@ public sealed class BlobCloudEvent(
 
                     try {
                         await using var blobStream = await new BlobClient(
-                                blobUri: blobUriBuilder.ToUri(),
-                                credential: tokenCredential,
-                                options: BlobClientOptions
-                            )
+                            blobUri: blobUriBuilder.ToUri(),
+                            credential: tokenCredential,
+                            options: BlobClientOptions
+                        )
                             .OpenWriteAsync(
-                                cancellationToken: cancellationToken,
-                                overwrite: true
-                            );
+                            cancellationToken: cancellationToken,
+                            overwrite: true
+                        );
 
                         await JsonSerializer.SerializeAsync(
                             cancellationToken: cancellationToken,
@@ -186,12 +193,11 @@ public sealed class BlobCloudEvent(
                             utf8Json: blobStream,
                             value: JsonPayload.Create(value: value.Events.ToArray())
                         );
-                    }
-                    catch (RequestFailedException e)
-                    when (
-                        (HttpStatusCode.NotFound == ((HttpStatusCode)e.Status)) &&
-                        ("ContainerNotFound" == e.ErrorCode)
-                    ) {
+                    } catch (RequestFailedException e)
+                      when (
+                          ((HttpStatusCode.NotFound == ((HttpStatusCode)e.Status)) &&
+                          ("ContainerNotFound" == e.ErrorCode))
+                      ) {
                         throw new InvalidOperationException(
                             innerException: e,
                             message: "BYTRC_BLOBEVENT_003: container not found"
@@ -204,8 +210,7 @@ public sealed class BlobCloudEvent(
                 },
                 source: containerBatchMap
             );
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             logger.LogCritical(
                 exception: e,
                 message: UnhandledExceptionMessage

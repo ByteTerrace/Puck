@@ -168,8 +168,8 @@ public sealed record WorldHudElement(
     public IReadOnlyList<WorldHudFrameCandidate> FrameCandidates =>
         (Sources
             ?? ((Source is { } single)
-                ? [new WorldHudFrameCandidate(Source: single)]
-                : []));
+            ? [new WorldHudFrameCandidate(Source: single)]
+            : []));
 }
 /// <summary>One HUD panel row — a stable id (unique within the section), a normalized viewport rect in screen space,
 /// which band it draws in, its chrome style, and its child elements. <c>WorldMutation.UpsertHudPanel</c> carries
@@ -263,18 +263,18 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
 /// constructor data, never restated); the render cost each authored element expands into is the overlay writer's own
 /// constant.</summary>
 public static class WorldHudCapacity {
-    /// <summary>The number of structurally unique frame sources one HUD section may name. Repeated elements naming
-    /// the same source share one presentation slot. A cross-layer law pins this schema constant to the overlay's
-    /// independently declared fixed shader-slot count.</summary>
-    public const int MaxFrameSources = 8;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
-    /// <summary>The most ranked source candidates one frame element carries.</summary>
-    public const int MaxFrameCandidatesPerElement = 4;
     /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's
     /// <see cref="MaxElementsPerPanel"/> because it is confined to a single seat's viewport rather than the whole
     /// screen.</summary>
     public const int MaxElementsPerSeatPanel = 12;
+    /// <summary>The most ranked source candidates one frame element carries.</summary>
+    public const int MaxFrameCandidatesPerElement = 4;
+    /// <summary>The number of structurally unique frame sources one HUD section may name. Repeated elements naming
+    /// the same source share one presentation slot. A cross-layer law pins this schema constant to the overlay's
+    /// independently declared fixed shader-slot count.</summary>
+    public const int MaxFrameSources = 8;
     /// <summary>The seat-scope panel-row ceiling: how many <c>hud.panels</c> rows an identity-owned world may author.
     /// <see cref="WorldIdentity.Hud"/> is that one panel.</summary>
     public const int MaxSeatPanels = 1;
@@ -425,7 +425,8 @@ public static class HudBindingVocabulary {
             );
             var bodyEnd = (isTarget
                 ? (token.Length - TargetFacetSuffix.Length)
-                : token.Length);
+                : token.Length
+            );
 
             if (bodyEnd <= StatePrefix.Length) {
                 return false;

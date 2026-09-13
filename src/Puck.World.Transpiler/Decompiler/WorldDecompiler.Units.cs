@@ -12,10 +12,13 @@ public static partial class WorldDecompiler {
     /// <remarks>Only identity-conversion units are printed: a suffix the emitter would scale by would round-trip a
     /// different number than the document holds.</remarks>
     private static string? UnitSuffixFor(string fieldKey, JsonValue value) {
-        if (value.TryGetValue<string>(out _) || value.TryGetValue<bool>(out _)) {
+        if (
+            value.TryGetValue<string>(value: out _) ||
+            value.TryGetValue<bool>(value: out _)
+        ) {
             return null;
         }
-        return WorldDocumentEmitterUnits.Classify(fieldKey) switch {
+        return WorldDocumentEmitterUnits.Classify(fieldKey: fieldKey) switch {
             UnitDimension.Degrees => "deg",
             UnitDimension.Seconds => "s",
             _ => null,

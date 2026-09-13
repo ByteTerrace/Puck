@@ -73,7 +73,14 @@ public sealed partial class SdfProgramBuilder {
             blend: blend,
             derived1: MathF.Abs(x: halfWidth),   // Data1.y = halfWidth
             derived2: MathF.Abs(x: halfHeight),  // Data1.z = halfHeight
-            derived3: GlyphSamplingCorrection(atlas, uvBottomLeft, uvTopRight, halfWidth, halfHeight, distanceScale),
+            derived3: GlyphSamplingCorrection(
+                atlas: atlas,
+                distanceScale: distanceScale,
+                halfHeight: halfHeight,
+                halfWidth: halfWidth,
+                uvMax: uvTopRight,
+                uvMin: uvBottomLeft
+            ),
             dimensions: new Vector4(
                 w: MathF.Max(
                     x: 0f,
@@ -90,26 +97,43 @@ public sealed partial class SdfProgramBuilder {
     }
 
     private static float GlyphSamplingCorrection(FontAtlas atlas, Vector2 uvMin, Vector2 uvMax, float halfWidth, float halfHeight, float distanceScale) {
-        if (atlas.ImageData is { } image && (image.Width != atlas.Width || image.Height != atlas.Height)) {
-            throw new ArgumentException("Glyph atlas pixels must match its declared dimensions.", nameof(atlas));
+        if (
+            (atlas.ImageData is { } image) &&
+            ((image.Width != atlas.Width) || (image.Height != atlas.Height))
+        ) {
+            throw new ArgumentException(
+                message: "Glyph atlas pixels must match its declared dimensions.",
+                paramName: nameof(atlas)
+            );
         }
-        var gradient = atlas.ImageData?.AlphaGradientBound ?? Vector2.One;
-        var first = BitConverter.SingleToUInt32Bits(PackUv(uvMin));
-        var last = BitConverter.SingleToUInt32Bits(PackUv(uvMax));
+        var gradient = (atlas.ImageData?.AlphaGradientBound ?? Vector2.One);
+        var first = BitConverter.SingleToUInt32Bits(value: PackUv(uv: uvMin));
+        var last = BitConverter.SingleToUInt32Bits(value: PackUv(uv: uvMax));
         // Decode the actual unorm16 endpoints. Two float ULPs at one cover their shader decode/subtract rounding;
         // the final relative guard covers the mapping arithmetic. Round the reciprocal downward as well.
-        const double decodeSlack = 2d / 8388608;
-        var spanX = Math.Abs((long)(first & 65535) - (last & 65535)) / 65535d + decodeSlack;
-        var spanY = Math.Abs((long)(first >> 16) - (last >> 16)) / 65535d + decodeSlack;
-        var x = gradient.X * (double)atlas.Width * spanX * distanceScale / (2d * halfWidth);
-        var y = gradient.Y * (double)atlas.Height * spanY * distanceScale / (2d * halfHeight);
-        var bound = Math.Max(1d, Math.Sqrt(x * x + y * y) * 1.00001d);
-        var correction = MathF.BitDecrement((float)(1d / bound));
-        if (!float.IsFinite(correction) || correction <= 0) {
-            throw new ArgumentException("The glyph sampling scale cannot be represented safely.", nameof(atlas));
+        const double DecodeSlack = (2d / 8388608);
+        var spanX = ((Math.Abs(value: (((long)(first & 65535)) - (last & 65535))) / 65535d) + DecodeSlack);
+        var spanY = ((Math.Abs(value: (((long)(first >> 16)) - (last >> 16))) / 65535d) + DecodeSlack);
+        var x = ((((gradient.X * ((double)atlas.Width)) * spanX) * distanceScale) / (2d * halfWidth));
+        var y = ((((gradient.Y * ((double)atlas.Height)) * spanY) * distanceScale) / (2d * halfHeight));
+        var bound = Math.Max(
+            val1: 1d,
+            val2: (Math.Sqrt(d: ((x * x) + (y * y))) * 1.00001d)
+        );
+        var correction = MathF.BitDecrement(x: ((float)(1d / bound)));
+
+        if (
+            !float.IsFinite(f: correction) ||
+            (correction <= 0)
+        ) {
+            throw new ArgumentException(
+                message: "The glyph sampling scale cannot be represented safely.",
+                paramName: nameof(atlas)
+            );
         }
         return correction;
     }
+
     /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
     /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at
     /// <paramref name="origin"/> (the first line's baseline pen). Each glyph is a self-contained

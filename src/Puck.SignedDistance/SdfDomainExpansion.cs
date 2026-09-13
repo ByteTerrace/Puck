@@ -33,35 +33,6 @@ public static class SdfDomainExpansion {
         Z: FixedQ4816.Zero
     );
 
-    // The fold plane's (u, v) world-axis indices, the untouched axial index, and the sign carrying a +angle rotation
-    // from u toward v into a right-handed rotation about the axis: (x, z) is left-handed about +Y, the other two pairs
-    // right-handed. KEEP IN SYNC with SDF_OP_REPEAT_POLAR's plane selection in Assets/Shaders/Sdf/sdf-vm.hlsli.
-    private static (int U, int V, int W, double Sign) PlaneAxes(SdfPolarAxis axis) {
-        return axis switch {
-            SdfPolarAxis.X => (U: 1, V: 2, W: 0, Sign: 1d),
-            SdfPolarAxis.Z => (U: 0, V: 1, W: 2, Sign: 1d),
-            _ => (U: 0, V: 2, W: 1, Sign: -1d),
-        };
-    }
-    private static FixedVector3 UnitAxis(int index) {
-        return index switch {
-            0 => new FixedVector3(
-            X: FixedQ4816.One,
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.Zero
-        ),
-            1 => new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: FixedQ4816.One,
-            Z: FixedQ4816.Zero
-        ),
-            _ => new FixedVector3(
-            X: FixedQ4816.Zero,
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.One
-        ),
-        };
-    }
     // The product of the two reflections H(a)H(b) as a unit quaternion (b × a, b · a) — the integer-only route from a
     // mirror to the proper rotation left once H(x̂) is factored out, with no matrix-to-quaternion reconstruction and so
     // no platform sqrt.
@@ -104,41 +75,15 @@ public static class SdfDomainExpansion {
             Z: vector.Z
         ).Normalize();
     }
-    // A repeat limit reaches a copy set as a cell COUNT, so it must be whole: the shader's
-    // clamp(round(p / spacing), -limit, limit) parks everything past a fractional limit at that fractional offset,
-    // which is a copy off the lattice rather than one more lattice cell.
-    private static bool TryCellLimit(float limit, out int cells) {
-        cells = 0;
-
-        if (
-            !float.IsFinite(f: limit) ||
-            (limit < 0f) ||
-            (limit != MathF.Truncate(x: limit)) ||
-            (limit > 1024f)
-        ) {
-            return false;
-        }
-
-        cells = ((int)limit);
-
-        return true;
-    }
-    // The budget is judged against the count a branch set would have, in closed form, before one frame exists: the
-    // authored values reaching here are hostile-document scale — a repeat limit of 120 is 14 million frames and any
-    // limit at or past 645 exceeds Array.MaxLength — so a refusal that costs what it refuses is not a refusal.
-    // Both generators know their count exactly: (2l_x+1)(2l_y+1)(2l_z+1) cells, count·(mirror ? 2 : 1) sectors.
-    // The arithmetic is bounded by construction — TryCellLimit caps each axis at 1024, so the repeat product is at
-    // most 2049^3, and a polar's doubled int count is at most 2^32; both sit far inside long.
-    private static bool WithinBudget(long accumulated, long branchCount, int copyBudget, string opName, out string refusal) {
-        if ((accumulated * branchCount) > copyBudget) {
-            refusal = $"a domain chain whose {opName} op expands it to {(accumulated * branchCount)} copies, past the {copyBudget}-copy budget";
-
-            return false;
-        }
-
-        refusal = string.Empty;
-
-        return true;
+    // The fold plane's (u, v) world-axis indices, the untouched axial index, and the sign carrying a +angle rotation
+    // from u toward v into a right-handed rotation about the axis: (x, z) is left-handed about +Y, the other two pairs
+    // right-handed. KEEP IN SYNC with SDF_OP_REPEAT_POLAR's plane selection in Assets/Shaders/Sdf/sdf-vm.hlsli.
+    private static (int U, int V, int W, double Sign) PlaneAxes(SdfPolarAxis axis) {
+        return axis switch {
+            SdfPolarAxis.X => (U: 1, V: 2, W: 0, Sign: 1d),
+            SdfPolarAxis.Z => (U: 0, V: 1, W: 2, Sign: 1d),
+            _ => (U: 0, V: 2, W: 1, Sign: -1d),
+        };
     }
     private static bool TryBranches(SdfDomainOp op, long accumulated, int copyBudget, List<SdfRigidFrame> branches, out string refusal) {
         refusal = string.Empty;
@@ -229,10 +174,10 @@ public static class SdfDomainExpansion {
                                 branches.Add(item: ConjugateByOrigin(
                                     branch: SdfRigidFrame.Identity with {
                                         Position = new FixedVector3(
-                                            X: (spacing.X * FixedQ4816.FromInteger(value: cellX)),
-                                            Y: (spacing.Y * FixedQ4816.FromInteger(value: cellY)),
-                                            Z: (spacing.Z * FixedQ4816.FromInteger(value: cellZ))
-                                        ),
+                                        X: (spacing.X * FixedQ4816.FromInteger(value: cellX)),
+                                        Y: (spacing.Y * FixedQ4816.FromInteger(value: cellY)),
+                                        Z: (spacing.Z * FixedQ4816.FromInteger(value: cellZ))
+                                    ),
                                     },
                                     origin: repeatOrigin
                                 ));
@@ -306,6 +251,61 @@ public static class SdfDomainExpansion {
                     message: "The domain op kind is not defined."
                 );
         }
+    }
+    // A repeat limit reaches a copy set as a cell COUNT, so it must be whole: the shader's
+    // clamp(round(p / spacing), -limit, limit) parks everything past a fractional limit at that fractional offset,
+    // which is a copy off the lattice rather than one more lattice cell.
+    private static bool TryCellLimit(float limit, out int cells) {
+        cells = 0;
+
+        if (
+            !float.IsFinite(f: limit) ||
+            (limit < 0f) ||
+            (limit != MathF.Truncate(x: limit)) ||
+            (limit > 1024f)
+        ) {
+            return false;
+        }
+
+        cells = ((int)limit);
+
+        return true;
+    }
+    private static FixedVector3 UnitAxis(int index) {
+        return index switch {
+            0 => new FixedVector3(
+            X: FixedQ4816.One,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        ),
+            1 => new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.One,
+            Z: FixedQ4816.Zero
+        ),
+            _ => new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.One
+        ),
+        };
+    }
+    // The budget is judged against the count a branch set would have, in closed form, before one frame exists: the
+    // authored values reaching here are hostile-document scale — a repeat limit of 120 is 14 million frames and any
+    // limit at or past 645 exceeds Array.MaxLength — so a refusal that costs what it refuses is not a refusal.
+    // Both generators know their count exactly: (2l_x+1)(2l_y+1)(2l_z+1) cells, count·(mirror ? 2 : 1) sectors.
+    // The arithmetic is bounded by construction — TryCellLimit caps each axis at 1024, so the repeat product is at
+    // most 2049^3, and a polar's doubled int count is at most 2^32; both sit far inside long.
+    private static bool WithinBudget(long accumulated, long branchCount, int copyBudget, string opName, out string refusal) {
+        if ((accumulated * branchCount) > copyBudget) {
+            refusal = $"a domain chain whose {opName} op expands it to {(accumulated * branchCount)} copies, past the {copyBudget}-copy budget";
+
+            return false;
+        }
+
+        refusal = string.Empty;
+
+        return true;
     }
 
     /// <summary>Returns whether <paramref name="domain"/> expands to a finite copy set within

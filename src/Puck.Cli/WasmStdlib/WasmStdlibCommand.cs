@@ -15,8 +15,48 @@ namespace Puck.Cli.WasmStdlib;
 // the registry — this verb never changes.
 // Exit 0 on success, 2 on a missing repository root or a missing destination directory.
 internal static class WasmStdlibCommand {
+    private static int Run() {
+        // Every registry path names a repo convention (e.g. wasm/puck-stdlib/src), not an argument, so it
+        // is anchored at the repository root — the same asymmetry `scan` documents for its own defaults.
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+            return 2;
+        }
+
+        var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+        foreach (var source in WasmStdlibSources.All) {
+            var fullPath = Path.Combine(
+                path1: repositoryRoot,
+                path2: source.RelativePath
+            );
+            var directory = Path.GetDirectoryName(path: fullPath);
+
+            if (
+                (directory is null) ||
+                !Directory.Exists(path: directory)
+            ) {
+                Console.Error.WriteLine(value: $"wasm-stdlib: destination directory not found for {source.RelativePath} (expected {CliPaths.ToDisplay(fullPath: (directory ?? fullPath))}).");
+
+                return 2;
+            }
+
+            var contents = source.Emit();
+
+            File.WriteAllText(
+                contents: contents,
+                encoding: encoding,
+                path: fullPath
+            );
+
+            Console.Error.WriteLine(value: $"wasm-stdlib: wrote {CliPaths.ToDisplay(fullPath: fullPath)} ({contents.Length} chars).");
+        }
+
+        return 0;
+    }
+
     public static Command Create() {
-        var command = new Command(description: """
+        var command = new Command(
+            description: """
             Regenerate the generated Rust sources of the WASM standard library.
 
             Writes every artifact registered in Puck.Scripting.WasmStdlibSources.All by calling its Emit delegate
@@ -30,39 +70,12 @@ internal static class WasmStdlibCommand {
             a change to this verb.
 
             Exit codes: 0 wrote every file, 2 repository root not found, or a destination directory missing.
-            """, name: "wasm-stdlib");
+            """,
+            name: "wasm-stdlib"
+        );
 
         command.SetAction(action: _ => Run());
 
         return command;
-    }
-
-    private static int Run() {
-        // Every registry path names a repo convention (e.g. wasm/puck-stdlib/src), not an argument, so it
-        // is anchored at the repository root — the same asymmetry `scan` documents for its own defaults.
-        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
-        }
-
-        var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
-        foreach (var source in WasmStdlibSources.All) {
-            var fullPath = Path.Combine(path1: repositoryRoot, path2: source.RelativePath);
-            var directory = Path.GetDirectoryName(path: fullPath);
-
-            if ((directory is null) || !Directory.Exists(path: directory)) {
-                Console.Error.WriteLine(value: $"wasm-stdlib: destination directory not found for {source.RelativePath} (expected {CliPaths.ToDisplay(fullPath: (directory ?? fullPath))}).");
-
-                return 2;
-            }
-
-            var contents = source.Emit();
-
-            File.WriteAllText(contents: contents, encoding: encoding, path: fullPath);
-
-            Console.Error.WriteLine(value: $"wasm-stdlib: wrote {CliPaths.ToDisplay(fullPath: fullPath)} ({contents.Length} chars).");
-        }
-
-        return 0;
     }
 }

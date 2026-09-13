@@ -13,7 +13,6 @@ public interface IWorldAgentExtension {
     /// <param name="registry">The registry to register agent services into.</param>
     void Register(IWorldAgentExtensionRegistry registry);
 }
-
 /// <summary>
 /// Registry supplied to an agent extension to register autonomous participant services.
 /// </summary>

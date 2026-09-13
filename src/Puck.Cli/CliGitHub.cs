@@ -11,10 +11,20 @@ internal static class CliGitHub {
         if (IsActions) { Console.WriteLine(value: $"::add-mask::{value}"); }
     }
     public static void Output(string key, string value) {
-        if (Environment.GetEnvironmentVariable(variable: "GITHUB_OUTPUT") is { Length: > 0 } output) { File.AppendAllText(contents: $"{key}={value}\n", path: output); }
+        if (Environment.GetEnvironmentVariable(variable: "GITHUB_OUTPUT") is { Length: > 0 } output) {
+            File.AppendAllText(
+                contents: $"{key}={value}\n",
+                path: output
+            );
+        }
     }
     public static void Summarize(string message) {
         Console.WriteLine(value: message);
-        if (Environment.GetEnvironmentVariable(variable: "GITHUB_STEP_SUMMARY") is { Length: > 0 } summary) { File.AppendAllText(contents: (message + "\n\n"), path: summary); }
+        if (Environment.GetEnvironmentVariable(variable: "GITHUB_STEP_SUMMARY") is { Length: > 0 } summary) {
+            File.AppendAllText(
+                contents: (message + "\n\n"),
+                path: summary
+            );
+        }
     }
 }

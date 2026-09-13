@@ -10,10 +10,10 @@ internal static class DirectXGpuFormats {
         GpuPixelFormat.R16G16B16A16Float => DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT,
         GpuPixelFormat.R32G32B32A32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT,
         _ => throw new ArgumentOutOfRangeException(
-            actualValue: gpuPixelFormat,
-            message: null,
-            paramName: nameof(gpuPixelFormat)
-        ),
+        actualValue: gpuPixelFormat,
+        message: null,
+        paramName: nameof(gpuPixelFormat)
+    ),
     };
     // The concrete GpuImageLayout cases share a fixed D3D12_RESOURCE_STATES value. A caller
     // supplies its own behavior for anything else (Undefined included) — a fallback state or a thrown exception.

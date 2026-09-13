@@ -301,13 +301,6 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Kind: GrantSubjectKind.Adjacency,
         Value: 0
     );
-    /// <summary>Creates a named machine instance subject for live operation control.</summary>
-    /// <param name="name">The authored machine instance name.</param>
-    public static GrantSubject Machine(string name) => new(
-        Id: name,
-        Kind: GrantSubjectKind.Machine,
-        Value: 0
-    );
     /// <summary>Creates a single body by 0-based entity index.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public static GrantSubject Body(int index) => new(
@@ -341,6 +334,13 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         GrantSubjectKind.Machine => $"machine:{Id}",
         _ => "?",
     };
+    /// <summary>Creates a named machine instance subject for live operation control.</summary>
+    /// <param name="name">The authored machine instance name.</param>
+    public static GrantSubject Machine(string name) => new(
+        Id: name,
+        Kind: GrantSubjectKind.Machine,
+        Value: 0
+    );
     /// <summary>Creates a single <c>placements</c> row by its stable id.</summary>
     /// <param name="id">The placement row id.</param>
     public static GrantSubject Placement(string id) => new(

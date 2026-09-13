@@ -22,33 +22,43 @@ internal sealed class TuneInstrumentMachine : IMachineRuntime, IMachineContentSl
     /// content leaves it empty, awaiting <see cref="LoadContent"/> — the same contract every other engine's
     /// <see cref="IMachineEngine.Create"/> follows).</summary>
     public TuneInstrumentMachine(int audioSampleRate, byte[]? content, string? savePath) {
-        var document = ((content is null) ? null : TuneInstrumentEngine.ParseContent(content: content));
+        var document = ((content is null)
+            ? null
+            : TuneInstrumentEngine.ParseContent(content: content)
+        );
 
         m_inner = new MachineHost(
             audioSampleRate: audioSampleRate,
-            cartridgeRom: ((document is null) ? null : TuneRom.Build(document: document)),
+            cartridgeRom: ((document is null)
+            ? null
+            : TuneRom.Build(document: document)),
             model: ConsoleModel.CgbE,
             savePath: savePath
         );
 
-        TicksPerBeat = ((document is null) ? 0L : (document.Tempo!.Value * TicksPerRowFrame));
+        TicksPerBeat = ((document is null)
+            ? 0L
+            : (document.Tempo!.Value * TicksPerRowFrame)
+        );
     }
 
-    /// <inheritdoc/>
-    public long TicksPerBeat { get; private set; }
-    /// <inheritdoc/>
-    public bool IsAssigned => m_inner.IsAssigned;
-    /// <inheritdoc/>
-    public MachineRuntimeStatus Status => m_inner.Status;
-    /// <inheritdoc/>
-    public IReadOnlyDictionary<string, IMachineVideoOutput> VideoOutputs => m_inner.VideoOutputs;
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, IAudioMachine> AudioOutputs => m_inner.AudioOutputs;
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, IMachineInputPort> InputPorts => m_inner.InputPorts;
     /// <inheritdoc/>
+    public bool IsAssigned => m_inner.IsAssigned;
+    /// <inheritdoc/>
     public int SampleRate => m_inner.SampleRate;
+    /// <inheritdoc/>
+    public MachineRuntimeStatus Status => m_inner.Status;
+    /// <inheritdoc/>
+    public long TicksPerBeat { get; private set; }
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IMachineVideoOutput> VideoOutputs => m_inner.VideoOutputs;
 
+    /// <inheritdoc/>
+    public bool Advance(ulong deltaTicks) => m_inner.Advance(deltaTicks: deltaTicks);
     /// <inheritdoc/>
     public void Dispose() => m_inner.Dispose();
     /// <inheritdoc/>
@@ -72,6 +82,4 @@ internal sealed class TuneInstrumentMachine : IMachineRuntime, IMachineContentSl
     }
     /// <inheritdoc/>
     public int ReadSamples(Span<short> destination) => m_inner.ReadSamples(destination: destination);
-    /// <inheritdoc/>
-    public bool Advance(ulong deltaTicks) => m_inner.Advance(deltaTicks);
 }

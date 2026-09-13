@@ -13,7 +13,6 @@ public enum HiddenCells : byte {
     /// value, no text, no observation stamp.</summary>
     Placeholder,
 }
-
 /// <summary>Opt-in observation policy. Null readers means public; an empty list means authority only.
 /// Row and cell policies intersect. Replica-tier authorities remain fully trusted.</summary>
 /// <param name="Readers">Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.</param>
@@ -25,7 +24,7 @@ public enum HiddenCells : byte {
 public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, HiddenCells Hidden = HiddenCells.Omit,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReadersFrom = null) {
     /// <summary>Gets a value indicating whether the policy admits the public observer: no reader list of either kind.</summary>
-    public bool IsPublic => Readers is null && ReadersFrom is null;
+    public bool IsPublic => ((Readers is null) && (ReadersFrom is null));
 
     /// <summary>Whether this observation policy admits the recipient named by its canonical token, or the public
     /// observer when the token is null.</summary>
@@ -33,42 +32,57 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
         if (IsPublic) {
             return true;
         }
-        if (recipient is null || Readers is null) {
+        if (
+            (recipient is null) ||
+            (Readers is null)
+        ) {
             return false;
         }
-        for (var index = 0; index < Readers.Count; index++) {
-            if (string.Equals(Readers[index], recipient, StringComparison.Ordinal)) {
+        for (var index = 0; (index < Readers.Count); index++) {
+            if (string.Equals(
+                a: Readers[index],
+                b: recipient,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return true;
             }
         }
         return false;
     }
-
     /// <summary>Whether the policy admits the recipient through its static list or the live text row.</summary>
     /// <param name="recipient">The canonical token, or null for the public observer.</param>
     /// <param name="rows">The state rows the live reader row is read from.</param>
     public bool Allows(string? recipient, IReadOnlyList<StateRow>? rows) {
-        if (Allows(recipient)) {
+        if (Allows(recipient: recipient)) {
             return true;
         }
-        if (recipient is null || ReadersFrom is null || StateRows.FindStateRow(rows, ReadersFrom) is not { Cells: { } cells }) {
+        if (
+            (recipient is null) ||
+            (ReadersFrom is null) ||
+            (StateRows.FindStateRow(
+            rows,
+            ReadersFrom
+        ) is not { Cells: { } cells })
+        ) {
             return false;
         }
-        for (var index = 0; index < cells.Count; index++) {
-            if (string.Equals(cells[index].Text, recipient, StringComparison.Ordinal)) {
+        for (var index = 0; (index < cells.Count); index++) {
+            if (string.Equals(
+                a: cells[index].Text,
+                b: recipient,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return true;
             }
         }
         return false;
     }
 }
-
 /// <summary>A persisted knowledge layer refreshed explicitly by the authority.</summary>
 /// <param name="Source">The integer/boolean board observed.</param>
 /// <param name="Mask">A boolean board over the same topology; true cells are currently observed.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateKnowledge(string Source, string Mask);
-
 /// <summary>When a stored knowledge value was last seen and whether the latest observation still sees it.</summary>
 /// <param name="Tick">The last observation tick.</param>
 /// <param name="Visible">Whether the latest explicit refresh sees this cell.</param>

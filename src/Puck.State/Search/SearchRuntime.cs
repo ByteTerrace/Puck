@@ -6,7 +6,6 @@ namespace Puck.State;
 /// a frame snapshot in the layout's own order), its own (shape, token, candidate) cursor, its negamax window, and the
 /// best candidate found so far.</summary>
 public sealed record SearchLevelCheckpoint(int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values, ulong Key = 0UL, long AlphaEntry = 0L);
-
 /// <summary>One job's checkpointed progress. <see cref="Legal"/> holds one mask per token in the token row's cell
 /// order, filled as the job walks — populated only for a board of at most <c>BoardMask.MaxCells</c> cells.
 /// <see cref="Counts"/> holds one accepted-candidate count per token, size-agnostic. <see cref="Wide"/> holds one
@@ -18,7 +17,6 @@ public sealed record SearchJobCheckpoint(
     int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, SearchLevelCheckpoint[] Levels,
     ulong[] TtKey, long[] TtValue, long[] TtMeta, SearchTreeCheckpoint? Tree = null
 );
-
 /// <summary>A job's tree search in flight: the node pool (parallel arrays, <see cref="Count"/> nodes used), the
 /// path from the root, the phase and its cursors, the playout and path frames, and the draw seed.</summary>
 public sealed record SearchTreeCheckpoint(
@@ -26,19 +24,16 @@ public sealed record SearchTreeCheckpoint(
     long[] Parent, long[] FirstChild, long[] ChildCount, long[] Visits, long[] Total, long[] Shape, long[] Token, long[] Target, long[] Expanded,
     long[] Path, int PathLength, long[] UctValues, long[] PlayValues
 );
-
 /// <summary>The search runtime's checkpointed state, in section order.</summary>
 public sealed record SearchCheckpoint(SearchJobCheckpoint[] Jobs) {
     /// <summary>Gets the checkpoint of a runtime with no jobs.</summary>
     public static SearchCheckpoint Empty { get; } = new(Jobs: []);
 }
-
 /// <summary>One job's progress as a document project's read-back reads it.</summary>
 public readonly record struct SearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerTick, long JudgeCost, int JudgeRules,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, bool HasOutcome = false, int Iteration = 0, int Iterations = 0
 );
-
 /// <summary>Runs a set of search jobs over an <see cref="IStateSection"/>'s rows: a frame over the installed
 /// section, the rules a frame can evaluate, and per job a walk over every (shape, token, target cell or direction)
 /// candidate judged by those rules under a per-tick node quota. A job restarts whenever the frame's inputs change
@@ -55,40 +50,55 @@ public readonly record struct SearchStatus(
 /// depth-one job's root outputs are unchanged by whether a score is authored.</summary>
 public sealed partial class SearchRuntime {
     private sealed class Level {
-        public StateFrame Frame = null!;
-        public int Shape;
-        public int Token;
-        public int Target;
         public long Alpha;
-        public long Beta;
-        public long Best;
-        public int BestToken = -1;
-        public int BestTarget = -1;
+        public long AlphaEntry;
         public long BaseTurn;
+        public long Best;
+        public int BestTarget = -1;
+        public int BestToken = -1;
+        public long Beta;
+        public StateFrame Frame = null!;
         // The position's frame hash and the window's lower edge at entry, for the transposition table's store.
         public ulong Key;
-        public long AlphaEntry;
+        public int Shape;
+        public int Target;
+        public int Token;
     }
-
     private sealed class Job {
         public Job(SearchPlan plan, int tokenCapacity, FrameLayout layout, IReadOnlyList<StateRow> rows) {
             Plan = plan;
             Legal = new long[tokenCapacity];
             Counts = new long[tokenCapacity];
-            Wide = ((plan.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.CellCount)] : null);
-            Levels = BuildLevels(depth: plan.Depth, layout: layout, rows: rows);
-            ZoneRows = ResolveZones(plan: plan, rows: rows);
+            Wide = ((plan.Reach is not null)
+                ? new long[(tokenCapacity * WideWordsPerToken(cellCount: plan.CellCount))]
+                : null
+            );
+            Levels = BuildLevels(
+                depth: plan.Depth,
+                layout: layout,
+                rows: rows
+            );
+            ZoneRows = ResolveZones(
+                plan: plan,
+                rows: rows
+            );
 
-            if ((plan.Score is not null) && (plan.Method == SearchMethod.Negamax)) {
+            if (
+                (plan.Score is not null) &&
+                (plan.Method == SearchMethod.Negamax)
+            ) {
                 TtKey = new ulong[SearchCapacity.TranspositionEntries];
                 TtValue = new long[SearchCapacity.TranspositionEntries];
                 TtMeta = new long[SearchCapacity.TranspositionEntries];
             }
             if (plan.Chance is not null) {
-                var frames = new StateFrame[plan.Depth + 1];
+                var frames = new StateFrame[(plan.Depth + 1)];
 
-                for (var index = 0; index < frames.Length; index++) {
-                    frames[index] = new StateFrame(layout: layout, rows: rows);
+                for (var index = 0; (index < frames.Length); index++) {
+                    frames[index] = new StateFrame(
+                        layout: layout,
+                        rows: rows
+                    );
                 }
 
                 ChanceFrames = frames;
@@ -105,61 +115,71 @@ public sealed partial class SearchRuntime {
                 TreeToken = new int[nodes];
                 TreeTarget = new int[nodes];
                 TreeExpanded = new long[nodes];
-                Path = new int[plan.Depth + 2];
-                UctFrame = new StateFrame(layout: layout, rows: rows);
-                PlayFrame = new StateFrame(layout: layout, rows: rows);
+                Path = new int[(plan.Depth + 2)];
+                UctFrame = new StateFrame(
+                    layout: layout,
+                    rows: rows
+                );
+                PlayFrame = new StateFrame(
+                    layout: layout,
+                    rows: rows
+                );
             }
         }
 
-        // The tree search (SearchRuntime.Uct.cs), allocated only for a job with an outcome.
-        public bool UctActive { get; set; }
-        public int Phase { get; set; }
-        public int TreeCount { get; set; }
+        public int Active { get; set; }
+        public long BaseTurn { get; set; }
+        // Pooled scratch frames a chance node's own bounded recursive negamax reuses by recursion depth, allocated
+        // once for a chance-bearing job so its tick never allocates; null for a job with no chance node.
+        public StateFrame[]? ChanceFrames { get; set; }
+        public long Count { get; set; }
+        public long[] Counts { get; set; }
+        public bool Done { get; set; }
         public int Iteration { get; set; }
-        public ulong Seed;
-        public int UShape { get; set; }
-        public int UToken { get; set; }
-        public int UTarget { get; set; }
-        public int UScan { get; set; }
-        public int UStart { get; set; }
-        public int PlayoutPlies { get; set; }
-        public int PathLength { get; set; }
-        public int[]? TreeParent { get; set; }
-        public int[]? TreeFirstChild { get; set; }
-        public int[]? TreeChildCount { get; set; }
-        public long[]? TreeVisits { get; set; }
-        public long[]? TreeTotal { get; set; }
-        public int[]? TreeShape { get; set; }
-        public int[]? TreeToken { get; set; }
-        public int[]? TreeTarget { get; set; }
-        public long[]? TreeExpanded { get; set; }
+        public long[] Legal { get; set; }
+        public Level[] Levels { get; set; }
+        public long Nodes { get; set; }
         public int[]? Path { get; set; }
-        public StateFrame? UctFrame { get; set; }
+        public int PathLength { get; set; }
+        public int Phase { get; set; }
+        public SearchPlan Plan { get; set; }
         public StateFrame? PlayFrame { get; set; }
-
+        public int PlayoutPlies { get; set; }
+        public bool Running { get; set; }
+        public int Shape { get; set; }
+        public ulong Stamp { get; set; }
+        public int Target { get; set; }
+        public int Token { get; set; }
+        public int[]? TreeChildCount { get; set; }
+        public int TreeCount { get; set; }
+        public long[]? TreeExpanded { get; set; }
+        public int[]? TreeFirstChild { get; set; }
+        public int[]? TreeParent { get; set; }
+        public int[]? TreeShape { get; set; }
+        public int[]? TreeTarget { get; set; }
+        public int[]? TreeToken { get; set; }
+        public long[]? TreeTotal { get; set; }
+        public long[]? TreeVisits { get; set; }
         // The transposition table: a position's frame hash, the value negamax found there, and (in TtMeta) how many
         // plies that value covers in the low byte with its bound flag above — 1 exact, 2 lower, 3 upper. Slot 0 of
         // TtMeta reads 0 for an empty entry, which no stored entry produces. Cleared on restart, kept across passes.
         public ulong[]? TtKey { get; set; }
-        public long[]? TtValue { get; set; }
         public long[]? TtMeta { get; set; }
-
-        public SearchPlan Plan { get; set; }
+        public long[]? TtValue { get; set; }
+        public int UScan { get; set; }
+        public int UShape { get; set; }
+        public int UStart { get; set; }
+        public int UTarget { get; set; }
+        public int UToken { get; set; }
+        // The tree search (SearchRuntime.Uct.cs), allocated only for a job with an outcome.
+        public bool UctActive { get; set; }
+        public StateFrame? UctFrame { get; set; }
+        public long[]? Wide { get; set; }
         // A zone job's zones as rows of the bound section, in plan order — the cells a token's value is the index of.
         // Null for a board job. Rebound with the rows.
         public StateRow[]? ZoneRows { get; set; }
-        public ulong Stamp { get; set; }
-        public bool Running { get; set; }
-        public bool Done { get; set; }
-        public int Shape { get; set; }
-        public int Token { get; set; }
-        public int Target { get; set; }
-        public long Count { get; set; }
-        public long[] Legal { get; set; }
-        public long[] Counts { get; set; }
-        public long[]? Wide { get; set; }
-        public long Nodes { get; set; }
-        public long BaseTurn { get; set; }
+
+        public ulong Seed;
 
         // Iterative-deepening negamax, engaged only when Plan.Score is not null. PassDepth is the depth the current
         // pass searches to; Active is which ply (0 = root) is being expanded. Best/BestToken/BestTarget are the root's
@@ -168,18 +188,27 @@ public sealed partial class SearchRuntime {
         // in (so a child gets a tighter bound), but never breaks its own loop on it — every root candidate is always
         // tried, so the root outputs never depend on whether a score is authored.
         public int PassDepth { get; set; } = 1;
-        public int Active { get; set; }
         public long Best { get; set; } = -SearchCapacity.MateScore;
         public int BestToken { get; set; } = -1;
         public int BestTarget { get; set; } = -1;
         public long Alpha { get; set; } = -SearchCapacity.MateScore;
         public long Beta { get; set; } = SearchCapacity.MateScore;
-        public Level[] Levels { get; set; }
 
-        // Pooled scratch frames a chance node's own bounded recursive negamax reuses by recursion depth, allocated
-        // once for a chance-bearing job so its tick never allocates; null for a job with no chance node.
-        public StateFrame[]? ChanceFrames { get; set; }
+        public static Level[] BuildLevels(int depth, FrameLayout layout, IReadOnlyList<StateRow> rows) {
+            var levels = new Level[Math.Max(
+                val1: 0,
+                val2: (depth - 1)
+            )];
 
+            for (var index = 0; (index < levels.Length); index++) {
+                levels[index] = new Level { Frame = new StateFrame(
+                    layout: layout,
+                    rows: rows
+                ) };
+            }
+
+            return levels;
+        }
         public static StateRow[]? ResolveZones(SearchPlan plan, IReadOnlyList<StateRow> rows) {
             if (plan.Zones.Length == 0) {
                 return null;
@@ -187,20 +216,14 @@ public sealed partial class SearchRuntime {
 
             var zones = new StateRow[plan.Zones.Length];
 
-            for (var index = 0; index < zones.Length; index++) {
-                zones[index] = (StateRows.FindStateRow(rows: rows, name: plan.Zones[index]) ?? throw new InvalidOperationException(message: $"search '{plan.Name}' zone '{plan.Zones[index]}' vanished after planning"));
+            for (var index = 0; (index < zones.Length); index++) {
+                zones[index] = (StateRows.FindStateRow(
+                    rows: rows,
+                    name: plan.Zones[index]
+                ) ?? throw new InvalidOperationException(message: $"search '{plan.Name}' zone '{plan.Zones[index]}' vanished after planning"));
             }
 
             return zones;
-        }
-        public static Level[] BuildLevels(int depth, FrameLayout layout, IReadOnlyList<StateRow> rows) {
-            var levels = new Level[Math.Max(val1: 0, val2: (depth - 1))];
-
-            for (var index = 0; index < levels.Length; index++) {
-                levels[index] = new Level { Frame = new StateFrame(layout: layout, rows: rows) };
-            }
-
-            return levels;
         }
     }
 
@@ -208,6 +231,7 @@ public sealed partial class SearchRuntime {
     private readonly RowStore m_store;
     private readonly Action<string, string>? m_narrate;
     private readonly List<SearchWrite> m_outputs = [];
+
     private Job[] m_jobs = [];
     private CompiledRule[] m_judge = [];
     private FrameLayout? m_layout;
@@ -258,10 +282,29 @@ public sealed partial class SearchRuntime {
 
         var layoutRebuilt = false;
 
-        if ((m_layout is null) || !m_layout.Fits(rows: rows) || !ReferenceEquals(objA: m_catalog, objB: catalog)) {
-            m_layout = new FrameLayout(rows: rows, topology: topology);
-            m_host = new FrameHost(layout: m_layout, rows: rows, catalog: catalog, patterns: patterns, tables: tables);
-            m_base = new StateFrame(layout: m_layout, rows: rows);
+        if (
+            (m_layout is null) ||
+            !m_layout.Fits(rows: rows) ||
+            !ReferenceEquals(
+            objA: m_catalog,
+            objB: catalog
+        )
+        ) {
+            m_layout = new FrameLayout(
+                rows: rows,
+                topology: topology
+            );
+            m_host = new FrameHost(
+                catalog: catalog,
+                layout: m_layout,
+                patterns: patterns,
+                rows: rows,
+                tables: tables
+            );
+            m_base = new StateFrame(
+                layout: m_layout,
+                rows: rows
+            );
             m_catalog = catalog;
             layoutRebuilt = true;
 
@@ -275,19 +318,49 @@ public sealed partial class SearchRuntime {
 
         var jobs = new Job[plans.Length];
 
-        for (var index = 0; index < plans.Length; index++) {
+        for (var index = 0; (index < plans.Length); index++) {
             var plan = plans[index];
-            var tokens = (StateRows.FindStateRow(rows: rows, name: plan.Tokens)?.Cells?.Count ?? 0);
-            var levelCount = Math.Max(val1: 0, val2: (plan.Depth - 1));
-            var expectedWide = ((plan.Reach is not null) ? (tokens * WideWordsPerToken(cellCount: plan.CellCount)) : 0);
-            var kept = Array.Find(array: m_jobs, match: job => string.Equals(a: job.Plan.Name, b: plan.Name, comparisonType: StringComparison.Ordinal));
+            var tokens = (StateRows.FindStateRow(
+                rows: rows,
+                name: plan.Tokens
+            )?.Cells?.Count ?? 0);
+            var levelCount = Math.Max(
+                val1: 0,
+                val2: (plan.Depth - 1)
+            );
+            var expectedWide = ((plan.Reach is not null)
+                ? (tokens * WideWordsPerToken(cellCount: plan.CellCount))
+                : 0
+            );
+            var kept = Array.Find(
+                array: m_jobs,
+                match: job => string.Equals(
+                    a: job.Plan.Name,
+                    b: plan.Name,
+                    comparisonType: StringComparison.Ordinal
+                )
+            );
 
-            if ((kept is not null) && (kept.Legal.Length == tokens) && ((kept.Wide?.Length ?? 0) == expectedWide)) {
+            if (
+                (kept is not null) &&
+                (kept.Legal.Length == tokens) &&
+                ((kept.Wide?.Length ?? 0) == expectedWide)
+            ) {
                 kept.Plan = plan;
-                kept.ZoneRows = Job.ResolveZones(plan: plan, rows: rows);
+                kept.ZoneRows = Job.ResolveZones(
+                    plan: plan,
+                    rows: rows
+                );
 
-                if (layoutRebuilt || (kept.Levels.Length != levelCount)) {
-                    kept.Levels = Job.BuildLevels(depth: plan.Depth, layout: m_layout, rows: rows);
+                if (
+                    layoutRebuilt ||
+                    (kept.Levels.Length != levelCount)
+                ) {
+                    kept.Levels = Job.BuildLevels(
+                        depth: plan.Depth,
+                        layout: m_layout,
+                        rows: rows
+                    );
                     kept.Stamp = 0UL;
                 } else {
                     foreach (var level in kept.Levels) {
@@ -296,8 +369,14 @@ public sealed partial class SearchRuntime {
                 }
                 if (kept.TreeParent is not null) {
                     if (layoutRebuilt) {
-                        kept.UctFrame = new StateFrame(layout: m_layout, rows: rows);
-                        kept.PlayFrame = new StateFrame(layout: m_layout, rows: rows);
+                        kept.UctFrame = new StateFrame(
+                            layout: m_layout,
+                            rows: rows
+                        );
+                        kept.PlayFrame = new StateFrame(
+                            layout: m_layout,
+                            rows: rows
+                        );
                         kept.Stamp = 0UL;
                     } else {
                         kept.UctFrame!.Rebind(rows: rows);
@@ -305,11 +384,17 @@ public sealed partial class SearchRuntime {
                     }
                 }
                 if (kept.ChanceFrames is not null) {
-                    if (layoutRebuilt || (kept.ChanceFrames.Length != (plan.Depth + 1))) {
-                        var frames = new StateFrame[plan.Depth + 1];
+                    if (
+                        layoutRebuilt ||
+                        (kept.ChanceFrames.Length != (plan.Depth + 1))
+                    ) {
+                        var frames = new StateFrame[(plan.Depth + 1)];
 
-                        for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++) {
-                            frames[frameIndex] = new StateFrame(layout: m_layout, rows: rows);
+                        for (var frameIndex = 0; (frameIndex < frames.Length); frameIndex++) {
+                            frames[frameIndex] = new StateFrame(
+                                layout: m_layout,
+                                rows: rows
+                            );
                         }
 
                         kept.ChanceFrames = frames;
@@ -323,13 +408,17 @@ public sealed partial class SearchRuntime {
 
                 jobs[index] = kept;
             } else {
-                jobs[index] = new Job(plan: plan, tokenCapacity: tokens, layout: m_layout, rows: rows);
+                jobs[index] = new Job(
+                    layout: m_layout,
+                    plan: plan,
+                    rows: rows,
+                    tokenCapacity: tokens
+                );
             }
         }
 
         m_jobs = jobs;
     }
-
     /// <summary>Advances every job by its node quota, landing a finished job's outputs through <paramref name="apply"/>.</summary>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="apply">Installs one job's writes through the ordinary door.</param>
@@ -337,13 +426,21 @@ public sealed partial class SearchRuntime {
     public bool Step(ulong tick, Func<IReadOnlyList<SearchWrite>, bool> apply) {
         ArgumentNullException.ThrowIfNull(argument: apply);
 
-        if ((m_jobs.Length == 0) || (m_host is null) || (m_base is null) || (m_layout is null)) {
+        if (
+            (m_jobs.Length == 0) ||
+            (m_host is null) ||
+            (m_base is null) ||
+            (m_layout is null)
+        ) {
             return false;
         }
 
         var rows = m_store.Rows;
 
-        if (!ReferenceEquals(objA: m_base.Rows, objB: rows)) {
+        if (!ReferenceEquals(
+            objA: m_base.Rows,
+            objB: rows
+        )) {
             RebindLive(rows: rows);
         }
 
@@ -354,78 +451,146 @@ public sealed partial class SearchRuntime {
 
         foreach (var job in m_jobs) {
             if (job.Stamp != stamp) {
-                Restart(job: job, stamp: stamp);
+                Restart(
+                    job: job,
+                    stamp: stamp
+                );
             }
             if (!job.Running) {
                 continue;
             }
 
-            Walk(job: job, tick: tick);
+            Walk(
+                job: job,
+                tick: tick
+            );
 
             if (job.Running) {
                 continue;
             }
 
             job.Done = true;
-            installed |= Land(job: job, apply: apply);
+            installed |= Land(
+                apply: apply,
+                job: job
+            );
         }
 
         return installed;
     }
-
     /// <summary>Captures every job's progress.</summary>
     public SearchCheckpoint Capture() {
         var jobs = new SearchJobCheckpoint[m_jobs.Length];
 
-        for (var index = 0; index < m_jobs.Length; index++) {
+        for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
-            var levels = ((job.Levels.Length == 0) ? [] : new SearchLevelCheckpoint[job.Levels.Length]);
+            var levels = ((job.Levels.Length == 0)
+                ? []
+                : new SearchLevelCheckpoint[job.Levels.Length]
+            );
 
-            for (var level = 0; level < levels.Length; level++) {
+            for (var level = 0; (level < levels.Length); level++) {
                 var entry = job.Levels[level];
 
                 levels[level] = new SearchLevelCheckpoint(
-                    Shape: entry.Shape, Token: entry.Token, Target: entry.Target, Alpha: entry.Alpha, Beta: entry.Beta,
-                    Best: entry.Best, BestToken: entry.BestToken, BestTarget: entry.BestTarget, BaseTurn: entry.BaseTurn,
-                    Values: entry.Frame.Values.ToArray(), Key: entry.Key, AlphaEntry: entry.AlphaEntry
+                    Shape: entry.Shape,
+                    Token: entry.Token,
+                    Target: entry.Target,
+                    Alpha: entry.Alpha,
+                    Beta: entry.Beta,
+                    Best: entry.Best,
+                    BestToken: entry.BestToken,
+                    BestTarget: entry.BestTarget,
+                    BaseTurn: entry.BaseTurn,
+                    Values: entry.Frame.Values.ToArray(),
+                    Key: entry.Key,
+                    AlphaEntry: entry.AlphaEntry
                 );
             }
 
             jobs[index] = new SearchJobCheckpoint(
-                Name: job.Plan.Name, Stamp: job.Stamp, Running: job.Running, Done: job.Done, Shape: job.Shape, Token: job.Token, Target: job.Target,
-                Count: job.Count, Legal: [.. job.Legal], Counts: [.. job.Counts], Wide: ((job.Wide is { } wide) ? [.. wide] : []), Nodes: job.Nodes, BaseTurn: job.BaseTurn,
-                PassDepth: job.PassDepth, Active: job.Active, Best: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
-                Alpha: job.Alpha, Beta: job.Beta, Levels: levels,
-                TtKey: ((job.TtKey is { } ttKey) ? [.. ttKey] : []), TtValue: ((job.TtValue is { } ttValue) ? [.. ttValue] : []), TtMeta: ((job.TtMeta is { } ttMeta) ? [.. ttMeta] : []),
+                Name: job.Plan.Name,
+                Stamp: job.Stamp,
+                Running: job.Running,
+                Done: job.Done,
+                Shape: job.Shape,
+                Token: job.Token,
+                Target: job.Target,
+                Count: job.Count,
+                Legal: [.. job.Legal],
+                Counts: [.. job.Counts],
+                Wide: ((job.Wide is { } wide)
+                ? [.. wide]
+                : []),
+                Nodes: job.Nodes,
+                BaseTurn: job.BaseTurn,
+                PassDepth: job.PassDepth,
+                Active: job.Active,
+                Best: job.Best,
+                BestToken: job.BestToken,
+                BestTarget: job.BestTarget,
+                Alpha: job.Alpha,
+                Beta: job.Beta,
+                Levels: levels,
+                TtKey: ((job.TtKey is { } ttKey)
+                ? [.. ttKey]
+                : []),
+                TtValue: ((job.TtValue is { } ttValue)
+                ? [.. ttValue]
+                : []),
+                TtMeta: ((job.TtMeta is { } ttMeta)
+                ? [.. ttMeta]
+                : []),
                 Tree: CaptureTree(job: job)
             );
         }
 
         return new SearchCheckpoint(Jobs: jobs);
     }
+
     private static long[] Widen(int[] values) {
         var wide = new long[values.Length];
 
-        for (var index = 0; index < values.Length; index++) {
+        for (var index = 0; (index < values.Length); index++) {
             wide[index] = values[index];
         }
 
         return wide;
     }
     private static void Narrow(long[] wide, int[] into) {
-        for (var index = 0; index < into.Length; index++) {
-            into[index] = (int)wide[index];
+        for (var index = 0; (index < into.Length); index++) {
+            into[index] = ((int)wide[index]);
         }
     }
     private static SearchTreeCheckpoint? CaptureTree(Job job) => ((job.TreeParent is null)
         ? null
         : new SearchTreeCheckpoint(
-            Active: job.UctActive, Phase: job.Phase, Count: job.TreeCount, Iteration: job.Iteration, Seed: job.Seed, UShape: job.UShape, UToken: job.UToken, UTarget: job.UTarget,
-            UScan: job.UScan, UStart: job.UStart, PlayoutPlies: job.PlayoutPlies,
-            Parent: Widen(job.TreeParent), FirstChild: Widen(job.TreeFirstChild!), ChildCount: Widen(job.TreeChildCount!), Visits: [.. job.TreeVisits!], Total: [.. job.TreeTotal!],
-            Shape: Widen(job.TreeShape!), Token: Widen(job.TreeToken!), Target: Widen(job.TreeTarget!), Expanded: [.. job.TreeExpanded!],
-            Path: Widen(job.Path!), PathLength: job.PathLength, UctValues: job.UctFrame!.Values.ToArray(), PlayValues: job.PlayFrame!.Values.ToArray()
-        ));
+            Active: job.UctActive,
+            Phase: job.Phase,
+            Count: job.TreeCount,
+            Iteration: job.Iteration,
+            Seed: job.Seed,
+            UShape: job.UShape,
+            UToken: job.UToken,
+            UTarget: job.UTarget,
+            UScan: job.UScan,
+            UStart: job.UStart,
+            PlayoutPlies: job.PlayoutPlies,
+            Parent: Widen(values: job.TreeParent),
+            FirstChild: Widen(values: job.TreeFirstChild!),
+            ChildCount: Widen(values: job.TreeChildCount!),
+            Visits: [.. job.TreeVisits!],
+            Total: [.. job.TreeTotal!],
+            Shape: Widen(values: job.TreeShape!),
+            Token: Widen(values: job.TreeToken!),
+            Target: Widen(values: job.TreeTarget!),
+            Expanded: [.. job.TreeExpanded!],
+            Path: Widen(values: job.Path!),
+            PathLength: job.PathLength,
+            UctValues: job.UctFrame!.Values.ToArray(),
+            PlayValues: job.PlayFrame!.Values.ToArray()
+        )
+    );
     private static bool TreeFits(Job job, SearchTreeCheckpoint? tree) {
         if (job.TreeParent is null) {
             return (tree is null);
@@ -436,12 +601,26 @@ public sealed partial class SearchRuntime {
 
         var nodes = job.TreeParent.Length;
 
-        return (tree.Parent.Length == nodes) && (tree.FirstChild.Length == nodes) && (tree.ChildCount.Length == nodes) && (tree.Visits.Length == nodes) && (tree.Total.Length == nodes) &&
-            (tree.Shape.Length == nodes) && (tree.Token.Length == nodes) && (tree.Target.Length == nodes) && (tree.Expanded.Length == nodes) &&
-            (tree.Path.Length == job.Path!.Length) && (tree.UctValues.Length == job.UctFrame!.Values.Length) && (tree.PlayValues.Length == job.PlayFrame!.Values.Length);
+        return (
+            (tree.Parent.Length == nodes) &&
+            (tree.FirstChild.Length == nodes) &&
+            (tree.ChildCount.Length == nodes) &&
+            (tree.Visits.Length == nodes) &&
+            (tree.Total.Length == nodes) &&
+            (tree.Shape.Length == nodes) &&
+            (tree.Token.Length == nodes) &&
+            (tree.Target.Length == nodes) &&
+            (tree.Expanded.Length == nodes) &&
+            (tree.Path.Length == job.Path!.Length) &&
+            (tree.UctValues.Length == job.UctFrame!.Values.Length) &&
+            (tree.PlayValues.Length == job.PlayFrame!.Values.Length)
+        );
     }
     private static void RestoreTree(Job job, SearchTreeCheckpoint? tree) {
-        if ((job.TreeParent is null) || (tree is null)) {
+        if (
+            (job.TreeParent is null) ||
+            (tree is null)
+        ) {
             return;
         }
 
@@ -456,16 +635,37 @@ public sealed partial class SearchRuntime {
         job.UScan = tree.UScan;
         job.UStart = tree.UStart;
         job.PlayoutPlies = tree.PlayoutPlies;
-        Narrow(tree.Parent, job.TreeParent);
-        Narrow(tree.FirstChild, job.TreeFirstChild!);
-        Narrow(tree.ChildCount, job.TreeChildCount!);
+        Narrow(
+            tree.Parent,
+            job.TreeParent
+        );
+        Narrow(
+            tree.FirstChild,
+            job.TreeFirstChild!
+        );
+        Narrow(
+            tree.ChildCount,
+            job.TreeChildCount!
+        );
         tree.Visits.AsSpan().CopyTo(destination: job.TreeVisits!);
         tree.Total.AsSpan().CopyTo(destination: job.TreeTotal!);
-        Narrow(tree.Shape, job.TreeShape!);
-        Narrow(tree.Token, job.TreeToken!);
-        Narrow(tree.Target, job.TreeTarget!);
+        Narrow(
+            tree.Shape,
+            job.TreeShape!
+        );
+        Narrow(
+            tree.Token,
+            job.TreeToken!
+        );
+        Narrow(
+            tree.Target,
+            job.TreeTarget!
+        );
         tree.Expanded.AsSpan().CopyTo(destination: job.TreeExpanded!);
-        Narrow(tree.Path, job.Path!);
+        Narrow(
+            tree.Path,
+            job.Path!
+        );
         job.PathLength = tree.PathLength;
         tree.UctValues.AsSpan().CopyTo(destination: job.UctFrame!.Values);
         tree.PlayValues.AsSpan().CopyTo(destination: job.PlayFrame!.Values);
@@ -478,13 +678,28 @@ public sealed partial class SearchRuntime {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         foreach (var job in m_jobs) {
-            var saved = Array.Find(array: checkpoint.Jobs, match: entry => string.Equals(a: entry.Name, b: job.Plan.Name, comparisonType: StringComparison.Ordinal));
+            var saved = Array.Find(
+                array: checkpoint.Jobs,
+                match: entry => string.Equals(
+                    a: entry.Name,
+                    b: job.Plan.Name,
+                    comparisonType: StringComparison.Ordinal
+                )
+            );
 
             if (
-                (saved is null) || (saved.Legal.Length != job.Legal.Length) || (saved.Counts.Length != job.Counts.Length) ||
-                (saved.Wide.Length != (job.Wide?.Length ?? 0)) || (saved.Levels.Length != job.Levels.Length) ||
-                (saved.TtKey.Length != (job.TtKey?.Length ?? 0)) || (saved.TtValue.Length != (job.TtValue?.Length ?? 0)) || (saved.TtMeta.Length != (job.TtMeta?.Length ?? 0)) ||
-                !TreeFits(job: job, tree: saved.Tree)
+                (saved is null) ||
+                (saved.Legal.Length != job.Legal.Length) ||
+                (saved.Counts.Length != job.Counts.Length) ||
+                (saved.Wide.Length != (job.Wide?.Length ?? 0)) ||
+                (saved.Levels.Length != job.Levels.Length) ||
+                (saved.TtKey.Length != (job.TtKey?.Length ?? 0)) ||
+                (saved.TtValue.Length != (job.TtValue?.Length ?? 0)) ||
+                (saved.TtMeta.Length != (job.TtMeta?.Length ?? 0)) ||
+                !TreeFits(
+                job: job,
+                tree: saved.Tree
+            )
             ) {
                 job.Stamp = 0UL;
                 job.Running = false;
@@ -495,7 +710,7 @@ public sealed partial class SearchRuntime {
 
             var shapeMatches = true;
 
-            for (var level = 0; level < job.Levels.Length; level++) {
+            for (var level = 0; (level < job.Levels.Length); level++) {
                 if (saved.Levels[level].Values.Length != job.Levels[level].Frame.Values.Length) {
                     shapeMatches = false;
 
@@ -536,9 +751,12 @@ public sealed partial class SearchRuntime {
                 saved.TtValue.AsSpan().CopyTo(destination: job.TtValue!);
                 saved.TtMeta.AsSpan().CopyTo(destination: job.TtMeta!);
             }
-            RestoreTree(job: job, tree: saved.Tree);
+            RestoreTree(
+                job: job,
+                tree: saved.Tree
+            );
 
-            for (var level = 0; level < job.Levels.Length; level++) {
+            for (var level = 0; (level < job.Levels.Length); level++) {
                 var entry = job.Levels[level];
                 var restored = saved.Levels[level];
 
@@ -566,8 +784,12 @@ public sealed partial class SearchRuntime {
         foreach (var job in m_jobs) {
             hash.Add(value: Fnv1aHash.Compute(values: job.Plan.Name.AsSpan()));
             hash.Add(value: job.Stamp);
-            hash.Add(value: ((byte)(job.Running ? 1 : 0)));
-            hash.Add(value: ((byte)(job.Done ? 1 : 0)));
+            hash.Add(value: ((byte)(job.Running
+                ? 1
+                : 0)));
+            hash.Add(value: ((byte)(job.Done
+                ? 1
+                : 0)));
             hash.Add(value: ((uint)job.Shape));
             hash.Add(value: ((uint)job.Token));
             hash.Add(value: ((uint)job.Target));
@@ -611,14 +833,16 @@ public sealed partial class SearchRuntime {
                 }
             }
             if (job.TtKey is { } ttKey) {
-                for (var slot = 0; slot < ttKey.Length; slot++) {
+                for (var slot = 0; (slot < ttKey.Length); slot++) {
                     hash.Add(value: ttKey[slot]);
                     hash.Add(value: job.TtValue![slot]);
                     hash.Add(value: job.TtMeta![slot]);
                 }
             }
             if (job.TreeParent is { } parents) {
-                hash.Add(value: ((byte)(job.UctActive ? 1 : 0)));
+                hash.Add(value: ((byte)(job.UctActive
+                    ? 1
+                    : 0)));
                 hash.Add(value: ((uint)job.Phase));
                 hash.Add(value: ((uint)job.TreeCount));
                 hash.Add(value: ((uint)job.Iteration));
@@ -631,7 +855,7 @@ public sealed partial class SearchRuntime {
                 hash.Add(value: ((uint)job.PlayoutPlies));
                 hash.Add(value: ((uint)job.PathLength));
 
-                for (var node = 0; node < job.TreeCount; node++) {
+                for (var node = 0; (node < job.TreeCount); node++) {
                     hash.Add(value: ((uint)parents[node]));
                     hash.Add(value: ((uint)job.TreeFirstChild![node]));
                     hash.Add(value: ((uint)job.TreeChildCount![node]));
@@ -642,7 +866,7 @@ public sealed partial class SearchRuntime {
                     hash.Add(value: ((uint)job.TreeTarget![node]));
                     hash.Add(value: job.TreeExpanded![node]);
                 }
-                for (var index = 0; index < job.PathLength; index++) {
+                for (var index = 0; (index < job.PathLength); index++) {
                     hash.Add(value: ((uint)job.Path![index]));
                 }
                 foreach (var value in job.UctFrame!.Values) {
@@ -658,14 +882,31 @@ public sealed partial class SearchRuntime {
     public IReadOnlyList<SearchStatus> Status() {
         var status = new SearchStatus[m_jobs.Length];
 
-        for (var index = 0; index < m_jobs.Length; index++) {
+        for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
 
             status[index] = new SearchStatus(
-                Name: job.Plan.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
-                Cells: job.Plan.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
-                HasScore: (((job.Plan.Score is not null) || (job.Plan.Scores is not null)) && (job.Plan.Method == SearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
-                HasOutcome: (job.Plan.Method == SearchMethod.Tree), Iteration: job.Iteration, Iterations: job.Plan.Iterations
+                Name: job.Plan.Name,
+                Running: job.Running,
+                Done: job.Done,
+                Token: job.Token,
+                Tokens: job.Legal.Length,
+                Target: job.Target,
+                Cells: job.Plan.CellCount,
+                Count: job.Count,
+                Nodes: job.Nodes,
+                NodesPerTick: job.Plan.Nodes,
+                JudgeCost: job.Plan.JudgeCost,
+                JudgeRules: m_judge.Length,
+                HasScore: (((job.Plan.Score is not null) || (job.Plan.Scores is not null)) && (job.Plan.Method == SearchMethod.Negamax)),
+                Depth: job.Plan.Depth,
+                PassDepth: job.PassDepth,
+                BestScore: job.Best,
+                BestToken: job.BestToken,
+                BestTarget: job.BestTarget,
+                HasOutcome: (job.Plan.Method == SearchMethod.Tree),
+                Iteration: job.Iteration,
+                Iterations: job.Plan.Iterations
             );
         }
 
@@ -680,7 +921,10 @@ public sealed partial class SearchRuntime {
         m_host!.Rebind(rows: rows);
 
         foreach (var job in m_jobs) {
-            job.ZoneRows = Job.ResolveZones(plan: job.Plan, rows: rows);
+            job.ZoneRows = Job.ResolveZones(
+                plan: job.Plan,
+                rows: rows
+            );
 
             foreach (var level in job.Levels) {
                 level.Frame.Rebind(rows: rows);
@@ -699,49 +943,84 @@ public sealed partial class SearchRuntime {
     // A job is sized by its token row's live cell count: a token row filled or emptied by a mutation since the last
     // rebuild re-sizes the job here, on the tick, so no install is needed to notice it.
     private void ResizeJobs(IReadOnlyList<StateRow> rows) {
-        for (var index = 0; index < m_jobs.Length; index++) {
+        for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
             var tokens = 0;
 
             if (
-                m_catalog!.TryResolve(lane: StateLane.Document, name: job.Plan.Tokens, handle: out var handle) &&
-                StateReader.TryResolveRowHandle(rows: rows, catalog: m_catalog, handle: handle, rowOrdinal: out _, row: out var row)
+                m_catalog!.TryResolve(
+                lane: StateLane.Document,
+                name: job.Plan.Tokens,
+                handle: out var handle
+            ) &&
+                StateReader.TryResolveRowHandle(
+                catalog: m_catalog,
+                handle: handle,
+                row: out var row,
+                rowOrdinal: out _,
+                rows: rows
+            )
             ) {
                 tokens = (row.Cells?.Count ?? 0);
             }
 
             if (job.Legal.Length != tokens) {
-                m_jobs[index] = new Job(plan: job.Plan, tokenCapacity: tokens, layout: m_layout!, rows: rows);
+                m_jobs[index] = new Job(
+                    plan: job.Plan,
+                    tokenCapacity: tokens,
+                    layout: m_layout!,
+                    rows: rows
+                );
             }
         }
     }
-
     private ulong Stamp() {
         var hash = Fnv1aHash.Create();
         var values = m_base!.Values;
 
-        for (var ordinal = 0; ordinal < m_layout!.RowCount; ordinal++) {
+        for (var ordinal = 0; (ordinal < m_layout!.RowCount); ordinal++) {
             var layout = m_layout[ordinal];
 
-            if ((layout.Kind == FrameRowKind.Unframed) || IsOutput(name: m_base.Rows[ordinal].Name.Value)) {
+            if (
+                (layout.Kind == FrameRowKind.Unframed) ||
+                IsOutput(name: m_base.Rows[ordinal].Name.Value)
+            ) {
                 continue;
             }
 
-            foreach (var value in values.Slice(start: layout.Offset, length: layout.Length)) {
+            foreach (var value in values.Slice(
+                start: layout.Offset,
+                length: layout.Length
+            )) {
                 hash.Add(value: value);
             }
         }
 
         return hash.Value;
     }
-
     private bool IsOutput(string name) {
         foreach (var job in m_jobs) {
             if (
-                string.Equals(a: job.Plan.Legal, b: name, comparisonType: StringComparison.Ordinal) ||
-                string.Equals(a: job.Plan.Reach, b: name, comparisonType: StringComparison.Ordinal) ||
-                string.Equals(a: job.Plan.Counts, b: name, comparisonType: StringComparison.Ordinal) ||
-                string.Equals(a: job.Plan.Best, b: name, comparisonType: StringComparison.Ordinal)
+                string.Equals(
+                a: job.Plan.Legal,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                string.Equals(
+                a: job.Plan.Reach,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                string.Equals(
+                a: job.Plan.Counts,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                string.Equals(
+                a: job.Plan.Best,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 return true;
             }
@@ -749,13 +1028,15 @@ public sealed partial class SearchRuntime {
 
         return false;
     }
-
     private void Restart(Job job, ulong stamp) {
         job.Stamp = stamp;
         job.Running = true;
         job.Done = false;
         job.Nodes = 0L;
-        job.BaseTurn = Slot(store: m_base!, name: job.Plan.Turn);
+        job.BaseTurn = Slot(
+            store: m_base!,
+            name: job.Plan.Turn
+        );
         job.PassDepth = 1;
         job.TtKey?.AsSpan().Clear();
         job.TtValue?.AsSpan().Clear();
@@ -765,7 +1046,6 @@ public sealed partial class SearchRuntime {
         job.Iteration = 0;
         ResetPass(job: job);
     }
-
     // A fresh iterative-deepening pass over the same (unchanged) root position: the root outputs are recomputed
     // identically every pass, and the running negamax result starts over at the terminal sentinel. The caller owns
     // PassDepth — this never touches it, so a mid-search pass transition (already incremented) and a full restart
@@ -785,7 +1065,14 @@ public sealed partial class SearchRuntime {
         job.Alpha = -SearchCapacity.MateScore;
         job.Beta = SearchCapacity.MateScore;
     }
-
     private static long Slot(StateStore store, string name) =>
-        (((store.Find(name: name) is { } row) && store.TryStored(row: row, key: StateRow.SlotKey, value: out var value, text: out _)) ? value : 0L);
+        (((store.Find(name: name) is { } row) && store.TryStored(
+            key: StateRow.SlotKey,
+            row: row,
+            text: out _,
+            value: out var value
+        ))
+            ? value
+            : 0L
+        );
 }

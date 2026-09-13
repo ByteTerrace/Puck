@@ -29,31 +29,43 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
         m_diagnostics = diagnostics;
     }
 
-    /// <inheritdoc />
-    public void Start(IGamepadConnectionRegistry registry) {
-        ArgumentNullException.ThrowIfNull(registry);
-
-        // Idempotent: only the first Start spins the poll thread.
-        if (uint.MinValue != Interlocked.CompareExchange(comparand: 0, location1: ref m_started, value: 1)) {
-            return;
-        }
-
-        // XInput ships on Windows 8+; do nothing (no Xbox support) elsewhere.
-        if (!OperatingSystem.IsWindowsVersionAtLeast(major: 6, minor: 2, build: 0)) {
-            return;
-        }
-
-        m_registry = registry;
-        m_thread = new Thread(start: () => RunXInputLoop(cancellationToken: m_cancellation.Token)) {
-            IsBackground = true,
-            Name = "Puck.Input XInput Poll",
-        };
-        m_thread.Start();
+    // Unregisters a connection from the manager and disposes it (silencing motors and freeing its GameInput bind).
+    private void CloseSlot(XInputGamepadConnection connection) {
+        m_registry!.Unregister(connection: connection);
+        connection.Dispose();
     }
+    // Atomically allocates a player slot and registers a new connection for it through the manager.
+    private XInputGamepadConnection OpenSlot(uint slot) {
+        return ((XInputGamepadConnection)m_registry!.Register(connectionFactory: playerIndex => new XInputGamepadConnection(
+            deviceId: InputDeviceId.FromConnectionKey(key: $"xinput:{slot}"),
+            haptics: m_gameInputHaptics,
+            playerIndex: playerIndex,
+            slot: slot
+        )));
+    }
+    private static void PaceTo(long deadline, CancellationToken cancellationToken) {
+        while (!cancellationToken.IsCancellationRequested) {
+            var remaining = (deadline - Stopwatch.GetTimestamp());
 
+            if (remaining <= 0L) {
+                break;
+            }
+
+            var remainingMs = ((remaining * 1000L) / Stopwatch.Frequency);
+
+            if (remainingMs > 1L) {
+                Thread.Sleep(millisecondsTimeout: ((int)(remainingMs - 1L)));
+            } else {
+                Thread.SpinWait(iterations: 64);
+            }
+        }
+    }
     private void RunXInputLoop(CancellationToken cancellationToken) {
         try {
-            _ = XInput.GetStateEx(state: out _, userIndex: 0u);
+            _ = XInput.GetStateEx(
+                state: out _,
+                userIndex: 0u
+            );
         } catch (DllNotFoundException) {
             m_diagnostics?.Invoke("[gamepad] XInput unavailable (xinput1_4.dll not found); Xbox controllers disabled");
 
@@ -90,14 +102,23 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                 for (var slot = 0; (slot < XInputSlotCount); ++slot) {
                     var connection = connections[slot];
 
-                    if ((connection is null) && (cycleStart < emptySlotRecheck[slot])) {
+                    if (
+                        (connection is null) &&
+                        (cycleStart < emptySlotRecheck[slot])
+                    ) {
                         continue;
                     }
 
-                    var status = XInput.GetStateEx(state: out var state, userIndex: ((uint)slot));
+                    var status = XInput.GetStateEx(
+                        state: out var state,
+                        userIndex: ((uint)slot)
+                    );
 
                     if (status == XInput.ErrorSuccess) {
-                        if ((connection is null) || connection.IsFaulted) {
+                        if (
+                            (connection is null) ||
+                            connection.IsFaulted
+                        ) {
                             // Remove the prior (faulted) connection before re-adding, so the manager never briefly
                             // holds two entries with the same id (which would let TryGetOutput pick the dead one).
                             if (connection is not null) {
@@ -122,7 +143,10 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                     }
                 }
 
-                PaceTo(cancellationToken: cancellationToken, deadline: (cycleStart + pollPeriodTicks));
+                PaceTo(
+                    cancellationToken: cancellationToken,
+                    deadline: (cycleStart + pollPeriodTicks)
+                );
             }
         } catch (Exception exception) {
             // This runs on a dedicated thread, where an unhandled exception would terminate the process. Fail
@@ -137,37 +161,6 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
             m_gameInputHaptics?.Dispose();
         }
     }
-    // Atomically allocates a player slot and registers a new connection for it through the manager.
-    private XInputGamepadConnection OpenSlot(uint slot) {
-        return ((XInputGamepadConnection)m_registry!.Register(connectionFactory: playerIndex => new XInputGamepadConnection(
-            deviceId: InputDeviceId.FromConnectionKey(key: $"xinput:{slot}"),
-            haptics: m_gameInputHaptics,
-            playerIndex: playerIndex,
-            slot: slot
-        )));
-    }
-    // Unregisters a connection from the manager and disposes it (silencing motors and freeing its GameInput bind).
-    private void CloseSlot(XInputGamepadConnection connection) {
-        m_registry!.Unregister(connection: connection);
-        connection.Dispose();
-    }
-    private static void PaceTo(long deadline, CancellationToken cancellationToken) {
-        while (!cancellationToken.IsCancellationRequested) {
-            var remaining = (deadline - Stopwatch.GetTimestamp());
-
-            if (remaining <= 0L) {
-                break;
-            }
-
-            var remainingMs = ((remaining * 1000L) / Stopwatch.Frequency);
-
-            if (remainingMs > 1L) {
-                Thread.Sleep(millisecondsTimeout: ((int)(remainingMs - 1L)));
-            } else {
-                Thread.SpinWait(iterations: 64);
-            }
-        }
-    }
 
     /// <inheritdoc />
     public void Dispose() {
@@ -177,5 +170,34 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
         _ = (m_thread?.Join(millisecondsTimeout: 500));
 
         m_cancellation.Dispose();
+    }
+    /// <inheritdoc />
+    public void Start(IGamepadConnectionRegistry registry) {
+        ArgumentNullException.ThrowIfNull(registry);
+
+        // Idempotent: only the first Start spins the poll thread.
+        if (uint.MinValue != Interlocked.CompareExchange(
+            comparand: 0,
+            location1: ref m_started,
+            value: 1
+        )) {
+            return;
+        }
+
+        // XInput ships on Windows 8+; do nothing (no Xbox support) elsewhere.
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            major: 6,
+            minor: 2,
+            build: 0
+        )) {
+            return;
+        }
+
+        m_registry = registry;
+        m_thread = new Thread(start: () => RunXInputLoop(cancellationToken: m_cancellation.Token)) {
+            IsBackground = true,
+            Name = "Puck.Input XInput Poll",
+        };
+        m_thread.Start();
     }
 }

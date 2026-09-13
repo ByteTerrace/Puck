@@ -30,68 +30,14 @@ internal sealed class WatchpointAccessPcStage : IPostStage<PostContext> {
     private static readonly byte[] Program = [0x3E, WriteValue, 0xEA, 0x60, 0xC0, 0xFA, 0x50, 0xC0, 0x18, 0xFE];
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "watchpoint-access-pc";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
-
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        var legs = new (string Mode, Action<MachineInstance> Advance)[] {
-            ("continuous", static instance => instance.Machine.Run(tCycles: 256)),
-            ("frame", static instance => instance.Machine.Run(tCycles: PostMachine.TCyclesPerFrame)),
-            ("step", static instance => RunSteps(
-            count: 2,
-            instance: instance
-        )),
-            ("until", static instance => RunUntil(
-            instance: instance,
-            target: LoopPc
-        )),
-        };
-
-        foreach (var (mode, advance) in legs) {
-            if (RunLeg(
-                advance: advance,
-                expectedIsWrite: true,
-                expectedPc: WriteInstructionPc,
-                expectedValue: WriteValue,
-                mode: mode,
-                read: false,
-                watchAddress: WriteWatchAddress,
-                write: true
-            ) is { } writeFailure) {
-                return PostStageOutcome.Fail(detail: writeFailure);
-            }
-
-            // "step" only needs 2 steps to reach the WRITE; the READ is the 3rd instruction, so its own leg needs one more.
-            var readAdvance = ((mode == "step")
-                ? (static instance => RunSteps(
-                count: 3,
-                instance: instance
-            ))
-                : advance);
-
-            if (RunLeg(
-                advance: readAdvance,
-                expectedIsWrite: false,
-                expectedPc: ReadInstructionPc,
-                expectedValue: ReadValue,
-                mode: mode,
-                read: true,
-                watchAddress: ReadWatchAddress,
-                write: false
-            ) is { } readFailure) {
-                return PostStageOutcome.Fail(detail: readFailure);
-            }
-        }
-
-        return PostStageOutcome.Pass(detail: $"{legs.Length} execution modes (continuous/frame/step/until) x 2 access kinds (read/write) all report the accessing instruction's PC (write=0x{WriteInstructionPc:X4}, read=0x{ReadInstructionPc:X4}), not the CPU's post-advance PC");
-    }
 
     private static string? RunLeg(string mode, bool read, bool write, ushort watchAddress, ushort expectedPc, byte expectedValue, bool expectedIsWrite, Action<MachineInstance> advance) {
         var rom = new byte[0x8000];
@@ -171,5 +117,60 @@ internal sealed class WatchpointAccessPcStage : IPostStage<PostContext> {
         while (cpu.ProgramCounter != target) {
             instance.Machine.StepInstruction();
         }
+    }
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        var legs = new (string Mode, Action<MachineInstance> Advance)[] {
+            ("continuous", static instance => instance.Machine.Run(tCycles: 256)),
+            ("frame", static instance => instance.Machine.Run(tCycles: PostMachine.TCyclesPerFrame)),
+            ("step", static instance => RunSteps(
+            count: 2,
+            instance: instance
+        )),
+            ("until", static instance => RunUntil(
+            instance: instance,
+            target: LoopPc
+        )),
+        };
+
+        foreach (var (mode, advance) in legs) {
+            if (RunLeg(
+                advance: advance,
+                expectedIsWrite: true,
+                expectedPc: WriteInstructionPc,
+                expectedValue: WriteValue,
+                mode: mode,
+                read: false,
+                watchAddress: WriteWatchAddress,
+                write: true
+            ) is { } writeFailure) {
+                return PostStageOutcome.Fail(detail: writeFailure);
+            }
+
+            // "step" only needs 2 steps to reach the WRITE; the READ is the 3rd instruction, so its own leg needs one more.
+            var readAdvance = ((mode == "step")
+                ? (static instance => RunSteps(
+                    count: 3,
+                    instance: instance
+                ))
+                : advance
+            );
+
+            if (RunLeg(
+                advance: readAdvance,
+                expectedIsWrite: false,
+                expectedPc: ReadInstructionPc,
+                expectedValue: ReadValue,
+                mode: mode,
+                read: true,
+                watchAddress: ReadWatchAddress,
+                write: false
+            ) is { } readFailure) {
+                return PostStageOutcome.Fail(detail: readFailure);
+            }
+        }
+
+        return PostStageOutcome.Pass(detail: $"{legs.Length} execution modes (continuous/frame/step/until) x 2 access kinds (read/write) all report the accessing instruction's PC (write=0x{WriteInstructionPc:X4}, read=0x{ReadInstructionPc:X4}), not the CPU's post-advance PC");
     }
 }

@@ -24,23 +24,23 @@ public enum UnitDimension {
 /// document vocabulary contributes only its own classification (which of ITS fields is a time) and never a second
 /// copy of the arithmetic.</summary>
 public static class UnitConversion {
-    private static readonly string[] s_degreesUnits = ["deg"];
-    private static readonly string[] s_radiansUnits = ["deg", "rad"];
-    private static readonly string[] s_secondsUnits = ["s", "ms"];
-    private static readonly string[] s_metersUnits = ["m", "cm", "mm"];
-    private static readonly string[] s_hertzUnits = ["hz"];
-    private static readonly string[] s_fractionUnits = ["%", "pct"];
+    private static readonly string[] DegreesUnits = ["deg"];
+    private static readonly string[] FractionUnits = ["%", "pct"];
+    private static readonly string[] HertzUnits = ["hz"];
+    private static readonly string[] MetersUnits = ["m", "cm", "mm"];
+    private static readonly string[] RadiansUnits = ["deg", "rad"];
+    private static readonly string[] SecondsUnits = ["s", "ms"];
 
     /// <summary>Returns the unit spellings <paramref name="dimension"/> accepts, for a diagnostic message.</summary>
     /// <param name="dimension">The dimension to describe.</param>
     /// <returns>The accepted spellings, or an empty array for <see cref="UnitDimension.None"/>.</returns>
     public static string[] AcceptedUnits(UnitDimension dimension) => dimension switch {
-        UnitDimension.Degrees => s_degreesUnits,
-        UnitDimension.Radians => s_radiansUnits,
-        UnitDimension.Seconds => s_secondsUnits,
-        UnitDimension.Meters => s_metersUnits,
-        UnitDimension.Hertz => s_hertzUnits,
-        UnitDimension.Fraction => s_fractionUnits,
+        UnitDimension.Degrees => DegreesUnits,
+        UnitDimension.Radians => RadiansUnits,
+        UnitDimension.Seconds => SecondsUnits,
+        UnitDimension.Meters => MetersUnits,
+        UnitDimension.Hertz => HertzUnits,
+        UnitDimension.Fraction => FractionUnits,
         _ => [],
     };
     /// <summary>Converts a number carrying a unit suffix into <paramref name="dimension"/>'s native unit.</summary>
@@ -68,7 +68,10 @@ public static class UnitConversion {
 
             case UnitDimension.Radians:
                 if (lowerUnit == "deg") {
-                    converted = Math.Round(value: ((numericValue * Math.PI) / 180.0), digits: 6);
+                    converted = Math.Round(
+                        digits: 6,
+                        value: ((numericValue * Math.PI) / 180.0)
+                    );
 
                     return true;
                 }

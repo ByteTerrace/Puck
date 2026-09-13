@@ -108,10 +108,12 @@ internal static partial class Sm83SstVectorFile {
             var entry = entries[index];
             var address = ((entry[0].ValueKind == JsonValueKind.Number)
                 ? (ushort?)entry[0].GetUInt16()
-                : null);
+                : null
+            );
             var data = ((entry[1].ValueKind == JsonValueKind.Number)
                 ? (byte?)entry[1].GetByte()
-                : null);
+                : null
+            );
             var flags = (entry[2].GetString() ?? string.Empty);
 
             cycles[index] = new Sm83SstCycle(

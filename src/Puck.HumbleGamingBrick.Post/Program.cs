@@ -8,7 +8,11 @@ using Puck.HumbleGamingBrick.Post;
 // --accept-regressions, --accept-shrink, --accept-candidate, --require-assets). Every run writes its candidate ledger
 // beside its report; accepting it is a file copy under the refusal rules, never a second run.
 
-if (!CommandLineArguments.TryValidateValues(args: args, names: ["--corpus-cache"], error: out var optionError)) {
+if (!CommandLineArguments.TryValidateValues(
+    args: args,
+    error: out var optionError,
+    names: ["--corpus-cache"]
+)) {
     Console.Error.WriteLine(value: optionError);
     return 2;
 }
@@ -49,8 +53,13 @@ var parallelism = int.Parse(
         name: "--parallelism"
     ) ?? "0")
 );
-var corpora = CorpusManifest.Load(path: CorpusManifest.InRepository(projectName: "Puck.HumbleGamingBrick.Post"), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
-
+var corpora = CorpusManifest.Load(
+    path: CorpusManifest.InRepository(projectName: "Puck.HumbleGamingBrick.Post"),
+    cacheRoot: CommandLineArguments.Value(
+        args: args,
+        name: "--corpus-cache"
+    )
+);
 // --fetch-corpora fills the local cache from the manifest's pinned archives and exits; a build agent runs it once per
 // cache key, a developer once per version bump.
 if (args.Contains(
@@ -61,7 +70,6 @@ if (args.Contains(
 
     return 0;
 }
-
 var testRomRoot = corpora.Resolve(
     args: args,
     flag: "--roms",
@@ -103,7 +111,6 @@ var candidatePath = CommandLineArguments.Value(
 );
 var ledgerPath = ExpectationsLedger.ResolvePath();
 var existing = ExpectationsLedger.Load(path: ledgerPath);
-
 // --accept-candidate takes a candidate a previous run (this machine's or a build agent's) wrote, and applies the same
 // refusal rules an in-run --accept does, with no battery run at all.
 if (candidatePath is not null) {
@@ -116,12 +123,11 @@ if (candidatePath is not null) {
     candidateDelta.Print();
 
     return Accept(
+        blockers: [],
         candidate: loaded,
-        delta: candidateDelta,
-        blockers: []
+        delta: candidateDelta
     );
 }
-
 var stages = PostStages.Create()
     .Where(predicate: stage => PostStageFilters.TierMatches(
     stage: stage,
@@ -147,9 +153,7 @@ var report = new PostBattery<PostContext>(
     banner: "Puck.HumbleGamingBrick.Post - HumbleGamingBrick machine power-on self-test",
     stages: stages
 ).Run(context: context);
-
 report.Write(artifactsDirectory: artifactsDirectory);
-
 var candidate = LedgerAcceptance.BuildCandidate(
     existing: existing,
     measurements: context.Measurements
@@ -162,7 +166,6 @@ var candidateFile = Path.Combine(
     path1: artifactsDirectory,
     path2: "Expectations.candidate.json"
 );
-
 ExpectationsLedger.Save(
     entries: candidate.Values,
     path: candidateFile
@@ -171,44 +174,40 @@ delta.Print();
 Console.Out.WriteLine(value: (delta.IsEmpty
     ? $"Candidate ledger matches {ledgerPath} ({candidate.Count} rows); written to {candidateFile}"
     : $"Candidate ledger written to {candidateFile}: {delta.Ratcheted.Count} ratcheted, {delta.Regressed.Count} regressed, {delta.Dropped.Count} dropped, {delta.Added.Count} added"));
-
 if (!accept) {
     return report.ExitCode;
 }
-
 var blockers = new List<string>();
 var infraStages = report.Results
     .Where(predicate: static result => (result.Outcome.Verdict == PostVerdict.Infra))
     .Select(selector: static result => result.Name)
     .ToArray();
-
 if (infraStages.Length > 0) {
-    blockers.Add(item: $"{infraStages.Length} stage(s) ended in infrastructure failure ({string.Join(separator: ", ", values: infraStages)})");
+    blockers.Add(item: $"{infraStages.Length} stage(s) ended in infrastructure failure ({string.Join(
+        separator: ", ",
+        values: infraStages
+    )})");
 }
-
 var erroredCases = report.Results
     .Where(predicate: static result => (result.Outcome.Cases is not null))
     .Sum(selector: static result => result.Outcome.Cases!.Count(predicate: static item => (item.Verdict == PostCaseVerdict.Error)));
-
 if (erroredCases > 0) {
     blockers.Add(item: $"{erroredCases} case(s) could not be measured");
 }
-
 var acceptExit = Accept(
+    blockers: blockers,
     candidate: candidate,
-    delta: delta,
-    blockers: blockers
+    delta: delta
 );
-
 return ((acceptExit == 0)
     ? 0
-    : acceptExit);
-
+    : acceptExit
+);
 static string? ExistingFile(string? path) =>
     (((path is not null) && File.Exists(path: path))
         ? path
-        : null);
-
+        : null
+    );
 int Accept(IReadOnlyDictionary<(string Suite, string Path, string Model), LedgerEntry> candidate, LedgerAcceptance.Delta delta, IReadOnlyList<string> blockers) {
     var refusals = LedgerAcceptance.Refusals(
         acceptRegressions: acceptRegressions,
@@ -218,7 +217,10 @@ int Accept(IReadOnlyDictionary<(string Suite, string Path, string Model), Ledger
     );
 
     if (refusals.Count > 0) {
-        Console.Error.WriteLine(value: $"accept refused: {string.Join(separator: "; ", values: refusals)}.");
+        Console.Error.WriteLine(value: $"accept refused: {string.Join(
+            separator: "; ",
+            values: refusals
+        )}.");
 
         return 2;
     }

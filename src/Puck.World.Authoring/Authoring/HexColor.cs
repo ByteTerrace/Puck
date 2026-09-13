@@ -15,6 +15,50 @@ public static class HexColor {
     /// KEEP IN SYNC with the HUD state-binding prefix in <c>Puck.World.HudBindingVocabulary</c>.</summary>
     public const string StateBindingPrefix = "state.";
 
+    /// <summary>Formats an RGB triple (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string.</summary>
+    /// <param name="rgb">The RGB color.</param>
+    /// <returns>The <c>#RRGGBB</c> string.</returns>
+    public static string Format(Vector3 rgb) =>
+        string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"#{((int)MathF.Round(x: (Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: rgb.X
+            ) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: rgb.Y
+            ) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: rgb.Z
+            ) * 255f))):X2}"
+        );
+    /// <summary>Formats an RGBA quad (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string when
+    /// opaque, else <c>#RRGGBBAA</c> — the baked-alpha form a theme token authors when it carries partial
+    /// transparency.</summary>
+    /// <param name="rgba">The RGBA color.</param>
+    /// <returns>The <c>#RRGGBB</c>/<c>#RRGGBBAA</c> string.</returns>
+    public static string FormatRgba(Vector4 rgba) {
+        var rgb = Format(rgb: new Vector3(
+            x: rgba.X,
+            y: rgba.Y,
+            z: rgba.Z
+        ));
+
+        return ((rgba.W >= 1f)
+            ? rgb
+            : string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{rgb}{((int)MathF.Round(x: (Math.Clamp(
+                    max: 1f,
+                    min: 0f,
+                    value: rgba.W
+                ) * 255f))):X2}"
+            )
+        );
+    }
     /// <summary>Returns whether a value has the state-binding shape: the prefix followed by at least one character.</summary>
     /// <param name="value">The candidate string.</param>
     public static bool IsStateBinding(string? value) =>
@@ -24,14 +68,6 @@ public static class HexColor {
             comparisonType: StringComparison.Ordinal,
             value: StateBindingPrefix
         ));
-    /// <summary>Formats an RGB triple (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string.</summary>
-    /// <param name="rgb">The RGB color.</param>
-    /// <returns>The <c>#RRGGBB</c> string.</returns>
-    public static string Format(Vector3 rgb) =>
-        string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"#{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.X) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.Y) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.Z) * 255f))):X2}"
-        );
     /// <summary>Parses a <c>#RRGGBB</c> string, falling back when it does not parse.</summary>
     /// <param name="value">The <c>#RRGGBB</c> string.</param>
     /// <param name="fallback">The RGB color returned when <paramref name="value"/> does not parse.</param>
@@ -42,7 +78,21 @@ public static class HexColor {
             value: value
         )
             ? rgb
-            : fallback);
+            : fallback
+        );
+    /// <summary>Parses a <c>#RRGGBB</c> (opaque) or <c>#RRGGBBAA</c> (baked-alpha) string, falling back when it does
+    /// not parse.</summary>
+    /// <param name="value">The candidate string.</param>
+    /// <param name="fallback">The RGBA color returned when <paramref name="value"/> does not parse.</param>
+    /// <returns>The RGBA color.</returns>
+    public static Vector4 ParseRgba(string? value, Vector4 fallback) =>
+        (TryParseRgba(
+            rgba: out var rgba,
+            value: value
+        )
+            ? rgba
+            : fallback
+        );
     /// <summary>Parses a <c>#RRGGBB</c> string (exactly seven characters, hex digits in either case).</summary>
     /// <param name="value">The candidate string.</param>
     /// <param name="rgb">The RGB color, each component in <c>[0, 1]</c>.</param>
@@ -52,11 +102,11 @@ public static class HexColor {
             (value is { Length: 7 }) &&
             (value[0] == '#') &&
             int.TryParse(
-                s: value.AsSpan(start: 1),
-                style: NumberStyles.HexNumber,
-                provider: CultureInfo.InvariantCulture,
-                result: out var packed
-            )
+            s: value.AsSpan(start: 1),
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out var packed
+        )
         ) {
             rgb = new Vector3(
                 x: (((packed >> 16) & 0xff) / 255f),
@@ -71,34 +121,6 @@ public static class HexColor {
 
         return false;
     }
-    /// <summary>Formats an RGBA quad (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string when
-    /// opaque, else <c>#RRGGBBAA</c> — the baked-alpha form a theme token authors when it carries partial
-    /// transparency.</summary>
-    /// <param name="rgba">The RGBA color.</param>
-    /// <returns>The <c>#RRGGBB</c>/<c>#RRGGBBAA</c> string.</returns>
-    public static string FormatRgba(Vector4 rgba) {
-        var rgb = Format(rgb: new Vector3(x: rgba.X, y: rgba.Y, z: rgba.Z));
-
-        return ((rgba.W >= 1f)
-            ? rgb
-            : string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{rgb}{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgba.W) * 255f))):X2}"
-            )
-        );
-    }
-    /// <summary>Parses a <c>#RRGGBB</c> (opaque) or <c>#RRGGBBAA</c> (baked-alpha) string, falling back when it does
-    /// not parse.</summary>
-    /// <param name="value">The candidate string.</param>
-    /// <param name="fallback">The RGBA color returned when <paramref name="value"/> does not parse.</param>
-    /// <returns>The RGBA color.</returns>
-    public static Vector4 ParseRgba(string? value, Vector4 fallback) =>
-        (TryParseRgba(
-            rgba: out var rgba,
-            value: value
-        )
-            ? rgba
-            : fallback);
     /// <summary>Parses a <c>#RRGGBB</c> (opaque, alpha 1) or <c>#RRGGBBAA</c> (baked-alpha) string.</summary>
     /// <param name="value">The candidate string.</param>
     /// <param name="rgba">The RGBA color, each component in <c>[0, 1]</c>.</param>
@@ -123,23 +145,23 @@ public static class HexColor {
             (value is { Length: 9 }) &&
             (value[0] == '#') &&
             int.TryParse(
-                s: value.AsSpan(
-                    length: 6,
-                    start: 1
-                ),
-                style: NumberStyles.HexNumber,
-                provider: CultureInfo.InvariantCulture,
-                result: out var packed
-            ) &&
+            s: value.AsSpan(
+                length: 6,
+                start: 1
+            ),
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out var packed
+        ) &&
             int.TryParse(
-                s: value.AsSpan(
-                    length: 2,
-                    start: 7
-                ),
-                style: NumberStyles.HexNumber,
-                provider: CultureInfo.InvariantCulture,
-                result: out var alpha
-            )
+            s: value.AsSpan(
+                length: 2,
+                start: 7
+            ),
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out var alpha
+        )
         ) {
             rgba = new Vector4(
                 w: (alpha / 255f),

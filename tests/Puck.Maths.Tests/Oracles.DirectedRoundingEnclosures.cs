@@ -60,7 +60,10 @@ internal static partial class Oracles {
     public static Enclosure Pi(int bitCount) =>
         ((bitCount == ArcTangentBitCount)
             ? ArcTangentPi
-            : ((bitCount == AngleBitCount) ? AnglePi : MachinPi(bitCount: bitCount)));
+            : ((bitCount == AngleBitCount)
+                ? AnglePi
+                : MachinPi(bitCount: bitCount)
+        ));
     /// <summary>Rounds the exact rational <c>numerator·2^shift / denominator</c> to the nearest raw, ties to even, then
     /// wraps to the signed 64-bit carrier — the reference for a fixed-point division.</summary>
     /// <param name="numerator">The dividend.</param>
@@ -73,21 +76,30 @@ internal static partial class Oracles {
     /// against <c>d</c> — the formulation the carrier cannot use, because <c>2r</c> would overflow it — and wraps the
     /// exact signed value once at the end.</remarks>
     public static long RoundDyadicRatio(BigInteger numerator, BigInteger denominator, int shift) =>
-        WrapToRaw(value: RoundRationalTiesToEven(denominator: denominator, numerator: (numerator << shift)));
+        WrapToRaw(value: RoundRationalTiesToEven(
+            denominator: denominator,
+            numerator: (numerator << shift)
+        ));
     /// <summary>The exact rounded fixed-point product as an UNWRAPPED integer — what the checked multiplication must
     /// return, and what its range verdict is decided by.</summary>
     /// <param name="a">The multiplicand's raw.</param>
     /// <param name="b">The multiplier's raw.</param>
     /// <returns>The rounded product, unwrapped.</returns>
     public static BigInteger ExactRoundedProduct(long a, long b) =>
-        RoundRationalTiesToEven(numerator: (((BigInteger)a) * b), denominator: (BigInteger.One << 16));
+        RoundRationalTiesToEven(
+            numerator: (((BigInteger)a) * b),
+            denominator: (BigInteger.One << 16)
+        );
     /// <summary>The exact rounded fixed-point quotient as an UNWRAPPED integer — the checked division's counterpart to
     /// <see cref="ExactRoundedProduct"/>.</summary>
     /// <param name="a">The dividend's raw.</param>
     /// <param name="b">The divisor's raw, which must be non-zero.</param>
     /// <returns>The rounded quotient, unwrapped.</returns>
     public static BigInteger ExactRoundedRatio(long a, long b) =>
-        RoundRationalTiesToEven(numerator: (((BigInteger)a) << 16), denominator: new BigInteger(value: b));
+        RoundRationalTiesToEven(
+            numerator: (((BigInteger)a) << 16),
+            denominator: new BigInteger(value: b)
+        );
     /// <summary>The exact integer square root <c>⌊√value⌋</c>, by a bit-length seed and Newton descent in
     /// <see cref="BigInteger"/>, settled by the exact predicate <c>r² ≤ value &lt; (r+1)²</c>.</summary>
     /// <param name="value">The radicand; a non-positive value roots to zero.</param>
@@ -169,8 +181,16 @@ internal static partial class Oracles {
         var denominator = ((((BigInteger)br) * br) + (((BigInteger)bi) * bi));
 
         return (
-            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)ar) * br) + (((BigInteger)ai) * bi)), shift: 16),
-            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)ai) * br) - (((BigInteger)ar) * bi)), shift: 16)
+            RoundDyadicRatio(
+            denominator: denominator,
+            numerator: ((((BigInteger)ar) * br) + (((BigInteger)ai) * bi)),
+            shift: 16
+        ),
+            RoundDyadicRatio(
+            denominator: denominator,
+            numerator: ((((BigInteger)ai) * br) - (((BigInteger)ar) * bi)),
+            shift: 16
+        )
         );
     }
     /// <summary>The reference split-complex quotient — <c>left·conj(right)/(c² − d²)</c>, each component ONE
@@ -187,8 +207,16 @@ internal static partial class Oracles {
         var denominator = ((((BigInteger)bu) * bu) - (((BigInteger)bv) * bv));
 
         return (
-            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)au) * bu) - (((BigInteger)av) * bv)), shift: 16),
-            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)av) * bu) - (((BigInteger)au) * bv)), shift: 16)
+            RoundDyadicRatio(
+            denominator: denominator,
+            numerator: ((((BigInteger)au) * bu) - (((BigInteger)av) * bv)),
+            shift: 16
+        ),
+            RoundDyadicRatio(
+            denominator: denominator,
+            numerator: ((((BigInteger)av) * bu) - (((BigInteger)au) * bv)),
+            shift: 16
+        )
         );
     }
     /// <summary>The first lane at which a returned unit direction is farther than <paramref name="tolerance"/> raws from
@@ -225,8 +253,16 @@ internal static partial class Oracles {
             var high = (new BigInteger(value: unit[lane]) + tolerance);
 
             // low·√S ≤ cᵢ·2¹⁶ ≤ high·√S, the second written as (−high)·√S ≤ −cᵢ·2¹⁶ so one comparison shape serves both.
-            if (!SurdAtMost(bound: scaled, coefficient: low, radicand: squaredSum)) { return lane; }
-            if (!SurdAtMost(bound: -scaled, coefficient: -high, radicand: squaredSum)) { return lane; }
+            if (!SurdAtMost(
+                bound: scaled,
+                coefficient: low,
+                radicand: squaredSum
+            )) { return lane; }
+            if (!SurdAtMost(
+                bound: -scaled,
+                coefficient: -high,
+                radicand: squaredSum
+            )) { return lane; }
         }
 
         return -1;
@@ -245,7 +281,11 @@ internal static partial class Oracles {
     /// <c>e₁² = e₃² = −e₀</c> and <c>e₂e₃ = +e₁</c>.</remarks>
     public static void CayleyDicksonProduct(ReadOnlySpan<long> left, ReadOnlySpan<long> right, int floors, int shift, Span<long> result) =>
         TwistedGroupProduct(
-            chargeSource: (first, second) => CayleyDicksonCharge(floors: floors, leftIndex: first, rightIndex: second),
+            chargeSource: (first, second) => CayleyDicksonCharge(
+                floors: floors,
+                leftIndex: first,
+                rightIndex: second
+            ),
             left: left,
             right: right,
             shift: shift,
@@ -268,16 +308,32 @@ internal static partial class Oracles {
 
             for (var first = 0; (first < width); ++first) {
                 var second = first ^ target;
-                var charge = CayleyDicksonCharge(floors: floors, leftIndex: first, rightIndex: second);
+                var charge = CayleyDicksonCharge(
+                    floors: floors,
+                    leftIndex: first,
+                    rightIndex: second
+                );
                 var realTerm = (((BigInteger)left[first]) * right[second]);
                 var dualTerm = ((((BigInteger)left[first]) * right[(width + second)]) + (((BigInteger)left[(width + first)]) * right[second]));
 
-                real += ((charge > 0) ? realTerm : -realTerm);
-                dual += ((charge > 0) ? dualTerm : -dualTerm);
+                real += ((charge > 0)
+                    ? realTerm
+                    : -realTerm
+                );
+                dual += ((charge > 0)
+                    ? dualTerm
+                    : -dualTerm
+                );
             }
 
-            result[target] = RoundDyadic(exact: real, shift: shift);
-            result[(width + target)] = RoundDyadic(exact: dual, shift: shift);
+            result[target] = RoundDyadic(
+                exact: real,
+                shift: shift
+            );
+            result[(width + target)] = RoundDyadic(
+                exact: dual,
+                shift: shift
+            );
         }
     }
     /// <summary>The reference dual product over a carrier that is NOT a house type: the generic path forms the carrier
@@ -289,9 +345,30 @@ internal static partial class Oracles {
     /// <param name="right">The multiplier, same layout.</param>
     /// <param name="result">The destination, same layout.</param>
     public static void DualOverQuadraticProduct(long pRaw, long qRaw, ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        var real = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: left[0], v1: left[1], u2: right[0], v2: right[1]);
-        var crossed = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: left[0], v1: left[1], u2: right[2], v2: right[3]);
-        var seeded = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: left[2], v1: left[3], u2: right[0], v2: right[1]);
+        var real = QuadraticMultiply(
+            pRaw: pRaw,
+            qRaw: qRaw,
+            u1: left[0],
+            v1: left[1],
+            u2: right[0],
+            v2: right[1]
+        );
+        var crossed = QuadraticMultiply(
+            pRaw: pRaw,
+            qRaw: qRaw,
+            u1: left[0],
+            v1: left[1],
+            u2: right[2],
+            v2: right[3]
+        );
+        var seeded = QuadraticMultiply(
+            pRaw: pRaw,
+            qRaw: qRaw,
+            u1: left[2],
+            v1: left[3],
+            u2: right[0],
+            v2: right[1]
+        );
 
         result[0] = real.U;
         result[1] = real.V;
@@ -308,7 +385,10 @@ internal static partial class Oracles {
 
         for (var lane = 0; (lane < left.Length); ++lane) { exact += (((BigInteger)left[lane]) * right[lane]); }
 
-        return RoundDyadic(exact: exact, shift: shift);
+        return RoundDyadic(
+            exact: exact,
+            shift: shift
+        );
     }
     /// <summary>The reference rotation sandwich <c>v' = v + 2·u×(u×v + w·v)</c> over the fixed-point carrier: each of the
     /// two stages accumulates its exact product sum and rounds ONCE per component, and the final combination wraps.</summary>
@@ -324,12 +404,30 @@ internal static partial class Oracles {
     public static void QuaternionSandwich(ReadOnlySpan<long> rotation, ReadOnlySpan<long> vector, int shift, Span<long> result) {
         var (ux, uy, uz, w) = (((BigInteger)rotation[0]), ((BigInteger)rotation[1]), ((BigInteger)rotation[2]), ((BigInteger)rotation[3]));
         var (vx, vy, vz) = (((BigInteger)vector[0]), ((BigInteger)vector[1]), ((BigInteger)vector[2]));
-        var tx = new BigInteger(value: RoundDyadic(exact: (((uy * vz) - (uz * vy)) + (w * vx)), shift: shift));
-        var ty = new BigInteger(value: RoundDyadic(exact: (((uz * vx) - (ux * vz)) + (w * vy)), shift: shift));
-        var tz = new BigInteger(value: RoundDyadic(exact: (((ux * vy) - (uy * vx)) + (w * vz)), shift: shift));
-        var dx = new BigInteger(value: RoundDyadic(exact: ((uy * tz) - (uz * ty)), shift: shift));
-        var dy = new BigInteger(value: RoundDyadic(exact: ((uz * tx) - (ux * tz)), shift: shift));
-        var dz = new BigInteger(value: RoundDyadic(exact: ((ux * ty) - (uy * tx)), shift: shift));
+        var tx = new BigInteger(value: RoundDyadic(
+            exact: (((uy * vz) - (uz * vy)) + (w * vx)),
+            shift: shift
+        ));
+        var ty = new BigInteger(value: RoundDyadic(
+            exact: (((uz * vx) - (ux * vz)) + (w * vy)),
+            shift: shift
+        ));
+        var tz = new BigInteger(value: RoundDyadic(
+            exact: (((ux * vy) - (uy * vx)) + (w * vz)),
+            shift: shift
+        ));
+        var dx = new BigInteger(value: RoundDyadic(
+            exact: ((uy * tz) - (uz * ty)),
+            shift: shift
+        ));
+        var dy = new BigInteger(value: RoundDyadic(
+            exact: ((uz * tx) - (ux * tz)),
+            shift: shift
+        ));
+        var dz = new BigInteger(value: RoundDyadic(
+            exact: ((ux * ty) - (uy * tx)),
+            shift: shift
+        ));
 
         result[0] = WrapToRaw(value: (vx + (dx << 1)));
         result[1] = WrapToRaw(value: (vy + (dy << 1)));
@@ -348,7 +446,10 @@ internal static partial class Oracles {
     /// reference never reproduces the subject's <c>carry &lt;&lt; 36</c> two's-complement congruence; it judges it.</remarks>
     public static (BigInteger Cell, BigInteger LocalRaw) CellSplit(BigInteger cell, BigInteger localRaw, int cellRawLog2) {
         var span = (BigInteger.One << cellRawLog2);
-        var carry = FloorQuotient(denominator: span, numerator: (localRaw + (span >> 1)));
+        var carry = FloorQuotient(
+            denominator: span,
+            numerator: (localRaw + (span >> 1))
+        );
 
         return ((cell + carry), (localRaw - (carry * span)));
     }
@@ -393,7 +494,10 @@ internal static partial class Oracles {
         for (var step = 0; (step < rateRaws.Length); ++step) {
             var numerator = ((new BigInteger(value: rateRaws[step]) * new BigInteger(value: elapsedTicks[step])) + remainder);
             var magnitude = BigInteger.Abs(value: numerator);
-            var quotient = BigInteger.Divide(dividend: magnitude, divisor: denominator);
+            var quotient = BigInteger.Divide(
+                dividend: magnitude,
+                divisor: denominator
+            );
 
             if (numerator.Sign < 0) { quotient = -quotient; }
 
@@ -424,7 +528,13 @@ internal static partial class Oracles {
         conjugate[2] = WrapToRaw(value: -new BigInteger(value: value[2]));
         conjugate[3] = WrapToRaw(value: -new BigInteger(value: value[3]));
 
-        CayleyDicksonProduct(left: value[4..8], right: conjugate, floors: 2, shift: shift, result: product);
+        CayleyDicksonProduct(
+            left: value[4..8],
+            right: conjugate,
+            floors: 2,
+            shift: shift,
+            result: product
+        );
 
         result[0] = WrapToRaw(value: (new BigInteger(value: product[1]) << 1));
         result[1] = WrapToRaw(value: (new BigInteger(value: product[2]) << 1));
@@ -444,8 +554,17 @@ internal static partial class Oracles {
         Span<long> rotated = stackalloc long[3];
         Span<long> translation = stackalloc long[4];
 
-        QuaternionSandwich(result: rotated, rotation: rotation, shift: shift, vector: point);
-        RigidTranslation(result: translation, shift: shift, value: value);
+        QuaternionSandwich(
+            result: rotated,
+            rotation: rotation,
+            shift: shift,
+            vector: point
+        );
+        RigidTranslation(
+            result: translation,
+            shift: shift,
+            value: value
+        );
 
         for (var lane = 0; (lane < 3); ++lane) {
             result[lane] = WrapToRaw(value: (new BigInteger(value: rotated[lane]) + translation[lane]));
@@ -455,9 +574,15 @@ internal static partial class Oracles {
     // coefficient·√radicand ≤ bound, exactly: the signs are read off first so the single squaring never flips the
     // inequality. The radicand is non-negative by construction.
     private static bool SurdAtMost(BigInteger coefficient, BigInteger radicand, BigInteger bound) {
-        if (coefficient.Sign <= 0) { return ((bound.Sign >= 0) || (((coefficient * coefficient) * radicand) >= (bound * bound))); }
+        if (coefficient.Sign <= 0) { return (
+            (bound.Sign >= 0) ||
+            (((coefficient * coefficient) * radicand) >= (bound * bound))
+        ); }
 
-        return ((bound.Sign > 0) && (((coefficient * coefficient) * radicand) <= (bound * bound)));
+        return (
+            (bound.Sign > 0) &&
+            (((coefficient * coefficient) * radicand) <= (bound * bound))
+        );
     }
 
     /// <summary>The exact decimal expansion of the SIGNED dyadic rational <c>value / 2^shift</c>, rendered
@@ -470,8 +595,15 @@ internal static partial class Oracles {
     /// <c>n/2ˢ == (n·5ˢ)/10ˢ</c>, deliberately unlike any digit-at-a-time renderer.</remarks>
     public static string ExactDyadicDecimalSigned(BigInteger value, int shift) =>
         ((value.Sign < 0)
-            ? ("-" + ExactDyadicDecimal(numerator: -value, shift: shift))
-            : ExactDyadicDecimal(numerator: value, shift: shift));
+            ? ("-" + ExactDyadicDecimal(
+                numerator: -value,
+                shift: shift
+            ))
+            : ExactDyadicDecimal(
+                numerator: value,
+                shift: shift
+            )
+        );
     /// <summary>Quantizes the exact decimal literal <c>numerator / 10^decimalExponent</c> onto the <c>2^shift</c> grid:
     /// ONE ties-to-even rounding of the exact rational <c>numerator·2^shift / 10^decimalExponent</c>, plus the verdict
     /// of the ASYMMETRIC signed range <c>[−2⁶³, 2⁶³ − 1]</c>.</summary>
@@ -486,11 +618,16 @@ internal static partial class Oracles {
     public static (bool InRange, long Raw) DecimalToRaw(BigInteger numerator, int decimalExponent, int shift) {
         var exact = RoundRationalTiesToEven(
             numerator: (numerator << shift),
-            denominator: BigInteger.Pow(value: new BigInteger(value: 10), exponent: decimalExponent)
+            denominator: BigInteger.Pow(
+                value: new BigInteger(value: 10),
+                exponent: decimalExponent
+            )
         );
         var inRange = ((exact >= long.MinValue) && (exact <= long.MaxValue));
 
-        return (inRange, (inRange ? ((long)exact) : 0L));
+        return (inRange, (inRange
+            ? ((long)exact)
+            : 0L));
     }
     /// <summary>An enclosure of <c>log₂(raw / 2¹⁶) · 2^(16 + guardBitCount)</c> for a positive raw.</summary>
     /// <param name="raw">The subject's raw, which must be positive.</param>
@@ -515,7 +652,10 @@ internal static partial class Oracles {
 
         for (var bit = 1; (bit <= LogFractionBitCount); ++bit) {
             lowState = ((lowState * lowState) >> SeriesBitCount);
-            highState = CeilingShiftRight(shift: SeriesBitCount, value: (highState * highState));
+            highState = CeilingShiftRight(
+                shift: SeriesBitCount,
+                value: (highState * highState)
+            );
 
             if (lowState >= two) {
                 lowFraction += (BigInteger.One << (LogFractionBitCount - bit));
@@ -524,14 +664,20 @@ internal static partial class Oracles {
 
             if (highState >= two) {
                 highFraction += (BigInteger.One << (LogFractionBitCount - bit));
-                highState = CeilingShiftRight(shift: 1, value: highState);
+                highState = CeilingShiftRight(
+                    shift: 1,
+                    value: highState
+                );
             }
         }
 
         var scaled = (integerPart << LogFractionBitCount);
 
         return Rescale(
-            value: new Enclosure(Low: (scaled + lowFraction), High: ((scaled + highFraction) + BigInteger.One)),
+            value: new Enclosure(
+                Low: (scaled + lowFraction),
+                High: ((scaled + highFraction) + BigInteger.One)
+            ),
             fromBitCount: LogFractionBitCount,
             toBitCount: (16 + guardBitCount)
         );
@@ -554,12 +700,18 @@ internal static partial class Oracles {
         for (var level = 1; (level <= exponentBitCount); ++level) {
             if (!(((fraction >> (exponentBitCount - level)) & BigInteger.One)).IsZero) {
                 low = ((low * LowLadder[level]) >> SeriesBitCount);
-                high = CeilingShiftRight(value: (high * HighLadder[level]), shift: SeriesBitCount);
+                high = CeilingShiftRight(
+                    value: (high * HighLadder[level]),
+                    shift: SeriesBitCount
+                );
             }
         }
 
         return Rescale(
-            value: new Enclosure(High: high, Low: low),
+            value: new Enclosure(
+                High: high,
+                Low: low
+            ),
             fromBitCount: SeriesBitCount,
             toBitCount: ((((int)wholePart) + 16) + guardBitCount)
         );
@@ -576,8 +728,14 @@ internal static partial class Oracles {
     /// the mathematical case analysis itself — there is only one atan2 — so the leg names the series as the independent
     /// part.</remarks>
     public static Enclosure EncloseAtan2(long yRaw, long xRaw, int guardBitCount) {
-        if ((0L == yRaw) && (0L == xRaw)) {
-            return new(Low: BigInteger.Zero, High: BigInteger.Zero);
+        if (
+            (0L == yRaw) &&
+            (0L == xRaw)
+        ) {
+            return new(
+                Low: BigInteger.Zero,
+                High: BigInteger.Zero
+            );
         }
 
         var ordinate = BigInteger.Abs(value: new BigInteger(value: yRaw));
@@ -586,17 +744,39 @@ internal static partial class Oracles {
         Enclosure principal;
 
         if (xRaw > 0L) {
-            principal = EncloseArcTangent(bitCount: ArcTangentBitCount, denominator: abscissa, numerator: ordinate);
+            principal = EncloseArcTangent(
+                bitCount: ArcTangentBitCount,
+                denominator: abscissa,
+                numerator: ordinate
+            );
         } else if (0L == xRaw) {
-            principal = new(Low: (circle.Low >> 1), High: CeilingShiftRight(value: circle.High, shift: 1));
+            principal = new(
+                Low: (circle.Low >> 1),
+                High: CeilingShiftRight(
+                    value: circle.High,
+                    shift: 1
+                )
+            );
         } else {
-            var inner = EncloseArcTangent(bitCount: ArcTangentBitCount, denominator: abscissa, numerator: ordinate);
+            var inner = EncloseArcTangent(
+                bitCount: ArcTangentBitCount,
+                denominator: abscissa,
+                numerator: ordinate
+            );
 
-            principal = new(Low: (circle.Low - inner.High), High: (circle.High - inner.Low));
+            principal = new(
+                Low: (circle.Low - inner.High),
+                High: (circle.High - inner.Low)
+            );
         }
 
         return Rescale(
-            value: ((yRaw < 0L) ? new Enclosure(Low: -principal.High, High: -principal.Low) : principal),
+            value: ((yRaw < 0L)
+            ? new Enclosure(
+                    Low: -principal.High,
+                    High: -principal.Low
+                )
+            : principal),
             fromBitCount: ArcTangentBitCount,
             toBitCount: (16 + guardBitCount)
         );
@@ -611,41 +791,74 @@ internal static partial class Oracles {
     /// remainder after thirty terms is bounded by <c>|r|^61/61!</c>. The subject uses Q96 turn reduction and a Q60
     /// quarter-wave table with a local correction; no production constants or evaluation kernel are shared.</remarks>
     public static (Enclosure Sin, Enclosure Cos) EncloseSinCos(long raw, int guardBitCount) =>
-        EncloseSinCosScaled(raw: raw, fractionBitCount: 16, guardBitCount: guardBitCount);
-
+        EncloseSinCosScaled(
+            fractionBitCount: 16,
+            guardBitCount: guardBitCount,
+            raw: raw
+        );
     /// <summary>Encloses sine and cosine of the exact dyadic radian angle, including unsigned Q16 and signed Q17/Q32.</summary>
     public static (Enclosure Sin, Enclosure Cos) EncloseSinCosScaled(BigInteger raw, int fractionBitCount, int guardBitCount) {
         var circle = Pi(bitCount: AngleBitCount);
-        var turn = new Enclosure(Low: (circle.Low << 1), High: (circle.High << 1));
+        var turn = new Enclosure(
+            Low: (circle.Low << 1),
+            High: (circle.High << 1)
+        );
         var theta = (raw << (AngleBitCount - fractionBitCount));
-        var turns = RoundRationalTiesToEven(numerator: theta, denominator: turn.Low);
-        var residual = Residual(theta: theta, turn: turn, turns: turns);
+        var turns = RoundRationalTiesToEven(
+            numerator: theta,
+            denominator: turn.Low
+        );
+        var residual = Residual(
+            theta: theta,
+            turn: turn,
+            turns: turns
+        );
 
         // The reduction constant is known to within a handful of units at this scale, so the rounded turn count is the
         // nearest one except at an unreachable knife edge; the normalisation makes the residual's bound a fact of the
         // code rather than an argument about that edge.
         while (residual.Low > circle.High) {
             turns += BigInteger.One;
-            residual = Residual(theta: theta, turn: turn, turns: turns);
+            residual = Residual(
+                theta: theta,
+                turn: turn,
+                turns: turns
+            );
         }
 
         while (residual.High < -circle.High) {
             turns -= BigInteger.One;
-            residual = Residual(theta: theta, turn: turn, turns: turns);
+            residual = Residual(
+                theta: theta,
+                turn: turn,
+                turns: turns
+            );
         }
 
-        return EncloseTrigResidual(residual: residual, guardBitCount: guardBitCount);
+        return EncloseTrigResidual(
+            guardBitCount: guardBitCount,
+            residual: residual
+        );
     }
-
     /// <summary>Encloses sine and cosine of a binary turn fraction using the independently derived circle interval.</summary>
     public static (Enclosure Sin, Enclosure Cos) EncloseSinCosTurns(ulong fractionalTurns, int guardBitCount) {
-        var phase = new BigInteger(unchecked((long)fractionalTurns));
+        var phase = new BigInteger(value: unchecked((long)fractionalTurns));
         var circle = Pi(bitCount: AngleBitCount);
-        var low = (phase * ((phase.Sign < 0) ? circle.High : circle.Low) * 2);
-        var high = (phase * ((phase.Sign < 0) ? circle.Low : circle.High) * 2);
+        var low = ((phase * ((phase.Sign < 0)
+            ? circle.High
+            : circle.Low)) * 2);
+        var high = ((phase * ((phase.Sign < 0)
+            ? circle.Low
+            : circle.High)) * 2);
 
         return EncloseTrigResidual(
-            residual: new(Low: (low >> 64), High: CeilingShiftRight(value: high, shift: 64)),
+            residual: new(
+                Low: (low >> 64),
+                High: CeilingShiftRight(
+                    shift: 64,
+                    value: high
+                )
+            ),
             guardBitCount: guardBitCount
         );
     }
@@ -669,10 +882,25 @@ internal static partial class Oracles {
         }
 
         return (
-            Rescale(value: new Enclosure(High: (sine + slack), Low: (sine - slack)), fromBitCount: TrigBitCount, toBitCount: (16 + guardBitCount)),
-            Rescale(value: new Enclosure(High: (cosine + slack), Low: (cosine - slack)), fromBitCount: TrigBitCount, toBitCount: (16 + guardBitCount))
+            Rescale(
+            value: new Enclosure(
+                High: (sine + slack),
+                Low: (sine - slack)
+            ),
+            fromBitCount: TrigBitCount,
+            toBitCount: (16 + guardBitCount)
+        ),
+            Rescale(
+            value: new Enclosure(
+                High: (cosine + slack),
+                Low: (cosine - slack)
+            ),
+            fromBitCount: TrigBitCount,
+            toBitCount: (16 + guardBitCount)
+        )
         );
     }
+
     /// <summary>Rescales an enclosure between two fixed-point scales with DIRECTED rounding, so the widened or narrowed
     /// pair still brackets the same real value.</summary>
     /// <param name="value">The enclosure.</param>
@@ -687,12 +915,21 @@ internal static partial class Oracles {
         if (fromBitCount > toBitCount) {
             var narrowing = (fromBitCount - toBitCount);
 
-            return new(Low: (value.Low >> narrowing), High: CeilingShiftRight(value: value.High, shift: narrowing));
+            return new(
+                Low: (value.Low >> narrowing),
+                High: CeilingShiftRight(
+                    value: value.High,
+                    shift: narrowing
+                )
+            );
         }
 
         var widening = (toBitCount - fromBitCount);
 
-        return new(Low: (value.Low << widening), High: (value.High << widening));
+        return new(
+            Low: (value.Low << widening),
+            High: (value.High << widening)
+        );
     }
 
     // The quotient rounded toward POSITIVE infinity, which is what an upper bound must use wherever the lower bound
@@ -701,18 +938,38 @@ internal static partial class Oracles {
         (-((-value) >> shift));
     // The residual θ − n·2π as an enclosure, with the turn product taken in the direction each bound needs.
     private static Enclosure Residual(BigInteger theta, Enclosure turn, BigInteger turns) {
-        var productLow = ((turns.Sign >= 0) ? (turns * turn.Low) : (turns * turn.High));
-        var productHigh = ((turns.Sign >= 0) ? (turns * turn.High) : (turns * turn.Low));
+        var productLow = ((turns.Sign >= 0)
+            ? (turns * turn.Low)
+            : (turns * turn.High)
+        );
+        var productHigh = ((turns.Sign >= 0)
+            ? (turns * turn.High)
+            : (turns * turn.Low)
+        );
 
-        return new(High: (theta - productLow), Low: (theta - productHigh));
+        return new(
+            High: (theta - productLow),
+            Low: (theta - productHigh)
+        );
     }
     // π = 16·atan(1/5) − 4·atan(1/239), evaluated by the series alone: the reduction branch of EncloseArcTangent needs
     // π, and this is where that circularity is cut — both Machin arguments are already below a half.
     private static Enclosure MachinPi(int bitCount) {
-        var first = ArcTangentSeries(numerator: BigInteger.One, denominator: new BigInteger(value: 5), bitCount: bitCount);
-        var second = ArcTangentSeries(numerator: BigInteger.One, denominator: new BigInteger(value: 239), bitCount: bitCount);
+        var first = ArcTangentSeries(
+            numerator: BigInteger.One,
+            denominator: new BigInteger(value: 5),
+            bitCount: bitCount
+        );
+        var second = ArcTangentSeries(
+            numerator: BigInteger.One,
+            denominator: new BigInteger(value: 239),
+            bitCount: bitCount
+        );
 
-        return new(Low: ((16 * first.Low) - (4 * second.High)), High: ((16 * first.High) - (4 * second.Low)));
+        return new(
+            Low: ((16 * first.Low) - (4 * second.High)),
+            High: ((16 * first.High) - (4 * second.Low))
+        );
     }
     // atan(numerator/denominator)·2^bitCount, enclosed, for a non-negative numerator and a positive denominator. The
     // two exact reductions atan(z) = π/2 − atan(1/z) and atan(z) = π/4 + atan((z−1)/(z+1)) bring every argument onto
@@ -720,30 +977,61 @@ internal static partial class Oracles {
     // cubic, NO fixed-width truncation: a different derivation from the subject in every part.
     private static Enclosure EncloseArcTangent(BigInteger numerator, BigInteger denominator, int bitCount) {
         if (numerator > denominator) {
-            var reciprocal = EncloseArcTangent(bitCount: bitCount, denominator: numerator, numerator: denominator);
+            var reciprocal = EncloseArcTangent(
+                bitCount: bitCount,
+                denominator: numerator,
+                numerator: denominator
+            );
             var circle = Pi(bitCount: bitCount);
 
-            return new(Low: ((circle.Low >> 1) - reciprocal.High), High: (CeilingShiftRight(value: circle.High, shift: 1) - reciprocal.Low));
+            return new(
+                Low: ((circle.Low >> 1) - reciprocal.High),
+                High: (CeilingShiftRight(
+                    value: circle.High,
+                    shift: 1
+                ) - reciprocal.Low)
+            );
         }
 
         if ((numerator << 1) > denominator) {
-            var folded = EncloseArcTangent(bitCount: bitCount, denominator: (denominator + numerator), numerator: (denominator - numerator));
+            var folded = EncloseArcTangent(
+                bitCount: bitCount,
+                denominator: (denominator + numerator),
+                numerator: (denominator - numerator)
+            );
             var circle = Pi(bitCount: bitCount);
 
-            return new(Low: ((circle.Low >> 2) - folded.High), High: (CeilingShiftRight(value: circle.High, shift: 2) - folded.Low));
+            return new(
+                Low: ((circle.Low >> 2) - folded.High),
+                High: (CeilingShiftRight(
+                    value: circle.High,
+                    shift: 2
+                ) - folded.Low)
+            );
         }
 
-        return ArcTangentSeries(bitCount: bitCount, denominator: denominator, numerator: numerator);
+        return ArcTangentSeries(
+            bitCount: bitCount,
+            denominator: denominator,
+            numerator: numerator
+        );
     }
     // The alternating series atan(z) = Σ (−1)ᵏ z^(2k+1)/(2k+1) at scale 2^bitCount, for 0 ≤ z ≤ ½. The powers are
     // carried at the working scale rather than as exact rationals, so nothing grows past a few hundred bits; every
     // truncation is bounded by a handful of units and the slack below absorbs the lot along with the tail.
     private static Enclosure ArcTangentSeries(BigInteger numerator, BigInteger denominator, int bitCount) {
         if (numerator.IsZero) {
-            return new(Low: BigInteger.Zero, High: BigInteger.Zero);
+            return new(
+                Low: BigInteger.Zero,
+                High: BigInteger.Zero
+            );
         }
 
-        var count = ArcTangentTermCount(bitCount: bitCount, denominator: denominator, numerator: numerator);
+        var count = ArcTangentTermCount(
+            bitCount: bitCount,
+            denominator: denominator,
+            numerator: numerator
+        );
         var argument = ((numerator << bitCount) / denominator);
         var square = ((argument * argument) >> bitCount);
         var power = argument;
@@ -766,7 +1054,10 @@ internal static partial class Oracles {
 
         var slack = new BigInteger(value: ((8 * count) + 16));
 
-        return new(High: (high + slack), Low: (low - slack));
+        return new(
+            High: (high + slack),
+            Low: (low - slack)
+        );
     }
     // The terms the series needs for a tail below 2^-(bitCount+8): each term costs at least one guaranteed bit per
     // factor of the argument's reciprocal, bounded below by the operands' bit-length difference.
@@ -783,9 +1074,16 @@ internal static partial class Oracles {
     // the ceiling counterpart BigInteger's own truncating `/` does not give, needed by the Gaussian-tail enclosure
     // below wherever a bound must round away from the true value rather than toward it.
     private static BigInteger CeilingDivideNonNegative(BigInteger numerator, BigInteger positiveDenominator) {
-        var quotient = BigInteger.DivRem(dividend: numerator, divisor: positiveDenominator, remainder: out var remainder);
+        var quotient = BigInteger.DivRem(
+            dividend: numerator,
+            divisor: positiveDenominator,
+            remainder: out var remainder
+        );
 
-        return ((remainder > BigInteger.Zero) ? (quotient + BigInteger.One) : quotient);
+        return ((remainder > BigInteger.Zero)
+            ? (quotient + BigInteger.One)
+            : quotient
+        );
     }
 
     // The working precision and term count the Gaussian-tail enclosure's e^4.5 series below carries. 4.5^41/41! is
@@ -829,7 +1127,10 @@ internal static partial class Oracles {
             var stepDenominator = (new BigInteger(value: term) * scale);
 
             termLow = ((termLow * xScaled) / stepDenominator);
-            termHigh = CeilingDivideNonNegative(numerator: (termHigh * xScaled), positiveDenominator: stepDenominator);
+            termHigh = CeilingDivideNonNegative(
+                numerator: (termHigh * xScaled),
+                positiveDenominator: stepDenominator
+            );
             sumLow += termLow;
             sumHigh += termHigh;
         }
@@ -837,15 +1138,27 @@ internal static partial class Oracles {
         // The tail Σ_{k>N} term_k is bounded by term_N · r/(1−r) with r = x/(N+1) — the largest ratio any later term
         // ever carries, since x/k strictly decreases as k grows past N+1. At x=9/2, N=40: r/(1−r) = x/((N+1)−x) =
         // (9/2)/(73/2) = 9/73, an exact rational applied directly to the already-scaled upper term.
-        var remainderBound = CeilingDivideNonNegative(numerator: (termHigh * 9), positiveDenominator: 73);
-        var eEnclosure = new Enclosure(High: (sumHigh + remainderBound), Low: sumLow);
+        var remainderBound = CeilingDivideNonNegative(
+            numerator: (termHigh * 9),
+            positiveDenominator: 73
+        );
+        var eEnclosure = new Enclosure(
+            High: (sumHigh + remainderBound),
+            Low: sumLow
+        );
         var scaleSquared = (BigInteger.One << (2 * GaussianTailWorkingBitCount));
         // e^(−4.5) = 1/e^4.5: reciprocating an enclosure swaps and inverts its bounds, each rounded away from the
         // true value.
         var negativeExponentialLow = (scaleSquared / eEnclosure.High);
-        var negativeExponentialHigh = CeilingDivideNonNegative(numerator: scaleSquared, positiveDenominator: eEnclosure.Low);
+        var negativeExponentialHigh = CeilingDivideNonNegative(
+            numerator: scaleSquared,
+            positiveDenominator: eEnclosure.Low
+        );
         var piEnclosure = Pi(bitCount: GaussianTailWorkingBitCount);
-        var twoPiEnclosure = new Enclosure(Low: (piEnclosure.Low * 2), High: (piEnclosure.High * 2));
+        var twoPiEnclosure = new Enclosure(
+            Low: (piEnclosure.Low * 2),
+            High: (piEnclosure.High * 2)
+        );
         // √(2π) at the SAME working scale: S = √(2π)·scale satisfies S² = 2π·scale², so the radicand is the 2π
         // enclosure shifted up by one more working-bit-count factor. IntegerSquareRoot floors, which is already a
         // safe LOWER bound for the low radicand; +1 makes the high side a safe upper bound.
@@ -854,13 +1167,22 @@ internal static partial class Oracles {
         // φ(3) = e^(−4.5)/√(2π), both operands already at scale 2^GaussianTailWorkingBitCount, so the scale factor
         // introduced by the division is corrected by one more multiply by `scale`.
         var densityLow = ((negativeExponentialLow * scale) / sqrtTwoPiHigh);
-        var densityHigh = CeilingDivideNonNegative(numerator: (negativeExponentialHigh * scale), positiveDenominator: sqrtTwoPiLow);
+        var densityHigh = CeilingDivideNonNegative(
+            numerator: (negativeExponentialHigh * scale),
+            positiveDenominator: sqrtTwoPiLow
+        );
         // Gordon's bounds, doubled for the two-sided tail: Q(3) ∈ ((3/10)·φ(3), φ(3)/3).
         var tailLow = ((2 * (3 * densityLow)) / 10);
-        var tailHigh = CeilingDivideNonNegative(numerator: (2 * densityHigh), positiveDenominator: 3);
+        var tailHigh = CeilingDivideNonNegative(
+            numerator: (2 * densityHigh),
+            positiveDenominator: 3
+        );
 
         return Rescale(
-            value: new Enclosure(High: tailHigh, Low: tailLow),
+            value: new Enclosure(
+                High: tailHigh,
+                Low: tailLow
+            ),
             fromBitCount: GaussianTailWorkingBitCount,
             toBitCount: (16 + guardBitCount)
         );

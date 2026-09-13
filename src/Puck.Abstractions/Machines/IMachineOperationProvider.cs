@@ -15,7 +15,6 @@ public interface IMachineOperationProvider {
     /// <exception cref="ArgumentNullException"><paramref name="current"/> is <see langword="null"/>.</exception>
     MachineOperationPreparation PrepareOperation(MachineCreationRequest current, MachineOperationRequest request);
 }
-
 /// <summary>A provider operation envelope before authority and generation are applied by its host.</summary>
 public readonly record struct MachineOperationRequest {
     /// <summary>Creates a request and detaches its payload from the caller's JSON document.</summary>
@@ -23,12 +22,12 @@ public readonly record struct MachineOperationRequest {
     /// <param name="payload">The operation payload, including its descriptor schema tag.</param>
     /// <exception cref="InvalidOperationException">The payload is not cloneable because its source document is invalid.</exception>
     public MachineOperationRequest(string id, JsonElement payload) { Id = id; Payload = payload.Clone(); }
+
     /// <summary>Gets the provider operation identifier.</summary>
     public string Id { get; }
     /// <summary>Gets the detached typed JSON payload.</summary>
     public JsonElement Payload { get; }
 }
-
 /// <summary>The outcome of applying a prepared runtime operation.</summary>
 public enum MachineOperationStatus {
     /// <summary>The operation was invalid or violates a provider constraint.</summary>
@@ -40,7 +39,6 @@ public enum MachineOperationStatus {
     /// <summary>A provider or runtime fault prevented completion.</summary>
     Faulted,
 }
-
 /// <summary>The explicit result of an operation application or refusal.</summary>
 public readonly record struct MachineOperationResult {
     /// <summary>Creates an explicit operation result and detaches its optional value.</summary>
@@ -50,22 +48,24 @@ public readonly record struct MachineOperationResult {
     public MachineOperationResult(MachineOperationStatus status, JsonElement? value = null, string? reason = null) {
         Status = status; Value = value?.Clone(); Reason = reason;
     }
+
+    /// <summary>Gets the diagnostic reason.</summary>
+    public string? Reason { get; }
     /// <summary>Gets whether the operation completed or was refused.</summary>
     public MachineOperationStatus Status { get; }
     /// <summary>Gets the optional detached provider result.</summary>
     public JsonElement? Value { get; }
-    /// <summary>Gets the diagnostic reason.</summary>
-    public string? Reason { get; }
 }
-
 /// <summary>An operation prepared without changing the live instance.</summary>
 public abstract record MachineOperationPreparation {
     private MachineOperationPreparation() { }
+
     /// <summary>A host-owned replacement configuration, prepared and committed atomically by the host.</summary>
     public sealed record Replacement : MachineOperationPreparation {
         /// <summary>Creates a replacement and detaches its configuration.</summary>
         /// <param name="configuration">The complete provider configuration to construct.</param>
         public Replacement(JsonElement configuration) => Configuration = configuration.Clone();
+
         /// <summary>Gets the canonical replacement configuration.</summary>
         public JsonElement Configuration { get; }
     }
@@ -78,10 +78,11 @@ public abstract record MachineOperationPreparation {
         public Runtime(IMachinePreparedOperation operation, JsonElement? configuration = null) {
             ArgumentNullException.ThrowIfNull(operation); Operation = operation; Configuration = configuration?.Clone();
         }
-        /// <summary>Gets the prepared runtime action.</summary>
-        public IMachinePreparedOperation Operation { get; }
+
         /// <summary>Gets the canonical configuration to adopt after success.</summary>
         public JsonElement? Configuration { get; }
+        /// <summary>Gets the prepared runtime action.</summary>
+        public IMachinePreparedOperation Operation { get; }
     }
     /// <summary>A provider refusal produced before runtime mutation.</summary>
     public sealed record Refusal : MachineOperationPreparation {
@@ -89,14 +90,19 @@ public abstract record MachineOperationPreparation {
         /// <param name="result">The refusal, unsupported, or faulted result.</param>
         /// <exception cref="ArgumentException"><paramref name="result"/> reports <see cref="MachineOperationStatus.Applied"/>.</exception>
         public Refusal(MachineOperationResult result) {
-            if (result.Status == MachineOperationStatus.Applied) { throw new ArgumentException("An applied operation result cannot be a preparation refusal.", nameof(result)); }
+            if (result.Status == MachineOperationStatus.Applied) {
+                throw new ArgumentException(
+                    message: "An applied operation result cannot be a preparation refusal.",
+                    paramName: nameof(result)
+                );
+            }
             Result = result;
         }
+
         /// <summary>Gets the refusal result.</summary>
         public MachineOperationResult Result { get; }
     }
 }
-
 /// <summary>A provider operation whose validation and target data are complete and safe to apply to one runtime.</summary>
 public interface IMachinePreparedOperation {
     /// <summary>Applies this action at the host's coherent execution barrier.</summary>
@@ -105,7 +111,6 @@ public interface IMachinePreparedOperation {
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> is <see langword="null"/>.</exception>
     MachineOperationResult Apply(IMachineRuntime runtime);
 }
-
 /// <summary>Shared descriptor lookup and payload validation for provider operation adapters.</summary>
 public static class MachineOperationValidation {
     /// <summary>Finds and validates an operation payload against one engine descriptor.</summary>
@@ -120,15 +125,34 @@ public static class MachineOperationValidation {
         ArgumentNullException.ThrowIfNull(descriptor);
         operation = null;
         foreach (var candidate in descriptor.Operations) {
-            if (string.Equals(candidate.Id, request.Id, StringComparison.Ordinal)) { operation = candidate; break; }
+            if (string.Equals(
+                a: candidate.Id,
+                b: request.Id,
+                comparisonType: StringComparison.Ordinal
+            )) { operation = candidate; break; }
         }
         if (operation is null) {
-            failure = new(MachineOperationStatus.Unsupported, reason: $"provider does not support operation '{request.Id}'");
+            failure = new(
+                MachineOperationStatus.Unsupported,
+                reason: $"provider does not support operation '{request.Id}'"
+            );
             return false;
         }
         var errors = new List<string>();
-        if (!MachineConfigurationValidation.TryValidate(operation.Payload, request.Payload, schemaTag: true, errors)) {
-            failure = new(MachineOperationStatus.Refused, reason: string.Join(" ", errors));
+
+        if (!MachineConfigurationValidation.TryValidate(
+            operation.Payload,
+            request.Payload,
+            schemaTag: true,
+            errors
+        )) {
+            failure = new(
+                MachineOperationStatus.Refused,
+                reason: string.Join(
+                    separator: " ",
+                    values: errors
+                )
+            );
             return false;
         }
         failure = default;

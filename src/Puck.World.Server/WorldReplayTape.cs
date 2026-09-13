@@ -513,8 +513,8 @@ public sealed partial class WorldReplayTape {
                 m_liveServer.Output.Narrate(
                     channel: "replay.tape",
                     text: $"[replay.tape: '{name}' discarded {discardedAuthorityCount} pending authority entr{((discardedAuthorityCount == 1)
-                        ? "y"
-                        : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]"
+                    ? "y"
+                    : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]"
                 );
             }
         }
@@ -653,6 +653,7 @@ public sealed partial class WorldReplayTape {
 
         return true;
     }
+
     // Attaches every capture tap over fresh per-tick accumulators — the record half of arming, shared by
     // TryBeginRecording and a fork's handover (which arrives with its prefix already in m_ticks/m_liveHashes).
     private void AttachTaps() {
@@ -692,7 +693,11 @@ public sealed partial class WorldReplayTape {
             // the identical FIFO order — both ultimately driven by the one m_pending queue every mutation kind
             // shares — so the Nth open entry always answers the Nth outcome, even across several mutations pending
             // in the same tick.
-            if (m_openMutationEntryIndices.TryDequeue(result: out var index) && (index < m_currentAuthority.Count) && (m_currentAuthority[index] is WorldReplayEntry.Mutation pending)) {
+            if (
+                m_openMutationEntryIndices.TryDequeue(result: out var index) &&
+                (index < m_currentAuthority.Count) &&
+                (m_currentAuthority[index] is WorldReplayEntry.Mutation pending)
+            ) {
                 m_currentAuthority[index] = (pending with { Outcome = applied });
             }
         };
@@ -736,6 +741,7 @@ public sealed partial class WorldReplayTape {
             }
         };
     }
+
     /// <summary>Loads a saved recording, rehydrates a fresh world from it, re-drives the recorded server-input stream,
     /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the
     /// verdict is readable the instant it returns. Never touches the live session.</summary>

@@ -24,31 +24,29 @@ public sealed class WorldAgentHarnessExtension : IWorldAgentExtension {
 
     private sealed class WorldAgentHostedService(IServiceProvider services) : IPuckHostedService {
         private readonly IServiceProvider m_services = (services ?? throw new ArgumentNullException(paramName: nameof(services)));
+
         private CancellationTokenSource? m_cts;
 
         public IServiceProvider Services => m_services;
-
-        public Task StartAsync(CancellationToken cancellationToken) {
-            m_cts = new CancellationTokenSource();
-
-            return Task.CompletedTask;
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken) {
-            m_cts?.Cancel();
-
-            return Task.CompletedTask;
-        }
 
         public void Dispose() {
             m_cts?.Dispose();
             m_cts = null;
         }
-
         public ValueTask DisposeAsync() {
             Dispose();
 
             return ValueTask.CompletedTask;
+        }
+        public Task StartAsync(CancellationToken cancellationToken) {
+            m_cts = new CancellationTokenSource();
+
+            return Task.CompletedTask;
+        }
+        public Task StopAsync(CancellationToken cancellationToken) {
+            m_cts?.Cancel();
+
+            return Task.CompletedTask;
         }
     }
 }

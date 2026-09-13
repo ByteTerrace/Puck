@@ -20,25 +20,52 @@ public class ReedSolomonKernels {
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_field = BinaryField<byte>.Create(degree: 8, reductionTail: 0x1D);
+        m_field = BinaryField<byte>.Create(
+            degree: 8,
+            reductionTail: 0x1D
+        );
         m_generator = new byte[(CheckSymbolCount + 1)];
         m_message = new byte[MessageLength];
         m_codeword = new byte[(MessageLength + CheckSymbolCount)];
         m_syndromes = new byte[CheckSymbolCount];
         rng.NextBytes(buffer: m_message);
-        ReedSolomon.BuildGenerator(field: m_field, firstRootExponent: 0, generator: m_generator, rootBase: ((byte)2));
-        m_message.CopyTo(array: m_codeword, index: 0);
-        ReedSolomon.ComputeCheckSymbols(checkSymbols: m_codeword.AsSpan(start: MessageLength), field: m_field, generator: m_generator, message: m_message);
+        ReedSolomon.BuildGenerator(
+            field: m_field,
+            firstRootExponent: 0,
+            generator: m_generator,
+            rootBase: ((byte)2)
+        );
+        m_message.CopyTo(
+            array: m_codeword,
+            index: 0
+        );
+        ReedSolomon.ComputeCheckSymbols(
+            checkSymbols: m_codeword.AsSpan(start: MessageLength),
+            field: m_field,
+            generator: m_generator,
+            message: m_message
+        );
     }
     [Benchmark]
     public byte BuildGenerator() {
-        ReedSolomon.BuildGenerator(field: m_field, firstRootExponent: 0, generator: m_generator, rootBase: ((byte)2));
+        ReedSolomon.BuildGenerator(
+            field: m_field,
+            firstRootExponent: 0,
+            generator: m_generator,
+            rootBase: ((byte)2)
+        );
 
         return m_generator[1];
     }
     [Benchmark]
     public byte ComputeSyndromes() {
-        ReedSolomon.ComputeSyndromes(codeword: m_codeword, field: m_field, firstRootExponent: 0, rootBase: ((byte)2), syndromes: m_syndromes);
+        ReedSolomon.ComputeSyndromes(
+            codeword: m_codeword,
+            field: m_field,
+            firstRootExponent: 0,
+            rootBase: ((byte)2),
+            syndromes: m_syndromes
+        );
 
         return m_syndromes[0];
     }
@@ -60,7 +87,7 @@ public class PrimeFieldBatchInverse {
         m_values = new ulong[Count];
         m_scratch = new ulong[Count];
 
-        for (var i = 0; (i < Count); ++i) { m_values[i] = (m_field.Reduce(value: ((ulong)rng.NextInt64())) | 1UL); }
+        for (var i = 0; (i < Count); ++i) { m_values[i] = m_field.Reduce(value: ((ulong)rng.NextInt64())) | 1UL; }
     }
     [Benchmark(Baseline = true)]
     public ulong OneByOne() {
@@ -72,7 +99,10 @@ public class PrimeFieldBatchInverse {
     }
     [Benchmark]
     public ulong Batch() {
-        m_values.CopyTo(array: m_scratch, index: 0);
+        m_values.CopyTo(
+            array: m_scratch,
+            index: 0
+        );
         m_field.BatchInverse(values: m_scratch);
 
         return m_scratch[0];

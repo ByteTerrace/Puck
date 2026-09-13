@@ -13,14 +13,14 @@ namespace Puck.Vulkan.Factories;
 /// <see cref="VulkanGraphicsPipeline"/>.
 /// </summary>
 public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFactory {
+    private const uint BlendFactorOne = 1;
+    private const uint BlendFactorOneMinusSrcAlpha = 7;
+    private const uint BlendFactorSrcAlpha = 6;
     // The fixed pipeline shape this factory configures: a vec2-position vertex stream, textureSamplerCount scalar
     // combined-image-sampler bindings 0..textureSamplerCount-1 (fragment) plus an optional storage buffer at binding
     // textureSamplerCount (vertex + fragment), straight alpha-over blending, and a triangle-list raster with a
     // dynamic scissor. The underlying pipeline API bakes in none of this.
     private const uint BlendFactorZero = 0;
-    private const uint BlendFactorOne = 1;
-    private const uint BlendFactorOneMinusSrcAlpha = 7;
-    private const uint BlendFactorSrcAlpha = 6;
     private const uint BlendOpAdd = 0;
     private const uint ColorComponentRgbaBits = 0x0000000F;
     private const uint CullModeNone = 0;
@@ -51,16 +51,6 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         m_graphicsPipelineApi = graphicsPipelineApi;
     }
 
-    // ONE binding PER texture (0..textureSamplerCount-1), never a single array-descriptor binding: DXC's
-    // vk::combinedImageSampler only fuses a SCALAR Texture2D+SamplerState pair, so a shader sampling several sources
-    // declares that many distinct scalar pairs, each at its own binding (the same reason
-    // Puck.SdfVm's screen-source kernels declare 32 separate bindings rather than one array of 32). The storage
-    // buffer, when present, follows immediately after at binding textureSamplerCount — matching the Direct3D 12
-    // factory's identity slot map (DirectXGpuPipelineFactory.BuildLayout), so both backends agree on binding numbers.
-    private static uint ToVkVertexFormat(GpuVertexFormat format) => format switch {
-        GpuVertexFormat.R32G32Float => FormatR32G32Sfloat,
-        _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The Vulkan graphics pipeline supports only R32G32Float vertex attributes."),
-    };
     private static IReadOnlyList<VkDescriptorSetLayoutBinding> BuildDescriptorBindings(uint textureSamplerCount, bool enableStorageBuffer) {
         var bindings = new List<VkDescriptorSetLayoutBinding>();
 
@@ -84,6 +74,20 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
 
         return bindings;
     }
+    // ONE binding PER texture (0..textureSamplerCount-1), never a single array-descriptor binding: DXC's
+    // vk::combinedImageSampler only fuses a SCALAR Texture2D+SamplerState pair, so a shader sampling several sources
+    // declares that many distinct scalar pairs, each at its own binding (the same reason
+    // Puck.SdfVm's screen-source kernels declare 32 separate bindings rather than one array of 32). The storage
+    // buffer, when present, follows immediately after at binding textureSamplerCount — matching the Direct3D 12
+    // factory's identity slot map (DirectXGpuPipelineFactory.BuildLayout), so both backends agree on binding numbers.
+    private static uint ToVkVertexFormat(GpuVertexFormat format) => format switch {
+        GpuVertexFormat.R32G32Float => FormatR32G32Sfloat,
+        _ => throw new ArgumentOutOfRangeException(
+        nameof(format),
+        format,
+        "The Vulkan graphics pipeline supports only R32G32Float vertex attributes."
+    ),
+    };
 
     /// <inheritdoc/>
     public VulkanGraphicsPipeline Create(
@@ -138,26 +142,42 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             throw new InvalidOperationException(message: "Graphics-pipeline creation requires a fragment shader module.");
         }
 
-        var layout = vertexInput ?? new GpuVertexInputLayout(VertexPositionStride, [new GpuVertexAttribute(0, GpuVertexFormat.R32G32Float, 0)]);
-        if (layout.Attributes.Count > 0 && layout.StrideBytes == 0) {
-            throw new ArgumentException("A vertex input layout with attributes requires a non-zero stride.", nameof(vertexInput));
+        var layout = (vertexInput ?? new GpuVertexInputLayout(
+            VertexPositionStride,
+            [new GpuVertexAttribute(
+                    Format: GpuVertexFormat.R32G32Float,
+                    Location: 0,
+                    OffsetBytes: 0
+                )]
+        ));
+
+        if (
+            (layout.Attributes.Count > 0) &&
+            (layout.StrideBytes == 0)
+        ) {
+            throw new ArgumentException(
+                message: "A vertex input layout with attributes requires a non-zero stride.",
+                paramName: nameof(vertexInput)
+            );
         }
-        var vertexAttributes = new List<VkVertexInputAttributeDescription>(layout.Attributes.Count);
+        var vertexAttributes = new List<VkVertexInputAttributeDescription>(capacity: layout.Attributes.Count);
+
         foreach (var attribute in layout.Attributes) {
-            vertexAttributes.Add(new VkVertexInputAttributeDescription {
+            vertexAttributes.Add(item: new VkVertexInputAttributeDescription {
                 Binding = 0,
-                Format = ToVkVertexFormat(attribute.Format),
+                Format = ToVkVertexFormat(format: attribute.Format),
                 Location = attribute.Location,
                 Offset = attribute.OffsetBytes,
             });
         }
-        IReadOnlyList<VkVertexInputBindingDescription> vertexBindings = layout.Attributes.Count == 0
+        IReadOnlyList<VkVertexInputBindingDescription> vertexBindings = ((layout.Attributes.Count == 0)
             ? []
             : [new VkVertexInputBindingDescription {
                 Binding = 0,
                 InputRate = VertexInputRateVertex,
                 Stride = layout.StrideBytes,
-            }];
+            }]
+        );
         var request = new VulkanGraphicsPipelineCreateRequest(
             ColorBlendAttachments: [
                 new VkPipelineColorBlendAttachmentState(

@@ -52,6 +52,52 @@ public sealed record TrustListEntry(
     TimeSpan? RootBindingMaximumAge = null,
     TimeSpan? SubjectBindingMaximumAge = null
 ) {
+    /// <summary>Validates <see cref="ValidateShape"/> and <see cref="ValidateKeyMaterial"/> together — every check
+    /// this entry needs on a platform with an <see cref="ECDsa"/> backing. <see cref="TrustList"/> calls this for
+    /// every entry at construction, so an unvalidated list cannot reach the verifier.</summary>
+    /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
+    public void Validate() {
+        ValidateShape();
+        ValidateKeyMaterial();
+    }
+    /// <summary>
+    /// Imports <see cref="PublicKeySubjectPublicKeyInfo"/> the same way <c>AttestationVerifier.VerifySignature</c>
+    /// does at actual verification time and requires its curve to match <see cref="PinnedId"/>'s algorithm, so a
+    /// malformed SPKI, one with trailing bytes, or a well-formed key on the wrong curve refuses once, at validation,
+    /// rather than at every runtime connection attempt forever. Requires <see cref="ECDsa"/>, which has no backing
+    /// on every platform (<see cref="OperatingSystem.IsBrowser"/>) — call only where that is available; a caller
+    /// that cannot defers the check and reports it as deferred rather than as an error (see
+    /// <c>WorldDefinitionValidator.ValidateAdmission</c>).
+    /// </summary>
+    /// <exception cref="ArgumentException">The public key does not decode, import, or match the pinned algorithm's curve.</exception>
+    public void ValidateKeyMaterial() {
+        var descriptor = AttestationAlgorithms.Resolve(algorithm: PinnedId.Algorithm);
+
+        using var ecdsa = ECDsa.Create();
+
+        try {
+            ecdsa.ImportSubjectPublicKeyInfo(
+                source: PublicKeySubjectPublicKeyInfo.Span,
+                bytesRead: out var bytesRead
+            );
+
+            if (bytesRead != PublicKeySubjectPublicKeyInfo.Length) {
+                throw new CryptographicException(message: $"The SubjectPublicKeyInfo contains {(PublicKeySubjectPublicKeyInfo.Length - bytesRead)} trailing byte(s).");
+            }
+        } catch (CryptographicException exception) {
+            throw new ArgumentException(
+                message: $"A trust list entry's public key bytes do not decode as a SubjectPublicKeyInfo usable with algorithm '{PinnedId.Algorithm}' — {exception.Message}",
+                innerException: exception
+            );
+        }
+
+        if (!AttestationCurves.Matches(
+            key: ecdsa.ExportParameters(includePrivateParameters: false).Curve,
+            expected: descriptor.Curve
+        )) {
+            throw new ArgumentException(message: $"A trust list entry's public key is not on the curve algorithm '{PinnedId.Algorithm}' names.");
+        }
+    }
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
     /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
@@ -113,52 +159,6 @@ public sealed record TrustListEntry(
         ) {
             throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
         }
-    }
-    /// <summary>
-    /// Imports <see cref="PublicKeySubjectPublicKeyInfo"/> the same way <c>AttestationVerifier.VerifySignature</c>
-    /// does at actual verification time and requires its curve to match <see cref="PinnedId"/>'s algorithm, so a
-    /// malformed SPKI, one with trailing bytes, or a well-formed key on the wrong curve refuses once, at validation,
-    /// rather than at every runtime connection attempt forever. Requires <see cref="ECDsa"/>, which has no backing
-    /// on every platform (<see cref="OperatingSystem.IsBrowser"/>) — call only where that is available; a caller
-    /// that cannot defers the check and reports it as deferred rather than as an error (see
-    /// <c>WorldDefinitionValidator.ValidateAdmission</c>).
-    /// </summary>
-    /// <exception cref="ArgumentException">The public key does not decode, import, or match the pinned algorithm's curve.</exception>
-    public void ValidateKeyMaterial() {
-        var descriptor = AttestationAlgorithms.Resolve(algorithm: PinnedId.Algorithm);
-
-        using var ecdsa = ECDsa.Create();
-
-        try {
-            ecdsa.ImportSubjectPublicKeyInfo(
-                source: PublicKeySubjectPublicKeyInfo.Span,
-                bytesRead: out var bytesRead
-            );
-
-            if (bytesRead != PublicKeySubjectPublicKeyInfo.Length) {
-                throw new CryptographicException(message: $"The SubjectPublicKeyInfo contains {(PublicKeySubjectPublicKeyInfo.Length - bytesRead)} trailing byte(s).");
-            }
-        } catch (CryptographicException exception) {
-            throw new ArgumentException(
-                message: $"A trust list entry's public key bytes do not decode as a SubjectPublicKeyInfo usable with algorithm '{PinnedId.Algorithm}' — {exception.Message}",
-                innerException: exception
-            );
-        }
-
-        if (!AttestationCurves.Matches(
-            key: ecdsa.ExportParameters(includePrivateParameters: false).Curve,
-            expected: descriptor.Curve
-        )) {
-            throw new ArgumentException(message: $"A trust list entry's public key is not on the curve algorithm '{PinnedId.Algorithm}' names.");
-        }
-    }
-    /// <summary>Validates <see cref="ValidateShape"/> and <see cref="ValidateKeyMaterial"/> together — every check
-    /// this entry needs on a platform with an <see cref="ECDsa"/> backing. <see cref="TrustList"/> calls this for
-    /// every entry at construction, so an unvalidated list cannot reach the verifier.</summary>
-    /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
-    public void Validate() {
-        ValidateShape();
-        ValidateKeyMaterial();
     }
 }
 /// <summary>
@@ -314,11 +314,6 @@ public sealed record TrustList {
 
         return null;
     }
-
-    private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
-        PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
-    };
-
     // Both the entry's own durations and the verifier's defaults are wire-seconds windows, so one guard serves both;
     // `subject` names which family the caller is validating so the refusal still says what it refused.
     internal static void ValidateOptionalDuration(TimeSpan? value, string name, string subject) {
@@ -332,6 +327,10 @@ public sealed record TrustList {
             );
         }
     }
+
+    private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
+        PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
+    };
 
     /// <summary>
     /// Finds the <see cref="AttestationTrustMode.SignsDirectly"/> entry pinning one subject's own signing key,

@@ -39,59 +39,6 @@ public static class QueuedHostContractProbe {
 
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(value: 15);
 
-    /// <summary>Proves queued checkpoint import and continuation using complete core bytes, held inputs,
-    /// fractional pacing, accepted-work barriers, and playback settings across independent hosts.</summary>
-    /// <param name="withContent">Creates a fresh assigned runtime over the same synthetic content.</param>
-    /// <typeparam name="THost">The concrete queued host under test.</typeparam>
-    /// <returns>The durable checkpoint contract result.</returns>
-    public static QueuedHostProbeResult VerifyCheckpoint<THost>(Func<THost> withContent) where THost : QueuedMachineHost {
-        using var source = withContent();
-        using var target = withContent();
-        var budget = EngineTicks.PerRate(60) + 1;
-        source.SetFastForward(3);
-        for (var index = 0; index < 18; index++) {
-            source.SetState(ScheduledInput(index));
-            _ = source.Submit(budget);
-        }
-        var checkpoint = source.CaptureCheckpoint();
-        if (source.PendingSteps != 0 || source.CompletedSteps != 18) {
-            return QueuedHostProbeResult.Fail("checkpoint did not drain every accepted step");
-        }
-        var decoded = QueuedMachineCheckpoint.Decode(checkpoint);
-        if (decoded.Checkpoint.CycleRemainder == 0) { return QueuedHostProbeResult.Fail("checkpoint probe did not exercise fractional pacing"); }
-        var untouched = target.CaptureCheckpoint();
-        var corrupted = checkpoint.ToArray();
-        corrupted[^1] ^= 1;
-        try { target.RestoreCheckpoint(corrupted); return QueuedHostProbeResult.Fail("corrupt checkpoint was accepted"); }
-        catch (InvalidDataException) { }
-        var wrongIdentity = (decoded.Checkpoint with { Identity = "different-content" }).Encode(decoded.Input);
-        try { target.RestoreCheckpoint(wrongIdentity); return QueuedHostProbeResult.Fail("wrong-content checkpoint was accepted"); }
-        catch (InvalidOperationException) { }
-        if (!untouched.AsSpan().SequenceEqual(target.CaptureCheckpoint())) {
-            return QueuedHostProbeResult.Fail("a refused checkpoint changed the fresh runtime");
-        }
-        target.RestoreCheckpoint(checkpoint);
-        if (!checkpoint.AsSpan().SequenceEqual(target.CaptureCheckpoint())) {
-            return QueuedHostProbeResult.Fail("checkpoint import changed complete machine or host state");
-        }
-        // The first suffix segment intentionally keeps the captured input; subsequent ones change the full pad.
-        for (var index = 0; index < 32; index++) {
-            if (index != 0) {
-                var input = ScheduledInput(index + 18);
-                source.SetState(input); target.SetState(input);
-            }
-            _ = source.Advance(budget + (ulong)(index % 7));
-            _ = target.Advance(budget + (ulong)(index % 7));
-            if (!source.CaptureCheckpoint().AsSpan().SequenceEqual(target.CaptureCheckpoint())) {
-                return QueuedHostProbeResult.Fail($"checkpoint continuation diverged at suffix segment {index}");
-            }
-        }
-        source.SetRewindEnabled(true);
-        try { _ = source.CaptureCheckpoint(); return QueuedHostProbeResult.Fail("checkpoint silently discarded enabled rewind history"); }
-        catch (InvalidOperationException) { }
-        return QueuedHostProbeResult.Pass("queued capture drained all accepted work; independent import and continuation preserved full core state, held input, fractional pacing, playback settings, and step count; corruption and identity mismatch left the target unchanged");
-    }
-
     private static void DriveOrderedPokeSchedule<THost>(THost host, int steps, ulong budget, in MachinePadState input, int scratchAddress)
         where THost : QueuedMachineHost, IQueuedMachineRuntime, IMachineMemoryPeek {
         for (var step = 0; (step < steps); ++step) {
@@ -178,7 +125,10 @@ public static class QueuedHostContractProbe {
         producer.Start();
 
         try {
-            if (!started.Wait(timeout: OperationTimeout) || (Volatile.Read(location: ref submitted) == 0L)) {
+            if (
+                !started.Wait(timeout: OperationTimeout) ||
+                (Volatile.Read(location: ref submitted) == 0L)
+            ) {
                 return QueuedHostProbeResult.Fail(detail: $"the concurrent step producer never submitted work: {producerFault}");
             }
             for (var hammer = 0; (hammer < hammers); ++hammer) {
@@ -1077,6 +1027,64 @@ public static class QueuedHostContractProbe {
 
         return QueuedHostProbeResult.Pass(detail: $"bounded queue accepted and completed all {accepted} exact segments; capacity={host.MaximumPendingSteps}, backpressure={host.BackpressureEvents}");
     }
+    /// <summary>Proves queued checkpoint import and continuation using complete core bytes, held inputs,
+    /// fractional pacing, accepted-work barriers, and playback settings across independent hosts.</summary>
+    /// <param name="withContent">Creates a fresh assigned runtime over the same synthetic content.</param>
+    /// <typeparam name="THost">The concrete queued host under test.</typeparam>
+    /// <returns>The durable checkpoint contract result.</returns>
+    public static QueuedHostProbeResult VerifyCheckpoint<THost>(Func<THost> withContent) where THost : QueuedMachineHost {
+        using var source = withContent();
+        using var target = withContent();
+        var budget = (EngineTicks.PerRate(ratePerSecond: 60) + 1);
+
+        source.SetFastForward(factor: 3);
+        for (var index = 0; (index < 18); index++) {
+            source.SetState(state: ScheduledInput(frame: index));
+            _ = source.Submit(deltaTicks: budget);
+        }
+        var checkpoint = source.CaptureCheckpoint();
+
+        if (
+            (source.PendingSteps != 0) ||
+            (source.CompletedSteps != 18)
+        ) {
+            return QueuedHostProbeResult.Fail(detail: "checkpoint did not drain every accepted step");
+        }
+        var decoded = QueuedMachineCheckpoint.Decode(bytes: checkpoint);
+
+        if (decoded.Checkpoint.CycleRemainder == 0) { return QueuedHostProbeResult.Fail(detail: "checkpoint probe did not exercise fractional pacing"); }
+        var untouched = target.CaptureCheckpoint();
+        var corrupted = checkpoint.ToArray();
+
+        corrupted[^1] ^= 1;
+        try { target.RestoreCheckpoint(checkpoint: corrupted); return QueuedHostProbeResult.Fail(detail: "corrupt checkpoint was accepted"); } catch (InvalidDataException) { }
+        var wrongIdentity = (decoded.Checkpoint with { Identity = "different-content" }).Encode(input: decoded.Input);
+
+        try { target.RestoreCheckpoint(checkpoint: wrongIdentity); return QueuedHostProbeResult.Fail(detail: "wrong-content checkpoint was accepted"); } catch (InvalidOperationException) { }
+        if (!untouched.AsSpan().SequenceEqual(other: target.CaptureCheckpoint())) {
+            return QueuedHostProbeResult.Fail(detail: "a refused checkpoint changed the fresh runtime");
+        }
+        target.RestoreCheckpoint(checkpoint: checkpoint);
+        if (!checkpoint.AsSpan().SequenceEqual(other: target.CaptureCheckpoint())) {
+            return QueuedHostProbeResult.Fail(detail: "checkpoint import changed complete machine or host state");
+        }
+        // The first suffix segment intentionally keeps the captured input; subsequent ones change the full pad.
+        for (var index = 0; (index < 32); index++) {
+            if (index != 0) {
+                var input = ScheduledInput(frame: (index + 18));
+
+                source.SetState(state: input); target.SetState(state: input);
+            }
+            _ = source.Advance(deltaTicks: (budget + ((ulong)(index % 7))));
+            _ = target.Advance(deltaTicks: (budget + ((ulong)(index % 7))));
+            if (!source.CaptureCheckpoint().AsSpan().SequenceEqual(other: target.CaptureCheckpoint())) {
+                return QueuedHostProbeResult.Fail(detail: $"checkpoint continuation diverged at suffix segment {index}");
+            }
+        }
+        source.SetRewindEnabled(enabled: true);
+        try { _ = source.CaptureCheckpoint(); return QueuedHostProbeResult.Fail(detail: "checkpoint silently discarded enabled rewind history"); } catch (InvalidOperationException) { }
+        return QueuedHostProbeResult.Pass(detail: "queued capture drained all accepted work; independent import and continuation preserved full core state, held input, fractional pacing, playback settings, and step count; corruption and identity mismatch left the target unchanged");
+    }
     /// <summary>Verifies the debug memory window (<see cref="IMachineMemoryPeek"/>) is marshaled through the worker
     /// rather than racing the running core: the marshaled poke path is deterministic (the serial reference — two
     /// identical ordered step/poke schedules reach a byte-identical image), cross-thread peek hammering leaves state
@@ -1219,7 +1227,8 @@ public static class QueuedHostContractProbe {
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyTimeTravel<THost>(Func<THost> withContent, Func<THost> withAudio, Func<THost, long> observe)
         where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine, IAudioMachine, IFeedbackMachine {
-        var checkpoint = VerifyCheckpoint(withContent);
+        var checkpoint = VerifyCheckpoint(withContent: withContent);
+
         if (!checkpoint.Passed) { return checkpoint; }
         // A remainder-bearing per-frame budget: 60 Hz submissions against a ~59.73 Hz native cadence leave a tick→cycle
         // remainder every frame, so both the accumulator restoration (rewind) and the mismatched-cadence lead (runahead)

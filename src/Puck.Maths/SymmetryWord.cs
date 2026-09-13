@@ -49,6 +49,50 @@ public sealed class SymmetryWord {
     /// the least common multiple of the orbit lengths.</summary>
     public int Order { get; }
 
+    private static int Image(ReadOnlySpan<int> letters, int node) {
+        foreach (var letter in letters) {
+            node = SymmetryLattice.Reflect(
+                mirror: letter,
+                node: node
+            );
+        }
+
+        return node;
+    }
+    private static void ValidateNode(int node) {
+        if (((uint)node) >= ((uint)SymmetryLattice.NodeCount)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: node,
+                message: $"the node index must be in [0, {SymmetryLattice.NodeCount})",
+                paramName: nameof(node)
+            );
+        }
+    }
+
+    /// <summary>Applies the word once.</summary>
+    /// <param name="node">The node to move, in <c>[0, <see cref="SymmetryLattice.NodeCount"/>)</c>.</param>
+    /// <returns>The node the word carries <paramref name="node"/> to.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public int Apply(int node) =>
+        Apply(
+            node: node,
+            steps: 1L
+        );
+    /// <summary>Applies the word a whole number of times — the counted power, read in constant time from the node's
+    /// orbit, so a negative count walks the orbit backwards and every multiple of the orbit's length returns the node
+    /// itself.</summary>
+    /// <param name="node">The node to move, in <c>[0, <see cref="SymmetryLattice.NodeCount"/>)</c>.</param>
+    /// <param name="steps">The number of applications; any value, positive or negative.</param>
+    /// <returns>The node <paramref name="steps"/> applications carry <paramref name="node"/> to.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public int Apply(int node, long steps) {
+        ValidateNode(node: node);
+
+        var length = ((long)m_cycleLength[node]);
+        var offset = (((long)m_position[node]) + steps).FloorModulo(modulus: length);
+
+        return m_orbit[(m_cycleStart[node] + ((int)offset))];
+    }
     /// <summary>Creates the word of a list of mirror nodes.</summary>
     /// <param name="mirrors">The letters, each a node in <c>[0, <see cref="SymmetryLattice.NodeCount"/>)</c>, applied first to last.</param>
     /// <returns>The baked word.</returns>
@@ -121,51 +165,6 @@ public sealed class SymmetryWord {
             order: order,
             position: position
         );
-    }
-
-    private static int Image(ReadOnlySpan<int> letters, int node) {
-        foreach (var letter in letters) {
-            node = SymmetryLattice.Reflect(
-                mirror: letter,
-                node: node
-            );
-        }
-
-        return node;
-    }
-    private static void ValidateNode(int node) {
-        if (((uint)node) >= ((uint)SymmetryLattice.NodeCount)) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: node,
-                message: $"the node index must be in [0, {SymmetryLattice.NodeCount})",
-                paramName: nameof(node)
-            );
-        }
-    }
-
-    /// <summary>Applies the word once.</summary>
-    /// <param name="node">The node to move, in <c>[0, <see cref="SymmetryLattice.NodeCount"/>)</c>.</param>
-    /// <returns>The node the word carries <paramref name="node"/> to.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
-    public int Apply(int node) =>
-        Apply(
-            node: node,
-            steps: 1L
-        );
-    /// <summary>Applies the word a whole number of times — the counted power, read in constant time from the node's
-    /// orbit, so a negative count walks the orbit backwards and every multiple of the orbit's length returns the node
-    /// itself.</summary>
-    /// <param name="node">The node to move, in <c>[0, <see cref="SymmetryLattice.NodeCount"/>)</c>.</param>
-    /// <param name="steps">The number of applications; any value, positive or negative.</param>
-    /// <returns>The node <paramref name="steps"/> applications carry <paramref name="node"/> to.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
-    public int Apply(int node, long steps) {
-        ValidateNode(node: node);
-
-        var length = ((long)m_cycleLength[node]);
-        var offset = (((long)m_position[node]) + steps).FloorModulo(modulus: length);
-
-        return m_orbit[(m_cycleStart[node] + ((int)offset))];
     }
     /// <summary>Returns the length of a node's orbit: the least positive step count that returns that one node to
     /// itself, a divisor of <see cref="Order"/>.</summary>

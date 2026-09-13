@@ -58,11 +58,26 @@ public sealed class WorldCurveCommandModule(IWorldConsoleAuthority authority) : 
 
             echo = echo
                 .Head(head: row.Name)
-                .Field(key: "closed", value: row.Closed)
-                .Field(key: "knots", value: row.Knots.Count)
-                .Field(key: "segments", value: compiled.SegmentCount)
-                .Field(key: "length", value: compiled.TotalLength.ToString())
-                .Field(key: "refs", value: $"cameras:{refs.Cameras},follows:{refs.Follows}");
+                .Field(
+                key: "closed",
+                value: row.Closed
+            )
+                .Field(
+                key: "knots",
+                value: row.Knots.Count
+            )
+                .Field(
+                key: "segments",
+                value: compiled.SegmentCount
+            )
+                .Field(
+                key: "length",
+                value: compiled.TotalLength.ToString()
+            )
+                .Field(
+                key: "refs",
+                value: $"cameras:{refs.Cameras},follows:{refs.Follows}"
+            );
         }
 
         return echo.Close();
@@ -75,7 +90,10 @@ public sealed class WorldCurveCommandModule(IWorldConsoleAuthority authority) : 
             name: "world.curves",
             description: "Reports the curves census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored closed flag and knot count, the compiled segment count and total arc length (the SAME derivation the camera path op and the sim curve-follow target read), and how many document members reference it.",
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.curves") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.curves"
+                ) is { } refusal) {
                     return refusal;
                 }
 

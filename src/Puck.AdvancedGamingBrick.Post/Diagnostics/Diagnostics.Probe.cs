@@ -11,7 +11,10 @@ internal sealed partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (args[index] == "--probe") {
                 Probe(
-                    fullBoot: args.Contains(value: "--full-boot", comparer: StringComparer.OrdinalIgnoreCase),
+                    fullBoot: args.Contains(
+                        value: "--full-boot",
+                        comparer: StringComparer.OrdinalIgnoreCase
+                    ),
                     romPath: args[(index + 1)],
                     steps: long.Parse(s: args[(index + 2)])
                 );
@@ -33,7 +36,10 @@ internal sealed partial class Diagnostics {
                         fromBase: 16
                     ),
                     count: long.Parse(s: args[(index + 4)]),
-                    skipAfter: ((args.Length > (index + 5)) && long.TryParse(s: args[(index + 5)], result: out var skipAfter)
+                    skipAfter: (((args.Length > (index + 5)) && long.TryParse(
+                        s: args[(index + 5)],
+                        result: out var skipAfter
+                    ))
                     ? skipAfter
                     : 0)
                 );
@@ -49,7 +55,8 @@ internal sealed partial class Diagnostics {
     /// to see exactly why a cart's link-init loops, with no external oracle.</summary>
     public void LinkInitTrace(string romPath, uint triggerLo, uint triggerHi, long count, long skipAfter = 0) {
         using var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: BiosImage, options: MachineOptions,
+            bios: BiosImage,
+            options: MachineOptions,
             rom: File.ReadAllBytes(path: romPath)
         ));
         var machine = instance.Machine;
@@ -112,7 +119,8 @@ internal sealed partial class Diagnostics {
 
         using var instance = AgbMachineFactory.Create(
             configuration: new AgbMachineConfiguration(
-                bios: BiosImage, options: MachineOptions,
+                bios: BiosImage,
+                options: MachineOptions,
                 rom: File.ReadAllBytes(path: romPath)
             ),
             compose: services => {

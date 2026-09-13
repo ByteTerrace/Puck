@@ -53,8 +53,12 @@ public abstract record WorldPlacementResponseCondition {
     // of that kind, so a condition's comparand reads the same way a console cell edit would.
     private static long LiteralToRaw(CellKind kind, float literal) => (kind switch {
         CellKind.Fixed => FixedQ4816.FromDouble(value: literal).Value,
-        _ => ((long)MathF.Round(x: literal, mode: MidpointRounding.ToEven)),
+        _ => ((long)MathF.Round(
+        mode: MidpointRounding.ToEven,
+        x: literal
+    )),
     });
+
     /// <summary>The original lattice-field condition, unchanged from before this union existed: the named field
     /// read at the placement's own coupled cell, compared against a literal or another row's slot cell.</summary>
     /// <param name="Field">The field read at the cell.</param>
@@ -99,20 +103,45 @@ public abstract record WorldPlacementResponseCondition {
         public bool Holds(WorldDefinition definition, ulong tick) {
             ArgumentNullException.ThrowIfNull(argument: definition);
 
-            if (!WorldStateReader.TryRead(definition: definition, rowName: State, key: Key, tick: tick, row: out var row, rawValue: out var raw, text: out _) || (raw is not { } rawValue)) {
+            if (
+                !WorldStateReader.TryRead(
+                definition: definition,
+                rowName: State,
+                key: Key,
+                tick: tick,
+                row: out var row,
+                rawValue: out var raw,
+                text: out _
+            ) ||
+                (raw is not { } rawValue)
+            ) {
                 return false;
             }
 
             long expected;
 
             if (ComparandState is { } comparandRow) {
-                if (!WorldStateReader.TryRead(definition: definition, rowName: comparandRow, key: ComparandKey, tick: tick, row: out _, rawValue: out var comparand, text: out _) || (comparand is not { } comparandValue)) {
+                if (
+                    !WorldStateReader.TryRead(
+                    definition: definition,
+                    rowName: comparandRow,
+                    key: ComparandKey,
+                    tick: tick,
+                    row: out _,
+                    rawValue: out var comparand,
+                    text: out _
+                ) ||
+                    (comparand is not { } comparandValue)
+                ) {
                     return false;
                 }
 
                 expected = comparandValue;
             } else {
-                expected = LiteralToRaw(kind: row.Kind, literal: (Value ?? 0f));
+                expected = LiteralToRaw(
+                    kind: row.Kind,
+                    literal: (Value ?? 0f)
+                );
             }
 
             return Comparison.Holds(

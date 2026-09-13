@@ -68,10 +68,31 @@ public sealed class SdfStepScaleBinderLawTests {
     }
 
     [Fact]
+    public void ARoundSphereCarriesNoFactorAndNoBinder() {
+        Assert.Equal(
+            expected: 1f,
+            actual: SdfSolidGeometry.StepFactor(
+                type: SdfSolidPrimitive.Sphere,
+                scale: new Vector3(value: 0.3f)
+            )
+        );
+
+        var program = Build(
+            scale: new Vector3(value: 0.3f),
+            scoped: false
+        );
+
+        Assert.Equal(
+            expected: 1f,
+            actual: program.StepScale
+        );
+        Assert.Null(value: program.StepScaleBinder);
+    }
+    [Fact]
     public void AnUnscopedEccentricSphereBindsTheStepScaleAtItsOwnFactor() {
         var factor = SdfSolidGeometry.StepFactor(
-            type: SdfSolidPrimitive.Sphere,
-            scale: EccentricScale
+            scale: EccentricScale,
+            type: SdfSolidPrimitive.Sphere
         );
         var program = Build(
             scale: EccentricScale,
@@ -79,15 +100,15 @@ public sealed class SdfStepScaleBinderLawTests {
         );
 
         Assert.Equal(
-            expected: (0.16f / 0.1f),
-            actual: factor
+            actual: factor,
+            expected: (0.16f / 0.1f)
         );
         Assert.Equal(
             expected: (1f / factor),
             actual: program.StepScale
         );
 
-        var binder = Assert.NotNull(program.StepScaleBinder);
+        var binder = Assert.NotNull(value: program.StepScaleBinder);
 
         Assert.Equal(
             expected: factor,
@@ -107,6 +128,22 @@ public sealed class SdfStepScaleBinderLawTests {
         );
     }
     [Fact]
+    public void EveryOtherPrimitiveReportsFactorOne() {
+        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
+            if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) {
+                continue;
+            }
+
+            Assert.Equal(
+                expected: 1f,
+                actual: SdfSolidGeometry.StepFactor(
+                    scale: EccentricScale,
+                    type: type
+                )
+            );
+        }
+    }
+    [Fact]
     public void ScopingTheSameSphereLeavesTheGlobalStepScaleAtOne() {
         var program = Build(
             scale: EccentricScale,
@@ -117,28 +154,7 @@ public sealed class SdfStepScaleBinderLawTests {
             expected: 1f,
             actual: program.StepScale
         );
-        Assert.Null(program.StepScaleBinder);
-    }
-    [Fact]
-    public void ARoundSphereCarriesNoFactorAndNoBinder() {
-        Assert.Equal(
-            expected: 1f,
-            actual: SdfSolidGeometry.StepFactor(
-                type: SdfSolidPrimitive.Sphere,
-                scale: new Vector3(value: 0.3f)
-            )
-        );
-
-        var program = Build(
-            scale: new Vector3(value: 0.3f),
-            scoped: false
-        );
-
-        Assert.Equal(
-            expected: 1f,
-            actual: program.StepScale
-        );
-        Assert.Null(program.StepScaleBinder);
+        Assert.Null(value: program.StepScaleBinder);
     }
     [Fact]
     public void TheLargestUnscopedFactorIsTheOneNamed() {
@@ -151,7 +167,7 @@ public sealed class SdfStepScaleBinderLawTests {
                 z: 0.2f
             )
         );
-        var binder = Assert.NotNull(program.StepScaleBinder);
+        var binder = Assert.NotNull(value: program.StepScaleBinder);
 
         Assert.Equal(
             expected: 1,
@@ -165,21 +181,5 @@ public sealed class SdfStepScaleBinderLawTests {
             expected: 0.5f,
             actual: program.StepScale
         );
-    }
-    [Fact]
-    public void EveryOtherPrimitiveReportsFactorOne() {
-        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
-            if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) {
-                continue;
-            }
-
-            Assert.Equal(
-                expected: 1f,
-                actual: SdfSolidGeometry.StepFactor(
-                    type: type,
-                    scale: EccentricScale
-                )
-            );
-        }
     }
 }

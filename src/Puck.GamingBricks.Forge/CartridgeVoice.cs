@@ -14,7 +14,6 @@ public enum CartridgeVoice {
     /// <summary>The noise channel, four registers a step.</summary>
     Noise = 3,
 }
-
 /// <summary>Reads the voice a document names.</summary>
 public static class CartridgeVoices {
     /// <summary>Returns the voice a document's name selects.</summary>

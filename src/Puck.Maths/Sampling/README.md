@@ -969,4 +969,4 @@ indices its consumers derive at run time.
 
 ## Documentation
 
-📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)
+📚 [Puck.Maths](../../../docs/reference/maths.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

@@ -35,16 +35,15 @@ namespace Puck.GamingBricks;
 public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly IMachineGroupCore m_core;
     private readonly QueuedWorkerLifecycle<GroupWorkItem> m_lifecycle;
+    private readonly Lock m_lifecycleLock = new();
     private readonly IMachineRuntime[] m_machines;
     private readonly int m_maximumPendingSteps;
     private readonly MachineTimeTravel<MachineLinkPads> m_timeTravel;
-    private readonly QueuedMachineWorker[] m_workers;
     private readonly string m_workerName;
+    private readonly QueuedMachineWorker[] m_workers;
 
     private ulong m_cycleRemainder;
     private int m_disposed;
-
-    private readonly Lock m_lifecycleLock = new();
 
     /// <summary>Forms a link over two or more queued machines: each member's core is lent to this group, the medium is
     /// built over the lent cores, and the group's execution thread starts. A failure at any point returns every core
@@ -129,6 +128,9 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     /// capacity.</summary>
     public long BackpressureEvents =>
         m_lifecycle.BackpressureEvents;
+    /// <summary>Gets the number of accepted group segments whose emulation has completed.</summary>
+    public long CompletedSteps =>
+        m_lifecycle.CompletedSteps;
     /// <inheritdoc/>
     public long CompletedTransfers {
         get {
@@ -139,9 +141,6 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             return transfers;
         }
     }
-    /// <summary>Gets the number of accepted group segments whose emulation has completed.</summary>
-    public long CompletedSteps =>
-        m_lifecycle.CompletedSteps;
     /// <summary>Gets the group's current shared cycle count, read on the group's execution thread — the monotonic stamp
     /// a captured instant carries, and the coordinate a rewind lands on. Zero when the link is severed.</summary>
     public long CycleCount {
@@ -178,144 +177,6 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             return fingerprint;
         }
     }
-
-    /// <summary>Captures the group's whole state image — every member's snapshot plus the medium's pacing state — on
-    /// the group's execution thread, so it observes a coherent inter-instruction boundary.</summary>
-    /// <returns>The state image, or an empty array when the link is severed.</returns>
-    public byte[] CaptureState() {
-        var image = Array.Empty<byte>();
-
-        _ = RunOnLinkThread(work: () => {
-            var buffer = Array.Empty<byte>();
-            var length = m_core.CaptureState(buffer: ref buffer);
-
-            image = buffer[..length];
-        });
-
-        return image;
-    }
-    /// <inheritdoc/>
-    // The whole method runs under m_lifecycleLock, not just the teardown: a second concurrent caller (typically a
-    // member's own DetachCore cascading through SeverLink while another member's Dispose already won the exchange)
-    // blocks here until the first finishes returning every core, rather than observing a false "severed" the instant
-    // it loses the race. Member workers do not deadlock against this wait: ReturnCore's own pre-lock m_lent check lets
-    // the winner's foreach skip a worker that is concurrently tearing itself down without ever taking that worker's
-    // lifecycle lock.
-    public void Dispose() {
-        lock (m_lifecycleLock) {
-            if (0 != Interlocked.Exchange(
-                location1: ref m_disposed,
-                value: 1
-            )) {
-                return;
-            }
-
-            m_lifecycle.Stop();
-            m_timeTravel.Dispose();
-            m_core.Dispose();
-
-            foreach (var worker in m_workers) {
-                worker.ReturnCore(hostAccumulator: m_cycleRemainder);
-            }
-        }
-    }
-    /// <summary>Rewinds the whole group to the oldest captured instant inside the requested native-frame window, or the
-    /// nearest older instant when that window is empty. Every member and the medium's pacing land together.</summary>
-    /// <param name="frames">The number of native frames to move backward.</param>
-    /// <returns>The number of native frames actually rewound.</returns>
-    public int RewindBy(int frames) {
-        var rewound = 0;
-
-        _ = RunOnLinkThread(work: () => {
-            rewound = m_timeTravel.RewindBy(
-                frames: frames,
-                hostAccumulator: out var landedAccumulator
-            );
-
-            if (rewound > 0) {
-                // The group jumped to a past instant: restore the tick-to-cycle accumulator phase that instant was
-                // produced under, atomically with the members, so identical future ticks buy identical budgets.
-                m_cycleRemainder = landedAccumulator;
-
-                foreach (var worker in m_workers) {
-                    worker.RestageLentFrame();
-                }
-            }
-        });
-
-        return rewound;
-    }
-    /// <inheritdoc/>
-    // Enforces the interface's own "call from inside work already running on the link's thread" contract rather than
-    // marshaling: every current caller (a lent worker's memory-poke/reconfigure path) invokes this from inside a
-    // RunOnLinkThread work item, so a second RunOnLinkThread here would enqueue behind itself and never drain — the
-    // link thread waiting on work only it can dequeue.
-    public void InvalidateLinkHistory() {
-        if (!ReferenceEquals(
-            objA: Thread.CurrentThread,
-            objB: m_lifecycle.Worker
-        )) {
-            throw new InvalidOperationException(message: $"{nameof(InvalidateLinkHistory)} must run on the {m_workerName} link thread; call it from inside work already running there.");
-        }
-
-        m_timeTravel.Reset();
-    }
-    /// <inheritdoc/>
-    public bool RunOnLinkThread(Action work) {
-        ArgumentNullException.ThrowIfNull(argument: work);
-
-        if (
-            (0 != Volatile.Read(location: ref m_disposed)) ||
-            (m_lifecycle.Worker is null)
-        ) {
-            return false;
-        }
-
-        using var completion = new ManualResetEventSlim(initialState: false);
-
-        return m_lifecycle.EnqueueAndWait(item: GroupWorkItem.ForInvoke(
-            completion: completion,
-            work: work
-        ));
-    }
-    /// <inheritdoc/>
-    public void SeverLink() =>
-        Dispose();
-    /// <summary>Sets the group's fast-forward factor — the number of exact tick/seat-input segments run per submission,
-    /// clamped to at least 1. Every member advances the same number of segments, so the lockstep holds.</summary>
-    /// <param name="factor">The exact-segment repeat count (1 = realtime).</param>
-    public void SetFastForward(int factor) =>
-        _ = RunOnLinkThread(work: () => m_timeTravel.SetFastForward(factor: factor));
-    /// <summary>Arms or disarms the group's rewind ring. While armed, each stepped group frame is captured; disarming
-    /// clears the captured history.</summary>
-    /// <param name="enabled">Whether to capture rewind history.</param>
-    public void SetRewindEnabled(bool enabled) =>
-        _ = RunOnLinkThread(work: () => m_timeTravel.SetRewindEnabled(enabled: enabled));
-    /// <inheritdoc/>
-    public void Step(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
-        if (EnqueueStep(
-            deltaTicks: deltaTicks,
-            forceStage: true,
-            inputs: inputs
-        ) == QueuedMachineSubmission.Rejected) {
-            m_lifecycle.ThrowIfFaulted();
-
-            return;
-        }
-
-        m_lifecycle.Drain();
-    }
-    /// <summary>Accepts one exact tick/seat-input segment for ordered execution, applying producer backpressure at the
-    /// group's pending-segment capacity.</summary>
-    /// <param name="deltaTicks">The segment's fixed-step tick budget, shared by every member.</param>
-    /// <param name="inputs">Each member's controller image, in cable order.</param>
-    /// <returns>The observable submission outcome.</returns>
-    public QueuedMachineSubmission Submit(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) =>
-        EnqueueStep(
-            deltaTicks: deltaTicks,
-            forceStage: false,
-            inputs: inputs
-        );
 
     private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage) {
         if (
@@ -405,6 +266,144 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             );
         }
     }
+
+    /// <summary>Captures the group's whole state image — every member's snapshot plus the medium's pacing state — on
+    /// the group's execution thread, so it observes a coherent inter-instruction boundary.</summary>
+    /// <returns>The state image, or an empty array when the link is severed.</returns>
+    public byte[] CaptureState() {
+        var image = Array.Empty<byte>();
+
+        _ = RunOnLinkThread(work: () => {
+            var buffer = Array.Empty<byte>();
+            var length = m_core.CaptureState(buffer: ref buffer);
+
+            image = buffer[..length];
+        });
+
+        return image;
+    }
+    /// <inheritdoc/>
+    // The whole method runs under m_lifecycleLock, not just the teardown: a second concurrent caller (typically a
+    // member's own DetachCore cascading through SeverLink while another member's Dispose already won the exchange)
+    // blocks here until the first finishes returning every core, rather than observing a false "severed" the instant
+    // it loses the race. Member workers do not deadlock against this wait: ReturnCore's own pre-lock m_lent check lets
+    // the winner's foreach skip a worker that is concurrently tearing itself down without ever taking that worker's
+    // lifecycle lock.
+    public void Dispose() {
+        lock (m_lifecycleLock) {
+            if (0 != Interlocked.Exchange(
+                location1: ref m_disposed,
+                value: 1
+            )) {
+                return;
+            }
+
+            m_lifecycle.Stop();
+            m_timeTravel.Dispose();
+            m_core.Dispose();
+
+            foreach (var worker in m_workers) {
+                worker.ReturnCore(hostAccumulator: m_cycleRemainder);
+            }
+        }
+    }
+    /// <inheritdoc/>
+    // Enforces the interface's own "call from inside work already running on the link's thread" contract rather than
+    // marshaling: every current caller (a lent worker's memory-poke/reconfigure path) invokes this from inside a
+    // RunOnLinkThread work item, so a second RunOnLinkThread here would enqueue behind itself and never drain — the
+    // link thread waiting on work only it can dequeue.
+    public void InvalidateLinkHistory() {
+        if (!ReferenceEquals(
+            objA: Thread.CurrentThread,
+            objB: m_lifecycle.Worker
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(InvalidateLinkHistory)} must run on the {m_workerName} link thread; call it from inside work already running there.");
+        }
+
+        m_timeTravel.Reset();
+    }
+    /// <summary>Rewinds the whole group to the oldest captured instant inside the requested native-frame window, or the
+    /// nearest older instant when that window is empty. Every member and the medium's pacing land together.</summary>
+    /// <param name="frames">The number of native frames to move backward.</param>
+    /// <returns>The number of native frames actually rewound.</returns>
+    public int RewindBy(int frames) {
+        var rewound = 0;
+
+        _ = RunOnLinkThread(work: () => {
+            rewound = m_timeTravel.RewindBy(
+                frames: frames,
+                hostAccumulator: out var landedAccumulator
+            );
+
+            if (rewound > 0) {
+                // The group jumped to a past instant: restore the tick-to-cycle accumulator phase that instant was
+                // produced under, atomically with the members, so identical future ticks buy identical budgets.
+                m_cycleRemainder = landedAccumulator;
+
+                foreach (var worker in m_workers) {
+                    worker.RestageLentFrame();
+                }
+            }
+        });
+
+        return rewound;
+    }
+    /// <inheritdoc/>
+    public bool RunOnLinkThread(Action work) {
+        ArgumentNullException.ThrowIfNull(argument: work);
+
+        if (
+            (0 != Volatile.Read(location: ref m_disposed)) ||
+            (m_lifecycle.Worker is null)
+        ) {
+            return false;
+        }
+
+        using var completion = new ManualResetEventSlim(initialState: false);
+
+        return m_lifecycle.EnqueueAndWait(item: GroupWorkItem.ForInvoke(
+            completion: completion,
+            work: work
+        ));
+    }
+    /// <summary>Sets the group's fast-forward factor — the number of exact tick/seat-input segments run per submission,
+    /// clamped to at least 1. Every member advances the same number of segments, so the lockstep holds.</summary>
+    /// <param name="factor">The exact-segment repeat count (1 = realtime).</param>
+    public void SetFastForward(int factor) =>
+        _ = RunOnLinkThread(work: () => m_timeTravel.SetFastForward(factor: factor));
+    /// <summary>Arms or disarms the group's rewind ring. While armed, each stepped group frame is captured; disarming
+    /// clears the captured history.</summary>
+    /// <param name="enabled">Whether to capture rewind history.</param>
+    public void SetRewindEnabled(bool enabled) =>
+        _ = RunOnLinkThread(work: () => m_timeTravel.SetRewindEnabled(enabled: enabled));
+    /// <inheritdoc/>
+    public void SeverLink() =>
+        Dispose();
+    /// <inheritdoc/>
+    public void Step(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
+        if (EnqueueStep(
+            deltaTicks: deltaTicks,
+            forceStage: true,
+            inputs: inputs
+        ) == QueuedMachineSubmission.Rejected) {
+            m_lifecycle.ThrowIfFaulted();
+
+            return;
+        }
+
+        m_lifecycle.Drain();
+    }
+    /// <summary>Accepts one exact tick/seat-input segment for ordered execution, applying producer backpressure at the
+    /// group's pending-segment capacity.</summary>
+    /// <param name="deltaTicks">The segment's fixed-step tick budget, shared by every member.</param>
+    /// <param name="inputs">Each member's controller image, in cable order.</param>
+    /// <returns>The observable submission outcome.</returns>
+    public QueuedMachineSubmission Submit(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) =>
+        EnqueueStep(
+            deltaTicks: deltaTicks,
+            forceStage: false,
+            inputs: inputs
+        );
 
     private enum GroupWorkKind {
         Step,

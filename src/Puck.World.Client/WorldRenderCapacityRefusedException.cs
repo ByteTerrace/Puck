@@ -11,8 +11,8 @@ public sealed class WorldRenderCapacityRefusedException : InvalidOperationExcept
     /// <param name="innerException">The engine ceiling that refused.</param>
     public WorldRenderCapacityRefusedException(string message, Exception? innerException = null)
         : base(
-            innerException: innerException,
-            message: message
-        ) {
+        innerException: innerException,
+        message: message
+    ) {
     }
 }

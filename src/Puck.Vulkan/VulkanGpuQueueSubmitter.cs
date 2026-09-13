@@ -10,6 +10,15 @@ namespace Puck.Vulkan;
 /// </summary>
 public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter, IVulkanFrameSynchronizationApi frameSynchronizationApi) : IGpuQueueSubmitter {
     /// <inheritdoc/>
+    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) {
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
+
+        return new VulkanGpuSubmissionFence(
+            deviceHandle: vkContext.LogicalDevice.Handle,
+            frameSynchronizationApi: frameSynchronizationApi
+        );
+    }
+    /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
         var vkContext = ((IVulkanDeviceContext)deviceContext);
 
@@ -41,15 +50,6 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
             graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
         );
     }
-    /// <inheritdoc/>
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
-
-        return new VulkanGpuSubmissionFence(
-            deviceHandle: vkContext.LogicalDevice.Handle,
-            frameSynchronizationApi: frameSynchronizationApi
-        );
-    }
 }
 
 /// <summary>
@@ -68,7 +68,10 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
         m_frameSynchronizationApi = frameSynchronizationApi;
         m_frameSynchronizationApi.CreateFence(
             fenceHandle: out m_fenceHandle,
-            request: new VulkanFrameSynchronizationCreateRequest(DeviceHandle: deviceHandle, StartSignaled: false)
+            request: new VulkanFrameSynchronizationCreateRequest(
+                DeviceHandle: deviceHandle,
+                StartSignaled: false
+            )
         ).ThrowIfFailed(operation: "vkCreateFence");
     }
 
@@ -84,6 +87,19 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
         return m_fenceHandle;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Destroys the fence WITHOUT waiting (the frame-ring owner drains the device before teardown, and a
+    /// lost device has nothing left to wait on).</remarks>
+    public void Dispose() {
+        if (0 != m_fenceHandle) {
+            m_frameSynchronizationApi.DestroyFence(
+                deviceHandle: m_deviceHandle,
+                fenceHandle: m_fenceHandle
+            );
+            m_fenceHandle = 0;
+            m_pending = false;
+        }
+    }
     /// <inheritdoc/>
     public void Wait() {
         if (!m_pending) {
@@ -102,15 +118,5 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
             fenceHandle: m_fenceHandle
         ).ThrowIfFailed(operation: "vkResetFences");
         m_pending = false;
-    }
-    /// <inheritdoc/>
-    /// <remarks>Destroys the fence WITHOUT waiting (the frame-ring owner drains the device before teardown, and a
-    /// lost device has nothing left to wait on).</remarks>
-    public void Dispose() {
-        if (0 != m_fenceHandle) {
-            m_frameSynchronizationApi.DestroyFence(deviceHandle: m_deviceHandle, fenceHandle: m_fenceHandle);
-            m_fenceHandle = 0;
-            m_pending = false;
-        }
     }
 }

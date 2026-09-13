@@ -18,6 +18,8 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
     private const uint SpecialCurrentExtent = 0xFFFFFFFF;
     private const uint TransferSourceImageUsage = 0x00000001;
 
+    private readonly IVulkanSwapchainApi m_swapchainApi;
+
     private static IReadOnlyList<uint> BuildQueueFamilyIndices(VulkanQueueFamilySelection queueFamilySelection) {
         if (queueFamilySelection.UsesSingleQueueFamily) {
             return [queueFamilySelection.GraphicsFamilyIndex];
@@ -45,15 +47,15 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
 
         return (
             Math.Clamp(
-                max: capabilities.MaxImageExtentWidth,
-                min: capabilities.MinImageExtentWidth,
-                value: desiredWidth
-            ),
+            max: capabilities.MaxImageExtentWidth,
+            min: capabilities.MinImageExtentWidth,
+            value: desiredWidth
+        ),
             Math.Clamp(
-                max: capabilities.MaxImageExtentHeight,
-                min: capabilities.MinImageExtentHeight,
-                value: desiredHeight
-            )
+            max: capabilities.MaxImageExtentHeight,
+            min: capabilities.MinImageExtentHeight,
+            value: desiredHeight
+        )
         );
     }
     private static uint SelectCompositeAlpha(uint supportedCompositeAlpha) {
@@ -77,11 +79,15 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         return (
             ((capabilities.MaxImageCount > 0) &&
             (imageCount > capabilities.MaxImageCount))
-                ? capabilities.MaxImageCount
-                : imageCount);
+            ? capabilities.MaxImageCount
+            : imageCount
+        );
     }
     private static uint SelectPresentMode(IReadOnlyList<uint> presentModes, uint? preferredPresentMode) {
-        if (preferredPresentMode.HasValue && presentModes.Contains(value: preferredPresentMode.Value)) {
+        if (
+            preferredPresentMode.HasValue &&
+            presentModes.Contains(value: preferredPresentMode.Value)
+        ) {
             return preferredPresentMode.Value;
         }
 
@@ -100,22 +106,14 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         return presentModes[0];
     }
     private static VulkanSurfaceFormat SelectSurfaceFormat(IReadOnlyList<VulkanSurfaceFormat> surfaceFormats, VulkanSurfaceFormat? preferredSurfaceFormat) {
-        if (preferredSurfaceFormat.HasValue && surfaceFormats.Contains(value: preferredSurfaceFormat.Value)) {
+        if (
+            preferredSurfaceFormat.HasValue &&
+            surfaceFormats.Contains(value: preferredSurfaceFormat.Value)
+        ) {
             return preferredSurfaceFormat.Value;
         }
 
         return surfaceFormats[0];
-    }
-
-    private readonly IVulkanSwapchainApi m_swapchainApi;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanSwapchainFactory"/> class.</summary>
-    /// <param name="swapchainApi">The swapchain API used to create and own the underlying swapchain.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="swapchainApi"/> is <see langword="null"/>.</exception>
-    public VulkanSwapchainFactory(IVulkanSwapchainApi swapchainApi) {
-        ArgumentNullException.ThrowIfNull(argument: swapchainApi);
-
-        m_swapchainApi = swapchainApi;
     }
 
     /// <inheritdoc/>
@@ -150,7 +148,8 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         var queueFamilyIndices = BuildQueueFamilyIndices(queueFamilySelection: logicalDevice.PhysicalDevice.QueueFamilySelection);
         var sharingMode = ((queueFamilyIndices.Count == 1)
             ? ExclusiveSharingMode
-            : ConcurrentSharingMode);
+            : ConcurrentSharingMode
+        );
         var surfaceFormat = SelectSurfaceFormat(
             preferredSurfaceFormat: preferredSurfaceFormat,
             surfaceFormats: supportDetails.SurfaceFormats
@@ -190,5 +189,14 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
             swapchainApi: m_swapchainApi,
             swapchainHandle: swapchainHandle
         );
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanSwapchainFactory"/> class.</summary>
+    /// <param name="swapchainApi">The swapchain API used to create and own the underlying swapchain.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="swapchainApi"/> is <see langword="null"/>.</exception>
+    public VulkanSwapchainFactory(IVulkanSwapchainApi swapchainApi) {
+        ArgumentNullException.ThrowIfNull(argument: swapchainApi);
+
+        m_swapchainApi = swapchainApi;
     }
 }

@@ -38,10 +38,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// <summary>Initializes a new instance that creates its device on the default adapter at feature level 11.0.</summary>
     public DirectXDeviceContext()
         : this(
-            adapterLuid: 0,
-            deviceApi: new Apis.DirectXNativeDeviceApi(),
-            minimumFeatureLevel: DirectXFeatureLevel.Level110
-        ) {
+        adapterLuid: 0,
+        deviceApi: new Apis.DirectXNativeDeviceApi(),
+        minimumFeatureLevel: DirectXFeatureLevel.Level110
+    ) {
     }
     /// <summary>Initializes a new instance bound to a fixed adapter LUID.</summary>
     /// <param name="adapterLuid">The adapter LUID to create the device on, or zero for the default adapter.</param>
@@ -127,7 +127,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             void* debugInterface;
             var debugIid = ID3D12Debug.IID_Guid;
 
-            if (PInvoke.D3D12GetDebugInterface(ppvDebug: &debugInterface, riid: in debugIid).Succeeded) {
+            if (PInvoke.D3D12GetDebugInterface(
+                ppvDebug: &debugInterface,
+                riid: in debugIid
+            ).Succeeded) {
                 ((ID3D12Debug*)debugInterface)->EnableDebugLayer();
                 _ = ((IUnknown*)debugInterface)->Release();
             }
@@ -140,7 +143,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                 adapterLuid: adapterLuid,
                 minimumFeatureLevel: FeatureLevel
             )
-            : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel));
+            : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel)
+        );
 
         EnsureShaderModelFloor(deviceHandle: m_device.Handle);
 
@@ -149,7 +153,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         void* infoQueuePtr;
         var infoQueueIid = ID3D12InfoQueue.IID_Guid;
 
-        if (((IUnknown*)m_device.Handle)->QueryInterface(ppvObject: out infoQueuePtr, riid: in infoQueueIid).Succeeded) {
+        if (((IUnknown*)m_device.Handle)->QueryInterface(
+            ppvObject: out infoQueuePtr,
+            riid: in infoQueueIid
+        ).Succeeded) {
             m_infoQueue = ((nint)infoQueuePtr);
         }
 
@@ -222,7 +229,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         var reported = (queried
             ? $"{(((int)shaderModel.HighestShaderModel) >> 4)}.{((int)shaderModel.HighestShaderModel) & 0xF}"
-            : "unknown (feature query failed)");
+            : "unknown (feature query failed)"
+        );
 
         throw new InvalidOperationException(message:
             ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 ") +
@@ -253,12 +261,21 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         var fence = ((ID3D12Fence*)m_idleFence);
         var value = m_idleFenceValue;
 
-        ((ID3D12CommandQueue*)m_commandQueue)->Signal(Value: value, pFence: fence);
+        ((ID3D12CommandQueue*)m_commandQueue)->Signal(
+            Value: value,
+            pFence: fence
+        );
         m_idleFenceValue++;
 
         if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(Value: value, hEvent: m_idleFenceEvent);
-            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_idleFenceEvent);
+            fence->SetEventOnCompletion(
+                Value: value,
+                hEvent: m_idleFenceEvent
+            );
+            _ = PInvoke.WaitForSingleObject(
+                dwMilliseconds: uint.MaxValue,
+                hHandle: m_idleFenceEvent
+            );
         }
 
         DrainDebugMessages();
@@ -280,7 +297,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             nuint length = 0;
 
             // First call (null message) returns the byte length the message + its description need.
-            infoQueue->GetMessage(MessageIndex: index, pMessage: null, pMessageByteLength: &length);
+            infoQueue->GetMessage(
+                MessageIndex: index,
+                pMessage: null,
+                pMessageByteLength: &length
+            );
 
             if (0 == length) {
                 continue;
@@ -291,10 +312,16 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             fixed (byte* pointer = buffer) {
                 var message = ((D3D12_MESSAGE*)pointer);
 
-                infoQueue->GetMessage(MessageIndex: index, pMessage: message, pMessageByteLength: &length);
+                infoQueue->GetMessage(
+                    MessageIndex: index,
+                    pMessage: message,
+                    pMessageByteLength: &length
+                );
 
                 var description = new string(
-                    length: ((int)((message->DescriptionByteLength > 0) ? (message->DescriptionByteLength - 1) : 0)),
+                    length: ((int)((message->DescriptionByteLength > 0)
+                    ? (message->DescriptionByteLength - 1)
+                    : 0)),
                     startIndex: 0,
                     value: ((sbyte*)message->pDescription)
                 );

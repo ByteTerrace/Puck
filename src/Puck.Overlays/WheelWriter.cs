@@ -15,6 +15,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     // The same emptied-viewport guard the cursor writer applies before opening a clip scope on the region.
     private const float MinRegionExtent = 0.05f;
 
+    /// <summary>A sector's icon chip half-extent as a fraction of the ring width.</summary>
+    public const float ChipHalfRatio = 0.3f;
     /// <summary>The active-ring label's character clamp — <see cref="MaxSectorLabelChars"/>' hub-label twin.</summary>
     public const int MaxRingLabelChars = 16;
     /// <summary>The most rings a published seat may carry — the render-side backstop against the host's declared
@@ -28,11 +30,9 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     public const int MaxSectorsPerRing = 8;
     /// <summary>The half-width, px, trimmed off each angular edge of a piece so neighbours read as separate pieces.</summary>
     public const float SectorGapPx = 2f;
-    /// <summary>A sector's icon chip half-extent as a fraction of the ring width.</summary>
-    public const float ChipHalfRatio = 0.3f;
 
-    private readonly OverlayThemeStore m_theme;
     private readonly IWheelSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="WheelWriter"/> class.</summary>
     /// <param name="source">The wheel snapshot source.</param>
@@ -53,32 +53,6 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             seat: in seat
         );
 
-    private static void NoteRefusedSectors(OverlayFrameBuilder builder, ReadOnlySpan<OverlayWheelSector> sectors, int start) {
-        var elements = 0;
-        var textWords = 0;
-
-        for (var index = start; (index < sectors.Length); index++) {
-            var sector = sectors[index];
-
-            // Every sector owns its wedge, then either one icon record or one non-empty text fallback.
-            elements++;
-
-            if (sector.Icon.Glyph0 != 0) {
-                elements++;
-            } else if (!string.IsNullOrEmpty(value: sector.Label)) {
-                elements++;
-                textWords += Math.Min(
-                    val1: sector.Label.Length,
-                    val2: MaxSectorLabelChars
-                );
-            }
-        }
-
-        builder.NoteRefused(
-            elements: elements,
-            textWords: textWords
-        );
-    }
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) {
         var region = seat.Viewport;
 
@@ -110,7 +84,10 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 );
             }
 
-            if ((((uint)seat.ActiveRing) < ((uint)rings.Length)) && (seat.ActiveRing >= ringCount)) {
+            if (
+                (((uint)seat.ActiveRing) < ((uint)rings.Length)) &&
+                (seat.ActiveRing >= ringCount)
+            ) {
                 var refusedLabel = rings[seat.ActiveRing].Label;
 
                 if (!string.IsNullOrEmpty(value: refusedLabel)) {
@@ -202,8 +179,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                         ? OverlayColorRole.Danger
                         : (isHovered
                             ? OverlayColorRole.Accent
-                            : (OverlayColorRole?)null))
-                );
+                            : (OverlayColorRole?)null
+                )));
 
                 builder.WriteWedge(
                     alpha: ringAlpha,
@@ -228,8 +205,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                     builder.WriteIcon(
                         accent: (isHovered || isOutcome),
                         accentRole: (((glow is { } chipRole) && (chipRole != OverlayColorRole.Accent))
-                            ? chipRole
-                            : null),
+                        ? chipRole
+                        : null),
                         alpha: ringAlpha,
                         badgeGlyph0: 0,
                         badgeGlyph1: 0,
@@ -268,7 +245,10 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
                 // A committed sector remains the hub's subject through its outcome fade even when the host clears
                 // HoveredSector (an errored commit is no longer a live hover, but it still names the failed act).
-                if (isHovered || isOutcome) {
+                if (
+                    isHovered ||
+                    isOutcome
+                ) {
                     hoveredLabel = sector.Label.AsSpan();
                 }
 
@@ -286,14 +266,14 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             centerY: seat.CenterY,
             gap: 0f,
             glow: (!hasOutcomeSector
-                ? (seat.Outcome switch {
+            ? (seat.Outcome switch {
                     OverlayWheelOutcome.Dispatched => OverlayColorRole.Positive,
                     OverlayWheelOutcome.Cancelled or OverlayWheelOutcome.Errored => OverlayColorRole.Danger,
                     _ => (!hasHoveredSector
-                        ? OverlayColorRole.Accent
-                        : null),
-                })
+                ? OverlayColorRole.Accent
                 : null),
+                })
+            : null),
             innerRadius: 0f,
             outerRadius: hubRadius,
             role: OverlayColorRole.ScrimPanel,
@@ -351,6 +331,32 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         }
 
         builder.EndClip();
+    }
+    private static void NoteRefusedSectors(OverlayFrameBuilder builder, ReadOnlySpan<OverlayWheelSector> sectors, int start) {
+        var elements = 0;
+        var textWords = 0;
+
+        for (var index = start; (index < sectors.Length); index++) {
+            var sector = sectors[index];
+
+            // Every sector owns its wedge, then either one icon record or one non-empty text fallback.
+            elements++;
+
+            if (sector.Icon.Glyph0 != 0) {
+                elements++;
+            } else if (!string.IsNullOrEmpty(value: sector.Label)) {
+                elements++;
+                textWords += Math.Min(
+                    val1: sector.Label.Length,
+                    val2: MaxSectorLabelChars
+                );
+            }
+        }
+
+        builder.NoteRefused(
+            elements: elements,
+            textWords: textWords
+        );
     }
 
     /// <summary>Emits this frame's per-seat wheel records, when a snapshot has been published.</summary>

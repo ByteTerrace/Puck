@@ -19,6 +19,26 @@ namespace Puck.World.Tests;
 /// its own (it starts with neither — seats seed Drive over their OWN body index only).
 /// </summary>
 public sealed class AuthorityAdministrationLawTests {
+    private static bool GrantAndObserveHeld(WorldFixture fixture, WorldPrincipal actor, WorldPrincipal recipient, GrantSubject subject) {
+        var grant = new WorldGrant(
+            Principal: recipient,
+            Capability: WorldCapability.Drive,
+            Subject: subject,
+            Exclusive: false
+        );
+
+        fixture.Server.Grant(
+            grant: grant,
+            actor: actor
+        );
+
+        return fixture.Server.Grants.Allows(
+            capability: WorldCapability.Drive,
+            principal: recipient,
+            subject: subject
+        );
+    }
+
     [Fact]
     public void SeatAdministersOnlyItsOwnBody_OtherBodyRefused_OwnBodySucceeds() {
         using var fixture = Fixtures.FreshServer();
@@ -32,15 +52,18 @@ public sealed class AuthorityAdministrationLawTests {
 
         Laws.RefusalWithControl(
             lawId: "authority.grant-administration-own-body-only",
-            deniedOutcome: () => GrantAndObserveHeld(actor: actor, fixture: fixture, recipient: recipient, subject: otherBody),
-            controlOutcome: () => GrantAndObserveHeld(actor: actor, fixture: fixture, recipient: recipient, subject: ownBody));
-    }
-
-    private static bool GrantAndObserveHeld(WorldFixture fixture, WorldPrincipal actor, WorldPrincipal recipient, GrantSubject subject) {
-        var grant = new WorldGrant(Principal: recipient, Capability: WorldCapability.Drive, Subject: subject, Exclusive: false);
-
-        fixture.Server.Grant(grant: grant, actor: actor);
-
-        return fixture.Server.Grants.Allows(capability: WorldCapability.Drive, principal: recipient, subject: subject);
+            deniedOutcome: () => GrantAndObserveHeld(
+                actor: actor,
+                fixture: fixture,
+                recipient: recipient,
+                subject: otherBody
+            ),
+            controlOutcome: () => GrantAndObserveHeld(
+                actor: actor,
+                fixture: fixture,
+                recipient: recipient,
+                subject: ownBody
+            )
+        );
     }
 }

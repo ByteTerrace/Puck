@@ -129,7 +129,10 @@ public static class ShaderBytecode {
     /// <c>".spv"</c> for Vulkan.</summary>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
     /// <returns>The extension, with its leading dot.</returns>
-    public static string FileExtension(bool hostsOnDirectX) => (hostsOnDirectX ? ".dxil" : ".spv");
+    public static string FileExtension(bool hostsOnDirectX) => (hostsOnDirectX
+        ? ".dxil"
+        : ".spv"
+    );
     /// <summary>Validates that <paramref name="bytecode"/> is recognizable, well-formed SPIR-V or DXBC/DXIL bytecode.</summary>
     /// <param name="bytecode">The compiled shader bytecode.</param>
     /// <exception cref="ArgumentException"><paramref name="bytecode"/> is too small, mis-aligned (SPIR-V), or an unrecognized format.</exception>

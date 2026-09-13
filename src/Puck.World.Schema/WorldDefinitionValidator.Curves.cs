@@ -42,11 +42,16 @@ public static partial class WorldDefinitionValidator {
 
             var knots = row.Knots;
             var knotCount = (knots?.Count ?? 0);
-            var minKnots = (row.Closed ? 3 : 2);
+            var minKnots = (row.Closed
+                ? 3
+                : 2
+            );
             var admitted = true;
 
             if (knotCount < minKnots) {
-                errors.Add(item: $"{path}.knots declares {knotCount} knot(s); a {(row.Closed ? "closed" : "open")} curve needs at least {minKnots}.");
+                errors.Add(item: $"{path}.knots declares {knotCount} knot(s); a {(row.Closed
+                    ? "closed"
+                    : "open")} curve needs at least {minKnots}.");
 
                 admitted = false;
             }
@@ -71,11 +76,41 @@ public static partial class WorldDefinitionValidator {
 
                 var position = knot.Position.Value;
 
-                RequireRange(value: position.X, min: -CurveMaxCoordinate, max: CurveMaxCoordinate, name: $"{knotPath}.position.x", errors: errors);
-                RequireRange(value: position.Y, min: -CurveMaxCoordinate, max: CurveMaxCoordinate, name: $"{knotPath}.position.y", errors: errors);
-                RequireRange(value: position.Z, min: -CurveMaxCoordinate, max: CurveMaxCoordinate, name: $"{knotPath}.position.z", errors: errors);
-                RequireRange(value: knot.TangentYaw, min: -CurveMaxTangentYaw, max: CurveMaxTangentYaw, name: $"{knotPath}.tangentYaw", errors: errors);
-                RequireRange(value: knot.Curvature, min: -CurveMaxCurvature, max: CurveMaxCurvature, name: $"{knotPath}.curvature", errors: errors);
+                RequireRange(
+                    value: position.X,
+                    min: -CurveMaxCoordinate,
+                    max: CurveMaxCoordinate,
+                    name: $"{knotPath}.position.x",
+                    errors: errors
+                );
+                RequireRange(
+                    value: position.Y,
+                    min: -CurveMaxCoordinate,
+                    max: CurveMaxCoordinate,
+                    name: $"{knotPath}.position.y",
+                    errors: errors
+                );
+                RequireRange(
+                    value: position.Z,
+                    min: -CurveMaxCoordinate,
+                    max: CurveMaxCoordinate,
+                    name: $"{knotPath}.position.z",
+                    errors: errors
+                );
+                RequireRange(
+                    value: knot.TangentYaw,
+                    min: -CurveMaxTangentYaw,
+                    max: CurveMaxTangentYaw,
+                    name: $"{knotPath}.tangentYaw",
+                    errors: errors
+                );
+                RequireRange(
+                    value: knot.Curvature,
+                    min: -CurveMaxCurvature,
+                    max: CurveMaxCurvature,
+                    name: $"{knotPath}.curvature",
+                    errors: errors
+                );
 
                 var knotAdmitted = (
                     float.IsFinite(f: position.X) && (MathF.Abs(x: position.X) <= CurveMaxCoordinate) &&

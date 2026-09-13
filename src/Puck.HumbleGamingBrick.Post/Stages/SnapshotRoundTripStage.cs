@@ -31,14 +31,33 @@ internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
     ];
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "snapshot-round-trip";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
+
+    // L-01: fails loudly on ANY roster drift — count, name, or order — rather than letting a stale
+    // MachineIdentity.CurrentVersion silently mislabel a shifted layout.
+    private static string? SectionRosterMismatch(IReadOnlyList<SnapshotSection> sections) {
+        if (sections.Count != ExpectedSectionRoster.Length) {
+            return $"snapshot has {sections.Count} sections; expected {ExpectedSectionRoster.Length} ({string.Join(
+                separator: ", ",
+                values: ExpectedSectionRoster
+            )}) — a component was added, removed, or the registration order changed without updating this roster (and MachineIdentity.CurrentVersion, if the byte layout moved)";
+        }
+
+        for (var index = 0; (index < sections.Count); ++index) {
+            if (sections[index].Name != ExpectedSectionRoster[index]) {
+                return $"snapshot section[{index}]=\"{sections[index].Name}\"; expected \"{ExpectedSectionRoster[index]}\" — section order drifted silently";
+            }
+        }
+
+        return null;
+    }
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -81,27 +100,9 @@ internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
         return (afterFirstRun.ContentEquals(other: afterSecondRun)
             ? PostStageOutcome.Pass(detail: $"save@{WarmFrames}f, then +{TailFrames}f twice, byte-identical ({midpoint.Size} state bytes, format v{midpoint.Identity.Version}, {midpoint.Sections.Count} sections in the expected order)")
             : PostStageOutcome.Fail(detail: $"restored run diverged from the original after {TailFrames} frames — {HashDivergenceProbe.DescribeDivergence(
-            a: afterFirstRun,
-            b: afterSecondRun
-        )}"));
-    }
-
-    // L-01: fails loudly on ANY roster drift — count, name, or order — rather than letting a stale
-    // MachineIdentity.CurrentVersion silently mislabel a shifted layout.
-    private static string? SectionRosterMismatch(IReadOnlyList<SnapshotSection> sections) {
-        if (sections.Count != ExpectedSectionRoster.Length) {
-            return $"snapshot has {sections.Count} sections; expected {ExpectedSectionRoster.Length} ({string.Join(
-                separator: ", ",
-                values: ExpectedSectionRoster
-            )}) — a component was added, removed, or the registration order changed without updating this roster (and MachineIdentity.CurrentVersion, if the byte layout moved)";
-        }
-
-        for (var index = 0; (index < sections.Count); ++index) {
-            if (sections[index].Name != ExpectedSectionRoster[index]) {
-                return $"snapshot section[{index}]=\"{sections[index].Name}\"; expected \"{ExpectedSectionRoster[index]}\" — section order drifted silently";
-            }
-        }
-
-        return null;
+                a: afterFirstRun,
+                b: afterSecondRun
+            )}")
+        );
     }
 }

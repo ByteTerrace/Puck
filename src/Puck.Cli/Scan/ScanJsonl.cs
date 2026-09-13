@@ -10,16 +10,6 @@ namespace Puck.Cli.Scan;
 // comment, comment-smell and lock analyzers emit the same byFile shape, so the grouping is identical —
 // only what populates each line differs.
 internal static class ScanJsonl {
-    // A location's 1-based start and end line — the pair every analyzer record reports.
-    public static (int Start, int End) LineRange(Location location) {
-        var span = location.GetLineSpan();
-
-        return ((span.StartLinePosition.Line + 1), (span.EndLinePosition.Line + 1));
-    }
-    // The span of a construct reported from two anchors (a `lock` keyword through its close paren), so
-    // the record covers the header rather than the whole body.
-    public static (int Start, int End) LineRange(Location start, Location end) =>
-        ((start.GetLineSpan().StartLinePosition.Line + 1), (end.GetLineSpan().EndLinePosition.Line + 1));
     public static string BuildGroupedChunks(Dictionary<string, List<(int Line, string Text)>> byFile, int maxPerChunk) {
         var builder = new StringBuilder(value: "[");
         var firstChunk = true;
@@ -27,7 +17,10 @@ internal static class ScanJsonl {
         // Densest files first; the ordinal tie-break keeps equal-count files in a fixed order rather
         // than dictionary insertion order, so the work-list is byte-identical run to run.
         foreach (var (file, sites) in byFile.OrderByDescending(keySelector: static pair => pair.Value.Count)
-            .ThenBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
+            .ThenBy(
+            keySelector: static pair => pair.Key,
+            comparer: StringComparer.Ordinal
+        )) {
             var chunkCount = (((sites.Count + maxPerChunk) - 1) / maxPerChunk);
 
             for (var offset = 0; (offset < sites.Count); offset += maxPerChunk) {
@@ -42,7 +35,10 @@ internal static class ScanJsonl {
                     .Append(value: "\"chunks\":").Append(value: chunkCount).Append(value: ',')
                     .Append(value: "\"lines\":[");
 
-                var end = Math.Min(val1: (offset + maxPerChunk), val2: sites.Count);
+                var end = Math.Min(
+                    val1: (offset + maxPerChunk),
+                    val2: sites.Count
+                );
 
                 for (var lineIndex = offset; (lineIndex < end); lineIndex++) {
                     if (lineIndex > offset) {
@@ -58,13 +54,6 @@ internal static class ScanJsonl {
 
         return builder.Append(value: ']').ToString();
     }
-    // The densest files first, formatted for the stderr digest every analyzer prints —
-    // `<count>  <file>`, top 30 by default.
-    public static IEnumerable<string> TopFiles(Dictionary<string, int> perFile, int take = 30) =>
-        perFile.OrderByDescending(keySelector: static pair => pair.Value)
-            .ThenBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)
-            .Take(count: take)
-            .Select(selector: static pair => $"{pair.Value,5}  {pair.Key}");
     // Minimal JSON string escaper. The scan output is only ever read back through JsonDocument, so this
     // needs to round-trip, not to be a general serializer.
     public static string JsonString(string value) {
@@ -89,7 +78,10 @@ internal static class ScanJsonl {
                     break;
                 default:
                     if (character < 0x20) {
-                        builder.Append(value: "\\u").Append(value: ((int)character).ToString(format: "x4", provider: CultureInfo.InvariantCulture));
+                        builder.Append(value: "\\u").Append(value: ((int)character).ToString(
+                            format: "x4",
+                            provider: CultureInfo.InvariantCulture
+                        ));
                     } else {
                         builder.Append(value: character);
                     }
@@ -100,4 +92,24 @@ internal static class ScanJsonl {
 
         return builder.Append(value: '"').ToString();
     }
+    // A location's 1-based start and end line — the pair every analyzer record reports.
+    public static (int Start, int End) LineRange(Location location) {
+        var span = location.GetLineSpan();
+
+        return ((span.StartLinePosition.Line + 1), (span.EndLinePosition.Line + 1));
+    }
+    // The span of a construct reported from two anchors (a `lock` keyword through its close paren), so
+    // the record covers the header rather than the whole body.
+    public static (int Start, int End) LineRange(Location start, Location end) =>
+        ((start.GetLineSpan().StartLinePosition.Line + 1), (end.GetLineSpan().EndLinePosition.Line + 1));
+    // The densest files first, formatted for the stderr digest every analyzer prints —
+    // `<count>  <file>`, top 30 by default.
+    public static IEnumerable<string> TopFiles(Dictionary<string, int> perFile, int take = 30) =>
+        perFile.OrderByDescending(keySelector: static pair => pair.Value)
+            .ThenBy(
+            keySelector: static pair => pair.Key,
+            comparer: StringComparer.Ordinal
+        )
+            .Take(count: take)
+            .Select(selector: static pair => $"{pair.Value,5}  {pair.Key}");
 }

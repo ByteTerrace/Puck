@@ -45,10 +45,16 @@ public sealed record CreationDriverDocument(
 ) {
     /// <summary>The largest signal-to-phase gain magnitude.</summary>
     public const float MaxCadence = 256f;
+    /// <summary>The most tokens a gate carries — a gate is a conjunction of independent conditions, and four is
+    /// already more than any authored rig needs.</summary>
+    public const int MaxGateTokens = 4;
     /// <summary>Planar (horizontal) rendered travel, metres — a stride that a ramp's rise must not charge.</summary>
     public const string SignalPlanarTravel = "planarTravel";
     /// <summary>The body's total rendered speed, metres per second.</summary>
     public const string SignalSpeed = "speed";
+    /// <summary>The prefix of a state-cell signal: <c>state.&lt;row&gt;[.&lt;key&gt;]</c>, whose numeric value at the
+    /// frame's tick is the phase (times the cadence) — a cycle-trait clock, a drawn value, an advancing counter.</summary>
+    public const string SignalStatePrefix = "state.";
     /// <summary>Elapsed presentation time, seconds — the signal a rotor or an idle breath rides.</summary>
     public const string SignalTime = "time";
     /// <summary>Total rendered travel, metres — the climb signal (a wall-riding body has no planar component worth
@@ -59,17 +65,14 @@ public sealed record CreationDriverDocument(
     public const string SignalTurnRate = "turnRate";
     /// <summary>The body's rendered vertical speed, metres per second; positive rises.</summary>
     public const string SignalVerticalSpeed = "verticalSpeed";
-    /// <summary>The exponential time constant a driver's weight eases toward its gate over, seconds.</summary>
-    public const float WeightSeconds = 0.15f;
-    /// <summary>The most tokens a gate carries — a gate is a conjunction of independent conditions, and four is
-    /// already more than any authored rig needs.</summary>
-    public const int MaxGateTokens = 4;
     /// <summary>The client-derived gate token holding while the body's eased rendered speed is above
     /// <c>Puck.World.Client.WorldGaitDrivers.MovingSpeed</c> — a presentation predicate, not a sim fact, so a
     /// walker's stride returns its limbs to rest when the body stops without the simulation publishing anything.</summary>
     public const string TokenMoving = "moving";
     /// <summary>The negation of <see cref="TokenMoving"/>.</summary>
     public const string TokenStill = "still";
+    /// <summary>The exponential time constant a driver's weight eases toward its gate over, seconds.</summary>
+    public const float WeightSeconds = 0.15f;
     /// <summary>The ungated <see cref="When"/> token, refused alongside any other token: a conjunction with "no
     /// condition" says nothing the other tokens do not. KEEP IN SYNC with
     /// <c>Puck.Physics.Motion.BodyFactVocabulary.Always</c>, the resolver on the consuming side — this document family
@@ -81,19 +84,16 @@ public sealed record CreationDriverDocument(
     /// <returns><see langword="true"/> for <see cref="SignalPlanarTravel"/>, <see cref="SignalTravel"/>, and
     /// <see cref="SignalTime"/>.</returns>
     public static bool Integrates(string? signal) => (signal is (SignalPlanarTravel or SignalTravel or SignalTime));
-    /// <summary>The prefix of a state-cell signal: <c>state.&lt;row&gt;[.&lt;key&gt;]</c>, whose numeric value at the
-    /// frame's tick is the phase (times the cadence) — a cycle-trait clock, a drawn value, an advancing counter.</summary>
-    public const string SignalStatePrefix = "state.";
-    /// <summary>Returns whether a signal names a state cell.</summary>
-    /// <param name="signal">The signal name.</param>
-    public static bool IsStateSignal(string? signal) => ((signal is { } named) && named.StartsWith(
-        value: SignalStatePrefix,
-        comparisonType: StringComparison.Ordinal
-    ) && (named.Length > SignalStatePrefix.Length));
     /// <summary>Returns whether a signal name is recognized.</summary>
     /// <param name="signal">The signal name.</param>
     /// <returns><see langword="true"/> when the name is one of the six signals.</returns>
     public static bool IsSignal(string? signal) => (Integrates(signal: signal) || (signal is (SignalSpeed or SignalVerticalSpeed or SignalTurnRate)) || IsStateSignal(signal: signal));
+    /// <summary>Returns whether a signal names a state cell.</summary>
+    /// <param name="signal">The signal name.</param>
+    public static bool IsStateSignal(string? signal) => ((signal is { } named) && named.StartsWith(
+        comparisonType: StringComparison.Ordinal,
+        value: SignalStatePrefix
+    ) && (named.Length > SignalStatePrefix.Length));
 }
 /// <summary>Reads a driver's gate as either one token or an array of them, and always writes the array — the
 /// single-token spelling stays authorable while every consumer past the parse sees one shape.</summary>
@@ -140,25 +140,39 @@ public sealed class DriverGateJsonConverter : JsonConverter<IReadOnlyList<string
 /// <summary>The waveform a swing or slide maps its driver's phase through — the artist's control over the shape of a
 /// motion, separate from what drives it and where it hinges.</summary>
 public static class CreationWave {
+    /// <summary>The constant waveform: 1 whatever the argument, so the facet reads <c>amplitude · w</c> — a pose the
+    /// driver's weight blends in while its gate holds (arms raised while climbing, a crouch while sneaking) rather
+    /// than a cycle.</summary>
+    public const string Constant = "constant";
     /// <summary>The authored waveform: <c>curve:&lt;row name&gt;</c> samples the containing world's <c>curves</c> row
     /// by arc fraction — the argument's fraction of a turn maps onto the row's arc length, and the sampled Z is the
     /// value — so a path drawn left to right in the XZ plane is the shape of the motion. The world validator refuses
     /// a name its <c>curves</c> section does not declare.</summary>
     public const string CurvePrefix = "curve:";
+    /// <summary>The positive lobe of <see cref="Sine"/>: <c>max(0, sin(argument))</c>, zero for half of every cycle.
+    /// A knee or an elbow bends one way only, so its swing takes this waveform and a phase that puts the lobe on
+    /// the swing-through.</summary>
+    public const string HalfSine = "halfSine";
     /// <summary>The identity waveform: the argument itself, unbounded. A wheel or a rotor takes amplitude 1 and this
     /// waveform, so the cadence alone reads as radians per metre or radians per second.</summary>
     public const string Linear = "linear";
     /// <summary>The default waveform: <c>sin(argument)</c>.</summary>
     public const string Sine = "sine";
-    /// <summary>The constant waveform: 1 whatever the argument, so the facet reads <c>amplitude · w</c> — a pose the
-    /// driver's weight blends in while its gate holds (arms raised while climbing, a crouch while sneaking) rather
-    /// than a cycle.</summary>
-    public const string Constant = "constant";
-    /// <summary>The positive lobe of <see cref="Sine"/>: <c>max(0, sin(argument))</c>, zero for half of every cycle.
-    /// A knee or an elbow bends one way only, so its swing takes this waveform and a phase that puts the lobe on
-    /// the swing-through.</summary>
-    public const string HalfSine = "halfSine";
 
+    /// <summary>Evaluates a waveform.</summary>
+    /// <param name="wave">The waveform name, or null for <see cref="Sine"/>.</param>
+    /// <param name="argument">The driver phase plus the facet's own phase offset, radians.</param>
+    /// <returns>The waveform's value — in [-1, 1] for <see cref="Sine"/>, in [0, 1] for <see cref="HalfSine"/>,
+    /// unbounded for <see cref="Linear"/>.</returns>
+    public static float Evaluate(string? wave, float argument) => wave switch {
+        Linear => argument,
+        Constant => 1f,
+        HalfSine => MathF.Max(
+        x: 0f,
+        y: MathF.Sin(x: argument)
+    ),
+        _ => MathF.Sin(x: argument),
+    };
     /// <summary>Returns whether a waveform name is one this engine evaluates.</summary>
     /// <param name="wave">The waveform name, or null for <see cref="Sine"/>.</param>
     /// <returns><see langword="true"/> for null, <see cref="Sine"/>, <see cref="HalfSine"/>, <see cref="Linear"/>,
@@ -177,9 +191,9 @@ public static class CreationWave {
         if (
             (wave is not { } named) ||
             !named.StartsWith(
-                value: CurvePrefix,
-                comparisonType: StringComparison.Ordinal
-            ) ||
+            comparisonType: StringComparison.Ordinal,
+            value: CurvePrefix
+        ) ||
             (named.Length <= CurvePrefix.Length)
         ) {
             return false;
@@ -189,20 +203,6 @@ public static class CreationWave {
 
         return true;
     }
-    /// <summary>Evaluates a waveform.</summary>
-    /// <param name="wave">The waveform name, or null for <see cref="Sine"/>.</param>
-    /// <param name="argument">The driver phase plus the facet's own phase offset, radians.</param>
-    /// <returns>The waveform's value — in [-1, 1] for <see cref="Sine"/>, in [0, 1] for <see cref="HalfSine"/>,
-    /// unbounded for <see cref="Linear"/>.</returns>
-    public static float Evaluate(string? wave, float argument) => wave switch {
-        Linear => argument,
-        Constant => 1f,
-        HalfSine => MathF.Max(
-            x: 0f,
-            y: MathF.Sin(x: argument)
-        ),
-        _ => MathF.Sin(x: argument),
-    };
 }
 /// <summary>
 /// One driver-fed rotation authored on a <see cref="ShapeDocument"/>: the shape turns about <see cref="Axis"/> at

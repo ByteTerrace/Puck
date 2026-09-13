@@ -10,30 +10,59 @@ using Puck.AdvancedGamingBrick.Post;
 // accuracy-frontier diagnostic modes (the cosim oracles, single-ROM inspectors) live in Diagnostics and run before the
 // battery when their flag is present; see the README.
 
-if (!CommandLineArguments.TryValidateValues(args: args, names: ["--bios", "--ares", "--suite-focus", "--corpus-cache"], error: out var optionError)) {
+if (!CommandLineArguments.TryValidateValues(
+    args: args,
+    error: out var optionError,
+    names: ["--bios", "--ares", "--suite-focus", "--corpus-cache"]
+)) {
     Console.Error.WriteLine(value: optionError);
     return 2;
 }
 ReadOnlyMemory<byte> biosImage;
 try {
-    biosImage = LoadBios(path: CommandLineArguments.Value(args: args, name: "--bios"));
-} catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
+    biosImage = LoadBios(path: CommandLineArguments.Value(
+        args: args,
+        name: "--bios"
+    ));
+} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
     Console.Error.WriteLine(value: $"--bios: {exception.Message}");
     return 2;
 }
 var machineOptions = new AgbMachineOptions {
-    DisablePrefetch = args.Contains(value: "--no-prefetch", comparer: StringComparer.OrdinalIgnoreCase),
-    DisableRtc = args.Contains(value: "--no-rtc", comparer: StringComparer.OrdinalIgnoreCase),
-    BusTrace = args.Contains(value: "--bus-trace", comparer: StringComparer.OrdinalIgnoreCase) ? Console.Error.WriteLine : null,
+    DisablePrefetch = args.Contains(
+    value: "--no-prefetch",
+    comparer: StringComparer.OrdinalIgnoreCase
+),
+    DisableRtc = args.Contains(
+    value: "--no-rtc",
+    comparer: StringComparer.OrdinalIgnoreCase
+),
+    BusTrace = (args.Contains(
+    value: "--bus-trace",
+    comparer: StringComparer.OrdinalIgnoreCase
+)
+    ? Console.Error.WriteLine
+    : null),
 };
-if (machineOptions.DisablePrefetch || machineOptions.DisableRtc || machineOptions.BusTrace is not null) {
+if (
+    machineOptions.DisablePrefetch ||
+    machineOptions.DisableRtc ||
+    (machineOptions.BusTrace is not null)
+) {
     string[] supported = ["--render", "--probe", "--ags", "--accuracy-suite", "--lockstep", "--pctrace", "--statetrace", "--trace-cycles", "--trace-crash", "--iodump", "--link-init-trace"];
-    if (!args.Any(predicate: arg => supported.Contains(value: arg, comparer: StringComparer.OrdinalIgnoreCase))) {
+
+    if (!args.Any(predicate: arg => supported.Contains(
+        value: arg,
+        comparer: StringComparer.OrdinalIgnoreCase
+    ))) {
         Console.Error.WriteLine(value: "--no-prefetch, --no-rtc and --bus-trace require a single-ROM inspection diagnostic; battery and benchmark runs use normal hardware behavior.");
         return 2;
     }
 }
-var diagnostics = new Diagnostics(biosImage: biosImage, machineOptions: machineOptions);
+var diagnostics = new Diagnostics(
+    biosImage: biosImage,
+    machineOptions: machineOptions
+);
 // A diagnostic flag short-circuits the battery: run that single investigative mode and return its exit code.
 if (diagnostics.TryRun(
     args: args,
@@ -41,8 +70,13 @@ if (diagnostics.TryRun(
 )) {
     return diagnosticExitCode;
 }
-var corpora = CorpusManifest.Load(path: CorpusManifest.InRepository(projectName: "Puck.AdvancedGamingBrick.Post"), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
-
+var corpora = CorpusManifest.Load(
+    path: CorpusManifest.InRepository(projectName: "Puck.AdvancedGamingBrick.Post"),
+    cacheRoot: CommandLineArguments.Value(
+        args: args,
+        name: "--corpus-cache"
+    )
+);
 if (args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,
     value: "--fetch-corpora"
@@ -51,7 +85,6 @@ if (args.Contains(
 
     return 0;
 }
-
 var artifactsDirectory = (CommandLineArguments.Value(
     args: args,
     name: "--artifacts"
@@ -123,19 +156,18 @@ var report = new PostBattery<PostContext>(
     banner: "Puck.AdvancedGamingBrick.Post - AdvancedGamingBrick machine power-on self-test",
     stages: stages
 ).Run(context: context);
-
 report.Write(artifactsDirectory: artifactsDirectory);
-
 return report.ExitCode;
-
 static string? ExistingDirectory(string? path) =>
     (((path is not null) && Directory.Exists(path: path))
         ? path
-        : null);
+        : null
+    );
 static string? ExistingFile(string? path) =>
     (((path is not null) && File.Exists(path: path))
         ? path
-        : null);
+        : null
+    );
 // Loads the explicit --bios image, rejecting unreadable or wrong-sized files. Only omission selects the zeroed
 // 16 KiB stub, on which BIOS-dependent stages skip cleanly. The banner reports the image's
 // real classification (retail / replacement / unknown) via AgbBiosProfile rather than assuming a replacement.

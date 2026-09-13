@@ -14,13 +14,12 @@ namespace Puck.Text;
 /// identity and caching of the image.
 /// </remarks>
 public sealed class FontAtlasImageData {
-    private readonly byte[] m_rgbaPixels;
     private readonly Lazy<Vector2> m_alphaGradientBound;
+    private readonly byte[] m_rgbaPixels;
 
     /// <summary>Gets upper bounds on the horizontal and vertical derivatives of bilinearly reconstructed alpha,
     /// in encoded units per texel. Includes quantization and image-wide cell transitions; edge clamping adds no slope.</summary>
     public Vector2 AlphaGradientBound => m_alphaGradientBound.Value;
-
     /// <summary>Gets the content hash computed from the owned pixel buffer.</summary>
     public AssetContentHash ContentHash { get; }
     /// <summary>Gets the image height in pixels.</summary>
@@ -37,10 +36,50 @@ public sealed class FontAtlasImageData {
     /// <exception cref="ArgumentNullException"><paramref name="rgbaPixels"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="rgbaPixels"/> does not contain exactly <paramref name="width"/> × <paramref name="height"/> × 4 bytes.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="height"/> or <paramref name="width"/> is not greater than zero.</exception>
-    public FontAtlasImageData(byte[] rgbaPixels, int height, int width) : this(rgbaPixels, height, width, false) { }
+    public FontAtlasImageData(byte[] rgbaPixels, int height, int width) : this(
+        rgbaPixels,
+        height,
+        width,
+        false
+    ) { }
 
     // Only for fresh buffers whose producer relinquishes all mutable references after this call.
-    internal static FontAtlasImageData TakeOwnership(byte[] rgbaPixels, int height, int width) => new(rgbaPixels, height, width, true);
+    internal static FontAtlasImageData TakeOwnership(byte[] rgbaPixels, int height, int width) => new(
+        height: height,
+        rgbaPixels: rgbaPixels,
+        takeOwnership: true,
+        width: width
+    );
+
+    private Vector2 ComputeAlphaGradientBound() {
+        var horizontal = 0;
+        var vertical = 0;
+
+        for (var y = 0; (y < Height); y++) {
+            for (var x = 0; (x < Width); x++) {
+                var offset = ((((y * Width) + x) * 4) + 3);
+                var alpha = m_rgbaPixels[offset];
+
+                if ((x + 1) < Width) { horizontal = Math.Max(
+                    val1: horizontal,
+                    val2: Math.Abs(value: (alpha - m_rgbaPixels[(offset + 4)]))
+                ); }
+                if ((y + 1) < Height) { vertical = Math.Max(
+                    val1: vertical,
+                    val2: Math.Abs(value: (alpha - m_rgbaPixels[(offset + (Width * 4))]))
+                ); }
+            }
+        }
+        // A bilinear partial derivative is a convex combination of the two parallel edge differences.
+        return new(
+            x: ((horizontal == 0)
+            ? 0
+            : MathF.BitIncrement(x: (horizontal / 255f))),
+            y: ((vertical == 0)
+            ? 0
+            : MathF.BitIncrement(x: (vertical / 255f)))
+        );
+    }
 
     private FontAtlasImageData(byte[] rgbaPixels, int height, int width, bool takeOwnership) {
         ArgumentNullException.ThrowIfNull(rgbaPixels);
@@ -69,25 +108,12 @@ public sealed class FontAtlasImageData {
         }
 
         Height = height;
-        m_rgbaPixels = takeOwnership ? rgbaPixels : (byte[])rgbaPixels.Clone();
+        m_rgbaPixels = (takeOwnership
+            ? rgbaPixels
+            : (byte[])rgbaPixels.Clone()
+        );
         ContentHash = AssetContentHash.Compute(content: m_rgbaPixels);
         Width = width;
-        m_alphaGradientBound = new Lazy<Vector2>(ComputeAlphaGradientBound);
-    }
-
-    private Vector2 ComputeAlphaGradientBound() {
-        var horizontal = 0;
-        var vertical = 0;
-        for (var y = 0; y < Height; y++) {
-            for (var x = 0; x < Width; x++) {
-                var offset = ((y * Width + x) * 4) + 3;
-                var alpha = m_rgbaPixels[offset];
-                if (x + 1 < Width) { horizontal = Math.Max(horizontal, Math.Abs(alpha - m_rgbaPixels[offset + 4])); }
-                if (y + 1 < Height) { vertical = Math.Max(vertical, Math.Abs(alpha - m_rgbaPixels[offset + Width * 4])); }
-            }
-        }
-        // A bilinear partial derivative is a convex combination of the two parallel edge differences.
-        return new(horizontal == 0 ? 0 : MathF.BitIncrement(horizontal / 255f),
-            vertical == 0 ? 0 : MathF.BitIncrement(vertical / 255f));
+        m_alphaGradientBound = new Lazy<Vector2>(valueFactory: ComputeAlphaGradientBound);
     }
 }

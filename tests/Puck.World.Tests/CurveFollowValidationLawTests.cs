@@ -13,8 +13,24 @@ public sealed class CurveFollowValidationLawTests {
     private static WorldCurveRow StraightPath => new(
         Name: "path",
         Knots: [
-            new WorldCurveKnot(Position: new DocumentVector3(x: 0f, y: 0f, z: 0f), TangentYaw: 0f, Curvature: 0f),
-            new WorldCurveKnot(Position: new DocumentVector3(x: 20f, y: 0f, z: 0f), TangentYaw: 0f, Curvature: 0f),
+            new WorldCurveKnot(
+                Position: new DocumentVector3(
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                ),
+                TangentYaw: 0f,
+                Curvature: 0f
+            ),
+            new WorldCurveKnot(
+                Position: new DocumentVector3(
+                    x: 20f,
+                    y: 0f,
+                    z: 0f
+                ),
+                TangentYaw: 0f,
+                Curvature: 0f
+            ),
         ],
         Closed: false
     );
@@ -34,7 +50,10 @@ public sealed class CurveFollowValidationLawTests {
             Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
-            Target: new BodyTargetSource.CurveFollow(Curve: curve, Rate: rate)
+            Target: new BodyTargetSource.CurveFollow(
+                Curve: curve,
+                Rate: rate
+            )
         );
 
         return document with {
@@ -42,7 +61,7 @@ public sealed class CurveFollowValidationLawTests {
             KitRowsRaw = [kit with {
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     ["follow"] = new BodyProgramParameters(
-                        Scalars: new Dictionary<string, float> {
+                Scalars: new Dictionary<string, float> {
                             ["standoffRadius"] = 0.1f,
                             ["approach"] = 1f,
                             ["orbit"] = 0f,
@@ -66,8 +85,8 @@ public sealed class CurveFollowValidationLawTests {
                             ["altitudeBase"] = 0f,
                             ["altitudeRange"] = 0f,
                         },
-                        Channels: new Dictionary<string, string>()
-                    ),
+                Channels: new Dictionary<string, string>()
+            ),
                 },
             }],
         };
@@ -75,41 +94,114 @@ public sealed class CurveFollowValidationLawTests {
 
     [Fact]
     public void DanglingCurveNameRefusesWhileADeclaredRowPasses() {
-        var denied = WithFollowTarget(curve: "missing", rate: 2f);
-        var admitted = WithFollowTarget(curve: "path", rate: 2f);
+        var denied = WithFollowTarget(
+            curve: "missing",
+            rate: 2f
+        );
+        var admitted = WithFollowTarget(
+            curve: "path",
+            rate: 2f
+        );
 
-        Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "'missing' names no curves row.");
-        Assert.True(condition: TryValidate(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+        Assert.False(condition: TryValidate(
+            definition: denied,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "'missing' names no curves row."
+        );
+        Assert.True(
+            condition: TryValidate(
+                definition: admitted,
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
     }
     [Fact]
     public void RateAboveTheCeilingRefusesWhileTheCeilingItselfPasses() {
-        var denied = WithFollowTarget(curve: "path", rate: (WorldCurves.MaxFollowRate + 1f));
-        var admitted = WithFollowTarget(curve: "path", rate: WorldCurves.MaxFollowRate);
+        var denied = WithFollowTarget(
+            curve: "path",
+            rate: (WorldCurves.MaxFollowRate + 1f)
+        );
+        var admitted = WithFollowTarget(
+            curve: "path",
+            rate: WorldCurves.MaxFollowRate
+        );
 
-        Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "target.rate");
-        Assert.True(condition: TryValidate(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
-    }
-    [Fact]
-    public void RateBelowTheNegativeCeilingRefusesWhileTheCeilingItselfPasses() {
-        var denied = WithFollowTarget(curve: "path", rate: -(WorldCurves.MaxFollowRate + 1f));
-        var admitted = WithFollowTarget(curve: "path", rate: -WorldCurves.MaxFollowRate);
-
-        Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "target.rate");
-        Assert.True(condition: TryValidate(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+        Assert.False(condition: TryValidate(
+            definition: denied,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "target.rate"
+        );
+        Assert.True(
+            condition: TryValidate(
+                definition: admitted,
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
     }
     [Fact]
     public void RateAtResidentSimulationRateRefusesWhileASteppingRatePasses() {
-        var withTarget = WithFollowTarget(curve: "path", rate: 2f);
+        var withTarget = WithFollowTarget(
+            curve: "path",
+            rate: 2f
+        );
 
         var denied = (withTarget with { Simulation = new WorldSimulationDefaults(RateHz: 0) }); // resident, non-stepping
         var admitted = withTarget;
 
-        Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "cannot compile — the world authors no simulation rate (simulation.rateHz)");
-        Assert.True(condition: TryValidate(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+        Assert.False(condition: TryValidate(
+            definition: denied,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "cannot compile — the world authors no simulation rate (simulation.rateHz)"
+        );
+        Assert.True(
+            condition: TryValidate(
+                definition: admitted,
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
+    }
+    [Fact]
+    public void RateBelowTheNegativeCeilingRefusesWhileTheCeilingItselfPasses() {
+        var denied = WithFollowTarget(
+            curve: "path",
+            rate: -(WorldCurves.MaxFollowRate + 1f)
+        );
+        var admitted = WithFollowTarget(
+            curve: "path",
+            rate: -WorldCurves.MaxFollowRate
+        );
+
+        Assert.False(condition: TryValidate(
+            definition: denied,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "target.rate"
+        );
+        Assert.True(
+            condition: TryValidate(
+                definition: admitted,
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
     }
     [Fact]
     public void TangentYawOutsideTheCanonicalIntervalRefusesWhileAnInRangeValuePasses() {
@@ -119,11 +211,30 @@ public sealed class CurveFollowValidationLawTests {
                 StraightPath.Knots[1],
             ],
         };
-        var denied = (WithFollowTarget(curve: "path", rate: 2f) with { CurvesRaw = [outOfRangeRow] });
-        var admitted = WithFollowTarget(curve: "path", rate: 2f);
+        var denied = (WithFollowTarget(
+            curve: "path",
+            rate: 2f
+        ) with { CurvesRaw = [outOfRangeRow] });
+        var admitted = WithFollowTarget(
+            curve: "path",
+            rate: 2f
+        );
 
-        Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "tangentYaw");
-        Assert.True(condition: TryValidate(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+        Assert.False(condition: TryValidate(
+            definition: denied,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "tangentYaw"
+        );
+        Assert.True(
+            condition: TryValidate(
+                definition: admitted,
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
     }
 }

@@ -31,7 +31,6 @@ public sealed record SculptContext(JsonObject Document) {
         );
     }
 }
-
 /// <summary>One named, registered sculpt: a generator that turns the current world document into a
 /// <see cref="SculptPatch"/> — the same power a hand-authored world document has, expressed as code instead of JSON.
 /// A sculpt reads <see cref="SculptContext.Document"/> to carry forward hand-authored data by name; it never writes
@@ -43,43 +42,43 @@ public interface ICreationSculpt {
     string Name { get; }
     /// <summary>One line describing what this sculpt authors.</summary>
     string Description { get; }
+
     /// <summary>Builds the patch this sculpt applies against <paramref name="context"/>'s document.</summary>
     SculptPatch Sculpt(SculptContext context);
 }
-
 /// <summary>The sculpt registry — empty as shipped; a sculpt is registered by a composition root or a test through
 /// <see cref="Register"/>.</summary>
 public static class CreationSculptRegistry {
-    private static readonly Dictionary<string, ICreationSculpt> s_byName = new(comparer: StringComparer.Ordinal);
-    private static readonly List<ICreationSculpt> s_shipped = [];
+    private static readonly Dictionary<string, ICreationSculpt> ByName = new(comparer: StringComparer.Ordinal);
+    private static readonly List<ICreationSculpt> Shipped = [];
 
     /// <summary>Every registered sculpt, in registration order.</summary>
-    public static IReadOnlyList<ICreationSculpt> All => s_shipped;
+    public static IReadOnlyList<ICreationSculpt> All => Shipped;
 
     /// <summary>Registers (or replaces) a sculpt by its own <see cref="ICreationSculpt.Name"/> — the seam a
     /// composition root or a test registers a sculpt through.</summary>
     public static void Register(ICreationSculpt sculpt) {
         ArgumentNullException.ThrowIfNull(argument: sculpt);
 
-        if (s_byName.TryAdd(
+        if (ByName.TryAdd(
             key: sculpt.Name,
             value: sculpt
         )) {
-            s_shipped.Add(item: sculpt);
+            Shipped.Add(item: sculpt);
         } else {
-            s_byName[sculpt.Name] = sculpt;
+            ByName[sculpt.Name] = sculpt;
 
-            var index = s_shipped.FindIndex(match: existing => string.Equals(
+            var index = Shipped.FindIndex(match: existing => string.Equals(
                 a: existing.Name,
                 b: sculpt.Name,
                 comparisonType: StringComparison.Ordinal
             ));
 
-            s_shipped[index] = sculpt;
+            Shipped[index] = sculpt;
         }
     }
     /// <summary>Resolves a sculpt by name.</summary>
-    public static bool TryGet(string name, out ICreationSculpt sculpt) => s_byName.TryGetValue(
+    public static bool TryGet(string name, out ICreationSculpt sculpt) => ByName.TryGetValue(
         key: name,
         value: out sculpt!
     );

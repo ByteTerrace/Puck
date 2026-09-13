@@ -39,6 +39,9 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     private readonly int m_maximumPendingSteps;
     private readonly string m_role;
     private readonly Queue<TWorkItem> m_work;
+    // Condition variable, not a plain gate: Monitor.Wait/Pulse require an object monitor, which System.Threading.Lock
+    // refuses (CS9216).
+    private readonly object m_workLock = new();
     private readonly string m_workerName;
 
     private bool m_acceptingWork;
@@ -47,10 +50,6 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     private long m_submittedSteps;
     private Thread? m_worker;
     private Exception? m_workerFault;
-
-    // Condition variable, not a plain gate: Monitor.Wait/Pulse require an object monitor, which System.Threading.Lock
-    // refuses (CS9216).
-    private readonly object m_workLock = new();
 
     /// <summary>Creates a lifecycle for a worker that is not yet running.</summary>
     /// <param name="maximumPendingSteps">The finite number of accepted-but-incomplete step items before
@@ -106,6 +105,15 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     /// <summary>Gets the owning thread, or <see langword="null"/> while no worker is running.</summary>
     public Thread? Worker =>
         m_worker;
+
+    private void ThrowIfFaultedLocked() {
+        if (m_workerFault is { } fault) {
+            throw new InvalidOperationException(
+                innerException: fault,
+                message: $"The {m_workerName} {m_role} faulted."
+            );
+        }
+    }
 
     /// <summary>Records one completed step item and wakes every producer waiting for pending-window capacity. Call
     /// from the thread that ran the item.</summary>
@@ -299,15 +307,6 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     public void ThrowIfFaulted() {
         lock (m_workLock) {
             ThrowIfFaultedLocked();
-        }
-    }
-
-    private void ThrowIfFaultedLocked() {
-        if (m_workerFault is { } fault) {
-            throw new InvalidOperationException(
-                innerException: fault,
-                message: $"The {m_workerName} {m_role} faulted."
-            );
         }
     }
 }

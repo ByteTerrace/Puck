@@ -92,6 +92,14 @@ public static class OverlayTokenBlock {
     /// <summary>The slab's total size in 32-bit words (a multiple of 4 — the storage buffer is <c>uint4</c>-strided).</summary>
     public const int WordCount = ((RoleCount * 4) + ScalarCount);
 
+    // A scrim's fill plus its own alpha, composed into one baked-alpha RgbaColor the way every other role already
+    // bakes its alpha — the GPU-side role table carries no separate per-role alpha channel.
+    private static RgbaColor Baked(OverlayThemeValues.Scrim scrim) => new(
+        A: scrim.Alpha,
+        B: scrim.Color.B,
+        G: scrim.Color.G,
+        R: scrim.Color.R
+    );
     private static void WriteColor(Span<uint> destination, OverlayColorRole role, RgbaColor color) {
         var offset = (((int)role) * 4);
 
@@ -103,14 +111,6 @@ public static class OverlayTokenBlock {
     private static void WriteScalar(Span<uint> destination, Scalar scalar, float value) {
         destination[((RoleCount * 4) + ((int)scalar))] = BitConverter.SingleToUInt32Bits(value: value);
     }
-    // A scrim's fill plus its own alpha, composed into one baked-alpha RgbaColor the way every other role already
-    // bakes its alpha — the GPU-side role table carries no separate per-role alpha channel.
-    private static RgbaColor Baked(OverlayThemeValues.Scrim scrim) => new(
-        A: scrim.Alpha,
-        B: scrim.Color.B,
-        G: scrim.Color.G,
-        R: scrim.Color.R
-    );
 
     /// <summary>Serializes the token slab into the destination span (the storage buffer's front words) from a
     /// resolved theme.</summary>

@@ -36,7 +36,10 @@ public sealed record ActionStateSlot(
     bool PlayerWritable = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionStateEnvelope? Envelope = null
 ) : IStateSlot {
-    StateValueKind IStateSlot.ValueKind => ((Kind == ActionStateKind.Timer) ? StateValueKind.Timer : StateValueKind.Counter);
+    StateValueKind IStateSlot.ValueKind => ((Kind == ActionStateKind.Timer)
+        ? StateValueKind.Timer
+        : StateValueKind.Counter
+    );
 }
 /// <summary>An authored fixed-phase body motion program.</summary>
 /// <param name="Name">The stable name kits use to select the program.</param>
@@ -103,206 +106,6 @@ public static class BodyMotionProgramRoles {
 /// <summary>The document intake for <see cref="CompiledActionSpec"/> — the one place an authored
 /// <see cref="ActionSpec"/> becomes the engine's compiled trigger form.</summary>
 public static class BodyActionSpecFactory {
-    /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
-    /// <see cref="WorldPredicate.Recently"/> instance.</summary>
-    /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
-    /// <param name="gate">Receives the flattened postfix program.</param>
-    /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
-    /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
-    /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
-    /// referenced.</param>
-    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="WorldPredicate.Held"/>
-    /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
-    /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
-    /// authoring one outside a shaping gate.</param>
-    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) =>
-        FlattenPredicate(predicate: predicate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows, stateSlots: stateSlots, channels: channels, depth: 0);
-    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, WorldChannelTable? channels, int depth) {
-        if (depth >= CompiledPredicateCapacity.MaxTokens) {
-            throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
-        }
-
-        switch (predicate) {
-            case null:
-                break;
-            case ActionPredicate.All all:
-                ArgumentNullException.ThrowIfNull(argument: all.Predicates);
-                foreach (var inner in all.Predicates) {
-                    if (inner is null) {
-                        throw new InvalidOperationException(message: "An 'all' action gate contains a null predicate.");
-                    }
-                    FlattenPredicate(
-                        gate: gate,
-                        predicate: inner,
-                        recencyFacts: recencyFacts,
-                        recencyWindows: recencyWindows,
-                        stateSlots: stateSlots,
-                        channels: channels,
-                        depth: (depth + 1)
-                    );
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.All,
-                    Arity: all.Predicates.Count
-                ));
-
-                break;
-            case ActionPredicate.Any any:
-                if (any.Predicates is not { Count: > 0 }) {
-                    throw new InvalidOperationException(message: "An 'any' action gate must contain at least one predicate.");
-                }
-                foreach (var inner in any.Predicates) {
-                    if (inner is null) {
-                        throw new InvalidOperationException(message: "An 'any' action gate contains a null predicate.");
-                    }
-                    FlattenPredicate(
-                        gate: gate,
-                        predicate: inner,
-                        recencyFacts: recencyFacts,
-                        recencyWindows: recencyWindows,
-                        stateSlots: stateSlots,
-                        channels: channels,
-                        depth: (depth + 1)
-                    );
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Any,
-                    Arity: any.Predicates.Count
-                ));
-
-                break;
-            case ActionPredicate.Not not:
-                ArgumentNullException.ThrowIfNull(argument: not.Predicate);
-                FlattenPredicate(
-                    gate: gate,
-                    predicate: not.Predicate,
-                    recencyFacts: recencyFacts,
-                    recencyWindows: recencyWindows,
-                    stateSlots: stateSlots,
-                    channels: channels,
-                    depth: (depth + 1)
-                );
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Not,
-                    Arity: 1
-                ));
-
-                break;
-            case WorldPredicate.Held held:
-                if (
-                    (channels is not { } table) ||
-                    !table.TryGetOrdinal(
-                    name: held.Channel,
-                    ordinal: out var heldOrdinal
-                )
-                ) {
-                    throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table — 'held' is legitimate only inside a kit's shaping-row gate.");
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Held,
-                    ChannelOrdinal: heldOrdinal
-                ));
-
-                break;
-            case WorldPredicate.Now now:
-                gate.Add(item: new CompiledPredicate(
-                    Fact: now.Fact,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Now
-                ));
-
-                break;
-            case WorldPredicate.Recently recently:
-                gate.Add(item: new CompiledPredicate(
-                    Fact: recently.Fact,
-                    RecencySlot: recencyFacts.Count,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Recently
-                ));
-                recencyFacts.Add(item: recently.Fact);
-                recencyWindows.Add(item: DurationTicks(seconds: recently.WindowSeconds));
-
-                break;
-            case ActionPredicate.CompareState compare:
-                // A per-body action-state slot is not keyed — a `key` here would be parsed and discarded, which is
-                // exactly the shape this campaign refuses. It is legitimate at WORLD scope alone (WorldRuleCompiler).
-                if (compare.Key is not null) {
-                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries a 'key' — a per-body action-state slot is not keyed; 'key' addresses a world state row's cell and is legitimate only in a world rule.");
-                }
-                // A comparand ROW reference addresses a world state row (or a reserved channel a world evaluates
-                // per tick) — a per-body action-state slot has neither, so the second spelling is legitimate only in
-                // a world rule (WorldRuleCompiler), never here.
-                if (
-                    (compare.ComparandState is not null) ||
-                    (compare.ComparandKey is not null)
-                ) {
-                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries a 'comparandState'/'comparandKey' — a per-body action-state slot has no world state row to reference; a comparand row is legitimate only in a world rule.");
-                }
-
-                if (compare.Value is not { } constant) {
-                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries no 'value' — a per-body predicate names the authored constant to compare against.");
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: ResolveState(
-                        name: compare.State,
-                        stateSlots: stateSlots
-                    ),
-                    Value: NumericLiteral.ToFixed(value: constant),
-                    Comparison: compare.Comparison,
-                    Kind: CompiledPredicateKind.CompareState
-                ));
-                break;
-            case WorldPredicate.TimerElapsed elapsed:
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: ResolveState(
-                        name: elapsed.State,
-                        stateSlots: stateSlots
-                    ),
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.TimerElapsed
-                ));
-                break;
-        }
-
-        if (gate.Count > CompiledPredicateCapacity.MaxTokens) {
-            throw new InvalidOperationException(message: $"An action gate compiles past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
-        }
-    }
-
     private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
         var instruction = effect switch {
             WorldEffect.SetVerticalVelocity set => new CompiledBodyInstruction(
@@ -476,6 +279,191 @@ public static class BodyActionSpecFactory {
     private static ulong DurationTicks(float seconds) {
         return FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: seconds));
     }
+    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, WorldChannelTable? channels, int depth) {
+        if (depth >= CompiledPredicateCapacity.MaxTokens) {
+            throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
+        }
+
+        switch (predicate) {
+            case null:
+                break;
+            case ActionPredicate.All all:
+                ArgumentNullException.ThrowIfNull(argument: all.Predicates);
+                foreach (var inner in all.Predicates) {
+                    if (inner is null) {
+                        throw new InvalidOperationException(message: "An 'all' action gate contains a null predicate.");
+                    }
+                    FlattenPredicate(
+                        channels: channels,
+                        depth: (depth + 1),
+                        gate: gate,
+                        predicate: inner,
+                        recencyFacts: recencyFacts,
+                        recencyWindows: recencyWindows,
+                        stateSlots: stateSlots
+                    );
+                }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.All,
+                    Arity: all.Predicates.Count
+                ));
+
+                break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 }) {
+                    throw new InvalidOperationException(message: "An 'any' action gate must contain at least one predicate.");
+                }
+                foreach (var inner in any.Predicates) {
+                    if (inner is null) {
+                        throw new InvalidOperationException(message: "An 'any' action gate contains a null predicate.");
+                    }
+                    FlattenPredicate(
+                        channels: channels,
+                        depth: (depth + 1),
+                        gate: gate,
+                        predicate: inner,
+                        recencyFacts: recencyFacts,
+                        recencyWindows: recencyWindows,
+                        stateSlots: stateSlots
+                    );
+                }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Any,
+                    Arity: any.Predicates.Count
+                ));
+
+                break;
+            case ActionPredicate.Not not:
+                ArgumentNullException.ThrowIfNull(argument: not.Predicate);
+                FlattenPredicate(
+                    gate: gate,
+                    predicate: not.Predicate,
+                    recencyFacts: recencyFacts,
+                    recencyWindows: recencyWindows,
+                    stateSlots: stateSlots,
+                    channels: channels,
+                    depth: (depth + 1)
+                );
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Not,
+                    Arity: 1
+                ));
+
+                break;
+            case WorldPredicate.Held held:
+                if (
+                    (channels is not { } table) ||
+                    !table.TryGetOrdinal(
+                    name: held.Channel,
+                    ordinal: out var heldOrdinal
+                )
+                ) {
+                    throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table — 'held' is legitimate only inside a kit's shaping-row gate.");
+                }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Held,
+                    ChannelOrdinal: heldOrdinal
+                ));
+
+                break;
+            case WorldPredicate.Now now:
+                gate.Add(item: new CompiledPredicate(
+                    Fact: now.Fact,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Now
+                ));
+
+                break;
+            case WorldPredicate.Recently recently:
+                gate.Add(item: new CompiledPredicate(
+                    Fact: recently.Fact,
+                    RecencySlot: recencyFacts.Count,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Recently
+                ));
+                recencyFacts.Add(item: recently.Fact);
+                recencyWindows.Add(item: DurationTicks(seconds: recently.WindowSeconds));
+
+                break;
+            case ActionPredicate.CompareState compare:
+                // A per-body action-state slot is not keyed — a `key` here would be parsed and discarded, which is
+                // exactly the shape this campaign refuses. It is legitimate at WORLD scope alone (WorldRuleCompiler).
+                if (compare.Key is not null) {
+                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries a 'key' — a per-body action-state slot is not keyed; 'key' addresses a world state row's cell and is legitimate only in a world rule.");
+                }
+                // A comparand ROW reference addresses a world state row (or a reserved channel a world evaluates
+                // per tick) — a per-body action-state slot has neither, so the second spelling is legitimate only in
+                // a world rule (WorldRuleCompiler), never here.
+                if (
+                    (compare.ComparandState is not null) ||
+                    (compare.ComparandKey is not null)
+                ) {
+                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries a 'comparandState'/'comparandKey' — a per-body action-state slot has no world state row to reference; a comparand row is legitimate only in a world rule.");
+                }
+
+                if (compare.Value is not { } constant) {
+                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries no 'value' — a per-body predicate names the authored constant to compare against.");
+                }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: ResolveState(
+                        name: compare.State,
+                        stateSlots: stateSlots
+                    ),
+                    Value: NumericLiteral.ToFixed(value: constant),
+                    Comparison: compare.Comparison,
+                    Kind: CompiledPredicateKind.CompareState
+                ));
+                break;
+            case WorldPredicate.TimerElapsed elapsed:
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: ResolveState(
+                        name: elapsed.State,
+                        stateSlots: stateSlots
+                    ),
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.TimerElapsed
+                ));
+                break;
+        }
+
+        if (gate.Count > CompiledPredicateCapacity.MaxTokens) {
+            throw new InvalidOperationException(message: $"An action gate compiles past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
+        }
+    }
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldRuleCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
@@ -578,6 +566,28 @@ public static class BodyActionSpecFactory {
             RecencyWindows: recencyWindows.ToArray()
         );
     }
+    /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
+    /// <see cref="WorldPredicate.Recently"/> instance.</summary>
+    /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
+    /// <param name="gate">Receives the flattened postfix program.</param>
+    /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
+    /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
+    /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
+    /// referenced.</param>
+    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="WorldPredicate.Held"/>
+    /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
+    /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
+    /// authoring one outside a shaping gate.</param>
+    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) =>
+        FlattenPredicate(
+            channels: channels,
+            depth: 0,
+            gate: gate,
+            predicate: predicate,
+            recencyFacts: recencyFacts,
+            recencyWindows: recencyWindows,
+            stateSlots: stateSlots
+        );
 }
 /// <summary>One producer program and a kit's fixed-point arguments for it, resolved to
 /// <see cref="BodyProducerParameter"/> ordinals once at kit-compile time — the tick path indexes
@@ -597,26 +607,134 @@ public sealed class CompiledBodyProducer {
         RoamActive = roamActive;
     }
 
-    /// <summary>Gets the compiled producer program.</summary>
-    public CompiledBodyMotionProgram Program { get; }
-    /// <summary>Gets the compiled target source, when this producer senses a target.</summary>
-    public FixedBodyTargetSource? Target { get; }
     /// <summary>Gets bounded local-perception and steering parameters, when authored.</summary>
     public FixedWorldFlockProfile? Flock { get; }
+    /// <summary>Gets the compiled producer program.</summary>
+    public CompiledBodyMotionProgram Program { get; }
     /// <summary>Gets a value indicating whether <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s roam shape runs
     /// for this producer — always true for a non-sensing steering program, and derived at compile time from a
     /// roam-exclusive <see cref="BodyProducerParameterVocabulary.SteeringScalars"/> member for a sensing program;
     /// never authored as a separate flag.</summary>
     public bool RoamActive { get; }
+    /// <summary>Gets the compiled target source, when this producer senses a target.</summary>
+    public FixedBodyTargetSource? Target { get; }
 
-    /// <summary>Reads one validated channel ordinal, or <c>-1</c> when the kit binds none.</summary>
-    public int Channel(BodyProducerParameter parameter) => m_channelOrdinals[(int)parameter];
-    /// <summary>Reads one validated fixed-point scalar.</summary>
-    public FixedQ4816 Scalar(BodyProducerParameter parameter) => m_scalars[(int)parameter];
     // The scalar ordinals CHANNEL args (Press) may legitimately name, alongside the op-declared scalar set — kept
     // separate from BodyProducerParameterVocabulary.RequiredScalars, which answers only for the SCALAR-valued
     // argument space.
     private static bool AdmitsChannelArgument(CompiledBodyMotionProgram program, BodyProducerParameter parameter) => ((parameter == BodyProducerParameter.Press) && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent));
+
+    /// <summary>Reads one validated channel ordinal, or <c>-1</c> when the kit binds none.</summary>
+    public int Channel(BodyProducerParameter parameter) => m_channelOrdinals[((int)parameter)];
+    /// <summary>Compiles a kit's producer parameters, refusing an authored <c>scalars</c>/<c>channels</c> key that
+    /// names no parameter this program's selected operations read, or that omits one they require.</summary>
+    /// <param name="program">The compiled producer program.</param>
+    /// <param name="source">The program's authored target source, or <see langword="null"/> when it senses none.</param>
+    /// <param name="parameters">The kit's authored arguments for the program.</param>
+    /// <param name="channels">The world's compiled channel table.</param>
+    /// <param name="targets">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table.</param>
+    /// <param name="navigation">The world's compiled navigation-domain table.</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
+    /// divisor.</param>
+    /// <returns>The compiled producer binding.</returns>
+    /// <exception cref="BodyMotionProgramException">An authored key names no parameter this program's operations
+    /// read, or a required parameter is missing.</exception>
+    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) {
+        var requiredScalars = ResolveRequiredScalars(
+            parameters: parameters,
+            program: program,
+            target: source
+        );
+        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
+        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
+        var roamActive = (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars)));
+
+        var scalars = new FixedQ4816[ParameterCount];
+
+        foreach (var (name, value) in parameters.Scalars) {
+            if (
+                !BodyProducerParameterVocabulary.TryParse(
+                name: name,
+                parameter: out var parameter
+            ) ||
+                !requiredScalars.Contains(item: parameter)
+            ) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
+                    programName: program.Name,
+                    detail: $"scalar '{name}' names no parameter this program's selected operations read"
+                );
+            }
+
+            scalars[((int)parameter)] = FixedQ4816.FromDouble(value: value);
+        }
+        foreach (var required in requiredScalars) {
+            if (!parameters.Scalars.ContainsKey(key: BodyProducerParameterVocabulary.Name(parameter: required))) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterMissing,
+                    programName: program.Name,
+                    detail: $"scalar '{BodyProducerParameterVocabulary.Name(parameter: required)}' is required by this program's selected operations"
+                );
+            }
+        }
+
+        var channelOrdinals = new int[ParameterCount];
+
+        Array.Fill(
+            array: channelOrdinals,
+            value: -1
+        );
+
+        foreach (var (name, channel) in parameters.Channels) {
+            if (
+                !BodyProducerParameterVocabulary.TryParse(
+                name: name,
+                parameter: out var parameter
+            ) ||
+                !AdmitsChannelArgument(
+                parameter: parameter,
+                program: program
+            )
+            ) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
+                    programName: program.Name,
+                    detail: $"channel argument '{name}' names no parameter this program's selected operations read"
+                );
+            }
+
+            channelOrdinals[((int)parameter)] = (channels.TryGetOrdinal(
+                name: channel,
+                ordinal: out var ordinal
+            )
+                ? ordinal
+                : -1
+            );
+        }
+
+        return new CompiledBodyProducer(
+            program: program,
+            flock: ((parameters.Flock is { } flock)
+            ? new FixedWorldFlockProfile(
+                    navigation: navigation,
+                    source: flock
+                )
+            : null),
+            scalars: scalars,
+            channelOrdinals: channelOrdinals,
+            roamActive: roamActive,
+            target: ((source is { } target)
+            ? FixedBodyTargetSource.Compile(
+                    curves: curves,
+                    navigation: navigation,
+                    registers: targets,
+                    simulationRateHz: simulationRateHz,
+                    source: target
+                )
+            : null)
+        );
+    }
     /// <summary>Computes one producer program's full required-scalar set from its selected operations and authored
     /// arguments — the ONE derivation both this type's <see cref="Compile"/> and the schema validator
     /// (<c>WorldDefinitionValidator.Motion.cs</c>'s <c>ValidateProducerParameters</c>) read, so a required-set rule
@@ -640,12 +758,18 @@ public sealed class CompiledBodyProducer {
         // With sensing, roam is an optional fallback and its exclusive scalar presence activates it. Without
         // sensing, roam is the op's only reachable shape, so selecting ProduceSteeringIntent requires it outright;
         // accepting an empty bare producer would compile a permanently inert program.
-        if (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars))) {
+        if (
+            producesSteering &&
+            (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars))
+        ) {
             required.UnionWith(other: BodyProducerParameterVocabulary.SteeringScalars);
         }
         // The approach shape ProduceSteeringIntent runs is reachable only on a tick this program's own sensing
         // found a target — never on a bare roam producer, which can only ever run the roam shape.
-        if (senses && producesSteering) {
+        if (
+            senses &&
+            producesSteering
+        ) {
             required.UnionWith(other: BodyProducerParameterVocabulary.SteeringApproachScalars);
         }
         // SenseTarget's own release-radius hysteresis (WorldBody.Step.cs) reads this scalar only for a NON-flock
@@ -661,102 +785,6 @@ public sealed class CompiledBodyProducer {
 
         return required;
     }
-    /// <summary>Compiles a kit's producer parameters, refusing an authored <c>scalars</c>/<c>channels</c> key that
-    /// names no parameter this program's selected operations read, or that omits one they require.</summary>
-    /// <param name="program">The compiled producer program.</param>
-    /// <param name="source">The program's authored target source, or <see langword="null"/> when it senses none.</param>
-    /// <param name="parameters">The kit's authored arguments for the program.</param>
-    /// <param name="channels">The world's compiled channel table.</param>
-    /// <param name="targets">The world's compiled target-register table.</param>
-    /// <param name="curves">The world's compiled curves-row table.</param>
-    /// <param name="navigation">The world's compiled navigation-domain table.</param>
-    /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
-    /// divisor.</param>
-    /// <returns>The compiled producer binding.</returns>
-    /// <exception cref="BodyMotionProgramException">An authored key names no parameter this program's operations
-    /// read, or a required parameter is missing.</exception>
-    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) {
-        var requiredScalars = ResolveRequiredScalars(
-            program: program,
-            target: source,
-            parameters: parameters
-        );
-        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
-        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
-        var roamActive = (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars)));
-
-        var scalars = new FixedQ4816[ParameterCount];
-
-        foreach (var (name, value) in parameters.Scalars) {
-            if (
-                !BodyProducerParameterVocabulary.TryParse(name: name, parameter: out var parameter) ||
-                !requiredScalars.Contains(item: parameter)
-            ) {
-                throw new BodyMotionProgramException(
-                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
-                    programName: program.Name,
-                    detail: $"scalar '{name}' names no parameter this program's selected operations read"
-                );
-            }
-
-            scalars[(int)parameter] = FixedQ4816.FromDouble(value: value);
-        }
-        foreach (var required in requiredScalars) {
-            if (!parameters.Scalars.ContainsKey(key: BodyProducerParameterVocabulary.Name(parameter: required))) {
-                throw new BodyMotionProgramException(
-                    refusal: BodyMotionProgramRefusal.ParameterMissing,
-                    programName: program.Name,
-                    detail: $"scalar '{BodyProducerParameterVocabulary.Name(parameter: required)}' is required by this program's selected operations"
-                );
-            }
-        }
-
-        var channelOrdinals = new int[ParameterCount];
-
-        Array.Fill(
-            array: channelOrdinals,
-            value: -1
-        );
-
-        foreach (var (name, channel) in parameters.Channels) {
-            if (
-                !BodyProducerParameterVocabulary.TryParse(name: name, parameter: out var parameter) ||
-                !AdmitsChannelArgument(
-                program: program,
-                parameter: parameter
-            )
-            ) {
-                throw new BodyMotionProgramException(
-                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
-                    programName: program.Name,
-                    detail: $"channel argument '{name}' names no parameter this program's selected operations read"
-                );
-            }
-
-            channelOrdinals[(int)parameter] = (channels.TryGetOrdinal(
-                name: channel,
-                ordinal: out var ordinal
-            )
-                ? ordinal
-                : -1
-            );
-        }
-
-        return new CompiledBodyProducer(
-            program: program,
-            flock: parameters.Flock is { } flock ? new FixedWorldFlockProfile(flock, navigation) : null,
-            scalars: scalars,
-            channelOrdinals: channelOrdinals,
-            roamActive: roamActive,
-            target: ((source is { } target)
-            ? FixedBodyTargetSource.Compile(
-                    curves: curves,
-                    navigation: navigation,
-                    registers: targets,
-                    simulationRateHz: simulationRateHz,
-                    source: target
-                )
-            : null)
-        );
-    }
+    /// <summary>Reads one validated fixed-point scalar.</summary>
+    public FixedQ4816 Scalar(BodyProducerParameter parameter) => m_scalars[((int)parameter)];
 }

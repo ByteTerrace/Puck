@@ -26,8 +26,8 @@ public sealed partial class WorldStampPool {
             ResolveEffectorSlots(
                 effectors: effectors,
                 live: live,
-                shapes: shapes,
-                shapeCount: shapeCount
+                shapeCount: shapeCount,
+                shapes: shapes
             );
         }
 
@@ -64,6 +64,7 @@ public sealed partial class WorldStampPool {
 
             var tipSlot = live.EffectorTipSlot[index];
             var boneBase = (index * CreationEffectorDocument.MaxChainBones);
+
             var (tipPosition, _) = BasePose(
                 poses: poses,
                 shape: shapes[tipSlot]
@@ -86,17 +87,25 @@ public sealed partial class WorldStampPool {
                 tipWorld: tipWorld
             );
 
-            var gateHolds = WorldGaitDrivers.GateHolds(facts: facts, gate: effector.When, moving: moving, definition: client.Definition, tick: client.Tick, bodyIndex: (live.BodyIndex ?? -1));
+            var gateHolds = WorldGaitDrivers.GateHolds(
+                facts: facts,
+                gate: effector.When,
+                moving: moving,
+                definition: client.Definition,
+                tick: client.Tick,
+                bodyIndex: (live.BodyIndex ?? -1)
+            );
             var contactWeight = 1f;
+
             if (gateHolds) {
                 resolved = ApplyPlant(
+                    contactWeight: out contactWeight,
                     document: document,
                     effector: effector,
                     index: index,
                     live: live,
                     resolved: resolved,
-                    target: ref targetWorld,
-                    contactWeight: out contactWeight
+                    target: ref targetWorld
                 );
             } else {
                 // A contact released in flight cannot be reused on a later landing at another world point.
@@ -118,8 +127,8 @@ public sealed partial class WorldStampPool {
                     : weight)
                 : ((weight < WorldGaitDrivers.RestWeight)
                     ? 0f
-                    : weight)
-            );
+                    : weight
+            ));
 
             live.EffectorHasTarget[index] = resolved;
             live.EffectorTarget[index] = targetWorld;
@@ -162,7 +171,7 @@ public sealed partial class WorldStampPool {
             );
 
             for (var bone = 0; (bone < bones); bone++) {
-                var slot = live.EffectorBoneSlot[boneBase + bone];
+                var slot = live.EffectorBoneSlot[(boneBase + bone)];
                 var parent = live.PartParent[slot];
 
                 // A bone's joint is carried by its PARENT's motion, never by its own: a swing about that joint fixes
@@ -198,7 +207,7 @@ public sealed partial class WorldStampPool {
                     continue;
                 }
 
-                var slot = live.EffectorBoneSlot[boneBase + bone];
+                var slot = live.EffectorBoneSlot[(boneBase + bone)];
                 var joint = RestJoint(shape: shapes[slot]);
                 var rotation = live.PartOwnRotation[slot];
                 var translation = live.PartOwnTranslation[slot];
@@ -257,7 +266,10 @@ public sealed partial class WorldStampPool {
 
         var window = plant.Window.Value;
 
-        if (plant.SwingWeight is not null && driverWeight <= WorldGaitDrivers.RestWeight) {
+        if (
+            (plant.SwingWeight is not null) &&
+            (driverWeight <= WorldGaitDrivers.RestWeight)
+        ) {
             live.EffectorPlanted[index] = false;
             return resolved;
         }
@@ -268,7 +280,7 @@ public sealed partial class WorldStampPool {
             to: window.Y
         )) {
             live.EffectorPlanted[index] = false;
-            contactWeight = 1f - (driverWeight * (1f - (plant.SwingWeight ?? 1f)));
+            contactWeight = (1f - (driverWeight * (1f - (plant.SwingWeight ?? 1f))));
 
             return resolved;
         }
@@ -297,8 +309,8 @@ public sealed partial class WorldStampPool {
         ? swings[0].Pivot.Value
         : ((shape.Joint is { } joint)
             ? joint.Value
-            : shape.Position.Value)
-    );
+            : shape.Position.Value
+    ));
     // Each effector's bone and tip shape slots, resolved once per registration off the immutable document. A slot the
     // document cannot name leaves the effector with too few bones, which reads as inert.
     private static void ResolveEffectorSlots(Registration live, IReadOnlyList<CreationEffectorDocument> effectors, IReadOnlyList<ShapeDocument> shapes, int shapeCount) {
@@ -346,7 +358,7 @@ public sealed partial class WorldStampPool {
                     break;
                 }
 
-                live.EffectorBoneSlot[boneBase + bone] = slot;
+                live.EffectorBoneSlot[(boneBase + bone)] = slot;
                 bones++;
             }
 
@@ -381,46 +393,50 @@ public sealed partial class WorldStampPool {
 
         switch (goal.Kind) {
             case CreationEffectorTargetDocument.KindBody: {
-                var index = (goal.Index ?? -1);
+                    var index = (goal.Index ?? -1);
 
-                if (
-                    (((uint)index) >= ((uint)WorldClient.EntityCapacity)) ||
-                    !client.IsActive(index: index)
-                ) {
-                    return false;
+                    if (
+                        (((uint)index) >= ((uint)WorldClient.EntityCapacity)) ||
+                        !client.IsActive(index: index)
+                    ) {
+                        return false;
+                    }
+
+                    // The offset rides the TARGET body's attitude, so a handle authored on a carried crate stays on the
+                    // crate's corner as it turns rather than sliding around it.
+                    target = (client.Position(index: index) + Vector3.Transform(
+                        rotation: client.Orientation(index: index),
+                        value: (goal.Offset?.Value ?? Vector3.Zero)
+                    ));
+
+                    return true;
                 }
-
-                // The offset rides the TARGET body's attitude, so a handle authored on a carried crate stays on the
-                // crate's corner as it turns rather than sliding around it.
-                target = (client.Position(index: index) + Vector3.Transform(
-                    rotation: client.Orientation(index: index),
-                    value: (goal.Offset?.Value ?? Vector3.Zero)
-                ));
-
-                return true;
-            }
             case CreationEffectorTargetDocument.KindState: {
-                return ((goal.Reference is { } reference) && WorldGaitDrivers.TryReadStateVector(
-                    bodyIndex: bodyIndex,
-                    definition: client.Definition,
-                    reference: reference,
-                    tick: client.Tick,
-                    value: out target
-                ));
-            }
+                    return (
+                        (goal.Reference is { } reference) &&
+                        WorldGaitDrivers.TryReadStateVector(
+                        bodyIndex: bodyIndex,
+                        definition: client.Definition,
+                        reference: reference,
+                        tick: client.Tick,
+                        value: out target
+                    )
+                    );
+                }
             default: {
-                return WorldEffectorSolver.TryProbeSurface(
-                    field: client.StaticField,
-                    origin: tipWorld,
-                    reach: (goal.Reach?.Value ?? 0f),
-                    rootRotation: rootRotation,
-                    standoff: (goal.Standoff?.Value ?? 0f),
-                    target: out target,
-                    towards: (goal.Direction?.Value ?? Vector3.Zero)
-                );
-            }
+                    return WorldEffectorSolver.TryProbeSurface(
+                        field: client.StaticField,
+                        origin: tipWorld,
+                        reach: (goal.Reach?.Value ?? 0f),
+                        rootRotation: rootRotation,
+                        standoff: (goal.Standoff?.Value ?? 0f),
+                        target: out target,
+                        towards: (goal.Direction?.Value ?? Vector3.Zero)
+                    );
+                }
         }
     }
+
     /// <summary>Reads a body-rooted creation look's live rig state — the decisions <c>body.rig</c> echoes.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="state">The rig's declared drivers and effectors with their current values, or
@@ -468,8 +484,8 @@ public sealed partial class WorldStampPool {
                 Weight: live.EffectorWeight[index],
                 Planted: live.EffectorPlanted[index],
                 Target: (live.EffectorHasTarget[index]
-                    ? live.EffectorTarget[index]
-                    : null),
+                ? live.EffectorTarget[index]
+                : null),
                 Bones: live.EffectorBoneCount[index]
             ));
         }

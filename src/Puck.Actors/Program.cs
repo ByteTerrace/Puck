@@ -30,31 +30,29 @@ var configurationStoreIsConfigured = services.TryAddConfigurationStore(
 services.AddAzureClients(configureClients: clientFactoryBuilder => {
     clientFactoryBuilder.UseCredential(tokenCredential: tokenCredential);
     clientFactoryBuilder
-        .AddClient<BlobServiceClient, BlobClientOptions>(
-            factory: (blobClientOptions, tokenCredential, serviceProvider) => {
-                var endpoint = serviceProvider
-                    .GetRequiredService<IOptionsMonitor<PublicStorageOptions>>()
-                    .CurrentValue
-                    .Endpoint;
+        .AddClient<BlobServiceClient, BlobClientOptions>(factory: (blobClientOptions, tokenCredential, serviceProvider) => {
+            var endpoint = serviceProvider
+                .GetRequiredService<IOptionsMonitor<PublicStorageOptions>>()
+                .CurrentValue
+                .Endpoint;
 
-                return (!Uri.TryCreate(
-                        result: out var endpointUri,
-                        uriKind: UriKind.Absolute,
-                        uriString: endpoint
-                    )
-                    ? throw new ArgumentException(message: $"Current public storage endpoint \"{endpoint}\" is not a valid absolute URI.")
-                    : new BlobServiceClient(
-                        credential: tokenCredential,
-                        options: blobClientOptions,
-                        serviceUri: endpointUri
-                    ));
-            }
-        )
+            return (!Uri.TryCreate(
+                result: out var endpointUri,
+                uriKind: UriKind.Absolute,
+                uriString: endpoint
+            )
+                ? throw new ArgumentException(message: $"Current public storage endpoint \"{endpoint}\" is not a valid absolute URI.")
+                : new BlobServiceClient(
+                    credential: tokenCredential,
+                    options: blobClientOptions,
+                    serviceUri: endpointUri
+                )
+            );
+        })
         .WithName(name: "PublicStorage");
     clientFactoryBuilder
         .AddClient<GraphServiceClient, GraphClientOptions>(factory: (_, tokenCredential) =>
-            new(tokenCredential: tokenCredential)
-        );
+            new(tokenCredential: tokenCredential));
 });
 if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLICATIONINSIGHTS_CONNECTION_STRING"))) {
     builder
@@ -107,11 +105,7 @@ services.TryAddKeyedSingleton<TokenCredential>(
 var umiClientAssertionId = configuration.GetValue<string>(key: "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID");
 if (!string.IsNullOrWhiteSpace(value: umiClientAssertionId)) {
     services.TryAddKeyedSingleton<TokenCredential>(
-        instance: new ManagedIdentityCredential(
-            id: ManagedIdentityId.FromUserAssignedClientId(
-                id: umiClientAssertionId
-            )
-        ),
+        instance: new ManagedIdentityCredential(id: ManagedIdentityId.FromUserAssignedClientId(id: umiClientAssertionId)),
         serviceKey: IdentityUtilities.ClientAssertionCredentialKey
     );
 } else {
@@ -123,8 +117,7 @@ if (!string.IsNullOrWhiteSpace(value: umiClientAssertionId)) {
 services.TryAddSingleton<GraphServiceClient>(implementationFactory: static serviceProvider =>
     serviceProvider
         .GetRequiredService<IAzureClientFactory<GraphServiceClient>>()
-        .CreateClient(name: "Default")
-);
+        .CreateClient(name: "Default"));
 services.TryAddSingleton<IKeyPairService, DefaultKeyPairService>();
 services.TryAddSingleton<IUserProvisioningService, DefaultUserProvisioningService>();
 var privateBlobEndpointIsValid = Uri.TryCreate(
@@ -141,7 +134,10 @@ var isAzureHosted = (privateBlobEndpointIsValid && privateTableEndpointIsValid);
 // The internal API is Entra-secured: the Functions edge sends an app-only token for the shared
 // application registration carrying the "Actors.Invoke" app role. No shared secrets. Local
 // development (no Azure fabric configured) runs open.
-if (isAzureHosted && string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "Authorization:JwtBearer:Authority"))) {
+if (
+    isAzureHosted &&
+    string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "Authorization:JwtBearer:Authority"))
+) {
     throw new InvalidOperationException(message: "Authorization:JwtBearer must be configured when Azure-hosted.");
 }
 services
@@ -157,9 +153,7 @@ services
                             .Claims
                             .Any(predicate: static claim =>
                                 ((("roles" == claim.Type) || (System.Security.Claims.ClaimTypes.Role == claim.Type)) &&
-                                ("Actors.Invoke" == claim.Value))
-                            )
-                    );
+                                ("Actors.Invoke" == claim.Value))));
             }
         );
     });
@@ -198,7 +192,8 @@ usersApi.MapPost(
         EnsureProvisionedRequest request,
         IGrainFactory grainFactory
     ) => {
-        if (string.IsNullOrWhiteSpace(value: request.ProtectedAssertion) ||
+        if (
+            string.IsNullOrWhiteSpace(value: request.ProtectedAssertion) ||
             string.IsNullOrWhiteSpace(value: request.TokenDiscriminator)
         ) {
             return Results.BadRequest(error: new {
@@ -210,10 +205,10 @@ usersApi.MapPost(
             var provisioningState = await grainFactory
                 .GetGrain<IUserGrain>(primaryKey: oid)
                 .EnsureProvisionedAsync(tokenEscrow: new(
-                    ExpiresAt: request.AssertionExpiresAt,
-                    ProtectedAssertion: request.ProtectedAssertion,
-                    TokenDiscriminator: request.TokenDiscriminator
-                ));
+                ExpiresAt: request.AssertionExpiresAt,
+                ProtectedAssertion: request.ProtectedAssertion,
+                TokenDiscriminator: request.TokenDiscriminator
+            ));
 
             return Results.Ok(value: ProvisioningStateResponse.From(provisioningState: provisioningState));
         } catch (InvalidOperationException e) {
@@ -241,8 +236,7 @@ usersApi.MapGet(
         IGrainFactory grainFactory
     ) => Results.Ok(value: await grainFactory
         .GetGrain<IUserGrain>(primaryKey: oid)
-        .GetStorageLocationAsync()
-    ),
+        .GetStorageLocationAsync()),
     pattern: "/{oid:guid}/storage-location"
 );
 usersApi.MapPut(
@@ -273,9 +267,9 @@ usersApi.MapPut(
             var provisioningState = await grainFactory
                 .GetGrain<IUserGrain>(primaryKey: oid)
                 .SetStorageAccessAsync(
-                    canRead: request.CanRead,
-                    canWrite: request.CanWrite
-                );
+                canRead: request.CanRead,
+                canWrite: request.CanWrite
+            );
 
             return Results.Ok(value: ProvisioningStateResponse.From(provisioningState: provisioningState));
         } catch (InvalidOperationException e) {
@@ -313,8 +307,7 @@ public sealed record ProvisioningStateResponse(
                 .GetValues<ProvisioningStep>()
                 .Where(predicate: step =>
                     ((ProvisioningStep.None != step) &&
-                    provisioningState.CompletedSteps.HasFlag(flag: step))
-                )
+                    provisioningState.CompletedSteps.HasFlag(flag: step)))
                 .Select(selector: static step => step.ToString())
                 .ToArray(),
             FaultReason: provisioningState.FaultReason,

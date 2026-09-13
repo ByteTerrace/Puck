@@ -19,248 +19,223 @@ namespace Puck.World;
 public static class WorldModuleNamespace {
     private static readonly JsonSerializerOptions Options = WorldJsonContext.Default.Options;
 
-    /// <summary>Prefixes every name <paramref name="module"/> declares with <paramref name="alias"/> and rewrites
-    /// the module's references to match, in place.</summary>
-    /// <param name="module">The fragment's composed tree; mutated.</param>
-    /// <param name="alias">The alias, admissible under <see cref="WorldImport.TryValidateAlias"/>.</param>
-    /// <param name="reason">The one-line refusal, or empty on success.</param>
-    /// <returns><see langword="true"/> when the alias was admissible and the rewrite applied.</returns>
-    public static bool TryApply(JsonObject module, string alias, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: module);
+    private static Dictionary<(WorldNameKind Kind, string Name), string> CollectDeclaredNames(JsonObject module, string alias) {
+        var declared = new Dictionary<(WorldNameKind Kind, string Name), string>();
 
-        if (!WorldImport.TryValidateAlias(alias: alias, reason: out reason)) {
-            return false;
-        }
-
-        var declared = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        Visit(node: module, type: typeof(WorldDefinition), visitor: (parent, name, value, field) => {
-            if ((field.Role == WorldNameRole.Declares) && (value is JsonValue leaf) && leaf.TryGetValue<string>(value: out var text) && (text.Length > 0)) {
-                declared[text] = $"{alias}{WorldNameRegistry.AliasSeparator}{text}";
+        Visit(
+            node: module,
+            type: typeof(WorldDefinition),
+            visitor: (parent, name, value, field) => {
+            if (
+                (field.Role == WorldNameRole.Declares) &&
+                (value is JsonValue leaf) &&
+                leaf.TryGetValue<string>(value: out var textValue) &&
+                (textValue.Length > 0)
+            ) {
+                declared[(field.Kind, textValue)] = ((alias + WorldNameRegistry.AliasSeparator) + textValue);
             }
-        });
-
-        if (declared.Count == 0) {
-            reason = string.Empty;
-
-            return true;
         }
-
-        var rewriter = new Rewriter(declared: declared);
-
-        Visit(node: module, type: typeof(WorldDefinition), visitor: (parent, name, value, field) => {
-            switch (value) {
-                case JsonArray list when (field.Role == WorldNameRole.Names):
-                    for (var index = 0; (index < list.Count); index++) {
-                        if ((list[index: index] is JsonValue element) && element.TryGetValue<string>(value: out var item)) {
-                            list[index: index] = rewriter.Rewrite(text: item, role: field.Role);
-                        }
-                    }
-
-                    break;
-                case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                    parent[propertyName: name] = rewriter.Rewrite(text: text, role: field.Role);
-
-                    break;
-            }
-        });
-
-        reason = string.Empty;
-
-        return true;
-    }
-    /// <summary>Applies provider metadata to an imported module.</summary>
-    public static bool TryApply(JsonObject module, string alias, IMachineValidationCatalog catalog,
-        string sourceDocumentPath, string targetDocumentPath, out string reason) {
-        ArgumentNullException.ThrowIfNull(catalog);
-
-        var declared = CollectDeclaredNames(module, alias);
-        if (!TryApply(module, alias, out reason)) {
-            return false;
-        }
-
-        return TryRewriteMachineMetadata(
-            module,
-            alias,
-            catalog,
-            sourceDocumentPath,
-            targetDocumentPath,
-            declared,
-            out reason
         );
+        return declared;
     }
-
-    /// <summary>Rebases provider content and asset fields from one document origin to another.</summary>
-    public static bool TryRelocateConfigurationAssets(JsonObject module, IMachineValidationCatalog catalog,
-        string sourceDocumentPath, string targetDocumentPath, out string reason) {
-        ArgumentNullException.ThrowIfNull(catalog);
-
-        if (module["machines"] is not JsonArray machines) {
-            reason = string.Empty;
-            return true;
-        }
-
-        foreach (var node in machines) {
-            if (node is not JsonObject machine ||
-                machine["engine"] is not JsonValue engineValue ||
-                !engineValue.TryGetValue<string>(out var engineId) ||
-                machine["configuration"] is not JsonObject configuration ||
-                !catalog.TryDescriptor(engineId, out var descriptor)) {
-                continue;
-            }
-
-            var descriptorErrors = new List<string>();
-            if (!MachineConfigurationFields.TryValidateDescriptor(descriptor.Configuration, descriptorErrors)) {
-                reason = "machine '" + (machine["name"]?.ToString() ?? "(unnamed)") +
-                    "' has invalid provider descriptor: " + string.Join(" ", descriptorErrors);
-                return false;
-            }
-
-            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
-                if (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath) ||
-                    site.Value is not JsonValue pathValue ||
-                    !pathValue.TryGetValue<string>(out var path) ||
-                    path.Length == 0) {
-                    return;
-                }
-
-                site.Value = JsonValue.Create(RelocateAssetPath(path, sourceDocumentPath, targetDocumentPath));
-            });
-        }
-
-        reason = string.Empty;
-        return true;
-    }
-
-    private static bool TryRewriteMachineMetadata(JsonObject module, string alias, IMachineValidationCatalog catalog,
-        string sourceDocumentPath, string targetDocumentPath, IReadOnlyDictionary<(WorldNameKind Kind, string Name), string> declared, out string reason) {
-        if (!TryRelocateConfigurationAssets(module, catalog, sourceDocumentPath, targetDocumentPath, out reason)) {
-            return false;
-        }
-
-        if (module["machines"] is not JsonArray machines) {
-            reason = string.Empty;
-            return true;
-        }
-
-        foreach (var node in machines) {
-            if (node is not JsonObject machine ||
-                machine["engine"] is not JsonValue engineValue ||
-                !engineValue.TryGetValue<string>(out var engineId) ||
-                machine["configuration"] is not JsonObject configuration ||
-                !catalog.TryDescriptor(engineId, out var descriptor)) {
-                continue;
-            }
-
-            var descriptorErrors = new List<string>();
-            if (!MachineConfigurationFields.TryValidateDescriptor(descriptor.Configuration, descriptorErrors)) {
-                reason = "machine '" + (machine["name"]?.ToString() ?? "(unnamed)") +
-                    "' has invalid provider descriptor: " + string.Join(" ", descriptorErrors);
-                return false;
-            }
-
-            var local = new Dictionary<string, string>(StringComparer.Ordinal);
-            var localError = string.Empty;
-            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
-                if (site.Field.Role != MachineFieldRole.Declaration ||
-                    site.Value is not JsonValue value ||
-                    !value.TryGetValue<string>(out var name) ||
-                    name.Length == 0) {
-                    return;
-                }
-
-                if (!local.TryAdd(name, alias + WorldNameRegistry.AliasSeparator + name)) {
-                    localError = "machine '" + (machine["name"]?.ToString() ?? "(unnamed)") +
-                        "' declares duplicate provider-local name '" + name + "'.";
-                }
-            });
-
-            if (localError.Length != 0) {
-                reason = localError;
-                return false;
-            }
-
-            MachineConfigurationFields.Visit(configuration, descriptor.Configuration, site => {
-                if (site.Value is not JsonValue value ||
-                    !value.TryGetValue<string>(out var textValue)) {
-                    return;
-                }
-
-                var rewritten = site.Field.Role switch {
-                    MachineFieldRole.Declaration or MachineFieldRole.LocalReference =>
-                        local.TryGetValue(textValue, out var localName) ? localName : textValue,
-                    MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference =>
-                        declared.TryGetValue((ProviderReferenceKind(site.Field.Role), textValue), out var worldName) ? worldName : textValue,
-                    _ => textValue
-                };
-
-                if (rewritten != textValue) {
-                    site.Value = JsonValue.Create(rewritten);
-                }
-            });
-        }
-
-        reason = string.Empty;
-        return true;
-    }
-
-    private static string RelocateAssetPath(string path, string sourceDocumentPath, string targetDocumentPath) {
-        if (Path.IsPathRooted(path)) {
-            return path;
-        }
-
-        if (Path.IsPathRooted(sourceDocumentPath) || Path.IsPathRooted(targetDocumentPath)) {
-            var source = Path.GetFullPath(Path.Combine(
-                Path.GetDirectoryName(Path.GetFullPath(sourceDocumentPath)) ?? ".",
-                path
-            ));
-            var target = Path.GetDirectoryName(Path.GetFullPath(targetDocumentPath)) ?? ".";
-            return Path.GetRelativePath(target, source).Replace('\\', '/');
-        }
-
-        var sourceAsset = WorldDefinitionFileSource.CombineRelativeDocumentName(sourceDocumentPath, path);
-        var targetDirectory = targetDocumentPath.Replace('\\', '/');
-        var slash = targetDirectory.LastIndexOf('/');
-        targetDirectory = slash >= 0 ? targetDirectory[..slash] : string.Empty;
-        var from = targetDirectory.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var to = sourceAsset.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var common = 0;
-        while (common < from.Length &&
-            common < to.Length &&
-            string.Equals(from[common], to[common], StringComparison.OrdinalIgnoreCase)) {
-            common++;
-        }
-
-        var segments = new List<string>();
-        for (var i = common; i < from.Length; i++) {
-            segments.Add("..");
-        }
-
-        for (var i = common; i < to.Length; i++) {
-            segments.Add(to[i]);
-        }
-
-        return segments.Count == 0 ? "." : string.Join("/", segments);
-    }
-
     private static WorldNameKind ProviderReferenceKind(MachineFieldRole role) => role switch {
         MachineFieldRole.StateReference => WorldNameKind.State,
         MachineFieldRole.MachineReference => WorldNameKind.Machine,
         MachineFieldRole.ScreenReference => WorldNameKind.Screen,
         _ => WorldNameKind.Any
     };
+    private static string RelocateAssetPath(string path, string sourceDocumentPath, string targetDocumentPath) {
+        if (Path.IsPathRooted(path: path)) {
+            return path;
+        }
 
-    private static Dictionary<(WorldNameKind Kind, string Name), string> CollectDeclaredNames(JsonObject module, string alias) {
-        var declared = new Dictionary<(WorldNameKind Kind, string Name), string>();
-        Visit(module, typeof(WorldDefinition), (parent, name, value, field) => {
-            if (field.Role == WorldNameRole.Declares &&
-                value is JsonValue leaf &&
-                leaf.TryGetValue<string>(out var textValue) &&
-                textValue.Length > 0) {
-                declared[(field.Kind, textValue)] = alias + WorldNameRegistry.AliasSeparator + textValue;
+        if (
+            Path.IsPathRooted(path: sourceDocumentPath) ||
+            Path.IsPathRooted(path: targetDocumentPath)
+        ) {
+            var source = Path.GetFullPath(path: Path.Combine(
+                path1: (Path.GetDirectoryName(path: Path.GetFullPath(path: sourceDocumentPath)) ?? "."),
+                path2: path
+            ));
+            var target = (Path.GetDirectoryName(path: Path.GetFullPath(path: targetDocumentPath)) ?? ".");
+
+            return Path.GetRelativePath(
+                path: source,
+                relativeTo: target
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        }
+
+        var sourceAsset = WorldDefinitionFileSource.CombineRelativeDocumentName(
+            name: path,
+            referrerName: sourceDocumentPath
+        );
+        var targetDirectory = targetDocumentPath.Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
+        var slash = targetDirectory.LastIndexOf(value: '/');
+
+        targetDirectory = ((slash >= 0)
+            ? targetDirectory[..slash]
+            : string.Empty
+        );
+        var from = targetDirectory.Split(
+            options: StringSplitOptions.RemoveEmptyEntries,
+            separator: '/'
+        );
+        var to = sourceAsset.Split(
+            options: StringSplitOptions.RemoveEmptyEntries,
+            separator: '/'
+        );
+        var common = 0;
+
+        while (
+            (common < from.Length) &&
+            (common < to.Length) &&
+            string.Equals(
+            a: from[common],
+            b: to[common],
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+        ) {
+            common++;
+        }
+
+        var segments = new List<string>();
+
+        for (var i = common; (i < from.Length); i++) {
+            segments.Add(item: "..");
+        }
+
+        for (var i = common; (i < to.Length); i++) {
+            segments.Add(item: to[i]);
+        }
+
+        return ((segments.Count == 0)
+            ? "."
+            : string.Join(
+                separator: "/",
+                values: segments
+            )
+        );
+    }
+    private static bool TryRewriteMachineMetadata(JsonObject module, string alias, IMachineValidationCatalog catalog,
+        string sourceDocumentPath, string targetDocumentPath, IReadOnlyDictionary<(WorldNameKind Kind, string Name), string> declared, out string reason) {
+        if (!TryRelocateConfigurationAssets(
+            catalog: catalog,
+            module: module,
+            reason: out reason,
+            sourceDocumentPath: sourceDocumentPath,
+            targetDocumentPath: targetDocumentPath
+        )) {
+            return false;
+        }
+
+        if (module["machines"] is not JsonArray machines) {
+            reason = string.Empty;
+            return true;
+        }
+
+        foreach (var node in machines) {
+            if (
+                (node is not JsonObject machine) ||
+                (machine["engine"] is not JsonValue engineValue) ||
+                !engineValue.TryGetValue<string>(value: out var engineId) ||
+                (machine["configuration"] is not JsonObject configuration) ||
+                !catalog.TryDescriptor(
+                descriptor: out var descriptor,
+                engineId: engineId
+            )
+            ) {
+                continue;
             }
-        });
-        return declared;
+
+            var descriptorErrors = new List<string>();
+
+            if (!MachineConfigurationFields.TryValidateDescriptor(
+                descriptor: descriptor.Configuration,
+                errors: descriptorErrors
+            )) {
+                reason = ((("machine '" + (machine["name"]?.ToString() ?? "(unnamed)")) +
+                    "' has invalid provider descriptor: ") + string.Join(
+                    separator: " ",
+                    values: descriptorErrors
+                ));
+                return false;
+            }
+
+            var local = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+            var localError = string.Empty;
+
+            MachineConfigurationFields.Visit(
+                configuration: configuration,
+                descriptor: descriptor.Configuration,
+                visitor: site => {
+                if (
+                    (site.Field.Role != MachineFieldRole.Declaration) ||
+                    (site.Value is not JsonValue value) ||
+                    !value.TryGetValue<string>(value: out var name) ||
+                    (name.Length == 0)
+                ) {
+                    return;
+                }
+
+                if (!local.TryAdd(
+                    key: name,
+                    value: ((alias + WorldNameRegistry.AliasSeparator) + name)
+                )) {
+                    localError = (((("machine '" + (machine["name"]?.ToString() ?? "(unnamed)")) +
+                        "' declares duplicate provider-local name '") + name) + "'.");
+                }
+            }
+            );
+
+            if (localError.Length != 0) {
+                reason = localError;
+                return false;
+            }
+
+            MachineConfigurationFields.Visit(
+                configuration: configuration,
+                descriptor: descriptor.Configuration,
+                visitor: site => {
+                if (
+                    (site.Value is not JsonValue value) ||
+                    !value.TryGetValue<string>(value: out var textValue)
+                ) {
+                    return;
+                }
+
+                var rewritten = site.Field.Role switch {
+                    MachineFieldRole.Declaration or MachineFieldRole.LocalReference =>
+                        (local.TryGetValue(
+                    key: textValue,
+                    value: out var localName
+                )
+                    ? localName
+                    : textValue),
+                    MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference =>
+                        (declared.TryGetValue(
+                    key: (ProviderReferenceKind(role: site.Field.Role), textValue),
+                    value: out var worldName
+                )
+                    ? worldName
+                    : textValue),
+                    _ => textValue
+                };
+
+                if (rewritten != textValue) {
+                    site.Value = JsonValue.Create(rewritten);
+                }
+            }
+            );
+        }
+
+        reason = string.Empty;
+        return true;
     }
 
     /// <summary>Rewrites one value of a registered role against a declared-name map — the unit
@@ -273,9 +248,177 @@ public static class WorldModuleNamespace {
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: declared);
 
-        return new Rewriter(declared: declared).Rewrite(text: text, role: role);
+        return new Rewriter(declared: declared).Rewrite(
+            role: role,
+            text: text
+        );
     }
+    /// <summary>Prefixes every name <paramref name="module"/> declares with <paramref name="alias"/> and rewrites
+    /// the module's references to match, in place.</summary>
+    /// <param name="module">The fragment's composed tree; mutated.</param>
+    /// <param name="alias">The alias, admissible under <see cref="WorldImport.TryValidateAlias"/>.</param>
+    /// <param name="reason">The one-line refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the alias was admissible and the rewrite applied.</returns>
+    public static bool TryApply(JsonObject module, string alias, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: module);
 
+        if (!WorldImport.TryValidateAlias(
+            alias: alias,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        var declared = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        Visit(
+            node: module,
+            type: typeof(WorldDefinition),
+            visitor: (parent, name, value, field) => {
+            if (
+                (field.Role == WorldNameRole.Declares) &&
+                (value is JsonValue leaf) &&
+                leaf.TryGetValue<string>(value: out var text) &&
+                (text.Length > 0)
+            ) {
+                declared[text] = $"{alias}{WorldNameRegistry.AliasSeparator}{text}";
+            }
+        }
+        );
+
+        if (declared.Count == 0) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var rewriter = new Rewriter(declared: declared);
+
+        Visit(
+            node: module,
+            type: typeof(WorldDefinition),
+            visitor: (parent, name, value, field) => {
+            switch (value) {
+                case JsonArray list when (field.Role == WorldNameRole.Names):
+                    for (var index = 0; (index < list.Count); index++) {
+                        if (
+                            (list[index: index] is JsonValue element) &&
+                            element.TryGetValue<string>(value: out var item)
+                        ) {
+                            list[index: index] = rewriter.Rewrite(
+                                text: item,
+                                role: field.Role
+                            );
+                        }
+                    }
+
+                    break;
+                case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
+                    parent[propertyName: name] = rewriter.Rewrite(
+                        text: text,
+                        role: field.Role
+                    );
+
+                    break;
+            }
+        }
+        );
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Applies provider metadata to an imported module.</summary>
+    public static bool TryApply(JsonObject module, string alias, IMachineValidationCatalog catalog,
+        string sourceDocumentPath, string targetDocumentPath, out string reason) {
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        var declared = CollectDeclaredNames(
+            alias: alias,
+            module: module
+        );
+
+        if (!TryApply(
+            alias: alias,
+            module: module,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        return TryRewriteMachineMetadata(
+            alias: alias,
+            catalog: catalog,
+            declared: declared,
+            module: module,
+            reason: out reason,
+            sourceDocumentPath: sourceDocumentPath,
+            targetDocumentPath: targetDocumentPath
+        );
+    }
+    /// <summary>Rebases provider content and asset fields from one document origin to another.</summary>
+    public static bool TryRelocateConfigurationAssets(JsonObject module, IMachineValidationCatalog catalog,
+        string sourceDocumentPath, string targetDocumentPath, out string reason) {
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        if (module["machines"] is not JsonArray machines) {
+            reason = string.Empty;
+            return true;
+        }
+
+        foreach (var node in machines) {
+            if (
+                (node is not JsonObject machine) ||
+                (machine["engine"] is not JsonValue engineValue) ||
+                !engineValue.TryGetValue<string>(value: out var engineId) ||
+                (machine["configuration"] is not JsonObject configuration) ||
+                !catalog.TryDescriptor(
+                descriptor: out var descriptor,
+                engineId: engineId
+            )
+            ) {
+                continue;
+            }
+
+            var descriptorErrors = new List<string>();
+
+            if (!MachineConfigurationFields.TryValidateDescriptor(
+                descriptor: descriptor.Configuration,
+                errors: descriptorErrors
+            )) {
+                reason = ((("machine '" + (machine["name"]?.ToString() ?? "(unnamed)")) +
+                    "' has invalid provider descriptor: ") + string.Join(
+                    separator: " ",
+                    values: descriptorErrors
+                ));
+                return false;
+            }
+
+            MachineConfigurationFields.Visit(
+                configuration: configuration,
+                descriptor: descriptor.Configuration,
+                visitor: site => {
+                if (
+                    (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath)) ||
+                    (site.Value is not JsonValue pathValue) ||
+                    !pathValue.TryGetValue<string>(value: out var path) ||
+                    (path.Length == 0)
+                ) {
+                    return;
+                }
+
+                site.Value = JsonValue.Create(RelocateAssetPath(
+                    path: path,
+                    sourceDocumentPath: sourceDocumentPath,
+                    targetDocumentPath: targetDocumentPath
+                ));
+            }
+            );
+        }
+
+        reason = string.Empty;
+        return true;
+    }
     /// <summary>Walks a raw tree type-directed, calling <paramref name="visitor"/> at every registered name-bearing
     /// site with the holding object, the member's JSON name, the value, and the registration: each present member
     /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
@@ -293,21 +436,47 @@ public static class WorldModuleNamespace {
 
         if (type == typeof(ValueExpression)) {
             if (node is JsonObject) {
-                Visit(node: node, type: typeof(ValueExpressionTokens), visitor: visitor);
+                Visit(
+                    node: node,
+                    type: typeof(ValueExpressionTokens),
+                    visitor: visitor
+                );
             }
 
             return;
         }
 
         if (type == typeof(WorldLatticeScalar)) {
-            if ((node is JsonObject scalar) && scalar.TryGetPropertyValue(propertyName: "row", jsonNode: out var row) && (row is not null) && WorldNameRegistry.TryFind(declaringType: typeof(WorldLatticeScalar), member: nameof(WorldLatticeScalar.Row), field: out var scalarField)) {
-                visitor(scalar, "row", row, scalarField);
+            if (
+                (node is JsonObject scalar) &&
+                scalar.TryGetPropertyValue(
+                jsonNode: out var row,
+                propertyName: "row"
+            ) &&
+                (row is not null) &&
+                WorldNameRegistry.TryFind(
+                declaringType: typeof(WorldLatticeScalar),
+                member: nameof(WorldLatticeScalar.Row),
+                field: out var scalarField
+            )
+            ) {
+                visitor(
+                    scalar,
+                    "row",
+                    row,
+                    scalarField
+                );
             }
 
             return;
         }
 
-        if (type.IsPrimitive || type.IsEnum || (type == typeof(string)) || (type == typeof(decimal))) {
+        if (
+            type.IsPrimitive ||
+            type.IsEnum ||
+            (type == typeof(string)) ||
+            (type == typeof(decimal))
+        ) {
             return;
         }
 
@@ -319,17 +488,40 @@ public static class WorldModuleNamespace {
             return;
         }
 
-        if (typeof(StateRow).IsAssignableFrom(c: type) && (node is JsonObject rowObject)) {
+        if (
+            typeof(StateRow).IsAssignableFrom(c: type) &&
+            (node is JsonObject rowObject)
+        ) {
             foreach (var (jsonName, declaringType, member, propertyType) in WorldNameRegistry.ReflectedRowMembers(type: type)) {
-                if (!rowObject.TryGetPropertyValue(propertyName: jsonName, jsonNode: out var value) || (value is null)) {
+                if (
+                    !rowObject.TryGetPropertyValue(
+                    jsonNode: out var value,
+                    propertyName: jsonName
+                ) ||
+                    (value is null)
+                ) {
                     continue;
                 }
 
-                if (WorldNameRegistry.TryResolve(declaringType: declaringType, member: member, propertyType: propertyType, field: out var field)) {
-                    visitor(rowObject, jsonName, value, field);
+                if (WorldNameRegistry.TryResolve(
+                    declaringType: declaringType,
+                    field: out var field,
+                    member: member,
+                    propertyType: propertyType
+                )) {
+                    visitor(
+                        rowObject,
+                        jsonName,
+                        value,
+                        field
+                    );
                 }
 
-                Visit(node: value, type: propertyType, visitor: visitor);
+                Visit(
+                    node: value,
+                    type: propertyType,
+                    visitor: visitor
+                );
             }
 
             return;
@@ -337,10 +529,30 @@ public static class WorldModuleNamespace {
 
         switch (typeInfo.Kind) {
             case JsonTypeInfoKind.Object when (node is JsonObject obj):
-                if ((typeInfo.PolymorphismOptions is { } polymorphism) && obj.TryGetPropertyValue(propertyName: "$type", jsonNode: out var discriminatorNode) && (discriminatorNode is JsonValue discriminatorValue) && discriminatorValue.TryGetValue<string>(value: out var discriminator)) {
+                if (
+                    (typeInfo.PolymorphismOptions is { } polymorphism) &&
+                    obj.TryGetPropertyValue(
+                    jsonNode: out var discriminatorNode,
+                    propertyName: "$type"
+                ) &&
+                    (discriminatorNode is JsonValue discriminatorValue) &&
+                    discriminatorValue.TryGetValue<string>(value: out var discriminator)
+                ) {
                     foreach (var derived in polymorphism.DerivedTypes) {
-                        if ((derived.TypeDiscriminator is string arm) && string.Equals(a: arm, b: discriminator, comparisonType: StringComparison.Ordinal) && (derived.DerivedType != type)) {
-                            Visit(node: node, type: derived.DerivedType, visitor: visitor);
+                        if (
+                            (derived.TypeDiscriminator is string arm) &&
+                            string.Equals(
+                            a: arm,
+                            b: discriminator,
+                            comparisonType: StringComparison.Ordinal
+                        ) &&
+                            (derived.DerivedType != type)
+                        ) {
+                            Visit(
+                                node: node,
+                                type: derived.DerivedType,
+                                visitor: visitor
+                            );
 
                             return;
                         }
@@ -348,29 +560,60 @@ public static class WorldModuleNamespace {
                 }
 
                 foreach (var property in typeInfo.Properties) {
-                    if (property.IsExtensionData || (property.Get is null) || (property.Set is null) || !obj.TryGetPropertyValue(propertyName: property.Name, jsonNode: out var value) || (value is null)) {
+                    if (
+                        property.IsExtensionData ||
+                        (property.Get is null) ||
+                        (property.Set is null) ||
+                        !obj.TryGetPropertyValue(
+                        propertyName: property.Name,
+                        jsonNode: out var value
+                    ) ||
+                        (value is null)
+                    ) {
                         continue;
                     }
 
                     var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
 
-                    if (WorldNameRegistry.TryResolve(declaringType: declaringType, member: member, propertyType: property.PropertyType, field: out var field)) {
-                        visitor(obj, property.Name, value, field);
+                    if (WorldNameRegistry.TryResolve(
+                        declaringType: declaringType,
+                        member: member,
+                        propertyType: property.PropertyType,
+                        field: out var field
+                    )) {
+                        visitor(
+                            obj,
+                            property.Name,
+                            value,
+                            field
+                        );
                     }
 
-                    Visit(node: value, type: property.PropertyType, visitor: visitor);
+                    Visit(
+                        node: value,
+                        type: property.PropertyType,
+                        visitor: visitor
+                    );
                 }
 
                 break;
             case JsonTypeInfoKind.Enumerable when (node is JsonArray list):
                 foreach (var element in list) {
-                    Visit(node: element, type: typeInfo.ElementType!, visitor: visitor);
+                    Visit(
+                        node: element,
+                        type: typeInfo.ElementType!,
+                        visitor: visitor
+                    );
                 }
 
                 break;
             case JsonTypeInfoKind.Dictionary when (node is JsonObject entries):
                 foreach (var entry in entries) {
-                    Visit(node: entry.Value, type: typeInfo.ElementType!, visitor: visitor);
+                    Visit(
+                        node: entry.Value,
+                        type: typeInfo.ElementType!,
+                        visitor: visitor
+                    );
                 }
 
                 break;
@@ -380,27 +623,270 @@ public static class WorldModuleNamespace {
     private sealed class Rewriter(IReadOnlyDictionary<string, string> declared) {
         private const string BindingPrefix = "state.";
 
+        private static bool EndsWithLiveZonePrefix(string text, int bracket) {
+            var prefix = (RuleFacts.LiveZonePrefix.Length - 1);
+
+            return (
+                (bracket >= prefix) &&
+                (string.CompareOrdinal(
+                indexA: (bracket - prefix),
+                indexB: 0,
+                length: prefix,
+                strA: text,
+                strB: RuleFacts.LiveZonePrefix
+            ) == 0)
+            );
+        }
+        private static bool IsNamePart(char character) =>
+            (char.IsLetterOrDigit(c: character) || (character == '_') || (character == '$') || (character == '.'));
+        private static bool IsNameStart(char character) =>
+            (char.IsLetter(c: character) || (character == '_') || (character == '$'));
+        private static bool IsSignedSegment(string text, int index) =>
+            (((index + 1) < text.Length) && (text[index] == '-') && char.IsAsciiDigit(c: text[(index + 1)]));
         private string Map(string name) =>
-            (declared.TryGetValue(key: name, value: out var prefixed) ? prefixed : name);
+            (declared.TryGetValue(
+                key: name,
+                value: out var prefixed
+            )
+                ? prefixed
+                : name
+            );
+        private static int MatchingBracket(string text, int open) {
+            var depth = 0;
 
-        public string Rewrite(string text, WorldNameRole role) => role switch {
-            WorldNameRole.Declares => Map(name: text),
-            WorldNameRole.Names => (text.StartsWith(value: '$') ? RewriteReserved(name: text) : Map(name: text)),
-            WorldNameRole.Key => RewriteKey(key: text),
-            WorldNameRole.Expression => RewriteExpression(text: text),
-            WorldNameRole.Binding => RewriteBinding(token: text),
-            WorldNameRole.Template => RewriteTemplate(template: text),
-            _ => text,
-        };
+            for (var index = open; (index < text.Length); index++) {
+                if (text[index] == '[') {
+                    depth++;
+                } else if (
+                    (text[index] == ']') &&
+                    (--depth == 0)
+                ) {
+                    return index;
+                }
+            }
 
+            return -1;
+        }
+        // The span of one bare name in the infix grammar: letters, digits, '_', '$', '.'; a reserved name also takes
+        // ':' before a name character or a signed digit segment, and a "$zones[" index span whole.
+        private static int NameEnd(string text, int start) {
+            var reserved = (text[start] == '$');
+            var index = (start + 1);
+
+            while (index < text.Length) {
+                var character = text[index];
+
+                if (IsNamePart(character: character)) {
+                    index++;
+
+                    continue;
+                }
+
+                if (
+                    reserved &&
+                    (character == ':') &&
+                    ((index + 1) < text.Length) &&
+                    (IsNamePart(character: text[(index + 1)]) || IsSignedSegment(
+                    index: (index + 1),
+                    text: text
+                ))
+                ) {
+                    index++;
+
+                    continue;
+                }
+
+                if (
+                    reserved &&
+                    (character == '-') &&
+                    (text[(index - 1)] == ':') &&
+                    ((index + 1) < text.Length) &&
+                    char.IsAsciiDigit(c: text[(index + 1)])
+                ) {
+                    index++;
+
+                    continue;
+                }
+
+                if (
+                    reserved &&
+                    (character == '[') &&
+                    EndsWithLiveZonePrefix(
+                    bracket: index,
+                    text: text
+                )
+                ) {
+                    var close = MatchingBracket(
+                        open: index,
+                        text: text
+                    );
+
+                    if (close < 0) {
+                        break;
+                    }
+
+                    index = (close + 1);
+
+                    continue;
+                }
+
+                break;
+            }
+
+            return index;
+        }
+        private string RewriteBinding(string token) {
+            if (!token.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: BindingPrefix
+            )) {
+                return token;
+            }
+
+            var rest = token[BindingPrefix.Length..];
+            var dot = rest.IndexOf(value: '.');
+            var row = ((dot < 0)
+                ? rest
+                : rest[..dot]
+            );
+            var tail = ((dot < 0)
+                ? string.Empty
+                : rest[dot..]
+            );
+
+            return $"{BindingPrefix}{Map(name: row)}{tail}";
+        }
+        // The text between a name's brackets: a bare or backquoted name is a cell key and stays; a reserved token
+        // rewrites as a key; anything else is an expression.
+        private string RewriteBracket(string inner) {
+            if (!ExpressionSpelling.TryParseKey(
+                error: out _,
+                key: out var key,
+                text: inner
+            )) {
+                return inner;
+            }
+
+            if (
+                key.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: RuleFacts.ExpressionKeyPrefix
+            ) ||
+                key.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: RuleFacts.CellKeyPrefix
+            )
+            ) {
+                return RewriteExpression(text: inner);
+            }
+
+            if (key.StartsWith(value: '$')) {
+                return RewriteReserved(name: inner.Trim());
+            }
+
+            return inner;
+        }
+        private string RewriteExpression(string text) {
+            var output = new StringBuilder(capacity: text.Length);
+            var index = 0;
+
+            while (index < text.Length) {
+                var character = text[index];
+
+                if (character == '`') {
+                    var close = text.IndexOf(
+                        startIndex: (index + 1),
+                        value: '`'
+                    );
+
+                    if (close < 0) {
+                        _ = output.Append(
+                            value: text,
+                            startIndex: index,
+                            count: (text.Length - index)
+                        );
+
+                        break;
+                    }
+
+                    _ = output.Append(value: '`').Append(value: Map(name: text[(index + 1)..close])).Append(value: '`');
+                    index = (close + 1);
+
+                    continue;
+                }
+
+                if (IsNameStart(character: character)) {
+                    var end = NameEnd(
+                        start: index,
+                        text: text
+                    );
+                    var name = text[index..end];
+
+                    _ = output.Append(value: (name.StartsWith(value: '$')
+                        ? RewriteReserved(name: name)
+                        : Map(name: name)));
+                    index = end;
+
+                    if (
+                        (index < text.Length) &&
+                        (text[index] == '[')
+                    ) {
+                        var close = MatchingBracket(
+                            open: index,
+                            text: text
+                        );
+
+                        if (close < 0) {
+                            continue;
+                        }
+
+                        _ = output.Append(value: '[').Append(value: RewriteBracket(inner: text[(index + 1)..close])).Append(value: ']');
+                        index = (close + 1);
+                    }
+
+                    continue;
+                }
+
+                if (char.IsAsciiDigit(c: character)) {
+                    var end = index;
+
+                    while (
+                        (end < text.Length) &&
+                        (char.IsAsciiLetterOrDigit(c: text[end]) || (text[end] == '.'))
+                    ) {
+                        end++;
+                    }
+
+                    _ = output.Append(
+                        count: (end - index),
+                        startIndex: index,
+                        value: text
+                    );
+                    index = end;
+
+                    continue;
+                }
+
+                _ = output.Append(value: character);
+                index++;
+            }
+
+            return output.ToString();
+        }
         // A literal key is local to its row and stays; a reserved spelling ($cell:, $zone:, $pair:, $expr:, $zones[)
         // or a body-reference spelling (cell:<row>:<key>, argmax:<row>) carries names in its segments.
         private string RewriteKey(string key) {
-            if (key.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+            if (key.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: RuleFacts.ExpressionKeyPrefix
+            )) {
                 return $"{RuleFacts.ExpressionKeyPrefix}{RewriteExpression(text: key[RuleFacts.ExpressionKeyPrefix.Length..])}";
             }
 
-            if (key.StartsWith(value: '$') || key.Contains(value: ':')) {
+            if (
+                key.StartsWith(value: '$') ||
+                key.Contains(value: ':')
+            ) {
                 return RewriteReserved(name: key);
             }
 
@@ -409,14 +895,23 @@ public static class WorldModuleNamespace {
         // Colon segments outside brackets are names; a bracketed span is a live-zone index, a cell key in its own
         // right. A $bind: read names a rule-local binding, never a row.
         private string RewriteReserved(string name) {
-            if (name.StartsWith(WorldRuleFacts.InfluencePrefix, StringComparison.Ordinal)) {
-                var separator = name.IndexOf(':', WorldRuleFacts.InfluencePrefix.Length);
+            if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.InfluencePrefix
+            )) {
+                var separator = name.IndexOf(
+                    ':',
+                    WorldRuleFacts.InfluencePrefix.Length
+                );
                 // Influence labels are shared semantics, even if a module happens to declare a row of that name.
                 if (separator >= 0) {
-                    return name[..(separator + 1)] + RewriteReserved(name[(separator + 1)..]);
+                    return (name[..(separator + 1)] + RewriteReserved(name: name[(separator + 1)..]));
                 }
             }
-            if (name.StartsWith(value: RuleFacts.BindPrefix, comparisonType: StringComparison.Ordinal)) {
+            if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: RuleFacts.BindPrefix
+            )) {
                 return name;
             }
 
@@ -428,10 +923,17 @@ public static class WorldModuleNamespace {
                 var character = name[index];
 
                 if (character == '[') {
-                    var close = MatchingBracket(text: name, open: index);
+                    var close = MatchingBracket(
+                        open: index,
+                        text: name
+                    );
 
                     if (close < 0) {
-                        _ = segment.Append(value: name, startIndex: index, count: (name.Length - index));
+                        _ = segment.Append(
+                            value: name,
+                            startIndex: index,
+                            count: (name.Length - index)
+                        );
 
                         break;
                     }
@@ -460,97 +962,6 @@ public static class WorldModuleNamespace {
 
             return output.ToString();
         }
-        // The text between a name's brackets: a bare or backquoted name is a cell key and stays; a reserved token
-        // rewrites as a key; anything else is an expression.
-        private string RewriteBracket(string inner) {
-            if (!ExpressionSpelling.TryParseKey(text: inner, key: out var key, error: out _)) {
-                return inner;
-            }
-
-            if (key.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal) || key.StartsWith(value: RuleFacts.CellKeyPrefix, comparisonType: StringComparison.Ordinal)) {
-                return RewriteExpression(text: inner);
-            }
-
-            if (key.StartsWith(value: '$')) {
-                return RewriteReserved(name: inner.Trim());
-            }
-
-            return inner;
-        }
-        private string RewriteExpression(string text) {
-            var output = new StringBuilder(capacity: text.Length);
-            var index = 0;
-
-            while (index < text.Length) {
-                var character = text[index];
-
-                if (character == '`') {
-                    var close = text.IndexOf(value: '`', startIndex: (index + 1));
-
-                    if (close < 0) {
-                        _ = output.Append(value: text, startIndex: index, count: (text.Length - index));
-
-                        break;
-                    }
-
-                    _ = output.Append(value: '`').Append(value: Map(name: text[(index + 1)..close])).Append(value: '`');
-                    index = (close + 1);
-
-                    continue;
-                }
-
-                if (IsNameStart(character: character)) {
-                    var end = NameEnd(text: text, start: index);
-                    var name = text[index..end];
-
-                    _ = output.Append(value: (name.StartsWith(value: '$') ? RewriteReserved(name: name) : Map(name: name)));
-                    index = end;
-
-                    if ((index < text.Length) && (text[index] == '[')) {
-                        var close = MatchingBracket(text: text, open: index);
-
-                        if (close < 0) {
-                            continue;
-                        }
-
-                        _ = output.Append(value: '[').Append(value: RewriteBracket(inner: text[(index + 1)..close])).Append(value: ']');
-                        index = (close + 1);
-                    }
-
-                    continue;
-                }
-
-                if (char.IsAsciiDigit(c: character)) {
-                    var end = index;
-
-                    while ((end < text.Length) && (char.IsAsciiLetterOrDigit(c: text[end]) || (text[end] == '.'))) {
-                        end++;
-                    }
-
-                    _ = output.Append(value: text, startIndex: index, count: (end - index));
-                    index = end;
-
-                    continue;
-                }
-
-                _ = output.Append(value: character);
-                index++;
-            }
-
-            return output.ToString();
-        }
-        private string RewriteBinding(string token) {
-            if (!token.StartsWith(value: BindingPrefix, comparisonType: StringComparison.Ordinal)) {
-                return token;
-            }
-
-            var rest = token[BindingPrefix.Length..];
-            var dot = rest.IndexOf(value: '.');
-            var row = ((dot < 0) ? rest : rest[..dot]);
-            var tail = ((dot < 0) ? string.Empty : rest[dot..]);
-
-            return $"{BindingPrefix}{Map(name: row)}{tail}";
-        }
         private string RewriteTemplate(string template) {
             var output = new StringBuilder(capacity: template.Length);
             var index = 0;
@@ -558,7 +969,11 @@ public static class WorldModuleNamespace {
             while (index < template.Length) {
                 var character = template[index];
 
-                if ((character == '{') && ((index + 1) < template.Length) && (template[index + 1] == '{')) {
+                if (
+                    (character == '{') &&
+                    ((index + 1) < template.Length) &&
+                    (template[(index + 1)] == '{')
+                ) {
                     _ = output.Append(value: "{{");
                     index += 2;
 
@@ -566,10 +981,17 @@ public static class WorldModuleNamespace {
                 }
 
                 if (character == '{') {
-                    var close = template.IndexOf(value: '}', startIndex: index);
+                    var close = template.IndexOf(
+                        startIndex: index,
+                        value: '}'
+                    );
 
                     if (close < 0) {
-                        _ = output.Append(value: template, startIndex: index, count: (template.Length - index));
+                        _ = output.Append(
+                            value: template,
+                            startIndex: index,
+                            count: (template.Length - index)
+                        );
 
                         break;
                     }
@@ -587,73 +1009,16 @@ public static class WorldModuleNamespace {
             return output.ToString();
         }
 
-        // The span of one bare name in the infix grammar: letters, digits, '_', '$', '.'; a reserved name also takes
-        // ':' before a name character or a signed digit segment, and a "$zones[" index span whole.
-        private static int NameEnd(string text, int start) {
-            var reserved = (text[start] == '$');
-            var index = (start + 1);
-
-            while (index < text.Length) {
-                var character = text[index];
-
-                if (IsNamePart(character: character)) {
-                    index++;
-
-                    continue;
-                }
-
-                if (reserved && (character == ':') && ((index + 1) < text.Length) && (IsNamePart(character: text[index + 1]) || IsSignedSegment(text: text, index: (index + 1)))) {
-                    index++;
-
-                    continue;
-                }
-
-                if (reserved && (character == '-') && (text[index - 1] == ':') && ((index + 1) < text.Length) && char.IsAsciiDigit(c: text[index + 1])) {
-                    index++;
-
-                    continue;
-                }
-
-                if (reserved && (character == '[') && EndsWithLiveZonePrefix(text: text, bracket: index)) {
-                    var close = MatchingBracket(text: text, open: index);
-
-                    if (close < 0) {
-                        break;
-                    }
-
-                    index = (close + 1);
-
-                    continue;
-                }
-
-                break;
-            }
-
-            return index;
-        }
-        private static bool EndsWithLiveZonePrefix(string text, int bracket) {
-            var prefix = (RuleFacts.LiveZonePrefix.Length - 1);
-
-            return ((bracket >= prefix) && (string.CompareOrdinal(strA: text, indexA: (bracket - prefix), strB: RuleFacts.LiveZonePrefix, indexB: 0, length: prefix) == 0));
-        }
-        private static bool IsSignedSegment(string text, int index) =>
-            (((index + 1) < text.Length) && (text[index] == '-') && char.IsAsciiDigit(c: text[index + 1]));
-        private static bool IsNameStart(char character) =>
-            (char.IsLetter(c: character) || (character == '_') || (character == '$'));
-        private static bool IsNamePart(char character) =>
-            (char.IsLetterOrDigit(c: character) || (character == '_') || (character == '$') || (character == '.'));
-        private static int MatchingBracket(string text, int open) {
-            var depth = 0;
-
-            for (var index = open; (index < text.Length); index++) {
-                if (text[index] == '[') {
-                    depth++;
-                } else if ((text[index] == ']') && (--depth == 0)) {
-                    return index;
-                }
-            }
-
-            return -1;
-        }
+        public string Rewrite(string text, WorldNameRole role) => role switch {
+            WorldNameRole.Declares => Map(name: text),
+            WorldNameRole.Names => (text.StartsWith(value: '$')
+            ? RewriteReserved(name: text)
+            : Map(name: text)),
+            WorldNameRole.Key => RewriteKey(key: text),
+            WorldNameRole.Expression => RewriteExpression(text: text),
+            WorldNameRole.Binding => RewriteBinding(token: text),
+            WorldNameRole.Template => RewriteTemplate(template: text),
+            _ => text,
+        };
     }
 }

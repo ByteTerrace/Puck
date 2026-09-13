@@ -20,9 +20,14 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
     /// <returns>The expression, carrying <paramref name="text"/> as its <see cref="Text"/>.</returns>
     /// <exception cref="FormatException">The spelling does not parse.</exception>
     public static ValueExpression Parse(string text) =>
-        (ExpressionSpelling.TryParse(text: text, tokens: out var tokens, error: out var error)
+        (ExpressionSpelling.TryParse(
+            error: out var error,
+            text: text,
+            tokens: out var tokens
+        )
             ? new ValueExpression(Tokens: tokens) { Text = text }
-            : throw new FormatException(message: $"expression \"{text}\" {error}"));
+            : throw new FormatException(message: $"expression \"{text}\" {error}")
+        );
 }
 /// <summary>One authored token in a <see cref="ValueExpression"/>.</summary>
 [JsonDerivedType(typeof(ValueToken.Constant), typeDiscriminator: "constant")]
@@ -424,7 +429,6 @@ public abstract record ValueToken {
     /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
     public sealed record ArrangementMember : ValueToken;
 }
-
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one
 /// conversion every <see cref="ValueToken.Constant"/>, table value, and authored fixed literal crosses, so the
 /// rounding is decided in exactly one place.</summary>
@@ -433,10 +437,13 @@ public static class NumericLiteral {
     /// <param name="value">The exact decimal literal.</param>
     /// <returns>The fixed-point value.</returns>
     /// <exception cref="OverflowException">The literal is outside the Q48.16 state range.</exception>
-    public static FixedQ4816 ToFixed(decimal value) => TryToFixed(value: value, result: out var result)
+    public static FixedQ4816 ToFixed(decimal value) => (TryToFixed(
+        result: out var result,
+        value: value
+    )
         ? result
-        : throw new OverflowException(message: $"The exact decimal literal '{value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}' is outside the Q48.16 state range.");
-
+        : throw new OverflowException(message: $"The exact decimal literal '{value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}' is outside the Q48.16 state range.")
+    );
     /// <summary>Converts a decimal literal, refusing rather than throwing when it lies outside the Q48.16 range.</summary>
     /// <param name="value">The exact decimal literal.</param>
     /// <param name="result">The fixed-point value, when this method returns <see langword="true"/>.</param>

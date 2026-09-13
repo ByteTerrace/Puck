@@ -105,34 +105,34 @@ public static class ShapeDomainOps {
     private static SdfDomainOp Map(ShapeDomainOp op) {
         return op switch {
             ShapeDomainOp.Symmetry symmetry => new SdfDomainOp.Symmetry(
-                Normal: symmetry.Normal,
-                Offset: (symmetry.Offset ?? 0f)
-            ),
+            Normal: symmetry.Normal,
+            Offset: (symmetry.Offset ?? 0f)
+        ),
             ShapeDomainOp.Repeat repeat => new SdfDomainOp.Repeat(
-                Limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit)),
-                Origin: (repeat.Origin?.Value ?? Vector3.Zero),
-                Spacing: repeat.Spacing
-            ),
+            Limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit)),
+            Origin: (repeat.Origin?.Value ?? Vector3.Zero),
+            Spacing: repeat.Spacing
+        ),
             ShapeDomainOp.Polar polar => new SdfDomainOp.Polar(
-                Axis: (polar.Axis ?? SdfPolarAxis.Y),
-                Count: polar.Count,
-                MaterialStride: (polar.MaterialStride ?? 0),
-                Mirror: (polar.Mirror ?? false),
-                Origin: (polar.Origin?.Value ?? Vector3.Zero)
-            ),
+            Axis: (polar.Axis ?? SdfPolarAxis.Y),
+            Count: polar.Count,
+            MaterialStride: (polar.MaterialStride ?? 0),
+            Mirror: (polar.Mirror ?? false),
+            Origin: (polar.Origin?.Value ?? Vector3.Zero)
+        ),
             ShapeDomainOp.Wallpaper wallpaper => new SdfDomainOp.Wallpaper(
-                Cell: wallpaper.Cell,
-                Group: wallpaper.Group,
-                Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
-                LodDistance: (wallpaper.LodDistance ?? 0f),
-                MaterialStride: (wallpaper.MaterialStride ?? 0),
-                Plane: (wallpaper.Plane ?? SdfWallpaperPlane.XZ)
-            ),
+            Cell: wallpaper.Cell,
+            Group: wallpaper.Group,
+            Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
+            LodDistance: (wallpaper.LodDistance ?? 0f),
+            MaterialStride: (wallpaper.MaterialStride ?? 0),
+            Plane: (wallpaper.Plane ?? SdfWallpaperPlane.XZ)
+        ),
             _ => throw new ArgumentOutOfRangeException(
-                paramName: nameof(op),
-                actualValue: op,
-                message: "The shape domain op kind is not defined."
-            ),
+            paramName: nameof(op),
+            actualValue: op,
+            message: "The shape domain op kind is not defined."
+        ),
         };
     }
 

@@ -35,6 +35,7 @@ public interface IRuleReader {
     /// not carry; the enclosing gate or expression evaluation clears it and fails, so a missing entry is a reported
     /// refusal rather than a value.</summary>
     bool TableKeyMissing { get; set; }
+
     /// <summary>Returns the participant index a binding names for the evaluation in flight, or -1 when it is not in
     /// play.</summary>
     /// <param name="key">The binding.</param>
@@ -53,8 +54,10 @@ public interface IRuleReader {
     /// never nests another, so one buffer serves every reader.</summary>
     /// <param name="cells">The cell count to hold.</param>
     Span<long> BoardScratch(int cells);
+
     /// <summary>Gets scratch for one pattern word, sized to the longest word any source in the section can produce.</summary>
     Span<long> PatternWord { get; }
+
     /// <summary>Returns a row's version — a counter the host bumps on every state write to any of its cells — so a
     /// scheduler can prove a row's stored content unchanged between two evaluations without rereading it. The
     /// default answers "the host cannot say", which keeps every rule evaluating in full; only a host reading through

@@ -96,32 +96,31 @@ public sealed record ShapePanelDocument(
             value2: new Vector3(value: SdfSolidGeometry.MinimumScale)
         );
         var plateHalfExtent = SdfSolidGeometry.HalfExtent(
-            type: type,
-            scale: scale,
+            axis: direction,
             lift: lift,
-            axis: direction
+            scale: scale,
+            type: type
         );
         var copyHalfExtent = SdfSolidGeometry.HalfExtent(
-            type: type,
-            scale: erodedScale,
+            axis: direction,
             lift: lift,
-            axis: direction
+            scale: erodedScale,
+            type: type
         );
         var recess = (depth >= 0f);
 
         return new ShapePanelPlacement(
-            FaceAxis: direction,
-            ErodedScale: erodedScale,
-            Offset: (recess
-            ? ((plateHalfExtent + copyHalfExtent) - depth)
-            : (-depth + (plateHalfExtent - copyHalfExtent))),
             Blend: (recess
             ? SdfBlendOp.Subtraction
-            : SdfBlendOp.Union)
+            : SdfBlendOp.Union),
+            ErodedScale: erodedScale,
+            FaceAxis: direction,
+            Offset: (recess
+            ? ((plateHalfExtent + copyHalfExtent) - depth)
+            : (-depth + (plateHalfExtent - copyHalfExtent)))
         );
     }
 }
-
 /// <summary>Where a panel copy sits against its plate — see <see cref="ShapePanelDocument.Resolve"/>.</summary>
 /// <param name="FaceAxis">The normalized local face direction.</param>
 /// <param name="ErodedScale">The copy's own per-axis scale, in the plate scale's units.</param>

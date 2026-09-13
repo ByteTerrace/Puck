@@ -203,11 +203,11 @@ public static partial class WorldDefinitionValidator {
                     float.IsFinite(f: gravity.SofteningLength) &&
                     (gravity.SofteningLength > 0f) &&
                     !FixedWorldGravity.TryCompilePointMass(
-                        gravitationalConstant: gravity.GravitationalConstant,
-                        mass: out _,
-                        point: point,
-                        softeningLength: gravity.SofteningLength
-                    )
+                    gravitationalConstant: gravity.GravitationalConstant,
+                    mass: out _,
+                    point: point,
+                    softeningLength: gravity.SofteningLength
+                )
                 ) {
                     errors.Add(item: $"{path} cannot lower its surfaceGravity/referenceRadius promise through gravity's Q48.16 Plummer kernel without underflow or overflow.");
                 }
@@ -306,12 +306,12 @@ public static partial class WorldDefinitionValidator {
             if (
                 (placement is not null) &&
                 !FixedWorldGravityArea.TryCompile(
-                    area: area,
-                    authoredIndex: index,
-                    compiled: out _,
-                    frame: frames[placement.Id],
-                    placement: placement
-                )
+                area: area,
+                authoredIndex: index,
+                compiled: out _,
+                frame: frames[placement.Id],
+                placement: placement
+            )
             ) {
                 errors.Add(item: $"{path} cannot lower its placement-relative bounds and acceleration through the Q48.16 evaluator without underflow or overflow.");
             }
@@ -399,6 +399,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         var events = collision.Events;
+
         RequireIntRange(
             value: events.CandidateBudget,
             min: 1,
@@ -425,6 +426,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         var bodyContacts = collision.BodyContacts;
+
         RequireIntRange(
             value: bodyContacts.CandidateBudget,
             min: 1,
@@ -602,7 +604,10 @@ public static partial class WorldDefinitionValidator {
                 if (noise.Frequency < 1) {
                     errors.Add(item: $"{path}.region.frequency must be at least 1 (noise-cell edge in grid cells; was {noise.Frequency}).");
                 }
-                if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
+                if (
+                    (noise.Octaves < 1) ||
+                    (noise.Octaves > 4)
+                ) {
                     errors.Add(item: $"{path}.region.octaves must be in 1..4 (was {noise.Octaves}).");
                 }
 
@@ -626,7 +631,10 @@ public static partial class WorldDefinitionValidator {
                 if (scatter.Spacing < 2) {
                     errors.Add(item: $"{path}.region.spacing must be at least 2 cells (was {scatter.Spacing}).");
                 }
-                if ((scatter.Radius < 1) || ((2 * scatter.Radius) > scatter.Spacing)) {
+                if (
+                    (scatter.Radius < 1) ||
+                    ((2 * scatter.Radius) > scatter.Spacing)
+                ) {
                     errors.Add(item: $"{path}.region.radius must be at least 1 and at most spacing/2 (a jittered point never leaves its block; was {scatter.Radius} against spacing {scatter.Spacing}).");
                 }
 
@@ -710,14 +718,18 @@ public static partial class WorldDefinitionValidator {
         }
 
         ValidateHudVisible(
-            definition: (isIdentityScope ? null : definition),
+            definition: (isIdentityScope
+            ? null
+            : definition),
             errors: errors,
             path: "hud.defaults.visible",
             predicate: hud.Defaults?.Visible,
             stateRows: stateRows
         );
         ValidateHudVisible(
-            definition: (isIdentityScope ? null : definition),
+            definition: (isIdentityScope
+            ? null
+            : definition),
             errors: errors,
             path: "hud.defaults.cursor.visible",
             predicate: hud.Defaults?.Cursor?.Visible,
@@ -784,7 +796,9 @@ public static partial class WorldDefinitionValidator {
                 stateRows: stateRows
             );
             ValidateHudVisible(
-                definition: (isIdentityScope ? null : definition),
+                definition: (isIdentityScope
+                ? null
+                : definition),
                 errors: errors,
                 path: $"{panelPath}.visible",
                 predicate: panel.Visible,
@@ -799,10 +813,13 @@ public static partial class WorldDefinitionValidator {
                 // Every candidate counts: a ranked element may show any of them, and the overlay's slot table is
                 // sized for the distinct sources a section can reach, not the ones winning this frame.
                 foreach (var candidate in element.FrameCandidates) {
-                    if ((candidate?.Source is not { } source) || !frameSources.Add(item: JsonSerializer.Serialize(
+                    if (
+                        (candidate?.Source is not { } source) ||
+                        !frameSources.Add(item: JsonSerializer.Serialize(
                         value: source,
                         jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
-                    ))) {
+                    ))
+                    ) {
                         continue;
                     }
 
@@ -933,7 +950,10 @@ public static partial class WorldDefinitionValidator {
         if (
             (width >= 1) &&
             (depth >= 1) &&
-            (CreationStampSampling.NoiseInstanceCeiling(depth: depth, width: width) > SdfProgramBuilder.MaxInstances)
+            (CreationStampSampling.NoiseInstanceCeiling(
+            depth: depth,
+            width: width
+        ) > SdfProgramBuilder.MaxInstances)
         ) {
             errors.Add(item: $"{path} width x depth ({width}x{depth}) worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling.");
         }
@@ -1021,7 +1041,11 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if ((shape?.Lights is { } authoredLights) && (index < authoredLights.Count) && (authoredLights[index]?.GetType() != light.GetType())) {
+                if (
+                    (shape?.Lights is { } authoredLights) &&
+                    (index < authoredLights.Count) &&
+                    (authoredLights[index]?.GetType() != light.GetType())
+                ) {
                     errors.Add(item: $"{lightPath} must keep the kind the static render.lighting authors in that slot.");
                 }
 
@@ -1030,9 +1054,13 @@ public static partial class WorldDefinitionValidator {
                     WorldRenderLight.Occluder occluder => occluder.Anchor,
                     _ => null,
                 };
-                if (shape?.Lights is { } baseLights && index < baseLights.Count &&
-                    LightAnchor(light) is { } keyAnchor && keyAnchor != LightAnchor(baseLights[index])) {
-                    errors.Add($"{lightPath}.anchor must match the base light; cycle keys interpolate offsets within that frame.");
+                if (
+                    (shape?.Lights is { } baseLights) &&
+                    (index < baseLights.Count) &&
+                    (LightAnchor(value: light) is { } keyAnchor) &&
+                    (keyAnchor != LightAnchor(value: baseLights[index]))
+                ) {
+                    errors.Add(item: $"{lightPath}.anchor must match the base light; cycle keys interpolate offsets within that frame.");
                 }
 
                 switch (light) {
@@ -1108,22 +1136,44 @@ public static partial class WorldDefinitionValidator {
                             break;
                         }
                     case WorldRenderLight.Occluder occluder: {
-                            if (occluder.Position is { } position && !IsFinite(position)) {
-                                errors.Add($"{lightPath}.position must be finite.");
+                            if (
+                                (occluder.Position is { } position) &&
+                                !IsFinite(value: position)
+                            ) {
+                                errors.Add(item: $"{lightPath}.position must be finite.");
                             }
                             if (occluder.Radius is { } radius) {
-                                RequirePositive(errors: errors, name: $"{lightPath}.radius", value: radius);
+                                RequirePositive(
+                                    errors: errors,
+                                    name: $"{lightPath}.radius",
+                                    value: radius
+                                );
                             }
                             if (occluder.Weight is { } weight) {
-                                RequireRange(value: weight, min: 0f, max: 1f, name: $"{lightPath}.weight", errors: errors);
+                                RequireRange(
+                                    value: weight,
+                                    min: 0f,
+                                    max: 1f,
+                                    name: $"{lightPath}.weight",
+                                    errors: errors
+                                );
                             }
                             if (occluder.Anchor is { } anchor) {
                                 if (anchor is not (WorldAnchor.Entity or WorldAnchor.EntityPart or WorldAnchor.Placement)) {
-                                    errors.Add($"{lightPath}.anchor must name an entity, entity part, or placement frame.");
+                                    errors.Add(item: $"{lightPath}.anchor must name an entity, entity part, or placement frame.");
                                 } else {
-                                    ValidateAnchor(anchor, definition.Placements,
-                                        new HashSet<string>(definition.Placements.Select(p => p.Id), StringComparer.Ordinal),
-                                        definition.Creations, definition.Population.Capacity, $"{lightPath}.anchor", errors);
+                                    ValidateAnchor(
+                                        anchor,
+                                        definition.Placements,
+                                        new HashSet<string>(
+                                            collection: definition.Placements.Select(selector: p => p.Id),
+                                            comparer: StringComparer.Ordinal
+                                        ),
+                                        definition.Creations,
+                                        definition.Population.Capacity,
+                                        $"{lightPath}.anchor",
+                                        errors
+                                    );
                                 }
                             }
                             break;
@@ -1159,7 +1209,10 @@ public static partial class WorldDefinitionValidator {
                                     ValidateAnchor(
                                         anchor: anchor,
                                         placements: definition.Placements,
-                                        placementIds: new HashSet<string>(collection: definition.Placements.Select(selector: static placement => placement.Id), comparer: StringComparer.Ordinal),
+                                        placementIds: new HashSet<string>(
+                                            collection: definition.Placements.Select(selector: static placement => placement.Id),
+                                            comparer: StringComparer.Ordinal
+                                        ),
                                         creations: definition.Creations,
                                         populationCapacity: definition.Population.Capacity,
                                         path: $"{lightPath}.anchor",
@@ -1263,7 +1316,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{layerPath} repeats a layer kind; each kind appears at most once.");
             }
 
-            if ((shape is not null) && !(shape.Layers?.Any(predicate: authored => authored?.GetType() == layer.GetType()) ?? false)) {
+            if (
+                (shape is not null) &&
+                !(shape.Layers?.Any(predicate: authored => (authored?.GetType() == layer.GetType())) ?? false)
+            ) {
                 errors.Add(item: $"{layerPath} moves a layer kind the static render.sky does not author; a cycle key may not add a layer.");
             }
 
@@ -1280,7 +1336,10 @@ public static partial class WorldDefinitionValidator {
                         }
 
                         if (shape is null) {
-                            if ((stops.Count < 2) || (stops.Count > SdfEnvironment.MaxSkyStops)) {
+                            if (
+                                (stops.Count < 2) ||
+                                (stops.Count > SdfEnvironment.MaxSkyStops)
+                            ) {
                                 errors.Add(item: $"{layerPath}.stops carries {stops.Count} stops; a gradient carries two to {SdfEnvironment.MaxSkyStops}.");
                             }
                         } else {
@@ -1312,7 +1371,10 @@ public static partial class WorldDefinitionValidator {
                                     errors: errors
                                 );
 
-                                if ((previous is { } last) && (elevation <= last)) {
+                                if (
+                                    (previous is { } last) &&
+                                    (elevation <= last)
+                                ) {
                                     errors.Add(item: $"{stopPath}.elevation must exceed the previous stop's.");
                                 }
 
@@ -1366,7 +1428,12 @@ public static partial class WorldDefinitionValidator {
                         if (disc.Light is { } lightIndex) {
                             var lights = lighting?.Lights;
 
-                            if ((lights is null) || (lightIndex < 0) || (lightIndex >= lights.Count) || (lights[lightIndex] is not WorldRenderLight.Directional)) {
+                            if (
+                                (lights is null) ||
+                                (lightIndex < 0) ||
+                                (lightIndex >= lights.Count) ||
+                                (lights[lightIndex] is not WorldRenderLight.Directional)
+                            ) {
                                 errors.Add(item: $"{layerPath}.light must name a directional light's slot in render.lighting.lights.");
                             }
                         }
@@ -1376,42 +1443,42 @@ public static partial class WorldDefinitionValidator {
                 case WorldRenderSkyLayer.Stars stars: {
                         if (stars.Density is { } density) {
                             RequirePositive(
-                                value: density,
+                                errors: errors,
                                 name: $"{layerPath}.density",
-                                errors: errors
+                                value: density
                             );
                         }
 
                         if (stars.Brightness is { } brightness) {
                             RequireNonNegative(
-                                value: brightness,
+                                errors: errors,
                                 name: $"{layerPath}.brightness",
-                                errors: errors
+                                value: brightness
                             );
                         }
 
                         if (stars.Twinkle is { } twinkle) {
                             if (twinkle.Share is { } share) {
                                 RequireUnitInterval(
-                                    value: share,
+                                    errors: errors,
                                     name: $"{layerPath}.twinkle.share",
-                                    errors: errors
+                                    value: share
                                 );
                             }
 
                             if (twinkle.Depth is { } depth) {
                                 RequireUnitInterval(
-                                    value: depth,
+                                    errors: errors,
                                     name: $"{layerPath}.twinkle.depth",
-                                    errors: errors
+                                    value: depth
                                 );
                             }
 
                             if (twinkle.Rate is { } rate) {
                                 RequirePositive(
-                                    value: rate,
+                                    errors: errors,
                                     name: $"{layerPath}.twinkle.rate",
-                                    errors: errors
+                                    value: rate
                                 );
                             }
                         }
@@ -1421,9 +1488,9 @@ public static partial class WorldDefinitionValidator {
                 case WorldRenderSkyLayer.Clouds clouds: {
                         if (clouds.Coverage is { } coverage) {
                             RequireUnitInterval(
-                                value: coverage,
+                                errors: errors,
                                 name: $"{layerPath}.coverage",
-                                errors: errors
+                                value: coverage
                             );
                         }
 
@@ -1440,9 +1507,9 @@ public static partial class WorldDefinitionValidator {
 
                         if (clouds.Scale is { } scale) {
                             RequirePositive(
-                                value: scale,
+                                errors: errors,
                                 name: $"{layerPath}.scale",
-                                errors: errors
+                                value: scale
                             );
                         }
 
@@ -1510,33 +1577,43 @@ public static partial class WorldDefinitionValidator {
 
                 var direction = softbox.Direction;
 
-                if (!float.IsFinite(f: direction.X) || !float.IsFinite(f: direction.Y) || !float.IsFinite(f: direction.Z)) {
+                if (
+                    !float.IsFinite(f: direction.X) ||
+                    !float.IsFinite(f: direction.Y) ||
+                    !float.IsFinite(f: direction.Z)
+                ) {
                     errors.Add(item: $"{softboxPath}.direction must contain finite coordinates.");
-                } else if (((direction.X * direction.X) + (direction.Y * direction.Y) + (direction.Z * direction.Z)) <= 0f) {
+                } else if ((((direction.X * direction.X) + (direction.Y * direction.Y)) + (direction.Z * direction.Z)) <= 0f) {
                     errors.Add(item: $"{softboxPath}.direction must be nonzero.");
                 }
 
                 var size = softbox.Size;
 
-                if (!float.IsFinite(f: size.X) || !float.IsFinite(f: size.Y)) {
+                if (
+                    !float.IsFinite(f: size.X) ||
+                    !float.IsFinite(f: size.Y)
+                ) {
                     errors.Add(item: $"{softboxPath}.size must contain finite coordinates.");
-                } else if ((size.X <= 0f) || (size.Y <= 0f)) {
+                } else if (
+                    (size.X <= 0f) ||
+                    (size.Y <= 0f)
+                ) {
                     errors.Add(item: $"{softboxPath}.size must be strictly positive on both axes.");
                 }
 
                 if (softbox.Weight is { } weight) {
                     RequireNonNegative(
-                        value: weight,
+                        errors: errors,
                         name: $"{softboxPath}.weight",
-                        errors: errors
+                        value: weight
                     );
                 }
 
                 if (softbox.Blur is { } blur) {
                     RequireNonNegative(
-                        value: blur,
+                        errors: errors,
                         name: $"{softboxPath}.blur",
-                        errors: errors
+                        value: blur
                     );
                 }
 
@@ -2022,7 +2099,10 @@ public static partial class WorldDefinitionValidator {
         if (predicateErrors.Count > 0) {
             HudRowValidation.Refuse(
                 errors: errors,
-                message: string.Join(separator: " ", values: predicateErrors),
+                message: string.Join(
+                    separator: " ",
+                    values: predicateErrors
+                ),
                 reason: HudRefusal.VisiblePredicateInvalid
             );
         }

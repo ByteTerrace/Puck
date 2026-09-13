@@ -25,7 +25,7 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: capacity);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: maximumOperationsPerFrame);
 
-        m_channel = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(capacity: capacity) {
+        m_channel = Channel.CreateBounded<WorkItem>(options: new BoundedChannelOptions(capacity: capacity) {
             AllowSynchronousContinuations = false,
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -37,28 +37,12 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
     /// <summary>Gets the approximate number of operations waiting for a host-frame drain.</summary>
     public int PendingCount => m_channel.Reader.Count;
 
-    /// <inheritdoc/>
-    public ValueTask<TResult> InvokeAsync<TResult>(
-        Func<TResult> operation,
-        CancellationToken cancellationToken = default
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: operation);
-        if (cancellationToken.IsCancellationRequested) {
-            return ValueTask.FromCanceled<TResult>(cancellationToken: cancellationToken);
-        }
-        if (Volatile.Read(location: ref m_disposed) != 0) {
-            return ValueTask.FromException<TResult>(exception: new ObjectDisposedException(objectName: nameof(WorldAgentMailbox)));
-        }
+    private void RefuseRemainingOnShutdown() {
+        var exception = new ObjectDisposedException(objectName: nameof(WorldAgentMailbox));
 
-        var item = new WorkItem<TResult>(operation: operation, cancellationToken: cancellationToken);
-        if (!m_channel.Writer.TryWrite(item: item)) {
-            item.Refuse(exception: ((Volatile.Read(location: ref m_disposed) != 0)
-                ? new ObjectDisposedException(objectName: nameof(WorldAgentMailbox))
-                : new InvalidOperationException(message: "The world-agent mailbox is full; retry after the host drains pending operations.")
-            ));
+        while (m_channel.Reader.TryRead(item: out var item)) {
+            item.Refuse(exception: exception);
         }
-
-        return new ValueTask<TResult>(item.Task);
     }
 
     /// <summary>Executes up to the configured per-frame limit on the calling launcher thread.</summary>
@@ -82,9 +66,9 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
         try {
             for (
                 var operationIndex = 0;
-                (Volatile.Read(location: ref m_disposed) == 0) &&
+                ((Volatile.Read(location: ref m_disposed) == 0) &&
                     (operationIndex < m_maximumOperationsPerFrame) &&
-                    m_channel.Reader.TryRead(item: out var item);
+                    m_channel.Reader.TryRead(item: out var item));
                 operationIndex++
             ) {
                 item.Execute();
@@ -93,10 +77,12 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
             Monitor.Exit(obj: m_drainGate);
         }
     }
-
     /// <summary>Refuses every operation still queued during host shutdown and closes the mailbox to new work.</summary>
     public void Dispose() {
-        if (Interlocked.Exchange(location1: ref m_disposed, value: 1) != 0) {
+        if (Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        ) != 0) {
             return;
         }
 
@@ -105,25 +91,42 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
             RefuseRemainingOnShutdown();
         }
     }
-
-    private void RefuseRemainingOnShutdown() {
-        var exception = new ObjectDisposedException(objectName: nameof(WorldAgentMailbox));
-
-        while (m_channel.Reader.TryRead(item: out var item)) {
-            item.Refuse(exception: exception);
+    /// <inheritdoc/>
+    public ValueTask<TResult> InvokeAsync<TResult>(
+        Func<TResult> operation,
+        CancellationToken cancellationToken = default
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: operation);
+        if (cancellationToken.IsCancellationRequested) {
+            return ValueTask.FromCanceled<TResult>(cancellationToken: cancellationToken);
         }
+        if (Volatile.Read(location: ref m_disposed) != 0) {
+            return ValueTask.FromException<TResult>(exception: new ObjectDisposedException(objectName: nameof(WorldAgentMailbox)));
+        }
+
+        var item = new WorkItem<TResult>(
+            cancellationToken: cancellationToken,
+            operation: operation
+        );
+
+        if (!m_channel.Writer.TryWrite(item: item)) {
+            item.Refuse(exception: ((Volatile.Read(location: ref m_disposed) != 0)
+                ? new ObjectDisposedException(objectName: nameof(WorldAgentMailbox))
+                : new InvalidOperationException(message: "The world-agent mailbox is full; retry after the host drains pending operations.")));
+        }
+
+        return new ValueTask<TResult>(task: item.Task);
     }
 
     private abstract class WorkItem {
         public abstract void Execute();
         public abstract void Refuse(Exception exception);
     }
-
     private sealed class WorkItem<TResult> : WorkItem {
         private readonly CancellationToken m_cancellationToken;
-        private readonly CancellationTokenRegistration m_registration;
+        private readonly TaskCompletionSource<TResult> m_completion = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Func<TResult> m_operation;
-        private readonly TaskCompletionSource<TResult> m_completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly CancellationTokenRegistration m_registration;
 
         // 0 = queued, 1 = executing, 2 = terminal. Cancellation may win only while queued.
         private int m_state;
@@ -139,8 +142,22 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
 
         public Task<TResult> Task => m_completion.Task;
 
+        private void CancelQueued() {
+            if (Interlocked.CompareExchange(
+                comparand: 0,
+                location1: ref m_state,
+                value: 2
+            ) == 0) {
+                m_completion.TrySetCanceled(cancellationToken: m_cancellationToken);
+            }
+        }
+
         public override void Execute() {
-            if (Interlocked.CompareExchange(location1: ref m_state, value: 1, comparand: 0) != 0) {
+            if (Interlocked.CompareExchange(
+                comparand: 0,
+                location1: ref m_state,
+                value: 1
+            ) != 0) {
                 m_registration.Dispose();
                 return;
             }
@@ -150,23 +167,23 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
             } catch (Exception exception) {
                 m_completion.SetException(exception: exception);
             } finally {
-                Volatile.Write(location: ref m_state, value: 2);
+                Volatile.Write(
+                    location: ref m_state,
+                    value: 2
+                );
                 m_registration.Dispose();
             }
         }
-
         public override void Refuse(Exception exception) {
-            if (Interlocked.CompareExchange(location1: ref m_state, value: 2, comparand: 0) == 0) {
+            if (Interlocked.CompareExchange(
+                comparand: 0,
+                location1: ref m_state,
+                value: 2
+            ) == 0) {
                 m_completion.SetException(exception: exception);
             }
 
             m_registration.Dispose();
-        }
-
-        private void CancelQueued() {
-            if (Interlocked.CompareExchange(location1: ref m_state, value: 2, comparand: 0) == 0) {
-                m_completion.TrySetCanceled(cancellationToken: m_cancellationToken);
-            }
         }
     }
 }

@@ -28,7 +28,7 @@ evidence for a behavior; it does not by itself establish hardware truth.
 
 Applications can use `AdvancedGamingBrickCore` synchronously or resolve the
 queued `AdvancedMachineHost` through the shared machine engine surface. The
-[AGB project README](../../../src/Puck.AdvancedGamingBrick/README.md) documents
+[embedding guide](embedding.md) documents
 construction, firmware, saves, options, and API examples. [Machine hosting runtime](../shared/machine-hosting.md)
 covers worker lifetime, cycle pacing, buffers, audio, and snapshots.
 

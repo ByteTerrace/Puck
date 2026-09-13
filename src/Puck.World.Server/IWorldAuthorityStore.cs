@@ -45,10 +45,10 @@ public enum WorldAuthorityStoreOutcomeKind {
 /// <param name="Kind">What kind of thing happened.</param>
 /// <param name="Detail">Human-readable detail — the remedy on a refusal, empty on success.</param>
 public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutcomeKind Kind, string Detail) {
-    /// <summary>The root snapshot observed after a successful publication, including its journal watermark.</summary>
-    public WorldAuthorityRootSnapshot? PublishedRoot { get; init; }
     /// <summary>Gets a value indicating whether the write landed.</summary>
     public bool Ok => (Kind == WorldAuthorityStoreOutcomeKind.Ok);
+    /// <summary>The root snapshot observed after a successful publication, including its journal watermark.</summary>
+    public WorldAuthorityRootSnapshot? PublishedRoot { get; init; }
 
     /// <summary>Builds an already-exists outcome.</summary>
     /// <param name="detail">The refusal detail.</param>
@@ -62,11 +62,26 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
         Detail: detail,
         Kind: WorldAuthorityStoreOutcomeKind.Failed
     );
+    /// <summary>Builds an operation-conflict outcome.</summary>
+    public static WorldAuthorityStoreOutcome OperationConflict(string detail) => new(
+        Detail: detail,
+        Kind: WorldAuthorityStoreOutcomeKind.OperationConflict
+    );
     /// <summary>Builds a precondition-failed outcome.</summary>
     /// <param name="detail">The refusal detail.</param>
     public static WorldAuthorityStoreOutcome PreconditionFailed(string detail) => new(
         Detail: detail,
         Kind: WorldAuthorityStoreOutcomeKind.PreconditionFailed
+    );
+    /// <summary>Builds an uncertain-commit outcome.</summary>
+    public static WorldAuthorityStoreOutcome RecoveryRequired(string detail) => new(
+        Detail: detail,
+        Kind: WorldAuthorityStoreOutcomeKind.RecoveryRequired
+    );
+    /// <summary>Builds a stale-fence outcome.</summary>
+    public static WorldAuthorityStoreOutcome StaleFence(string detail) => new(
+        Detail: detail,
+        Kind: WorldAuthorityStoreOutcomeKind.StaleFence
     );
     /// <summary>Builds a success outcome.</summary>
     /// <param name="detail">Optional human-readable detail.</param>
@@ -75,21 +90,6 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
         Detail: detail,
         Kind: WorldAuthorityStoreOutcomeKind.Ok
     ) { PublishedRoot = root };
-    /// <summary>Builds a stale-fence outcome.</summary>
-    public static WorldAuthorityStoreOutcome StaleFence(string detail) => new(
-        Detail: detail,
-        Kind: WorldAuthorityStoreOutcomeKind.StaleFence
-    );
-    /// <summary>Builds an operation-conflict outcome.</summary>
-    public static WorldAuthorityStoreOutcome OperationConflict(string detail) => new(
-        Detail: detail,
-        Kind: WorldAuthorityStoreOutcomeKind.OperationConflict
-    );
-    /// <summary>Builds an uncertain-commit outcome.</summary>
-    public static WorldAuthorityStoreOutcome RecoveryRequired(string detail) => new(
-        Detail: detail,
-        Kind: WorldAuthorityStoreOutcomeKind.RecoveryRequired
-    );
 }
 /// <summary>The blob-backed persistence seam a hosted world's checkpoint, journal, and published definition read and
 /// write through. Programmed against opaque encoded bytes throughout — this seam never decodes a checkpoint or a

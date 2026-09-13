@@ -18,15 +18,49 @@ public sealed class LawDeclarationTests {
         var declaredIds = LawDeclarations.All.Keys.ToHashSet(comparer: StringComparer.Ordinal);
         var caseIds = LawRegistry.All.Select(selector: lawCase => lawCase.Id).ToList();
         var caseIdCounts = caseIds
-            .GroupBy(keySelector: id => id, comparer: StringComparer.Ordinal)
-            .ToDictionary(keySelector: group => group.Key, elementSelector: group => group.Count(), comparer: StringComparer.Ordinal);
+            .GroupBy(
+            keySelector: id => id,
+            comparer: StringComparer.Ordinal
+        )
+            .ToDictionary(
+            keySelector: group => group.Key,
+            elementSelector: group => group.Count(),
+            comparer: StringComparer.Ordinal
+        );
 
-        var undeclared = caseIdCounts.Keys.Where(predicate: id => !declaredIds.Contains(item: id)).OrderBy(keySelector: id => id, comparer: StringComparer.Ordinal).ToList();
-        var uninstantiated = declaredIds.Where(predicate: id => !caseIdCounts.ContainsKey(key: id)).OrderBy(keySelector: id => id, comparer: StringComparer.Ordinal).ToList();
-        var duplicated = caseIdCounts.Where(predicate: pair => (pair.Value > 1)).Select(selector: pair => pair.Key).OrderBy(keySelector: id => id, comparer: StringComparer.Ordinal).ToList();
+        var undeclared = caseIdCounts.Keys.Where(predicate: id => !declaredIds.Contains(item: id)).OrderBy(
+            keySelector: id => id,
+            comparer: StringComparer.Ordinal
+        ).ToList();
+        var uninstantiated = declaredIds.Where(predicate: id => !caseIdCounts.ContainsKey(key: id)).OrderBy(
+            keySelector: id => id,
+            comparer: StringComparer.Ordinal
+        ).ToList();
+        var duplicated = caseIdCounts.Where(predicate: pair => (pair.Value > 1)).Select(selector: pair => pair.Key).OrderBy(
+            keySelector: id => id,
+            comparer: StringComparer.Ordinal
+        ).ToList();
 
-        Assert.True(condition: (undeclared.Count == 0), userMessage: $"{undeclared.Count} case id(s) with no declaration under tests/Puck.Maths.Tests/laws/: {string.Join(separator: ", ", values: undeclared.Take(count: 20))}");
-        Assert.True(condition: (uninstantiated.Count == 0), userMessage: $"{uninstantiated.Count} declared id(s) with no case in LawRegistry.All: {string.Join(separator: ", ", values: uninstantiated.Take(count: 20))}");
-        Assert.True(condition: (duplicated.Count == 0), userMessage: $"{duplicated.Count} case id(s) declared more than once in LawRegistry.All: {string.Join(separator: ", ", values: duplicated.Take(count: 20))}");
+        Assert.True(
+            condition: (undeclared.Count == 0),
+            userMessage: $"{undeclared.Count} case id(s) with no declaration under tests/Puck.Maths.Tests/laws/: {string.Join(
+                separator: ", ",
+                values: undeclared.Take(count: 20)
+            )}"
+        );
+        Assert.True(
+            condition: (uninstantiated.Count == 0),
+            userMessage: $"{uninstantiated.Count} declared id(s) with no case in LawRegistry.All: {string.Join(
+                separator: ", ",
+                values: uninstantiated.Take(count: 20)
+            )}"
+        );
+        Assert.True(
+            condition: (duplicated.Count == 0),
+            userMessage: $"{duplicated.Count} case id(s) declared more than once in LawRegistry.All: {string.Join(
+                separator: ", ",
+                values: duplicated.Take(count: 20)
+            )}"
+        );
     }
 }

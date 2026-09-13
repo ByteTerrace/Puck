@@ -46,9 +46,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     private int m_audioReadFrame;
     private int m_audioWriteFrame;
     private nint m_boundSourceView;
+    private long m_checkpointCompletedSteps;
     private IQueuedMachineCore? m_core;
     private ulong m_cycleRemainder;
-    private long m_checkpointCompletedSteps;
     private int m_disposed;
     private Vector3 m_emittedLight;
     private long m_frameVersion;
@@ -154,7 +154,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         m_lifecycle.BackpressureEvents;
     /// <summary>Gets the number of accepted segments whose emulation has completed.</summary>
     public long CompletedSteps =>
-        checked(Interlocked.Read(ref m_checkpointCompletedSteps) + m_lifecycle.CompletedSteps);
+        checked((Interlocked.Read(location: ref m_checkpointCompletedSteps) + m_lifecycle.CompletedSteps));
     /// <summary>Gets the light the framebuffer emits — its average color, normalized 0..1.</summary>
     public Vector3 EmittedLight {
         get {
@@ -198,6 +198,9 @@ public sealed class QueuedMachineWorker : IDisposable {
             arg: 0,
             op: TimeTravelOp.Status
         ).Status;
+
+    internal QueuedMachineCheckpoint CaptureCheckpoint() => RunCheckpoint(restore: null);
+    internal void RestoreCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(restore: checkpoint);
 
     // Stops the worker and disposes the core (a forced final save flush rides its Dispose). A lent core is severed from
     // its link first, so the link never steps a core that is being torn down.
@@ -256,17 +259,73 @@ public sealed class QueuedMachineWorker : IDisposable {
             input: in input
         ));
     }
+    private void ExecuteCheckpoint(IQueuedMachineCore core, CheckpointRequest request) {
+        if (request.Restore is { } restore) {
+            if (
+                (restore.Identity != core.CheckpointIdentity) ||
+                (m_lifecycle.CompletedSteps != 0)
+            ) {
+                request.Error = "machine restore requires matching content and configuration in an unstepped runtime";
+                return;
+            }
+            core.RestoreState(
+                buffer: restore.CoreState,
+                length: restore.CoreState.Length
+            );
+            m_cycleRemainder = restore.CycleRemainder;
+            Interlocked.Exchange(
+                location1: ref m_checkpointCompletedSteps,
+                value: restore.CompletedSteps
+            );
+            m_timeTravel!.Reset();
+            m_timeTravel.SetFastForward(factor: restore.FastForwardFactor);
+            m_timeTravel.SetRunahead(frames: restore.RunaheadFrames);
+            ResetAudioRing();
+            lock (m_frameLock) { m_motorLevel = core.MotorLevel; }
+            StageMachineFrame(core: core);
+            request.Result = restore;
+            return;
+        }
+        var status = m_timeTravel!.GetStatus();
+
+        if (status.RewindEnabled) {
+            request.Error = "machine checkpoint cannot yet preserve an enabled rewind history";
+            return;
+        }
+        var bytes = Array.Empty<byte>();
+        var length = core.CaptureState(buffer: ref bytes);
+
+        request.Result = new(
+            core.CheckpointIdentity,
+            bytes[..length],
+            m_cycleRemainder,
+            CompletedSteps,
+            status.FastForwardFactor,
+            status.RunaheadFrames
+        );
+    }
     // Executes one marshaled debug memory access on the worker thread, between steps — so a peek observes a coherent
     // inter-instruction snapshot and a poke never lands mid-instruction or races a load/eject. A poke drops the rewind
     // ring in the SAME work item as the mutation (atomic order, not mutate-then-queue): the poked byte is an unrecorded
     // input the history could no longer reconstruct.
     private void ExecuteMemoryAccess(IQueuedMachineCore core, MemoryRequest request) {
         if (request.HardwareAddress is { } address) {
-            request.HardwareResult = core is IMachineHardwareAccess hardware
-                ? request.IsWrite
-                    ? hardware.Write(address, request.HardwareValue, request.HardwareMode)
-                    : hardware.Read(address, request.HardwareMode)
-                : new(MachineAccessStatus.Unsupported, Reason: "The core does not expose hardware access.");
+            request.HardwareResult = ((core is IMachineHardwareAccess hardware)
+                ? (request.IsWrite
+                    ? hardware.Write(
+                        address: address,
+                        mode: request.HardwareMode,
+                        value: request.HardwareValue
+                    )
+                    : hardware.Read(
+                        address: address,
+                        mode: request.HardwareMode
+                    ))
+                : new(
+                    MachineAccessStatus.Unsupported,
+                    Reason: "The core does not expose hardware access."
+                )
+            );
             if (request.Mutated) {
                 m_timeTravel?.Reset();
             }
@@ -349,55 +408,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         request.Status = timeTravel.GetStatus();
-    }
-
-    internal QueuedMachineCheckpoint CaptureCheckpoint() => RunCheckpoint(null);
-    internal void RestoreCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(checkpoint);
-
-    private QueuedMachineCheckpoint RunCheckpoint(QueuedMachineCheckpoint? restore) {
-        lock (m_lifecycleLock) {
-            ObjectDisposedException.ThrowIf(m_disposed != 0, this);
-            ThrowIfLent("checkpoint");
-            if (m_core is null) { throw new InvalidOperationException("cannot checkpoint an empty machine"); }
-            var request = new CheckpointRequest { Restore = restore };
-            using var completion = new ManualResetEventSlim(false);
-            if (!m_lifecycle.EnqueueAndWait(new WorkItem(WorkKind.Checkpoint, 0, default, false, false, completion, null, null, null, request))) {
-                m_lifecycle.ThrowIfFaulted();
-                throw new InvalidOperationException("machine checkpoint barrier is closed");
-            }
-            m_lifecycle.ThrowIfFaulted();
-            if (request.Error is { } error) { throw new InvalidOperationException(error); }
-            return request.Result ?? throw new InvalidOperationException("machine checkpoint barrier did not complete");
-        }
-    }
-
-    private void ExecuteCheckpoint(IQueuedMachineCore core, CheckpointRequest request) {
-        if (request.Restore is { } restore) {
-            if (restore.Identity != core.CheckpointIdentity || m_lifecycle.CompletedSteps != 0) {
-                request.Error = "machine restore requires matching content and configuration in an unstepped runtime";
-                return;
-            }
-            core.RestoreState(restore.CoreState, restore.CoreState.Length);
-            m_cycleRemainder = restore.CycleRemainder;
-            Interlocked.Exchange(ref m_checkpointCompletedSteps, restore.CompletedSteps);
-            m_timeTravel!.Reset();
-            m_timeTravel.SetFastForward(restore.FastForwardFactor);
-            m_timeTravel.SetRunahead(restore.RunaheadFrames);
-            ResetAudioRing();
-            lock (m_frameLock) { m_motorLevel = core.MotorLevel; }
-            StageMachineFrame(core);
-            request.Result = restore;
-            return;
-        }
-        var status = m_timeTravel!.GetStatus();
-        if (status.RewindEnabled) {
-            request.Error = "machine checkpoint cannot yet preserve an enabled rewind history";
-            return;
-        }
-        var bytes = Array.Empty<byte>();
-        var length = core.CaptureState(ref bytes);
-        request.Result = new(core.CheckpointIdentity, bytes[..length], m_cycleRemainder,
-            CompletedSteps, status.FastForwardFactor, status.RunaheadFrames);
     }
     private void PublishBackBuffer(Vector3 light) {
         lock (m_frameLock) {
@@ -519,6 +529,37 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_audioWriteFrame = 0;
         }
     }
+    private QueuedMachineCheckpoint RunCheckpoint(QueuedMachineCheckpoint? restore) {
+        lock (m_lifecycleLock) {
+            ObjectDisposedException.ThrowIf(
+                condition: (m_disposed != 0),
+                instance: this
+            );
+            ThrowIfLent(operation: "checkpoint");
+            if (m_core is null) { throw new InvalidOperationException(message: "cannot checkpoint an empty machine"); }
+            var request = new CheckpointRequest { Restore = restore };
+            using var completion = new ManualResetEventSlim(initialState: false);
+
+            if (!m_lifecycle.EnqueueAndWait(item: new WorkItem(
+                Checkpoint: request,
+                Completion: completion,
+                DeltaTicks: 0,
+                ForceFlush: false,
+                ForceStage: false,
+                Input: default,
+                Kind: WorkKind.Checkpoint,
+                Memory: null,
+                Reconfigure: null,
+                TimeTravel: null
+            ))) {
+                m_lifecycle.ThrowIfFaulted();
+                throw new InvalidOperationException(message: "machine checkpoint barrier is closed");
+            }
+            m_lifecycle.ThrowIfFaulted();
+            if (request.Error is { } error) { throw new InvalidOperationException(message: error); }
+            return (request.Result ?? throw new InvalidOperationException(message: "machine checkpoint barrier did not complete"));
+        }
+    }
     // Marshals one debug memory access onto the worker thread (the single-producer discipline: peek/poke touch the same
     // core arrays/mapper state the worker mutates while stepping, so they must never be driven cross-thread), blocking
     // until it completes between steps. A no-op leaving the default result (peek 0) when no core is attached.
@@ -565,20 +606,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         ));
 
         return request;
-    }
-    // Routes one unit of core-touching work onto the link's execution thread while the core is lent, so it observes the
-    // same coherent inter-instruction boundary the worker thread would have given it. Returns false when the core is not
-    // lent (the caller falls back to its own worker) or when no core is attached at all.
-    private bool TryRunOnLink(Action work) {
-        if (
-            !m_lent ||
-            (m_lender is not { } lender) ||
-            (m_core is null)
-        ) {
-            return false;
-        }
-
-        return lender.RunOnLinkThread(work: work);
     }
     private void StageBlackFrame() {
         Array.Clear(array: m_rgbaBack);
@@ -628,6 +655,20 @@ public sealed class QueuedMachineWorker : IDisposable {
         if (m_lent) {
             throw new InvalidOperationException(message: $"The {m_workerName} core is lent to a cable link; sever the link before attempting to {operation} it.");
         }
+    }
+    // Routes one unit of core-touching work onto the link's execution thread while the core is lent, so it observes the
+    // same coherent inter-instruction boundary the worker thread would have given it. Returns false when the core is not
+    // lent (the caller falls back to its own worker) or when no core is attached at all.
+    private bool TryRunOnLink(Action work) {
+        if (
+            !m_lent ||
+            (m_lender is not { } lender) ||
+            (m_core is null)
+        ) {
+            return false;
+        }
+
+        return lender.RunOnLinkThread(work: work);
     }
     private void WorkerLoop(IQueuedMachineCore core) {
         var current = default(WorkItem);
@@ -712,7 +753,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                         current.Completion!.Set();
                         break;
                     case WorkKind.Checkpoint:
-                        ExecuteCheckpoint(core, current.Checkpoint!);
+                        ExecuteCheckpoint(
+                            core: core,
+                            request: current.Checkpoint!
+                        );
                         current.Completion!.Set();
                         break;
                     case WorkKind.Memory:
@@ -746,6 +790,35 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
     }
 
+    /// <summary>Runs a validated hardware access at the worker or coupled-link boundary. Reads are coherent, and
+    /// successful state-changing accesses invalidate rewind history in the same work item.</summary>
+    /// <param name="address">The provider-owned space, unsigned address, and scalar width.</param>
+    /// <param name="mode">The requested inspection, patch, or bus semantics.</param>
+    /// <param name="value">A scalar to write, or null for a read.</param>
+    /// <returns>Explicit availability and any observed value.</returns>
+    public MachineAccessResult AccessHardware(MachineMemoryAddress address, MachineAccessMode mode, ulong? value = null) {
+        if (QueueFault is { } beforeFault) {
+            return new(
+                MachineAccessStatus.Faulted,
+                Reason: beforeFault
+            );
+        }
+        var request = new MemoryRequest {
+            HardwareAddress = address,
+            HardwareMode = mode,
+            HardwareValue = value.GetValueOrDefault(),
+            IsWrite = value.HasValue,
+        };
+
+        RunMemoryAccess(request: request);
+        return (((request.HardwareResult.Status == MachineAccessStatus.Unavailable) && (QueueFault is { } fault))
+            ? new(
+                MachineAccessStatus.Faulted,
+                Reason: fault
+            )
+            : request.HardwareResult
+        );
+    }
     /// <inheritdoc/>
     public void Dispose() {
         if (0 != Interlocked.Exchange(
@@ -806,38 +879,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_core?.FlushSave(force: force);
         }
     }
-    /// <summary>Attaches a freshly built and booted core: stops any running worker (draining accepted history), disposes
-    /// the previous core, stages the new core's first frame, and starts its worker thread.</summary>
-    /// <param name="core">The booted core to run. The worker takes ownership and disposes it on the next
-    /// <see cref="Load"/>/<see cref="Eject"/>/<see cref="Dispose"/>.</param>
-    /// <exception cref="ObjectDisposedException">The worker is disposed.</exception>
-    public void Load(IQueuedMachineCore core) {
-        ArgumentNullException.ThrowIfNull(argument: core);
-
-        lock (m_lifecycleLock) {
-            ObjectDisposedException.ThrowIf(
-                condition: (0 != Volatile.Read(location: ref m_disposed)),
-                instance: this
-            );
-            ThrowIfLent(operation: "load content into");
-            DetachCore();
-            m_core = core;
-            m_timeTravel = new MachineTimeTravel<MachinePadState>(
-                core: core,
-                cyclesPerSecond: core.CyclesPerSecond
-            );
-            m_cycleRemainder = 0UL;
-            Interlocked.Exchange(ref m_checkpointCompletedSteps, 0);
-
-            lock (m_frameLock) {
-                m_motorLevel = 0f;
-            }
-            core.ConfigureAudio(sampleRate: m_audioSampleRate);
-            ResetAudioRing();
-            StageMachineFrame(core: core);
-            StartWorker(core: core);
-        }
-    }
     /// <summary>Quiesces this worker at a frame boundary and lends its core to a link, which then steps it. The worker
     /// drains every already-accepted segment, joins its execution thread, and drops its own rewind ring (the link owns
     /// coupled time travel for the whole group); the core itself, its battery save, and every published surface stay
@@ -872,108 +913,39 @@ public sealed class QueuedMachineWorker : IDisposable {
             return core;
         }
     }
-    /// <summary>Publishes one link-driven step's results through this worker's own surfaces — the framebuffer stage,
-    /// the audio ring drain, the feedback sample, the completed-step count, and the native-frame-keyed save-flush
-    /// debounce — so a linked member looks exactly like an independently stepped one to every consumer. Call on the
-    /// link's execution thread after the group's step, once per member. A no-op when the core is not lent.</summary>
-    /// <param name="forceStage">When <see langword="true"/>, repack the framebuffer even when no native frame
-    /// completed (the synchronous step path's contract).</param>
-    public void PublishLentStep(bool forceStage) {
-        if (
-            !m_lent ||
-            (m_core is not { } core)
-        ) {
-            return;
-        }
-
-        lock (m_frameLock) {
-            m_motorLevel = core.MotorLevel;
-        }
-
-        if (m_audioSampleRate > 0) {
-            DrainAudio(core: core);
-        }
-
-        var nativeFrame = core.NativeFrameIndex;
-
-        if (
-            forceStage ||
-            (nativeFrame != m_lentStagedNativeFrame)
-        ) {
-            StageMachineFrame(core: core);
-            m_lentStagedNativeFrame = nativeFrame;
-        }
-
-        m_lifecycle.CompleteStep();
-
-        if ((nativeFrame - m_lentFlushNativeFrame) >= SaveFlushIntervalFrames) {
-            m_lentFlushNativeFrame = nativeFrame;
-            core.FlushSave(force: false);
-        }
-    }
-    /// <summary>Re-stages the lent core's framebuffer and feedback and clears the host audio ring — the publication a
-    /// link performs after a coupled rewind moved the group, so no consumer sees pixels, rumble, or samples from the
-    /// abandoned future. Unlike <see cref="PublishLentStep"/> it does not count a step: no segment ran. Call on the
-    /// link's execution thread; a no-op when the core is not lent.</summary>
-    public void RestageLentFrame() {
-        if (
-            !m_lent ||
-            (m_core is not { } core)
-        ) {
-            return;
-        }
-
-        ResetAudioRing();
-
-        lock (m_frameLock) {
-            m_motorLevel = core.MotorLevel;
-        }
-
-        m_lentStagedNativeFrame = core.NativeFrameIndex;
-
-        StageMachineFrame(core: core);
-    }
-    /// <summary>Takes the core back from a severed link and restarts this worker's own execution thread on it, so the
-    /// machine steps independently again. The completed/submitted step counts carry across the link rather than
-    /// restarting. A no-op when the core is not lent; when the worker is being disposed it only clears the lend, since
-    /// the core is about to be torn down.</summary>
-    /// <param name="hostAccumulator">The link's tick-to-cycle accumulator phase at the sever, adopted as this worker's
-    /// own so the conversion carries no drift across the seam.</param>
-    public void ReturnCore(ulong hostAccumulator) {
-        // A lender's own teardown (LinkedMachineGroup.Dispose) calls this for every member, including one that is
-        // concurrently severing itself through its own Dispose/DetachCore — which holds m_lifecycleLock for that
-        // whole call, cascading into the lender's Dispose while still holding it. Bailing out here on the volatile
-        // flag alone, before taking the lock, lets the lender's teardown finish without ever contending for that
-        // worker's own lock: the two calls would otherwise deadlock on each other's lock.
-        if (!m_lent) {
-            return;
-        }
+    /// <summary>Attaches a freshly built and booted core: stops any running worker (draining accepted history), disposes
+    /// the previous core, stages the new core's first frame, and starts its worker thread.</summary>
+    /// <param name="core">The booted core to run. The worker takes ownership and disposes it on the next
+    /// <see cref="Load"/>/<see cref="Eject"/>/<see cref="Dispose"/>.</param>
+    /// <exception cref="ObjectDisposedException">The worker is disposed.</exception>
+    public void Load(IQueuedMachineCore core) {
+        ArgumentNullException.ThrowIfNull(argument: core);
 
         lock (m_lifecycleLock) {
-            if (!m_lent) {
-                return;
-            }
-
-            m_lent = false;
-            m_lender = null;
-
-            if (
-                (0 != Volatile.Read(location: ref m_disposed)) ||
-                (m_core is not { } core)
-            ) {
-                return;
-            }
-
-            m_cycleRemainder = hostAccumulator;
+            ObjectDisposedException.ThrowIf(
+                condition: (0 != Volatile.Read(location: ref m_disposed)),
+                instance: this
+            );
+            ThrowIfLent(operation: "load content into");
+            DetachCore();
+            m_core = core;
             m_timeTravel = new MachineTimeTravel<MachinePadState>(
                 core: core,
                 cyclesPerSecond: core.CyclesPerSecond
             );
-
-            StartWorker(
-                core: core,
-                resetCounters: false
+            m_cycleRemainder = 0UL;
+            Interlocked.Exchange(
+                location1: ref m_checkpointCompletedSteps,
+                value: 0
             );
+
+            lock (m_frameLock) {
+                m_motorLevel = 0f;
+            }
+            core.ConfigureAudio(sampleRate: m_audioSampleRate);
+            ResetAudioRing();
+            StageMachineFrame(core: core);
+            StartWorker(core: core);
         }
     }
     /// <summary>Drops the GPU upload after a device loss: the next <see cref="PublishFrame"/> rebuilds it on the fresh
@@ -1071,6 +1043,45 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
         }
     }
+    /// <summary>Publishes one link-driven step's results through this worker's own surfaces — the framebuffer stage,
+    /// the audio ring drain, the feedback sample, the completed-step count, and the native-frame-keyed save-flush
+    /// debounce — so a linked member looks exactly like an independently stepped one to every consumer. Call on the
+    /// link's execution thread after the group's step, once per member. A no-op when the core is not lent.</summary>
+    /// <param name="forceStage">When <see langword="true"/>, repack the framebuffer even when no native frame
+    /// completed (the synchronous step path's contract).</param>
+    public void PublishLentStep(bool forceStage) {
+        if (
+            !m_lent ||
+            (m_core is not { } core)
+        ) {
+            return;
+        }
+
+        lock (m_frameLock) {
+            m_motorLevel = core.MotorLevel;
+        }
+
+        if (m_audioSampleRate > 0) {
+            DrainAudio(core: core);
+        }
+
+        var nativeFrame = core.NativeFrameIndex;
+
+        if (
+            forceStage ||
+            (nativeFrame != m_lentStagedNativeFrame)
+        ) {
+            StageMachineFrame(core: core);
+            m_lentStagedNativeFrame = nativeFrame;
+        }
+
+        m_lifecycle.CompleteStep();
+
+        if ((nativeFrame - m_lentFlushNativeFrame) >= SaveFlushIntervalFrames) {
+            m_lentFlushNativeFrame = nativeFrame;
+            core.FlushSave(force: false);
+        }
+    }
     /// <summary>Drains buffered audio from the worker's own ring — filled on the worker thread from the attached
     /// core's presentation-side ring after each completed segment — into <paramref name="destination"/>, so a
     /// consumer reading off-thread never touches the emulation thread. The neutral <see cref="IAudioMachine.ReadSamples"/>
@@ -1137,6 +1148,71 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         return (Ok: request.Ok, Reason: request.Reason);
     }
+    /// <summary>Re-stages the lent core's framebuffer and feedback and clears the host audio ring — the publication a
+    /// link performs after a coupled rewind moved the group, so no consumer sees pixels, rumble, or samples from the
+    /// abandoned future. Unlike <see cref="PublishLentStep"/> it does not count a step: no segment ran. Call on the
+    /// link's execution thread; a no-op when the core is not lent.</summary>
+    public void RestageLentFrame() {
+        if (
+            !m_lent ||
+            (m_core is not { } core)
+        ) {
+            return;
+        }
+
+        ResetAudioRing();
+
+        lock (m_frameLock) {
+            m_motorLevel = core.MotorLevel;
+        }
+
+        m_lentStagedNativeFrame = core.NativeFrameIndex;
+
+        StageMachineFrame(core: core);
+    }
+    /// <summary>Takes the core back from a severed link and restarts this worker's own execution thread on it, so the
+    /// machine steps independently again. The completed/submitted step counts carry across the link rather than
+    /// restarting. A no-op when the core is not lent; when the worker is being disposed it only clears the lend, since
+    /// the core is about to be torn down.</summary>
+    /// <param name="hostAccumulator">The link's tick-to-cycle accumulator phase at the sever, adopted as this worker's
+    /// own so the conversion carries no drift across the seam.</param>
+    public void ReturnCore(ulong hostAccumulator) {
+        // A lender's own teardown (LinkedMachineGroup.Dispose) calls this for every member, including one that is
+        // concurrently severing itself through its own Dispose/DetachCore — which holds m_lifecycleLock for that
+        // whole call, cascading into the lender's Dispose while still holding it. Bailing out here on the volatile
+        // flag alone, before taking the lock, lets the lender's teardown finish without ever contending for that
+        // worker's own lock: the two calls would otherwise deadlock on each other's lock.
+        if (!m_lent) {
+            return;
+        }
+
+        lock (m_lifecycleLock) {
+            if (!m_lent) {
+                return;
+            }
+
+            m_lent = false;
+            m_lender = null;
+
+            if (
+                (0 != Volatile.Read(location: ref m_disposed)) ||
+                (m_core is not { } core)
+            ) {
+                return;
+            }
+
+            m_cycleRemainder = hostAccumulator;
+            m_timeTravel = new MachineTimeTravel<MachinePadState>(
+                core: core,
+                cyclesPerSecond: core.CyclesPerSecond
+            );
+
+            StartWorker(
+                core: core,
+                resetCounters: false
+            );
+        }
+    }
     /// <summary>Rewinds to the oldest captured instant inside the requested native-frame window, or the nearest older
     /// instant when that window is empty (marshaled onto the worker thread).</summary>
     /// <param name="frames">The number of native frames to move backward.</param>
@@ -1154,26 +1230,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             arg: factor,
             op: TimeTravelOp.SetFastForward
         );
-
-    /// <summary>Runs a validated hardware access at the worker or coupled-link boundary. Reads are coherent, and
-    /// successful state-changing accesses invalidate rewind history in the same work item.</summary>
-    /// <param name="address">The provider-owned space, unsigned address, and scalar width.</param>
-    /// <param name="mode">The requested inspection, patch, or bus semantics.</param>
-    /// <param name="value">A scalar to write, or null for a read.</param>
-    /// <returns>Explicit availability and any observed value.</returns>
-    public MachineAccessResult AccessHardware(MachineMemoryAddress address, MachineAccessMode mode, ulong? value = null) {
-        if (QueueFault is { } beforeFault) {
-            return new(MachineAccessStatus.Faulted, Reason: beforeFault);
-        }
-        var request = new MemoryRequest {
-            HardwareAddress = address, HardwareMode = mode, HardwareValue = value.GetValueOrDefault(),
-            IsWrite = value.HasValue,
-        };
-        RunMemoryAccess(request);
-        return request.HardwareResult.Status == MachineAccessStatus.Unavailable && QueueFault is { } fault
-            ? new(MachineAccessStatus.Faulted, Reason: fault)
-            : request.HardwareResult;
-    }
     /// <summary>Arms or disarms the rewind ring (marshaled onto the worker thread).</summary>
     /// <param name="enabled">Whether to capture rewind history.</param>
     public void SetRewindEnabled(bool enabled) =>
@@ -1243,15 +1299,18 @@ public sealed class QueuedMachineWorker : IDisposable {
     private sealed class MemoryRequest {
         public int Address;
         public byte[]? Block;
+        public MachineMemoryAddress? HardwareAddress;
+        public MachineAccessMode HardwareMode;
+        public MachineAccessResult HardwareResult;
+        public ulong HardwareValue;
         public bool IsWrite;
         public byte Result;
         public byte Value;
-        public MachineMemoryAddress? HardwareAddress;
-        public MachineAccessMode HardwareMode;
-        public ulong HardwareValue;
-        public MachineAccessResult HardwareResult;
-        public bool Mutated => HardwareAddress is null ? IsWrite
-            : HardwareResult.Status == MachineAccessStatus.Available && (IsWrite || HardwareMode == MachineAccessMode.Bus);
+
+        public bool Mutated => ((HardwareAddress is null)
+            ? IsWrite
+            : ((HardwareResult.Status == MachineAccessStatus.Available) && (IsWrite || (HardwareMode == MachineAccessMode.Bus)))
+        );
     }
     // A marshaled time-travel command + its result box, filled on the worker thread and read by the producer after the
     // barrier completes.
@@ -1269,9 +1328,9 @@ public sealed class QueuedMachineWorker : IDisposable {
         public string Reason = string.Empty;
     }
     private sealed class CheckpointRequest {
+        public string? Error;
         public QueuedMachineCheckpoint? Restore;
         public QueuedMachineCheckpoint? Result;
-        public string? Error;
     }
     private readonly record struct WorkItem(
         WorkKind Kind,

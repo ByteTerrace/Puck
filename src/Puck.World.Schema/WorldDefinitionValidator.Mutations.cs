@@ -43,8 +43,15 @@ public static partial class WorldDefinitionValidator {
             var rowName = queue.Dequeue();
 
             if (
-                !catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) ||
-                !catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) ||
+                !catalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: rowName
+            ) ||
+                !catalog.TryGetDescriptor(
+                descriptor: out var descriptor,
+                handle: handle
+            ) ||
                 (((uint)descriptor.LaneOrdinal) >= ((uint)rows.Count)) ||
                 (rows[descriptor.LaneOrdinal] is not { } row)
             ) {
@@ -73,7 +80,10 @@ public static partial class WorldDefinitionValidator {
                 row: row
             );
 
-            if (row.EffectiveDomain is StateDomain.CellsOf board && row.Field is null) {
+            if (
+                (row.EffectiveDomain is StateDomain.CellsOf board) &&
+                (row.Field is null)
+            ) {
                 ValidateBoardRow(
                     board: board,
                     definition: definition,
@@ -86,12 +96,18 @@ public static partial class WorldDefinitionValidator {
                 // Missing row names must not trigger unrelated domain inference before a row is validated.
                 // Lists retain authored order; dictionary enumeration never determines validation order.
                 dependentsByRow = new Dictionary<string, List<WorldStateRow>>(comparer: StringComparer.Ordinal);
-                foreach (var dependent in definition.State ?? []) {
-                    if (dependent is null || dependent.EffectiveDomain is not StateDomain.KeysOf keysOf ||
-                        keysOf.Row.Value is not { } source) {
+                foreach (var dependent in (definition.State ?? [])) {
+                    if (
+                        (dependent is null) ||
+                        (dependent.EffectiveDomain is not StateDomain.KeysOf keysOf) ||
+                        (keysOf.Row.Value is not { } source)
+                    ) {
                         continue;
                     }
-                    if (!dependentsByRow.TryGetValue(key: source, value: out var dependents)) {
+                    if (!dependentsByRow.TryGetValue(
+                        key: source,
+                        value: out var dependents
+                    )) {
                         dependents = [];
                         dependentsByRow[key: source] = dependents;
                     }
@@ -99,7 +115,10 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            if (dependentsByRow.TryGetValue(key: rowName, value: out var matchingDependents)) {
+            if (dependentsByRow.TryGetValue(
+                key: rowName,
+                value: out var matchingDependents
+            )) {
                 foreach (var dependent in matchingDependents) {
                     if (seen.Add(item: dependent.Name.Value)) {
                         queue.Enqueue(item: dependent.Name.Value);
@@ -116,7 +135,6 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
-
     /// <summary>Adds every row name a <see cref="StateTransform"/> reads or writes to <paramref name="names"/> —
     /// the touched-row set <see cref="TryValidateTouchedStateRows"/> needs to check the same invariants the
     /// whole-document walk would, without compiling the rest of the document.</summary>

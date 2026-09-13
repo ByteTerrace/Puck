@@ -346,7 +346,7 @@ an overflow does, and the compile-time kind proof admits each family only in
 the kind it means (`sin`/`cos` fixed, `sqrt` both, the rest int).
 `ModularTransform` stays a C# concern: a quasicrystal inflation would arrive as
 a generator draw source, not as an author-facing matrix. The combinatorial and
-factorial number systems over [Puck.Maths `Combinatorics`](../../src/Puck.Maths/README.md#combination-and-permutation-ranks)
+factorial number systems over [Puck.Maths `Combinatorics`](../reference/maths.md#combination-and-permutation-ranks)
 are calls over one cell each: a subset is a bitmask (`subsetRank`/`subsetAt`/
 `subsetMember`, colex, n ≤ 64 — a poker hand's identity is one rank below
 `choose(52, 5)`) and a permutation is nibble-packed (`arrangementRank`/`arrangementAt`/

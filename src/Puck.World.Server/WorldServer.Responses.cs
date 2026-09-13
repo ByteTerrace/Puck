@@ -27,25 +27,34 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var matchedIndex = ResolveMatchingResponse(lattice: lattice, placement: placement, responses: responses, tick: m_lastCompletedTick);
+            var matchedIndex = ResolveMatchingResponse(
+                lattice: lattice,
+                placement: placement,
+                responses: responses,
+                tick: m_lastCompletedTick
+            );
 
             lines.Add(item: ((matchedIndex >= 0)
                 ? $"'{placement.Id}' prototype={placement.PrototypeId} holds=[{matchedIndex}] {DescribeCondition(condition: responses[matchedIndex].When)} -> {responses[matchedIndex].PrototypeId}"
-                : $"'{placement.Id}' prototype={placement.PrototypeId} holds=none"
-            ));
+                : $"'{placement.Id}' prototype={placement.PrototypeId} holds=none"));
         }
 
         return ((lines.Count == 0)
             ? "[world.responses: none declared]"
-            : $"[world.responses: {string.Join(separator: "; ", values: lines)}]"
+            : $"[world.responses: {string.Join(
+                separator: "; ",
+                values: lines
+            )}]"
         );
     }
+
     private static string DescribeCondition(WorldPlacementResponseCondition condition) => (condition switch {
         WorldPlacementResponseCondition.FieldCondition field => $"{field.Field} {field.Comparison}",
-        WorldPlacementResponseCondition.StateCondition state => $"state:{state.State}{((state.Key is { } key) ? $".{key}" : string.Empty)} {state.Comparison}",
+        WorldPlacementResponseCondition.StateCondition state => $"state:{state.State}{((state.Key is { } key)
+        ? $".{key}"
+        : string.Empty)} {state.Comparison}",
         _ => "?",
     });
-
     // Runs after StepFields, so a Field entry reads this tick's own lattice writes — unchanged from before this
     // facet gained a state arm. A State entry reads the installed document directly (WorldStateReader, the same
     // reader every other row-name comparand in this file already goes through), so it sees a rule's own write the
@@ -63,9 +72,23 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var skippable = TryReadResponseSnapshot(definition: m_definition, responses: responses, tick: tick, values: values, present: present, count: out var count);
+            var skippable = TryReadResponseSnapshot(
+                count: out var count,
+                definition: m_definition,
+                present: present,
+                responses: responses,
+                tick: tick,
+                values: values
+            );
 
-            if (skippable && ObservedValuesUnchanged(placementId: placement.Id, values: values[..count], present: present[..count])) {
+            if (
+                skippable &&
+                ObservedValuesUnchanged(
+                placementId: placement.Id,
+                values: values[..count],
+                present: present[..count]
+            )
+            ) {
                 continue;
             }
 
@@ -75,7 +98,12 @@ public sealed partial class WorldServer {
                 m_responseObservedValues.Remove(key: placement.Id);
             }
 
-            var matchedIndex = ResolveMatchingResponse(lattice: lattice, placement: placement, responses: responses, tick: tick);
+            var matchedIndex = ResolveMatchingResponse(
+                lattice: lattice,
+                placement: placement,
+                responses: responses,
+                tick: tick
+            );
 
             if (matchedIndex < 0) {
                 continue;
@@ -133,14 +161,25 @@ public sealed partial class WorldServer {
     private int ResolveMatchingResponse(FieldLattice? lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
         var cell = 0;
         var hasCell = ((lattice is not null) && lattice.TryBodyCellOf(
-            position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: m_definition, placement: placement)),
+            position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(
+                definition: m_definition,
+                placement: placement
+            )),
             cell: out cell
         ));
 
         for (var index = 0; (index < responses.Count); index++) {
             var holds = (responses[index].When switch {
-                WorldPlacementResponseCondition.FieldCondition field => (hasCell && FieldConditionHolds(condition: field, lattice: lattice!, cell: cell, tick: tick)),
-                WorldPlacementResponseCondition.StateCondition state => state.Holds(definition: m_definition, tick: tick),
+                WorldPlacementResponseCondition.FieldCondition field => (hasCell && FieldConditionHolds(
+                cell: cell,
+                condition: field,
+                lattice: lattice!,
+                tick: tick
+            )),
+                WorldPlacementResponseCondition.StateCondition state => state.Holds(
+                definition: m_definition,
+                tick: tick
+            ),
                 _ => false,
             });
 
@@ -152,17 +191,26 @@ public sealed partial class WorldServer {
         return -1;
     }
     private bool FieldConditionHolds(WorldPlacementResponseCondition.FieldCondition condition, FieldLattice lattice, int cell, ulong tick) {
-        if (!lattice.TryFieldIndex(name: condition.Field, field: out var field)) {
+        if (!lattice.TryFieldIndex(
+            name: condition.Field,
+            field: out var field
+        )) {
             return false;
         }
 
         var expected = ((condition.Value.Row is { } row)
-            ? ReadScalarSlot(row: row, tick: tick)
+            ? ReadScalarSlot(
+                row: row,
+                tick: tick
+            )
             : FixedQ4816.FromDouble(value: (condition.Value.Literal ?? 0f))
         );
 
         return condition.Comparison.Holds(
-            value: lattice.Value(field: field, cell: cell),
+            value: lattice.Value(
+                cell: cell,
+                field: field
+            ),
             expected: expected
         );
     }
@@ -177,11 +225,27 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            ReadResponseSnapshotCell(definition: definition, row: state.State, key: state.Key, tick: tick, values: values, present: present, index: count);
+            ReadResponseSnapshotCell(
+                definition: definition,
+                row: state.State,
+                key: state.Key,
+                tick: tick,
+                values: values,
+                present: present,
+                index: count
+            );
             count++;
 
             if (state.ComparandState is { } comparandRow) {
-                ReadResponseSnapshotCell(definition: definition, row: comparandRow, key: state.ComparandKey, tick: tick, values: values, present: present, index: count);
+                ReadResponseSnapshotCell(
+                    definition: definition,
+                    row: comparandRow,
+                    key: state.ComparandKey,
+                    tick: tick,
+                    values: values,
+                    present: present,
+                    index: count
+                );
                 count++;
             }
         }
@@ -189,16 +253,33 @@ public sealed partial class WorldServer {
         return true;
     }
     private static void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, Span<long> values, Span<bool> present, int index) {
-        var found = (WorldStateReader.TryRead(definition: definition, rowName: row, key: key, tick: tick, row: out _, rawValue: out var raw, text: out _) && (raw is not null));
+        var found = (WorldStateReader.TryRead(
+            definition: definition,
+            key: key,
+            rawValue: out var raw,
+            row: out _,
+            rowName: row,
+            text: out _,
+            tick: tick
+        ) && (raw is not null));
 
         present[index] = found;
         values[index] = (raw ?? 0L);
     }
     private bool ObservedValuesUnchanged(string placementId, ReadOnlySpan<long> values, ReadOnlySpan<bool> present) {
-        if (!m_responseObservedValues.TryGetValue(key: placementId, value: out var cached) || (cached.Values.Length != values.Length)) {
+        if (
+            !m_responseObservedValues.TryGetValue(
+            key: placementId,
+            value: out var cached
+        ) ||
+            (cached.Values.Length != values.Length)
+        ) {
             return false;
         }
 
-        return (cached.Values.AsSpan().SequenceEqual(other: values) && cached.Present.AsSpan().SequenceEqual(other: present));
+        return (
+            cached.Values.AsSpan().SequenceEqual(other: values) &&
+            cached.Present.AsSpan().SequenceEqual(other: present)
+        );
     }
 }

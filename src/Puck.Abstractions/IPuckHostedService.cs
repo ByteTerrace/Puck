@@ -8,7 +8,6 @@ public interface IPuckHostedService : IAsyncDisposable, IDisposable {
     /// <summary>Starts the hosted service.</summary>
     /// <param name="cancellationToken">Indicates that the start process has been aborted.</param>
     Task StartAsync(CancellationToken cancellationToken);
-
     /// <summary>Stops the hosted service.</summary>
     /// <param name="cancellationToken">Indicates that the shutdown process should no longer be graceful.</param>
     Task StopAsync(CancellationToken cancellationToken);

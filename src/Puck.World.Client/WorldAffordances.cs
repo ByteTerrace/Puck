@@ -35,6 +35,19 @@ public static class WorldAffordances {
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
     public static bool Installed => (Registry is not null);
 
+    private static WorldSeatModeFamily? FindSeatMode(IReadOnlyList<WorldSeatModeFamily> seatModes, string family) {
+        foreach (var mode in (seatModes ?? [])) {
+            if (string.Equals(
+                a: mode.Name,
+                b: family,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return mode;
+            }
+        }
+
+        return null;
+    }
     // The physical source's FULL declared kind, via the engine's one reflection-derived source catalog. Native
     // bindings ride CommandValue and therefore admit its whole range (including Axis3D and Orientation); only addon
     // input records apply AddonSourceVocabulary's narrower payload shape. Unknown and explicitly unaddressable
@@ -82,7 +95,11 @@ public static class WorldAffordances {
                 );
 
                 if (mode is not null) {
-                    if (!mode.States.Any(predicate: state => string.Equals(a: state.Name, b: row.State, comparisonType: StringComparison.Ordinal))) {
+                    if (!mode.States.Any(predicate: state => string.Equals(
+                        a: state.Name,
+                        b: row.State,
+                        comparisonType: StringComparison.Ordinal
+                    ))) {
                         errors.Add(item: $"contexts row {rowIndex} (family \"{row.Family}\") names state \"{row.State}\", which that family never publishes (states: {string.Join(
                             separator: ", ",
                             values: mode.States.Select(selector: state => state.Name)
@@ -92,33 +109,30 @@ public static class WorldAffordances {
                     continue;
                 }
             }
-            if ((states is null) && !WorldStateBindingContext.TryParseFamily(
+            if (
+                (states is null) &&
+                !WorldStateBindingContext.TryParseFamily(
                 family: row.Family,
                 rowName: out _
-            )) {
+            )
+            ) {
                 errors.Add(item: $"contexts row {rowIndex} names family \"{row.Family}\", which is not an admitted context family (admitted: {string.Join(
                     separator: ", ",
                     values: WorldContextFamilies.Families
                 )}, {WorldStateBindingContext.FamilyPrefix}<row>)");
-            } else if ((states is not null) && !states.Contains(
+            } else if (
+                (states is not null) &&
+                !states.Contains(
                 value: row.State,
                 comparer: StringComparer.Ordinal
-            )) {
+            )
+            ) {
                 errors.Add(item: $"contexts row {rowIndex} (family \"{row.Family}\") names state \"{row.State}\", which that family never publishes (states: {string.Join(
                     separator: ", ",
                     values: states
                 )})");
             }
         }
-    }
-    private static WorldSeatModeFamily? FindSeatMode(IReadOnlyList<WorldSeatModeFamily> seatModes, string family) {
-        foreach (var mode in (seatModes ?? [])) {
-            if (string.Equals(a: mode.Name, b: family, comparisonType: StringComparison.Ordinal)) {
-                return mode;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
@@ -180,13 +194,13 @@ public static class WorldAffordances {
             document: document,
             lookups: new BindingVocabularyLookups(
                 Command: ((registry is null)
-                ? null
-                : name => (registry.TryGetMetadata(
+            ? null
+            : name => (registry.TryGetMetadata(
                         metadata: out var metadata,
                         name: name
                     )
-                    ? metadata
-                    : null)),
+                ? metadata
+                : null)),
                 SourceKind: SourceKind,
                 Channel: reference => channels.TryGetOrdinal(
                     ordinal: out _,

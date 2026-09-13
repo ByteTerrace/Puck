@@ -18,8 +18,11 @@ public readonly record struct ShaderFrameConstants(
     Vector3 ICameraTarget,
     float Pad1,
     Vector3 ICameraUp,
-    float Pad2)
-{
+    float Pad2) {
     public const int SizeBytes = 112;
-    public void CopyTo(Span<byte> destination) => MemoryMarshal.Write(destination, in this);
+
+    public void CopyTo(Span<byte> destination) => MemoryMarshal.Write(
+        destination: destination,
+        value: in this
+    );
 }

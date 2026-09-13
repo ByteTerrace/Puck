@@ -29,24 +29,35 @@ internal sealed record MemberRef(string Type, string Name);
 /// </para>
 /// </remarks>
 internal sealed record LegText(string Kind, string Flavor, string Subject, string Against, string Shared, string Citation, string Absolute) {
+    private static TEnum Parse<TEnum>(string token, string slot) where TEnum : struct, Enum =>
+        (Enum.TryParse<TEnum>(
+            ignoreCase: false,
+            result: out var parsed,
+            value: token
+        )
+            ? parsed
+            : throw new InvalidOperationException(message: $"'{token}' is not a {typeof(TEnum).Name} and cannot fill a leg's {slot} slot.")
+        );
+
     /// <summary>Materializes the authored row as the leg the gates read.</summary>
     /// <returns>The leg carrying this row's kind, flavor and prose.</returns>
     /// <exception cref="InvalidOperationException">The kind or flavor token names no member of its enum.</exception>
     public Leg ToLeg() =>
         new(
-            Kind: Parse<LegKind>(token: Kind, slot: nameof(Kind)),
-            Flavor: Parse<ShareFlavor>(token: Flavor, slot: nameof(Flavor)),
+            Kind: Parse<LegKind>(
+                token: Kind,
+                slot: nameof(Kind)
+            ),
+            Flavor: Parse<ShareFlavor>(
+                token: Flavor,
+                slot: nameof(Flavor)
+            ),
             Subject: Subject,
             Against: Against,
             Shared: Shared,
             Citation: Citation,
             Absolute: Absolute
         );
-
-    private static TEnum Parse<TEnum>(string token, string slot) where TEnum : struct, Enum =>
-        (Enum.TryParse<TEnum>(ignoreCase: false, result: out var parsed, value: token)
-            ? parsed
-            : throw new InvalidOperationException(message: $"'{token}' is not a {typeof(TEnum).Name} and cannot fill a leg's {slot} slot."));
 }
 /// <summary>
 /// Reads the authored law declarations out of <c>laws/*.json</c>.
@@ -76,19 +87,34 @@ internal static class LawDeclarations {
     /// <summary>Gets every authored declaration, keyed by law id.</summary>
     public static IReadOnlyDictionary<string, LawDeclaration> All => Declarations;
     /// <summary>Gets the directory the authored declaration files live in.</summary>
-    public static string Directory => Path.Combine(path1: TestPaths.ProjectDirectory, path2: "laws");
+    public static string Directory => Path.Combine(
+        path1: TestPaths.ProjectDirectory,
+        path2: "laws"
+    );
 
     private static IReadOnlyDictionary<string, LawDeclaration> Load() {
         var declarations = new Dictionary<string, LawDeclaration>(comparer: StringComparer.Ordinal);
 
         if (!System.IO.Directory.Exists(path: Directory)) { return declarations; }
 
-        foreach (var path in System.IO.Directory.EnumerateFiles(path: Directory, searchPattern: "*.json").OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal)) {
-            var rows = (JsonSerializer.Deserialize<List<LawDeclaration>>(json: File.ReadAllText(path: path), options: ReadOptions)
+        foreach (var path in System.IO.Directory.EnumerateFiles(
+            path: Directory,
+            searchPattern: "*.json"
+        ).OrderBy(
+            keySelector: static name => name,
+            comparer: StringComparer.Ordinal
+        )) {
+            var rows = (JsonSerializer.Deserialize<List<LawDeclaration>>(
+                json: File.ReadAllText(path: path),
+                options: ReadOptions
+            )
                 ?? throw new InvalidOperationException(message: $"{Path.GetFileName(path: path)} did not parse as a law declaration list."));
 
             foreach (var row in rows) {
-                if (!declarations.TryAdd(key: row.Id, value: row)) {
+                if (!declarations.TryAdd(
+                    key: row.Id,
+                    value: row
+                )) {
                     throw new InvalidOperationException(message: $"the law id '{row.Id}' is declared twice; ids are the test display name and must be unique.");
                 }
             }

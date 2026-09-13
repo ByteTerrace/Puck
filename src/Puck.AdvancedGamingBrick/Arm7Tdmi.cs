@@ -78,8 +78,9 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     /// returns the CPSR and the setter is ignored.</summary>
     private uint Spsr {
         get => (HasSpsr
-        ? m_bankSpsr[BankIndex(mode: CurrentMode)]
-        : m_cpsr);
+            ? m_bankSpsr[BankIndex(mode: CurrentMode)]
+            : m_cpsr
+        );
         set {
             if (HasSpsr) {
                 m_bankSpsr[BankIndex(mode: CurrentMode)] = value;
@@ -267,7 +268,8 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         m_gpr[15] += (thumb
             ? 2u
-            : 4u);
+            : 4u
+        );
         m_fetchAddress = m_gpr[15];
         m_fetchWord = FetchWord(
             address: m_fetchAddress,
@@ -278,19 +280,21 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private uint FetchWord(uint address, bool thumb) {
         var access = (m_nextFetchNonSequential
             ? BusAccessType.NonSequential
-            : BusAccessType.Sequential);
+            : BusAccessType.Sequential
+        );
 
         m_nextFetchNonSequential = false;
 
         return (thumb
             ? m_bus.ReadCode16(
-            access: access,
-            address: address & ~1u
-        )
+                access: access,
+                address: address & ~1u
+            )
             : m_bus.ReadCode32(
-            access: access,
-            address: address & ~3u
-        ));
+                access: access,
+                address: address & ~3u
+            )
+        );
     }
     // ARM7TDMI reload: after a branch/exception writes R15, the pipeline is refilled
     // lazily on the next Step — the first refill fetch is non-sequential, then fetch() slides+refills again, so the

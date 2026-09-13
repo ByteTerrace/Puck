@@ -10,7 +10,11 @@ public sealed partial class SdfProgram {
         center = Vector3.Zero;
         radius = 0f;
 
-        if (!TryFindSweepCurve(sweepCurves: sweepCurves, instructionIndex: instructionIndex, curve: out var curve)) {
+        if (!TryFindSweepCurve(
+            curve: out var curve,
+            instructionIndex: instructionIndex,
+            sweepCurves: sweepCurves
+        )) {
             return false;
         }
 
@@ -30,18 +34,57 @@ public sealed partial class SdfProgram {
             return false;
         }
 
-        var low = Vector3.Min(curve.A, Vector3.Min(curve.B, curve.C));
-        var high = Vector3.Max(curve.A, Vector3.Max(curve.B, curve.C));
+        var low = Vector3.Min(
+            value1: curve.A,
+            value2: Vector3.Min(
+                value1: curve.B,
+                value2: curve.C
+            )
+        );
+        var high = Vector3.Max(
+            value1: curve.A,
+            value2: Vector3.Max(
+                value1: curve.B,
+                value2: curve.C
+            )
+        );
 
         center = ((low * 0.5f) + (high * 0.5f));
-        var hullRadius = MathF.Max(Vector3.Distance(center, curve.A), MathF.Max(Vector3.Distance(center, curve.B), Vector3.Distance(center, curve.C)));
+        var hullRadius = MathF.Max(
+            x: Vector3.Distance(
+                value1: center,
+                value2: curve.A
+            ),
+            y: MathF.Max(
+                x: Vector3.Distance(
+                    value1: center,
+                    value2: curve.B
+                ),
+                y: Vector3.Distance(
+                    value1: center,
+                    value2: curve.C
+                )
+            )
+        );
         // A tight hull can sit far from the local origin. Cover interpolation/center rounding in those coordinates,
         // in addition to PackBounds' radius-relative padding; padding only the small hull misses that error scale.
-        var coordinateSlack = (0.000001f * MathF.Max(curve.A.Length(), MathF.Max(curve.B.Length(), curve.C.Length())));
+        var coordinateSlack = (0.000001f * MathF.Max(
+            x: curve.A.Length(),
+            y: MathF.Max(
+                x: curve.B.Length(),
+                y: curve.C.Length()
+            )
+        ));
 
-        radius = (hullRadius + MathF.Max(curve.RadiusStart, curve.RadiusEnd) + MathF.Max(curve.Bulge, 0f) + instruction.Data0.W + margin + coordinateSlack);
+        radius = (((((hullRadius + MathF.Max(
+            x: curve.RadiusStart,
+            y: curve.RadiusEnd
+        )) + MathF.Max(
+            x: curve.Bulge,
+            y: 0f
+        )) + instruction.Data0.W) + margin) + coordinateSlack);
 
-        return float.IsFinite(radius);
+        return float.IsFinite(f: radius);
     }
     // A Sweep's chain reach is the control polygon's own max distance from the local origin plus the largest radius
     // the sweep's profile can reach plus the strand orbit radius — the same sum SdfSolidGeometry.SweepReach and

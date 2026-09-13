@@ -88,6 +88,11 @@ public readonly record struct VoicePatch(
 /// broken oldest-first — the policy that never robs a fresh attack to keep a dying tail.
 /// </summary>
 public sealed class VoiceSynth {
+    // Mirrors the synth-patch document's MaxPitchMillihertz bound (KEEP IN SYNC) — the synth's own
+    // overflow ceiling on a pitch already summed from base + sweep + vibrato, owned here so the synth needs no
+    // document-layer reference (Puck.Audio parses no document); kept numerically identical by convention, not by
+    // a shared constant, since the two live on opposite sides of the layering rank the document validator sits above.
+    private const long MaxPitchMillihertz = 24_000_000L;
     private const long PeakQ32 = (65536L << 16);
     // 2π and the phase→radians bridge in Q16: rotor step angle = phaseIncrementQ32 · 2π >> 32.
     private const long TwoPiRawQ16 = 411775L;
@@ -96,13 +101,6 @@ public sealed class VoiceSynth {
     /// interval — vibrato and sweeps move at millihertz scales, so 64 samples (1.33 ms) is inaudibly coarse and
     /// keeps the per-sample path multiply-only.</summary>
     public const int ControlIntervalFrames = 64;
-
-    // Mirrors the synth-patch document's MaxPitchMillihertz bound (KEEP IN SYNC) — the synth's own
-    // overflow ceiling on a pitch already summed from base + sweep + vibrato, owned here so the synth needs no
-    // document-layer reference (Puck.Audio parses no document); kept numerically identical by convention, not by
-    // a shared constant, since the two live on opposite sides of the layering rank the document validator sits above.
-    private const long MaxPitchMillihertz = 24_000_000L;
-
     /// <summary>The fixed voice count.</summary>
     public const int VoiceCount = 32;
 

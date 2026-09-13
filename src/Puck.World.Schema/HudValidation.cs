@@ -167,7 +167,10 @@ internal static class HudRowValidation {
         var isFrame = (element.Kind == WorldHudElementKind.Frame);
 
         if (!isFrame) {
-            if ((element.Source is not null) || (element.Sources is not null)) {
+            if (
+                (element.Source is not null) ||
+                (element.Sources is not null)
+            ) {
                 Refuse(
                     errors: errors,
                     message: $"{path}.source is only legal on a 'frame' kind element (got '{element.Kind}').",
@@ -178,7 +181,10 @@ internal static class HudRowValidation {
             return;
         }
 
-        if ((element.Source is not null) && (element.Sources is not null)) {
+        if (
+            (element.Source is not null) &&
+            (element.Sources is not null)
+        ) {
             Refuse(
                 errors: errors,
                 message: $"{path} authors both source and sources — a single unconditional source is 'source', a ranked list is 'sources'.",
@@ -190,7 +196,10 @@ internal static class HudRowValidation {
 
         var candidates = element.FrameCandidates;
 
-        if ((candidates.Count == 0) || (candidates.Count > WorldHudCapacity.MaxFrameCandidatesPerElement)) {
+        if (
+            (candidates.Count == 0) ||
+            (candidates.Count > WorldHudCapacity.MaxFrameCandidatesPerElement)
+        ) {
             Refuse(
                 errors: errors,
                 message: $"{path} needs 1..{WorldHudCapacity.MaxFrameCandidatesPerElement} frame source candidates (got {candidates.Count}).",
@@ -212,14 +221,19 @@ internal static class HudRowValidation {
                 cameras: (cameras ?? []),
                 definition: definition!,
                 errors: frameErrors,
-                path: ((element.Sources is null) ? candidatePath : $"{candidatePath}.source"),
+                path: ((element.Sources is null)
+                ? candidatePath
+                : $"{candidatePath}.source"),
                 source: candidate?.Source
             );
 
             if (frameErrors.Count > 0) {
                 Refuse(
                     errors: errors,
-                    message: string.Join(separator: " ", values: frameErrors),
+                    message: string.Join(
+                        separator: " ",
+                        values: frameErrors
+                    ),
                     reason: HudRefusal.FrameSourceInvalid
                 );
             }
@@ -237,13 +251,19 @@ internal static class HudRowValidation {
             if (predicateErrors.Count > 0) {
                 Refuse(
                     errors: errors,
-                    message: string.Join(separator: " ", values: predicateErrors),
+                    message: string.Join(
+                        separator: " ",
+                        values: predicateErrors
+                    ),
                     reason: HudRefusal.FramePredicateInvalid
                 );
             }
         }
 
-        if (!float.IsFinite(f: element.FadeSeconds) || (element.FadeSeconds < 0f)) {
+        if (
+            !float.IsFinite(f: element.FadeSeconds) ||
+            (element.FadeSeconds < 0f)
+        ) {
             Refuse(
                 errors: errors,
                 message: $"{path}.fadeSeconds must be finite and non-negative (got {element.FadeSeconds}).",

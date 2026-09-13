@@ -20,82 +20,31 @@ public sealed class LaneErodeLawTests {
         return builder;
     }
 
-    [Fact]
-    public void LaneErodeLowersToOneInstructionCarryingTheDocumentedDataLanes() {
-        var material = NewBuilder();
-        var program = material
-            .ResetPoint()
-            .LaneErode(
-                lane: 0,
-                from: 0.2f,
-                noiseScale: 3f,
-                reach: 1.5f,
-                to: 0.8f
-            )
-            .Sphere(radius: 1f, material: 0)
-            .Build();
-
-        // ResetPoint(), LaneErode, ShapeBlend — every chain opens with its own ResetPoint instruction.
-        Assert.Equal(expected: 3, actual: program.Instructions.Count);
-        Assert.Equal(expected: SdfOp.ResetPoint, actual: program.Instructions[0].Op);
-
-        var erode = program.Instructions[1];
-
-        Assert.Equal(expected: SdfOp.LaneErode, actual: erode.Op);
-        Assert.Equal(expected: (float)((uint)0), actual: erode.Data0.X);
-        Assert.Equal(expected: 0.2f, actual: erode.Data0.Y);
-        Assert.Equal(expected: 0.8f, actual: erode.Data0.Z);
-        Assert.Equal(expected: 3f, actual: erode.Data0.W);
-        Assert.Equal(expected: 1.5f, actual: erode.Data1.X);
-        Assert.Equal(expected: SdfOp.ShapeBlend, actual: program.Instructions[2].Op);
-    }
-    [Theory]
     [InlineData(0, 0)]
     [InlineData(1, 1)]
     [InlineData(2, 2)]
     [InlineData(3, 3)]
+    [Theory]
     public void EachLaneIndexPacksItsDocumentedOrdinal(int lane, uint expectedOrdinal) {
         var program = NewBuilder()
             .ResetPoint()
             .LaneErode(
-                lane: lane,
-                from: 0f,
-                noiseScale: 1f,
-                reach: 1f,
-                to: 1f
-            )
-            .Sphere(radius: 1f, material: 0)
+            from: 0f,
+            lane: lane,
+            noiseScale: 1f,
+            reach: 1f,
+            to: 1f
+        )
+            .Sphere(
+            radius: 1f,
+            material: 0
+        )
             .Build();
 
-        Assert.Equal(expected: (float)expectedOrdinal, actual: program.Instructions[1].Data0.X);
-    }
-    [Fact]
-    public void LaneErodeRefusesAnUndefinedLane() {
-        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder()
-            .ResetPoint()
-            .LaneErode(
-                lane: ((int)99),
-                from: 0f,
-                noiseScale: 1f,
-                reach: 1f,
-                to: 1f
-            ));
-
-        Assert.Equal(expected: "lane", actual: refusal.ParamName);
-    }
-    [Fact]
-    public void LaneErodeRefusesAnEqualFromToPair() {
-        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder()
-            .ResetPoint()
-            .LaneErode(
-                lane: 0,
-                from: 0.5f,
-                noiseScale: 1f,
-                reach: 1f,
-                to: 0.5f
-            ));
-
-        Assert.Contains(expectedSubstring: "to", actualString: refusal.ParamName);
+        Assert.Equal(
+            expected: ((float)expectedOrdinal),
+            actual: program.Instructions[1].Data0.X
+        );
     }
     [Fact]
     public void LaneErodeAcceptsAReversedFromToPair() {
@@ -103,41 +52,149 @@ public sealed class LaneErodeLawTests {
         var program = NewBuilder()
             .ResetPoint()
             .LaneErode(
-                lane: 0,
-                from: 0.8f,
-                noiseScale: 1f,
-                reach: 1f,
-                to: 0.2f
-            )
-            .Sphere(radius: 1f, material: 0)
+            from: 0.8f,
+            lane: 0,
+            noiseScale: 1f,
+            reach: 1f,
+            to: 0.2f
+        )
+            .Sphere(
+            radius: 1f,
+            material: 0
+        )
             .Build();
 
-        Assert.Equal(expected: 0.8f, actual: program.Instructions[1].Data0.Y);
-        Assert.Equal(expected: 0.2f, actual: program.Instructions[1].Data0.Z);
+        Assert.Equal(
+            expected: 0.8f,
+            actual: program.Instructions[1].Data0.Y
+        );
+        Assert.Equal(
+            expected: 0.2f,
+            actual: program.Instructions[1].Data0.Z
+        );
+    }
+    [Fact]
+    public void LaneErodeLowersToOneInstructionCarryingTheDocumentedDataLanes() {
+        var material = NewBuilder();
+        var program = material
+            .ResetPoint()
+            .LaneErode(
+            from: 0.2f,
+            lane: 0,
+            noiseScale: 3f,
+            reach: 1.5f,
+            to: 0.8f
+        )
+            .Sphere(
+            radius: 1f,
+            material: 0
+        )
+            .Build();
+
+        // ResetPoint(), LaneErode, ShapeBlend — every chain opens with its own ResetPoint instruction.
+        Assert.Equal(
+            expected: 3,
+            actual: program.Instructions.Count
+        );
+        Assert.Equal(
+            expected: SdfOp.ResetPoint,
+            actual: program.Instructions[0].Op
+        );
+
+        var erode = program.Instructions[1];
+
+        Assert.Equal(
+            expected: SdfOp.LaneErode,
+            actual: erode.Op
+        );
+        Assert.Equal(
+            expected: ((float)((uint)0)),
+            actual: erode.Data0.X
+        );
+        Assert.Equal(
+            expected: 0.2f,
+            actual: erode.Data0.Y
+        );
+        Assert.Equal(
+            expected: 0.8f,
+            actual: erode.Data0.Z
+        );
+        Assert.Equal(
+            expected: 3f,
+            actual: erode.Data0.W
+        );
+        Assert.Equal(
+            expected: 1.5f,
+            actual: erode.Data1.X
+        );
+        Assert.Equal(
+            expected: SdfOp.ShapeBlend,
+            actual: program.Instructions[2].Op
+        );
+    }
+    [Fact]
+    public void LaneErodeRefusesAnEqualFromToPair() {
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder()
+            .ResetPoint()
+            .LaneErode(
+            from: 0.5f,
+            lane: 0,
+            noiseScale: 1f,
+            reach: 1f,
+            to: 0.5f
+        ));
+
+        Assert.Contains(
+            expectedSubstring: "to",
+            actualString: refusal.ParamName
+        );
+    }
+    [Fact]
+    public void LaneErodeRefusesAnUndefinedLane() {
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder()
+            .ResetPoint()
+            .LaneErode(
+            from: 0f,
+            lane: ((int)99),
+            noiseScale: 1f,
+            reach: 1f,
+            to: 1f
+        ));
+
+        Assert.Equal(
+            expected: "lane",
+            actual: refusal.ParamName
+        );
     }
     [Fact]
     public void LaneErodeRefusesNonFiniteOrNegativeReach() {
         var negative = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder()
             .ResetPoint()
             .LaneErode(
-                lane: 0,
-                from: 0f,
-                noiseScale: 1f,
-                reach: -1f,
-                to: 1f
-            ));
+            from: 0f,
+            lane: 0,
+            noiseScale: 1f,
+            reach: -1f,
+            to: 1f
+        ));
         var notFinite = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder()
             .ResetPoint()
             .LaneErode(
-                lane: 0,
-                from: 0f,
-                noiseScale: 1f,
-                reach: float.NaN,
-                to: 1f
-            ));
+            from: 0f,
+            lane: 0,
+            noiseScale: 1f,
+            reach: float.NaN,
+            to: 1f
+        ));
 
-        Assert.Contains(expectedSubstring: "reach", actualString: negative.Message);
-        Assert.Contains(expectedSubstring: "reach", actualString: notFinite.Message);
+        Assert.Contains(
+            expectedSubstring: "reach",
+            actualString: negative.Message
+        );
+        Assert.Contains(
+            expectedSubstring: "reach",
+            actualString: notFinite.Message
+        );
     }
     // The public SdfProgram constructor's own admission door refuses a hand-assembled instruction stream whose
     // LaneErode carries a non-exact-integer or out-of-range lane index — the runtime shader thresholds it
@@ -146,15 +203,30 @@ public sealed class LaneErodeLawTests {
     public void ThePublicConstructorRefusesAPackedLaneErodeWithAFractionalOrOutOfRangeLaneIndex() {
         SdfInstruction Erode(float laneIndex) => new(
             Blend: 0u,
-            Data0: new Vector4(w: 1f, x: laneIndex, y: 0.2f, z: 0.8f),
-            Data1: new Vector4(w: 0f, x: 1f, y: 0f, z: 0f),
+            Data0: new Vector4(
+                w: 1f,
+                x: laneIndex,
+                y: 0.2f,
+                z: 0.8f
+            ),
+            Data1: new Vector4(
+                w: 0f,
+                x: 1f,
+                y: 0f,
+                z: 0f
+            ),
             Material: 0u,
             Op: SdfOp.LaneErode,
             Shape: 0u
         );
         SdfInstruction Shape() => new(
             Blend: ((uint)SdfBlendOp.Union),
-            Data0: new Vector4(w: 0f, x: 1f, y: 0f, z: 0f),
+            Data0: new Vector4(
+                w: 0f,
+                x: 1f,
+                y: 0f,
+                z: 0f
+            ),
             Data1: Vector4.Zero,
             Material: 0u,
             Op: SdfOp.ShapeBlend,

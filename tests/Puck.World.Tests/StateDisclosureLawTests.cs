@@ -7,116 +7,444 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class StateDisclosureLawTests {
+    private static WorldDefinition Cards(string first = "seat1", string second = "seat2") => Fixtures.BuildDocument() with {
+        StateRaw = new(World: [
+            new(
+            Name(value: "cards"),
+            CellKind.Int,
+            Cells: [Cell(
+                    key: "ace",
+                    value: 101
+                ), Cell(
+                    key: "king",
+                    value: 202
+                )],
+            Visibility: new()
+        ),
+            new(
+            Name(value: "handA"),
+            CellKind.Bool,
+            Cells: [Cell(
+                    key: "ace",
+                    value: 1
+                )],
+            Domain: new StateDomain.KeysOf(
+                CellName.Parse(candidate: "cards"),
+                Ordered: true
+            ),
+            Visibility: new([first])
+        ),
+            new(
+            Name(value: "handB"),
+            CellKind.Bool,
+            Cells: [Cell(
+                    key: "king",
+                    value: 1
+                )],
+            Domain: new StateDomain.KeysOf(
+                CellName.Parse(candidate: "cards"),
+                Ordered: true
+            ),
+            Visibility: new([second])
+        )
+        ]),
+    };
+    private static StateCell Cell(string key, long value) => new(
+        Name(value: key),
+        value
+    );
+    private static CellName Name(string value) => CellName.Parse(candidate: value);
+
+    [Fact]
+    public void KnowledgeRetainsLastSeenValueWhenSightIsLostAndRoundTrips() {
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new(
+            Lattices: [new LatticeTopology.Grid(
+                    "map",
+                    new DocumentVector3(
+                        x: 0,
+                        y: 0,
+                        z: 0
+                    ),
+                    1,
+                    2,
+                    1
+                )],
+            World: [
+                new(
+                    Name(value: "truth"),
+                    CellKind.Int,
+                    Cells: [Cell(
+                            key: "0",
+                            value: 7
+                        ), Cell(
+                            key: "1",
+                            value: 9
+                        )],
+                    Domain: new StateDomain.CellsOf("map"),
+                    Visibility: new([])
+                ),
+                new(
+                    Name(value: "sight"),
+                    CellKind.Bool,
+                    Cells: [Cell(
+                            key: "0",
+                            value: 1
+                        )],
+                    Domain: new StateDomain.CellsOf("map"),
+                    Visibility: new([])
+                ),
+                new(
+                    Name(value: "known"),
+                    CellKind.Int,
+                    Cells: [],
+                    Domain: new StateDomain.CellsOf("map"),
+                    Visibility: new(["seat1"]),
+                    Knowledge: new(
+                        Mask: "sight",
+                        Source: "truth"
+                    )
+                )
+            ]
+        ),
+        };
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: definition,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.False(condition: WorldStateTransforms.TryApply(
+            definition,
+            new StateTransform.Observe(Row: "known"),
+            WorldPrincipal.Seat(slot: 0),
+            8,
+            "test",
+            out _,
+            out _
+        ));
+        Assert.True(
+            condition: WorldStateTransforms.TryApply(
+                definition,
+                new StateTransform.Observe(Row: "known"),
+                WorldPrincipal.World,
+                8,
+                "test",
+                out var seen,
+                out reason
+            ),
+            userMessage: reason
+        );
+        var changed = seen.WithWorldState(rows: seen.State.Select(selector: r => r.Name.Value switch {
+            "truth" => r with { Cells = [Cell(
+                key: "0",
+                value: 42
+            )] },
+            "sight" => r with { Cells = [] },
+            _ => r
+        }).ToArray());
+
+        Assert.True(
+            condition: WorldStateTransforms.TryApply(
+                changed,
+                new StateTransform.Observe(Row: "known"),
+                WorldPrincipal.World,
+                12,
+                "test",
+                out var remembered,
+                out reason
+            ),
+            userMessage: reason
+        );
+        var cell = Assert.Single(collection: Assert.Single(collection: WorldStateDisclosure.Compose(
+            definition: remembered,
+            recipient: WorldPrincipal.Seat(slot: 0)
+        )!).Cells);
+
+        Assert.Equal(
+            7,
+            cell.Value
+        );
+        Assert.Equal(
+            new StateObservation(
+                Tick: 8,
+                Visible: false
+            ),
+            cell.Observation
+        );
+        var bytes = WorldDefinitionSerialization.Serialize(definition: remembered);
+        var reloaded = System.Text.Json.JsonSerializer.Deserialize(
+            bytes,
+            WorldJsonContext.Default.WorldDefinition
+        )!;
+
+        Assert.Equal(
+            bytes,
+            WorldDefinitionSerialization.Serialize(definition: reloaded)
+        );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: reloaded,
+                reason: out reason
+            ),
+            userMessage: reason
+        );
+    }
+    [Fact]
+    public void ProjectionOmitsHiddenIdentitiesAndAttributesWithoutChangingAuthority() {
+        var definition = Cards();
+        var before = WorldDefinitionSerialization.Serialize(definition: definition);
+        var a = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: WorldProjection.Compose(
+            definition,
+            WorldDisclosureTier.Presentation,
+            "test",
+            1,
+            WorldPrincipal.Seat(slot: 0)
+        )!));
+        var b = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: WorldProjection.Compose(
+            definition,
+            WorldDisclosureTier.Presentation,
+            "test",
+            1,
+            WorldPrincipal.Seat(slot: 1)
+        )!));
+
+        Assert.Contains(
+            actualString: a,
+            expectedSubstring: "ace"
+        );
+        Assert.DoesNotContain(
+            actualString: a,
+            expectedSubstring: "king"
+        );
+        Assert.DoesNotContain(
+            actualString: a,
+            expectedSubstring: "202"
+        );
+        Assert.Contains(
+            actualString: b,
+            expectedSubstring: "king"
+        );
+        Assert.DoesNotContain(
+            actualString: b,
+            expectedSubstring: "\"ace\""
+        );
+        Assert.DoesNotContain(
+            actualString: a,
+            expectedSubstring: "drawCursor"
+        );
+        Assert.Equal(
+            before,
+            WorldDefinitionSerialization.Serialize(definition: definition)
+        );
+        var persisted = System.Text.Json.JsonSerializer.Deserialize(
+            before,
+            WorldJsonContext.Default.WorldDefinition
+        )!;
+
+        Assert.Equal(
+            before,
+            WorldDefinitionSerialization.Serialize(definition: persisted)
+        );
+    }
+    [Fact]
+    public void SecretStreamsResumeAndRefuseIncompatibleSources() {
+        var key = new ClosedBitset256(
+            Word0: 1,
+            Word1: 2,
+            Word2: 3,
+            Word3: 4
+        );
+        var generator = new StateGenerator(Source: GeneratorSource.StreamDraw);
+
+        Assert.True(condition: GeneratorEngine.TryFire(
+            generator,
+            CellKind.Int,
+            8,
+            9,
+            100,
+            null,
+            out var a,
+            out _,
+            key
+        ));
+        Assert.True(condition: GeneratorEngine.TryFire(
+            generator,
+            CellKind.Int,
+            8,
+            9,
+            100,
+            null,
+            out var b,
+            out _,
+            key
+        ));
+        Assert.Equal(
+            actual: b,
+            expected: a
+        );
+        Assert.True(condition: GeneratorEngine.TryFire(
+            generator,
+            CellKind.Int,
+            8,
+            9,
+            101,
+            null,
+            out var c,
+            out _,
+            key
+        ));
+        Assert.NotEqual(
+            a.Numeric,
+            c.Numeric
+        );
+        Assert.False(condition: GeneratorEngine.TryFire(
+            generator,
+            CellKind.Fixed,
+            8,
+            9,
+            100,
+            null,
+            out _,
+            out _,
+            key
+        ));
+    }
     [Fact]
     public async Task TwoAuthenticatedSocketsReceiveOnlyTheirOwnCells() {
-        var first = AdmissionWireFixture.GenerateIdentity("table-player-a");
-        var second = AdmissionWireFixture.GenerateIdentity("table-player-b");
+        var first = AdmissionWireFixture.GenerateIdentity(subject: "table-player-a");
+        var second = AdmissionWireFixture.GenerateIdentity(subject: "table-player-b");
         using var firstKey = first.Key;
         using var secondKey = second.Key;
-        var grants = new[] { new WorldAdmissionGrant(WorldCapability.Observe, GrantSubject.State("hands"), Budget: 100) };
-        var baseline = AdmissionWireFixture.BuildAdmissionDocument(AdmissionWireFixture.BuildEntry(first, grants));
+        var grants = new[] { new WorldAdmissionGrant(
+            WorldCapability.Observe,
+            GrantSubject.State(name: "hands"),
+            Budget: 100
+        ) };
+        var baseline = AdmissionWireFixture.BuildAdmissionDocument(entry: AdmissionWireFixture.BuildEntry(
+            grants: grants,
+            identity: first
+        ));
         var start = AdmissionWireFixture.PeerBodyIndex;
         var definition = baseline with {
-            Admission = [AdmissionWireFixture.BuildEntry(first, grants), AdmissionWireFixture.BuildEntry(second, grants)],
-            PopulationRaw = baseline.Population with { CapacityRaw = start + 2, NetworkPlayers = 2 },
-            StateRaw = new(World: [new(Name("hands"), CellKind.Int, Capacity: 2, Visibility: new(), Cells: [
-                Cell("cardA", 101) with { Visibility = new([WorldPrincipal.Peer(start, 1).Describe()]) },
-                Cell("cardB", 202) with { Visibility = new([WorldPrincipal.Peer(start + 1, 1).Describe()]) }
-            ])])
+            Admission = [AdmissionWireFixture.BuildEntry(
+                grants: grants,
+                identity: first
+            ), AdmissionWireFixture.BuildEntry(
+                grants: grants,
+                identity: second
+            )],
+            PopulationRaw = baseline.Population with { CapacityRaw = (start + 2), NetworkPlayers = 2 },
+            StateRaw = new(World: [new(
+                Name(value: "hands"),
+                CellKind.Int,
+                Capacity: 2,
+                Visibility: new(),
+                Cells: [
+                Cell(
+                        key: "cardA",
+                        value: 101
+                    ) with { Visibility = new([WorldPrincipal.Peer(
+                            generation: 1,
+                            index: start
+                        ).Describe()]) },
+                Cell(
+                        key: "cardB",
+                        value: 202
+                    ) with { Visibility = new([WorldPrincipal.Peer(
+                            generation: 1,
+                            index: (start + 1)
+                        ).Describe()]) }
+            ]
+            )]),
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
         using var host = new WorldPeerHost(fixture.Server);
-        host.Start("127.0.0.1:0");
+
+        host.Start(listen: "127.0.0.1:0");
         using var pumpCancellation = new CancellationTokenSource();
-        var pump = AdmissionWireFixture.RunPumpAsync(fixture, host, pumpCancellation.Token);
+        var pump = AdmissionWireFixture.RunPumpAsync(
+            fixture,
+            host,
+            pumpCancellation.Token
+        );
+
         try {
             using var deadline = Laws.SocketDeadline();
-            var a = await AdmissionWireFixture.ConnectAndAdmitAsync(host, first, deadline.Token);
+            var a = await AdmissionWireFixture.ConnectAndAdmitAsync(
+                host,
+                first,
+                deadline.Token
+            );
             using var clientA = a.Client;
-            var b = await AdmissionWireFixture.ConnectAndAdmitAsync(host, second, deadline.Token);
+            var b = await AdmissionWireFixture.ConnectAndAdmitAsync(
+                host,
+                second,
+                deadline.Token
+            );
             using var clientB = b.Client;
-            Assert.Equal(1, a.Generation);
-            Assert.Equal(1, b.Generation);
-            var seenA = await AdmissionWireFixture.SubmitQueryAsync(clientA.GetStream(), new WorldQuery.StateObservations("hands"), deadline.Token);
-            var seenB = await AdmissionWireFixture.SubmitQueryAsync(clientB.GetStream(), new WorldQuery.StateObservations("hands"), deadline.Token);
-            Assert.False(seenA.Refused, seenA.Text);
-            Assert.False(seenB.Refused, seenB.Text);
-            var expectedA = a.PeerIndex == start ? "cardA" : "cardB";
-            var expectedB = b.PeerIndex == start ? "cardA" : "cardB";
-            Assert.NotEqual(expectedA, expectedB);
-            Assert.Contains(expectedA, seenA.Text);
-            Assert.DoesNotContain(expectedB, seenA.Text);
-            Assert.Contains(expectedB, seenB.Text);
-            Assert.DoesNotContain(expectedA, seenB.Text);
+
+            Assert.Equal(
+                1,
+                a.Generation
+            );
+            Assert.Equal(
+                1,
+                b.Generation
+            );
+            var seenA = await AdmissionWireFixture.SubmitQueryAsync(
+                clientA.GetStream(),
+                new WorldQuery.StateObservations(Row: "hands"),
+                deadline.Token
+            );
+            var seenB = await AdmissionWireFixture.SubmitQueryAsync(
+                clientB.GetStream(),
+                new WorldQuery.StateObservations(Row: "hands"),
+                deadline.Token
+            );
+
+            Assert.False(
+                condition: seenA.Refused,
+                userMessage: seenA.Text
+            );
+            Assert.False(
+                condition: seenB.Refused,
+                userMessage: seenB.Text
+            );
+            var expectedA = ((a.PeerIndex == start)
+                ? "cardA"
+                : "cardB"
+            );
+            var expectedB = ((b.PeerIndex == start)
+                ? "cardA"
+                : "cardB"
+            );
+
+            Assert.NotEqual(
+                actual: expectedB,
+                expected: expectedA
+            );
+            Assert.Contains(
+                expectedA,
+                seenA.Text
+            );
+            Assert.DoesNotContain(
+                expectedB,
+                seenA.Text
+            );
+            Assert.Contains(
+                expectedB,
+                seenB.Text
+            );
+            Assert.DoesNotContain(
+                expectedA,
+                seenB.Text
+            );
         } finally {
             pumpCancellation.Cancel();
             await pump;
         }
-    }
-
-    private static CellName Name(string value) => CellName.Parse(value);
-    private static StateCell Cell(string key, long value) => new(Name(key), value);
-    private static WorldDefinition Cards(string first = "seat1", string second = "seat2") => Fixtures.BuildDocument() with {
-        StateRaw = new(World: [
-            new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
-            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([first])),
-            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([second]))
-        ])
-    };
-
-    [Fact]
-    public void ProjectionOmitsHiddenIdentitiesAndAttributesWithoutChangingAuthority() {
-        var definition = Cards();
-        var before = WorldDefinitionSerialization.Serialize(definition);
-        var a = Encoding.UTF8.GetString(WorldProjection.Serialize(WorldProjection.Compose(definition, WorldDisclosureTier.Presentation, "test", 1, WorldPrincipal.Seat(0))!));
-        var b = Encoding.UTF8.GetString(WorldProjection.Serialize(WorldProjection.Compose(definition, WorldDisclosureTier.Presentation, "test", 1, WorldPrincipal.Seat(1))!));
-        Assert.Contains("ace", a);
-        Assert.DoesNotContain("king", a);
-        Assert.DoesNotContain("202", a);
-        Assert.Contains("king", b);
-        Assert.DoesNotContain("\"ace\"", b);
-        Assert.DoesNotContain("drawCursor", a);
-        Assert.Equal(before, WorldDefinitionSerialization.Serialize(definition));
-        var persisted = System.Text.Json.JsonSerializer.Deserialize(before, WorldJsonContext.Default.WorldDefinition)!;
-        Assert.Equal(before, WorldDefinitionSerialization.Serialize(persisted));
-    }
-
-    [Fact]
-    public void KnowledgeRetainsLastSeenValueWhenSightIsLostAndRoundTrips() {
-        var definition = Fixtures.BuildDocument() with { StateRaw = new(
-            Lattices: [new LatticeTopology.Grid("map", new DocumentVector3(0,0,0), 1, 2, 1)],
-            World: [
-                new(Name("truth"), CellKind.Int, Cells: [Cell("0", 7), Cell("1", 9)], Domain: new StateDomain.CellsOf("map"), Visibility: new([])),
-                new(Name("sight"), CellKind.Bool, Cells: [Cell("0", 1)], Domain: new StateDomain.CellsOf("map"), Visibility: new([])),
-                new(Name("known"), CellKind.Int, Cells: [], Domain: new StateDomain.CellsOf("map"), Visibility: new(["seat1"]), Knowledge: new("truth", "sight"))
-            ]) };
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
-        Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.Observe("known"), WorldPrincipal.Seat(0), 8, "test", out _, out _));
-        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.Observe("known"), WorldPrincipal.World, 8, "test", out var seen, out reason), reason);
-        var changed = seen.WithWorldState(seen.State.Select(r => r.Name.Value switch {
-            "truth" => r with { Cells = [Cell("0", 42)] },
-            "sight" => r with { Cells = [] },
-            _ => r
-        }).ToArray());
-        Assert.True(WorldStateTransforms.TryApply(changed, new StateTransform.Observe("known"), WorldPrincipal.World, 12, "test", out var remembered, out reason), reason);
-        var cell = Assert.Single(Assert.Single(WorldStateDisclosure.Compose(remembered, WorldPrincipal.Seat(0))!).Cells);
-        Assert.Equal(7, cell.Value);
-        Assert.Equal(new StateObservation(8, false), cell.Observation);
-        var bytes = WorldDefinitionSerialization.Serialize(remembered);
-        var reloaded = System.Text.Json.JsonSerializer.Deserialize(bytes, WorldJsonContext.Default.WorldDefinition)!;
-        Assert.Equal(bytes, WorldDefinitionSerialization.Serialize(reloaded));
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(reloaded, out reason), reason);
-    }
-
-    [Fact]
-    public void SecretStreamsResumeAndRefuseIncompatibleSources() {
-        var key = new ClosedBitset256(1, 2, 3, 4);
-        var generator = new StateGenerator(Source: GeneratorSource.StreamDraw);
-        Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 100, null, out var a, out _, key));
-        Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 100, null, out var b, out _, key));
-        Assert.Equal(a, b);
-        Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 101, null, out var c, out _, key));
-        Assert.NotEqual(a.Numeric, c.Numeric);
-        Assert.False(GeneratorEngine.TryFire(generator, CellKind.Fixed, 8, 9, 100, null, out _, out _, key));
     }
 }

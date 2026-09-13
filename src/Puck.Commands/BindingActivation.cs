@@ -14,10 +14,10 @@ public sealed class BindingActivation {
     }
 
     internal CommandPhase Phase { get; }
-    internal CommandValue Value { get; }
     /// <summary>The authored text payload the activation submits as the line <c>&lt;Command&gt; &lt;Text&gt;</c>, or
     /// <see langword="null"/> for a value-only activation.</summary>
     internal string? Text { get; }
+    internal CommandValue Value { get; }
 
     /// <summary>The authored command name, for display and diagnostics.</summary>
     public string Command { get; }

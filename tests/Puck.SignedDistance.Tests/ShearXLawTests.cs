@@ -18,13 +18,19 @@ public sealed class ShearLawTests {
 
         return builder
             .ResetPoint()
-            .Shear(linear: linear, quadratic: quadratic)
+            .Shear(
+            linear: linear,
+            quadratic: quadratic
+        )
             .Sphere(
-                radius: radius,
-                material: material
-            )
+            radius: radius,
+            material: material
+        )
             .Build();
     }
+    // KEEP IN SYNC with SdfProgram.ShearOperatorNorm.
+    private static float MirrorOperatorNorm(float linear, float quadratic, float reach) =>
+        TwistOperatorNorm(a: (MathF.Abs(x: linear) + ((2.0f * MathF.Abs(x: quadratic)) * reach)));
     // Reproduces SDF_OP_SHEAR's mapCore case plus the trailing stepScale multiply exactly.
     private static float ShearedFieldDistance(Vector3 p, float linear, float quadratic, float radius, float stepScale) {
         var sheared = new Vector3(
@@ -41,71 +47,19 @@ public sealed class ShearLawTests {
 
         return MathF.Sqrt(x: (((2.0f + aSquared) + (a * MathF.Sqrt(x: (aSquared + 4.0f)))) / 2.0f));
     }
-    // KEEP IN SYNC with SdfProgram.ShearOperatorNorm.
-    private static float MirrorOperatorNorm(float linear, float quadratic, float reach) =>
-        TwistOperatorNorm(a: (MathF.Abs(x: linear) + ((2.0f * MathF.Abs(x: quadratic)) * reach)));
 
     [Fact]
-    public void TheStepClampMatchesTheDerivedOperatorNorm() {
-        const float Linear = 0.4f;
-        const float Quadratic = 0.6f;
-        const float Radius = 1.0f;
-
-        var program = BuildShearedSphere(
-            linear: Linear,
-            quadratic: Quadratic
-        );
-        // The chain's reach is the sphere's own bounding radius (no Translate on the chain).
-        var expected = (1.0f / MathF.Max(
-            x: MirrorOperatorNorm(
-                linear: Linear,
-                quadratic: Quadratic,
-                reach: Radius
-            ),
-            y: 1.0f
+    public void ANonFiniteLinearRefusesByName() {
+        var builder = new SdfProgramBuilder();
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.Shear(
+            linear: float.NaN,
+            quadratic: 0f
         ));
 
         Assert.Equal(
-            actual: program.StepScale,
-            expected: expected,
-            precision: 5
+            actual: exception.ParamName,
+            expected: "linear"
         );
-        Assert.True(condition: (program.StepScale < 1.0f));
-    }
-    [Fact]
-    public void ZeroLinearAndQuadraticIsAnExactIdentity() {
-        var program = BuildShearedSphere(
-            linear: 0f,
-            quadratic: 0f
-        );
-
-        Assert.Equal(
-            actual: program.StepScale,
-            expected: 1.0f
-        );
-
-        Vector3[] points = [
-            new(x: 3f, y: 0f, z: 0f),
-            new(x: 0f, y: 5f, z: 0f),
-            new(x: -2f, y: -4f, z: 1.5f),
-            new(x: 0.2f, y: 0.5f, z: -0.3f),
-        ];
-
-        foreach (var point in points) {
-            var expected = (point.Length() - 1.0f);
-            var actual = ShearedFieldDistance(
-                p: point,
-                linear: 0f,
-                quadratic: 0f,
-                radius: 1.0f,
-                stepScale: program.StepScale
-            );
-
-            Assert.Equal(
-                actual: actual,
-                expected: expected
-            );
-        }
     }
     [Fact]
     public void ThePolynomialIsExactAtAnArbitraryPointNotOnlyNearTheOrigin() {
@@ -113,16 +67,20 @@ public sealed class ShearLawTests {
         // point far from the origin obeys the same closed form as one near it, with no accumulated approximation.
         const float Linear = 1.3f;
         const float Quadratic = -0.7f;
-        var p = new Vector3(x: 2f, y: 6f, z: -3f);
+        var p = new Vector3(
+            x: 2f,
+            y: 6f,
+            z: -3f
+        );
         var expectedSheared = new Vector3(
-            x: (p.X + ((Linear * p.Y) + (Quadratic * p.Y * p.Y))),
+            x: (p.X + ((Linear * p.Y) + ((Quadratic * p.Y) * p.Y))),
             y: p.Y,
             z: p.Z
         );
 
         var actual = ShearedFieldDistance(
-            p: p,
             linear: Linear,
+            p: p,
             quadratic: Quadratic,
             radius: 1.0f,
             stepScale: 1.0f
@@ -157,10 +115,14 @@ public sealed class ShearLawTests {
         for (var x = -1.2f; (x <= 1.2f); x += Step) {
             for (var y = -1.2f; (y <= 1.2f); y += Step) {
                 for (var z = -1.2f; (z <= 1.2f); z += Step) {
-                    var p = new Vector3(x: x, y: y, z: z);
+                    var p = new Vector3(
+                        x: x,
+                        y: y,
+                        z: z
+                    );
                     var d0 = ShearedFieldDistance(
-                        p: p,
                         linear: Linear,
+                        p: p,
                         quadratic: Quadratic,
                         radius: Radius,
                         stepScale: stepScale
@@ -168,8 +130,8 @@ public sealed class ShearLawTests {
 
                     foreach (var axis in axes) {
                         var d1 = ShearedFieldDistance(
-                            p: (p + (axis * Step)),
                             linear: Linear,
+                            p: (p + (axis * Step)),
                             quadratic: Quadratic,
                             radius: Radius,
                             stepScale: stepScale
@@ -182,17 +144,31 @@ public sealed class ShearLawTests {
         }
     }
     [Fact]
-    public void ANonFiniteLinearRefusesByName() {
-        var builder = new SdfProgramBuilder();
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.Shear(
-            linear: float.NaN,
-            quadratic: 0f
+    public void TheStepClampMatchesTheDerivedOperatorNorm() {
+        const float Linear = 0.4f;
+        const float Quadratic = 0.6f;
+        const float Radius = 1.0f;
+
+        var program = BuildShearedSphere(
+            linear: Linear,
+            quadratic: Quadratic
+        );
+        // The chain's reach is the sphere's own bounding radius (no Translate on the chain).
+        var expected = (1.0f / MathF.Max(
+            x: MirrorOperatorNorm(
+                linear: Linear,
+                quadratic: Quadratic,
+                reach: Radius
+            ),
+            y: 1.0f
         ));
 
         Assert.Equal(
-            actual: exception.ParamName,
-            expected: "linear"
+            actual: program.StepScale,
+            expected: expected,
+            precision: 5
         );
+        Assert.True(condition: (program.StepScale < 1.0f));
     }
     [Fact]
     public void TheWarpFreeEvaluatorRefusesTheOpByName() {
@@ -206,5 +182,56 @@ public sealed class ShearLawTests {
             actualString: exception.Message,
             expectedSubstring: "Shear"
         );
+    }
+    [Fact]
+    public void ZeroLinearAndQuadraticIsAnExactIdentity() {
+        var program = BuildShearedSphere(
+            linear: 0f,
+            quadratic: 0f
+        );
+
+        Assert.Equal(
+            actual: program.StepScale,
+            expected: 1.0f
+        );
+
+        Vector3[] points = [
+            new(
+                x: 3f,
+                y: 0f,
+                z: 0f
+            ),
+            new(
+                x: 0f,
+                y: 5f,
+                z: 0f
+            ),
+            new(
+                x: -2f,
+                y: -4f,
+                z: 1.5f
+            ),
+            new(
+                x: 0.2f,
+                y: 0.5f,
+                z: -0.3f
+            ),
+        ];
+
+        foreach (var point in points) {
+            var expected = (point.Length() - 1.0f);
+            var actual = ShearedFieldDistance(
+                p: point,
+                linear: 0f,
+                quadratic: 0f,
+                radius: 1.0f,
+                stepScale: program.StepScale
+            );
+
+            Assert.Equal(
+                actual: actual,
+                expected: expected
+            );
+        }
     }
 }

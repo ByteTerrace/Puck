@@ -10,14 +10,36 @@ namespace Puck.World.Client;
 /// (division by zero, an absent cell) evaluates to 0 — matching an unauthored lane, never a thrown exception on a
 /// per-frame render path.</summary>
 public static class WorldLookLaneEvaluator {
-    /// <summary>Evaluates the four expressions in component order; absent entries are zero.</summary>
-    public static System.Numerics.Vector4 EvaluateLanes(IReadOnlyList<ValueExpression?>? expressions, WorldDefinition definition, ulong tick, int bodyIndex) {
-        var result = System.Numerics.Vector4.Zero;
-        for (var index = 0; index < Math.Min(expressions?.Count ?? 0, 4); index++) {
-            result[index] = Evaluate(expressions![index], definition, tick, bodyIndex);
+    private static bool TryBinary(Span<float> stack, ref int depth, Func<float, float, float> transform) {
+        if (
+            (depth < 2) ||
+            !float.IsFinite(f: stack[(depth - 1)]) ||
+            !float.IsFinite(f: stack[(depth - 2)])
+        ) {
+            return false;
         }
-        return result;
+
+        stack[(depth - 2)] = transform(
+            stack[(depth - 2)],
+            stack[(depth - 1)]
+        );
+        depth--;
+
+        return true;
     }
+    private static bool TryUnary(Span<float> stack, ref int depth, Func<float, float> transform) {
+        if (
+            (depth < 1) ||
+            !float.IsFinite(f: stack[(depth - 1)])
+        ) {
+            return false;
+        }
+
+        stack[(depth - 1)] = transform(stack[(depth - 1)]);
+
+        return true;
+    }
+
     /// <summary>Evaluates one lane expression.</summary>
     /// <param name="expression">The expression, or <see langword="null"/> for an unauthored lane (reads 0).</param>
     /// <param name="definition">The live definition.</param>
@@ -49,7 +71,8 @@ public static class WorldLookLaneEvaluator {
 
                         var reference = ((state.Key is { } key)
                             ? $"state.{state.Name}.{key}"
-                            : $"state.{state.Name}");
+                            : $"state.{state.Name}"
+                        );
 
                         stack[depth++] = (WorldGaitDrivers.TryReadStateNumber(
                             bodyIndex: bodyIndex,
@@ -59,46 +82,71 @@ public static class WorldLookLaneEvaluator {
                             value: out var value
                         )
                             ? value
-                            : 0f);
+                            : 0f
+                        );
                         break;
                     }
                 case ValueToken.Negate: {
-                        if (!TryUnary(stack: stack, depth: ref depth, transform: static v => -v)) {
+                        if (!TryUnary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: static v => -v
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Abs: {
-                        if (!TryUnary(stack: stack, depth: ref depth, transform: MathF.Abs)) {
+                        if (!TryUnary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: MathF.Abs
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Sign: {
-                        if (!TryUnary(stack: stack, depth: ref depth, transform: static v => MathF.Sign(v))) {
+                        if (!TryUnary(
+                            stack: stack,
+                            depth: ref depth,
+                            transform: static v => MathF.Sign(x: v)
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Add: {
-                        if (!TryBinary(stack: stack, depth: ref depth, transform: static (l, r) => (l + r))) {
+                        if (!TryBinary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: static (l, r) => (l + r)
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Subtract: {
-                        if (!TryBinary(stack: stack, depth: ref depth, transform: static (l, r) => (l - r))) {
+                        if (!TryBinary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: static (l, r) => (l - r)
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Multiply: {
-                        if (!TryBinary(stack: stack, depth: ref depth, transform: static (l, r) => (l * r))) {
+                        if (!TryBinary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: static (l, r) => (l * r)
+                        )) {
                             return 0f;
                         }
 
@@ -117,21 +165,34 @@ public static class WorldLookLaneEvaluator {
                         break;
                     }
                 case ValueToken.Min: {
-                        if (!TryBinary(stack: stack, depth: ref depth, transform: MathF.Min)) {
+                        if (!TryBinary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: MathF.Min
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Max: {
-                        if (!TryBinary(stack: stack, depth: ref depth, transform: MathF.Max)) {
+                        if (!TryBinary(
+                            depth: ref depth,
+                            stack: stack,
+                            transform: MathF.Max
+                        )) {
                             return 0f;
                         }
 
                         break;
                     }
                 case ValueToken.Clamp: {
-                        if (depth < 3 || !float.IsFinite(stack[depth - 2]) || !float.IsFinite(stack[depth - 1]) || stack[depth - 2] > stack[depth - 1]) {
+                        if (
+                            (depth < 3) ||
+                            !float.IsFinite(f: stack[(depth - 2)]) ||
+                            !float.IsFinite(f: stack[(depth - 1)]) ||
+                            (stack[(depth - 2)] > stack[(depth - 1)])
+                        ) {
                             return 0f;
                         }
 
@@ -152,26 +213,27 @@ public static class WorldLookLaneEvaluator {
         }
 
         return ((depth == 1)
-            ? (float.IsFinite(f: stack[0]) ? stack[0] : 0f)
-            : 0f);
+            ? (float.IsFinite(f: stack[0])
+                ? stack[0]
+                : 0f)
+            : 0f
+        );
     }
-    private static bool TryUnary(Span<float> stack, ref int depth, Func<float, float> transform) {
-        if (depth < 1 || !float.IsFinite(stack[depth - 1])) {
-            return false;
+    /// <summary>Evaluates the four expressions in component order; absent entries are zero.</summary>
+    public static System.Numerics.Vector4 EvaluateLanes(IReadOnlyList<ValueExpression?>? expressions, WorldDefinition definition, ulong tick, int bodyIndex) {
+        var result = System.Numerics.Vector4.Zero;
+
+        for (var index = 0; (index < Math.Min(
+            val1: (expressions?.Count ?? 0),
+            val2: 4
+        )); index++) {
+            result[index] = Evaluate(
+                expressions![index],
+                definition,
+                tick,
+                bodyIndex
+            );
         }
-
-        stack[(depth - 1)] = transform(stack[(depth - 1)]);
-
-        return true;
-    }
-    private static bool TryBinary(Span<float> stack, ref int depth, Func<float, float, float> transform) {
-        if (depth < 2 || !float.IsFinite(stack[depth - 1]) || !float.IsFinite(stack[depth - 2])) {
-            return false;
-        }
-
-        stack[(depth - 2)] = transform(stack[(depth - 2)], stack[(depth - 1)]);
-        depth--;
-
-        return true;
+        return result;
     }
 }

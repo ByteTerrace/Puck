@@ -94,10 +94,14 @@ internal static class AudioProbe {
         var passed = (silent == expectSilence);
 
         return new ProbeOutcome(
-            Detail: $"{(silent ? "silent" : "varying")} over {(samples.Length / 2)} samples after {ledgerCase.FrameCap} frames (expected {(expectSilence ? "silence" : "sound")})",
+            Detail: $"{(silent
+            ? "silent"
+            : "varying")} over {(samples.Length / 2)} samples after {ledgerCase.FrameCap} frames (expected {(expectSilence
+            ? "silence"
+            : "sound")})",
             Verdict: (passed
-                ? ProbeVerdict.Pass
-                : ProbeVerdict.Fail)
+            ? ProbeVerdict.Pass
+            : ProbeVerdict.Fail)
         );
     }
 }

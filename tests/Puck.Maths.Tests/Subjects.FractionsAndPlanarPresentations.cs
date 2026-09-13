@@ -244,11 +244,11 @@ internal static partial class Subjects {
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction16ExactOpsAndOrder(long[] left, long[] right) {
-        const int bits = UnitFraction16.FractionBitCount;
+        const int Bits = UnitFraction16.FractionBitCount;
 
         var rawA = UnitFraction16Raw(raw: left[0]);
         var rawB = UnitFraction16Raw(raw: right[0]);
-        var rawC = UnitFraction16Raw(raw: (left[0] >> bits));
+        var rawC = UnitFraction16Raw(raw: (left[0] >> Bits));
         var a = new UnitFraction16(Value: rawA);
         var b = UnitFraction16.FromRawBits(value: rawB);
         var c = UnitFraction16.FromRawBits(value: rawC);
@@ -259,7 +259,7 @@ internal static partial class Subjects {
         var exactA = new BigInteger(value: rawA);
         var exactB = new BigInteger(value: rawB);
         var exactC = new BigInteger(value: rawC);
-        var maximum = ((BigInteger.One << bits) - BigInteger.One);
+        var maximum = ((BigInteger.One << Bits) - BigInteger.One);
 
         // The primary constructor and the raw factory are one fact, and the raw reads back unmoved.
         if (a.Value != rawA) { return $"the constructor moved raw {rawA} to {a.Value}"; }
@@ -267,15 +267,15 @@ internal static partial class Subjects {
 
         // The wrapping ring.
         if ((a + b).Value != WrapToFraction(
-            fractionBitCount: bits,
+            fractionBitCount: Bits,
             value: (exactA + exactB)
         )) { return $"the wrapping sum of {rawA} and {rawB} is wrong"; }
         if ((a - b).Value != WrapToFraction(
-            fractionBitCount: bits,
+            fractionBitCount: Bits,
             value: (exactA - exactB)
         )) { return $"the wrapping difference of {rawA} and {rawB} is wrong"; }
         if ((-a).Value != WrapToFraction(
-            fractionBitCount: bits,
+            fractionBitCount: Bits,
             value: -exactA
         )) { return $"the modular negation of {rawA} is wrong"; }
         if ((~a).Value != (maximum - exactA)) { return $"the bitwise complement of {rawA} is wrong"; }
@@ -414,11 +414,11 @@ internal static partial class Subjects {
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction32ExactOpsAndOrder(long[] left, long[] right) {
-        const int bits = UnitFraction32.FractionBitCount;
+        const int Bits = UnitFraction32.FractionBitCount;
 
         var rawA = UnitFraction32Raw(raw: left[0]);
         var rawB = UnitFraction32Raw(raw: right[0]);
-        var rawC = UnitFraction32Raw(raw: (left[0] >> bits));
+        var rawC = UnitFraction32Raw(raw: (left[0] >> Bits));
         var a = new UnitFraction32(Value: rawA);
         var b = UnitFraction32.FromRawBits(value: rawB);
         var c = UnitFraction32.FromRawBits(value: rawC);
@@ -429,7 +429,7 @@ internal static partial class Subjects {
         var exactA = new BigInteger(value: rawA);
         var exactB = new BigInteger(value: rawB);
         var exactC = new BigInteger(value: rawC);
-        var maximum = ((BigInteger.One << bits) - BigInteger.One);
+        var maximum = ((BigInteger.One << Bits) - BigInteger.One);
 
         // The primary constructor and the raw factory are one fact, and the raw reads back unmoved.
         if (a.Value != rawA) { return $"the constructor moved raw {rawA} to {a.Value}"; }
@@ -437,15 +437,15 @@ internal static partial class Subjects {
 
         // The wrapping ring.
         if ((a + b).Value != WrapToFraction(
-            fractionBitCount: bits,
+            fractionBitCount: Bits,
             value: (exactA + exactB)
         )) { return $"the wrapping sum of {rawA} and {rawB} is wrong"; }
         if ((a - b).Value != WrapToFraction(
-            fractionBitCount: bits,
+            fractionBitCount: Bits,
             value: (exactA - exactB)
         )) { return $"the wrapping difference of {rawA} and {rawB} is wrong"; }
         if ((-a).Value != WrapToFraction(
-            fractionBitCount: bits,
+            fractionBitCount: Bits,
             value: -exactA
         )) { return $"the modular negation of {rawA} is wrong"; }
         if ((~a).Value != (maximum - exactA)) { return $"the bitwise complement of {rawA} is wrong"; }
@@ -588,14 +588,14 @@ internal static partial class Subjects {
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction16ShiftsMatchOracle(long[] left, long[] right) {
-        const int bits = UnitFraction16.FractionBitCount;
+        const int Bits = UnitFraction16.FractionBitCount;
 
         var raw = UnitFraction16Raw(raw: left[0]);
         var value = UnitFraction16.FromRawBits(value: raw);
         var exact = new BigInteger(value: raw);
-        var scale = (BigInteger.One << bits);
+        var scale = (BigInteger.One << Bits);
 
-        foreach (var amount in ((ReadOnlySpan<int>)[UnitFractionShiftAmount(raw: right[0]), 0, 1, (bits - 1), bits, (bits + 1), 31, 32, -1])) {
+        foreach (var amount in ((ReadOnlySpan<int>)[UnitFractionShiftAmount(raw: right[0]), 0, 1, (Bits - 1), Bits, (Bits + 1), 31, 32, -1])) {
             var masked = amount & 31;
 
             if ((value << amount).Value != ((exact << masked) % scale)) { return $"the left shift of raw {raw} by {amount} is wrong"; }
@@ -610,14 +610,14 @@ internal static partial class Subjects {
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction32ShiftsMatchOracle(long[] left, long[] right) {
-        const int bits = UnitFraction32.FractionBitCount;
+        const int Bits = UnitFraction32.FractionBitCount;
 
         var raw = UnitFraction32Raw(raw: left[0]);
         var value = UnitFraction32.FromRawBits(value: raw);
         var exact = new BigInteger(value: raw);
-        var scale = (BigInteger.One << bits);
+        var scale = (BigInteger.One << Bits);
 
-        foreach (var amount in ((ReadOnlySpan<int>)[UnitFractionShiftAmount(raw: right[0]), 0, 1, (bits - 1), bits, (bits + 1), 31, 32, -1])) {
+        foreach (var amount in ((ReadOnlySpan<int>)[UnitFractionShiftAmount(raw: right[0]), 0, 1, (Bits - 1), Bits, (Bits + 1), 31, 32, -1])) {
             var masked = amount & 31;
 
             if ((value << amount).Value != ((exact << masked) % scale)) { return $"the left shift of raw {raw} by {amount} is wrong"; }
@@ -828,13 +828,13 @@ internal static partial class Subjects {
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction16TextMatchesOracle(long[] left, long[] right) {
-        const int bits = UnitFraction16.FractionBitCount;
+        const int Bits = UnitFraction16.FractionBitCount;
 
         var raw = UnitFraction16Raw(raw: left[0]);
         var value = UnitFraction16.FromRawBits(value: raw);
         var reference = Oracles.ExactDyadicDecimal(
             numerator: new BigInteger(value: raw),
-            shift: bits
+            shift: Bits
         );
         Span<char> buffer = stackalloc char[(UnitFraction16.TotalBitCount + 4)];
 
@@ -908,17 +908,17 @@ internal static partial class Subjects {
                 s: text
             );
             var admitted = Oracles.TryUnitFractionText(
-                fractionBitCount: bits,
+                fractionBitCount: Bits,
                 raw: out var expected,
                 text: text
             );
 
             if (accepted != admitted) {
                 return $"'{text}' was {(accepted
-                ? "accepted"
-                : "refused")} by the subject and {(admitted
-                ? "accepted"
-                : "refused")} by the oracle";
+                    ? "accepted"
+                    : "refused")} by the subject and {(admitted
+                    ? "accepted"
+                    : "refused")} by the oracle";
             }
             if (
                 accepted &&
@@ -937,13 +937,13 @@ internal static partial class Subjects {
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction32TextMatchesOracle(long[] left, long[] right) {
-        const int bits = UnitFraction32.FractionBitCount;
+        const int Bits = UnitFraction32.FractionBitCount;
 
         var raw = UnitFraction32Raw(raw: left[0]);
         var value = UnitFraction32.FromRawBits(value: raw);
         var reference = Oracles.ExactDyadicDecimal(
             numerator: new BigInteger(value: raw),
-            shift: bits
+            shift: Bits
         );
         Span<char> buffer = stackalloc char[(UnitFraction32.TotalBitCount + 4)];
 
@@ -1017,17 +1017,17 @@ internal static partial class Subjects {
                 s: text
             );
             var admitted = Oracles.TryUnitFractionText(
-                fractionBitCount: bits,
+                fractionBitCount: Bits,
                 raw: out var expected,
                 text: text
             );
 
             if (accepted != admitted) {
                 return $"'{text}' was {(accepted
-                ? "accepted"
-                : "refused")} by the subject and {(admitted
-                ? "accepted"
-                : "refused")} by the oracle";
+                    ? "accepted"
+                    : "refused")} by the subject and {(admitted
+                    ? "accepted"
+                    : "refused")} by the oracle";
             }
             if (
                 accepted &&
@@ -1048,7 +1048,7 @@ internal static partial class Subjects {
     /// point and the invariant spelling stops parsing under it.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction16ParseLadderHolds() {
-        const int bits = UnitFraction16.FractionBitCount;
+        const int Bits = UnitFraction16.FractionBitCount;
 
         foreach (var (text, expected) in UnitFraction16ParseLadder) {
             if (
@@ -1069,7 +1069,7 @@ internal static partial class Subjects {
             ).Value != expected) { return $"the throwing span parse of '{text}' is wrong"; }
             if (
                 !Oracles.TryUnitFractionText(
-                fractionBitCount: bits,
+                fractionBitCount: Bits,
                 raw: out var admitted,
                 text: text
             ) ||
@@ -1087,7 +1087,7 @@ internal static partial class Subjects {
                 (refused != default)
             ) { return $"'{text}' was accepted, or left raw {refused.Value} behind"; }
             if (Oracles.TryUnitFractionText(
-                fractionBitCount: bits,
+                fractionBitCount: Bits,
                 raw: out _,
                 text: text
             )) { return $"the oracle accepted '{text}'"; }
@@ -1154,7 +1154,7 @@ internal static partial class Subjects {
     /// <summary>The UQ0.32 sibling of <see cref="UnitFraction16ParseLadderHolds"/>, statement for statement.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction32ParseLadderHolds() {
-        const int bits = UnitFraction32.FractionBitCount;
+        const int Bits = UnitFraction32.FractionBitCount;
 
         foreach (var (text, expected) in UnitFraction32ParseLadder) {
             if (
@@ -1175,7 +1175,7 @@ internal static partial class Subjects {
             ).Value != expected) { return $"the throwing span parse of '{text}' is wrong"; }
             if (
                 !Oracles.TryUnitFractionText(
-                fractionBitCount: bits,
+                fractionBitCount: Bits,
                 raw: out var admitted,
                 text: text
             ) ||
@@ -1193,7 +1193,7 @@ internal static partial class Subjects {
                 (refused != default)
             ) { return $"'{text}' was accepted, or left raw {refused.Value} behind"; }
             if (Oracles.TryUnitFractionText(
-                fractionBitCount: bits,
+                fractionBitCount: Bits,
                 raw: out _,
                 text: text
             )) { return $"the oracle accepted '{text}'"; }
@@ -1326,14 +1326,14 @@ internal static partial class Subjects {
     /// does not reach on one side of every binary statement.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? UnitFraction16Exhaustive() {
-        const int bits = UnitFraction16.FractionBitCount;
+        const int Bits = UnitFraction16.FractionBitCount;
 
         for (var raw = 0; (raw <= 65535); ++raw) {
             var value = UnitFraction16.FromRawBits(value: ((ushort)raw));
             var exact = new BigInteger(value: raw);
             var reference = Oracles.ExactDyadicDecimal(
                 numerator: exact,
-                shift: bits
+                shift: Bits
             );
 
             if (value.ToString() != reference) { return $"raw {raw} rendered as '{value.ToString()}'"; }
@@ -1343,7 +1343,7 @@ internal static partial class Subjects {
             ) != value) { return $"raw {raw} did not parse back from '{reference}'"; }
             if (BitConverter.DoubleToUInt64Bits(value: ((double)value)) != Oracles.ExactBinary64Bits(
                 numerator: exact,
-                shift: bits
+                shift: Bits
             )) { return $"the projection of raw {raw} is wrong"; }
             if (UnitFraction16.FromDouble(value: ((double)value)) != value) { return $"the double round trip failed at raw {raw}"; }
             if ((~value).Value != (65535 - raw)) { return $"the complement of raw {raw} is wrong"; }
@@ -1354,12 +1354,12 @@ internal static partial class Subjects {
                 var quotient = ((long)(value / UnitFraction16.FromRawBits(value: divisor)).Value);
 
                 if (product != ((long)Oracles.UnitFractionProduct(
-                    fractionBitCount: bits,
+                    fractionBitCount: Bits,
                     x: ((ulong)raw),
                     y: divisor
                 ))) { return $"the product of {raw} and {divisor} is wrong"; }
                 if (quotient != ((long)Oracles.UnitFractionQuotient(
-                    fractionBitCount: bits,
+                    fractionBitCount: Bits,
                     x: ((ulong)raw),
                     y: divisor
                 ))) { return $"the quotient of {raw} by {divisor} is wrong"; }
@@ -2266,9 +2266,9 @@ internal static partial class Subjects {
 
         for (var lane = 0; (lane < count); ++lane) {
             result[lane] = (closure[lane]
-            ? 1L
-            : 0L
-        );
+                ? 1L
+                : 0L
+            );
         }
     }
     /// <summary>The subject all-pairs shortest path: the guarded sum over all lengths of a tropical quiver element.</summary>
@@ -2397,9 +2397,9 @@ internal static partial class Subjects {
 
             for (var lane = 0; (lane < count); ++lane) {
                 adjacency[lane] = GraphMultiplicity(
-                left: left[lane],
-                right: right[lane]
-            );
+                    left: left[lane],
+                    right: right[lane]
+                );
             }
 
             Oracles.WalkCount(

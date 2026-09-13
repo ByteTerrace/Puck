@@ -1101,16 +1101,16 @@ internal static partial class Subjects {
                 paramName: "source"
             )) {
                 return $"ScaleRegion at degree {degree} accepted a {sourceLength}-into-{destinationLength} mismatch, or named {RefusedParameter(action: () => field.ScaleRegion(
-                destination: buffer.AsSpan(
-                    length: destinationLength,
-                    start: 0
-                ),
-                source: buffer.AsSpan(
-                    length: sourceLength,
-                    start: sourceStart
-                ),
-                scalar: scalar
-            ))}";
+                    destination: buffer.AsSpan(
+                        length: destinationLength,
+                        start: 0
+                    ),
+                    source: buffer.AsSpan(
+                        length: sourceLength,
+                        start: sourceStart
+                    ),
+                    scalar: scalar
+                ))}";
             }
             if (!Throws<ArgumentOutOfRangeException>(
                 action: () => field.MultiplyAccumulateRegion(

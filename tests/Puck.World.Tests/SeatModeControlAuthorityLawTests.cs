@@ -20,29 +20,6 @@ namespace Puck.World.Tests;
 public sealed class SeatModeControlAuthorityLawTests {
     private const int TargetBody = 0;
 
-    [Fact]
-    public void ActorLackingDriveOverTargetBodyIsRefused_ActorHoldingDriveSucceeds() {
-        using var fixture = Fixtures.FreshServer();
-
-        var actor = WorldPrincipal.Seat(slot: 1);
-        var driveOverTarget = new WorldGrant(Principal: actor, Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: TargetBody), Exclusive: false);
-
-        // Both bodies must be live: a local seat's body is minted on Join, not at construction, and the observation
-        // reads the target body's source directly.
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: WorldPrincipal.Seat(slot: TargetBody), Slot: TargetBody, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
-
-        Laws.RefusalWithControl(
-            lawId: "player.mode.acting-principal-drive-required",
-            deniedOutcome: () => IdledTargetBody(actor: actor, fixture: fixture),
-            controlOutcome: () => {
-                // The one discriminating fact reversed: the actor now holds Drive over the target body only.
-                fixture.Server.Grant(grant: driveOverTarget, actor: WorldPrincipal.Console);
-
-                return IdledTargetBody(actor: actor, fixture: fixture);
-            });
-    }
-
     // ApplyCommand(SetControl) runs the SAME acting-principal Drive gate the fly control application relies on: a
     // denial leaves the body's source untouched (reset to Live first, so the observation is clean either way), an
     // accept latches Idle.
@@ -55,5 +32,53 @@ public sealed class SeatModeControlAuthorityLawTests {
         ));
 
         return fixture.Server.Body(index: TargetBody)!.Source.IsIdle;
+    }
+
+    [Fact]
+    public void ActorLackingDriveOverTargetBodyIsRefused_ActorHoldingDriveSucceeds() {
+        using var fixture = Fixtures.FreshServer();
+
+        var actor = WorldPrincipal.Seat(slot: 1);
+        var driveOverTarget = new WorldGrant(
+            Principal: actor,
+            Capability: WorldCapability.Drive,
+            Subject: GrantSubject.Body(index: TargetBody),
+            Exclusive: false
+        );
+
+        // Both bodies must be live: a local seat's body is minted on Join, not at construction, and the observation
+        // reads the target body's source directly.
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: WorldPrincipal.Seat(slot: TargetBody),
+            Slot: TargetBody,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        Laws.RefusalWithControl(
+            lawId: "player.mode.acting-principal-drive-required",
+            deniedOutcome: () => IdledTargetBody(
+                actor: actor,
+                fixture: fixture
+            ),
+            controlOutcome: () => {
+                // The one discriminating fact reversed: the actor now holds Drive over the target body only.
+                fixture.Server.Grant(
+                    grant: driveOverTarget,
+                    actor: WorldPrincipal.Console
+                );
+
+                return IdledTargetBody(
+                    actor: actor,
+                    fixture: fixture
+                );
+            }
+        );
     }
 }

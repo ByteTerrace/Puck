@@ -16,7 +16,7 @@ internal static partial class Oracles {
         long dampingRaw,
         long responseRaw
     ) {
-        const int guardFractionBitCount = 128;
+        const int GuardFractionBitCount = 128;
 
         var pi = new BigInteger(value: FixedQ4816.PiQ61);
         var piScale = (BigInteger.One << FixedQ4816.PiQ61FractionBitCount);
@@ -44,11 +44,11 @@ internal static partial class Oracles {
 
         if (zeta != oneQ16) {
             var discriminant = BigInteger.Abs(value: ((oneQ16 * oneQ16) - (zeta * zeta)));
-            var root = NearestIntegerRoot(value: (discriminant << ((2 * guardFractionBitCount) - 32)));
+            var root = NearestIntegerRoot(value: (discriminant << ((2 * GuardFractionBitCount) - 32)));
 
             oscillationRate = WrapToRaw(value: RoundRationalTiesToEven(
                 numerator: ((omegaN * root) * scale32),
-                denominator: (omegaD * (BigInteger.One << guardFractionBitCount))
+                denominator: (omegaD * (BigInteger.One << GuardFractionBitCount))
             ));
 
             if (oscillationRate != 0L) {

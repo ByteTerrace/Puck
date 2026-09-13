@@ -13,67 +13,130 @@ public sealed partial class WorldStampPool {
         radius = 0f;
         var shapes = document.Shapes!;
         var anchor = shapes[fromIndex];
-        if ((document.Chains is { Count: > 0 }) ||
-            ((anchor.Blend ?? SdfBlendOp.Union) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))) {
+
+        if (
+            (document.Chains is { Count: > 0 }) ||
+            ((anchor.Blend ?? SdfBlendOp.Union) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))
+        ) {
             return false;
         }
         if (!live.PartParentsResolved) {
-            ResolvePartParents(live: live, shapes: shapes);
+            ResolvePartParents(
+                live: live,
+                shapes: shapes
+            );
         }
-        var owner = GroupMotionOwner(live: live, document: document, index: fromIndex);
+        var owner = GroupMotionOwner(
+            document: document,
+            index: fromIndex,
+            live: live
+        );
         var growth = 0f;
-        var identity = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, 1f, null);
+        var identity = new CreationStampTransform(
+            Vector3.Zero,
+            Quaternion.Identity,
+            1f,
+            null
+        );
 
-        for (var index = fromIndex; index < Math.Min(shapes.Count, WorldPlacementPolicy.MaxAnimatedStampShapes); index++) {
+        for (var index = fromIndex; (index < Math.Min(
+            val1: shapes.Count,
+            val2: WorldPlacementPolicy.MaxAnimatedStampShapes
+        )); index++) {
             var shape = shapes[index];
+
             if ((shape.Group ?? 0) != groupId) {
                 continue;
             }
             var blend = (shape.Blend ?? SdfBlendOp.Union);
-            if ((shape.Type == SdfSolidPrimitive.Plane) || (shape.Domain is { Count: > 0 }) ||
+
+            if (
+                (shape.Type == SdfSolidPrimitive.Plane) ||
+                (shape.Domain is { Count: > 0 }) ||
                 (blend is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion or SdfBlendOp.Subtraction or
                     SdfBlendOp.SmoothSubtraction or SdfBlendOp.Intersection or SdfBlendOp.SmoothIntersection)) ||
-                (GroupMotionOwner(live: live, document: document, index: index) != owner)) {
+                (GroupMotionOwner(
+                document: document,
+                index: index,
+                live: live
+            ) != owner)
+            ) {
                 return false;
             }
 
-            var separation = Vector3.Distance(anchor.Position.Value, shape.Position.Value);
+            var separation = Vector3.Distance(
+                value1: anchor.Position.Value,
+                value2: shape.Position.Value
+            );
+
             foreach (var frame in (document.Frames ?? [])) {
-                var anchorPose = frame.Transforms.FirstOrDefault(pose => pose.Id == anchor.Id);
-                var memberPose = frame.Transforms.FirstOrDefault(pose => pose.Id == shape.Id);
+                var anchorPose = frame.Transforms.FirstOrDefault(predicate: pose => (pose.Id == anchor.Id));
+                var memberPose = frame.Transforms.FirstOrDefault(predicate: pose => (pose.Id == shape.Id));
                 // Changing geometry scale needs a larger envelope than the rest primitive below provides.
-                if (((anchorPose is not null) && (anchorPose.Scale.Value != anchor.Scale.Value)) ||
-                    ((memberPose is not null) && (memberPose.Scale.Value != shape.Scale.Value))) {
+                if (
+                    ((anchorPose is not null) && (anchorPose.Scale.Value != anchor.Scale.Value)) ||
+                    ((memberPose is not null) && (memberPose.Scale.Value != shape.Scale.Value))
+                ) {
                     return false;
                 }
-                separation = MathF.Max(separation, Vector3.Distance(
-                    anchorPose?.Position.Value ?? anchor.Position.Value,
-                    memberPose?.Position.Value ?? shape.Position.Value));
+                separation = MathF.Max(
+                    x: separation,
+                    y: Vector3.Distance(
+                        value1: (anchorPose?.Position.Value ?? anchor.Position.Value),
+                        value2: (memberPose?.Position.Value ?? shape.Position.Value)
+                    )
+                );
             }
 
             // An outward field op acts on the whole running group, including when its shape is a cutter.
-            growth += MathF.Max(0f, shape.Dilate ?? 0f) + MathF.Max(0f, shape.Onion ?? 0f);
+            growth += (MathF.Max(
+                x: 0f,
+                y: (shape.Dilate ?? 0f)
+            ) + MathF.Max(
+                x: 0f,
+                y: (shape.Onion ?? 0f)
+            ));
             if (blend is SdfBlendOp.Union or SdfBlendOp.SmoothUnion) {
-                var bound = CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: identity);
-                radius = MathF.Max(radius, separation + bound.Radius);
+                var bound = CreationStampEmitter.ShapeStampBound(
+                    document: document,
+                    shapeIndex: index,
+                    transform: identity
+                );
+
+                radius = MathF.Max(
+                    x: radius,
+                    y: (separation + bound.Radius)
+                );
                 if (blend == SdfBlendOp.SmoothUnion) {
-                    growth += MathF.Max(0f, shape.Smooth ?? 0f);
+                    growth += MathF.Max(
+                        x: 0f,
+                        y: (shape.Smooth ?? 0f)
+                    );
                 }
             }
         }
 
         radius += growth;
-        return float.IsFinite(radius) && (radius > 0f);
+        return (
+            float.IsFinite(f: radius) &&
+            (radius > 0f)
+        );
     }
-
     private static int GroupMotionOwner(Registration live, CreationDocument document, int index) {
         while (index >= 0) {
             var shape = document.Shapes![index];
-            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 })) {
+
+            if (
+                (shape.Swings is { Count: > 0 }) ||
+                (shape.Slides is { Count: > 0 })
+            ) {
                 return index;
             }
             foreach (var effector in (document.Effectors ?? [])) {
-                if ((shape.Name is { } name) && effector.Chain.Contains(name.Value)) {
+                if (
+                    (shape.Name is { } name) &&
+                    effector.Chain.Contains(value: name.Value)
+                ) {
                     return index;
                 }
             }

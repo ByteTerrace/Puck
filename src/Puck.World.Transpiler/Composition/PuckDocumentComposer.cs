@@ -14,66 +14,6 @@ namespace Puck.World.Transpiler.Composition;
 /// (<see cref="Validation.WorldSemanticValidator"/>) compose through this one implementation, so a <c>.puck</c>
 /// source and the running game resolve a basis or import chain identically. Resolved names use forward slashes on every platform.</summary>
 public sealed class PuckDocumentComposer : IWorldDocumentSource {
-    /// <inheritdoc />
-    public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-        content = null;
-        referrerName = referrerName.Replace(oldChar: '\\', newChar: '/');
-
-        try {
-            var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerName)) ?? ".");
-            resolvedName = Path.GetFullPath(path: Path.Combine(path1: directory, path2: name)).Replace(oldChar: '\\', newChar: '/');
-        } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
-            resolvedName = name;
-            reason = $"cannot resolve path '{name}' from {referrerName}: {ex.Message}";
-
-            return false;
-        }
-
-        if (!File.Exists(path: resolvedName)) {
-            reason = $"document {resolvedName} (named by {referrerName}) does not exist.";
-
-            return false;
-        }
-
-        try {
-            if (resolvedName.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                var puckText = File.ReadAllText(path: resolvedName);
-                var diagnostics = new DiagnosticBag();
-                var parsed = PuckParser.ParseDocumentWithDiagnostics(source: puckText, diagnostics: diagnostics);
-                var lowered = ((parsed.Value is { } document)
-                    ? WorldDocumentEmitter.LowerWithDiagnostics(
-                        basePath: Path.GetDirectoryName(path: resolvedName),
-                        diagnostics: diagnostics,
-                        document: document
-                    ).Value
-                    : null
-                );
-
-                if (diagnostics.HasErrors || (lowered is null)) {
-                    var error = diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
-
-                    reason = ((error is null)
-                        ? $"{resolvedName} does not compile."
-                        : $"{resolvedName}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}");
-
-                    return false;
-                }
-
-                content = Encoding.UTF8.GetBytes(s: lowered.ToJsonString());
-            } else {
-                content = File.ReadAllBytes(path: resolvedName);
-            }
-
-            reason = string.Empty;
-
-            return true;
-        } catch (Exception ex) {
-            reason = $"cannot read document {resolvedName}: {ex.Message}";
-
-            return false;
-        }
-    }
-
     /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph, rooted beside
     /// <paramref name="rootResolvedPath"/>, transparently compiling any <c>.puck</c> basis/import reference along
     /// the way. Returns <paramref name="rootBytes"/>'s own re-parse (as <paramref name="composed"/> being
@@ -105,10 +45,92 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             composed: out composed,
             reason: out reason,
             rootBytes: rootBytes,
-            rootResolvedName: rootResolvedPath.Replace(oldChar: '\\', newChar: '/'),
+            rootResolvedName: rootResolvedPath.Replace(
+                newChar: '/',
+                oldChar: '\\'
+            ),
             source: source,
             catalogFingerprint: catalogFingerprint,
             catalog: catalog
         );
+    }
+    /// <inheritdoc />
+    public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
+        content = null;
+        referrerName = referrerName.Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
+
+        try {
+            var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerName)) ?? ".");
+
+            resolvedName = Path.GetFullPath(path: Path.Combine(
+                path1: directory,
+                path2: name
+            )).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        } catch (Exception ex) when ((ex is ArgumentException or NotSupportedException or PathTooLongException)) {
+            resolvedName = name;
+            reason = $"cannot resolve path '{name}' from {referrerName}: {ex.Message}";
+
+            return false;
+        }
+
+        if (!File.Exists(path: resolvedName)) {
+            reason = $"document {resolvedName} (named by {referrerName}) does not exist.";
+
+            return false;
+        }
+
+        try {
+            if (resolvedName.EndsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: ".puck"
+            )) {
+                var puckText = File.ReadAllText(path: resolvedName);
+                var diagnostics = new DiagnosticBag();
+                var parsed = PuckParser.ParseDocumentWithDiagnostics(
+                    source: puckText,
+                    diagnostics: diagnostics
+                );
+                var lowered = ((parsed.Value is { } document)
+                    ? WorldDocumentEmitter.LowerWithDiagnostics(
+                        basePath: Path.GetDirectoryName(path: resolvedName),
+                        diagnostics: diagnostics,
+                        document: document
+                    ).Value
+                    : null
+                );
+
+                if (
+                    diagnostics.HasErrors ||
+                    (lowered is null)
+                ) {
+                    var error = diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+
+                    reason = ((error is null)
+                        ? $"{resolvedName} does not compile."
+                        : $"{resolvedName}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}"
+                    );
+
+                    return false;
+                }
+
+                content = Encoding.UTF8.GetBytes(s: lowered.ToJsonString());
+            } else {
+                content = File.ReadAllBytes(path: resolvedName);
+            }
+
+            reason = string.Empty;
+
+            return true;
+        } catch (Exception ex) {
+            reason = $"cannot read document {resolvedName}: {ex.Message}";
+
+            return false;
+        }
     }
 }

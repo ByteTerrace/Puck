@@ -66,133 +66,243 @@ public enum StateReduceOp : byte {
 /// only what <see cref="Puck.Maths.DiscreteMeasure"/>'s exact rational allocation costs for its magnitude.</para>
 /// </remarks>
 public static class StateReader {
-    /// <summary>Resolves a document-owned row and its ordinal without a row-name scan.</summary>
-    /// <param name="rows">The current document rows, in catalog lane order.</param>
-    /// <param name="catalog">The catalog that owns the handle.</param>
-    /// <param name="handle">The compiled document-lane handle.</param>
-    /// <param name="rowOrdinal">The resolved ordinal, or -1 on failure.</param>
-    /// <param name="row">The resolved row, or null on failure.</param>
-    /// <returns>Whether the handle belongs to the catalog and addresses a current row with the expected name.</returns>
-    public static bool TryResolveRowHandle(IReadOnlyList<StateRow> rows, StateCatalog catalog, StateHandle handle, out int rowOrdinal, [NotNullWhen(true)] out StateRow? row) {
-        ArgumentNullException.ThrowIfNull(argument: rows);
-        ArgumentNullException.ThrowIfNull(argument: catalog);
-        if (catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
-            (descriptor.Ownership == StateLane.Document) &&
-            ((uint)descriptor.LaneOrdinal < (uint)rows.Count) &&
-            (rows[descriptor.LaneOrdinal] is { } resolved) &&
-            string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
-            rowOrdinal = descriptor.LaneOrdinal;
-            row = resolved;
-            return true;
+    // Known-cell reads share advancing-value semantics and use the store's ordinal path, including scratch frames.
+    internal static long LiveAt(StateStore? store, StateRow row, int index, ulong tick) =>
+        LiveAt(
+            index: index,
+            row: row,
+            rowOrdinal: -1,
+            store: store,
+            tick: tick
+        );
+    internal static long LiveAt(StateStore? store, int rowOrdinal, StateRow row, int index, ulong tick) {
+        var stored = 0L;
+        var found = ((store is not null) && ((rowOrdinal >= 0)
+            ? store.TryStoredAt(
+                index: index,
+                rowOrdinal: rowOrdinal,
+                value: out stored
+            )
+            : store.TryStoredAt(
+                index: index,
+                row: row,
+                value: out stored
+            )));
+
+        // A resolved frame row with no time traits needs no authored metadata. In particular, a zone reduction
+        // must not scan its authored members once per live member just to discover that there is no trait.
+        if (
+            found &&
+            (rowOrdinal >= 0) &&
+            (store is StateFrame frame) &&
+            !frame.Layout[rowOrdinal].HasTraits
+        ) {
+            return stored;
         }
-        rowOrdinal = -1;
-        row = null;
-        return false;
+
+        // Zone membership can move independently of authored metadata; resolve its trait by the current key.
+        StateCell? cell;
+
+        if (
+            (store is StateFrame) &&
+            (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true })
+        ) {
+            var hasKey = ((rowOrdinal >= 0)
+                ? store.TryKeyAt(
+                    index: index,
+                    key: out var key,
+                    rowOrdinal: rowOrdinal
+                )
+                : store.TryKeyAt(
+                    index: index,
+                    key: out key,
+                    row: row
+                )
+            );
+
+            cell = (hasKey
+                ? StateRows.FindCell(
+                    cells: row.Cells,
+                    key: key
+                )
+                : null
+            );
+        } else {
+            cell = ((((uint)index) < ((uint)(row.Cells?.Count ?? 0)))
+                ? row.Cells![index]
+                : null
+            );
+        }
+        return Live(
+            row,
+            cell,
+            (found
+            ? stored
+            : (cell?.Value ?? 0L)),
+            tick
+        );
     }
 
-    /// <summary>Resolves one document-owned row by its compiled typed handle without a row-name scan.</summary>
-    /// <param name="rows">The section's rows.</param>
-    /// <param name="catalog">The section's current state catalog.</param>
-    /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
-    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="row">The resolved row.</param>
-    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolves. Never returns <see langword="false"/>: a handle either
-    /// addresses a row in the current catalog or the call throws, which is the one rule every per-tick handle read
-    /// follows. This differs from <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s name-resolving door, which reads an unknown row as absent:
-    /// a compiled handle is only ever minted against a row the rule compiler already proved present in the same
-    /// section, and every install revalidates by recompiling every rule against it — so an installed section can
-    /// never carry a rule whose compiled row a handle addresses has vanished. A throw here is therefore a caught
-    /// invariant violation, never a reachable "the row is gone" case a rule needs to tolerate.</returns>
-    /// <exception cref="ArgumentException"><paramref name="handle"/> does not address a document-owned row in
-    /// <paramref name="catalog"/>.</exception>
-    public static bool TryReadHandle(
-        IReadOnlyList<StateRow> rows,
-        StateCatalog catalog,
-        StateHandle handle,
-        string? key,
+    private static string? ArgExtremumOverRow<TState>(
+        StateRow declared,
+        StateReduceOp op,
         ulong tick,
-        [NotNullWhen(true)] out StateRow? row,
-        out long? rawValue,
-        out string? text
+        TState state,
+        Func<int, TState, bool> isCandidateIndex
     ) {
-        ArgumentNullException.ThrowIfNull(argument: rows);
-        ArgumentNullException.ThrowIfNull(argument: catalog);
+        ArgumentNullException.ThrowIfNull(argument: isCandidateIndex);
 
-        if (!TryResolveRowHandle(rows: rows, catalog: catalog, handle: handle, rowOrdinal: out _, row: out row)) {
-            throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
+        var bestIndex = -1;
+        string? bestKey = null;
+        var bestValue = 0L;
+
+        var cells = (declared.Cells ?? []);
+
+        for (var candidateIndex = 0; (candidateIndex < cells.Count); candidateIndex++) {
+            var candidate = cells[candidateIndex];
+
+            if (
+                !TryParseCandidateIndex(
+                key: candidate.Key,
+                index: out var index
+            ) ||
+                !isCandidateIndex(
+                arg1: index,
+                arg2: state
+            )
+            ) {
+                continue;
+            }
+
+            ReadKnownCell(
+                cell: candidate,
+                rawValue: out var raw,
+                row: declared,
+                text: out _,
+                tick: tick
+            );
+            var value = raw!.Value;
+            var better = ((bestIndex < 0) || ((op == StateReduceOp.Max)
+                ? (value > bestValue)
+                : (value < bestValue)));
+            var tieLower = ((bestIndex >= 0) && (value == bestValue) && (index < bestIndex));
+
+            if (
+                better ||
+                tieLower
+            ) {
+                bestIndex = index;
+                bestKey = candidate.Key;
+                bestValue = value;
+            }
         }
 
-        ReadCell(key: key, rawValue: out rawValue, row: row, text: out text, tick: tick);
-
-        return true;
+        return bestKey;
     }
-    /// <summary>Resolves one document-owned row by its compiled handle and reads a cell through a store, on
-    /// <see cref="TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
-    /// <param name="store">Where the cell's stored value is read.</param>
-    /// <param name="catalog">The section's current state catalog.</param>
-    /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
-    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="row">The resolved row.</param>
-    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static bool TryReadHandle(
-        StateStore store,
-        StateCatalog catalog,
-        StateHandle handle,
-        string? key,
-        ulong tick,
-        [NotNullWhen(true)] out StateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: store);
-        ArgumentNullException.ThrowIfNull(argument: catalog);
-        var rows = store.Rows;
+    // The zone's members come from the store when one is given (a frame that has transferred them), else from the row.
+    private static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateStore? store, StateRow zone, Span<int> ordinals) {
+        var cells = (zone.Cells ?? []);
+        var count = ((store is not null)
+            ? store.CellCount(row: zone)
+            : cells.Count
+        );
 
-        if (!TryResolveRowHandle(rows: rows, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out row)) {
-            throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
+        if (
+            (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf) ||
+            (count > MaxArrangementTokens) ||
+            (StateRows.FindStateRow(
+            rows: rows,
+            name: keysOf.Row.Value
+        ) is not { Cells: { } domain })
+        ) {
+            return -1;
+        }
+        for (var index = 0; (index < count); index++) {
+            var key = ((cells.Count > index)
+                ? cells[index].Key
+                : default
+            );
+
+            if (
+                (store is not null) &&
+                !store.TryKeyAt(
+                index: index,
+                key: out key,
+                row: zone
+            )
+            ) {
+                return -1;
+            }
+            var ordinal = -1;
+
+            for (var candidate = 0; (candidate < domain.Count); candidate++) {
+                if (domain[candidate].Key == key) {
+                    ordinal = candidate;
+                    break;
+                }
+            }
+            if (ordinal < 0) {
+                return -1;
+            }
+            ordinals[index] = ordinal;
+        }
+        return count;
+    }
+    // The live value of a stored base under the row's and the cell's own value-over-time traits; a cell the row
+    // does not list (a frame's dense board cell) carries no trait of its own.
+    private static long Live(StateRow row, StateCell? cell, long baseValue, ulong tick) {
+        var isSlot = ((cell is null)
+            ? false
+            : (cell.Key == StateRow.SlotKey)
+        );
+
+        if (
+            (row.Advance is { } advance) &&
+            isSlot
+        ) {
+            return advance.ComputeCurrentValue(
+                baseValue: baseValue,
+                currentTick: tick,
+                row: row
+            );
+        }
+        if (
+            (row.Cycle is { } cycle) &&
+            isSlot
+        ) {
+            return cycle.ComputeCurrentValue(
+                baseValue: baseValue,
+                currentTick: tick,
+                row: row
+            );
+        }
+        if (cell?.Advance is { } cellAdvance) {
+            return cellAdvance.ComputeCurrentValue(
+                baseValue: baseValue,
+                currentTick: tick,
+                row: row
+            );
+        }
+        if (cell?.Cycle is { } cellCycle) {
+            return cellCycle.ComputeCurrentValue(
+                baseValue: baseValue,
+                currentTick: tick,
+                row: row
+            );
         }
 
-        ReadCell(store: store, rowOrdinal: ordinal, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
-
-        return true;
+        return baseValue;
     }
-    /// <summary>Resolves one document-owned row by its compiled handle and reads a cell through a store by pre-parsed key,
-    /// on <see cref="TryReadHandle(StateStore, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
-    /// <param name="store">Where the cell's stored value is read.</param>
-    /// <param name="catalog">The section's current state catalog.</param>
-    /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
-    /// <param name="key">The pre-parsed cell key.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="row">The resolved row.</param>
-    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static bool TryReadHandle(
-        StateStore store,
-        StateCatalog catalog,
-        StateHandle handle,
-        CellName key,
-        ulong tick,
-        [NotNullWhen(true)] out StateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: store);
-        ArgumentNullException.ThrowIfNull(argument: catalog);
-        var rows = store.Rows;
-
-        if (!TryResolveRowHandle(rows: rows, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out row)) {
-            throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
-        }
-
-        ReadCell(store: store, rowOrdinal: ordinal, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
-
-        return true;
+    private static void ReadKnownCell(StateRow row, StateCell cell, ulong tick, out long? rawValue, out string? text) {
+        rawValue = Live(
+            row: row,
+            cell: cell,
+            baseValue: cell.Value,
+            tick: tick
+        );
+        text = cell.Text;
     }
+
     /// <summary>Finds the winning cell's key over a keyed row under <paramref name="op"/>
     /// (<see cref="StateReduceOp.Max"/> or <see cref="StateReduceOp.Min"/>), resolving each candidate cell's value
     /// through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> after resolving the row once. A cell key
@@ -239,18 +349,24 @@ public static class StateReader {
         Func<int, TState, bool> isCandidateIndex
     ) {
         if (!TryRead(
-            rows: rows,
             key: null,
             rawValue: out _,
             row: out var declared,
             rowName: rowName,
+            rows: rows,
             text: out _,
             tick: tick
         )) {
             return null;
         }
 
-        return ArgExtremumOverRow(declared: declared, op: op, tick: tick, state: state, isCandidateIndex: isCandidateIndex);
+        return ArgExtremumOverRow(
+            declared: declared,
+            isCandidateIndex: isCandidateIndex,
+            op: op,
+            state: state,
+            tick: tick
+        );
     }
     /// <summary>Finds the winning cell like <see cref="ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,TState,Func{int,TState,bool})"/>,
     /// resolving the row through a compiled <paramref name="handle"/> instead of a name scan.</summary>
@@ -275,119 +391,23 @@ public static class StateReader {
     ) {
         _ = TryReadHandle(
             catalog: catalog,
-            rows: rows,
             handle: handle,
             key: null,
             rawValue: out _,
             row: out var declared,
+            rows: rows,
             text: out _,
             tick: tick
         );
 
-        return ArgExtremumOverRow(declared: declared!, op: op, tick: tick, state: state, isCandidateIndex: isCandidateIndex);
-    }
-    private static string? ArgExtremumOverRow<TState>(
-        StateRow declared,
-        StateReduceOp op,
-        ulong tick,
-        TState state,
-        Func<int, TState, bool> isCandidateIndex
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: isCandidateIndex);
-
-        var bestIndex = -1;
-        string? bestKey = null;
-        var bestValue = 0L;
-
-        var cells = (declared.Cells ?? []);
-        for (var candidateIndex = 0; candidateIndex < cells.Count; candidateIndex++) {
-            var candidate = cells[candidateIndex];
-            if (
-                !TryParseCandidateIndex(
-                key: candidate.Key,
-                index: out var index
-            ) ||
-                !isCandidateIndex(arg1: index, arg2: state)
-            ) {
-                continue;
-            }
-
-            ReadKnownCell(row: declared, cell: candidate, tick: tick, rawValue: out var raw, text: out _);
-            var value = raw!.Value;
-            var better = ((bestIndex < 0) || ((op == StateReduceOp.Max)
-                ? (value > bestValue)
-                : (value < bestValue)));
-            var tieLower = ((bestIndex >= 0) && (value == bestValue) && (index < bestIndex));
-
-            if (
-                better ||
-                tieLower
-            ) {
-                bestIndex = index;
-                bestKey = candidate.Key;
-                bestValue = value;
-            }
-        }
-
-        return bestKey;
-    }
-    /// <summary>Parses a keyed row's cell key as a candidate participant index: a non-negative integer in invariant
-    /// decimal form. The one definition of which cell keys name a participant, shared by <see cref="ArgExtremum"/>
-    /// and a host's own carrier scans.</summary>
-    /// <param name="key">The cell key.</param>
-    /// <param name="index">The parsed index, or -1 when the key is not a candidate.</param>
-    /// <returns><see langword="true"/> when <paramref name="key"/> parses as a non-negative integer.</returns>
-    public static bool TryParseCandidateIndex(string key, out int index) {
-        if (
-            int.TryParse(
-            s: key,
-            style: System.Globalization.NumberStyles.Integer,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out index
-        ) &&
-            (index >= 0)
-        ) {
-            return true;
-        }
-
-        index = -1;
-
-        return false;
-    }
-    /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving the row once and each cell
-    /// once through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> — so a table whose cells independently
-    /// advance (<see cref="StateCell.Advance"/>) reduces over every cell's live value for free, never a stale base
-    /// read straight off <see cref="StateCell.Value"/>.</summary>
-    /// <param name="rows">The section's rows.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="op">The reduction to apply. <see cref="StateReduceOp.Count"/> answers with the row's cell count
-    /// as an integer regardless of the row's <see cref="StateRow.Kind"/>; the others preserve that kind.</param>
-    /// <param name="tick">The tick this read is answering as of; used by each cell's value-over-time trait.</param>
-    /// <returns>The reduced value, or <see cref="FixedQ4816.Zero"/> when the row is absent or holds no cells.</returns>
-    public static FixedQ4816 Reduce(IReadOnlyList<StateRow>? rows, string rowName, StateReduceOp op, ulong tick) {
-        if (!TryRead(
-            rows: rows,
-            key: null,
-            rawValue: out _,
-            row: out var declared,
-            rowName: rowName,
-            text: out _,
+        return ArgExtremumOverRow(
+            declared: declared!,
+            isCandidateIndex: isCandidateIndex,
+            op: op,
+            state: state,
             tick: tick
-        )) {
-            return FixedQ4816.Zero;
-        }
-
-        var raw = ((op == StateReduceOp.ArrangementRank) ? ArrangementRank(rows: rows, zone: declared) : ReduceRaw(row: declared, op: op, tick: tick));
-        var kind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank) ? CellKind.Int : declared.Kind);
-
-        return ((kind == CellKind.Fixed)
-            ? FixedQ4816.FromRawBits(value: raw)
-            : LiftSaturating(raw: raw));
+        );
     }
-    /// <summary>The most tokens an arrangement rank or an <c>arrange</c> transform covers: 20! is the last factorial
-    /// below 2^63.</summary>
-    public const int MaxArrangementTokens = 20;
-
     /// <summary>Returns <see cref="ArrangementRank(IReadOnlyList{StateRow}?, StateRow)"/> over a store's rows — the
     /// rank reads token order alone, which the rows carry.</summary>
     /// <param name="store">The store.</param>
@@ -396,12 +416,22 @@ public static class StateReader {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: zone);
         Span<int> ordinals = stackalloc int[MaxArrangementTokens];
-        var count = DomainOrdinals(rows: store.Rows, store: store, zone: zone, ordinals: ordinals);
+        var count = DomainOrdinals(
+            rows: store.Rows,
+            store: store,
+            zone: zone,
+            ordinals: ordinals
+        );
+
         if (count < 0) {
             return -1L;
         }
         Span<int> relative = stackalloc int[MaxArrangementTokens];
-        RelativeOrder(ordinals: ordinals[..count], relative: relative[..count]);
+
+        RelativeOrder(
+            ordinals: ordinals[..count],
+            relative: relative[..count]
+        );
         return unchecked((long)Puck.Maths.Combinatorics.PermutationRank(permutation: relative[..count]));
     }
     /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
@@ -412,66 +442,60 @@ public static class StateReader {
     public static long ArrangementRank(IReadOnlyList<StateRow>? rows, StateRow zone) {
         ArgumentNullException.ThrowIfNull(argument: zone);
         Span<int> ordinals = stackalloc int[MaxArrangementTokens];
-        var count = DomainOrdinals(rows: rows, zone: zone, ordinals: ordinals);
+        var count = DomainOrdinals(
+            ordinals: ordinals,
+            rows: rows,
+            zone: zone
+        );
+
         if (count < 0) {
             return -1L;
         }
         Span<int> relative = stackalloc int[MaxArrangementTokens];
-        RelativeOrder(ordinals: ordinals[..count], relative: relative[..count]);
+
+        RelativeOrder(
+            ordinals: ordinals[..count],
+            relative: relative[..count]
+        );
         return unchecked((long)Puck.Maths.Combinatorics.PermutationRank(permutation: relative[..count]));
     }
-
     /// <summary>Fills each zone token's ordinal in its token domain's cell order, in zone order. Returns the token
     /// count, or -1 when the zone is not an ordered zone, exceeds <see cref="MaxArrangementTokens"/>, or holds a
     /// token the domain does not declare.</summary>
     /// <param name="rows">The section's rows.</param>
     /// <param name="zone">The ordered zone.</param>
     /// <param name="ordinals">Scratch of at least <see cref="MaxArrangementTokens"/>.</param>
-    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) => DomainOrdinals(rows: rows, store: null, zone: zone, ordinals: ordinals);
-
-    // The zone's members come from the store when one is given (a frame that has transferred them), else from the row.
-    private static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateStore? store, StateRow zone, Span<int> ordinals) {
-        var cells = (zone.Cells ?? []);
-        var count = ((store is not null) ? store.CellCount(row: zone) : cells.Count);
-        if (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf || count > MaxArrangementTokens ||
-            StateRows.FindStateRow(rows: rows, name: keysOf.Row.Value) is not { Cells: { } domain }) {
-            return -1;
-        }
-        for (var index = 0; index < count; index++) {
-            var key = cells.Count > index ? cells[index].Key : default;
-            if ((store is not null) && !store.TryKeyAt(row: zone, index: index, key: out key)) {
-                return -1;
-            }
-            var ordinal = -1;
-            for (var candidate = 0; candidate < domain.Count; candidate++) {
-                if (domain[candidate].Key == key) {
-                    ordinal = candidate;
-                    break;
-                }
-            }
-            if (ordinal < 0) {
-                return -1;
-            }
-            ordinals[index] = ordinal;
-        }
-        return count;
-    }
-
-    /// <summary>Maps distinct ordinals to their ranks among themselves — 0 for the smallest — so a subset's order is
-    /// a permutation of 0..k-1.</summary>
-    /// <param name="ordinals">The ordinals, distinct.</param>
-    /// <param name="relative">Receives each ordinal's rank.</param>
-    public static void RelativeOrder(ReadOnlySpan<int> ordinals, Span<int> relative) {
-        for (var index = 0; index < ordinals.Length; index++) {
-            var rank = 0;
-            for (var other = 0; other < ordinals.Length; other++) {
-                if (ordinals[other] < ordinals[index]) {
-                    rank++;
-                }
-            }
-            relative[index] = rank;
-        }
-    }
+    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) => DomainOrdinals(
+        ordinals: ordinals,
+        rows: rows,
+        store: null,
+        zone: zone
+    );
+    /// <summary>The inverse of <see cref="DynamicsRowRawToFixed"/> — narrows a continuous value back to the row's own
+    /// raw encoding: exact for <see cref="CellKind.Fixed"/>, nearest whole number (ties to even) for every other
+    /// kind.</summary>
+    /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
+    /// <param name="value">The continuous value.</param>
+    /// <returns>The row-kind-encoded raw value.</returns>
+    public static long DynamicsFixedToRowRaw(StateRow row, FixedQ4816 value) => ((row.Kind == CellKind.Fixed)
+        ? value.Value
+        : (FixedQ4816.Round(value: value).Value >> FixedQ4816.FractionBitCount)
+    );
+    /// <summary>Writes continuous dynamics state to its fixed-native raw carrier without narrowing.</summary>
+    /// <param name="value">The continuous value.</param>
+    public static long DynamicsFixedToTraitRaw(FixedQ4816 value) => value.Value;
+    /// <summary>Converts a row-stored target into the continuous quantity a follower computes in.</summary>
+    /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
+    /// <param name="raw">The raw value.</param>
+    /// <returns>Raw <c>FixedQ4816</c> bits reinterpreted for <see cref="CellKind.Fixed"/>; <paramref name="raw"/>
+    /// lifted as a whole number for every other kind.</returns>
+    public static FixedQ4816 DynamicsRowRawToFixed(StateRow row, long raw) => ((row.Kind == CellKind.Fixed)
+        ? FixedQ4816.FromRawBits(value: raw)
+        : LiftSaturating(raw: raw)
+    );
+    /// <summary>Reads fixed-native dynamics state from its raw carrier.</summary>
+    /// <param name="raw">The raw carrier.</param>
+    public static FixedQ4816 DynamicsTraitRawToFixed(long raw) => FixedQ4816.FromRawBits(value: raw);
     /// <summary>Lifts a whole-number cell to fixed point, saturating at <see cref="FixedQ4816"/>'s integer band.
     /// An int cell spans the whole <see cref="long"/>; the few readers that need a continuous quantity (a symmetry
     /// node, a dynamics target, a participant-reference key) clamp rather than throw, so no authored value can fault
@@ -479,161 +503,10 @@ public static class StateReader {
     /// <param name="raw">The int cell's whole value.</param>
     /// <returns>The value as fixed point, clamped to the representable integer band.</returns>
     public static FixedQ4816 LiftSaturating(long raw) => FixedQ4816.FromInteger(value: Math.Clamp(
-        value: raw,
+        max: (long.MaxValue >> FixedQ4816.FractionBitCount),
         min: (long.MinValue >> FixedQ4816.FractionBitCount),
-        max: (long.MaxValue >> FixedQ4816.FractionBitCount)
+        value: raw
     ));
-
-    /// <summary>Reduces a resolved row directly in its native raw encoding. Each declared cell is read once, so the
-    /// walk is linear in cell count.</summary>
-    /// <param name="row">The already-resolved row.</param>
-    /// <param name="op">The reduction to apply.</param>
-    /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
-    /// <returns>The native raw reduction, or zero for an empty row.</returns>
-    public static long ReduceRaw(StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(store: null, row: row, op: op, tick: tick);
-    /// <summary>Reduces a resolved row through a store, on <see cref="ReduceRaw(StateRow, StateReduceOp, ulong)"/>'s terms.</summary>
-    /// <param name="store">Where each cell's stored value is read, or <see langword="null"/> for the row's own cells.</param>
-    /// <param name="row">The already-resolved row.</param>
-    /// <param name="op">The reduction to apply.</param>
-    /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
-    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(store, row, op, tick, null, null);
-
-    /// <summary>Reduces current membership with an optional nonzero keyed filter and inclusive raw range.
-    /// The filter is indexed in read-local scratch; unfiltered count remains constant-time.</summary>
-    /// <param name="store">The current value store, or null for authored cells.</param>
-    /// <param name="row">The source row.</param>
-    /// <param name="op">The aggregate.</param>
-    /// <param name="tick">The evaluation tick.</param>
-    /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
-    /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
-    /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank, which requires its own reader.</returns>
-    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick, StateRow? filter, (long Lower, long Upper)? range) =>
-        ReduceRaw(store: store, rowOrdinal: -1, row: row, op: op, tick: tick, filterOrdinal: -1, filter: filter, range: range);
-
-    /// <summary>Reduces a resolved row through a store with pre-resolved row ordinals.</summary>
-    /// <param name="store">Where stored values are read, or null to read the row's own cells.</param>
-    /// <param name="rowOrdinal">The row's ordinal in the store, or -1 to resolve by row.</param>
-    /// <param name="row">The resolved source row.</param>
-    /// <param name="op">The aggregate to compute.</param>
-    /// <param name="tick">The tick whose live values are reduced.</param>
-    /// <param name="filterOrdinal">The filter's ordinal in the store, or -1 to resolve by row.</param>
-    /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
-    /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
-    /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank.</returns>
-    public static long ReduceRaw(StateStore? store, int rowOrdinal, StateRow row, StateReduceOp op, ulong tick, int filterOrdinal, StateRow? filter, (long Lower, long Upper)? range) {
-        ArgumentNullException.ThrowIfNull(row);
-        var count = store is null ? row.Cells?.Count ?? 0
-            : (rowOrdinal >= 0 ? store.CellCount(rowOrdinal: rowOrdinal) : store.CellCount(row: row));
-        if (op == StateReduceOp.Count && filter is null && range is null) { return count; }
-        if (op == StateReduceOp.ArrangementRank) { return -1L; }
-        if (count == 0) { return 0L; }
-
-        // Dense frames can hold keys outside the authored cell list. Their keyed path resolves topology ordinals.
-        var denseFilter = store is StateFrame && filter?.EffectiveDomain is StateDomain.CellsOf;
-        var filterCount = 0;
-        if (filter is not null && !denseFilter) {
-            filterCount = store is null ? filter.Cells?.Count ?? 0
-                : (filterOrdinal >= 0 ? store.CellCount(rowOrdinal: filterOrdinal) : store.CellCount(row: filter));
-        }
-        var scratchLength = filter is null || denseFilter ? 0 : CellOrdinalIndex.ScratchLength(filterCount);
-        var rented = scratchLength > 512 ? System.Buffers.ArrayPool<int>.Shared.Rent(scratchLength) : null;
-        var scratch = rented is null ? stackalloc int[scratchLength] : rented.AsSpan(0, scratchLength);
-        try {
-            var lookup = filter is null || denseFilter ? default : new CellOrdinalIndex(store, filter, scratch, rowOrdinal: filterOrdinal);
-            var hasValue = false;
-            var accumulator = 0L;
-            for (var index = 0; index < count; index++) {
-                if (filter is not null) {
-                    var key = default(CellName);
-                    if (store is not null) {
-                        var foundKey = rowOrdinal >= 0
-                            ? store.TryKeyAt(rowOrdinal: rowOrdinal, index: index, key: out key)
-                            : store.TryKeyAt(row: row, index: index, key: out key);
-                        if (!foundKey) { continue; }
-                    } else {
-                        key = row.Cells![index].Key;
-                    }
-                    if (denseFilter) {
-                        ReadCell(store!, filterOrdinal, filter, key, tick, out var admitted, out _);
-                        if (admitted is null or 0L) { continue; }
-                    } else {
-                        var filterIndex = lookup.Find(key);
-                        if (filterIndex < 0 || LiveAt(store, filterOrdinal, filter, filterIndex, tick) == 0L) { continue; }
-                    }
-                }
-                var raw = range is not null || op != StateReduceOp.Count ? LiveAt(store, rowOrdinal, row, index, tick) : 0L;
-                if (range is { } bounds && (raw < bounds.Lower || raw > bounds.Upper)) { continue; }
-                if (op == StateReduceOp.Count) { accumulator++; continue; }
-                accumulator = !hasValue ? raw : op switch {
-                    StateReduceOp.Sum => unchecked(accumulator + raw),
-                    StateReduceOp.Max => Math.Max(accumulator, raw),
-                    _ => Math.Min(accumulator, raw),
-                };
-                hasValue = true;
-            }
-            return accumulator;
-        } finally {
-            if (rented is not null) { System.Buffers.ArrayPool<int>.Shared.Return(rented); }
-        }
-    }
-    // Known-cell reads share advancing-value semantics and use the store's ordinal path, including scratch frames.
-    internal static long LiveAt(StateStore? store, StateRow row, int index, ulong tick) =>
-        LiveAt(store: store, rowOrdinal: -1, row: row, index: index, tick: tick);
-
-    internal static long LiveAt(StateStore? store, int rowOrdinal, StateRow row, int index, ulong tick) {
-        var stored = 0L;
-        var found = store is not null && ((rowOrdinal >= 0)
-            ? store.TryStoredAt(rowOrdinal: rowOrdinal, index: index, value: out stored)
-            : store.TryStoredAt(row: row, index: index, value: out stored));
-
-        // A resolved frame row with no time traits needs no authored metadata. In particular, a zone reduction
-        // must not scan its authored members once per live member just to discover that there is no trait.
-        if (found && (rowOrdinal >= 0) && (store is StateFrame frame) && !frame.Layout[rowOrdinal].HasTraits) {
-            return stored;
-        }
-
-        // Zone membership can move independently of authored metadata; resolve its trait by the current key.
-        StateCell? cell;
-        if (store is StateFrame && row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
-            var hasKey = (rowOrdinal >= 0)
-                ? store.TryKeyAt(rowOrdinal: rowOrdinal, index: index, key: out var key)
-                : store.TryKeyAt(row: row, index: index, key: out key);
-            cell = hasKey ? StateRows.FindCell(cells: row.Cells, key: key) : null;
-        } else {
-            cell = ((uint)index < (uint)(row.Cells?.Count ?? 0)) ? row.Cells![index] : null;
-        }
-        return Live(row, cell, found ? stored : (cell?.Value ?? 0L), tick);
-    }
-    /// <summary>Resolves one (row, key) pair against a store, on <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
-    /// <param name="store">Where the cell's stored value is read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="row">The named row, or <see langword="null"/>.</param>
-    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static bool TryRead(
-        StateStore store,
-        string rowName,
-        string? key,
-        ulong tick,
-        [NotNullWhen(true)] out StateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: store);
-        rawValue = null;
-        text = null;
-        row = store.Find(name: rowName);
-
-        if (row is null) {
-            return false;
-        }
-
-        ReadCell(store: store, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
-
-        return true;
-    }
     /// <summary>Reads one cell of a resolved row through a store: the stored value beneath the key under the row's
     /// value-over-time trait, or <see langword="null"/> when the store holds no cell under that key.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
@@ -643,8 +516,15 @@ public static class StateReader {
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
     public static void ReadCell(StateStore store, StateRow row, string? key, ulong tick, out long? rawValue, out string? text) =>
-        ReadCell(store: store, rowOrdinal: -1, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
-
+        ReadCell(
+            key: key,
+            rawValue: out rawValue,
+            row: row,
+            rowOrdinal: -1,
+            store: store,
+            text: out text,
+            tick: tick
+        );
     /// <summary>Reads one cell of a resolved row through a store by row ordinal and string key.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
     /// <param name="rowOrdinal">The row's ordinal.</param>
@@ -659,13 +539,24 @@ public static class StateReader {
         text = null;
         var target = (key ?? StateRow.SlotKey.Value);
 
-        if (!CellName.TryParse(candidate: target, name: out var targetKey, reason: out _)) {
+        if (!CellName.TryParse(
+            candidate: target,
+            name: out var targetKey,
+            reason: out _
+        )) {
             return;
         }
 
-        ReadCell(store: store, rowOrdinal: rowOrdinal, row: row, key: targetKey, tick: tick, rawValue: out rawValue, text: out text);
+        ReadCell(
+            key: targetKey,
+            rawValue: out rawValue,
+            row: row,
+            rowOrdinal: rowOrdinal,
+            store: store,
+            text: out text,
+            tick: tick
+        );
     }
-
     /// <summary>Reads one cell of a resolved row through a store by row ordinal and pre-parsed cell key.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
     /// <param name="rowOrdinal">The row's ordinal.</param>
@@ -679,57 +570,34 @@ public static class StateReader {
         rawValue = null;
         text = null;
 
-        var found = (rowOrdinal >= 0)
-            ? store.TryStored(rowOrdinal: rowOrdinal, key: key, value: out var stored, text: out text, cell: out var cell)
-            : store.TryStored(row: row, key: key, value: out stored, text: out text, cell: out cell);
+        var found = ((rowOrdinal >= 0)
+            ? store.TryStored(
+                cell: out var cell,
+                key: key,
+                rowOrdinal: rowOrdinal,
+                text: out text,
+                value: out var stored
+            )
+            : store.TryStored(
+                cell: out cell,
+                key: key,
+                row: row,
+                text: out text,
+                value: out stored
+            )
+        );
 
         if (!found) {
             return;
         }
 
-        rawValue = Live(row: row, cell: cell, baseValue: stored, tick: tick);
-    }
-    /// <summary>Resolves one (row, key) pair against a section's live rows.</summary>
-    /// <param name="rows">The section's rows, or <see langword="null"/> for none.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell
-    /// (<see cref="StateRow.SlotKey"/>).</param>
-    /// <param name="tick">The tick this read is answering as of — what an advancing row's value is computed at.
-    /// Callers pass the tick their frame already knows: the authority's completed tick on the authoritative side,
-    /// the last delivered snapshot's tick on a client (which is an authority tick, so it is comparable to an epoch;
-    /// it lags by delivery, never by a different clock).</param>
-    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when the row declares no
-    /// cell under that key — a distinct outcome from an unknown row, because a rule effect's read-modify-write treats
-    /// an absent cell as zero but an absent row as nothing to write.</param>
-    /// <param name="text">The addressed cell's text payload (<see cref="CellKind.Text"/> rows only), or
-    /// <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolved (whether or not it holds the addressed cell).</returns>
-    public static bool TryRead(
-        IReadOnlyList<StateRow>? rows,
-        string rowName,
-        string? key,
-        ulong tick,
-        [NotNullWhen(true)] out StateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        rawValue = null;
-        text = null;
-        row = StateRows.FindStateRow(
-            rows: rows,
-            name: rowName
+        rawValue = Live(
+            baseValue: stored,
+            cell: cell,
+            row: row,
+            tick: tick
         );
-
-        if (row is null) {
-            return false;
-        }
-
-        ReadCell(key: key, rawValue: out rawValue, row: row, text: out text, tick: tick);
-
-        return true;
     }
-
     /// <summary>Reads one cell of an already resolved row: the live raw value as of <paramref name="tick"/> under the
     /// row's value-over-time trait, or <see langword="null"/> when the key names no cell.</summary>
     /// <param name="row">The resolved row.</param>
@@ -756,114 +624,274 @@ public static class StateReader {
             return;
         }
 
-        ReadKnownCell(row: row, cell: cell, tick: tick, rawValue: out rawValue, text: out text);
-    }
-
-    private static void ReadKnownCell(StateRow row, StateCell cell, ulong tick, out long? rawValue, out string? text) {
-        rawValue = Live(row: row, cell: cell, baseValue: cell.Value, tick: tick);
-        text = cell.Text;
-    }
-
-    // The live value of a stored base under the row's and the cell's own value-over-time traits; a cell the row
-    // does not list (a frame's dense board cell) carries no trait of its own.
-    private static long Live(StateRow row, StateCell? cell, long baseValue, ulong tick) {
-        var isSlot = ((cell is null) ? false : (cell.Key == StateRow.SlotKey));
-
-        if ((row.Advance is { } advance) && isSlot) {
-            return advance.ComputeCurrentValue(row: row, baseValue: baseValue, currentTick: tick);
-        }
-        if ((row.Cycle is { } cycle) && isSlot) {
-            return cycle.ComputeCurrentValue(row: row, baseValue: baseValue, currentTick: tick);
-        }
-        if (cell?.Advance is { } cellAdvance) {
-            return cellAdvance.ComputeCurrentValue(row: row, baseValue: baseValue, currentTick: tick);
-        }
-        if (cell?.Cycle is { } cellCycle) {
-            return cellCycle.ComputeCurrentValue(row: row, baseValue: baseValue, currentTick: tick);
-        }
-
-        return baseValue;
-    }
-
-    /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> does, except a cell carrying a
-    /// <see cref="StateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>
-    /// (<see cref="TryEvaluateDynamics"/>) rather than its stored truth — the read a plain presentation binding takes;
-    /// a rule gate, an arithmetic write's operand, and a target facet all keep reading <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s truth
-    /// instead. A cell with no trait, or one whose trait names a <c>dynamics</c> row the section no longer declares
-    /// (live only mid-tick — every other door refuses a dangling reference at author time), reads bit-identically to
-    /// <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>.</summary>
-    /// <param name="rows">The section's rows.</param>
-    /// <param name="dynamics">The declared dynamics rows the trait's reference resolves against.</param>
-    /// <param name="ticksPerSecond">The simulation rate the follower is stepped at; a rate of zero or below reads
-    /// the stored truth.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
-    /// <param name="tick">The tick this read is answering as of.</param>
-    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when the row
-    /// declares no cell under that key.</param>
-    /// <param name="text">The addressed cell's text payload (<see cref="CellKind.Text"/> rows only, never eased), or
-    /// <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolved.</returns>
-    public static bool TryReadEased(
-        IReadOnlyList<StateRow>? rows,
-        IReadOnlyList<DynamicsRow>? dynamics,
-        int ticksPerSecond,
-        string rowName,
-        string? key,
-        ulong tick,
-        [NotNullWhen(true)] out StateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        if (!TryRead(
-            rows: rows,
-            key: key,
+        ReadKnownCell(
+            cell: cell,
             rawValue: out rawValue,
-            row: out row,
-            rowName: rowName,
+            row: row,
             text: out text,
             tick: tick
+        );
+    }
+    /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving the row once and each cell
+    /// once through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> — so a table whose cells independently
+    /// advance (<see cref="StateCell.Advance"/>) reduces over every cell's live value for free, never a stale base
+    /// read straight off <see cref="StateCell.Value"/>.</summary>
+    /// <param name="rows">The section's rows.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="op">The reduction to apply. <see cref="StateReduceOp.Count"/> answers with the row's cell count
+    /// as an integer regardless of the row's <see cref="StateRow.Kind"/>; the others preserve that kind.</param>
+    /// <param name="tick">The tick this read is answering as of; used by each cell's value-over-time trait.</param>
+    /// <returns>The reduced value, or <see cref="FixedQ4816.Zero"/> when the row is absent or holds no cells.</returns>
+    public static FixedQ4816 Reduce(IReadOnlyList<StateRow>? rows, string rowName, StateReduceOp op, ulong tick) {
+        if (!TryRead(
+            key: null,
+            rawValue: out _,
+            row: out var declared,
+            rowName: rowName,
+            rows: rows,
+            text: out _,
+            tick: tick
         )) {
-            return false;
+            return FixedQ4816.Zero;
         }
 
-        if (rawValue is not long) {
-            return true;
-        }
-
-        var target = (key ?? StateRow.SlotKey.Value);
-        var cell = (CellName.TryParse(
-            candidate: target,
-            name: out var targetKey,
-            reason: out _
-        )
-            ? StateRows.FindCell(
-                cells: row.Cells,
-                key: targetKey
+        var raw = ((op == StateReduceOp.ArrangementRank)
+            ? ArrangementRank(
+                rows: rows,
+                zone: declared
             )
-            : null
+            : ReduceRaw(
+                op: op,
+                row: declared,
+                tick: tick
+            )
+        );
+        var kind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank)
+            ? CellKind.Int
+            : declared.Kind
         );
 
-        if (
-            (cell is { } resolvedCell) &&
-            TryEvaluateDynamics(
-            cell: resolvedCell,
-            dynamics: dynamics,
-            ticksPerSecond: ticksPerSecond,
+        return ((kind == CellKind.Fixed)
+            ? FixedQ4816.FromRawBits(value: raw)
+            : LiftSaturating(raw: raw)
+        );
+    }
+    /// <summary>Reduces a resolved row directly in its native raw encoding. Each declared cell is read once, so the
+    /// walk is linear in cell count.</summary>
+    /// <param name="row">The already-resolved row.</param>
+    /// <param name="op">The reduction to apply.</param>
+    /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
+    /// <returns>The native raw reduction, or zero for an empty row.</returns>
+    public static long ReduceRaw(StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(
+        op: op,
+        row: row,
+        store: null,
+        tick: tick
+    );
+    /// <summary>Reduces a resolved row through a store, on <see cref="ReduceRaw(StateRow, StateReduceOp, ulong)"/>'s terms.</summary>
+    /// <param name="store">Where each cell's stored value is read, or <see langword="null"/> for the row's own cells.</param>
+    /// <param name="row">The already-resolved row.</param>
+    /// <param name="op">The reduction to apply.</param>
+    /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
+    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(
+        filter: null,
+        op: op,
+        range: null,
+        row: row,
+        store: store,
+        tick: tick
+    );
+    /// <summary>Reduces current membership with an optional nonzero keyed filter and inclusive raw range.
+    /// The filter is indexed in read-local scratch; unfiltered count remains constant-time.</summary>
+    /// <param name="store">The current value store, or null for authored cells.</param>
+    /// <param name="row">The source row.</param>
+    /// <param name="op">The aggregate.</param>
+    /// <param name="tick">The evaluation tick.</param>
+    /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
+    /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
+    /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank, which requires its own reader.</returns>
+    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick, StateRow? filter, (long Lower, long Upper)? range) =>
+        ReduceRaw(
+            filter: filter,
+            filterOrdinal: -1,
+            op: op,
+            range: range,
             row: row,
-            sample: out var sample,
-            tick: tick,
-            trait: out _
-        )
+            rowOrdinal: -1,
+            store: store,
+            tick: tick
+        );
+    /// <summary>Reduces a resolved row through a store with pre-resolved row ordinals.</summary>
+    /// <param name="store">Where stored values are read, or null to read the row's own cells.</param>
+    /// <param name="rowOrdinal">The row's ordinal in the store, or -1 to resolve by row.</param>
+    /// <param name="row">The resolved source row.</param>
+    /// <param name="op">The aggregate to compute.</param>
+    /// <param name="tick">The tick whose live values are reduced.</param>
+    /// <param name="filterOrdinal">The filter's ordinal in the store, or -1 to resolve by row.</param>
+    /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
+    /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
+    /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank.</returns>
+    public static long ReduceRaw(StateStore? store, int rowOrdinal, StateRow row, StateReduceOp op, ulong tick, int filterOrdinal, StateRow? filter, (long Lower, long Upper)? range) {
+        ArgumentNullException.ThrowIfNull(row);
+        var count = ((store is null)
+            ? (row.Cells?.Count ?? 0)
+            : ((rowOrdinal >= 0)
+                ? store.CellCount(rowOrdinal: rowOrdinal)
+                : store.CellCount(row: row)
+        ));
+
+        if (
+            (op == StateReduceOp.Count) &&
+            (filter is null) &&
+            (range is null)
+        ) { return count; }
+        if (op == StateReduceOp.ArrangementRank) { return -1L; }
+        if (count == 0) { return 0L; }
+
+        // Dense frames can hold keys outside the authored cell list. Their keyed path resolves topology ordinals.
+        var denseFilter = ((store is StateFrame) && (filter?.EffectiveDomain is StateDomain.CellsOf));
+        var filterCount = 0;
+
+        if (
+            (filter is not null) &&
+            !denseFilter
         ) {
-            rawValue = row.ClampToEnvelope(value: DynamicsFixedToRowRaw(
-                row: row,
-                value: sample.Value
+            filterCount = ((store is null)
+                ? (filter.Cells?.Count ?? 0)
+                : ((filterOrdinal >= 0)
+                    ? store.CellCount(rowOrdinal: filterOrdinal)
+                    : store.CellCount(row: filter)
             ));
         }
+        var scratchLength = (((filter is null) || denseFilter)
+            ? 0
+            : CellOrdinalIndex.ScratchLength(count: filterCount)
+        );
+        var rented = ((scratchLength > 512)
+            ? System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: scratchLength)
+            : null
+        );
+        var scratch = ((rented is null)
+            ? stackalloc int[scratchLength]
+            : rented.AsSpan(
+                length: scratchLength,
+                start: 0
+            )
+        );
 
-        return true;
+        try {
+            var lookup = (((filter is null) || denseFilter)
+                ? default
+                : new CellOrdinalIndex(
+                    store,
+                    filter,
+                    scratch,
+                    rowOrdinal: filterOrdinal
+                )
+            );
+            var hasValue = false;
+            var accumulator = 0L;
+
+            for (var index = 0; (index < count); index++) {
+                if (filter is not null) {
+                    var key = default(CellName);
+
+                    if (store is not null) {
+                        var foundKey = ((rowOrdinal >= 0)
+                            ? store.TryKeyAt(
+                                index: index,
+                                key: out key,
+                                rowOrdinal: rowOrdinal
+                            )
+                            : store.TryKeyAt(
+                                index: index,
+                                key: out key,
+                                row: row
+                            )
+                        );
+
+                        if (!foundKey) { continue; }
+                    } else {
+                        key = row.Cells![index].Key;
+                    }
+                    if (denseFilter) {
+                        ReadCell(
+                            key: key,
+                            rawValue: out var admitted,
+                            row: filter,
+                            rowOrdinal: filterOrdinal,
+                            store: store!,
+                            text: out _,
+                            tick: tick
+                        );
+                        if (admitted is null or 0L) { continue; }
+                    } else {
+                        var filterIndex = lookup.Find(key: key);
+
+                        if (
+                            (filterIndex < 0) ||
+                            (LiveAt(
+                            index: filterIndex,
+                            row: filter,
+                            rowOrdinal: filterOrdinal,
+                            store: store,
+                            tick: tick
+                        ) == 0L)
+                        ) { continue; }
+                    }
+                }
+                var raw = (((range is not null) || (op != StateReduceOp.Count))
+                    ? LiveAt(
+                        index: index,
+                        row: row,
+                        rowOrdinal: rowOrdinal,
+                        store: store,
+                        tick: tick
+                    )
+                    : 0L
+                );
+
+                if (
+                    (range is { } bounds) &&
+                    ((raw < bounds.Lower) || (raw > bounds.Upper))
+                ) { continue; }
+                if (op == StateReduceOp.Count) { accumulator++; continue; }
+                accumulator = (!hasValue
+                    ? raw
+                    : op switch {
+                    StateReduceOp.Sum => unchecked((accumulator + raw)),
+                    StateReduceOp.Max => Math.Max(
+                        val1: accumulator,
+                        val2: raw
+                    ),
+                    _ => Math.Min(
+                        val1: accumulator,
+                        val2: raw
+                    ),
+                }
+                );
+                hasValue = true;
+            }
+            return accumulator;
+        } finally {
+            if (rented is not null) { System.Buffers.ArrayPool<int>.Shared.Return(rented); }
+        }
+    }
+    /// <summary>Maps distinct ordinals to their ranks among themselves — 0 for the smallest — so a subset's order is
+    /// a permutation of 0..k-1.</summary>
+    /// <param name="ordinals">The ordinals, distinct.</param>
+    /// <param name="relative">Receives each ordinal's rank.</param>
+    public static void RelativeOrder(ReadOnlySpan<int> ordinals, Span<int> relative) {
+        for (var index = 0; (index < ordinals.Length); index++) {
+            var rank = 0;
+
+            for (var other = 0; (other < ordinals.Length); other++) {
+                if (ordinals[other] < ordinals[index]) {
+                    rank++;
+                }
+            }
+            relative[index] = rank;
+        }
     }
     /// <summary>Evaluates <paramref name="cell"/>'s <see cref="StateDynamics"/> easing trait — the row's own
     /// <see cref="StateRow.Dynamics"/> for the slot cell, else <paramref name="cell"/>'s own
@@ -916,10 +944,12 @@ public static class StateReader {
 
         var epoch = ((trait.EpochTick < 0L)
             ? 0UL
-            : (ulong)trait.EpochTick);
+            : (ulong)trait.EpochTick
+        );
         var elapsed = ((tick > epoch)
             ? (tick - epoch)
-            : 0UL);
+            : 0UL
+        );
 
         sample = dynamicsRow.Compiled.Evaluate(
             elapsedTicks: elapsed,
@@ -934,27 +964,378 @@ public static class StateReader {
 
         return true;
     }
-    /// <summary>Converts a row-stored target into the continuous quantity a follower computes in.</summary>
-    /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
-    /// <param name="raw">The raw value.</param>
-    /// <returns>Raw <c>FixedQ4816</c> bits reinterpreted for <see cref="CellKind.Fixed"/>; <paramref name="raw"/>
-    /// lifted as a whole number for every other kind.</returns>
-    public static FixedQ4816 DynamicsRowRawToFixed(StateRow row, long raw) => ((row.Kind == CellKind.Fixed)
-        ? FixedQ4816.FromRawBits(value: raw)
-        : LiftSaturating(raw: raw));
-    /// <summary>Reads fixed-native dynamics state from its raw carrier.</summary>
-    /// <param name="raw">The raw carrier.</param>
-    public static FixedQ4816 DynamicsTraitRawToFixed(long raw) => FixedQ4816.FromRawBits(value: raw);
-    /// <summary>Writes continuous dynamics state to its fixed-native raw carrier without narrowing.</summary>
-    /// <param name="value">The continuous value.</param>
-    public static long DynamicsFixedToTraitRaw(FixedQ4816 value) => value.Value;
-    /// <summary>The inverse of <see cref="DynamicsRowRawToFixed"/> — narrows a continuous value back to the row's own
-    /// raw encoding: exact for <see cref="CellKind.Fixed"/>, nearest whole number (ties to even) for every other
-    /// kind.</summary>
-    /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
-    /// <param name="value">The continuous value.</param>
-    /// <returns>The row-kind-encoded raw value.</returns>
-    public static long DynamicsFixedToRowRaw(StateRow row, FixedQ4816 value) => ((row.Kind == CellKind.Fixed)
-        ? value.Value
-        : (FixedQ4816.Round(value: value).Value >> FixedQ4816.FractionBitCount));
+    /// <summary>Parses a keyed row's cell key as a candidate participant index: a non-negative integer in invariant
+    /// decimal form. The one definition of which cell keys name a participant, shared by <see cref="ArgExtremum"/>
+    /// and a host's own carrier scans.</summary>
+    /// <param name="key">The cell key.</param>
+    /// <param name="index">The parsed index, or -1 when the key is not a candidate.</param>
+    /// <returns><see langword="true"/> when <paramref name="key"/> parses as a non-negative integer.</returns>
+    public static bool TryParseCandidateIndex(string key, out int index) {
+        if (
+            int.TryParse(
+            s: key,
+            style: System.Globalization.NumberStyles.Integer,
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            result: out index
+        ) &&
+            (index >= 0)
+        ) {
+            return true;
+        }
+
+        index = -1;
+
+        return false;
+    }
+    /// <summary>Resolves one (row, key) pair against a store, on <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
+    /// <param name="store">Where the cell's stored value is read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The named row, or <see langword="null"/>.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    public static bool TryRead(
+        StateStore store,
+        string rowName,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out StateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+        rawValue = null;
+        text = null;
+        row = store.Find(name: rowName);
+
+        if (row is null) {
+            return false;
+        }
+
+        ReadCell(
+            key: key,
+            rawValue: out rawValue,
+            row: row,
+            store: store,
+            text: out text,
+            tick: tick
+        );
+
+        return true;
+    }
+    /// <summary>Resolves one (row, key) pair against a section's live rows.</summary>
+    /// <param name="rows">The section's rows, or <see langword="null"/> for none.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell
+    /// (<see cref="StateRow.SlotKey"/>).</param>
+    /// <param name="tick">The tick this read is answering as of — what an advancing row's value is computed at.
+    /// Callers pass the tick their frame already knows: the authority's completed tick on the authoritative side,
+    /// the last delivered snapshot's tick on a client (which is an authority tick, so it is comparable to an epoch;
+    /// it lags by delivery, never by a different clock).</param>
+    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
+    /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when the row declares no
+    /// cell under that key — a distinct outcome from an unknown row, because a rule effect's read-modify-write treats
+    /// an absent cell as zero but an absent row as nothing to write.</param>
+    /// <param name="text">The addressed cell's text payload (<see cref="CellKind.Text"/> rows only), or
+    /// <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolved (whether or not it holds the addressed cell).</returns>
+    public static bool TryRead(
+        IReadOnlyList<StateRow>? rows,
+        string rowName,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out StateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        rawValue = null;
+        text = null;
+        row = StateRows.FindStateRow(
+            name: rowName,
+            rows: rows
+        );
+
+        if (row is null) {
+            return false;
+        }
+
+        ReadCell(
+            key: key,
+            rawValue: out rawValue,
+            row: row,
+            text: out text,
+            tick: tick
+        );
+
+        return true;
+    }
+    /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> does, except a cell carrying a
+    /// <see cref="StateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>
+    /// (<see cref="TryEvaluateDynamics"/>) rather than its stored truth — the read a plain presentation binding takes;
+    /// a rule gate, an arithmetic write's operand, and a target facet all keep reading <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s truth
+    /// instead. A cell with no trait, or one whose trait names a <c>dynamics</c> row the section no longer declares
+    /// (live only mid-tick — every other door refuses a dangling reference at author time), reads bit-identically to
+    /// <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>.</summary>
+    /// <param name="rows">The section's rows.</param>
+    /// <param name="dynamics">The declared dynamics rows the trait's reference resolves against.</param>
+    /// <param name="ticksPerSecond">The simulation rate the follower is stepped at; a rate of zero or below reads
+    /// the stored truth.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick this read is answering as of.</param>
+    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
+    /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when the row
+    /// declares no cell under that key.</param>
+    /// <param name="text">The addressed cell's text payload (<see cref="CellKind.Text"/> rows only, never eased), or
+    /// <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolved.</returns>
+    public static bool TryReadEased(
+        IReadOnlyList<StateRow>? rows,
+        IReadOnlyList<DynamicsRow>? dynamics,
+        int ticksPerSecond,
+        string rowName,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out StateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        if (!TryRead(
+            key: key,
+            rawValue: out rawValue,
+            row: out row,
+            rowName: rowName,
+            rows: rows,
+            text: out text,
+            tick: tick
+        )) {
+            return false;
+        }
+
+        if (rawValue is not long) {
+            return true;
+        }
+
+        var target = (key ?? StateRow.SlotKey.Value);
+        var cell = (CellName.TryParse(
+            candidate: target,
+            name: out var targetKey,
+            reason: out _
+        )
+            ? StateRows.FindCell(
+                cells: row.Cells,
+                key: targetKey
+            )
+            : null
+        );
+
+        if (
+            (cell is { } resolvedCell) &&
+            TryEvaluateDynamics(
+            cell: resolvedCell,
+            dynamics: dynamics,
+            row: row,
+            sample: out var sample,
+            tick: tick,
+            ticksPerSecond: ticksPerSecond,
+            trait: out _
+        )
+        ) {
+            rawValue = row.ClampToEnvelope(value: DynamicsFixedToRowRaw(
+                row: row,
+                value: sample.Value
+            ));
+        }
+
+        return true;
+    }
+    /// <summary>Resolves one document-owned row by its compiled typed handle without a row-name scan.</summary>
+    /// <param name="rows">The section's rows.</param>
+    /// <param name="catalog">The section's current state catalog.</param>
+    /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
+    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The resolved row.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolves. Never returns <see langword="false"/>: a handle either
+    /// addresses a row in the current catalog or the call throws, which is the one rule every per-tick handle read
+    /// follows. This differs from <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s name-resolving door, which reads an unknown row as absent:
+    /// a compiled handle is only ever minted against a row the rule compiler already proved present in the same
+    /// section, and every install revalidates by recompiling every rule against it — so an installed section can
+    /// never carry a rule whose compiled row a handle addresses has vanished. A throw here is therefore a caught
+    /// invariant violation, never a reachable "the row is gone" case a rule needs to tolerate.</returns>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> does not address a document-owned row in
+    /// <paramref name="catalog"/>.</exception>
+    public static bool TryReadHandle(
+        IReadOnlyList<StateRow> rows,
+        StateCatalog catalog,
+        StateHandle handle,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out StateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
+        if (!TryResolveRowHandle(
+            catalog: catalog,
+            handle: handle,
+            row: out row,
+            rowOrdinal: out _,
+            rows: rows
+        )) {
+            throw new ArgumentException(
+                message: "The state handle does not address a current document-owned row.",
+                paramName: nameof(handle)
+            );
+        }
+
+        ReadCell(
+            key: key,
+            rawValue: out rawValue,
+            row: row,
+            text: out text,
+            tick: tick
+        );
+
+        return true;
+    }
+    /// <summary>Resolves one document-owned row by its compiled handle and reads a cell through a store, on
+    /// <see cref="TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
+    /// <param name="store">Where the cell's stored value is read.</param>
+    /// <param name="catalog">The section's current state catalog.</param>
+    /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
+    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The resolved row.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    public static bool TryReadHandle(
+        StateStore store,
+        StateCatalog catalog,
+        StateHandle handle,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out StateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        var rows = store.Rows;
+
+        if (!TryResolveRowHandle(
+            catalog: catalog,
+            handle: handle,
+            row: out row,
+            rowOrdinal: out var ordinal,
+            rows: rows
+        )) {
+            throw new ArgumentException(
+                message: "The state handle does not address a current document-owned row.",
+                paramName: nameof(handle)
+            );
+        }
+
+        ReadCell(
+            key: key,
+            rawValue: out rawValue,
+            row: row,
+            rowOrdinal: ordinal,
+            store: store,
+            text: out text,
+            tick: tick
+        );
+
+        return true;
+    }
+    /// <summary>Resolves one document-owned row by its compiled handle and reads a cell through a store by pre-parsed key,
+    /// on <see cref="TryReadHandle(StateStore, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
+    /// <param name="store">Where the cell's stored value is read.</param>
+    /// <param name="catalog">The section's current state catalog.</param>
+    /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
+    /// <param name="key">The pre-parsed cell key.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The resolved row.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    public static bool TryReadHandle(
+        StateStore store,
+        StateCatalog catalog,
+        StateHandle handle,
+        CellName key,
+        ulong tick,
+        [NotNullWhen(true)] out StateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        var rows = store.Rows;
+
+        if (!TryResolveRowHandle(
+            catalog: catalog,
+            handle: handle,
+            row: out row,
+            rowOrdinal: out var ordinal,
+            rows: rows
+        )) {
+            throw new ArgumentException(
+                message: "The state handle does not address a current document-owned row.",
+                paramName: nameof(handle)
+            );
+        }
+
+        ReadCell(
+            key: key,
+            rawValue: out rawValue,
+            row: row,
+            rowOrdinal: ordinal,
+            store: store,
+            text: out text,
+            tick: tick
+        );
+
+        return true;
+    }
+    /// <summary>Resolves a document-owned row and its ordinal without a row-name scan.</summary>
+    /// <param name="rows">The current document rows, in catalog lane order.</param>
+    /// <param name="catalog">The catalog that owns the handle.</param>
+    /// <param name="handle">The compiled document-lane handle.</param>
+    /// <param name="rowOrdinal">The resolved ordinal, or -1 on failure.</param>
+    /// <param name="row">The resolved row, or null on failure.</param>
+    /// <returns>Whether the handle belongs to the catalog and addresses a current row with the expected name.</returns>
+    public static bool TryResolveRowHandle(IReadOnlyList<StateRow> rows, StateCatalog catalog, StateHandle handle, out int rowOrdinal, [NotNullWhen(true)] out StateRow? row) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        if (
+            catalog.TryGetDescriptor(
+            descriptor: out var descriptor,
+            handle: handle
+        ) &&
+            (descriptor.Ownership == StateLane.Document) &&
+            (((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) &&
+            (rows[descriptor.LaneOrdinal] is { } resolved) &&
+            string.Equals(
+            a: resolved.Name,
+            b: descriptor.Name,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            rowOrdinal = descriptor.LaneOrdinal;
+            row = resolved;
+            return true;
+        }
+        rowOrdinal = -1;
+        row = null;
+        return false;
+    }
+
+    /// <summary>The most tokens an arrangement rank or an <c>arrange</c> transform covers: 20! is the last factorial
+    /// below 2^63.</summary>
+    public const int MaxArrangementTokens = 20;
 }

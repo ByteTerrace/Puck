@@ -11,13 +11,13 @@ namespace Puck.HumbleGamingBrick.Post;
 /// importer (restoring IME/execution-state from a savestate).
 /// </summary>
 internal static class Sm83StateCodec {
-    /// <summary>The serialized byte count (<c>Sm83.SaveState</c>'s exact output length).</summary>
-    public const int ByteCount = 20;
-
     private const int HaltedOffset = 12;
-    private const int LockedUpOffset = 14;
     private const int ImeOffset = 15;
     private const int InterruptEnableCountdownOffset = 16;
+    private const int LockedUpOffset = 14;
+
+    /// <summary>The serialized byte count (<c>Sm83.SaveState</c>'s exact output length).</summary>
+    public const int ByteCount = 20;
 
     /// <summary>Writes a full internal state into the CPU.</summary>
     /// <param name="cpu">The CPU to load.</param>

@@ -173,7 +173,6 @@ public sealed class RuleException : ArgumentException {
     /// <summary>Gets the refusal category.</summary>
     public Enum Refusal { get; }
 }
-
 /// <summary>The runtime refusals the evaluator itself draws while firing; a document project's own effect arms
 /// declare their own tagged enum and report through the same ledger.</summary>
 public enum RuleEffectRefusal : byte {

@@ -6,6 +6,11 @@ For an introduction, start with the [engine overview](../overview.md) or the
 
 | Reference | Contents |
 |---|---|
+| [State and rules](state.md) | Named rows, rule compilation and evaluation, candidate frames, and host extensions. |
+| [Commands and input](commands.md) | Fixed-step input, bindings, text sessions, dispatch identity, and ordering. |
+| [Device input](input.md) | Device acquisition, controller motion, haptics, lighting, and platform integration. |
+| [Physics kernels](physics.md) | Gravity, motion, contacts, tethers, perception, navigation, and fields. |
+| [Deterministic numerics](maths.md) | Worked examples, primitive selection, and the boundary between reproducible simulation and other numeric work. |
 | [Puck CLI](../../src/Puck.Cli/README.md) | Repository commands, compilation, inspection, and verification tools. Run a command with `--help` for its options. |
 | [World commands](../../src/Puck.World/README.md) | The running application's console and launch options. |
 | [World schema](../../src/Puck.World.Schema/README.md) | Document fields, validation, and composition. |

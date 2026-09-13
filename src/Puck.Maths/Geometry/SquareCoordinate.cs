@@ -24,30 +24,45 @@ public readonly record struct SquareCoordinate(int X, int Y)
 
     /// <summary>Gets the origin.</summary>
     public static SquareCoordinate AdditiveIdentity => default;
-    /// <summary>Gets the Gaussian multiplicative identity, (1, 0).</summary>
-    public static SquareCoordinate MultiplicativeIdentity => new(X: 1, Y: 0);
     /// <summary>Gets the cardinal-step distance from the origin, |X| + |Y|.</summary>
     /// <exception cref="OverflowException">The distance exceeds int.MaxValue.</exception>
     public int Length => checked((int)(Math.Abs(value: ((long)X)) + Math.Abs(value: ((long)Y))));
-    /// <summary>Gets the square-shell radius, max(|X|, |Y|), also called Chebyshev distance.</summary>
-    /// <exception cref="OverflowException">The radius exceeds int.MaxValue.</exception>
-    public int Radius => checked((int)Math.Max(val1: Math.Abs(value: ((long)X)), val2: Math.Abs(value: ((long)Y))));
+    /// <summary>Gets the Gaussian multiplicative identity, (1, 0).</summary>
+    public static SquareCoordinate MultiplicativeIdentity => new(
+        X: 1,
+        Y: 0
+    );
     /// <summary>Gets the Gaussian norm, X² + Y², the squared Euclidean distance.</summary>
     /// <exception cref="OverflowException">The norm exceeds int.MaxValue.</exception>
     public int Norm => checked((int)((((Int128)X) * X) + (((Int128)Y) * Y)));
+    /// <summary>Gets the square-shell radius, max(|X|, |Y|), also called Chebyshev distance.</summary>
+    /// <exception cref="OverflowException">The radius exceeds int.MaxValue.</exception>
+    public int Radius => checked((int)Math.Max(
+        val1: Math.Abs(value: ((long)X)),
+        val2: Math.Abs(value: ((long)Y))
+    ));
 
-    /// <summary>Formats the components without evaluating derived properties that may overflow.</summary>
-    /// <returns>The invariant decimal X and Y components.</returns>
-    public override string ToString() => FormattableString.Invariant(formattable: $"SquareCoordinate {{ X = {X}, Y = {Y} }}");
     /// <summary>Returns a cardinal unit step, counterclockwise from east.</summary>
     /// <param name="direction">Any signed direction index, reduced modulo four.</param>
     /// <returns>East, north, west or south for indices zero through three.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SquareCoordinate Direction(int direction) => (direction & 3) switch {
-        0 => new(X: 1, Y: 0),
-        1 => new(X: 0, Y: 1),
-        2 => new(X: -1, Y: 0),
-        _ => new(X: 0, Y: -1),
+        0 => new(
+        X: 1,
+        Y: 0
+    ),
+        1 => new(
+        X: 0,
+        Y: 1
+    ),
+        2 => new(
+        X: -1,
+        Y: 0
+    ),
+        _ => new(
+        X: 0,
+        Y: -1
+    ),
     };
     /// <summary>Computes cardinal-step distance between two cells.</summary>
     /// <param name="left">The first cell.</param>
@@ -67,12 +82,18 @@ public readonly record struct SquareCoordinate(int X, int Y)
     /// <returns>The coordinate (-Y, X).</returns>
     /// <exception cref="OverflowException">A resulting component exceeds int.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SquareCoordinate RotatedLeft() => new(X: checked(-Y), Y: X);
+    public SquareCoordinate RotatedLeft() => new(
+        X: checked(-Y),
+        Y: X
+    );
     /// <summary>Rotates 90° clockwise about the origin.</summary>
     /// <returns>The coordinate (Y, -X).</returns>
     /// <exception cref="OverflowException">A resulting component exceeds int.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SquareCoordinate RotatedRight() => new(X: Y, Y: checked(-X));
+    public SquareCoordinate RotatedRight() => new(
+        X: Y,
+        Y: checked(-X)
+    );
     /// <summary>Snaps a fractional position to its nearest grid cell, rounding ties to even on each axis.</summary>
     /// <param name="x">The fractional horizontal component.</param>
     /// <param name="y">The fractional vertical component.</param>
@@ -80,7 +101,11 @@ public readonly record struct SquareCoordinate(int X, int Y)
     /// <exception cref="OverflowException">A rounded component exceeds int.</exception>
     public static SquareCoordinate Round(FixedQ4816 x, FixedQ4816 y) => new(
         X: checked((int)(FixedQ4816.Round(value: x).Value >> FixedQ4816.FractionBitCount)),
-        Y: checked((int)(FixedQ4816.Round(value: y).Value >> FixedQ4816.FractionBitCount)));
+        Y: checked((int)(FixedQ4816.Round(value: y).Value >> FixedQ4816.FractionBitCount))
+    );
+    /// <summary>Formats the components without evaluating derived properties that may overflow.</summary>
+    /// <returns>The invariant decimal X and Y components.</returns>
+    public override string ToString() => FormattableString.Invariant(formattable: $"SquareCoordinate {{ X = {X}, Y = {Y} }}");
 
     /// <summary>Adds the two coordinates.</summary>
     /// <param name="left">The first cell.</param>
@@ -89,7 +114,10 @@ public readonly record struct SquareCoordinate(int X, int Y)
     /// <exception cref="OverflowException">A resulting component exceeds int.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SquareCoordinate operator +(SquareCoordinate left, SquareCoordinate right) =>
-        new(X: checked((left.X + right.X)), Y: checked((left.Y + right.Y)));
+        new(
+            X: checked((left.X + right.X)),
+            Y: checked((left.Y + right.Y))
+        );
     /// <summary>Subtracts the two coordinates.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
@@ -97,13 +125,19 @@ public readonly record struct SquareCoordinate(int X, int Y)
     /// <exception cref="OverflowException">A resulting component exceeds int.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SquareCoordinate operator -(SquareCoordinate left, SquareCoordinate right) =>
-        new(X: checked((left.X - right.X)), Y: checked((left.Y - right.Y)));
+        new(
+            X: checked((left.X - right.X)),
+            Y: checked((left.Y - right.Y))
+        );
     /// <summary>Negates both components.</summary>
     /// <param name="value">The cell to negate.</param>
     /// <returns>The cell opposite the origin.</returns>
     /// <exception cref="OverflowException">A resulting component exceeds int.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static SquareCoordinate operator -(SquareCoordinate value) => new(X: checked(-value.X), Y: checked(-value.Y));
+    public static SquareCoordinate operator -(SquareCoordinate value) => new(
+        X: checked(-value.X),
+        Y: checked(-value.Y)
+    );
     /// <summary>Multiplies Gaussian integers, composing rotation and scaling.</summary>
     /// <param name="left">The multiplicand.</param>
     /// <param name="right">The multiplier.</param>
@@ -112,12 +146,16 @@ public readonly record struct SquareCoordinate(int X, int Y)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SquareCoordinate operator *(SquareCoordinate left, SquareCoordinate right) => new(
         X: checked((int)((((Int128)left.X) * right.X) - (((Int128)left.Y) * right.Y))),
-        Y: checked((int)((((Int128)left.X) * right.Y) + (((Int128)left.Y) * right.X))));
+        Y: checked((int)((((Int128)left.X) * right.Y) + (((Int128)left.Y) * right.X)))
+    );
     /// <summary>Scales both components by a signed integer.</summary>
     /// <param name="left">The coordinate.</param>
     /// <param name="right">The factor.</param>
     /// <returns>The scaled coordinate.</returns>
     /// <exception cref="OverflowException">A resulting component exceeds int.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static SquareCoordinate operator *(SquareCoordinate left, int right) => new(X: checked((left.X * right)), Y: checked((left.Y * right)));
+    public static SquareCoordinate operator *(SquareCoordinate left, int right) => new(
+        X: checked((left.X * right)),
+        Y: checked((left.Y * right))
+    );
 }

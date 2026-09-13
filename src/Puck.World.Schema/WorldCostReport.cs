@@ -46,25 +46,46 @@ public sealed record WorldCostReport(
 
         var compiledRules = WorldRuleCompiler.CompileAll(definition: definition);
         var compiledInteractions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
-        var contributors = WorldRuleWorkBudget.Contributors(definition: definition, rules: compiledRules, interactions: compiledInteractions);
-        var budget = WorldRuleWorkBudget.Measure(definition: definition, rules: compiledRules, interactions: compiledInteractions);
+        var contributors = WorldRuleWorkBudget.Contributors(
+            definition: definition,
+            interactions: compiledInteractions,
+            rules: compiledRules
+        );
+        var budget = WorldRuleWorkBudget.Measure(
+            definition: definition,
+            interactions: compiledInteractions,
+            rules: compiledRules
+        );
 
-        var recurringBound = CostBound.Unmodeled("Recurring authored work has heuristic weights, not calibrated portable cycle bounds.");
+        var recurringBound = CostBound.Unmodeled(reason: "Recurring authored work has heuristic weights, not calibrated portable cycle bounds.");
         var issues = new List<string> { recurringBound.Reason! };
 
         // Check search reservations
         var searchReservations = CostBound.Zero;
+
         if (definition.Search.Rows.Count > 0) {
-            searchReservations = CostBound.Unmodeled("Search traversal, frame copies, and chance expansion have no complete cycle reservation.");
-            issues.Add(searchReservations.Reason!);
-            if (!WorldSearchCompilation.TryPlanAll(definition: definition, rules: compiledRules, plans: out _, judge: out _, reason: out var searchReason)) {
+            searchReservations = CostBound.Unmodeled(reason: "Search traversal, frame copies, and chance expansion have no complete cycle reservation.");
+            issues.Add(item: searchReservations.Reason!);
+            if (!WorldSearchCompilation.TryPlanAll(
+                definition: definition,
+                judge: out _,
+                plans: out _,
+                reason: out var searchReason,
+                rules: compiledRules
+            )) {
                 issues.Add(item: $"Search planning issue: {searchReason}");
             }
         }
 
-        var totalBound = recurringBound + searchReservations;
-        var referenceEngineTicks = totalBound.IsKnown ? profile.ReferenceEngineTicks(totalBound.Cycles) : (long?)null;
-        var admitted = issues.Count == 0 && profile.Admits(totalBound, rateHz);
+        var totalBound = (recurringBound + searchReservations);
+        var referenceEngineTicks = (totalBound.IsKnown
+            ? profile.ReferenceEngineTicks(cycles: totalBound.Cycles)
+            : (long?)null
+        );
+        var admitted = ((issues.Count == 0) && profile.Admits(
+            bound: totalBound,
+            rateHz: rateHz
+        ));
 
         return new WorldCostReport(
             ModelId: model.Id,

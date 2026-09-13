@@ -93,7 +93,10 @@ public sealed partial class SdfProgramBuilder {
             subject: "A noise lacunarity"
         );
 
-        if ((octaves < 1) || (octaves > MaxNoiseOctaves)) {
+        if (
+            (octaves < 1) ||
+            (octaves > MaxNoiseOctaves)
+        ) {
             throw new ArgumentException(
                 message: $"NoiseDisplace octaves must be in 1..{MaxNoiseOctaves}; got {octaves}.",
                 paramName: nameof(octaves)
@@ -196,10 +199,25 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(value: laneIndex, paramName: nameof(laneIndex));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: laneIndex, other: 3, paramName: nameof(laneIndex));
-        RequireFinite(value: from, paramName: nameof(from), subject: "A morph from value");
-        RequireFinite(value: to, paramName: nameof(to), subject: "A morph to value");
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            value: laneIndex,
+            paramName: nameof(laneIndex)
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: laneIndex,
+            other: 3,
+            paramName: nameof(laneIndex)
+        );
+        RequireFinite(
+            value: from,
+            paramName: nameof(from),
+            subject: "A morph from value"
+        );
+        RequireFinite(
+            value: to,
+            paramName: nameof(to),
+            subject: "A morph to value"
+        );
 
         if (from == to) {
             throw new ArgumentOutOfRangeException(
@@ -212,7 +230,12 @@ public sealed partial class SdfProgramBuilder {
             SdfBlendOp.Morph,
             0f,
             scope.ShapeCountAtOpen,
-            new Vector4(x: ((float)(uint)laneIndex), y: from, z: to, w: 0f),
+            new Vector4(
+            w: 0f,
+            x: ((float)((uint)laneIndex)),
+            y: from,
+            z: to
+        ),
             0f
         );
 
@@ -226,11 +249,22 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
         }
 
-        RequireFinite(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
-        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+        RequireFinite(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
+        RequireNonNegative(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
 
         if (steps < 1) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(steps), message: "A stairs blend step count must be at least 1.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(steps),
+                message: "A stairs blend step count must be at least 1."
+            );
         }
 
         m_fieldScope = (
@@ -251,11 +285,22 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
         }
 
-        RequireFinite(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
-        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+        RequireFinite(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
+        RequireNonNegative(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
 
         if (steps < 1) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(steps), message: "A stairs blend step count must be at least 1.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(steps),
+                message: "A stairs blend step count must be at least 1."
+            );
         }
 
         m_fieldScope = (
@@ -338,10 +383,25 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="from">The lane threshold for t = 0.</param>
     /// <param name="to">The lane threshold for t = 1.</param>
     public SdfProgramBuilder PushFieldMorph(int laneIndex, float from, float to) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: laneIndex, paramName: nameof(laneIndex));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: laneIndex, other: 3, paramName: nameof(laneIndex));
-        RequireFinite(value: from, paramName: nameof(from), subject: "A morph from value");
-        RequireFinite(value: to, paramName: nameof(to), subject: "A morph to value");
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            value: laneIndex,
+            paramName: nameof(laneIndex)
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: laneIndex,
+            other: 3,
+            paramName: nameof(laneIndex)
+        );
+        RequireFinite(
+            value: from,
+            paramName: nameof(from),
+            subject: "A morph from value"
+        );
+        RequireFinite(
+            value: to,
+            paramName: nameof(to),
+            subject: "A morph to value"
+        );
 
         if (from == to) {
             throw new ArgumentOutOfRangeException(
@@ -363,7 +423,12 @@ public sealed partial class SdfProgramBuilder {
             SdfBlendOp.Morph,
             0f,
             m_shapeCount,
-            new Vector4(x: ((float)(uint)laneIndex), y: from, z: to, w: 0f),
+            new Vector4(
+            w: 0f,
+            x: ((float)((uint)laneIndex)),
+            y: from,
+            z: to
+        ),
             0f
         );
 
@@ -383,11 +448,22 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="steps">The integer step count (>= 1).</param>
     /// <param name="subtraction">Whether the stairs compose is subtraction (true) or union (false).</param>
     public SdfProgramBuilder PushFieldStairs(float radius, int steps, bool subtraction = false) {
-        RequireFinite(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
-        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+        RequireFinite(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
+        RequireNonNegative(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
 
         if (steps < 1) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(steps), message: "A stairs blend step count must be at least 1.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(steps),
+                message: "A stairs blend step count must be at least 1."
+            );
         }
 
         var openDepth = ((m_fieldScope is null)
@@ -400,7 +476,9 @@ public sealed partial class SdfProgramBuilder {
         }
 
         m_fieldScope = (
-            subtraction ? SdfBlendOp.StairsSubtraction : SdfBlendOp.StairsUnion,
+            (subtraction
+            ? SdfBlendOp.StairsSubtraction
+            : SdfBlendOp.StairsUnion),
             radius,
             m_shapeCount,
             default,
@@ -422,10 +500,18 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="radius">The blend radius.</param>
     /// <param name="steps">The integer step count (>= 1).</param>
     public SdfProgramBuilder PushFieldStairsUnion(float radius, int steps) =>
-        PushFieldStairs(radius: radius, steps: steps, subtraction: false);
+        PushFieldStairs(
+            radius: radius,
+            steps: steps,
+            subtraction: false
+        );
     /// <summary>Opens a field scope that will compose back into the parent via continuous stairs subtraction.</summary>
     /// <param name="radius">The blend radius.</param>
     /// <param name="steps">The integer step count (>= 1).</param>
     public SdfProgramBuilder PushFieldStairsSubtraction(float radius, int steps) =>
-        PushFieldStairs(radius: radius, steps: steps, subtraction: true);
+        PushFieldStairs(
+            radius: radius,
+            steps: steps,
+            subtraction: true
+        );
 }

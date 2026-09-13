@@ -44,10 +44,36 @@ public sealed class ModuleExportsLawTests {
         }
         """;
 
+    private static long Cell(WorldFixture fixture, string row, string key) {
+        var found = WorldDefinitionRows.FindStateRow(
+            rows: fixture.Server.Definition.State,
+            name: row
+        );
+
+        Assert.NotNull(@object: found);
+
+        return (found!.Cells?.SingleOrDefault(predicate: cell => (cell.Key.Value == key))?.Value ?? 0L);
+    }
+    private static string ModuleText(string module) =>
+        File.ReadAllText(path: Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "Puck.World",
+            "Assets",
+            "worlds",
+            "games",
+            $"{module}.world.json"
+        ));
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
 
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
             directory = directory.Parent;
         }
 
@@ -55,33 +81,90 @@ public sealed class ModuleExportsLawTests {
 
         return directory!.FullName;
     }
-    private static string ModuleText(string module) =>
-        File.ReadAllText(path: Path.Combine(RepositoryRoot(), "src", "Puck.World", "Assets", "worlds", "games", $"{module}.world.json"));
     private static string WriteHost(TempWorldDirectory files, string actionRow = "a_tttMoveCell", string readRow = "a_tttActive", string bindingToken = "state.a_tttWinner", string? moduleText = null) {
-        files.WriteText(name: "basis.world.json", text: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()));
-        files.WriteText(name: "tictactoe.world.json", text: (moduleText ?? ModuleText(module: "tictactoe")));
+        files.WriteText(
+            name: "basis.world.json",
+            text: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes())
+        );
+        files.WriteText(
+            name: "tictactoe.world.json",
+            text: (moduleText ?? ModuleText(module: "tictactoe"))
+        );
 
-        return files.WriteText(name: "host.world.json", text: TicTacToeHost
-            .Replace(oldValue: "ACTION_ROW", newValue: actionRow, comparisonType: StringComparison.Ordinal)
-            .Replace(oldValue: "READ_ROW", newValue: readRow, comparisonType: StringComparison.Ordinal)
-            .Replace(oldValue: "BINDING_TOKEN", newValue: bindingToken, comparisonType: StringComparison.Ordinal));
+        return files.WriteText(
+            name: "host.world.json",
+            text: TicTacToeHost
+            .Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: actionRow,
+                oldValue: "ACTION_ROW"
+            )
+            .Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: readRow,
+                oldValue: "READ_ROW"
+            )
+            .Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: bindingToken,
+                oldValue: "BINDING_TOKEN"
+            )
+        );
     }
-    private static long Cell(WorldFixture fixture, string row, string key) {
-        var found = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: row);
 
-        Assert.NotNull(@object: found);
+    [InlineData("a_tttBoard", "a_tttActive", "state.a_tttWinner", "a_tttBoard", "exports.actions", "$.interactions.interactions[0].effects[0].state")]
+    [InlineData("a_tttMoveCell", "a_tttMaskX", "state.a_tttWinner", "a_tttMaskX", "exports.reads", "$.rules[1].gate.state")]
+    [InlineData("a_tttMoveCell", "a_tttActive", "state.a_tttMoveCell", "a_tttMoveCell", "exports.bindings", "$.hud.panels[0].elements[0].binding")]
+    [Theory]
+    public void ABindingToANameTheModuleDoesNotExportRefusesByName(string actionRow, string readRow, string bindingToken, string name, string list, string path) {
+        using var files = new TempWorldDirectory();
+        var hostPath = WriteHost(
+            files: files,
+            actionRow: actionRow,
+            readRow: readRow,
+            bindingToken: bindingToken
+        );
 
-        return (found!.Cells?.SingleOrDefault(predicate: cell => (cell.Key.Value == key))?.Value ?? 0L);
+        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(
+            path: hostPath,
+            definition: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: $"'{name}'"
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: list
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: path
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "tictactoe.world.json as a"
+        );
     }
-
     [Fact]
     public void AHostDrivesReadsAndBindsTheModuleThroughItsExports() {
         using var files = new TempWorldDirectory();
         var hostPath = WriteHost(files: files);
 
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(path: hostPath, definition: out var definition, reason: out var reason), userMessage: reason);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                path: hostPath,
+                definition: out var definition,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
         Assert.Null(@object: definition!.Exports);
-        Assert.Contains(collection: definition.State, filter: static row => (row.Name.Value == "a_tttMoveCell"));
+        Assert.Contains(
+            collection: definition.State,
+            filter: static row => (row.Name.Value == "a_tttMoveCell")
+        );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
@@ -91,53 +174,193 @@ public sealed class ModuleExportsLawTests {
 
         // The host's rule drove the module through its exported actions and the module played the move; the host's
         // gate read the exported turn row after the module advanced it.
-        Assert.Equal(expected: 1L, actual: Cell(fixture: fixture, row: "a_tttBoard", key: "4"));
-        Assert.Equal(expected: 2L, actual: Cell(fixture: fixture, row: "a_tttActive", key: WorldStateRow.SlotKey));
-        Assert.Equal(expected: 1L, actual: Cell(fixture: fixture, row: "hostSawTurn", key: WorldStateRow.SlotKey));
+        Assert.Equal(
+            expected: 1L,
+            actual: Cell(
+                fixture: fixture,
+                key: "4",
+                row: "a_tttBoard"
+            )
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: Cell(
+                fixture: fixture,
+                key: WorldStateRow.SlotKey,
+                row: "a_tttActive"
+            )
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: Cell(
+                fixture: fixture,
+                key: WorldStateRow.SlotKey,
+                row: "hostSawTurn"
+            )
+        );
 
-        Assert.True(condition: WorldDefinitionFileSource.TryDescribeComposition(path: hostPath, layers: out var layers, reason: out var describeReason), userMessage: describeReason);
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryDescribeComposition(
+                layers: out var layers,
+                path: hostPath,
+                reason: out var describeReason
+            ),
+            userMessage: describeReason
+        );
 
         var module = layers.Single(predicate: static layer => (layer.Alias == "a"));
 
         Assert.NotNull(@object: module.Exports);
-        Assert.Equal(expected: "reads:tttActive,tttBoard,tttCube,tttMoveApplied,tttMoveCount,tttWinner actions:tttMoveCell,tttMoveRequest bindings:tttActive,tttMoveCount,tttWinner", actual: module.Exports!.Describe());
-        Assert.All(collection: layers.Where(predicate: static layer => (layer.Alias is null)), action: static layer => Assert.Null(@object: layer.Exports));
-    }
-    [Theory]
-    [InlineData("a_tttBoard", "a_tttActive", "state.a_tttWinner", "a_tttBoard", "exports.actions", "$.interactions.interactions[0].effects[0].state")]
-    [InlineData("a_tttMoveCell", "a_tttMaskX", "state.a_tttWinner", "a_tttMaskX", "exports.reads", "$.rules[1].gate.state")]
-    [InlineData("a_tttMoveCell", "a_tttActive", "state.a_tttMoveCell", "a_tttMoveCell", "exports.bindings", "$.hud.panels[0].elements[0].binding")]
-    public void ABindingToANameTheModuleDoesNotExportRefusesByName(string actionRow, string readRow, string bindingToken, string name, string list, string path) {
-        using var files = new TempWorldDirectory();
-        var hostPath = WriteHost(files: files, actionRow: actionRow, readRow: readRow, bindingToken: bindingToken);
-
-        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(path: hostPath, definition: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: $"'{name}'", actualString: reason);
-        Assert.Contains(expectedSubstring: list, actualString: reason);
-        Assert.Contains(expectedSubstring: path, actualString: reason);
-        Assert.Contains(expectedSubstring: "tictactoe.world.json as a", actualString: reason);
+        Assert.Equal(
+            expected: "reads:tttActive,tttBoard,tttCube,tttMoveApplied,tttMoveCount,tttWinner actions:tttMoveCell,tttMoveRequest bindings:tttActive,tttMoveCount,tttWinner",
+            actual: module.Exports!.Describe()
+        );
+        Assert.All(
+            collection: layers.Where(predicate: static layer => (layer.Alias is null)),
+            action: static layer => Assert.Null(@object: layer.Exports)
+        );
     }
     [Fact]
     public void APlacementBoardFacetBindsOnlyAnExportedOccupancyRow() {
-        var fixtures = Path.Combine(RepositoryRoot(), "tests", "Puck.World.Tests", "Fixtures");
-        var host = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(fixtures, "minimal-hexlines-host.world.json")))!);
+        var fixtures = Path.Combine(
+            path1: RepositoryRoot(),
+            path2: "tests",
+            path3: "Puck.World.Tests",
+            path4: "Fixtures"
+        );
+        var host = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(
+            path1: fixtures,
+            path2: "minimal-hexlines-host.world.json"
+        )))!);
 
-        host[propertyName: "basis"] = Path.GetFullPath(path: Path.Combine(fixtures, host[propertyName: "basis"]!.GetValue<string>()));
-        host[propertyName: "imports"]![index: 0]![propertyName: "document"] = Path.GetFullPath(path: Path.Combine(fixtures, host[propertyName: "imports"]![index: 0]![propertyName: "document"]!.GetValue<string>()));
+        host[propertyName: "basis"] = Path.GetFullPath(path: Path.Combine(
+            path1: fixtures,
+            path2: host[propertyName: "basis"]!.GetValue<string>()
+        ));
+        host[propertyName: "imports"]![index: 0]![propertyName: "document"] = Path.GetFullPath(path: Path.Combine(
+            path1: fixtures,
+            path2: host[propertyName: "imports"]![index: 0]![propertyName: "document"]!.GetValue<string>()
+        ));
 
         using var files = new TempWorldDirectory();
-        var exported = files.WriteText(name: "exported.world.json", text: host.ToJsonString());
+        var exported = files.WriteText(
+            name: "exported.world.json",
+            text: host.ToJsonString()
+        );
 
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(path: exported, definition: out _, reason: out var exportedReason), userMessage: exportedReason);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                path: exported,
+                definition: out _,
+                reason: out var exportedReason
+            ),
+            userMessage: exportedReason
+        );
 
         host[propertyName: "placements"]![propertyName: "rows"]![index: 0]![propertyName: "board"]![propertyName: "occupancy"] = "hexStoneCell";
 
-        var unexported = files.WriteText(name: "unexported.world.json", text: host.ToJsonString());
+        var unexported = files.WriteText(
+            name: "unexported.world.json",
+            text: host.ToJsonString()
+        );
 
-        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(path: unexported, definition: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "'hexStoneCell'", actualString: reason);
-        Assert.Contains(expectedSubstring: "exports.actions", actualString: reason);
-        Assert.Contains(expectedSubstring: "$.placements.rows[0].board.occupancy", actualString: reason);
+        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(
+            path: unexported,
+            definition: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "'hexStoneCell'"
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "exports.actions"
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "$.placements.rows[0].board.occupancy"
+        );
+    }
+    [Fact]
+    public void ASiblingImportBindsOnlyWhatItsSiblingExports() {
+        using var files = new TempWorldDirectory();
+
+        files.WriteText(
+            name: "basis.world.json",
+            text: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes())
+        );
+        files.WriteText(
+            name: "reader.world.json",
+            text: /*lang=json*/ """
+            { "rules": [ { "name": "mirror", "gate": { "$type": "compareState", "state": "flag", "comparison": "Equal", "value": 1 },
+                           "effects": [ { "$type": "setState", "state": "mirrored", "value": 1 } ] } ],
+              "state": { "world": [ { "name": "mirrored", "kind": "Int", "value": 0 } ] } }
+            """
+        );
+        files.WriteText(
+            name: "private.world.json",
+            text: /*lang=json*/ """
+            { "state": { "world": [ { "name": "flag", "kind": "Int", "value": 1 } ] } }
+            """
+        );
+        files.WriteText(
+            name: "public.world.json",
+            text: /*lang=json*/ """
+            { "exports": { "reads": [ "flag" ] }, "state": { "world": [ { "name": "flag", "kind": "Int", "value": 1 } ] } }
+            """
+        );
+
+        var refused = files.WriteText(
+            name: "refused.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "imports": [{ "document": "private.world.json" }, { "document": "reader.world.json" }] }
+            """
+        );
+
+        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(
+            path: refused,
+            definition: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "reader.world.json names 'flag'"
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "private.world.json declares and does not export under exports.reads"
+        );
+
+        var admitted = files.WriteText(
+            name: "admitted.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "imports": [{ "document": "public.world.json" }, { "document": "reader.world.json" }] }
+            """
+        );
+
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                path: admitted,
+                definition: out var definition,
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: definition!);
+
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Equal(
+            expected: 1L,
+            actual: Cell(
+                fixture: fixture,
+                key: WorldStateRow.SlotKey,
+                row: "mirrored"
+            )
+        );
     }
     [Fact]
     public void AnExportNamingNothingTheModuleDeclaresRefusesByName() {
@@ -146,48 +369,20 @@ public sealed class ModuleExportsLawTests {
         module[propertyName: "exports"]![propertyName: "reads"]!.AsArray().Add(value: "tttNoSuchRow");
 
         using var files = new TempWorldDirectory();
-        var hostPath = WriteHost(files: files, moduleText: module.ToJsonString());
+        var hostPath = WriteHost(
+            files: files,
+            moduleText: module.ToJsonString()
+        );
 
-        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(path: hostPath, definition: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "exports.reads names 'tttNoSuchRow', which the module does not declare", actualString: reason);
-    }
-    [Fact]
-    public void ASiblingImportBindsOnlyWhatItsSiblingExports() {
-        using var files = new TempWorldDirectory();
-
-        files.WriteText(name: "basis.world.json", text: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()));
-        files.WriteText(name: "reader.world.json", text: /*lang=json*/ """
-            { "rules": [ { "name": "mirror", "gate": { "$type": "compareState", "state": "flag", "comparison": "Equal", "value": 1 },
-                           "effects": [ { "$type": "setState", "state": "mirrored", "value": 1 } ] } ],
-              "state": { "world": [ { "name": "mirrored", "kind": "Int", "value": 0 } ] } }
-            """);
-        files.WriteText(name: "private.world.json", text: /*lang=json*/ """
-            { "state": { "world": [ { "name": "flag", "kind": "Int", "value": 1 } ] } }
-            """);
-        files.WriteText(name: "public.world.json", text: /*lang=json*/ """
-            { "exports": { "reads": [ "flag" ] }, "state": { "world": [ { "name": "flag", "kind": "Int", "value": 1 } ] } }
-            """);
-
-        var refused = files.WriteText(name: "refused.world.json", text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "private.world.json" }, { "document": "reader.world.json" }] }
-            """);
-
-        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(path: refused, definition: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "reader.world.json names 'flag'", actualString: reason);
-        Assert.Contains(expectedSubstring: "private.world.json declares and does not export under exports.reads", actualString: reason);
-
-        var admitted = files.WriteText(name: "admitted.world.json", text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "public.world.json" }, { "document": "reader.world.json" }] }
-            """);
-
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(path: admitted, definition: out var definition, reason: out var admittedReason), userMessage: admittedReason);
-
-        using var fixture = Fixtures.FreshServer(definition: definition!);
-
-        fixture.Step();
-        fixture.Step();
-
-        Assert.Equal(expected: 1L, actual: Cell(fixture: fixture, row: "mirrored", key: WorldStateRow.SlotKey));
+        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(
+            path: hostPath,
+            definition: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "exports.reads names 'tttNoSuchRow', which the module does not declare"
+        );
     }
     [Fact]
     public void ExportsOnADocumentLoadedAsAWorldRefuse() {
@@ -196,9 +391,19 @@ public sealed class ModuleExportsLawTests {
         world[propertyName: "exports"] = new JsonObject { [propertyName: "reads"] = new JsonArray() };
 
         using var files = new TempWorldDirectory();
-        var path = files.WriteText(name: "module-as-world.world.json", text: world.ToJsonString());
+        var path = files.WriteText(
+            name: "module-as-world.world.json",
+            text: world.ToJsonString()
+        );
 
-        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(path: path, definition: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "exports [none] survived to validation", actualString: reason);
+        Assert.False(condition: WorldDefinitionLoader.TryLoadFile(
+            path: path,
+            definition: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "exports [none] survived to validation"
+        );
     }
 }

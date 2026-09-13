@@ -2,21 +2,16 @@ using System.Net.Http.Json;
 
 namespace Puck.Azure.Functions.Services;
 
-public sealed class CheckNameAvailabilityRequest
-{
+public sealed class CheckNameAvailabilityRequest {
     public string? Name { get; set; }
     public string? Type { get; set; }
 }
-
-public sealed class CheckNameAvailabilityResponse
-{
+public sealed class CheckNameAvailabilityResponse {
     public string? Message { get; set; }
     public bool NameAvailable { get; set; }
     public string? Reason { get; set; }
 }
-
-public interface IArmNameAvailabilityService
-{
+public interface IArmNameAvailabilityService {
     Task<bool> IsAvailableAsync(
         string name,
         string subscriptionId,
@@ -25,9 +20,7 @@ public interface IArmNameAvailabilityService
         CancellationToken cancellationToken = default
     );
 }
-
-public sealed class DefaultArmNameAvailabilityService(IHttpClientFactory httpClientFactory) : IArmNameAvailabilityService
-{
+public sealed class DefaultArmNameAvailabilityService(IHttpClientFactory httpClientFactory) : IArmNameAvailabilityService {
     public async Task<bool> IsAvailableAsync(
         string name,
         string subscriptionId,
@@ -37,7 +30,10 @@ public sealed class DefaultArmNameAvailabilityService(IHttpClientFactory httpCli
     ) {
         var firstSlashIndex = type.IndexOf(value: '/');
 
-        if ((-1 == firstSlashIndex) || !type.Contains(value: '.')) {
+        if (
+            (-1 == firstSlashIndex) ||
+            !type.Contains(value: '.')
+        ) {
             throw new InvalidOperationException(message: "BYTRC_ARMNAMECHECK_000: invalid type");
         }
 

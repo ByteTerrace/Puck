@@ -41,20 +41,6 @@ public sealed class DefaultUserStorageLocationService(
         bool IsMigrating
     );
 
-    public async Task<UserStorageLocation> GetAsync(
-        string userObjectId,
-        CancellationToken cancellationToken
-    ) =>
-        await hybridCache.GetOrCreateAsync(
-            cancellationToken: cancellationToken,
-            factory: async innerCancellationToken => await ResolveAsync(
-                cancellationToken: innerCancellationToken,
-                userObjectId: userObjectId
-            ),
-            key: $"storage-location:{userObjectId}",
-            options: CacheEntryOptions
-        );
-
     private async Task<UserStorageLocation> ResolveAsync(
         string userObjectId,
         CancellationToken cancellationToken
@@ -66,9 +52,9 @@ public sealed class DefaultUserStorageLocationService(
                 var location = await httpClientFactory
                     .CreateClient(name: "Actors")
                     .GetFromJsonAsync<ActorStorageLocation>(
-                        cancellationToken: cancellationToken,
-                        requestUri: $"{actorsBaseUrl}/users/{userObjectId}/storage-location"
-                    );
+                    cancellationToken: cancellationToken,
+                    requestUri: $"{actorsBaseUrl}/users/{userObjectId}/storage-location"
+                );
 
                 if (location?.BlobEndpoint is not null) {
                     return new(
@@ -91,5 +77,19 @@ public sealed class DefaultUserStorageLocationService(
             Partition: partition
         );
     }
+
+    public async Task<UserStorageLocation> GetAsync(
+        string userObjectId,
+        CancellationToken cancellationToken
+    ) =>
+        await hybridCache.GetOrCreateAsync(
+            cancellationToken: cancellationToken,
+            factory: async innerCancellationToken => await ResolveAsync(
+                cancellationToken: innerCancellationToken,
+                userObjectId: userObjectId
+            ),
+            key: $"storage-location:{userObjectId}",
+            options: CacheEntryOptions
+        );
 }
 

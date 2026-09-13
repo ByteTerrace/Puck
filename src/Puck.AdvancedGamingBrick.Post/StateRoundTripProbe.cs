@@ -22,38 +22,52 @@ internal static class StateRoundTripProbe {
     private const int RecordFrames = 6;
     private const int WarmupFrames = 8;
 
-    /// <summary>Runs the three round-trip checks against one ROM image.</summary>
-    /// <param name="rom">The cartridge ROM bytes.</param>
-    /// <param name="label">A display label for the ROM.</param>
-    /// <param name="bios">The BIOS image to boot with.</param>
-    /// <returns><see langword="true"/> when every check passed, paired with a one-line detail.</returns>
-    public static (bool Pass, string Detail) Run(byte[] rom, string label, ReadOnlyMemory<byte> bios) {
-        var (frameOk, frameDetail, size) = FrameBoundaryCheck(
-            bios: bios,
-            rom: rom
-        );
-        var (midOk, midDetail) = MidFrameCheck(
-            bios: bios,
-            rom: rom
-        );
-        var (doubleOk, doubleDetail) = DoubleRestoreCheck(
-            bios: bios,
-            rom: rom
-        );
+    private static (bool Ok, string Detail) Compare((ulong Frame, ulong Registers)[] baseline, (ulong Frame, ulong Registers)[] replay) {
+        for (var i = 0; (i < baseline.Length); ++i) {
+            if (baseline[i] != replay[i]) {
+                return (false, $"frame {i} diverged (fb {baseline[i].Frame:X16}/{replay[i].Frame:X16}, reg {baseline[i].Registers:X16}/{replay[i].Registers:X16})");
+            }
+        }
 
-        var pass = (frameOk && midOk && doubleOk);
-        var status = (pass
-            ? "PASS"
-            : "FAIL");
-
-        Console.WriteLine(value: $"  [{status}] {label}  (image {size} bytes)");
-        Console.WriteLine(value: $"           frame-boundary: {frameDetail}");
-        Console.WriteLine(value: $"           mid-frame:      {midDetail}");
-        Console.WriteLine(value: $"           double-restore: {doubleDetail}");
-
-        return (pass, $"{label}: {status}");
+        return (true, $"{baseline.Length} frames identical after restore (final fb 0x{baseline[^1].Frame:X16})");
     }
+    // Double-restore invariant: snapshot∘restore reproduces the image, and is idempotent.
+    private static (bool Ok, string Detail) DoubleRestoreCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
+        using var host = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
+        var machine = host.Machine;
 
+        PostMachine.RunFrames(
+            frames: WarmupFrames,
+            machine: machine
+        );
+
+        var original = machine.Snapshot();
+
+        PostMachine.RunFrames(
+            frames: RecordFrames,
+            machine: machine
+        );
+
+        machine.Restore(snapshot: original);
+        var afterFirst = machine.Snapshot();
+
+        machine.Restore(snapshot: original);
+        var afterSecond = machine.Snapshot();
+
+        var reproducesOriginal = afterFirst.ContentEquals(other: original);
+        var idempotent = afterFirst.ContentEquals(other: afterSecond);
+        var ok = (reproducesOriginal && idempotent);
+
+        var detail = (ok
+            ? "restore reproduces the original image, and is idempotent"
+            : $"reproduces-original={reproducesOriginal}, idempotent={idempotent}"
+        );
+
+        return (ok, detail);
+    }
     // Frame-boundary snapshot: record K frames, restore, re-run K frames, compare.
     private static (bool Ok, string Detail, int Size) FrameBoundaryCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
         using var host = PostMachine.Build(
@@ -87,6 +101,8 @@ internal static class StateRoundTripProbe {
 
         return (ok, $"{detail} (snapshot at cycle {snapshot.TakenAt})", snapshot.Size);
     }
+    private static ulong FramebufferHash(AdvancedGamingBrickMachine machine) =>
+        Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: machine.Framebuffer));
     // Mid-frame snapshot: advance to a mid-scanline point at an instruction boundary, then the same compare.
     private static (bool Ok, string Detail) MidFrameCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
         using var host = PostMachine.Build(
@@ -131,42 +147,6 @@ internal static class StateRoundTripProbe {
 
         return (ok, $"{detail} (snapshot {intoFrame} cycles into frame)");
     }
-    // Double-restore invariant: snapshot∘restore reproduces the image, and is idempotent.
-    private static (bool Ok, string Detail) DoubleRestoreCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
-        using var host = PostMachine.Build(
-            bios: bios,
-            rom: rom
-        );
-        var machine = host.Machine;
-
-        PostMachine.RunFrames(
-            frames: WarmupFrames,
-            machine: machine
-        );
-
-        var original = machine.Snapshot();
-
-        PostMachine.RunFrames(
-            frames: RecordFrames,
-            machine: machine
-        );
-
-        machine.Restore(snapshot: original);
-        var afterFirst = machine.Snapshot();
-
-        machine.Restore(snapshot: original);
-        var afterSecond = machine.Snapshot();
-
-        var reproducesOriginal = afterFirst.ContentEquals(other: original);
-        var idempotent = afterFirst.ContentEquals(other: afterSecond);
-        var ok = (reproducesOriginal && idempotent);
-
-        var detail = (ok
-            ? "restore reproduces the original image, and is idempotent"
-            : $"reproduces-original={reproducesOriginal}, idempotent={idempotent}");
-
-        return (ok, detail);
-    }
     // Per-frame fingerprints: the framebuffer hash and the CPU register+CPSR hash after each of `frames` whole frames.
     private static (ulong Frame, ulong Registers)[] RecordFramesInto(AdvancedGamingBrickMachine machine, int frames) {
         var record = new (ulong Frame, ulong Registers)[frames];
@@ -178,17 +158,6 @@ internal static class StateRoundTripProbe {
 
         return record;
     }
-    private static (bool Ok, string Detail) Compare((ulong Frame, ulong Registers)[] baseline, (ulong Frame, ulong Registers)[] replay) {
-        for (var i = 0; (i < baseline.Length); ++i) {
-            if (baseline[i] != replay[i]) {
-                return (false, $"frame {i} diverged (fb {baseline[i].Frame:X16}/{replay[i].Frame:X16}, reg {baseline[i].Registers:X16}/{replay[i].Registers:X16})");
-            }
-        }
-
-        return (true, $"{baseline.Length} frames identical after restore (final fb 0x{baseline[^1].Frame:X16})");
-    }
-    private static ulong FramebufferHash(AdvancedGamingBrickMachine machine) =>
-        Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: machine.Framebuffer));
     private static ulong RegisterHash(AdvancedGamingBrickMachine machine) {
         Span<uint> registers = stackalloc uint[17];
 
@@ -199,5 +168,38 @@ internal static class StateRoundTripProbe {
         registers[16] = machine.Cpu.Cpsr;
 
         return Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: registers));
+    }
+
+    /// <summary>Runs the three round-trip checks against one ROM image.</summary>
+    /// <param name="rom">The cartridge ROM bytes.</param>
+    /// <param name="label">A display label for the ROM.</param>
+    /// <param name="bios">The BIOS image to boot with.</param>
+    /// <returns><see langword="true"/> when every check passed, paired with a one-line detail.</returns>
+    public static (bool Pass, string Detail) Run(byte[] rom, string label, ReadOnlyMemory<byte> bios) {
+        var (frameOk, frameDetail, size) = FrameBoundaryCheck(
+            bios: bios,
+            rom: rom
+        );
+        var (midOk, midDetail) = MidFrameCheck(
+            bios: bios,
+            rom: rom
+        );
+        var (doubleOk, doubleDetail) = DoubleRestoreCheck(
+            bios: bios,
+            rom: rom
+        );
+
+        var pass = (frameOk && midOk && doubleOk);
+        var status = (pass
+            ? "PASS"
+            : "FAIL"
+        );
+
+        Console.WriteLine(value: $"  [{status}] {label}  (image {size} bytes)");
+        Console.WriteLine(value: $"           frame-boundary: {frameDetail}");
+        Console.WriteLine(value: $"           mid-frame:      {midDetail}");
+        Console.WriteLine(value: $"           double-restore: {doubleDetail}");
+
+        return (pass, $"{label}: {status}");
     }
 }

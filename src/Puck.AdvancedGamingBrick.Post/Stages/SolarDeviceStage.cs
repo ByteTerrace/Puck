@@ -16,14 +16,14 @@ internal sealed class SolarDeviceStage : IPostStage<PostContext> {
     private static readonly byte[] GameCode = "U3IJ"u8.ToArray();
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "solar-device";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

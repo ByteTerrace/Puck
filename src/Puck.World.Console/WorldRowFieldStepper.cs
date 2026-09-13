@@ -86,7 +86,10 @@ public static class WorldRowFieldStepper {
             error: out error,
             path: fieldPath,
             root: root,
-            segments: segments.AsSpan(start: 0, length: (segments.Length - 1))
+            segments: segments.AsSpan(
+                start: 0,
+                length: (segments.Length - 1)
+            )
         )) {
             return false;
         }
@@ -106,10 +109,19 @@ public static class WorldRowFieldStepper {
         switch (leaf!.GetValueKind()) {
             case JsonValueKind.True or JsonValueKind.False: {
                     var current = leaf.GetValue<bool>();
-                    var applied = ((delta != 0f) ? !current : current);
+                    var applied = ((delta != 0f)
+                        ? !current
+                        : current
+                    );
 
-                    oldText = (current ? "true" : "false");
-                    newText = (applied ? "true" : "false");
+                    oldText = (current
+                        ? "true"
+                        : "false"
+                    );
+                    newText = (applied
+                        ? "true"
+                        : "false"
+                    );
                     replacement = JsonValue.Create(value: applied)!;
 
                     break;
@@ -142,9 +154,15 @@ public static class WorldRowFieldStepper {
 
                         try {
                             currentLong = leaf.GetValue<long>();
-                            appliedLong = checked((currentLong + ((long)Math.Round(mode: MidpointRounding.AwayFromZero, value: delta))));
+                            appliedLong = checked((currentLong + ((long)Math.Round(
+                                mode: MidpointRounding.AwayFromZero,
+                                value: delta
+                            ))));
                         } catch (Exception exception) when ((exception is OverflowException or FormatException or InvalidOperationException)) {
-                            error = $"'{fieldPath}': integer step out of range (delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
+                            error = $"'{fieldPath}': integer step out of range (delta {delta.ToString(
+                                format: "0.####",
+                                provider: CultureInfo.InvariantCulture
+                            )})";
 
                             return false;
                         }
@@ -157,13 +175,25 @@ public static class WorldRowFieldStepper {
                         var appliedDouble = (currentDouble + delta);
 
                         if (!double.IsFinite(d: appliedDouble)) {
-                            error = $"'{fieldPath}': step result is not finite (current {currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)}, delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
+                            error = $"'{fieldPath}': step result is not finite (current {currentDouble.ToString(
+                                format: "0.####",
+                                provider: CultureInfo.InvariantCulture
+                            )}, delta {delta.ToString(
+                                format: "0.####",
+                                provider: CultureInfo.InvariantCulture
+                            )})";
 
                             return false;
                         }
 
-                        oldText = currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
-                        newText = appliedDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
+                        oldText = currentDouble.ToString(
+                            format: "0.####",
+                            provider: CultureInfo.InvariantCulture
+                        );
+                        newText = appliedDouble.ToString(
+                            format: "0.####",
+                            provider: CultureInfo.InvariantCulture
+                        );
                         replacement = JsonValue.Create(value: appliedDouble)!;
                     }
 
@@ -172,11 +202,11 @@ public static class WorldRowFieldStepper {
             case JsonValueKind.String: {
                     if (
                         !WorldRowFieldPath.TryResolveClrType(
-                            error: out error,
-                            leafType: out var leafType,
-                            rowType: rowType,
-                            segments: segments
-                        ) ||
+                        error: out error,
+                        leafType: out var leafType,
+                        rowType: rowType,
+                        segments: segments
+                    ) ||
                         (leafType is not { IsEnum: true })
                     ) {
                         error ??= $"'{fieldPath}': not a steppable field (number, boolean, or named enum only)";

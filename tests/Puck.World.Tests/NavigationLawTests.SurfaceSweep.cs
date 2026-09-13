@@ -12,17 +12,27 @@ public sealed partial class NavigationLawTests {
     public void SurfaceNavigationAdmitsDiagonalEdgesAcrossAFlatFloor() {
         var definition = WithFloor(definition: NavigationDocument(domain: SurfaceDomain()));
         using var fixture = Fixtures.FreshServer(definition: definition);
+
         _ = JoinNavigator(
             fixture: fixture,
-            goal: new FixedVector3(X: FixedQ4816.FromInteger(value: 3), Y: FixedQ4816.Zero, Z: FixedQ4816.FromInteger(value: 3))
+            goal: new FixedVector3(
+                X: FixedQ4816.FromInteger(value: 3),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.FromInteger(value: 3)
+            )
         );
         fixture.Step();
 
-        var route = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(
-            @object: fixture.Server.Population.Capture().Entries.Single(row => row.Index == 0).Navigation
-        );
+        var route = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
 
-        Assert.Contains(expectedSubstring: "clear=16/16", actualString: fixture.Server.Population.DescribeNavigation(), comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: 4, actual: route.Path.Length);
+        Assert.Contains(
+            expectedSubstring: "clear=16/16",
+            actualString: fixture.Server.Population.DescribeNavigation(),
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: route.Path.Length
+        );
     }
 }

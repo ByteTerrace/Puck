@@ -457,7 +457,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        if (HasForwardingFrom(instance.Server)) { return false; }
+        if (HasForwardingFrom(source: instance.Server)) { return false; }
 
         return TryStop(
             name: name,
@@ -604,7 +604,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             // it is not yet part of the stepping engine at all, exactly like a row this host has not admitted.
             // ReleaseHold clears this and starts the door on the boundary the caller proves every mirror primed.
             // Retirement is a separate permanent hold; it must not bank ticks or run the paused-world edit drain.
-            if (instance.AwaitingMirrors || instance.Server.IsRetiring) {
+            if (
+                instance.AwaitingMirrors ||
+                instance.Server.IsRetiring
+            ) {
                 continue;
             }
 
@@ -723,15 +726,18 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             // an instance name for an observation. A caller holding only the delivered identity still deserves the
             // true answer, so fall back to matching that against each row's own stamped authority/endpoint.
             foreach (var candidate in m_remoteAuthorities.Values) {
-                if (string.Equals(
+                if (
+                    string.Equals(
                     a: candidate.Authority,
                     b: name,
                     comparisonType: StringComparison.Ordinal
-                ) || string.Equals(
+                ) ||
+                    string.Equals(
                     a: candidate.Endpoint,
                     b: name,
                     comparisonType: StringComparison.Ordinal
-                )) {
+                )
+                ) {
                     authority = candidate;
 
                     break;
@@ -953,24 +959,31 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // this way clears the same cross-document adjacency proof a top-level --world boot does (see
         // WorldDefinitionLoader.TryResolve). No cloud-backed half here; a neighbour reachable only through
         // the cloud refuses by name like any other unreachable resolver.
-        var instanceNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } instanceDirectory)
+        var instanceNeighbours = new WorldFileNeighbourResolver(
+            baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } instanceDirectory)
             ? instanceDirectory
-            : AppContext.BaseDirectory), catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog);
+            : AppContext.BaseDirectory),
+            catalogFingerprint: m_catalogFingerprint,
+            catalog: m_machineCatalog
+        );
 
         // Asked before the load, which is when the answer is still a prediction of what the load will do rather
         // than a trace of what it did: a held image standing for this path is what the load is about to compose from.
-        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: resolvedPath, catalogFingerprint: m_catalogFingerprint);
+        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(
+            catalogFingerprint: m_catalogFingerprint,
+            resolvedPath: resolvedPath
+        );
 
         // The instance's own NAME is the seed ladder's instance rung, so two instances of one document draw
         // independently while each stays reproducible from (document, instance name, draw history).
         if (!WorldDefinitionLoader.TryLoadFile(
+            catalog: m_machineCatalog,
+            catalogFingerprint: m_catalogFingerprint,
             definition: out var definition,
             instanceIdentity: name,
             neighbours: instanceNeighbours,
             path: resolvedPath,
-            reason: out reason,
-            catalogFingerprint: m_catalogFingerprint,
-            catalog: m_machineCatalog
+            reason: out reason
         )) {
             return false;
         }
@@ -997,7 +1010,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     template: definition!,
                     directory: ownedWorlds,
                     machineId: m_machineId,
-                    neighbours: new WorldFileNeighbourResolver(baseDirectory: () => ownedWorlds, catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog),
+                    neighbours: new WorldFileNeighbourResolver(
+                        baseDirectory: () => ownedWorlds,
+                        catalog: m_machineCatalog,
+                        catalogFingerprint: m_catalogFingerprint
+                    ),
                     narrationHub: m_narration,
                     machineCatalog: m_machineCatalog,
                     catalogFingerprint: m_catalogFingerprint
@@ -1026,7 +1043,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 ownedMachines: machines,
                 link: new LoopbackTransport(server: server),
                 federation: Boot!.Federation,
-                documentOrigin: new WorldFileOrigin(resolvedPath: resolvedPath, catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog),
+                documentOrigin: new WorldFileOrigin(
+                    catalog: m_machineCatalog,
+                    catalogFingerprint: m_catalogFingerprint,
+                    resolvedPath: resolvedPath
+                ),
                 ownedAdjacencies: adjacencies
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.SecurityException)) {
@@ -1089,10 +1110,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         _ = m_instances.Remove(key: name);
         _ = m_documentShared.Remove(key: name);
-        RemoveSourceForwarding(instance.Server);
+        RemoveSourceForwarding(source: instance.Server);
         foreach (var forwarded in m_forwardedBodies.Values) {
-            if (forwarded.Authority is WorldDeferredForwardedAuthority deferred &&
-                deferred.DescribeForCheckpoint().DestinationAuthority == instance.Server.AuthorityIdentity) {
+            if (
+                (forwarded.Authority is WorldDeferredForwardedAuthority deferred) &&
+                (deferred.DescribeForCheckpoint().DestinationAuthority == instance.Server.AuthorityIdentity)
+            ) {
                 deferred.Invalidate();
             }
         }
@@ -1172,7 +1195,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         ArgumentNullException.ThrowIfNull(argument: row);
 
         if (m_instances.ContainsKey(key: row.Name)) {
-            throw new ArgumentException(message: $"an instance named '{row.Name}' is already admitted", paramName: nameof(row));
+            throw new ArgumentException(
+                message: $"an instance named '{row.Name}' is already admitted",
+                paramName: nameof(row)
+            );
         }
 
         row.Server.TransferForwarder = this;
@@ -1193,14 +1219,20 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             b: BootInstanceName,
             comparisonType: StringComparison.Ordinal
         )) {
-            throw new ArgumentException(message: $"a boot row must be named '{BootInstanceName}'", paramName: nameof(row));
+            throw new ArgumentException(
+                message: $"a boot row must be named '{BootInstanceName}'",
+                paramName: nameof(row)
+            );
         }
 
         Admit(row: row);
         var bootEndpoint = EndpointFor(instance: row);
         // A world declaring fewer local seats than the host's seat ceiling (m_seats.SeatCount) has no entity-table
         // row for the seats it did not declare — Population.Capacity is the entity table's real size.
-        var routedSeats = Math.Min(val1: m_seats.SeatCount, val2: row.Server.Population.Capacity);
+        var routedSeats = Math.Min(
+            val1: m_seats.SeatCount,
+            val2: row.Server.Population.Capacity
+        );
 
         for (var slot = 0; (slot < routedSeats); slot++) {
             m_seats.PublishRoute(
@@ -1279,36 +1311,40 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var targetAuthority = pending.TargetAuthority?.Local?.Server.AuthorityIdentity
-                ?? pending.TargetAuthority?.Remote?.PeerAuthority ?? pending.RecoveryAuthority ?? string.Empty;
+            var targetAuthority = (pending.TargetAuthority?.Local?.Server.AuthorityIdentity
+                ?? (pending.TargetAuthority?.Remote?.PeerAuthority ?? (pending.RecoveryAuthority ?? string.Empty)));
 
             inDoubt.Add(item: new WorldInDoubtTransferCheckpoint(
                 RollbackOnly: pending.RollbackOnly,
                 CommitConfirmed: pending.CommitConfirmed,
-                Continuation: CaptureTransferContinuation(pending.Transfer, pending.Landed),
-                TargetDefinitionJson: (pending.TargetAuthority?.Remote?.Definition ?? pending.RecoveryDefinition) is { } remoteDefinition
-                    ? WorldDefinitionSerialization.Serialize(remoteDefinition) : null,
+                Continuation: CaptureTransferContinuation(
+                    pending.Transfer,
+                    pending.Landed
+                ),
+                TargetDefinitionJson: (((pending.TargetAuthority?.Remote?.Definition ?? pending.RecoveryDefinition) is { } remoteDefinition)
+                ? WorldDefinitionSerialization.Serialize(definition: remoteDefinition)
+                : null),
                 CommitMembers: [.. pending.CommitMembers],
                 Landed: [.. pending.Landed.Select(selector: static member => new WorldLandedMemberCheckpoint(
-                    AdmissionGrants: member.AdmissionGrants,
-                    BodyColor: member.BodyColor,
-                    Designations: member.Designations,
-                    DynamicState: member.DynamicState,
-                    Mobility: member.Mobility,
-                    FollowedSeatMask: member.FollowedSeatMask,
-                    Peer: member.Peer,
-                    Position: member.Position,
-                    SourceGrants: member.SourceGrants,
-                    SourceSlot: member.SourceSlot,
-                    TargetSlot: member.TargetSlot,
-                    Yaw: member.Yaw
-                ))],
+                        AdmissionGrants: member.AdmissionGrants,
+                        BodyColor: member.BodyColor,
+                        Designations: member.Designations,
+                        DynamicState: member.DynamicState,
+                        Mobility: member.Mobility,
+                        FollowedSeatMask: member.FollowedSeatMask,
+                        Peer: member.Peer,
+                        Position: member.Position,
+                        SourceGrants: member.SourceGrants,
+                        SourceSlot: member.SourceSlot,
+                        TargetSlot: member.TargetSlot,
+                        Yaw: member.Yaw
+                    ))],
                 MemberCount: pending.MemberCount,
                 SourceDeadlineTick: pending.SourceDeadlineTick,
                 SourceInstance: pending.Transfer.SourceInstance,
                 Spawned: pending.Spawned,
                 TargetAuthority: targetAuthority,
-                TargetEndpoint: pending.TargetAuthority?.Remote?.Endpoint ?? pending.RecoveryEndpoint,
+                TargetEndpoint: (pending.TargetAuthority?.Remote?.Endpoint ?? pending.RecoveryEndpoint),
                 TargetName: pending.TargetName,
                 TransferId: pending.Transfer.TransferId
             ));
@@ -1318,11 +1354,15 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         var forwarded = new List<WorldForwardedBodyCheckpoint>();
 
         foreach (var pair in m_forwardedBodies) {
-            if (!ReferenceEquals(objA: pair.Key.Server, objB: row.Server)) {
+            if (!ReferenceEquals(
+                objA: pair.Key.Server,
+                objB: row.Server
+            )) {
                 continue;
             }
 
             var destination = pair.Value.Authority.DescribeForCheckpoint();
+
             forwarded.Add(item: new WorldForwardedBodyCheckpoint(
                 SourceIncarnation: pair.Key.Incarnation,
                 DestinationAddress: new WorldEntityAddress(
@@ -1334,29 +1374,35 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 Mobility: destination.Mobility,
                 SourceAuthority: destination.SourceAuthority,
                 DestinationEndpoint: destination.Endpoint,
-                DestinationDefinitionJson: destination.Definition is { } definition ? WorldDefinitionSerialization.Serialize(definition) : null
+                DestinationDefinitionJson: ((destination.Definition is { } definition)
+                ? WorldDefinitionSerialization.Serialize(definition: definition)
+                : null)
             ));
         }
 
         var appliedIds = m_appliedTransferIds
             .Where(predicate: entry => string.Equals(
-                a: entry.SourceInstance,
-                b: row.Name,
-                comparisonType: StringComparison.Ordinal
-            ))
+            a: entry.SourceInstance,
+            b: row.Name,
+            comparisonType: StringComparison.Ordinal
+        ))
             .Select(selector: entry => entry.TransferId)
             .ToArray();
 
         return new WorldAuthorityHostRowCheckpoint(
             AnnouncedCrossingHolds: [.. m_announcedCrossingHolds
-                .Where(predicate: pair => string.Equals(a: pair.Key.Instance, b: row.Name, comparisonType: StringComparison.Ordinal))
+                .Where(predicate: pair => string.Equals(
+                    a: pair.Key.Instance,
+                    b: row.Name,
+                    comparisonType: StringComparison.Ordinal
+                ))
                 .Select(selector: pair => (pair.Key.Seat, pair.Value))],
             AppliedTransferHighWater: (m_appliedTransferHighWater.TryGetValue(
                 key: row.Name,
-                value: out var highWater)
-                ? highWater
-                : null
-            ),
+                value: out var highWater
+            )
+            ? highWater
+            : null),
             AppliedTransferIds: appliedIds,
             ElapsedEngineTicks: row.ElapsedEngineTicks,
             ForwardedBodies: forwarded,
@@ -1368,7 +1414,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             Retained: m_retainedInstances.Contains(item: row.Name),
             ScheduleAccumulatorTicks: row.ScheduleAccumulatorTicks,
             SeededArrivals: [.. m_seededArrivals
-                .Where(predicate: pair => string.Equals(a: pair.Key.Instance, b: row.Name, comparisonType: StringComparison.Ordinal))
+                .Where(predicate: pair => string.Equals(
+                    a: pair.Key.Instance,
+                    b: row.Name,
+                    comparisonType: StringComparison.Ordinal
+                ))
                 .Select(selector: pair => (pair.Key.Seat, pair.Value))]
         );
     }
@@ -1389,8 +1439,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: slice);
 
-        var restoredTransfers = PrepareInDoubtTransfers(row, slice.InDoubtTransfers);
-        var restoredForwarding = PrepareForwardedBodies(row, slice.ForwardedBodies);
+        var restoredTransfers = PrepareInDoubtTransfers(
+            row,
+            slice.InDoubtTransfers
+        );
+        var restoredForwarding = PrepareForwardedBodies(
+            row,
+            slice.ForwardedBodies
+        );
 
         row.ScheduleAccumulatorTicks = slice.ScheduleAccumulatorTicks;
         row.ElapsedEngineTicks = slice.ElapsedEngineTicks;
@@ -1420,11 +1476,15 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             m_seededArrivals[(row.Name, row2.Seat)] = row2.Border;
         }
 
-        RemoveSourceForwarding(row.Server);
+        RemoveSourceForwarding(source: row.Server);
         foreach (var forwarded in restoredForwarding) { m_forwardedBodies[(row.Server, forwarded.Incarnation)] = forwarded.Body; }
 
-        m_inDoubtTransfers.RemoveAll(pending => string.Equals(pending.Transfer.SourceInstance, row.Name, StringComparison.Ordinal));
-        m_inDoubtTransfers.AddRange(restoredTransfers);
+        m_inDoubtTransfers.RemoveAll(match: pending => string.Equals(
+            a: pending.Transfer.SourceInstance,
+            b: row.Name,
+            comparisonType: StringComparison.Ordinal
+        ));
+        m_inDoubtTransfers.AddRange(collection: restoredTransfers);
         ResolveForwardedRecoveries();
     }
 

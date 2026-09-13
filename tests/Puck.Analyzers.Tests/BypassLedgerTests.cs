@@ -20,19 +20,36 @@ public sealed class BypassLedgerTests {
             .SelectMany(selector: type => type.GetMethods(bindingAttr: BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.Static))
             .SelectMany(selector: method => method.GetCustomAttributesData())
             .Where(predicate: attribute =>
-                (string.Equals(a: attribute.AttributeType.FullName, b: "Xunit.TraitAttribute", comparisonType: StringComparison.Ordinal)
+                (string.Equals(
+            a: attribute.AttributeType.FullName,
+            b: "Xunit.TraitAttribute",
+            comparisonType: StringComparison.Ordinal
+        )
                 && (attribute.ConstructorArguments.Count == 2)
-                && string.Equals(a: (attribute.ConstructorArguments[0].Value as string), b: "bypass", comparisonType: StringComparison.Ordinal)))
+                && string.Equals(
+            a: (attribute.ConstructorArguments[0].Value as string),
+            b: "bypass",
+            comparisonType: StringComparison.Ordinal
+        )))
             .Select(selector: attribute => ((attribute.ConstructorArguments[1].Value as string) ?? string.Empty))
             .Distinct(comparer: StringComparer.Ordinal)
-            .OrderBy(keySelector: id => id, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: id => id,
+            comparer: StringComparer.Ordinal
+        )
             .ToArray();
 
     [Fact]
     public void EveryKnownBypassIsStillRecordedByACase() {
         var recorded = Recorded();
 
-        Assert.Equal(expected: Known.OrderBy(keySelector: id => id, comparer: StringComparer.Ordinal).ToArray(), actual: recorded);
+        Assert.Equal(
+            expected: Known.OrderBy(
+                keySelector: id => id,
+                comparer: StringComparer.Ordinal
+            ).ToArray(),
+            actual: recorded
+        );
     }
     [Fact]
     public void TallyOfKnownBypassesIsWhatThisSuiteSays() {
@@ -41,7 +58,13 @@ public sealed class BypassLedgerTests {
         var known = Known.Length;
         var recorded = Recorded().Length;
 
-        Assert.Equal(actual: known, expected: Tally);
-        Assert.Equal(actual: recorded, expected: Tally);
+        Assert.Equal(
+            actual: known,
+            expected: Tally
+        );
+        Assert.Equal(
+            actual: recorded,
+            expected: Tally
+        );
     }
 }

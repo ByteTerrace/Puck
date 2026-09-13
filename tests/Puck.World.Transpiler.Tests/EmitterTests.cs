@@ -7,8 +7,38 @@ namespace Puck.World.Transpiler.Tests;
 
 public class EmitterTests {
     [Fact]
+    public void TestAddonAutoHashing() {
+        const string Source = """
+            schema: "puck.world.definition.v1"
+
+            addon "test-addon" {
+                source: "addons/game.wasm"
+                hash: "auto"
+            }
+            """;
+
+        var doc = PuckParser.ParseDocument(Source);
+        var lowered = WorldDocumentEmitter.Lower(doc);
+
+        var addons = Assert.IsType<JsonArray>(@object: lowered["addons"]);
+
+        Assert.Single(collection: addons);
+        var addon0 = Assert.IsType<JsonObject>(@object: addons[0]);
+        var hash = addon0["hash"]?.ToString();
+
+        Assert.NotNull(@object: hash);
+        Assert.StartsWith(
+            actualString: hash,
+            expectedStartString: "sha256-64/"
+        );
+        Assert.Equal(
+            26,
+            hash.Length
+        ); // "sha256-64/" is 10 chars + 16 hex = 26 chars
+    }
+    [Fact]
     public void TestMinimalSyntheticWorldEmission() {
-        const string source = """
+        const string Source = """
             schema: "puck.world.definition.v1"
             basis: "worlds/standard.basis.json"
 
@@ -20,27 +50,52 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(source);
+        var doc = PuckParser.ParseDocument(Source);
         var jsonObj = WorldDocumentEmitter.Lower(doc);
 
-        Assert.Equal("puck.world.definition.v1", jsonObj["schema"]?.ToString());
-        Assert.Equal("worlds/standard.basis.json", jsonObj["basis"]?.ToString());
+        Assert.Equal(
+            "puck.world.definition.v1",
+            jsonObj["schema"]?.ToString()
+        );
+        Assert.Equal(
+            "worlds/standard.basis.json",
+            jsonObj["basis"]?.ToString()
+        );
 
-        var host = Assert.IsType<JsonObject>(jsonObj["host"]);
-        Assert.Equal(1280L, host["width"]?.GetValue<long>());
-        Assert.Equal(720L, host["height"]?.GetValue<long>());
-        Assert.False(host["fullscreen"]?.GetValue<bool>());
-        Assert.Equal(60L, host["targetHertz"]?.GetValue<long>());
+        var host = Assert.IsType<JsonObject>(@object: jsonObj["host"]);
+
+        Assert.Equal(
+            1280L,
+            host["width"]?.GetValue<long>()
+        );
+        Assert.Equal(
+            720L,
+            host["height"]?.GetValue<long>()
+        );
+        Assert.False(condition: host["fullscreen"]?.GetValue<bool>());
+        Assert.Equal(
+            60L,
+            host["targetHertz"]?.GetValue<long>()
+        );
 
         var canonicalJson = WorldDocumentEmitter.CompileToJson(doc);
-        Assert.Contains("\"schema\": \"puck.world.definition.v1\"", canonicalJson);
-        Assert.Contains("\"width\": 1280", canonicalJson);
-        Assert.EndsWith("\n", canonicalJson);
-    }
 
+        Assert.Contains(
+            actualString: canonicalJson,
+            expectedSubstring: "\"schema\": \"puck.world.definition.v1\""
+        );
+        Assert.Contains(
+            actualString: canonicalJson,
+            expectedSubstring: "\"width\": 1280"
+        );
+        Assert.EndsWith(
+            actualString: canonicalJson,
+            expectedEndString: "\n"
+        );
+    }
     [Fact]
     public void TestPipelineWorldParity() {
-        const string puckPipeline = """
+        const string PuckPipeline = """
             schema: "puck.world.definition.v1"
 
             host {
@@ -100,34 +155,66 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(puckPipeline);
+        var doc = PuckParser.ParseDocument(PuckPipeline);
         var lowered = WorldDocumentEmitter.Lower(doc);
 
-        var views = Assert.IsType<JsonObject>(lowered["views"]);
-        var layouts = Assert.IsType<JsonArray>(views["layouts"]);
-        Assert.Single(layouts);
-        var layout0 = Assert.IsType<JsonObject>(layouts[0]);
-        Assert.Equal("pipeline", layout0["name"]?.ToString());
-        Assert.Equal(0.25, layout0["transitionSeconds"]?.GetValue<double>());
+        var views = Assert.IsType<JsonObject>(@object: lowered["views"]);
+        var layouts = Assert.IsType<JsonArray>(@object: views["layouts"]);
 
-        var seatRig = Assert.IsType<JsonObject>(views["seatRig"]);
-        Assert.Equal("pipeline", seatRig["name"]?.ToString());
-        Assert.Equal("puck.camera.program.v1", seatRig["version"]?.ToString());
+        Assert.Single(collection: layouts);
+        var layout0 = Assert.IsType<JsonObject>(@object: layouts[0]);
 
-        var ops = Assert.IsType<JsonArray>(seatRig["operations"]);
-        Assert.Equal(2, ops.Count);
-        var op0 = Assert.IsType<JsonObject>(ops[0]);
-        Assert.Equal("orbit", op0["$type"]?.ToString());
-        Assert.Equal(0.01, op0["distance"]?.GetValue<double>());
+        Assert.Equal(
+            "pipeline",
+            layout0["name"]?.ToString()
+        );
+        Assert.Equal(
+            0.25,
+            layout0["transitionSeconds"]?.GetValue<double>()
+        );
 
-        var op1 = Assert.IsType<JsonObject>(ops[1]);
-        Assert.Equal("fieldOfView", op1["$type"]?.ToString());
-        Assert.Equal(0.001, op1["fieldOfViewRadians"]?.GetValue<double>());
+        var seatRig = Assert.IsType<JsonObject>(@object: views["seatRig"]);
+
+        Assert.Equal(
+            "pipeline",
+            seatRig["name"]?.ToString()
+        );
+        Assert.Equal(
+            "puck.camera.program.v1",
+            seatRig["version"]?.ToString()
+        );
+
+        var ops = Assert.IsType<JsonArray>(@object: seatRig["operations"]);
+
+        Assert.Equal(
+            2,
+            ops.Count
+        );
+        var op0 = Assert.IsType<JsonObject>(@object: ops[0]);
+
+        Assert.Equal(
+            "orbit",
+            op0["$type"]?.ToString()
+        );
+        Assert.Equal(
+            0.01,
+            op0["distance"]?.GetValue<double>()
+        );
+
+        var op1 = Assert.IsType<JsonObject>(@object: ops[1]);
+
+        Assert.Equal(
+            "fieldOfView",
+            op1["$type"]?.ToString()
+        );
+        Assert.Equal(
+            0.001,
+            op1["fieldOfViewRadians"]?.GetValue<double>()
+        );
     }
-
     [Fact]
     public void TestTemplateExpansionAndLetSubstitution() {
-        const string source = """
+        const string Source = """
             schema: "puck.world.definition.v1"
 
             let defaultGravity = [0, -9.81, 0]
@@ -151,43 +238,35 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(source);
+        var doc = PuckParser.ParseDocument(Source);
         var lowered = WorldDocumentEmitter.Lower(doc);
 
-        var host = Assert.IsType<JsonObject>(lowered["host"]);
-        Assert.Equal(0.25, host["tickIntervalSeconds"]?.GetValue<double>());
+        var host = Assert.IsType<JsonObject>(@object: lowered["host"]);
 
-        var physics = Assert.IsType<JsonObject>(host["physics"]);
-        var grav = Assert.IsType<JsonArray>(physics["gravity"]);
-        Assert.Equal(3, grav.Count);
-        Assert.Equal(-9.81, grav[1]?.GetValue<double>());
+        Assert.Equal(
+            0.25,
+            host["tickIntervalSeconds"]?.GetValue<double>()
+        );
 
-        var views = Assert.IsType<JsonObject>(lowered["views"]);
-        var seatRig = Assert.IsType<JsonObject>(views["seatRig"]);
-        Assert.Equal("pilot", seatRig["name"]?.ToString());
-        Assert.True(seatRig["pitchRadians"]?.GetValue<double>() > 0.78);
-    }
+        var physics = Assert.IsType<JsonObject>(@object: host["physics"]);
+        var grav = Assert.IsType<JsonArray>(@object: physics["gravity"]);
 
-    [Fact]
-    public void TestAddonAutoHashing() {
-        const string source = """
-            schema: "puck.world.definition.v1"
+        Assert.Equal(
+            3,
+            grav.Count
+        );
+        Assert.Equal(
+            -9.81,
+            grav[1]?.GetValue<double>()
+        );
 
-            addon "test-addon" {
-                source: "addons/game.wasm"
-                hash: "auto"
-            }
-            """;
+        var views = Assert.IsType<JsonObject>(@object: lowered["views"]);
+        var seatRig = Assert.IsType<JsonObject>(@object: views["seatRig"]);
 
-        var doc = PuckParser.ParseDocument(source);
-        var lowered = WorldDocumentEmitter.Lower(doc);
-
-        var addons = Assert.IsType<JsonArray>(lowered["addons"]);
-        Assert.Single(addons);
-        var addon0 = Assert.IsType<JsonObject>(addons[0]);
-        var hash = addon0["hash"]?.ToString();
-        Assert.NotNull(hash);
-        Assert.StartsWith("sha256-64/", hash);
-        Assert.Equal(26, hash.Length); // "sha256-64/" is 10 chars + 16 hex = 26 chars
+        Assert.Equal(
+            "pilot",
+            seatRig["name"]?.ToString()
+        );
+        Assert.True(condition: (seatRig["pitchRadians"]?.GetValue<double>() > 0.78));
     }
 }

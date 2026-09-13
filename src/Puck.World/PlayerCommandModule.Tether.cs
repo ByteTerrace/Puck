@@ -23,7 +23,9 @@ internal sealed partial class PlayerCommandModule {
             : "n/a"
         );
 
-        return $"[body.tether: body:{index} attached={(attached ? "yes" : "no")} anchor={anchor} rope={rope}]";
+        return $"[body.tether: body:{index} attached={(attached
+            ? "yes"
+            : "no")} anchor={anchor} rope={rope}]";
     }
     // The body.hold read-back: which row of the kit's ordered hold list holds the body, the surface normal it holds
     // (n/a for a free hold), and what the row still has left to spend (n/a for a row that spends nothing).
@@ -38,7 +40,9 @@ internal sealed partial class PlayerCommandModule {
             : "n/a"
         );
 
-        return $"[body.hold: body:{index} hold={name} normal={((normal == Puck.Maths.FixedVector3.Zero) ? "n/a" : $"({DescribeTetherFixed(value: normal.X)}, {DescribeTetherFixed(value: normal.Y)}, {DescribeTetherFixed(value: normal.Z)})")} spend={spend}]";
+        return $"[body.hold: body:{index} hold={name} normal={((normal == Puck.Maths.FixedVector3.Zero)
+            ? "n/a"
+            : $"({DescribeTetherFixed(value: normal.X)}, {DescribeTetherFixed(value: normal.Y)}, {DescribeTetherFixed(value: normal.Z)})")} spend={spend}]";
     }
     // Shared front matter for body.attach/body.detach: resolve the target, refuse by name when the target's OWN kit
     // carries no tether facet or no channel for this lane (a kit authoring none keeps every body's tether inert),
@@ -78,7 +82,14 @@ internal sealed partial class PlayerCommandModule {
             routed: out var routed
         );
 
-        if (routed || pressed.IsError || (pressed.Output?.Contains(value: "refused", comparisonType: StringComparison.Ordinal) ?? false)) {
+        if (
+            routed ||
+            pressed.IsError ||
+            (pressed.Output?.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: "refused"
+        ) ?? false)
+        ) {
             return pressed;
         }
 

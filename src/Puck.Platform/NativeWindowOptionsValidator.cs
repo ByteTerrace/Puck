@@ -19,7 +19,12 @@ public sealed class NativeWindowOptionsValidator : IValidateOptions<NativeWindow
 
         var failures = new List<string>(capacity: 5);
 
-        WindowOptionsValidation.AddFailures(failures: failures, title: options.Title, width: options.Width, height: options.Height);
+        WindowOptionsValidation.AddFailures(
+            failures: failures,
+            title: options.Title,
+            width: options.Width,
+            height: options.Height
+        );
 
         if (
             (options.Mode == NativeWindowMode.PlatformWindow) &&
@@ -30,6 +35,7 @@ public sealed class NativeWindowOptionsValidator : IValidateOptions<NativeWindow
 
         return ((failures.Count == 0)
             ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(failures: failures));
+            : ValidateOptionsResult.Fail(failures: failures)
+        );
     }
 }

@@ -23,7 +23,10 @@ internal static partial class Oracles {
             exact += (((BigInteger)left[lane]) * right[lane]);
         }
 
-        return RoundDyadic(exact: exact, shift: 16);
+        return RoundDyadic(
+            exact: exact,
+            shift: 16
+        );
     }
     /// <summary>The reference fused wedge — ONE ties-to-even rounding of the exact <c>x₁·y₂ − y₁·x₂</c> at shift
     /// sixteen, wrapped to the carrier.</summary>
@@ -33,7 +36,10 @@ internal static partial class Oracles {
     /// <param name="rightY">The second vector's second raw.</param>
     /// <returns>The bivector coefficient's raw.</returns>
     public static long FusedWedge(long leftX, long leftY, long rightX, long rightY) =>
-        RoundDyadic(exact: ((((BigInteger)leftX) * rightY) - (((BigInteger)leftY) * rightX)), shift: 16);
+        RoundDyadic(
+            exact: ((((BigInteger)leftX) * rightY) - (((BigInteger)leftY) * rightX)),
+            shift: 16
+        );
     /// <summary>The reference fused cross product — each lane ONE ties-to-even rounding of its exact two-product
     /// difference at shift sixteen, wrapped to the carrier.</summary>
     /// <param name="left">The first vector's three raws.</param>
@@ -42,9 +48,18 @@ internal static partial class Oracles {
     /// <remarks>The right-handed cycle is spelled out lane by lane rather than delegated, so a transposed or mis-signed
     /// lane assignment in the subject has an independently authored orientation to fail against.</remarks>
     public static void FusedCross(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        result[0] = RoundDyadic(exact: ((((BigInteger)left[1]) * right[2]) - (((BigInteger)left[2]) * right[1])), shift: 16);
-        result[1] = RoundDyadic(exact: ((((BigInteger)left[2]) * right[0]) - (((BigInteger)left[0]) * right[2])), shift: 16);
-        result[2] = RoundDyadic(exact: ((((BigInteger)left[0]) * right[1]) - (((BigInteger)left[1]) * right[0])), shift: 16);
+        result[0] = RoundDyadic(
+            exact: ((((BigInteger)left[1]) * right[2]) - (((BigInteger)left[2]) * right[1])),
+            shift: 16
+        );
+        result[1] = RoundDyadic(
+            exact: ((((BigInteger)left[2]) * right[0]) - (((BigInteger)left[0]) * right[2])),
+            shift: 16
+        );
+        result[2] = RoundDyadic(
+            exact: ((((BigInteger)left[0]) * right[1]) - (((BigInteger)left[1]) * right[0])),
+            shift: 16
+        );
     }
     /// <summary>The per-product-rounding discipline for a dot product: EACH raw Q32 product rounded to Q16 on its own,
     /// then summed exactly and wrapped. The alternative a kernel without a fused accumulator is forced into; it exists
@@ -56,7 +71,10 @@ internal static partial class Oracles {
         var total = BigInteger.Zero;
 
         for (var lane = 0; (lane < left.Length); ++lane) {
-            total += RoundToEvenUnits(magnitude: (((BigInteger)left[lane]) * right[lane]), shift: 16);
+            total += RoundToEvenUnits(
+                magnitude: (((BigInteger)left[lane]) * right[lane]),
+                shift: 16
+            );
         }
 
         return WrapToRaw(value: total);
@@ -70,8 +88,14 @@ internal static partial class Oracles {
     /// <returns>The per-product bivector coefficient's raw.</returns>
     public static long PerProductWedge(long leftX, long leftY, long rightX, long rightY) =>
         WrapToRaw(value: (
-            RoundToEvenUnits(magnitude: (((BigInteger)leftX) * rightY), shift: 16) -
-            RoundToEvenUnits(magnitude: (((BigInteger)leftY) * rightX), shift: 16)
+            RoundToEvenUnits(
+            magnitude: (((BigInteger)leftX) * rightY),
+            shift: 16
+        ) -
+            RoundToEvenUnits(
+            magnitude: (((BigInteger)leftY) * rightX),
+            shift: 16
+        )
         ));
     /// <summary>The exact rational <c>numerator · 2^fractionBitCount / denominator</c> rounded to a signed 64-bit
     /// raw, to nearest with ties to even, refusing rather than wrapping.</summary>
@@ -87,14 +111,23 @@ internal static partial class Oracles {
     public static bool RoundedRational(BigInteger numerator, BigInteger denominator, int fractionBitCount, out long result) {
         result = 0L;
 
-        if (denominator.IsZero || (fractionBitCount < 0)) {
+        if (
+            denominator.IsZero ||
+            (fractionBitCount < 0)
+        ) {
             return false;
         }
 
         var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
-        var scaled = (BigInteger.Abs(value: numerator) * BigInteger.Pow(exponent: fractionBitCount, value: 2));
+        var scaled = (BigInteger.Abs(value: numerator) * BigInteger.Pow(
+            exponent: fractionBitCount,
+            value: 2
+        ));
         var divisor = BigInteger.Abs(value: denominator);
-        var quotient = BigInteger.Divide(dividend: scaled, divisor: divisor);
+        var quotient = BigInteger.Divide(
+            dividend: scaled,
+            divisor: divisor
+        );
         var doubledRemainder = ((scaled - (quotient * divisor)) * 2);
 
         if (
@@ -130,7 +163,10 @@ internal static partial class Oracles {
         foreach (var raw in raws) {
             var magnitude = BigInteger.Abs(value: new BigInteger(value: raw));
 
-            total += RoundToEvenUnits(magnitude: (magnitude * magnitude), shift: 16);
+            total += RoundToEvenUnits(
+                magnitude: (magnitude * magnitude),
+                shift: 16
+            );
         }
 
         return total;
@@ -156,7 +192,10 @@ internal static partial class Oracles {
     /// <param name="raws">The vector's raws.</param>
     /// <returns>The rounded squared length, unwrapped.</returns>
     public static BigInteger RoundedSquaredNorm(ReadOnlySpan<long> raws) =>
-        RoundToEvenUnits(magnitude: SquaredNorm(raws: raws), shift: 16);
+        RoundToEvenUnits(
+            magnitude: SquaredNorm(raws: raws),
+            shift: 16
+        );
     /// <summary>The reference length — the NEAREST integer square root of the exact raw Q32 sum of squares, returned
     /// unwrapped. Rooting a raw Q32 quantity yields a raw Q16 one, so the only rounding is that final root.</summary>
     /// <param name="raws">The vector's raws.</param>
@@ -202,7 +241,10 @@ internal static partial class Oracles {
             return targetRaw;
         }
 
-        var step = ((displacement.Sign > 0) ? maxDeltaRaw : -maxDeltaRaw);
+        var step = ((displacement.Sign > 0)
+            ? maxDeltaRaw
+            : -maxDeltaRaw
+        );
 
         return WrapToRaw(value: (new BigInteger(value: currentRaw) + step));
     }
@@ -274,12 +316,18 @@ internal static partial class Oracles {
             }
 
             var odd = ((low << 1) + BigInteger.One);
-            var comparison = BigInteger.Compare(left: ((odd * odd) * squaredNorm), right: (squaredNumerator << 2));
+            var comparison = BigInteger.Compare(
+                left: ((odd * odd) * squaredNorm),
+                right: (squaredNumerator << 2)
+            );
             var rounded = (((comparison < 0) || ((0 == comparison) && !((low & BigInteger.One).IsZero)))
                 ? (low + BigInteger.One)
-                : low);
+                : low
+            );
 
-            result[lane] = WrapToRaw(value: ((raws[lane] < 0L) ? -rounded : rounded));
+            result[lane] = WrapToRaw(value: ((raws[lane] < 0L)
+                ? -rounded
+                : rounded));
         }
     }
     /// <summary>The STAGED normalization the shipped pipeline performs, re-derived in <see cref="BigInteger"/>: the
@@ -294,7 +342,10 @@ internal static partial class Oracles {
         var maximum = BigInteger.Zero;
 
         foreach (var raw in raws) {
-            maximum = BigInteger.Max(left: maximum, right: BigInteger.Abs(value: new BigInteger(value: raw)));
+            maximum = BigInteger.Max(
+                left: maximum,
+                right: BigInteger.Abs(value: new BigInteger(value: raw))
+            );
         }
 
         if (maximum.IsZero) {
@@ -311,9 +362,18 @@ internal static partial class Oracles {
 
         for (var lane = 0; (lane < raws.Length); ++lane) {
             var magnitude = BigInteger.Abs(value: new BigInteger(value: raws[lane]));
-            var preconditioned = ((shift >= 0) ? (magnitude << shift) : RoundToEvenUnits(magnitude: magnitude, shift: -shift));
+            var preconditioned = ((shift >= 0)
+                ? (magnitude << shift)
+                : RoundToEvenUnits(
+                    magnitude: magnitude,
+                    shift: -shift
+                )
+            );
 
-            scaled[lane] = ((raws[lane] < 0L) ? -preconditioned : preconditioned);
+            scaled[lane] = ((raws[lane] < 0L)
+                ? -preconditioned
+                : preconditioned
+            );
             squaredSum += (preconditioned * preconditioned);
         }
 
@@ -322,9 +382,14 @@ internal static partial class Oracles {
         var denominator = NearestIntegerRoot(value: (squaredSum << 32));
 
         for (var lane = 0; (lane < raws.Length); ++lane) {
-            var quotient = RoundRationalTiesToEven(numerator: (BigInteger.Abs(value: scaled[lane]) << 32), denominator: denominator);
+            var quotient = RoundRationalTiesToEven(
+                numerator: (BigInteger.Abs(value: scaled[lane]) << 32),
+                denominator: denominator
+            );
 
-            result[lane] = WrapToRaw(value: ((scaled[lane].Sign < 0) ? -quotient : quotient));
+            result[lane] = WrapToRaw(value: ((scaled[lane].Sign < 0)
+                ? -quotient
+                : quotient));
         }
     }
     /// <summary>The exact rational solve of a symmetric 2×2 system by Cramer's rule, direct in <see cref="BigInteger"/>
@@ -356,10 +421,23 @@ internal static partial class Oracles {
         // The refusal contract is "false AND every output zero" — computed into locals first and only exposed
         // through the out parameters once EVERY component is known to round successfully, so a later component's
         // overflow can never leave an earlier one's already-computed value behind.
-        var okX = TryRoundRatio(denominator: det, numerator: nx, raw: out var rx, shift: outputFractionShift);
-        var okY = TryRoundRatio(denominator: det, numerator: ny, raw: out var ry, shift: outputFractionShift);
+        var okX = TryRoundRatio(
+            denominator: det,
+            numerator: nx,
+            raw: out var rx,
+            shift: outputFractionShift
+        );
+        var okY = TryRoundRatio(
+            denominator: det,
+            numerator: ny,
+            raw: out var ry,
+            shift: outputFractionShift
+        );
 
-        if (!okX || !okY) {
+        if (
+            !okX ||
+            !okY
+        ) {
             x = 0L;
             y = 0L;
             return false;
@@ -421,11 +499,30 @@ internal static partial class Oracles {
         var nz = (((c13 * brx) + (c23 * bry)) + (c33 * brz));
 
         // See TrySolveSymmetric2's own note: no output is exposed until every component is known to round.
-        var okX = TryRoundRatio(denominator: det, numerator: nx, raw: out var rx, shift: outputFractionShift);
-        var okY = TryRoundRatio(denominator: det, numerator: ny, raw: out var ry, shift: outputFractionShift);
-        var okZ = TryRoundRatio(denominator: det, numerator: nz, raw: out var rz, shift: outputFractionShift);
+        var okX = TryRoundRatio(
+            denominator: det,
+            numerator: nx,
+            raw: out var rx,
+            shift: outputFractionShift
+        );
+        var okY = TryRoundRatio(
+            denominator: det,
+            numerator: ny,
+            raw: out var ry,
+            shift: outputFractionShift
+        );
+        var okZ = TryRoundRatio(
+            denominator: det,
+            numerator: nz,
+            raw: out var rz,
+            shift: outputFractionShift
+        );
 
-        if (!okX || !okY || !okZ) {
+        if (
+            !okX ||
+            !okY ||
+            !okZ
+        ) {
             x = 0L;
             y = 0L;
             z = 0L;
@@ -459,11 +556,30 @@ internal static partial class Oracles {
         }
 
         // See TrySolveSymmetric2's own note: no output is exposed until every component is known to round.
-        var okA = TryRoundRatio(denominator: det, numerator: bd, raw: out var ra, shift: outputFractionShift);
-        var okB = TryRoundRatio(denominator: det, numerator: -bb, raw: out var rb, shift: outputFractionShift);
-        var okD = TryRoundRatio(denominator: det, numerator: ba, raw: out var rd, shift: outputFractionShift);
+        var okA = TryRoundRatio(
+            denominator: det,
+            numerator: bd,
+            raw: out var ra,
+            shift: outputFractionShift
+        );
+        var okB = TryRoundRatio(
+            denominator: det,
+            numerator: -bb,
+            raw: out var rb,
+            shift: outputFractionShift
+        );
+        var okD = TryRoundRatio(
+            denominator: det,
+            numerator: ba,
+            raw: out var rd,
+            shift: outputFractionShift
+        );
 
-        if (!okA || !okB || !okD) {
+        if (
+            !okA ||
+            !okB ||
+            !okD
+        ) {
             invA = 0L;
             invB = 0L;
             invD = 0L;
@@ -526,14 +642,51 @@ internal static partial class Oracles {
         var c23 = ((bb * bc) - (ba * be));
         var c33 = ((ba * bd) - (bb * bb));
         // See TrySolveSymmetric2's own note: no output is exposed until every component is known to round.
-        var okA = TryRoundRatio(denominator: det, numerator: c11, raw: out var ra, shift: outputFractionShift);
-        var okB = TryRoundRatio(denominator: det, numerator: c12, raw: out var rb, shift: outputFractionShift);
-        var okC = TryRoundRatio(denominator: det, numerator: c13, raw: out var rc, shift: outputFractionShift);
-        var okD = TryRoundRatio(denominator: det, numerator: c22, raw: out var rd, shift: outputFractionShift);
-        var okE = TryRoundRatio(denominator: det, numerator: c23, raw: out var re, shift: outputFractionShift);
-        var okF = TryRoundRatio(denominator: det, numerator: c33, raw: out var rf, shift: outputFractionShift);
+        var okA = TryRoundRatio(
+            denominator: det,
+            numerator: c11,
+            raw: out var ra,
+            shift: outputFractionShift
+        );
+        var okB = TryRoundRatio(
+            denominator: det,
+            numerator: c12,
+            raw: out var rb,
+            shift: outputFractionShift
+        );
+        var okC = TryRoundRatio(
+            denominator: det,
+            numerator: c13,
+            raw: out var rc,
+            shift: outputFractionShift
+        );
+        var okD = TryRoundRatio(
+            denominator: det,
+            numerator: c22,
+            raw: out var rd,
+            shift: outputFractionShift
+        );
+        var okE = TryRoundRatio(
+            denominator: det,
+            numerator: c23,
+            raw: out var re,
+            shift: outputFractionShift
+        );
+        var okF = TryRoundRatio(
+            denominator: det,
+            numerator: c33,
+            raw: out var rf,
+            shift: outputFractionShift
+        );
 
-        if (!okA || !okB || !okC || !okD || !okE || !okF) {
+        if (
+            !okA ||
+            !okB ||
+            !okC ||
+            !okD ||
+            !okE ||
+            !okF
+        ) {
             invA = 0L;
             invB = 0L;
             invC = 0L;
@@ -556,9 +709,15 @@ internal static partial class Oracles {
     // exact rational quotient at the requested scale, rounded ties to even by RoundRationalTiesToEven (this module's
     // one tie body), reported UNWRAPPED so the caller can refuse before ever reducing to the 64-bit carrier.
     private static bool TryRoundRatio(BigInteger numerator, BigInteger denominator, int shift, out long raw) {
-        var rounded = RoundRationalTiesToEven(denominator: denominator, numerator: (numerator << shift));
+        var rounded = RoundRationalTiesToEven(
+            denominator: denominator,
+            numerator: (numerator << shift)
+        );
 
-        if ((rounded < long.MinValue) || (rounded > long.MaxValue)) {
+        if (
+            (rounded < long.MinValue) ||
+            (rounded > long.MaxValue)
+        ) {
             raw = 0L;
             return false;
         }
@@ -593,18 +752,41 @@ internal static partial class Oracles {
             { b, d, rhsY },
         };
 
-        if (!TryBareissEliminate(augmented: augmented, order: 2, totalColumns: 3)) {
+        if (!TryBareissEliminate(
+            augmented: augmented,
+            order: 2,
+            totalColumns: 3
+        )) {
             x = 0L;
             y = 0L;
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 2, denominators: out var denominators, numerators: out var numerators, order: 2);
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 2,
+            denominators: out var denominators,
+            numerators: out var numerators,
+            order: 2
+        );
 
-        var okX = TryRoundRatio(numerator: numerators[0], denominator: denominators[0], shift: outputFractionShift, raw: out var rx);
-        var okY = TryRoundRatio(numerator: numerators[1], denominator: denominators[1], shift: outputFractionShift, raw: out var ry);
+        var okX = TryRoundRatio(
+            numerator: numerators[0],
+            denominator: denominators[0],
+            shift: outputFractionShift,
+            raw: out var rx
+        );
+        var okY = TryRoundRatio(
+            numerator: numerators[1],
+            denominator: denominators[1],
+            shift: outputFractionShift,
+            raw: out var ry
+        );
 
-        if (!okX || !okY) {
+        if (
+            !okX ||
+            !okY
+        ) {
             x = 0L;
             y = 0L;
             return false;
@@ -651,20 +833,49 @@ internal static partial class Oracles {
             { c, e, f, rhsZ },
         };
 
-        if (!TryBareissEliminate(augmented: augmented, order: 3, totalColumns: 4)) {
+        if (!TryBareissEliminate(
+            augmented: augmented,
+            order: 3,
+            totalColumns: 4
+        )) {
             x = 0L;
             y = 0L;
             z = 0L;
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 3, denominators: out var denominators, numerators: out var numerators, order: 3);
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 3,
+            denominators: out var denominators,
+            numerators: out var numerators,
+            order: 3
+        );
 
-        var okX = TryRoundRatio(numerator: numerators[0], denominator: denominators[0], shift: outputFractionShift, raw: out var rx);
-        var okY = TryRoundRatio(numerator: numerators[1], denominator: denominators[1], shift: outputFractionShift, raw: out var ry);
-        var okZ = TryRoundRatio(numerator: numerators[2], denominator: denominators[2], shift: outputFractionShift, raw: out var rz);
+        var okX = TryRoundRatio(
+            numerator: numerators[0],
+            denominator: denominators[0],
+            shift: outputFractionShift,
+            raw: out var rx
+        );
+        var okY = TryRoundRatio(
+            numerator: numerators[1],
+            denominator: denominators[1],
+            shift: outputFractionShift,
+            raw: out var ry
+        );
+        var okZ = TryRoundRatio(
+            numerator: numerators[2],
+            denominator: denominators[2],
+            shift: outputFractionShift,
+            raw: out var rz
+        );
 
-        if (!okX || !okY || !okZ) {
+        if (
+            !okX ||
+            !okY ||
+            !okZ
+        ) {
             x = 0L;
             y = 0L;
             z = 0L;
@@ -694,21 +905,56 @@ internal static partial class Oracles {
             { b, d, 0, 1 },
         };
 
-        if (!TryBareissEliminate(augmented: augmented, order: 2, totalColumns: 4)) {
+        if (!TryBareissEliminate(
+            augmented: augmented,
+            order: 2,
+            totalColumns: 4
+        )) {
             invA = 0L;
             invB = 0L;
             invD = 0L;
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 2, denominators: out var column0Denominators, numerators: out var column0Numerators, order: 2);
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 3, denominators: out var column1Denominators, numerators: out var column1Numerators, order: 2);
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 2,
+            denominators: out var column0Denominators,
+            numerators: out var column0Numerators,
+            order: 2
+        );
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 3,
+            denominators: out var column1Denominators,
+            numerators: out var column1Numerators,
+            order: 2
+        );
 
-        var okA = TryRoundRatio(numerator: column0Numerators[0], denominator: column0Denominators[0], shift: outputFractionShift, raw: out var ra);
-        var okB = TryRoundRatio(numerator: column1Numerators[0], denominator: column1Denominators[0], shift: outputFractionShift, raw: out var rb);
-        var okD = TryRoundRatio(numerator: column1Numerators[1], denominator: column1Denominators[1], shift: outputFractionShift, raw: out var rd);
+        var okA = TryRoundRatio(
+            numerator: column0Numerators[0],
+            denominator: column0Denominators[0],
+            shift: outputFractionShift,
+            raw: out var ra
+        );
+        var okB = TryRoundRatio(
+            numerator: column1Numerators[0],
+            denominator: column1Denominators[0],
+            shift: outputFractionShift,
+            raw: out var rb
+        );
+        var okD = TryRoundRatio(
+            numerator: column1Numerators[1],
+            denominator: column1Denominators[1],
+            shift: outputFractionShift,
+            raw: out var rd
+        );
 
-        if (!okA || !okB || !okD) {
+        if (
+            !okA ||
+            !okB ||
+            !okD
+        ) {
             invA = 0L;
             invB = 0L;
             invD = 0L;
@@ -758,7 +1004,11 @@ internal static partial class Oracles {
             { c, e, f, 0, 0, 1 },
         };
 
-        if (!TryBareissEliminate(augmented: augmented, order: 3, totalColumns: 6)) {
+        if (!TryBareissEliminate(
+            augmented: augmented,
+            order: 3,
+            totalColumns: 6
+        )) {
             invA = 0L;
             invB = 0L;
             invC = 0L;
@@ -768,18 +1018,73 @@ internal static partial class Oracles {
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 3, denominators: out var column0Denominators, numerators: out var column0Numerators, order: 3);
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 4, denominators: out var column1Denominators, numerators: out var column1Numerators, order: 3);
-        BareissBackSubstitute(augmented: augmented, augmentedColumn: 5, denominators: out var column2Denominators, numerators: out var column2Numerators, order: 3);
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 3,
+            denominators: out var column0Denominators,
+            numerators: out var column0Numerators,
+            order: 3
+        );
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 4,
+            denominators: out var column1Denominators,
+            numerators: out var column1Numerators,
+            order: 3
+        );
+        BareissBackSubstitute(
+            augmented: augmented,
+            augmentedColumn: 5,
+            denominators: out var column2Denominators,
+            numerators: out var column2Numerators,
+            order: 3
+        );
 
-        var okA = TryRoundRatio(numerator: column0Numerators[0], denominator: column0Denominators[0], shift: outputFractionShift, raw: out var ra);
-        var okB = TryRoundRatio(numerator: column1Numerators[0], denominator: column1Denominators[0], shift: outputFractionShift, raw: out var rb);
-        var okC = TryRoundRatio(numerator: column2Numerators[0], denominator: column2Denominators[0], shift: outputFractionShift, raw: out var rc);
-        var okD = TryRoundRatio(numerator: column1Numerators[1], denominator: column1Denominators[1], shift: outputFractionShift, raw: out var rd);
-        var okE = TryRoundRatio(numerator: column2Numerators[1], denominator: column2Denominators[1], shift: outputFractionShift, raw: out var re);
-        var okF = TryRoundRatio(numerator: column2Numerators[2], denominator: column2Denominators[2], shift: outputFractionShift, raw: out var rf);
+        var okA = TryRoundRatio(
+            numerator: column0Numerators[0],
+            denominator: column0Denominators[0],
+            shift: outputFractionShift,
+            raw: out var ra
+        );
+        var okB = TryRoundRatio(
+            numerator: column1Numerators[0],
+            denominator: column1Denominators[0],
+            shift: outputFractionShift,
+            raw: out var rb
+        );
+        var okC = TryRoundRatio(
+            numerator: column2Numerators[0],
+            denominator: column2Denominators[0],
+            shift: outputFractionShift,
+            raw: out var rc
+        );
+        var okD = TryRoundRatio(
+            numerator: column1Numerators[1],
+            denominator: column1Denominators[1],
+            shift: outputFractionShift,
+            raw: out var rd
+        );
+        var okE = TryRoundRatio(
+            numerator: column2Numerators[1],
+            denominator: column2Denominators[1],
+            shift: outputFractionShift,
+            raw: out var re
+        );
+        var okF = TryRoundRatio(
+            numerator: column2Numerators[2],
+            denominator: column2Denominators[2],
+            shift: outputFractionShift,
+            raw: out var rf
+        );
 
-        if (!okA || !okB || !okC || !okD || !okE || !okF) {
+        if (
+            !okA ||
+            !okB ||
+            !okC ||
+            !okD ||
+            !okE ||
+            !okF
+        ) {
             invA = 0L;
             invB = 0L;
             invC = 0L;
@@ -845,7 +1150,11 @@ internal static partial class Oracles {
 
                 for (var j = (k + 1); (j < totalColumns); ++j) {
                     var updated = ((pivotValue * augmented[i, j]) - (factor * augmented[k, j]));
-                    var quotient = BigInteger.DivRem(dividend: updated, divisor: previousPivot, remainder: out var remainder);
+                    var quotient = BigInteger.DivRem(
+                        dividend: updated,
+                        divisor: previousPivot,
+                        remainder: out var remainder
+                    );
 
                     if (!remainder.IsZero) {
                         throw new InvalidOperationException(message: "Bareiss elimination produced a non-exact division; the fraction-free identity does not hold for this input.");
@@ -918,7 +1227,10 @@ internal static partial class Oracles {
     /// bits against a half-unit it forms itself. Callers are expected to keep the three counts inside a sane band; the
     /// power-of-two denominator here is built directly from them.</remarks>
     public static (bool Fits, long Raw) MixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, int fractionBitsOut) {
-        var exact = ExactMixedScale(product: (((BigInteger)a) * b), shift: ((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB));
+        var exact = ExactMixedScale(
+            product: (((BigInteger)a) * b),
+            shift: ((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB)
+        );
 
         return (((exact >= long.MinValue) && (exact <= long.MaxValue)), WrapToRaw(value: exact));
     }
@@ -943,7 +1255,10 @@ internal static partial class Oracles {
         int fractionBitsOut
     ) {
         var product = ((((BigInteger)a) * b) * c);
-        var exact = ExactMixedScale(product: product, shift: (((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB) - fractionBitsC));
+        var exact = ExactMixedScale(
+            product: product,
+            shift: (((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB) - fractionBitsC)
+        );
 
         return (
             (BigInteger.Abs(value: product) < (BigInteger.One << 128)),
@@ -1004,9 +1319,15 @@ internal static partial class Oracles {
     /// fixed-width kernel reaches for and the shape that overflows; the subject instead divides and carries the
     /// quotient up when anything was discarded.</remarks>
     public static BigInteger CeilingRational(BigInteger numerator, BigInteger denominator) {
-        var quotient = FloorQuotient(denominator: denominator, numerator: numerator);
+        var quotient = FloorQuotient(
+            denominator: denominator,
+            numerator: numerator
+        );
 
-        return (((quotient * denominator) == numerator) ? quotient : (quotient + BigInteger.One));
+        return (((quotient * denominator) == numerator)
+            ? quotient
+            : (quotient + BigInteger.One)
+        );
     }
     /// <summary>The least integer at or above the square root of a non-negative exact value, by a BRACKETED INTEGER
     /// SEARCH whose predicate is one exact squaring — no square root is ever taken.</summary>
@@ -1063,10 +1384,25 @@ internal static partial class Oracles {
         out long y
     ) {
         var shift = ((((long)fractionBitsOut) - fractionBitsMatrix) - fractionBitsVector);
-        var okX = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)a) * vX) + (((BigInteger)b) * vY)), shift: shift), raw: out var rx);
-        var okY = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)b) * vX) + (((BigInteger)d) * vY)), shift: shift), raw: out var ry);
+        var okX = TryMixedScaleSum(
+            exact: ExactMixedScale(
+                product: ((((BigInteger)a) * vX) + (((BigInteger)b) * vY)),
+                shift: shift
+            ),
+            raw: out var rx
+        );
+        var okY = TryMixedScaleSum(
+            exact: ExactMixedScale(
+                product: ((((BigInteger)b) * vX) + (((BigInteger)d) * vY)),
+                shift: shift
+            ),
+            raw: out var ry
+        );
 
-        if (!okX || !okY) {
+        if (
+            !okX ||
+            !okY
+        ) {
             x = 0L;
             y = 0L;
             return false;
@@ -1111,11 +1447,33 @@ internal static partial class Oracles {
         out long z
     ) {
         var shift = ((((long)fractionBitsOut) - fractionBitsMatrix) - fractionBitsVector);
-        var okX = TryMixedScaleSum(exact: ExactMixedScale(product: (((((BigInteger)a) * vX) + (((BigInteger)b) * vY)) + (((BigInteger)c) * vZ)), shift: shift), raw: out var rx);
-        var okY = TryMixedScaleSum(exact: ExactMixedScale(product: (((((BigInteger)b) * vX) + (((BigInteger)d) * vY)) + (((BigInteger)e) * vZ)), shift: shift), raw: out var ry);
-        var okZ = TryMixedScaleSum(exact: ExactMixedScale(product: (((((BigInteger)c) * vX) + (((BigInteger)e) * vY)) + (((BigInteger)f) * vZ)), shift: shift), raw: out var rz);
+        var okX = TryMixedScaleSum(
+            exact: ExactMixedScale(
+                product: (((((BigInteger)a) * vX) + (((BigInteger)b) * vY)) + (((BigInteger)c) * vZ)),
+                shift: shift
+            ),
+            raw: out var rx
+        );
+        var okY = TryMixedScaleSum(
+            exact: ExactMixedScale(
+                product: (((((BigInteger)b) * vX) + (((BigInteger)d) * vY)) + (((BigInteger)e) * vZ)),
+                shift: shift
+            ),
+            raw: out var ry
+        );
+        var okZ = TryMixedScaleSum(
+            exact: ExactMixedScale(
+                product: (((((BigInteger)c) * vX) + (((BigInteger)e) * vY)) + (((BigInteger)f) * vZ)),
+                shift: shift
+            ),
+            raw: out var rz
+        );
 
-        if (!okX || !okY || !okZ) {
+        if (
+            !okX ||
+            !okY ||
+            !okZ
+        ) {
             x = 0L;
             y = 0L;
             z = 0L;
@@ -1152,13 +1510,24 @@ internal static partial class Oracles {
         var lengthScale = (BigInteger.One << (3 * fractionBitsLength));
 
         var (numerator, denominator) = shape switch {
-            0 => (((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: first)), ((3 * PiDenominator) * lengthScale)),
+            0 => (((4 * PiNumerator) * BigInteger.Pow(
+            exponent: 3,
+            value: first
+        )), ((3 * PiDenominator) * lengthScale)),
             1 => ((((2 * ((BigInteger)first)) * (2 * ((BigInteger)second))) * (2 * ((BigInteger)third))), lengthScale),
             2 => ((((PiNumerator * first) * first) * second), (PiDenominator * lengthScale)),
-            _ => ((((((3 * PiNumerator) * first) * first) * second) + ((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: first))), ((3 * PiDenominator) * lengthScale)),
+            _ => ((((((3 * PiNumerator) * first) * first) * second) + ((4 * PiNumerator) * BigInteger.Pow(
+            exponent: 3,
+            value: first
+        ))), ((3 * PiDenominator) * lengthScale)),
         };
 
-        return TryRoundRatio(denominator: denominator, numerator: numerator, raw: out volume, shift: fractionBitsVolume);
+        return TryRoundRatio(
+            denominator: denominator,
+            numerator: numerator,
+            raw: out volume,
+            shift: fractionBitsVolume
+        );
     }
     /// <summary>The exact mass and inertia of a solid sphere about its centre.</summary>
     /// <param name="density">The density raw.</param>
@@ -1183,12 +1552,20 @@ internal static partial class Oracles {
         out long inertia
     ) {
         var (massNumerator, massDenominator) = ScaledMass(
-            volumeNumerator: ((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: radius)),
+            volumeNumerator: ((4 * PiNumerator) * BigInteger.Pow(
+                exponent: 3,
+                value: radius
+            )),
             volumeDenominator: ((3 * PiDenominator) << (3 * fractionBitsLength)),
             density: density,
             fractionBitsDensity: fractionBitsDensity
         );
-        var okMass = TryRoundRatio(denominator: massDenominator, numerator: massNumerator, raw: out var roundedMass, shift: fractionBitsMass);
+        var okMass = TryRoundRatio(
+            denominator: massDenominator,
+            numerator: massNumerator,
+            raw: out var roundedMass,
+            shift: fractionBitsMass
+        );
         var okInertia = TryRoundRatio(
             denominator: ((5 * massDenominator) << (2 * fractionBitsLength)),
             numerator: (((2 * massNumerator) * radius) * radius),
@@ -1196,7 +1573,10 @@ internal static partial class Oracles {
             shift: fractionBitsInertia
         );
 
-        if (!okMass || !okInertia) {
+        if (
+            !okMass ||
+            !okInertia
+        ) {
             mass = 0L;
             inertia = 0L;
             return false;
@@ -1246,12 +1626,37 @@ internal static partial class Oracles {
             fractionBitsDensity: fractionBitsDensity
         );
         var inertiaDenominator = ((12 * massDenominator) << (2 * fractionBitsLength));
-        var okMass = TryRoundRatio(denominator: massDenominator, numerator: massNumerator, raw: out var roundedMass, shift: fractionBitsMass);
-        var okXX = TryRoundRatio(denominator: inertiaDenominator, numerator: (massNumerator * ((ly * ly) + (lz * lz))), raw: out var roundedXX, shift: fractionBitsInertia);
-        var okYY = TryRoundRatio(denominator: inertiaDenominator, numerator: (massNumerator * ((lx * lx) + (lz * lz))), raw: out var roundedYY, shift: fractionBitsInertia);
-        var okZZ = TryRoundRatio(denominator: inertiaDenominator, numerator: (massNumerator * ((lx * lx) + (ly * ly))), raw: out var roundedZZ, shift: fractionBitsInertia);
+        var okMass = TryRoundRatio(
+            denominator: massDenominator,
+            numerator: massNumerator,
+            raw: out var roundedMass,
+            shift: fractionBitsMass
+        );
+        var okXX = TryRoundRatio(
+            denominator: inertiaDenominator,
+            numerator: (massNumerator * ((ly * ly) + (lz * lz))),
+            raw: out var roundedXX,
+            shift: fractionBitsInertia
+        );
+        var okYY = TryRoundRatio(
+            denominator: inertiaDenominator,
+            numerator: (massNumerator * ((lx * lx) + (lz * lz))),
+            raw: out var roundedYY,
+            shift: fractionBitsInertia
+        );
+        var okZZ = TryRoundRatio(
+            denominator: inertiaDenominator,
+            numerator: (massNumerator * ((lx * lx) + (ly * ly))),
+            raw: out var roundedZZ,
+            shift: fractionBitsInertia
+        );
 
-        if (!okMass || !okXX || !okYY || !okZZ) {
+        if (
+            !okMass ||
+            !okXX ||
+            !okYY ||
+            !okZZ
+        ) {
             mass = 0L;
             ixx = 0L;
             iyy = 0L;
@@ -1296,7 +1701,12 @@ internal static partial class Oracles {
             volumeNumerator: (((PiNumerator * radius) * radius) * height)
         );
         var squaredLength = (BigInteger.One << (2 * fractionBitsLength));
-        var okMass = TryRoundRatio(denominator: massDenominator, numerator: massNumerator, raw: out var roundedMass, shift: fractionBitsMass);
+        var okMass = TryRoundRatio(
+            denominator: massDenominator,
+            numerator: massNumerator,
+            raw: out var roundedMass,
+            shift: fractionBitsMass
+        );
         var okAxial = TryRoundRatio(
             denominator: ((2 * massDenominator) * squaredLength),
             numerator: ((massNumerator * radius) * radius),
@@ -1310,7 +1720,11 @@ internal static partial class Oracles {
             shift: fractionBitsInertia
         );
 
-        if (!okMass || !okAxial || !okPerpendicular) {
+        if (
+            !okMass ||
+            !okAxial ||
+            !okPerpendicular
+        ) {
             mass = 0L;
             axial = 0L;
             perpendicular = 0L;
@@ -1366,7 +1780,10 @@ internal static partial class Oracles {
             volumeNumerator: (((PiNumerator * r) * r) * h)
         );
         var (sphereMass, sphereDenominator) = ScaledMass(
-            volumeNumerator: ((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: r)),
+            volumeNumerator: ((4 * PiNumerator) * BigInteger.Pow(
+                exponent: 3,
+                value: r
+            )),
             volumeDenominator: ((3 * PiDenominator) * lengthCube),
             density: density,
             fractionBitsDensity: fractionBitsDensity
@@ -1375,7 +1792,12 @@ internal static partial class Oracles {
         var cylinder = (cylinderMass * sphereDenominator);
         var sphere = (sphereMass * cylinderDenominator);
 
-        var okMass = TryRoundRatio(denominator: commonDenominator, numerator: (cylinder + sphere), raw: out var roundedMass, shift: fractionBitsMass);
+        var okMass = TryRoundRatio(
+            denominator: commonDenominator,
+            numerator: (cylinder + sphere),
+            raw: out var roundedMass,
+            shift: fractionBitsMass
+        );
 
         // Axial: the cylinder's ½·m·r² plus BOTH hemispheres' (2/5)·m·r² — a hemisphere carries the whole sphere's
         // axial coefficient because the axis is its own symmetry axis.
@@ -1400,7 +1822,11 @@ internal static partial class Oracles {
             shift: fractionBitsInertia
         );
 
-        if (!okMass || !okAxial || !okPerpendicular) {
+        if (
+            !okMass ||
+            !okAxial ||
+            !okPerpendicular
+        ) {
             mass = 0L;
             axial = 0L;
             perpendicular = 0L;
@@ -1512,10 +1938,20 @@ internal static partial class Oracles {
             atOrigin[5] += ((((BigInteger)part.Iyz) * transferScale) - (((partMass * cy) * cz) * inertiaScale));
         }
 
-        var complete = TryRoundRatio(numerator: totalMass, denominator: BigInteger.One, shift: 0, raw: out mass);
+        var complete = TryRoundRatio(
+            numerator: totalMass,
+            denominator: BigInteger.One,
+            shift: 0,
+            raw: out mass
+        );
 
         for (var axis = 0; (axis < 3); ++axis) {
-            complete &= TryRoundRatio(numerator: moment[axis], denominator: totalMass, shift: 0, raw: out var component);
+            complete &= TryRoundRatio(
+                numerator: moment[axis],
+                denominator: totalMass,
+                shift: 0,
+                raw: out var component
+            );
             center[axis] = component;
         }
 
@@ -1555,9 +1991,16 @@ internal static partial class Oracles {
     private static BigInteger ExactMixedScale(BigInteger product, long shift) =>
         ((shift >= 0L)
             ? (product << ((int)shift))
-            : RoundRationalTiesToEven(numerator: product, denominator: (BigInteger.One << ((int)-shift))));
+            : RoundRationalTiesToEven(
+                numerator: product,
+                denominator: (BigInteger.One << ((int)-shift))
+            )
+        );
     private static bool TryMixedScaleSum(BigInteger exact, out long raw) {
-        if ((exact < long.MinValue) || (exact > long.MaxValue)) {
+        if (
+            (exact < long.MinValue) ||
+            (exact > long.MaxValue)
+        ) {
             raw = 0L;
             return false;
         }
@@ -1580,7 +2023,10 @@ internal static partial class Oracles {
             var squared = (ladder[(level - 1)] * scale);
             var root = IntegerSquareRoot(value: squared);
 
-            ladder[level] = ((ceiling && ((root * root) != squared)) ? (root + BigInteger.One) : root);
+            ladder[level] = ((ceiling && ((root * root) != squared))
+                ? (root + BigInteger.One)
+                : root
+            );
         }
 
         return ladder;

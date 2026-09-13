@@ -19,6 +19,14 @@ public sealed class WorldSeatAuthorityRouter {
     /// <summary>Raised after a successful claim change.</summary>
     public event Action<int>? RouteChanged;
 
+    // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery the world's own
+    // instance-addressed verbs use, so a routed answer reports which instance answered.
+    private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
+        prefix: "instance:",
+        text: text,
+        value: instanceName
+    );
+
     /// <summary>Whether any locally followed seat currently claims this exact generation-addressed entity.</summary>
     public bool Claims(in WorldEntityAddress entity) {
         for (var slot = 0; (slot < m_routes.Length); slot++) {
@@ -162,9 +170,9 @@ public sealed class WorldSeatAuthorityRouter {
             completion: answer => {
                 var text = ((tag is { } instanceName)
                     ? WithInstanceTag(
-                    text: answer.Text,
-                    instanceName: instanceName
-                )
+                        text: answer.Text,
+                        instanceName: instanceName
+                    )
                     : answer.Text
                 );
 
@@ -176,12 +184,4 @@ public sealed class WorldSeatAuthorityRouter {
 
         return true;
     }
-
-    // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery the world's own
-    // instance-addressed verbs use, so a routed answer reports which instance answered.
-    private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
-        prefix: "instance:",
-        text: text,
-        value: instanceName
-    );
 }

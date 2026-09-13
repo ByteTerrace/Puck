@@ -15,6 +15,13 @@ namespace Puck.Cli.Format.Rewriters;
 // decl-to-statement boundary is normalized — blank lines elsewhere are preserved — so the pass is
 // idempotent.
 internal sealed class DeclSpacingRewriter : CSharpSyntaxRewriter {
+    // Only space declarations that already sit on their own lines: a single-line body
+    // (`{ int n = f(); return n; }`) must not be blown open — and splitting it was also the source of a
+    // non-idempotent run, since the inserted newline retriggered the rule.
+    private static bool OnSeparateLines(StatementSyntax previous, StatementSyntax current) =>
+        (previous.GetTrailingTrivia().Any(predicate: static trivia => trivia.IsKind(kind: SyntaxKind.EndOfLineTrivia))
+        || current.GetLeadingTrivia().Any(predicate: static trivia => trivia.IsKind(kind: SyntaxKind.EndOfLineTrivia)));
+
     public override SyntaxNode? VisitBlock(BlockSyntax node) {
         var visited = ((BlockSyntax)base.VisitBlock(node: node)!);
         var statements = visited.Statements;
@@ -29,22 +36,20 @@ internal sealed class DeclSpacingRewriter : CSharpSyntaxRewriter {
             var previous = statements[(index - 1)];
             var current = statements[index];
 
-            rebuilt.Add(
-                item: (((previous is LocalDeclarationStatementSyntax)
+            rebuilt.Add(item: (((previous is LocalDeclarationStatementSyntax)
                     && (current is not LocalDeclarationStatementSyntax)
-                    && OnSeparateLines(current: current, previous: previous)
+                    && OnSeparateLines(
+                current: current,
+                previous: previous
+            )
                     && !RewriteShaping.HasCommentOrDirective(trivia: current.GetLeadingTrivia()))
-                    ? current.WithLeadingTrivia(trivia: RewriteShaping.SetBlankLines(lead: current.GetLeadingTrivia(), desired: 1))
-                    : current));
+                ? current.WithLeadingTrivia(trivia: RewriteShaping.SetBlankLines(
+                    lead: current.GetLeadingTrivia(),
+                    desired: 1
+                ))
+                : current));
         }
 
         return visited.WithStatements(statements: SyntaxFactory.List(nodes: rebuilt));
     }
-
-    // Only space declarations that already sit on their own lines: a single-line body
-    // (`{ int n = f(); return n; }`) must not be blown open — and splitting it was also the source of a
-    // non-idempotent run, since the inserted newline retriggered the rule.
-    private static bool OnSeparateLines(StatementSyntax previous, StatementSyntax current) =>
-        (previous.GetTrailingTrivia().Any(predicate: static trivia => trivia.IsKind(kind: SyntaxKind.EndOfLineTrivia))
-        || current.GetLeadingTrivia().Any(predicate: static trivia => trivia.IsKind(kind: SyntaxKind.EndOfLineTrivia)));
 }

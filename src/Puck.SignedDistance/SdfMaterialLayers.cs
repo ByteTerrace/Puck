@@ -20,40 +20,71 @@ public sealed record SdfInset(Vector3 Origin, Quaternion Rotation, float Depth, 
 public sealed record SdfWeathering(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
     IReadOnlyList<SdfRevealStage>? Under = null, SdfSurface? Deposit = null);
-
 /// <summary>The shared admission rules for engine and document material layers.</summary>
 public static class SdfMaterialLayers {
+    private static bool Color(Vector3 v) => (Finite(v: v) && (v.X >= 0f) && (v.Y >= 0f) && (v.Z >= 0f));
+    private static bool Finite(Vector3 v) => (float.IsFinite(f: v.X) && float.IsFinite(f: v.Y) && float.IsFinite(f: v.Z));
+    private static bool NonNegative(float v) => (float.IsFinite(f: v) && (v >= 0f));
+    private static bool Positive(float v) => (float.IsFinite(f: v) && (v > 0f));
+    private static bool Surface(SdfSurface s) => (Color(v: s.Color) && Unit(v: s.Roughness) && Unit(v: s.Metal));
+    private static bool Unit(float v) => (NonNegative(v: v) && (v <= 1f));
+
     /// <summary>Returns whether all layer inputs are finite and their bounded collections and ranges are valid.</summary>
     public static bool IsValid(SdfInset? inset, SdfWeathering? weathering) {
         if (inset is { } layer) {
-            if (!Finite(layer.Origin) || !float.IsFinite(layer.Rotation.LengthSquared()) ||
-                layer.Rotation.LengthSquared() < 1e-12f || !Positive(layer.Ior) || !NonNegative(layer.Depth) ||
-                layer.Paint is not { } paint || paint.Stops is not { Count: >= 1 and <= 4 } ||
-                !Unit(paint.Softness) || !Unit(paint.ModulationAmplitude) || !NonNegative(paint.ModulationFrequency)) { return false; }
+            if (
+                !Finite(v: layer.Origin) ||
+                !float.IsFinite(f: layer.Rotation.LengthSquared()) ||
+                (layer.Rotation.LengthSquared() < 1e-12f) ||
+                !Positive(v: layer.Ior) ||
+                !NonNegative(v: layer.Depth) ||
+                (layer.Paint is not { } paint) ||
+                (paint.Stops is not { Count: >= 1 and <= 4 }) ||
+                !Unit(v: paint.Softness) ||
+                !Unit(v: paint.ModulationAmplitude) ||
+                !NonNegative(v: paint.ModulationFrequency)
+            ) { return false; }
             var previous = -1f;
+
             foreach (var stop in paint.Stops) {
-                if (!NonNegative(stop.Radius) || stop.Radius <= previous || !Color(stop.Color)) { return false; }
+                if (
+                    !NonNegative(v: stop.Radius) ||
+                    (stop.Radius <= previous) ||
+                    !Color(v: stop.Color)
+                ) { return false; }
                 previous = stop.Radius;
             }
         }
         if (weathering is { } w) {
-            if (!Unit(w.Edge) || !Unit(w.Lines) || !Unit(w.Settle) || !Positive(w.Reach) ||
-                !NonNegative(w.Scale) || !Unit(w.Floor) || (uint)w.Lane > 3u || w.Under is { Count: > 2 } ||
-                ((w.Edge > 0f || w.Lines > 0f) && w.Under is not { Count: > 0 }) ||
-                (w.Settle > 0f && w.Deposit is null)) { return false; }
+            if (
+                !Unit(v: w.Edge) ||
+                !Unit(v: w.Lines) ||
+                !Unit(v: w.Settle) ||
+                !Positive(v: w.Reach) ||
+                !NonNegative(v: w.Scale) ||
+                !Unit(v: w.Floor) ||
+                (((uint)w.Lane) > 3u) ||
+                (w.Under is { Count: > 2 }) ||
+                (((w.Edge > 0f) || (w.Lines > 0f)) && (w.Under is not { Count: > 0 })) ||
+                ((w.Settle > 0f) && (w.Deposit is null))
+            ) { return false; }
             var previous = 0f;
-            if (w.Under is { } stages) { foreach (var stage in stages) {
-                if (!Unit(stage.Threshold) || stage.Threshold <= previous || !Surface(stage.Surface)) { return false; }
-                previous = stage.Threshold;
-            } }
-            if (w.Deposit is { } deposit && !Surface(deposit)) { return false; }
+
+            if (w.Under is { } stages) {
+                foreach (var stage in stages) {
+                    if (
+                        !Unit(v: stage.Threshold) ||
+                        (stage.Threshold <= previous) ||
+                        !Surface(s: stage.Surface)
+                    ) { return false; }
+                    previous = stage.Threshold;
+                }
+            }
+            if (
+                (w.Deposit is { } deposit) &&
+                !Surface(s: deposit)
+            ) { return false; }
         }
         return true;
     }
-    private static bool Surface(SdfSurface s) => Color(s.Color) && Unit(s.Roughness) && Unit(s.Metal);
-    private static bool Color(Vector3 v) => Finite(v) && v.X >= 0f && v.Y >= 0f && v.Z >= 0f;
-    private static bool Finite(Vector3 v) => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
-    private static bool NonNegative(float v) => float.IsFinite(v) && v >= 0f;
-    private static bool Positive(float v) => float.IsFinite(v) && v > 0f;
-    private static bool Unit(float v) => NonNegative(v) && v <= 1f;
 }

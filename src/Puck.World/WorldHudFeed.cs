@@ -36,12 +36,11 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     private readonly WorldHudPanel?[] m_seatSources = new WorldHudPanel?[PlayerRoster.MaxSlots];
     private readonly PanelBuild?[] m_seatBuilds = new PanelBuild?[PlayerRoster.MaxSlots];
     private int m_seenRevision = -1;
-
-    private WorldHudSection? m_seenHud;
-
     private PanelBuild[] m_worldPanels = [];
     private OverlayHudPanel[] m_visiblePanels = [];
     private WorldHudPanel[] m_worldSources = [];
+
+    private WorldHudSection? m_seenHud;
 
     // Every Frame candidate's source (present only for that kind, enforced at validation) resolves to a key through
     // the process's one WorldOverlayFrameSources at build; a non-Frame element carries no candidate state and -1 for
@@ -123,69 +122,6 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
         return built;
     }
-    private static double NowSeconds() => (((double)Stopwatch.GetTimestamp()) / Stopwatch.Frequency);
-    // Ranks every Frame element of a visible build for this frame: the first candidate whose condition holds for
-    // the build's scope wins, the element's cross-fade advances on the presentation clock, and the winner (plus the
-    // outgoing key while a fade runs) is marked into the generation so the binder keeps both producers alive.
-    private void RankFrames(PanelBuild build, double nowSeconds) {
-        var frames = build.Frames;
-
-        for (var index = 0; (index < frames.Length); index++) {
-            if (frames[index] is not { } frame) {
-                continue;
-            }
-
-            var winner = OverlayRanking.FirstHolding(
-                candidates: frame.Whens,
-                evaluator: m_facts,
-                slot: build.Slot,
-                when: static when => when
-            );
-
-            frame.Crossfade.Advance(
-                fadeSeconds: frame.FadeSeconds,
-                nowSeconds: nowSeconds,
-                winner: ((winner >= 0) ? frame.Keys[winner] : -1)
-            );
-
-            var current = frame.Crossfade.Current;
-            var outgoing = frame.Crossfade.Outgoing;
-
-            build.Elements[index] = (build.Elements[index] with {
-                FrameSource = current,
-                FrameSourceB = outgoing,
-                FrameMix = frame.Crossfade.Mix,
-            });
-
-            if (current >= 0) {
-                m_frameSources.MarkActive(key: current);
-            }
-
-            if (outgoing >= 0) {
-                m_frameSources.MarkActive(key: outgoing);
-            }
-        }
-    }
-    private void ReleaseFrameSources(PanelBuild build) {
-        foreach (var frame in build.Frames) {
-            if (frame is null) {
-                continue;
-            }
-
-            foreach (var key in frame.Keys) {
-                m_frameSources.ReleaseStructureKey(key: key);
-            }
-        }
-    }
-    private void ReleaseSeatBuild(int slot) {
-        if (m_seatBuilds[slot] is not { } build) {
-            return;
-        }
-
-        ReleaseFrameSources(build: build);
-        m_seatSources[slot] = null;
-        m_seatBuilds[slot] = null;
-    }
     // Walks the joined roster (publishing one entry per seat that is BOTH joined and has authored a player-scope
     // panel), scoping each seat's panel into the SAME published viewport WorldOverlayFeed's binding bar renders in
     // — the authored-layout-aware rect WorldFramePresenter resolved for this seat this frame, not the builtin
@@ -223,7 +159,10 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                     slot: slot
                 );
             }
-            var presence = m_facts.Presence(predicate: panel.Visible, slot: slot);
+            var presence = m_facts.Presence(
+                predicate: panel.Visible,
+                slot: slot
+            );
 
             if (presence <= 0f) {
                 continue;
@@ -282,11 +221,103 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
         return built;
     }
+    private static double NowSeconds() => (((double)Stopwatch.GetTimestamp()) / Stopwatch.Frequency);
+    private float PresenceAnySeat(OverlayPredicate? predicate) {
+        if (predicate is null) {
+            return 1f;
+        }
+
+        var strongest = 0f;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_roster.IsJoined(slot: slot)) {
+                strongest = MathF.Max(
+                    x: strongest,
+                    y: m_facts.Presence(
+                        predicate: predicate,
+                        slot: slot
+                    )
+                );
+            }
+        }
+
+        return strongest;
+    }
+    // Ranks every Frame element of a visible build for this frame: the first candidate whose condition holds for
+    // the build's scope wins, the element's cross-fade advances on the presentation clock, and the winner (plus the
+    // outgoing key while a fade runs) is marked into the generation so the binder keeps both producers alive.
+    private void RankFrames(PanelBuild build, double nowSeconds) {
+        var frames = build.Frames;
+
+        for (var index = 0; (index < frames.Length); index++) {
+            if (frames[index] is not { } frame) {
+                continue;
+            }
+
+            var winner = OverlayRanking.FirstHolding(
+                candidates: frame.Whens,
+                evaluator: m_facts,
+                slot: build.Slot,
+                when: static when => when
+            );
+
+            frame.Crossfade.Advance(
+                fadeSeconds: frame.FadeSeconds,
+                nowSeconds: nowSeconds,
+                winner: ((winner >= 0)
+                ? frame.Keys[winner]
+                : -1)
+            );
+
+            var current = frame.Crossfade.Current;
+            var outgoing = frame.Crossfade.Outgoing;
+
+            build.Elements[index] = (build.Elements[index] with {
+                FrameSource = current,
+                FrameSourceB = outgoing,
+                FrameMix = frame.Crossfade.Mix,
+            });
+
+            if (current >= 0) {
+                m_frameSources.MarkActive(key: current);
+            }
+
+            if (outgoing >= 0) {
+                m_frameSources.MarkActive(key: outgoing);
+            }
+        }
+    }
+    private void ReleaseFrameSources(PanelBuild build) {
+        foreach (var frame in build.Frames) {
+            if (frame is null) {
+                continue;
+            }
+
+            foreach (var key in frame.Keys) {
+                m_frameSources.ReleaseStructureKey(key: key);
+            }
+        }
+    }
+    private void ReleaseSeatBuild(int slot) {
+        if (m_seatBuilds[slot] is not { } build) {
+            return;
+        }
+
+        ReleaseFrameSources(build: build);
+        m_seatSources[slot] = null;
+        m_seatBuilds[slot] = null;
+    }
     private static OverlayHudBand ToBand(WorldHudLayer layer) => layer switch {
         WorldHudLayer.Under => OverlayHudBand.Under,
         WorldHudLayer.Over => OverlayHudBand.Over,
         WorldHudLayer.Replace => OverlayHudBand.Replace,
         _ => OverlayHudBand.Under,
+    };
+    private static OverlayHudFrameFit ToFit(WorldHudFrameFit fit) => fit switch {
+        WorldHudFrameFit.Cover => OverlayHudFrameFit.Cover,
+        WorldHudFrameFit.Contain => OverlayHudFrameFit.Contain,
+        WorldHudFrameFit.Stretch => OverlayHudFrameFit.Stretch,
+        _ => OverlayHudFrameFit.Cover,
     };
     private static OverlayHudElementKind ToKind(WorldHudElementKind kind) => kind switch {
         WorldHudElementKind.Rect => OverlayHudElementKind.Rect,
@@ -294,12 +325,6 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         WorldHudElementKind.Gauge => OverlayHudElementKind.Gauge,
         WorldHudElementKind.Frame => OverlayHudElementKind.Frame,
         _ => OverlayHudElementKind.Rect,
-    };
-    private static OverlayHudFrameFit ToFit(WorldHudFrameFit fit) => fit switch {
-        WorldHudFrameFit.Cover => OverlayHudFrameFit.Cover,
-        WorldHudFrameFit.Contain => OverlayHudFrameFit.Contain,
-        WorldHudFrameFit.Stretch => OverlayHudFrameFit.Stretch,
-        _ => OverlayHudFrameFit.Cover,
     };
     private static OverlayHudRect ToOverlayRect(WorldHudRect rect) => new(
         X: rect.X,
@@ -339,7 +364,13 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
             // instance unless a HUD row changed; only then is the structure rebuilt. The new builds take their keys
             // before the old release theirs, so a source both name never drops to zero references in between (which
             // would tear its producer down and rebuild it a frame later).
-            if ((revision != m_seenRevision) && !ReferenceEquals(objA: hud, objB: m_seenHud)) {
+            if (
+                (revision != m_seenRevision) &&
+                !ReferenceEquals(
+                objA: hud,
+                objB: m_seenHud
+            )
+            ) {
                 m_seenHud = hud;
 
                 var previous = m_worldPanels;
@@ -419,21 +450,5 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         public FrameElementState?[] Frames { get; } = frames;
         public OverlayHudPanel Panel { get; set; } = panel;
         public int Slot { get; } = slot;
-    }
-
-    private float PresenceAnySeat(OverlayPredicate? predicate) {
-        if (predicate is null) {
-            return 1f;
-        }
-
-        var strongest = 0f;
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            if (m_roster.IsJoined(slot: slot)) {
-                strongest = MathF.Max(x: strongest, y: m_facts.Presence(predicate: predicate, slot: slot));
-            }
-        }
-
-        return strongest;
     }
 }

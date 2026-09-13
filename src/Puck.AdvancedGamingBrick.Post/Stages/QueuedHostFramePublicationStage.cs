@@ -10,14 +10,14 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-frame-publication";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -32,6 +32,7 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> 
 
         return (result.Passed
             ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

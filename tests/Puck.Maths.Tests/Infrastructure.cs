@@ -38,7 +38,10 @@ internal static class TestPaths {
     /// <param name="fileName">The artifact file name, for example <c>frontier.json</c>.</param>
     /// <returns>The absolute path within the project directory.</returns>
     public static string Artifact(string fileName) =>
-        Path.Combine(path1: ProjectDirectory, path2: fileName);
+        Path.Combine(
+            path1: ProjectDirectory,
+            path2: fileName
+        );
 }
 /// <summary>Deterministic JSON persistence for the committed artifacts: stable member and array ordering, LF line
 /// endings, and update-on-change writes so an unchanged artifact never churns the working tree.</summary>
@@ -51,20 +54,46 @@ internal static class ArtifactJson {
         WriteIndented = true,
     };
 
-    /// <summary>Serializes <paramref name="value"/> to the canonical artifact form (indented, LF-terminated).</summary>
-    /// <typeparam name="TValue">The model type; its declared property order is the on-disk order.</typeparam>
-    /// <param name="value">The model to serialize.</param>
-    /// <returns>The canonical JSON text.</returns>
-    public static string Serialize<TValue>(TValue value) =>
-        (JsonSerializer.Serialize(options: Options, value: value).ReplaceLineEndings(replacementText: "\n") + "\n");
+    // Windows readers which omit FileShare.Delete briefly prevent an otherwise authorized atomic rename.
+    // Retry only those native sharing/access errors, with seven brief waits; persistent permission failures still
+    // fail the run. The successful path never sleeps, and no fallback exposes a partially rewritten artifact.
+    private static void WithSharingRetries(Action operation) {
+        for (var attempt = 0; ; attempt++) {
+            try {
+                operation();
+                return;
+            } catch (Exception exception) when (
+                (OperatingSystem.IsWindows() &&
+                (attempt < 7) &&
+                (exception is IOException or UnauthorizedAccessException) &&
+                ((exception.HResult & 0xFFFF) is 5 or 32 or 33))
+            ) {
+                Thread.Sleep(millisecondsTimeout: 25);
+            }
+        }
+    }
+
     /// <summary>Reads and deserializes an artifact, or returns <see langword="default"/> when the file is absent.</summary>
     /// <typeparam name="TValue">The model type.</typeparam>
     /// <param name="path">The absolute artifact path.</param>
     /// <returns>The deserialized model, or <see langword="default"/> when the file does not exist.</returns>
     public static TValue? ReadOrDefault<TValue>(string path) =>
         (File.Exists(path: path)
-            ? JsonSerializer.Deserialize<TValue>(json: File.ReadAllText(path: path), options: Options)
-            : default);
+            ? JsonSerializer.Deserialize<TValue>(
+                json: File.ReadAllText(path: path),
+                options: Options
+            )
+            : default
+        );
+    /// <summary>Serializes <paramref name="value"/> to the canonical artifact form (indented, LF-terminated).</summary>
+    /// <typeparam name="TValue">The model type; its declared property order is the on-disk order.</typeparam>
+    /// <param name="value">The model to serialize.</param>
+    /// <returns>The canonical JSON text.</returns>
+    public static string Serialize<TValue>(TValue value) =>
+        (JsonSerializer.Serialize(
+            options: Options,
+            value: value
+        ).ReplaceLineEndings(replacementText: "\n") + "\n");
     /// <summary>Writes <paramref name="content"/> to <paramref name="path"/> only when it differs from the current
     /// file, comparing on LF-normalized text so line-ending drift never triggers a spurious write. The write is atomic:
     /// the content lands in a sibling temporary file that then replaces the target, so a crash mid-write can never leave
@@ -75,7 +104,10 @@ internal static class ArtifactJson {
     public static bool WriteIfChanged(string path, string content) {
         var normalized = content.ReplaceLineEndings(replacementText: "\n");
 
-        if (File.Exists(path: path) && (File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n") == normalized)) {
+        if (
+            File.Exists(path: path) &&
+            (File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n") == normalized)
+        ) {
             return false;
         }
 
@@ -84,32 +116,20 @@ internal static class ArtifactJson {
         var temporaryPath = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 
         try {
-            File.WriteAllText(contents: normalized, path: temporaryPath);
-            WithSharingRetries(() => File.Move(destFileName: path, overwrite: true, sourceFileName: temporaryPath));
+            File.WriteAllText(
+                contents: normalized,
+                path: temporaryPath
+            );
+            WithSharingRetries(operation: () => File.Move(
+                destFileName: path,
+                overwrite: true,
+                sourceFileName: temporaryPath
+            ));
         } finally {
             // A failed replacement must not leave a staged artifact beside the source-controlled report.
-            WithSharingRetries(() => File.Delete(path: temporaryPath));
+            WithSharingRetries(operation: () => File.Delete(path: temporaryPath));
         }
 
         return true;
-    }
-
-    // Windows readers which omit FileShare.Delete briefly prevent an otherwise authorized atomic rename.
-    // Retry only those native sharing/access errors, with seven brief waits; persistent permission failures still
-    // fail the run. The successful path never sleeps, and no fallback exposes a partially rewritten artifact.
-    private static void WithSharingRetries(Action operation) {
-        for (var attempt = 0; ; attempt++) {
-            try {
-                operation();
-                return;
-            } catch (Exception exception) when (
-                OperatingSystem.IsWindows() &&
-                (attempt < 7) &&
-                (exception is IOException or UnauthorizedAccessException) &&
-                ((exception.HResult & 0xFFFF) is 5 or 32 or 33)
-            ) {
-                Thread.Sleep(millisecondsTimeout: 25);
-            }
-        }
     }
 }

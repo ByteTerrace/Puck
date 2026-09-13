@@ -18,26 +18,6 @@ namespace Puck.World.Tests;
 public sealed class WorldStampPoolBoundLawTests {
     private const string PrototypeId = "bounded";
 
-    private static ShapeDocument Shape(int id, SdfSolidPrimitive type, Vector3 scale, float? dilate = null, float? onion = null, ShapePanelDocument? panel = null) =>
-        new(
-            Id: id,
-            Name: null,
-            Type: type,
-            Position: new Vector3(
-                x: (1.5f * id),
-                y: 0f,
-                z: 0f
-            ),
-            Rotation: Quaternion.Identity,
-            Scale: scale,
-            Material: 0,
-            Blend: SdfBlendOp.Union,
-            Smooth: 0f,
-            Group: 0,
-            Dilate: dilate,
-            Onion: onion,
-            Panel: panel
-        );
     private static readonly ShapeDocument[] Shapes = [
         Shape(
             id: 0,
@@ -82,7 +62,11 @@ public sealed class WorldStampPoolBoundLawTests {
         // must widen by exactly that much — a recess would need no widening (subtraction only removes).
         Shape(
             id: 5,
-            panel: new ShapePanelDocument(Inset: 0.01f, Depth: -0.05f, Material: 1),
+            panel: new ShapePanelDocument(
+                Inset: 0.01f,
+                Depth: -0.05f,
+                Material: 1
+            ),
             scale: new Vector3(
                 x: 0.2f,
                 y: 0.15f,
@@ -113,11 +97,11 @@ public sealed class WorldStampPoolBoundLawTests {
             CreationsRaw = [creation],
             LookRowsRaw = [
                 new WorldLook(
-                    Name: "rig",
-                    Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                ),
+                Name: "rig",
+                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
+                Scale: bodyScale,
+                Motion: WorldLookMotion.Default
+            ),
             ],
         });
         var pool = new WorldStampPool();
@@ -148,30 +132,26 @@ public sealed class WorldStampPoolBoundLawTests {
 
         return builder.Build(buildInstanceGrid: false);
     }
-
-    /// <summary>A raised panel's depth is a creation-unit value: at a body look scale the raise it adds to the
-    /// world-unit instance bound scales with the placement, so the packed radius covers the scaled reach plus the
-    /// scaled raise.</summary>
-    [Fact]
-    public void ARaisedPanelBoundScalesItsRaiseWithTheBodyLook() {
-        const float BodyScale = 2f;
-        const int PanelledShape = 5;
-        var program = EmitPool(bodyScale: BodyScale);
-        var active = program.Instances.Where(predicate: instance => instance.Active).ToArray();
-        var shape = Shapes[PanelledShape];
-        var required = (SdfSolidGeometry.Reach(
-            type: shape.Type,
-            scale: (shape.Scale * BodyScale),
-            lift: SdfLift.Extrude
-        ) + (-shape.Panel!.Depth * BodyScale));
-
-        Assert.True(
-            condition: (active[PanelledShape].Radius >= required),
-            userMessage: $"the raised panel at look scale {BodyScale} packs radius {active[PanelledShape].Radius} below its scaled reach + raise {required}"
+    private static ShapeDocument Shape(int id, SdfSolidPrimitive type, Vector3 scale, float? dilate = null, float? onion = null, ShapePanelDocument? panel = null) =>
+        new(
+            Id: id,
+            Name: null,
+            Type: type,
+            Position: new Vector3(
+                x: (1.5f * id),
+                y: 0f,
+                z: 0f
+            ),
+            Rotation: Quaternion.Identity,
+            Scale: scale,
+            Material: 0,
+            Blend: SdfBlendOp.Union,
+            Smooth: 0f,
+            Group: 0,
+            Dilate: dilate,
+            Onion: onion,
+            Panel: panel
         );
-        // The control: the unscaled raise alone would leave the bound short.
-        Assert.True(condition: (required > (SdfSolidGeometry.Reach(type: shape.Type, scale: (shape.Scale * BodyScale), lift: SdfLift.Extrude) - shape.Panel.Depth)));
-    }
 
     /// <summary>Dilate/Onion are creation-unit values, like a panel's depth: at a body look scale the outward growth
     /// they add to the world-unit instance bound scales with the placement.</summary>
@@ -193,9 +173,140 @@ public sealed class WorldStampPoolBoundLawTests {
             userMessage: $"the dilated/onioned shape at look scale {BodyScale} packs radius {active[DilatedShape].Radius} below its scaled reach + growth {required}"
         );
         // The control: the unscaled growth alone would leave the bound short.
-        Assert.True(condition: (required > (SdfSolidGeometry.Reach(type: shape.Type, scale: (shape.Scale * BodyScale), lift: SdfLift.Extrude) + shape.Dilate.Value + shape.Onion.Value)));
+        Assert.True(condition: (required > ((SdfSolidGeometry.Reach(
+            type: shape.Type,
+            scale: (shape.Scale * BodyScale),
+            lift: SdfLift.Extrude
+        ) + shape.Dilate.Value) + shape.Onion.Value)));
     }
+    /// <summary>A domain-bearing shape parented to a swinging shape packs its instance on ITS OWN slot (the parent's
+    /// delta frame) with a radius covering every fold image from that frame's origin — rest offset plus fold
+    /// displacement plus primitive reach — so the bound travels with the parent. Checked at every frame of a swing:
+    /// each mirror image's own sphere lies inside the packed bound around the slot's live position. The discriminator:
+    /// at the swing's peak the same image escapes a static sphere of the creation's whole reach around the ROOT
+    /// slot, which is where a root-anchored bound would have clipped it at the tile seams.</summary>
+    [Fact]
+    public void AParentedDomainShapeBoundRidesItsOwnSlotAndCoversEveryFoldImage() {
+        var creation = CreationDomainParentLawTests.Prototype(document: CreationDomainParentLawTests.FollowRig());
+        var program = CreationDomainParentLawTests.EmitProgram(creation: creation);
+        var instance = program.Instances.Single(predicate: candidate => (candidate.IsDynamic && (candidate.Slot == CreationDomainParentLawTests.FoldSlot)));
+        var engine = CreationFrame.ToEngine(document: creation.Document);
+        var fold = engine.Shapes![1];
+        var solidReach = SdfSolidGeometry.Reach(
+            type: fold.Type,
+            scale: fold.Scale
+        );
+        // The symmetry plane is the engine-frame YZ plane, so the two images are the rest position and its X mirror.
+        Vector3[] images = [fold.Position.Value, (fold.Position.Value with { X = -fold.Position.Value.X })];
+        var creationReach = CreationStampEmitter.RenderReach(
+            document: engine,
+            scale: 1f,
+            fontFor: null
+        );
+        var pool = CreationDomainParentLawTests.Pool(creation: creation);
+        var client = CreationDomainParentLawTests.Client(definition: CreationDomainParentLawTests.Definition(creation: creation));
+        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var escapedRoot = false;
 
+        Assert.Equal(
+            expected: Vector3.Zero,
+            actual: instance.Center
+        );
+
+        for (var frame = 0; (frame < 120); frame++) {
+            CreationDomainParentLawTests.Advance(
+                client: client,
+                pool: pool,
+                tick: ((ulong)frame),
+                transforms: transforms
+            );
+
+            var slot = transforms[CreationDomainParentLawTests.FoldSlot];
+            var root = transforms[CreationDomainParentLawTests.RootSlot];
+
+            foreach (var image in images) {
+                var center = (slot.Position + Vector3.Transform(
+                    value: image,
+                    rotation: slot.Orientation
+                ));
+                var fromSlot = Vector3.Distance(
+                    value1: center,
+                    value2: slot.Position
+                );
+
+                Assert.True(
+                    condition: ((fromSlot + solidReach) <= (instance.Radius + 1e-4f)),
+                    userMessage: $"frame {frame}: fold image at {center} (sphere {solidReach}) lies {fromSlot} from its slot, outside the packed bound {instance.Radius}."
+                );
+                escapedRoot |= ((Vector3.Distance(
+                    value1: center,
+                    value2: root.Position
+                ) + solidReach) > creationReach);
+            }
+        }
+
+        Assert.True(
+            condition: escapedRoot,
+            userMessage: "no swing frame carried a fold image past the creation's static reach around the root, so this law cannot tell a travelling bound from a root-anchored one."
+        );
+    }
+    /// <summary>A raised panel's depth is a creation-unit value: at a body look scale the raise it adds to the
+    /// world-unit instance bound scales with the placement, so the packed radius covers the scaled reach plus the
+    /// scaled raise.</summary>
+    [Fact]
+    public void ARaisedPanelBoundScalesItsRaiseWithTheBodyLook() {
+        const float BodyScale = 2f;
+        const int PanelledShape = 5;
+        var program = EmitPool(bodyScale: BodyScale);
+        var active = program.Instances.Where(predicate: instance => instance.Active).ToArray();
+        var shape = Shapes[PanelledShape];
+        var required = (SdfSolidGeometry.Reach(
+            type: shape.Type,
+            scale: (shape.Scale * BodyScale),
+            lift: SdfLift.Extrude
+        ) + (-shape.Panel!.Depth * BodyScale));
+
+        Assert.True(
+            condition: (active[PanelledShape].Radius >= required),
+            userMessage: $"the raised panel at look scale {BodyScale} packs radius {active[PanelledShape].Radius} below its scaled reach + raise {required}"
+        );
+        // The control: the unscaled raise alone would leave the bound short.
+        Assert.True(condition: (required > (SdfSolidGeometry.Reach(
+            type: shape.Type,
+            scale: (shape.Scale * BodyScale),
+            lift: SdfLift.Extrude
+        ) - shape.Panel.Depth)));
+    }
+    [Fact]
+    public void EveryPerShapeInstanceCoversItsPrimitiveReach() {
+        var program = EmitPool();
+        var active = program.Instances.Where(predicate: instance => instance.Active).ToArray();
+
+        // One live instance per authored shape (the ungrouped pass), in document order.
+        Assert.True(
+            condition: (active.Length >= Shapes.Length),
+            userMessage: $"expected at least {Shapes.Length} live instances, found {active.Length}"
+        );
+
+        for (var index = 0; (index < Shapes.Length); index++) {
+            var shape = Shapes[index];
+            var panelRaise = ((shape.Panel is { Depth: < 0f } panel)
+                ? -panel.Depth
+                : 0f
+            );
+            var required = ((SdfSolidGeometry.Reach(
+                type: shape.Type,
+                scale: shape.Scale,
+                lift: SdfLift.Extrude,
+                panelRaise: panelRaise
+            ) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f));
+
+            Assert.True(
+                condition: (active[index].Radius >= required),
+                userMessage: $"shape {index} ({shape.Type}) packs radius {active[index].Radius} below its reach {required}"
+            );
+        }
+    }
     /// <summary>THE LAW: <see cref="SdfSolidGeometry.MaxPanelReach"/> — the probe's worst-case raised-panel term — is
     /// derived from <c>ShapePanelDocument</c>'s own <c>|Depth|</c> validation ceiling (twice a plate's own half-extent
     /// at zero inset), not a hand-picked literal: it covers that ceiling for every primitive a panel can be authored
@@ -215,10 +326,25 @@ public sealed class WorldStampPoolBoundLawTests {
         var scale = new Vector3(value: 3f);
         var maxPanelReach = SdfSolidGeometry.MaxPanelReach(scale: scale);
         var ownCeiling = (2f * MathF.Max(
-            x: SdfSolidGeometry.HalfExtent(type: type, scale: scale, lift: lift, axis: Vector3.UnitX),
+            x: SdfSolidGeometry.HalfExtent(
+                type: type,
+                scale: scale,
+                lift: lift,
+                axis: Vector3.UnitX
+            ),
             y: MathF.Max(
-                x: SdfSolidGeometry.HalfExtent(type: type, scale: scale, lift: lift, axis: Vector3.UnitY),
-                y: SdfSolidGeometry.HalfExtent(type: type, scale: scale, lift: lift, axis: Vector3.UnitZ)
+                x: SdfSolidGeometry.HalfExtent(
+                    type: type,
+                    scale: scale,
+                    lift: lift,
+                    axis: Vector3.UnitY
+                ),
+                y: SdfSolidGeometry.HalfExtent(
+                    type: type,
+                    scale: scale,
+                    lift: lift,
+                    axis: Vector3.UnitZ
+                )
             )
         ));
 
@@ -226,80 +352,5 @@ public sealed class WorldStampPoolBoundLawTests {
             condition: (maxPanelReach >= ownCeiling),
             userMessage: $"MaxPanelReach {maxPanelReach} undercuts {type}/{lift}'s own depth ceiling {ownCeiling}"
         );
-    }
-
-    [Fact]
-    public void EveryPerShapeInstanceCoversItsPrimitiveReach() {
-        var program = EmitPool();
-        var active = program.Instances.Where(predicate: instance => instance.Active).ToArray();
-
-        // One live instance per authored shape (the ungrouped pass), in document order.
-        Assert.True(
-            condition: (active.Length >= Shapes.Length),
-            userMessage: $"expected at least {Shapes.Length} live instances, found {active.Length}"
-        );
-
-        for (var index = 0; (index < Shapes.Length); index++) {
-            var shape = Shapes[index];
-            var panelRaise = ((shape.Panel is { Depth: < 0f } panel)
-                ? -panel.Depth
-                : 0f);
-            var required = ((SdfSolidGeometry.Reach(
-                type: shape.Type,
-                scale: shape.Scale,
-                lift: SdfLift.Extrude,
-                panelRaise: panelRaise
-            ) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f));
-
-            Assert.True(
-                condition: (active[index].Radius >= required),
-                userMessage: $"shape {index} ({shape.Type}) packs radius {active[index].Radius} below its reach {required}"
-            );
-        }
-    }
-
-    /// <summary>A domain-bearing shape parented to a swinging shape packs its instance on ITS OWN slot (the parent's
-    /// delta frame) with a radius covering every fold image from that frame's origin — rest offset plus fold
-    /// displacement plus primitive reach — so the bound travels with the parent. Checked at every frame of a swing:
-    /// each mirror image's own sphere lies inside the packed bound around the slot's live position. The discriminator:
-    /// at the swing's peak the same image escapes a static sphere of the creation's whole reach around the ROOT
-    /// slot, which is where a root-anchored bound would have clipped it at the tile seams.</summary>
-    [Fact]
-    public void AParentedDomainShapeBoundRidesItsOwnSlotAndCoversEveryFoldImage() {
-        var creation = CreationDomainParentLawTests.Prototype(document: CreationDomainParentLawTests.FollowRig());
-        var program = CreationDomainParentLawTests.EmitProgram(creation: creation);
-        var instance = program.Instances.Single(predicate: candidate => (candidate.IsDynamic && (candidate.Slot == CreationDomainParentLawTests.FoldSlot)));
-        var engine = CreationFrame.ToEngine(document: creation.Document);
-        var fold = engine.Shapes![1];
-        var solidReach = SdfSolidGeometry.Reach(type: fold.Type, scale: fold.Scale);
-        // The symmetry plane is the engine-frame YZ plane, so the two images are the rest position and its X mirror.
-        Vector3[] images = [fold.Position.Value, (fold.Position.Value with { X = -fold.Position.Value.X })];
-        var creationReach = CreationStampEmitter.RenderReach(document: engine, scale: 1f, fontFor: null);
-        var pool = CreationDomainParentLawTests.Pool(creation: creation);
-        var client = CreationDomainParentLawTests.Client(definition: CreationDomainParentLawTests.Definition(creation: creation));
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
-        var escapedRoot = false;
-
-        Assert.Equal(expected: Vector3.Zero, actual: instance.Center);
-
-        for (var frame = 0; (frame < 120); frame++) {
-            CreationDomainParentLawTests.Advance(client: client, pool: pool, tick: ((ulong)frame), transforms: transforms);
-
-            var slot = transforms[CreationDomainParentLawTests.FoldSlot];
-            var root = transforms[CreationDomainParentLawTests.RootSlot];
-
-            foreach (var image in images) {
-                var center = (slot.Position + Vector3.Transform(value: image, rotation: slot.Orientation));
-                var fromSlot = Vector3.Distance(value1: center, value2: slot.Position);
-
-                Assert.True(
-                    condition: ((fromSlot + solidReach) <= (instance.Radius + 1e-4f)),
-                    userMessage: $"frame {frame}: fold image at {center} (sphere {solidReach}) lies {fromSlot} from its slot, outside the packed bound {instance.Radius}."
-                );
-                escapedRoot |= ((Vector3.Distance(value1: center, value2: root.Position) + solidReach) > creationReach);
-            }
-        }
-
-        Assert.True(condition: escapedRoot, userMessage: "no swing frame carried a fold image past the creation's static reach around the root, so this law cannot tell a travelling bound from a root-anchored one.");
     }
 }

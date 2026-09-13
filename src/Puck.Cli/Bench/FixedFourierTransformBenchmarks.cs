@@ -25,7 +25,10 @@ public class FftForwardVsDirectSum {
         m_scratch = new FixedComplex[Length];
 
         for (var i = 0; (i < Length); ++i) {
-            m_input[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)));
+            m_input[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))
+            );
         }
     }
     [Benchmark(Baseline = true)]
@@ -49,8 +52,14 @@ public class FftForwardVsDirectSum {
     }
     [Benchmark]
     public FixedQ4816 Radix2() {
-        m_input.CopyTo(array: m_scratch, index: 0);
-        FixedFourierTransform.Forward(plan: m_plan, values: m_scratch);
+        m_input.CopyTo(
+            array: m_scratch,
+            index: 0
+        );
+        FixedFourierTransform.Forward(
+            plan: m_plan,
+            values: m_scratch
+        );
 
         return m_scratch[0].Real;
     }
@@ -80,43 +89,83 @@ public class FftForwardInverse {
         m_smallValues = new FixedComplex[256];
         m_largeValues = new FixedComplex[16384];
 
-        for (var i = 0; (i < m_smallForwardInput.Length); ++i) { m_smallForwardInput[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))); }
-        for (var i = 0; (i < m_largeForwardInput.Length); ++i) { m_largeForwardInput[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))); }
+        for (var i = 0; (i < m_smallForwardInput.Length); ++i) {
+            m_smallForwardInput[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))
+            );
+        }
+        for (var i = 0; (i < m_largeForwardInput.Length); ++i) {
+            m_largeForwardInput[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))
+            );
+        }
 
         m_smallInverseInput = ((FixedComplex[])m_smallForwardInput.Clone());
         m_largeInverseInput = ((FixedComplex[])m_largeForwardInput.Clone());
-        FixedFourierTransform.Forward(plan: m_smallPlan, values: m_smallInverseInput);
-        FixedFourierTransform.Forward(plan: m_largePlan, values: m_largeInverseInput);
+        FixedFourierTransform.Forward(
+            plan: m_smallPlan,
+            values: m_smallInverseInput
+        );
+        FixedFourierTransform.Forward(
+            plan: m_largePlan,
+            values: m_largeInverseInput
+        );
     }
     [IterationSetup(Target = nameof(ForwardSmall))]
-    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseSmall))]
-    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(ForwardLarge))]
-    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseLarge))]
-    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [Benchmark]
     public FixedQ4816 ForwardSmall() {
-        FixedFourierTransform.Forward(plan: m_smallPlan, values: m_smallValues);
+        FixedFourierTransform.Forward(
+            plan: m_smallPlan,
+            values: m_smallValues
+        );
 
         return m_smallValues[0].Real;
     }
     [Benchmark]
     public FixedQ4816 InverseSmall() {
-        FixedFourierTransform.Inverse(plan: m_smallPlan, values: m_smallValues);
+        FixedFourierTransform.Inverse(
+            plan: m_smallPlan,
+            values: m_smallValues
+        );
 
         return m_smallValues[0].Real;
     }
     [Benchmark]
     public FixedQ4816 ForwardLarge() {
-        FixedFourierTransform.Forward(plan: m_largePlan, values: m_largeValues);
+        FixedFourierTransform.Forward(
+            plan: m_largePlan,
+            values: m_largeValues
+        );
 
         return m_largeValues[0].Real;
     }
     [Benchmark]
     public FixedQ4816 InverseLarge() {
-        FixedFourierTransform.Inverse(plan: m_largePlan, values: m_largeValues);
+        FixedFourierTransform.Inverse(
+            plan: m_largePlan,
+            values: m_largeValues
+        );
 
         return m_largeValues[0].Real;
     }
@@ -148,8 +197,14 @@ public class FftConvolveVsNaive {
         m_destination = new FixedComplex[Length];
 
         for (var i = 0; (i < Length); ++i) {
-            m_left[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)));
-            m_right[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)));
+            m_left[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng))
+            );
+            m_right[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng))
+            );
         }
     }
     [Benchmark(Baseline = true)]
@@ -172,9 +227,20 @@ public class FftConvolveVsNaive {
     }
     [Benchmark]
     public FixedQ4816 Fft() {
-        m_left.CopyTo(array: m_scratchLeft, index: 0);
-        m_right.CopyTo(array: m_scratchRight, index: 0);
-        FixedFourierTransform.Convolve(destination: m_destination, left: m_scratchLeft, plan: m_plan, right: m_scratchRight);
+        m_left.CopyTo(
+            array: m_scratchLeft,
+            index: 0
+        );
+        m_right.CopyTo(
+            array: m_scratchRight,
+            index: 0
+        );
+        FixedFourierTransform.Convolve(
+            destination: m_destination,
+            left: m_scratchLeft,
+            plan: m_plan,
+            right: m_scratchRight
+        );
 
         return m_destination[0].Real;
     }

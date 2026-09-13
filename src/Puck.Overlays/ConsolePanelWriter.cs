@@ -23,8 +23,8 @@ public sealed class ConsolePanelWriter {
     /// never silent — see <see cref="OverlayFrameBuilder.Refused"/>) instead of quietly overrunning the reservation.</summary>
     public const int TitleChars = 7;
 
-    private readonly OverlayThemeStore m_theme;
     private readonly IConsoleTapeSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     static ConsolePanelWriter() {
         System.Diagnostics.Debug.Assert(
@@ -45,6 +45,13 @@ public sealed class ConsolePanelWriter {
         m_source = source;
         m_theme = theme;
     }
+
+    // The rows a line of the given length occupies at the column count; an empty line still takes one.
+    private static int SegmentCount(int length, int cols) =>
+        Math.Max(
+            val1: 1,
+            val2: ((length + (cols - 1)) / cols)
+        );
 
     /// <summary>Emits this frame's console panel, when one is visible.</summary>
     /// <param name="builder">The frame builder.</param>
@@ -116,7 +123,10 @@ public sealed class ConsolePanelWriter {
         var firstSegment = 0;
         var rowsUsed = 0;
 
-        while ((firstShown > 0) && (rowsUsed < historyRows)) {
+        while (
+            (firstShown > 0) &&
+            (rowsUsed < historyRows)
+        ) {
             var segments = SegmentCount(
                 cols: cols,
                 length: lines[(firstShown - 1)].Text.Length
@@ -152,10 +162,13 @@ public sealed class ConsolePanelWriter {
                 ? OverlayColorRole.Danger
                 : (isEcho
                     ? OverlayColorRole.Phosphor
-                    : OverlayColorRole.TextPrimary)
-            );
+                    : OverlayColorRole.TextPrimary
+            ));
 
-            for (var segment = ((index == firstShown) ? firstSegment : 0); (segment < segments); segment++) {
+            for (var segment = ((index == firstShown)
+                ? firstSegment
+                : 0
+            ); (segment < segments); segment++) {
                 var start = (segment * cols);
 
                 builder.WriteText(
@@ -227,11 +240,4 @@ public sealed class ConsolePanelWriter {
             y: promptY
         );
     }
-
-    // The rows a line of the given length occupies at the column count; an empty line still takes one.
-    private static int SegmentCount(int length, int cols) =>
-        Math.Max(
-            val1: 1,
-            val2: ((length + (cols - 1)) / cols)
-        );
 }

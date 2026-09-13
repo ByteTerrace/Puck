@@ -50,7 +50,10 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         // the previous binding's, so an array binding can never overlap a later binding regardless of the chosen index
         // values (the binding index is a logical id, not the heap offset). The root signature ranges and the descriptor
         // allocator's writes both resolve a binding to its slot through this same map, so they stay in lockstep.
-        layout.SlotByBinding = PackSlots(bindings: bindings, slotCount: out var slotCount);
+        layout.SlotByBinding = PackSlots(
+            bindings: bindings,
+            slotCount: out var slotCount
+        );
         layout.DescriptorSlotCount = slotCount;
 
         layout.RootSignatureHandle = CreateRootSignature(
@@ -79,10 +82,15 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         var maxBindingIndex = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
-            maxBindingIndex = Math.Max(val1: maxBindingIndex, val2: bindings[index].Binding);
+            maxBindingIndex = Math.Max(
+                val1: maxBindingIndex,
+                val2: bindings[index].Binding
+            );
         }
 
-        var slotByBinding = new uint[((bindings.Count > 0) ? (maxBindingIndex + 1) : 0)];
+        var slotByBinding = new uint[((bindings.Count > 0)
+            ? (maxBindingIndex + 1)
+            : 0)];
         var nextSlot = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
@@ -106,8 +114,14 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         uint[] slotByBinding
     ) {
         var rangeCount = bindings.Count;
-        var paramCount = ((hasDescriptorTable ? 1 : 0) + (hasRootConstants ? 1 : 0));
-        var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[((rangeCount > 0) ? rangeCount : 1)];
+        var paramCount = ((hasDescriptorTable
+            ? 1
+            : 0) + (hasRootConstants
+            ? 1
+            : 0));
+        var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[((rangeCount > 0)
+            ? rangeCount
+            : 1)];
         var parameters = stackalloc D3D12_ROOT_PARAMETER[2];
         var paramIndex = 0;
         var nextSrvRegister = 0u;
@@ -125,8 +139,12 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             var count = binding.Count;
             var rangeType = (isSrv
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
-                : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV);
-            var baseRegister = (isSrv ? nextSrvRegister : nextUavRegister);
+                : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV
+            );
+            var baseRegister = (isSrv
+                ? nextSrvRegister
+                : nextUavRegister
+            );
 
             if (isSrv) {
                 nextSrvRegister += count;
@@ -187,7 +205,9 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             }
         }
 
-        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((sampledImageCount > 0) ? (int)sampledImageCount : 1)];
+        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((sampledImageCount > 0)
+            ? (int)sampledImageCount
+            : 1)];
         var samplerRegister = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
@@ -197,8 +217,8 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
             staticSamplers[((int)samplerRegister)] = DirectXRootSignatures.ClampStaticSampler(
                 filter: ((samplerFilter == GpuSamplerFilter.Nearest)
-                    ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
-                    : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
+                ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
+                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
                 shaderRegister: samplerRegister,
                 shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL
             );
@@ -210,11 +230,18 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE,
             NumParameters = ((uint)paramCount),
             NumStaticSamplers = sampledImageCount,
-            pParameters = ((0 < paramCount) ? parameters : null),
-            pStaticSamplers = ((sampledImageCount > 0) ? staticSamplers : null),
+            pParameters = ((0 < paramCount)
+            ? parameters
+            : null),
+            pStaticSamplers = ((sampledImageCount > 0)
+            ? staticSamplers
+            : null),
         };
 
-        return DirectXRootSignatures.Create(description: in desc, device: device);
+        return DirectXRootSignatures.Create(
+            description: in desc,
+            device: device
+        );
     }
     private static nint BuildPso(ID3D12Device* device, nint rootSignature, nint csHandle, nuint csLength) {
         var psoDesc = new D3D12_COMPUTE_PIPELINE_STATE_DESC {
@@ -228,7 +255,11 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;
 
-        device->CreateComputePipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
+        device->CreateComputePipelineState(
+            pDesc: in psoDesc,
+            ppPipelineState: out pso,
+            riid: in psoIid
+        );
 
         return ((nint)pso);
     }

@@ -14,10 +14,10 @@ public static class NativeDisplayKindSelector {
             if (
                 !string.IsNullOrWhiteSpace(value: waylandDisplay) ||
                 string.Equals(
-                    a: xdgSessionType,
-                    b: "wayland",
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )
+                a: xdgSessionType,
+                b: "wayland",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
             ) {
                 return NativeDisplayKind.Wayland;
             }

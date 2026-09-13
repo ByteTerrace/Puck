@@ -14,12 +14,6 @@ namespace Puck.World.Authoring.Sculpting;
 /// under <c>Puck.World.Authoring</c> mints a reference — never reflection, never an <c>InternalsVisibleTo</c> grant.
 /// </summary>
 public static class DocumentReferences {
-    /// <summary>Builds a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference vector.</summary>
-    /// <param name="reference">The reference string (e.g. <c>state.mothJoints.waist</c>).</param>
-    public static DocumentVector3 Vector3(string reference) => JsonSerializer.Deserialize<DocumentVector3>(
-        json: JsonSerializer.Serialize(value: reference),
-        options: DocumentJsonOptions.Shared
-    )!;
     /// <summary>Builds a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference quaternion.</summary>
     /// <param name="reference">The reference string (e.g. <c>state.mothRot.z180</c>).</param>
     public static DocumentQuaternion Quaternion(string reference) => JsonSerializer.Deserialize<DocumentQuaternion>(
@@ -29,6 +23,12 @@ public static class DocumentReferences {
     /// <summary>Builds a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference scalar.</summary>
     /// <param name="reference">The reference string (e.g. <c>state.mothTuning.strideThigh</c>).</param>
     public static DocumentScalar Scalar(string reference) => JsonSerializer.Deserialize<DocumentScalar>(
+        json: JsonSerializer.Serialize(value: reference),
+        options: DocumentJsonOptions.Shared
+    )!;
+    /// <summary>Builds a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference vector.</summary>
+    /// <param name="reference">The reference string (e.g. <c>state.mothJoints.waist</c>).</param>
+    public static DocumentVector3 Vector3(string reference) => JsonSerializer.Deserialize<DocumentVector3>(
         json: JsonSerializer.Serialize(value: reference),
         options: DocumentJsonOptions.Shared
     )!;

@@ -23,15 +23,16 @@ namespace Puck.World;
 /// </remarks>
 public static class WorldStateDocumentValues {
     private const int MaxShapeDepth = 64;
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
-    private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
+
     // The visited set one walk on this thread reuses; a walk takes it out while it runs, so a walk started from
     // inside another (a resolver that parses a nested document) allocates its own rather than sharing one.
     [ThreadStatic]
-    private static HashSet<object>? t_seen;
+    private static HashSet<object>? Seen;
+
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
+    private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
 
     private sealed record Traversal(bool Skip, PropertyInfo[] Properties);
-
     // What the one walk does when it reaches a bound value.
     private enum Walk {
         // Read the referenced cell and fill the value, leaving the reference attached for canonical write-back.
@@ -46,6 +47,79 @@ public static class WorldStateDocumentValues {
         Flatten,
     }
 
+    // Only a walk that can name a refusal builds the diagnostic path; a search or a collection touches nothing and
+    // reports no path, so it never formats one.
+    private static bool BuildsPath(Walk walk) => (walk is Walk.Resolve or Walk.Flatten);
+    // Cache type shapes, never the contents of a document: mutable collections and value holders may acquire a
+    // reference between walks. A sealed property's shape can prove an entire literal branch irrelevant. Open
+    // types and recursive shapes stay conservative, since a subtype or a later link may contain a bound value.
+    private static bool CanContainValue(Type type, HashSet<Type> path, bool exactType = false) {
+        if (typeof(IDocumentStateValue).IsAssignableFrom(c: type)) {
+            return true;
+        }
+        if (IsLeaf(type: type)) {
+            return false;
+        }
+        if (
+            !exactType &&
+            !type.IsSealed &&
+            !type.IsValueType
+        ) {
+            return true;
+        }
+        // Recursive generic properties can expand into a new closed type at every level, so type identity alone
+        // does not bound shape discovery. Beyond this depth keep walking actual values conservatively.
+        if (
+            (path.Count >= MaxShapeDepth) ||
+            !path.Add(item: type)
+        ) {
+            return true;
+        }
+
+        try {
+            if (type.IsArray) {
+                return CanContainValue(
+                    type: type.GetElementType()!,
+                    path: path
+                );
+            }
+            if (typeof(IEnumerable).IsAssignableFrom(c: type)) {
+                // These exact BCL implementations enumerate their declared element types through IEnumerable.
+                // An arbitrary generic enumerable may implement its non-generic enumeration differently.
+                if (
+                    type.IsGenericType &&
+                    (type.GetGenericTypeDefinition() == typeof(List<>))
+                ) {
+                    return CanContainValue(
+                        type: type.GenericTypeArguments[0],
+                        path: path
+                    );
+                }
+                if (
+                    type.IsGenericType &&
+                    (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                ) {
+                    return (
+                        CanContainValue(
+                        type: type.GenericTypeArguments[0],
+                        path: path
+                    ) ||
+                        CanContainValue(
+                        type: type.GenericTypeArguments[1],
+                        path: path
+                    )
+                    );
+                }
+                return true;
+            }
+            return Properties(type: type).Any(predicate: property => CanContainValue(
+                type: property.PropertyType,
+                path: path
+            ));
+        } finally {
+            path.Remove(item: type);
+        }
+    }
     // Whether a property is DERIVED rather than document data, and so no part of what a document-value reference can
     // be retained in.
     //
@@ -71,77 +145,51 @@ public static class WorldStateDocumentValues {
         (type == typeof(DateTimeOffset)) ||
         (type == typeof(Guid)) ||
         (type == typeof(JsonElement)));
-    // Only a walk that can name a refusal builds the diagnostic path; a search or a collection touches nothing and
-    // reports no path, so it never formats one.
-    private static bool BuildsPath(Walk walk) => (walk is Walk.Resolve or Walk.Flatten);
-    private static PropertyInfo[] Properties(Type type) => PropertyCache.GetOrAdd(key: type, valueFactory: static type =>
-        [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
-            .Where(predicate: static property => (property.CanRead && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))]);
-
-    // Cache type shapes, never the contents of a document: mutable collections and value holders may acquire a
-    // reference between walks. A sealed property's shape can prove an entire literal branch irrelevant. Open
-    // types and recursive shapes stay conservative, since a subtype or a later link may contain a bound value.
-    private static bool CanContainValue(Type type, HashSet<Type> path, bool exactType = false) {
-        if (typeof(IDocumentStateValue).IsAssignableFrom(c: type)) {
-            return true;
+    private static Traversal Plan(Type type) => TraversalCache.GetOrAdd(
+        key: type,
+        valueFactory: static type => {
+        if (!CanContainValue(
+            exactType: true,
+            path: [],
+            type: type
+        )) {
+            return new Traversal(
+                Properties: [],
+                Skip: true
+            );
         }
-        if (IsLeaf(type: type)) {
-            return false;
-        }
-        if (!exactType && !type.IsSealed && !type.IsValueType) {
-            return true;
-        }
-        // Recursive generic properties can expand into a new closed type at every level, so type identity alone
-        // does not bound shape discovery. Beyond this depth keep walking actual values conservatively.
-        if ((path.Count >= MaxShapeDepth) || !path.Add(item: type)) {
-            return true;
-        }
-
-        try {
-            if (type.IsArray) {
-                return CanContainValue(type: type.GetElementType()!, path: path);
-            }
-            if (typeof(IEnumerable).IsAssignableFrom(c: type)) {
-                // These exact BCL implementations enumerate their declared element types through IEnumerable.
-                // An arbitrary generic enumerable may implement its non-generic enumeration differently.
-                if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(List<>))) {
-                    return CanContainValue(type: type.GenericTypeArguments[0], path: path);
-                }
-                if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))) {
-                    return CanContainValue(type: type.GenericTypeArguments[0], path: path) ||
-                        CanContainValue(type: type.GenericTypeArguments[1], path: path);
-                }
-                return true;
-            }
-            return Properties(type: type).Any(predicate: property => CanContainValue(type: property.PropertyType, path: path));
-        } finally {
-            path.Remove(item: type);
-        }
+        return new Traversal(
+            Skip: false,
+            Properties: (typeof(IEnumerable).IsAssignableFrom(c: type)
+            ? []
+            : [.. Properties(type: type).Where(predicate: static property => CanContainValue(
+                        type: property.PropertyType,
+                        path: []
+                    ))])
+        );
     }
-
+    );
+    private static PropertyInfo[] Properties(Type type) => PropertyCache.GetOrAdd(
+        key: type,
+        valueFactory: static type =>
+        [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
+            .Where(predicate: static property => (property.CanRead && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))]
+    );
     private static HashSet<object> RentSeen() {
-        var seen = t_seen;
+        var seen = Seen;
 
         if (seen is null) {
             return new HashSet<object>(comparer: ReferenceEqualityComparer.Instance);
         }
 
-        t_seen = null;
+        Seen = null;
 
         return seen;
     }
     private static void ReturnSeen(HashSet<object> seen) {
         seen.Clear();
-        t_seen = seen;
+        Seen = seen;
     }
-    private static Traversal Plan(Type type) => TraversalCache.GetOrAdd(key: type, valueFactory: static type => {
-        if (!CanContainValue(type: type, path: [], exactType: true)) {
-            return new Traversal(Skip: true, Properties: []);
-        }
-        return new Traversal(Skip: false, Properties: typeof(IEnumerable).IsAssignableFrom(c: type)
-            ? []
-            : [.. Properties(type: type).Where(predicate: static property => CanContainValue(type: property.PropertyType, path: []))]);
-    });
     private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, ISet<string>? collected, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason) {
         found = false;
         reason = string.Empty;
@@ -212,7 +260,9 @@ public static class WorldStateDocumentValues {
 
                 text = stateRow.Kind switch {
                     CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
-                    CellKind.Bool => ((raw != 0L) ? "true" : "false"),
+                    CellKind.Bool => ((raw != 0L)
+                    ? "true"
+                    : "false"),
                     _ => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 };
             }
@@ -258,7 +308,9 @@ public static class WorldStateDocumentValues {
                 if (!TryVisit(
                     definition: definition,
                     found: out var itemFound,
-                    path: (BuildsPath(walk: walk) ? $"{path}[{index}]" : string.Empty),
+                    path: (BuildsPath(walk: walk)
+                    ? $"{path}[{index}]"
+                    : string.Empty),
                     reason: out reason,
                     seen: seen,
                     deferDrawSites: deferDrawSites,
@@ -281,12 +333,15 @@ public static class WorldStateDocumentValues {
 
         foreach (var property in traversal.Properties) {
             var child = property.GetValue(obj: value);
+
             if (child is null) {
                 continue;
             }
             if (!TryVisit(
                 value: child,
-                path: (BuildsPath(walk: walk) ? $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}" : string.Empty),
+                path: (BuildsPath(walk: walk)
+                ? $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}"
+                : string.Empty),
                 definition: definition,
                 soughtRow: soughtRow,
                 collected: collected,
@@ -308,6 +363,49 @@ public static class WorldStateDocumentValues {
         return true;
     }
 
+    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="definition"/>
+    /// names to <paramref name="rows"/>, in one walk.</summary>
+    /// <remarks>A cell write carries a value, never a reference, and references live in the sections around the
+    /// state table, so a batch of cell writes collects this set once and asks each member's row against it, where
+    /// <see cref="ReferencesRow(WorldDefinition, string)"/> would walk the whole graph per member. A member that
+    /// re-declares a row or edits any other section is where the set can change; the caller collects again after
+    /// one.</remarks>
+    /// <param name="definition">The document to walk.</param>
+    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
+    public static void CollectReferencedRows(WorldDefinition definition, ISet<string> rows) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        CollectReferencedRows(
+            graph: definition,
+            rows: rows
+        );
+    }
+    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="graph"/>
+    /// — one section or value holder of a definition — names to <paramref name="rows"/>, in one walk.</summary>
+    /// <param name="graph">The sub-graph to walk.</param>
+    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
+    public static void CollectReferencedRows(object graph, ISet<string> rows) {
+        ArgumentNullException.ThrowIfNull(argument: graph);
+        ArgumentNullException.ThrowIfNull(argument: rows);
+
+        var seen = RentSeen();
+
+        try {
+            _ = TryVisit(
+                collected: rows,
+                deferDrawSites: false,
+                definition: null!,
+                found: out _,
+                path: "definition",
+                reason: out _,
+                seen: seen,
+                soughtRow: null,
+                value: graph,
+                walk: Walk.Collect
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
+    }
     /// <summary>Reports whether <paramref name="graph"/> retains any document-value reference at all.</summary>
     /// <param name="graph">The object graph to walk — a definition, or an egress document composed over one.</param>
     /// <returns><see langword="true"/> when at least one bound value is present.</returns>
@@ -319,16 +417,16 @@ public static class WorldStateDocumentValues {
         try {
             return (
                 TryVisit(
-                value: graph,
-                path: "document",
-                definition: null!,
-                walk: Walk.Find,
-                soughtRow: null,
                 collected: null,
-                seen: seen,
                 deferDrawSites: false,
+                definition: null!,
                 found: out var found,
-                reason: out _
+                path: "document",
+                reason: out _,
+                seen: seen,
+                soughtRow: null,
+                value: graph,
+                walk: Walk.Find
             ) &&
                 found
             );
@@ -359,16 +457,16 @@ public static class WorldStateDocumentValues {
         try {
             return (
                 TryVisit(
-                value: graph,
-                path: "definition",
-                definition: definition,
-                walk: Walk.Find,
-                soughtRow: rowName,
                 collected: null,
-                seen: seen,
                 deferDrawSites: false,
+                definition: definition,
                 found: out var found,
-                reason: out _
+                path: "definition",
+                reason: out _,
+                seen: seen,
+                soughtRow: rowName,
+                value: graph,
+                walk: Walk.Find
             ) &&
                 found
             );
@@ -397,59 +495,16 @@ public static class WorldStateDocumentValues {
 
         try {
             return TryVisit(
-                value: graph,
-                path: "document",
-                definition: source,
-                walk: Walk.Flatten,
-                soughtRow: null,
                 collected: null,
-                seen: seen,
                 deferDrawSites: false,
+                definition: source,
                 found: out _,
-                reason: out reason
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
-    }
-    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="definition"/>
-    /// names to <paramref name="rows"/>, in one walk.</summary>
-    /// <remarks>A cell write carries a value, never a reference, and references live in the sections around the
-    /// state table, so a batch of cell writes collects this set once and asks each member's row against it, where
-    /// <see cref="ReferencesRow(WorldDefinition, string)"/> would walk the whole graph per member. A member that
-    /// re-declares a row or edits any other section is where the set can change; the caller collects again after
-    /// one.</remarks>
-    /// <param name="definition">The document to walk.</param>
-    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
-    public static void CollectReferencedRows(WorldDefinition definition, ISet<string> rows) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-        CollectReferencedRows(
-            graph: definition,
-            rows: rows
-        );
-    }
-    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="graph"/>
-    /// — one section or value holder of a definition — names to <paramref name="rows"/>, in one walk.</summary>
-    /// <param name="graph">The sub-graph to walk.</param>
-    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
-    public static void CollectReferencedRows(object graph, ISet<string> rows) {
-        ArgumentNullException.ThrowIfNull(argument: graph);
-        ArgumentNullException.ThrowIfNull(argument: rows);
-
-        var seen = RentSeen();
-
-        try {
-            _ = TryVisit(
-                value: graph,
-                path: "definition",
-                definition: null!,
-                walk: Walk.Collect,
+                path: "document",
+                reason: out reason,
+                seen: seen,
                 soughtRow: null,
-                collected: rows,
-                seen: seen,
-                deferDrawSites: false,
-                found: out _,
-                reason: out _
+                value: graph,
+                walk: Walk.Flatten
             );
         } finally {
             ReturnSeen(seen: seen);
@@ -475,8 +530,8 @@ public static class WorldStateDocumentValues {
 
         return TryRehydrate(
             definition: definition,
-            refreshed: out refreshed,
-            reason: out reason
+            reason: out reason,
+            refreshed: out refreshed
         );
     }
     /// <summary>
@@ -513,6 +568,35 @@ public static class WorldStateDocumentValues {
 
         return true;
     }
+    /// <summary>Resolves every document-value reference in <paramref name="definition"/> in place.</summary>
+    /// <param name="definition">The document to resolve.</param>
+    /// <param name="reason">Why a reference could not be resolved, on failure.</param>
+    /// <param name="deferDrawSites">Whether a reference into a draw site that has not filled yet is left attached
+    /// for a later pass — legitimate only on the loader's first parse, which runs the draw resolver and resolves
+    /// again; every other door refuses such a reference by name, since nothing after it would ever fill the
+    /// site.</param>
+    public static bool TryResolve(WorldDefinition definition, out string reason, bool deferDrawSites = false) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var seen = RentSeen();
+
+        try {
+            return TryVisit(
+                collected: null,
+                deferDrawSites: deferDrawSites,
+                definition: definition,
+                found: out _,
+                path: "definition",
+                reason: out reason,
+                seen: seen,
+                soughtRow: null,
+                value: definition,
+                walk: Walk.Resolve
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
+    }
     /// <summary>
     /// Resolves every document-value reference in <paramref name="graph"/> against <paramref name="source"/>'s
     /// state cells in place, retaining each reference for canonical write-back — the resolve-only sibling of
@@ -537,45 +621,16 @@ public static class WorldStateDocumentValues {
 
         try {
             return TryVisit(
-                value: graph,
-                path: "document",
-                definition: source,
-                walk: Walk.Resolve,
-                soughtRow: null,
                 collected: null,
-                seen: seen,
                 deferDrawSites: false,
+                definition: source,
                 found: out _,
-                reason: out reason
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
-    }
-    /// <summary>Resolves every document-value reference in <paramref name="definition"/> in place.</summary>
-    /// <param name="definition">The document to resolve.</param>
-    /// <param name="reason">Why a reference could not be resolved, on failure.</param>
-    /// <param name="deferDrawSites">Whether a reference into a draw site that has not filled yet is left attached
-    /// for a later pass — legitimate only on the loader's first parse, which runs the draw resolver and resolves
-    /// again; every other door refuses such a reference by name, since nothing after it would ever fill the
-    /// site.</param>
-    public static bool TryResolve(WorldDefinition definition, out string reason, bool deferDrawSites = false) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        var seen = RentSeen();
-
-        try {
-            return TryVisit(
-                value: definition,
-                path: "definition",
-                definition: definition,
-                walk: Walk.Resolve,
-                soughtRow: null,
-                collected: null,
+                path: "document",
+                reason: out reason,
                 seen: seen,
-                deferDrawSites: deferDrawSites,
-                found: out _,
-                reason: out reason
+                soughtRow: null,
+                value: graph,
+                walk: Walk.Resolve
             );
         } finally {
             ReturnSeen(seen: seen);

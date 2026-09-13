@@ -10,6 +10,8 @@ Each plan opens with an implementation status review that separates what has lan
 - [DSL and cartridge release hardening](dsl-release-hardening.md)—release checks and compiler hardening.
 - [Retail-scale cartridges](retail-scale-cartridges.md)—capacity and authoring for large cartridge data.
 - [Screens and machine extensions](machine-extensions.md)—machine hosting, firmware, authoring, package boundaries, and hardware interaction.
+- [Product content](product-content.md)—content roots with a product manifest, an engine that ships no content, and one build pointed at any product.
+- [ROM ledger](rom-ledger.md)—one home, hashed manifest, and check for the engine's firmware, test corpora, and licensed images; retirement of the Tetris tooling.
 
 ## Runtime and hosting
 

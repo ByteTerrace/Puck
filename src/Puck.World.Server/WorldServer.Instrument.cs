@@ -45,7 +45,10 @@ public sealed partial class WorldServer {
     /// set's own order.</summary>
     /// <param name="seatSlot">The 0-based local seat slot.</param>
     private int? ResolveEngagedScreenIndex(int seatSlot) {
-        if ((seatSlot < 0) || (seatSlot >= Population.LocalSeatCount)) {
+        if (
+            (seatSlot < 0) ||
+            (seatSlot >= Population.LocalSeatCount)
+        ) {
             return null;
         }
 
@@ -73,11 +76,12 @@ public sealed partial class WorldServer {
 
         return $"[instrument.state: screen={screenIndex} instrument=yes ticksPerBeat={ticksPerBeat} driving=y]";
     }
-
     private long? InstrumentTicksPerBeat(int screenIndex) {
-        var screen = m_definition.Screens.FirstOrDefault(candidate => candidate?.Index == screenIndex);
-        return screen?.Source is WorldScreenSource.Machine machine
+        var screen = m_definition.Screens.FirstOrDefault(predicate: candidate => (candidate?.Index == screenIndex));
+
+        return ((screen?.Source is WorldScreenSource.Machine machine)
             ? m_machines.InstrumentTicksPerBeat(instance: machine.Instance)
-            : m_machines.InstrumentTicksPerBeat(index: screenIndex);
+            : m_machines.InstrumentTicksPerBeat(index: screenIndex)
+        );
     }
 }

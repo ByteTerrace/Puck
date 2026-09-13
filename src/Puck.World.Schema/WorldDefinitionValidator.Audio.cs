@@ -85,7 +85,10 @@ public static partial class WorldDefinitionValidator {
 
         foreach (var rule in (rules ?? [])) {
             foreach (var effect in (rule?.Effects ?? [])) {
-                if ((effect is WorldEffect.EmitCue cue) && WorldGameplayCue.IsValidName(candidate: cue.Name)) {
+                if (
+                    (effect is WorldEffect.EmitCue cue) &&
+                    WorldGameplayCue.IsValidName(candidate: cue.Name)
+                ) {
                     tokens.Add(item: cue.Name);
                 }
             }
@@ -112,12 +115,19 @@ public static partial class WorldDefinitionValidator {
             }
 
             var isPublished = WorldAudioCue.IsEventToken(token: cue.Event);
-            if (!isPublished && !ruleCueTokens.Contains(item: cue.Event)) {
+
+            if (
+                !isPublished &&
+                !ruleCueTokens.Contains(item: cue.Event)
+            ) {
                 errors.Add(item: $"{path}.event '{cue.Event}' is neither emitted by a world rule nor a published cue event token ({string.Join(
                     separator: " | ",
                     values: WorldAudioCue.EventTokens
                 )}).");
-            } else if (isPublished && WorldAudioCue.IsProducerBypassedToken(token: cue.Event)) {
+            } else if (
+                isPublished &&
+                WorldAudioCue.IsProducerBypassedToken(token: cue.Event)
+            ) {
                 errors.Add(item: $"{path}.event '{cue.Event}' is fired directly by its producer and can never be targeted by an authored audio.cues row.");
             }
 
@@ -215,22 +225,33 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.source is required.");
 
                 break;
-            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(machine.Instance):
+            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(value: machine.Instance):
                 errors.Add(item: $"{path}.source.instance is required.");
 
                 break;
-            case WorldSpeakerSource.Machine machine when !machineNames.Contains(machine.Instance):
+            case WorldSpeakerSource.Machine machine when !machineNames.Contains(item: machine.Instance):
                 errors.Add(item: $"{path}.source.instance '{machine.Instance}' names no declared machine.");
 
                 break;
-            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(machine.Output):
+            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(value: machine.Output):
                 errors.Add(item: $"{path}.source.output is required.");
 
                 break;
-            case WorldSpeakerSource.Machine machine when machines is { } catalog &&
-                definition.Machines.FirstOrDefault(candidate => candidate is not null && string.Equals(candidate.Name, machine.Instance, StringComparison.Ordinal)) is { } declaration &&
-                catalog.TryDescriptor(declaration.Engine, out var descriptor) &&
-                !descriptor.AudioOutputs.Any(port => string.Equals(port.Name, machine.Output, StringComparison.Ordinal)):
+            case WorldSpeakerSource.Machine machine when ((machines is { } catalog) &&
+                (definition.Machines.FirstOrDefault(predicate: candidate => ((candidate is not null) && string.Equals(
+            a: candidate.Name,
+            b: machine.Instance,
+            comparisonType: StringComparison.Ordinal
+        ))) is { } declaration) &&
+                catalog.TryDescriptor(
+            declaration.Engine,
+            out var descriptor
+        ) &&
+                !descriptor.AudioOutputs.Any(predicate: port => string.Equals(
+            a: port.Name,
+            b: machine.Output,
+            comparisonType: StringComparison.Ordinal
+        ))):
                 errors.Add(item: $"{path}.source.output '{machine.Output}' is not declared by machine '{machine.Instance}'.");
 
                 break;
@@ -341,7 +362,7 @@ public static partial class WorldDefinitionValidator {
             ValidateFeed(
                 definition: definition,
                 feed: speaker.Feed,
-                machineNames: definition.Machines.Where(machine => machine is not null).Select(machine => machine!.Name).ToHashSet(StringComparer.Ordinal),
+                machineNames: definition.Machines.Where(predicate: machine => (machine is not null)).Select(selector: machine => machine!.Name).ToHashSet(comparer: StringComparer.Ordinal),
                 machines: machines,
                 tuneIds: tuneIds,
                 patchIds: patchIds,

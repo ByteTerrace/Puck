@@ -42,11 +42,11 @@ namespace Puck.World.Authoring;
 /// i.e. near the reference. Creation units, finite, in <c>[0, MaxInset]</c>; refused by name otherwise. Default
 /// <c>0.003</c> — just enough to clear the plain surface without z-fighting, the pipeline's own shin margin.</param>
 public sealed record ShapeTrimDocument(string Shape, float Width, int Material, float Inset = 0.003f) {
-    /// <summary>The most entries <see cref="ShapeDocument.Trims"/> carries.</summary>
-    public const int MaxTrims = 4;
     /// <summary>The largest <see cref="Inset"/> — keeps the host copy's outward nudge well inside the per-shape
     /// cull-bound margins every emission path already carries, so a trim never needs its own bound widening.</summary>
     public const float MaxInset = 0.05f;
+    /// <summary>The most entries <see cref="ShapeDocument.Trims"/> carries.</summary>
+    public const int MaxTrims = 4;
     /// <summary>A representative <see cref="Width"/> a capacity probe reserves <see cref="MaxTrims"/> worst-case
     /// forms with — the probe never renders, and every trim costs the same instruction words regardless of
     /// magnitude, so any finite positive value reserves correctly.</summary>

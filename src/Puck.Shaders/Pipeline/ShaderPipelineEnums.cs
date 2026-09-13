@@ -11,7 +11,6 @@ public enum ShaderPipelinePassKind : byte {
     /// <summary>A fullscreen graphics pass.</summary>
     Fullscreen = 2,
 }
-
 /// <summary>Identifies a pipeline image, structured buffer, or depth resource.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineResourceKind>))]
 public enum ShaderPipelineResourceKind : byte {

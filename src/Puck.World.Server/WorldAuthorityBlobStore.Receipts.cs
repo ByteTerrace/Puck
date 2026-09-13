@@ -21,51 +21,133 @@ public sealed partial class WorldAuthorityBlobStore {
         // Own all caller buffers before the first await.
         var definitionBytes = definition.ToArray();
         var checkpointBytes = checkpoint.ToArray();
-        var detached = history with { Index = history.Index.ToArray(), Nodes = history.Nodes.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray(), StringComparer.Ordinal) };
+        var detached = history with { Index = history.Index.ToArray(), Nodes = history.Nodes.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToArray(),
+            StringComparer.Ordinal
+        ) };
+
         _ = detached.Validate();
-        if (detached.Owner != identity.Owner || detached.World != identity.World.Value ||
-            WorldDefinitionFileSource.ComputeContentHash(definitionBytes) != detached.Source.Root.DefinitionHash) {
-            return WorldAuthorityStoreOutcome.PreconditionFailed("fixture identity or published definition differs from the captured receipt root");
+        if (
+            (detached.Owner != identity.Owner) ||
+            (detached.World != identity.World.Value) ||
+            (WorldDefinitionFileSource.ComputeContentHash(content: definitionBytes) != detached.Source.Root.DefinitionHash)
+        ) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture identity or published definition differs from the captured receipt root");
         }
-        if (!WorldAuthorityCheckpointCodec.TryDecode(checkpointBytes, out var captured, out var reason)) {
-            return WorldAuthorityStoreOutcome.Failed("fixture checkpoint is invalid: " + reason);
+        if (!WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: checkpointBytes,
+            checkpoint: out var captured,
+            reason: out var reason
+        )) {
+            return WorldAuthorityStoreOutcome.Failed(detail: ("fixture checkpoint is invalid: " + reason));
         }
         var tick = captured!.Server.LastCompletedTick;
-        if (tick < detached.Source.Root.CheckpointTick || tick < detached.Source.Root.DurableTick) {
-            return WorldAuthorityStoreOutcome.PreconditionFailed("fixture checkpoint predates its captured authority root");
+
+        if (
+            (tick < detached.Source.Root.CheckpointTick) ||
+            (tick < detached.Source.Root.DurableTick)
+        ) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture checkpoint predates its captured authority root");
         }
-        if (await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false) is not null ||
-            await ReadAsync(LatestPointerAddress(identity.Owner, identity.World), cancellationToken).ConfigureAwait(false) is not null ||
-            await ReadAsync(WorldOwnedWorldSync.HostedAddressFor(identity.Owner, identity.World, "definition.json"), cancellationToken).ConfigureAwait(false) is not null) {
-            return WorldAuthorityStoreOutcome.PreconditionFailed("fixture creation requires a new world with no existing authority or legacy state");
+        if (
+            (await ReadRootSnapshotAsync(
+            cancellationToken: cancellationToken,
+            identity: identity
+        ).ConfigureAwait(continueOnCapturedContext: false) is not null) ||
+            (await ReadAsync(
+            address: LatestPointerAddress(
+                containerId: identity.Owner,
+                world: identity.World
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false) is not null) ||
+            (await ReadAsync(
+            address: WorldOwnedWorldSync.HostedAddressFor(
+                identity.Owner,
+                identity.World,
+                "definition.json"
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false) is not null)
+        ) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture creation requires a new world with no existing authority or legacy state");
         }
-        var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(checkpointBytes);
-        var ordinal = checked(detached.Source.Root.CheckpointOrdinal + 1);
+        var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(content: checkpointBytes);
+        var ordinal = checked((detached.Source.Root.CheckpointOrdinal + 1));
         var root = detached.Source.Root with {
             // Qualification is an isolated copy with disposable authority identities, not a live rewind point.
             RewindBoundary = null,
-            Epoch = checked(detached.Source.Root.Epoch + 1), FenceToken = Guid.Empty, Sequence = checked(detached.Source.Root.Sequence + 1),
-            CheckpointHash = checkpointHash, CheckpointOrdinal = ordinal, CheckpointTick = tick,
-            JournalHash = null, JournalEntryCount = 0, CheckpointCoverageSequence = detached.Source.Root.JournalSequence,
-            DurableOrdinal = ordinal, DurableTick = tick,
+            Epoch = checked((detached.Source.Root.Epoch + 1)),
+            FenceToken = Guid.Empty,
+            Sequence = checked((detached.Source.Root.Sequence + 1)),
+            CheckpointHash = checkpointHash,
+            CheckpointOrdinal = ordinal,
+            CheckpointTick = tick,
+            JournalHash = null,
+            JournalEntryCount = 0,
+            CheckpointCoverageSequence = detached.Source.Root.JournalSequence,
+            DurableOrdinal = ordinal,
+            DurableTick = tick,
         };
-        var written = await PutImmutableAsync(DefinitionCandidateAddress(identity, root.DefinitionHash!), definitionBytes, cancellationToken).ConfigureAwait(false);
+        var written = await PutImmutableAsync(
+            address: DefinitionCandidateAddress(
+                identity,
+                root.DefinitionHash!
+            ),
+            bytes: definitionBytes,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (!written.Ok) { return written; }
-        written = await PutImmutableAsync(CheckpointCandidateAddress(identity, ordinal, checkpointHash), checkpointBytes, cancellationToken).ConfigureAwait(false);
+        written = await PutImmutableAsync(
+            address: CheckpointCandidateAddress(
+                hash: checkpointHash,
+                identity: identity,
+                ordinal: ordinal
+            ),
+            bytes: checkpointBytes,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
         if (!written.Ok) { return written; }
         foreach (var node in detached.Nodes) {
-            written = await PutImmutableAsync(ReceiptCandidateAddress(identity, node.Key), node.Value, cancellationToken).ConfigureAwait(false);
+            written = await PutImmutableAsync(
+                address: ReceiptCandidateAddress(
+                    identity,
+                    node.Key
+                ),
+                bytes: node.Value,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
             if (!written.Ok) { return written; }
         }
         if (root.ReceiptIndexHash is { } indexPin) {
-            written = await PutImmutableAsync(ReceiptIndexAddress(identity, indexPin), detached.Index, cancellationToken).ConfigureAwait(false);
+            written = await PutImmutableAsync(
+                address: ReceiptIndexAddress(
+                    hash: indexPin,
+                    identity: identity
+                ),
+                bytes: detached.Index,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
             if (!written.Ok) { return written; }
         }
-        var published = await WriteRootAsync(identity, root, null, Puck.Storage.ObjectBlobWriteMode.CreateOnly, cancellationToken).ConfigureAwait(false);
-        return published.Succeeded ? WorldAuthorityStoreOutcome.Success(root: new(root, published.VersionToken ?? string.Empty))
-            : WorldAuthorityStoreOutcome.PreconditionFailed("fixture root was created by another writer; no authority was replaced");
-    }
+        var published = await WriteRootAsync(
+            cancellationToken: cancellationToken,
+            identity: identity,
+            ifMatchVersion: null,
+            mode: Puck.Storage.ObjectBlobWriteMode.CreateOnly,
+            root: root
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
+        return (published.Succeeded
+            ? WorldAuthorityStoreOutcome.Success(root: new(
+                Root: root,
+                VersionToken: (published.VersionToken ?? string.Empty)
+            ))
+            : WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture root was created by another writer; no authority was replaced")
+        );
+    }
     /// <summary>Exports the exact receipt graph of a previously selected root. Later publications do not enter
     /// the export. The caller must select the root in its checkpoint capture/publication queue before calling.</summary>
     /// <param name="identity">The authority whose immutable receipt objects are read.</param>
@@ -76,32 +158,72 @@ public sealed partial class WorldAuthorityBlobStore {
     public async Task<WorldAuthorityReceiptSnapshot> CaptureReceiptSnapshotAsync(WorldAuthorityIdentity identity,
         WorldAuthorityRootSnapshot source, CancellationToken cancellationToken = default) {
         var index = Array.Empty<byte>();
-        long bytes = 0;
-        var nodes = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
+        var bytes = 0L;
+        var nodes = new SortedDictionary<string, byte[]>(comparer: StringComparer.Ordinal);
+
         async Task<byte[]> ReadPayloadAsync(Puck.Storage.ObjectBlobAddress address, string pin) {
-            var found = await ReadAsync(address, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidDataException("receipt snapshot names a missing immutable object");
+            var found = (await ReadAsync(
+                address: address,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false)
+                ?? throw new InvalidDataException(message: "receipt snapshot names a missing immutable object"));
+
             bytes += found.Content.Length;
-            if (bytes > WorldAuthorityReceiptSnapshot.MaximumBytes || WorldDefinitionFileSource.ComputeContentHash(found.Content.Span) != pin) {
-                throw new InvalidDataException("receipt snapshot object is corrupt or exceeds its byte budget");
+            if (
+                (bytes > WorldAuthorityReceiptSnapshot.MaximumBytes) ||
+                (WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span) != pin)
+            ) {
+                throw new InvalidDataException(message: "receipt snapshot object is corrupt or exceeds its byte budget");
             }
             return found.Content.ToArray();
         }
         if (source.Root.ReceiptIndexHash is { } indexPin) {
-            index = await ReadPayloadAsync(ReceiptIndexAddress(identity, indexPin), indexPin).ConfigureAwait(false);
+            index = await ReadPayloadAsync(
+                address: ReceiptIndexAddress(
+                    hash: indexPin,
+                    identity: identity
+                ),
+                pin: indexPin
+            ).ConfigureAwait(continueOnCapturedContext: false);
         }
         var head = source.Root.ReceiptHash;
+
         while (head is not null) {
-            if (nodes.Count >= WorldAuthorityReceiptSnapshot.MaximumReceipts || nodes.ContainsKey(head)) {
-                throw new InvalidDataException("receipt snapshot chain is cyclic or exceeds its traversal bound");
+            if (
+                (nodes.Count >= WorldAuthorityReceiptSnapshot.MaximumReceipts) ||
+                nodes.ContainsKey(key: head)
+            ) {
+                throw new InvalidDataException(message: "receipt snapshot chain is cyclic or exceeds its traversal bound");
             }
-            var node = await ReadPayloadAsync(ReceiptCandidateAddress(identity, head), head).ConfigureAwait(false);
-            nodes.Add(head, node);
-            if (!WorldAuthorityRootCodec.TryDecodeReceipt(node, out _, out head, out var reason)) {
-                throw new InvalidDataException("receipt snapshot node is invalid: " + reason);
+            var node = await ReadPayloadAsync(
+                address: ReceiptCandidateAddress(
+                    hash: head,
+                    identity: identity
+                ),
+                pin: head
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            nodes.Add(
+                key: head,
+                value: node
+            );
+            if (!WorldAuthorityRootCodec.TryDecodeReceipt(
+                bytes: node,
+                previousHash: out head,
+                reason: out var reason,
+                receipt: out _
+            )) {
+                throw new InvalidDataException(message: ("receipt snapshot node is invalid: " + reason));
             }
         }
-        var snapshot = new WorldAuthorityReceiptSnapshot(identity.Owner, identity.World.Value, source, index, nodes);
+        var snapshot = new WorldAuthorityReceiptSnapshot(
+            identity.Owner,
+            identity.World.Value,
+            source,
+            index,
+            nodes
+        );
+
         _ = snapshot.Validate();
         return snapshot;
     }

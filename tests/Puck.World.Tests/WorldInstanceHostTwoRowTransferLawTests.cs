@@ -43,17 +43,23 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
     [Fact]
     public void LocalTransfer_Commits_LandsInDestination_AndForwardsAtTheSource() {
         var document = PeerPopulationDocument();
-        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
+        const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var host = BuildHost(machineId: Guid.NewGuid());
-        using var rowA = HostRow.Build(definition: document, name: "row-a");
-        using var rowB = HostRow.Build(definition: document, name: "row-b");
+        using var rowA = HostRow.Build(
+            definition: document,
+            name: "row-a"
+        );
+        using var rowB = HostRow.Build(
+            definition: document,
+            name: "row-b"
+        );
 
         host.Admit(row: rowA.Instance);
         host.Admit(row: rowB.Instance);
 
         Assert.True(condition: rowA.Server.ExecuteAuthorityOperation(operation: () => rowA.Server.Population.TryAdmitRemotePeerAt(
-            slot: peerSlot,
+            slot: PeerSlot,
             source: IntentSource.Live,
             grantTemplates: [],
             identityDomain: string.Empty,
@@ -71,19 +77,25 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
             destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
             scope: WorldInstanceHost.TransferScope.Body,
             sourceInstance: "row-a",
-            sourceSlot: peerSlot
+            sourceSlot: PeerSlot
         );
 
         host.DrainPendingTransfers();
 
-        Assert.True(condition: rowB.Server.Population.IsActive(index: peerSlot));
-        Assert.False(condition: rowA.Server.Population.IsActive(index: peerSlot));
+        Assert.True(condition: rowB.Server.Population.IsActive(index: PeerSlot));
+        Assert.False(condition: rowA.Server.Population.IsActive(index: PeerSlot));
 
         var sourceRow = host.CaptureRow(row: rowA.Instance);
         var forwarded = Assert.Single(collection: sourceRow.ForwardedBodies);
 
-        Assert.Equal(expected: peerSlot, actual: forwarded.DestinationBodyIndex);
-        Assert.Contains(expected: transferId, collection: sourceRow.AppliedTransferIds);
+        Assert.Equal(
+            expected: PeerSlot,
+            actual: forwarded.DestinationBodyIndex
+        );
+        Assert.Contains(
+            expected: transferId,
+            collection: sourceRow.AppliedTransferIds
+        );
 
         var destinationRow = host.CaptureRow(row: rowB.Instance);
 
@@ -100,7 +112,10 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
 
         var fault = new FaultingPeerCall(destination: rowB.Server);
 
-        host.SetPeerCallFault(fault: fault, instanceName: "row-b");
+        host.SetPeerCallFault(
+            fault: fault,
+            instanceName: "row-b"
+        );
 
         Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
@@ -120,14 +135,20 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
 
         // Faulted: the destination holds a reservation (a lease) but no body is active there yet — genuinely
         // reserved-uncommitted, not merely a refused commit.
-        Assert.Equal(expected: 1, actual: fault.CommitCalls);
+        Assert.Equal(
+            expected: 1,
+            actual: fault.CommitCalls
+        );
         Assert.False(condition: rowB.Server.Population.IsActive(index: 0));
         Assert.False(condition: rowA.Server.Population.IsActive(index: 0));
 
         // The next drain reconciles: TryStatus reads Reserved, Commit is retried for real, and this time it lands.
         host.DrainPendingTransfers();
 
-        Assert.Equal(expected: 2, actual: fault.CommitCalls);
+        Assert.Equal(
+            expected: 2,
+            actual: fault.CommitCalls
+        );
         Assert.True(condition: rowB.Server.Population.IsActive(index: 0));
     }
 }

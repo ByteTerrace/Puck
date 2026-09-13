@@ -16,6 +16,44 @@ public static class FixedPointRounding {
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static T RoundHalfToEven<T>(T truncated, T remainder, T threshold) where T : IBinaryInteger<T> =>
         unchecked((truncated + ((remainder > threshold).As<T>() | ((remainder == threshold).As<T>() & truncated & T.One))));
+    /// <summary>Rounds the exact rational <c>numerator / denominator · 2^fractionBitCount</c> to the nearest
+    /// integer, to nearest with ties to even, at unbounded width.</summary>
+    /// <param name="numerator">The exact numerator, of either sign.</param>
+    /// <param name="denominator">The exact denominator, of either sign and non-zero.</param>
+    /// <param name="fractionBitCount">The result's fraction bit count, which must be non-negative.</param>
+    /// <returns>The rounded value, exactly — no width guard, no narrowing.</returns>
+    /// <remarks>The core every narrowing rounding in this family reduces to: <see cref="TryRoundRational"/> adds the
+    /// signed-64-bit width guard and narrowing; <c>SecondOrderExactMath.RoundToGuardScale</c> and
+    /// <c>FixedPointConvert.ScaleDecimalWide</c> call it directly at their own working scale.</remarks>
+    internal static BigInteger RoundRational(BigInteger numerator, BigInteger denominator, int fractionBitCount) {
+        var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
+        var magnitude = BigInteger.Abs(value: numerator);
+
+        if (magnitude.IsZero) {
+            return BigInteger.Zero;
+        }
+
+        var divisor = BigInteger.Abs(value: denominator);
+
+        magnitude <<= fractionBitCount;
+        var quotient = BigInteger.DivRem(
+            dividend: magnitude,
+            divisor: divisor,
+            remainder: out var remainder
+        );
+        var distanceToNext = (divisor - remainder);
+
+        quotient = RoundToNearestTiesToEven(
+            distanceToNext: distanceToNext,
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
+
+        return (negative
+            ? -quotient
+            : quotient
+        );
+    }
 
     /// <summary>Chooses the nearest of two adjacent integer results, resolving an exact tie to the even result.</summary>
     /// <typeparam name="T">The binary integer carrying the result and both non-negative distances.</typeparam>
@@ -93,41 +131,5 @@ public static class FixedPointRounding {
         result = ((long)quotient);
 
         return true;
-    }
-
-    /// <summary>Rounds the exact rational <c>numerator / denominator · 2^fractionBitCount</c> to the nearest
-    /// integer, to nearest with ties to even, at unbounded width.</summary>
-    /// <param name="numerator">The exact numerator, of either sign.</param>
-    /// <param name="denominator">The exact denominator, of either sign and non-zero.</param>
-    /// <param name="fractionBitCount">The result's fraction bit count, which must be non-negative.</param>
-    /// <returns>The rounded value, exactly — no width guard, no narrowing.</returns>
-    /// <remarks>The core every narrowing rounding in this family reduces to: <see cref="TryRoundRational"/> adds the
-    /// signed-64-bit width guard and narrowing; <c>SecondOrderExactMath.RoundToGuardScale</c> and
-    /// <c>FixedPointConvert.ScaleDecimalWide</c> call it directly at their own working scale.</remarks>
-    internal static BigInteger RoundRational(BigInteger numerator, BigInteger denominator, int fractionBitCount) {
-        var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
-        var magnitude = BigInteger.Abs(value: numerator);
-
-        if (magnitude.IsZero) {
-            return BigInteger.Zero;
-        }
-
-        var divisor = BigInteger.Abs(value: denominator);
-
-        magnitude <<= fractionBitCount;
-        var quotient = BigInteger.DivRem(
-            dividend: magnitude,
-            divisor: divisor,
-            remainder: out var remainder
-        );
-        var distanceToNext = (divisor - remainder);
-
-        quotient = RoundToNearestTiesToEven(
-            distanceToNext: distanceToNext,
-            distanceToTruncated: remainder,
-            truncated: quotient
-        );
-
-        return (negative ? -quotient : quotient);
     }
 }

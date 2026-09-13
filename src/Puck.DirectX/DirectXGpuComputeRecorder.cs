@@ -28,7 +28,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
 
         state.ReleaseRetainedResources();
         allocator->Reset();
-        commandList->Reset(pAllocator: allocator, pInitialState: null);
+        commandList->Reset(
+            pAllocator: allocator,
+            pInitialState: null
+        );
     }
     /// <inheritdoc/>
     public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
@@ -38,7 +41,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
     }
     /// <inheritdoc/>
     public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
-        DirectXDebugLabel.Begin(commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList), label: label);
+        DirectXDebugLabel.Begin(
+            commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList),
+            label: label
+        );
     /// <inheritdoc/>
     public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
         DirectXDebugLabel.End(commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList));
@@ -64,7 +70,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var heap = ((ID3D12DescriptorHeap*)set.HeapHandle);
 
-        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &heap);
+        commandList->SetDescriptorHeaps(
+            NumDescriptorHeaps: 1,
+            ppDescriptorHeaps: &heap
+        );
 
         if (0 <= layout.DescriptorTableParamIndex) {
             commandList->SetComputeRootDescriptorTable(
@@ -82,7 +91,11 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
         uint offset,
         ReadOnlySpan<byte> data
     ) {
-        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
+        GpuPushConstantBinding.ValidateRange(
+            stageFlags: stageFlags,
+            offset: offset,
+            dataLength: data.Length
+        );
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!);
@@ -131,20 +144,31 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
         ArgumentOutOfRangeException.ThrowIfZero(deviceHandle);
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(imageHandle);
-        var descriptors = DirectXClearImageDescriptors.Create(deviceHandle: deviceHandle, imageHandle: imageHandle, format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format));
-        DecodeState(commandBufferHandle).RetainedResources.Add(descriptors);
+        var descriptors = DirectXClearImageDescriptors.Create(
+            deviceHandle: deviceHandle,
+            imageHandle: imageHandle,
+            format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format)
+        );
+
+        DecodeState(commandBufferHandle: commandBufferHandle).RetainedResources.Add(item: descriptors);
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var descriptorHeap = ((ID3D12DescriptorHeap*)descriptors.GpuHeapHandle);
-        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &descriptorHeap);
+
+        commandList->SetDescriptorHeaps(
+            NumDescriptorHeaps: 1,
+            ppDescriptorHeaps: &descriptorHeap
+        );
         var clearColor = stackalloc float[4] { 0f, 0f, 0f, 0f };
+
         commandList->ClearUnorderedAccessViewFloat(
             descriptors.GpuHandle,
             descriptors.CpuHandle,
             ((ID3D12Resource*)imageHandle),
             clearColor,
             0,
-            null);
+            null
+        );
 
     }
     /// <inheritdoc/>
@@ -152,24 +176,43 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
         ArgumentOutOfRangeException.ThrowIfZero(deviceHandle);
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
-        if (sizeBytes == 0 || (sizeBytes & 3) != 0 || sizeBytes / 4 > uint.MaxValue) {
-            throw new ArgumentOutOfRangeException(nameof(sizeBytes), sizeBytes, "Direct3D 12 buffer clears require a positive size divisible by four and representable by a raw UAV.");
+        if (
+            (sizeBytes == 0) ||
+            ((sizeBytes & 3) != 0) ||
+            ((sizeBytes / 4) > uint.MaxValue)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                nameof(sizeBytes),
+                sizeBytes,
+                "Direct3D 12 buffer clears require a positive size divisible by four and representable by a raw UAV."
+            );
         }
 
-        var descriptors = DirectXClearBufferDescriptors.Create(deviceHandle: deviceHandle, bufferHandle: bufferHandle, sizeBytes: sizeBytes);
-        DecodeState(commandBufferHandle).RetainedResources.Add(descriptors);
+        var descriptors = DirectXClearBufferDescriptors.Create(
+            bufferHandle: bufferHandle,
+            deviceHandle: deviceHandle,
+            sizeBytes: sizeBytes
+        );
+
+        DecodeState(commandBufferHandle: commandBufferHandle).RetainedResources.Add(item: descriptors);
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var descriptorHeap = ((ID3D12DescriptorHeap*)descriptors.GpuHeapHandle);
-        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &descriptorHeap);
+
+        commandList->SetDescriptorHeaps(
+            NumDescriptorHeaps: 1,
+            ppDescriptorHeaps: &descriptorHeap
+        );
         var clearValues = stackalloc uint[4] { 0U, 0U, 0U, 0U };
+
         commandList->ClearUnorderedAccessViewUint(
             descriptors.GpuHandle,
             descriptors.CpuHandle,
             ((ID3D12Resource*)bufferHandle),
             clearValues,
             0,
-            null);
+            null
+        );
         // ClearUnorderedAccessViewUint is a UAV write. Order it before the first shader access even when the
         // neutral transition remains UAV -> UAV (which correctly elides a state transition).
         // Buffer clear ordering is supplied by the following runtime buffer transition.
@@ -191,7 +234,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
         // Shared legacy state: the neutral oldLayout is Undefined on the first frame, so the prior state comes from
         // tracking. UNORDERED_ACCESS is both the private texture's creation state and a legal promotable BeforeState
         // while a simultaneous-access texture rests in COMMON.
-        var before = DirectXResourceStates.Get(imageHandle, ToResourceState(oldLayout));
+        var before = DirectXResourceStates.Get(
+            imageHandle,
+            ToResourceState(layout: oldLayout)
+        );
         var after = ToResourceState(layout: newLayout);
 
         if (before == after) {
@@ -209,8 +255,14 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
             pResource = ((ID3D12Resource*)imageHandle),
         };
 
-        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
-        DirectXResourceStates.Set(imageHandle, after);
+        commandList->ResourceBarrier(
+            NumBarriers: 1,
+            pBarriers: &barrier
+        );
+        DirectXResourceStates.Set(
+            resource: imageHandle,
+            state: after
+        );
     }
     /// <inheritdoc/>
     public void MemoryBarrier(
@@ -234,7 +286,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
             pResource = ((ID3D12Resource*)null),
         };
 
-        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
+        commandList->ResourceBarrier(
+            NumBarriers: 1,
+            pBarriers: &barrier
+        );
     }
     /// <inheritdoc/>
     public void TransitionBuffer(
@@ -251,12 +306,25 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
         // Shared legacy state: a per-resource TRANSITION barrier between the access states (e.g. UNORDERED_ACCESS ->
         // INDIRECT_ARGUMENT). Buffers have no subresources, so transition the whole resource.
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
-        var before = DirectXResourceStates.Get(bufferHandle, ToBufferResourceState(accessMask: sourceAccessMask));
+        var before = DirectXResourceStates.Get(
+            bufferHandle,
+            ToBufferResourceState(accessMask: sourceAccessMask)
+        );
         var after = ToBufferResourceState(accessMask: destinationAccessMask);
 
-        if (before == after || (after != D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS && (before & after) == after)) {
+        if (
+            (before == after) ||
+            ((after != D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS) && ((before & after) == after))
+        ) {
             if ((after & D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0) {
-                MemoryBarrier(deviceHandle, commandBufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask);
+                MemoryBarrier(
+                    commandBufferHandle: commandBufferHandle,
+                    destinationAccessMask: destinationAccessMask,
+                    destinationStageMask: destinationStageMask,
+                    deviceHandle: deviceHandle,
+                    sourceAccessMask: sourceAccessMask,
+                    sourceStageMask: sourceStageMask
+                );
             }
             return;
         }
@@ -271,8 +339,14 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
             pResource = ((ID3D12Resource*)bufferHandle),
         };
 
-        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &transition);
-        DirectXResourceStates.Set(bufferHandle, after);
+        commandList->ResourceBarrier(
+            NumBarriers: 1,
+            pBarriers: &transition
+        );
+        DirectXResourceStates.Set(
+            resource: bufferHandle,
+            state: after
+        );
     }
 
     // Access mask -> the resource state required by the next buffer use.
@@ -298,7 +372,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
     // a single DISPATCH argument, no root signature — a pure-dispatch signature binds nothing). Same per-device cache
     // a concurrent loser releases its duplicate so exactly one signature is kept.
     private nint GetOrCreateDispatchSignature(nint deviceHandle) {
-        if (m_dispatchSignatures.TryGetValue(key: deviceHandle, value: out var existing)) {
+        if (m_dispatchSignatures.TryGetValue(
+            key: deviceHandle,
+            value: out var existing
+        )) {
             return existing;
         }
 
@@ -324,7 +401,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
 
         var handle = ((nint)signature);
 
-        if (!m_dispatchSignatures.TryAdd(key: deviceHandle, value: handle)) {
+        if (!m_dispatchSignatures.TryAdd(
+            key: deviceHandle,
+            value: handle
+        )) {
             _ = ((IUnknown*)handle)->Release();
 
             return m_dispatchSignatures[deviceHandle];
@@ -345,16 +425,39 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
     private sealed unsafe class DirectXClearImageDescriptors : IDisposable {
         private nint m_cpuHeap;
         private nint m_gpuHeap;
+
         public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle { get; private set; }
         public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle { get; private set; }
         public nint GpuHeapHandle => m_gpuHeap;
 
+        private static ID3D12DescriptorHeap* CreateHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_FLAGS flags) {
+            var description = new D3D12_DESCRIPTOR_HEAP_DESC {
+                Flags = flags,
+                NodeMask = 0,
+                NumDescriptors = 1,
+                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            };
+
+            device->CreateDescriptorHeap(
+                pDescriptorHeapDesc: in description,
+                ppvHeap: out var heap,
+                riid: ID3D12DescriptorHeap.IID_Guid
+            );
+            return ((ID3D12DescriptorHeap*)heap);
+        }
+
         public static DirectXClearImageDescriptors Create(nint deviceHandle, nint imageHandle, DXGI_FORMAT format) {
             var device = ((ID3D12Device*)deviceHandle);
-            var cpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+            var cpuHeap = CreateHeap(
+                device,
+                D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE
+            );
             ID3D12DescriptorHeap* gpuHeap;
-            try { gpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE); }
-            catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
+
+            try { gpuHeap = CreateHeap(
+                device,
+                D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+            ); } catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
             var result = new DirectXClearImageDescriptors {
                 m_cpuHeap = ((nint)cpuHeap),
                 m_gpuHeap = ((nint)gpuHeap),
@@ -365,24 +468,34 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
                 Format = format,
                 ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D,
             };
+
             uav.Anonymous.Texture2D = new D3D12_TEX2D_UAV { MipSlice = 0, PlaneSlice = 0, };
             device->CreateUnorderedAccessView(
                 DestDescriptor: result.CpuHandle,
                 pCounterResource: null,
                 pDesc: &uav,
-                pResource: ((ID3D12Resource*)imageHandle));
+                pResource: ((ID3D12Resource*)imageHandle)
+            );
             device->CreateUnorderedAccessView(
                 DestDescriptor: DirectXConstants.GetCpuHeapStart(heap: gpuHeap),
                 pCounterResource: null,
                 pDesc: &uav,
-                pResource: ((ID3D12Resource*)imageHandle));
+                pResource: ((ID3D12Resource*)imageHandle)
+            );
             return result;
         }
-
         public void Dispose() {
-            DirectXConstants.Release(ref m_cpuHeap);
-            DirectXConstants.Release(ref m_gpuHeap);
+            DirectXConstants.Release(pointer: ref m_cpuHeap);
+            DirectXConstants.Release(pointer: ref m_gpuHeap);
         }
+    }
+    private sealed unsafe class DirectXClearBufferDescriptors : IDisposable {
+        private nint m_cpuHeap;
+        private nint m_gpuHeap;
+
+        public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle { get; private set; }
+        public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle { get; private set; }
+        public nint GpuHeapHandle => m_gpuHeap;
 
         private static ID3D12DescriptorHeap* CreateHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_FLAGS flags) {
             var description = new D3D12_DESCRIPTOR_HEAP_DESC {
@@ -391,27 +504,27 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
                 NumDescriptors = 1,
                 Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
             };
+
             device->CreateDescriptorHeap(
                 pDescriptorHeapDesc: in description,
                 ppvHeap: out var heap,
-                riid: ID3D12DescriptorHeap.IID_Guid);
-            return (ID3D12DescriptorHeap*)heap;
+                riid: ID3D12DescriptorHeap.IID_Guid
+            );
+            return ((ID3D12DescriptorHeap*)heap);
         }
-    }
-
-    private sealed unsafe class DirectXClearBufferDescriptors : IDisposable {
-        private nint m_cpuHeap;
-        private nint m_gpuHeap;
-        public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle { get; private set; }
-        public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle { get; private set; }
-        public nint GpuHeapHandle => m_gpuHeap;
 
         public static DirectXClearBufferDescriptors Create(nint deviceHandle, nint bufferHandle, ulong sizeBytes) {
             var device = ((ID3D12Device*)deviceHandle);
-            var cpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+            var cpuHeap = CreateHeap(
+                device,
+                D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE
+            );
             ID3D12DescriptorHeap* gpuHeap;
-            try { gpuHeap = CreateHeap(device, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE); }
-            catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
+
+            try { gpuHeap = CreateHeap(
+                device,
+                D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+            ); } catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
             var result = new DirectXClearBufferDescriptors {
                 m_cpuHeap = ((nint)cpuHeap),
                 m_gpuHeap = ((nint)gpuHeap),
@@ -422,6 +535,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
                 Format = DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS,
                 ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,
             };
+
             uav.Anonymous.Buffer = new D3D12_BUFFER_UAV {
                 CounterOffsetInBytes = 0,
                 FirstElement = 0,
@@ -433,39 +547,31 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
                 DestDescriptor: result.CpuHandle,
                 pCounterResource: null,
                 pDesc: &uav,
-                pResource: ((ID3D12Resource*)bufferHandle));
+                pResource: ((ID3D12Resource*)bufferHandle)
+            );
             device->CreateUnorderedAccessView(
                 DestDescriptor: DirectXConstants.GetCpuHeapStart(heap: gpuHeap),
                 pCounterResource: null,
                 pDesc: &uav,
-                pResource: ((ID3D12Resource*)bufferHandle));
+                pResource: ((ID3D12Resource*)bufferHandle)
+            );
             return result;
         }
-
         public void Dispose() {
-            DirectXConstants.Release(ref m_cpuHeap);
-            DirectXConstants.Release(ref m_gpuHeap);
-        }
-
-        private static ID3D12DescriptorHeap* CreateHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_FLAGS flags) {
-            var description = new D3D12_DESCRIPTOR_HEAP_DESC {
-                Flags = flags,
-                NodeMask = 0,
-                NumDescriptors = 1,
-                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            };
-            device->CreateDescriptorHeap(
-                pDescriptorHeapDesc: in description,
-                ppvHeap: out var heap,
-                riid: ID3D12DescriptorHeap.IID_Guid);
-            return (ID3D12DescriptorHeap*)heap;
+            DirectXConstants.Release(pointer: ref m_cpuHeap);
+            DirectXConstants.Release(pointer: ref m_gpuHeap);
         }
     }
+
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!);
     private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) =>
         // General and Undefined both resolve to the compute read/write state (the kernel's working layout).
-        (DirectXGpuFormats.TryToResourceState(layout: layout, resourceState: out var resourceState)
+        (DirectXGpuFormats.TryToResourceState(
+            layout: layout,
+            resourceState: out var resourceState
+        )
             ? resourceState
-            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+        );
 }

@@ -27,7 +27,10 @@ public static class BindableState {
 
         if (
             string.IsNullOrEmpty(value: value) ||
-            !HudBindingVocabulary.TryParse(binding: out var binding, token: value) ||
+            !HudBindingVocabulary.TryParse(
+            binding: out var binding,
+            token: value
+        ) ||
             (binding.Kind != HudBindingKind.StateNamed)
         ) {
             return false;
@@ -73,14 +76,19 @@ public readonly record struct BindableColor(string Raw) {
 
         return (
             WorldStateReader.TryRead(
-                definition: definition, key: key, rawValue: out _, row: out var stateRow,
-                rowName: row, text: out var text, tick: 0UL
-            ) &&
+            definition: definition,
+            key: key,
+            rawValue: out _,
+            row: out var stateRow,
+            rowName: row,
+            text: out var text,
+            tick: 0UL
+        ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
-                rgba: out _,
-                value: text
-            )
+            rgba: out _,
+            value: text
+        )
         );
     }
     /// <summary>Resolves this color against the live document — a hex literal parses directly, a state binding
@@ -103,19 +111,25 @@ public readonly record struct BindableColor(string Raw) {
                 value: Raw
             )
                 ? literal
-                : fallback);
+                : fallback
+            );
         }
 
         if (
             WorldStateReader.TryRead(
-                definition: definition, key: key, rawValue: out _, row: out var stateRow,
-                rowName: row, text: out var text, tick: tick
-            ) &&
+            definition: definition,
+            key: key,
+            rawValue: out _,
+            row: out var stateRow,
+            rowName: row,
+            text: out var text,
+            tick: tick
+        ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
-                rgba: out var bound,
-                value: text
-            )
+            rgba: out var bound,
+            value: text
+        )
         ) {
             return bound;
         }
@@ -159,7 +173,10 @@ public readonly record struct BindableScalar {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (Binding is null) {
-            return ((Literal is { } literal) && float.IsFinite(f: literal));
+            return (
+                (Literal is { } literal) &&
+                float.IsFinite(f: literal)
+            );
         }
 
         return (
@@ -169,9 +186,14 @@ public readonly record struct BindableScalar {
             value: Binding
         ) &&
             WorldStateReader.TryRead(
-                definition: definition, key: key, rawValue: out _, row: out var stateRow,
-                rowName: row, text: out _, tick: 0UL
-            ) &&
+            definition: definition,
+            key: key,
+            rawValue: out _,
+            row: out var stateRow,
+            rowName: row,
+            text: out _,
+            tick: 0UL
+        ) &&
             (stateRow.Kind is CellKind.Fixed or CellKind.Int)
         );
     }
@@ -187,7 +209,8 @@ public readonly record struct BindableScalar {
         if (Binding is null) {
             return (((Literal is { } literal) && float.IsFinite(f: literal))
                 ? literal
-                : fallback);
+                : fallback
+            );
         }
 
         if (
@@ -197,9 +220,14 @@ public readonly record struct BindableScalar {
             value: Binding
         ) ||
             !WorldStateReader.TryRead(
-                definition: definition, key: key, rawValue: out var raw, row: out var stateRow,
-                rowName: row, text: out _, tick: tick
-            ) ||
+            definition: definition,
+            key: key,
+            rawValue: out var raw,
+            row: out var stateRow,
+            rowName: row,
+            text: out _,
+            tick: tick
+        ) ||
             (raw is not { } rawValue)
         ) {
             return fallback;

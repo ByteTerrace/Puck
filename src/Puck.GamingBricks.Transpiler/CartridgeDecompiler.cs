@@ -16,7 +16,7 @@ public static class CartridgeDecompiler {
     private const string Indent = "    ";
 
     // The engine opcodes, and the compound-assignment spelling each is written as. An absent operation is plain `=`.
-    private static readonly Dictionary<string, string> s_assignments = new(StringComparer.Ordinal) {
+    private static readonly Dictionary<string, string> Assignments = new(comparer: StringComparer.Ordinal) {
         [nameof(ExpressionOp.Add)] = "+=",
         [nameof(ExpressionOp.BitAnd)] = "&=",
         [nameof(ExpressionOp.BitOr)] = "|=",
@@ -28,9 +28,8 @@ public static class CartridgeDecompiler {
         [nameof(ExpressionOp.ShiftRight)] = ">>=",
         [nameof(ExpressionOp.Subtract)] = "-=",
     };
-
     // The engine comparisons, and the infix comparator each is written as.
-    private static readonly Dictionary<string, string> s_comparators = new(StringComparer.Ordinal) {
+    private static readonly Dictionary<string, string> Comparators = new(comparer: StringComparer.Ordinal) {
         [nameof(ActionStateComparison.Equal)] = "==",
         [nameof(ActionStateComparison.Greater)] = ">",
         [nameof(ActionStateComparison.GreaterOrEqual)] = ">=",
@@ -38,152 +37,12 @@ public static class CartridgeDecompiler {
         [nameof(ActionStateComparison.LessOrEqual)] = "<=",
         [nameof(ActionStateComparison.NotEqual)] = "!=",
     };
-
     // The order sections are written in: the cartridge's own identity first, then its data, then its behaviour.
     // Any key not named here follows in ordinal order, so a section added to the document still round-trips.
-    private static readonly string[] s_sectionOrder = [
+    private static readonly string[] SectionOrder = [
         "target", "title", "gameCode", "palettes", "tiles", "map", "variables", "arrays",
         "screens", "sprites", "layers", "raster", "sounds", "save", "scrollX", "scrollY",
     ];
-
-    /// <summary>Writes a cartridge document out as Puck DSL source.</summary>
-    /// <param name="document">The cartridge JSON.</param>
-    /// <returns>The source text, newline-terminated.</returns>
-    public static string Decompile(JsonObject document) {
-        ArgumentNullException.ThrowIfNull(document);
-
-        var sb = new StringBuilder();
-
-        sb.Append("schema: \"").Append(document["schema"]?.GetValue<string>() ?? CartridgeVocabulary.Schema).Append("\"\n");
-
-        foreach (var key in OrderedSections(document: document)) {
-            sb.Append('\n');
-            WriteField(sb: sb, key: key, node: document[key], indentLevel: 0);
-        }
-
-        if (document["rules"] is JsonArray rules) {
-            if (rules.Count == 0) { sb.Append("\nrules []\n"); }
-            foreach (var rule in rules.OfType<JsonObject>()) {
-                sb.Append('\n');
-                WriteRule(sb: sb, rule: rule);
-            }
-        }
-
-        return sb.ToString();
-    }
-
-    private static IEnumerable<string> OrderedSections(JsonObject document) {
-        var remaining = document
-            .Select(static pair => pair.Key)
-            .Where(static key => (key is not ("schema" or "rules")))
-            .ToHashSet(comparer: StringComparer.Ordinal);
-
-        foreach (var key in s_sectionOrder) {
-            if (remaining.Remove(item: key)) {
-                yield return key;
-            }
-        }
-
-        foreach (var key in remaining.OrderBy(keySelector: static key => key, comparer: StringComparer.Ordinal)) {
-            yield return key;
-        }
-    }
-
-    private static void WriteRule(StringBuilder sb, JsonObject rule) {
-        sb.Append("rule \"").Append(rule["name"]?.GetValue<string>() ?? string.Empty).Append("\" {\n");
-
-        if (rule["when"] is JsonObject gate) {
-            sb.Append(Indent).Append("when ").Append(GateSource(gate: gate, nested: false)).Append('\n');
-        }
-
-        WriteBody(sb: sb, body: (rule["body"] as JsonArray), indentLevel: 1);
-        sb.Append("}\n");
-    }
-
-    private static void WriteBody(StringBuilder sb, JsonArray? body, int indentLevel) {
-        if (body is null) {
-            return;
-        }
-
-        foreach (var step in body.OfType<JsonObject>()) {
-            WriteStep(sb: sb, step: step, indentLevel: indentLevel);
-        }
-    }
-
-    private static void WriteStep(StringBuilder sb, JsonObject step, int indentLevel) {
-        var pad = string.Concat(Enumerable.Repeat(element: Indent, count: indentLevel));
-
-        switch (step["kind"]?.GetValue<string>()) {
-            case "set": {
-                var operation = (step["operation"]?.GetValue<string>() ?? string.Empty);
-                var spelling = (s_assignments.TryGetValue(key: operation, value: out var found) ? found : "=");
-
-                sb.Append(pad)
-                    .Append(CartridgeOperand.TargetToSource(node: step["target"]))
-                    .Append(' ').Append(spelling).Append(' ')
-                    .Append(CartridgeOperand.ToSource(node: step["value"]))
-                    .Append('\n');
-
-                break;
-            }
-
-            case "if": {
-                sb.Append(pad).Append("if ").Append(GateSource(gate: (step["when"] as JsonObject), nested: false)).Append(" {\n");
-                WriteBody(sb: sb, body: (step["then"] as JsonArray), indentLevel: (indentLevel + 1));
-
-                if (step["else"] is JsonArray otherwise) {
-                    sb.Append(pad).Append("} else {\n");
-                    WriteBody(sb: sb, body: otherwise, indentLevel: (indentLevel + 1));
-                }
-
-                sb.Append(pad).Append("}\n");
-
-                break;
-            }
-
-            case "repeat": {
-                sb.Append(pad)
-                    .Append("repeat ").Append((step["count"]?.GetValue<int>() ?? 1).ToString(provider: CultureInfo.InvariantCulture))
-                    .Append(" as ").Append(step["index"]?.GetValue<string>() ?? "i")
-                    .Append(" {\n");
-                WriteBody(sb: sb, body: (step["body"] as JsonArray), indentLevel: (indentLevel + 1));
-                sb.Append(pad).Append("}\n");
-
-                break;
-            }
-
-            case "break":
-                sb.Append(pad).Append("break\n");
-
-                break;
-
-            case { } kind:
-                WriteCallStep(sb: sb, step: step, kind: kind, pad: pad);
-
-                break;
-        }
-    }
-
-    private static void WriteCallStep(StringBuilder sb, JsonObject step, string kind, string pad) {
-        sb.Append(pad).Append(kind).Append('(');
-
-        var first = true;
-
-        foreach (var pair in step.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
-            if (pair.Key == "kind") {
-                continue;
-            }
-
-            if (!first) {
-                sb.Append(", ");
-            }
-
-            first = false;
-            sb.Append(pair.Key).Append(": ").Append(ArgumentSource(key: pair.Key, node: pair.Value));
-        }
-
-        sb.Append(")\n");
-    }
 
     // A field holding an operand prints as its source spelling; everything else is a plain JSON value.
     private static string ArgumentSource(string key, JsonNode? node) {
@@ -193,11 +52,29 @@ public static class CartridgeDecompiler {
 
         var sb = new StringBuilder();
 
-        WriteValue(sb: sb, node: node, indentLevel: 0);
+        WriteValue(
+            indentLevel: 0,
+            node: node,
+            sb: sb
+        );
 
         return sb.ToString();
     }
+    private static string Composed(JsonObject gate, string separator, bool nested) {
+        var arms = ((gate["predicates"] as JsonArray) ?? []);
+        var inner = string.Join(
+            separator: separator,
+            values: arms.OfType<JsonObject>().Select(selector: arm => GateSource(
+                gate: arm,
+                nested: true
+            ))
+        );
 
+        return (nested
+            ? $"({inner})"
+            : inner
+        );
+    }
     // Renders one predicate. A composed arm is parenthesised when it sits inside another, because and binds tighter
     // than or in the language and an unbracketed mixture would read back as a different gate.
     private static string GateSource(JsonObject? gate, bool nested) {
@@ -208,111 +85,354 @@ public static class CartridgeDecompiler {
 
         switch (gate["$type"]?.GetValue<string>()) {
             case "all":
-                return Composed(gate: gate, separator: " and ", nested: nested);
+                return Composed(
+                    gate: gate,
+                    nested: nested,
+                    separator: " and "
+                );
             case "any":
-                return Composed(gate: gate, separator: " or ", nested: nested);
+                return Composed(
+                    gate: gate,
+                    nested: nested,
+                    separator: " or "
+                );
             case "not":
-                return $"not {GateSource(gate: (gate["predicate"] as JsonObject), nested: true)}";
+                return $"not {GateSource(
+                    gate: (gate["predicate"] as JsonObject),
+                    nested: true
+                )}";
             default: {
-                var left = CartridgeOperand.ToSource(node: gate["left"]);
-                var right = CartridgeOperand.ToSource(node: gate["right"]);
-                var comparison = (gate["comparison"]?.GetValue<string>() ?? nameof(ActionStateComparison.Equal));
-                var comparator = (s_comparators.TryGetValue(key: comparison, value: out var found) ? found : "==");
+                    var left = CartridgeOperand.ToSource(node: gate["left"]);
+                    var right = CartridgeOperand.ToSource(node: gate["right"]);
+                    var comparison = (gate["comparison"]?.GetValue<string>() ?? nameof(ActionStateComparison.Equal));
+                    var comparator = (Comparators.TryGetValue(
+                        key: comparison,
+                        value: out var found
+                    )
+                        ? found
+                        : "=="
+                    );
 
-                // A button read against one is what a key test lowered to, and the key spelling is the readable half.
-                if ((comparison == nameof(ActionStateComparison.Equal))
-                    && (right == "1")
-                    && CartridgeExpressions.TryKey(name: left, button: out var button, mode: out var mode)) {
-                    return $"key({button}, {mode})";
+                    // A button read against one is what a key test lowered to, and the key spelling is the readable half.
+                    if (
+                        (comparison == nameof(ActionStateComparison.Equal)) &&
+                        (right == "1") &&
+                        CartridgeExpressions.TryKey(
+                        button: out var button,
+                        mode: out var mode,
+                        name: left
+                    )
+                    ) {
+                        return $"key({button}, {mode})";
+                    }
+
+                    return $"{left} {comparator} {right}";
                 }
-
-                return $"{left} {comparator} {right}";
-            }
         }
     }
+    private static IEnumerable<string> OrderedSections(JsonObject document) {
+        var remaining = document
+            .Select(selector: static pair => pair.Key)
+            .Where(predicate: static key => (key is not ("schema" or "rules")))
+            .ToHashSet(comparer: StringComparer.Ordinal);
 
-    private static string Composed(JsonObject gate, string separator, bool nested) {
-        var arms = ((gate["predicates"] as JsonArray) ?? []);
-        var inner = string.Join(separator: separator, values: arms.OfType<JsonObject>().Select(selector: arm => GateSource(gate: arm, nested: true)));
+        foreach (var key in SectionOrder) {
+            if (remaining.Remove(item: key)) {
+                yield return key;
+            }
+        }
 
-        return (nested ? $"({inner})" : inner);
+        foreach (var key in remaining.OrderBy(
+            keySelector: static key => key,
+            comparer: StringComparer.Ordinal
+        )) {
+            yield return key;
+        }
     }
+    private static void WriteBody(StringBuilder sb, JsonArray? body, int indentLevel) {
+        if (body is null) {
+            return;
+        }
 
+        foreach (var step in body.OfType<JsonObject>()) {
+            WriteStep(
+                indentLevel: indentLevel,
+                sb: sb,
+                step: step
+            );
+        }
+    }
+    private static void WriteCallStep(StringBuilder sb, JsonObject step, string kind, string pad) {
+        sb.Append(value: pad).Append(value: kind).Append(value: '(');
+
+        var first = true;
+
+        foreach (var pair in step.OrderBy(
+            keySelector: static pair => pair.Key,
+            comparer: StringComparer.Ordinal
+        )) {
+            if (pair.Key == "kind") {
+                continue;
+            }
+
+            if (!first) {
+                sb.Append(value: ", ");
+            }
+
+            first = false;
+            sb.Append(value: pair.Key).Append(value: ": ").Append(value: ArgumentSource(
+                key: pair.Key,
+                node: pair.Value
+            ));
+        }
+
+        sb.Append(value: ")\n");
+    }
     // One field, in the one spelling its value's shape calls for: a container is a block, a scalar takes a colon.
     // The colon is what tells a reader "this is a leaf", so it never appears in front of a '{' or a '['.
     private static void WriteField(StringBuilder sb, string key, JsonNode? node, int indentLevel) {
-        sb.Append(key).Append((node is (JsonObject or JsonArray)) ? " " : ": ");
-        WriteValue(sb: sb, node: node, indentLevel: indentLevel);
-        sb.Append('\n');
+        sb.Append(value: key).Append(value: ((node is (JsonObject or JsonArray))
+            ? " "
+            : ": "));
+        WriteValue(
+            indentLevel: indentLevel,
+            node: node,
+            sb: sb
+        );
+        sb.Append(value: '\n');
     }
+    private static void WriteRule(StringBuilder sb, JsonObject rule) {
+        sb.Append(value: "rule \"").Append(value: (rule["name"]?.GetValue<string>() ?? string.Empty)).Append(value: "\" {\n");
 
+        if (rule["when"] is JsonObject gate) {
+            sb.Append(value: Indent).Append(value: "when ").Append(value: GateSource(
+                gate: gate,
+                nested: false
+            )).Append(value: '\n');
+        }
+
+        WriteBody(
+            sb: sb,
+            body: (rule["body"] as JsonArray),
+            indentLevel: 1
+        );
+        sb.Append(value: "}\n");
+    }
+    private static void WriteStep(StringBuilder sb, JsonObject step, int indentLevel) {
+        var pad = string.Concat(values: Enumerable.Repeat(
+            count: indentLevel,
+            element: Indent
+        ));
+
+        switch (step["kind"]?.GetValue<string>()) {
+            case "set": {
+                    var operation = (step["operation"]?.GetValue<string>() ?? string.Empty);
+                    var spelling = (Assignments.TryGetValue(
+                        key: operation,
+                        value: out var found
+                    )
+                        ? found
+                        : "="
+                    );
+
+                    sb.Append(value: pad)
+                        .Append(value: CartridgeOperand.TargetToSource(node: step["target"]))
+                        .Append(value: ' ').Append(value: spelling).Append(value: ' ')
+                        .Append(value: CartridgeOperand.ToSource(node: step["value"]))
+                        .Append(value: '\n');
+
+                    break;
+                }
+
+            case "if": {
+                    sb.Append(value: pad).Append(value: "if ").Append(value: GateSource(
+                        gate: (step["when"] as JsonObject),
+                        nested: false
+                    )).Append(value: " {\n");
+                    WriteBody(
+                        sb: sb,
+                        body: (step["then"] as JsonArray),
+                        indentLevel: (indentLevel + 1)
+                    );
+
+                    if (step["else"] is JsonArray otherwise) {
+                        sb.Append(value: pad).Append(value: "} else {\n");
+                        WriteBody(
+                            body: otherwise,
+                            indentLevel: (indentLevel + 1),
+                            sb: sb
+                        );
+                    }
+
+                    sb.Append(value: pad).Append(value: "}\n");
+
+                    break;
+                }
+
+            case "repeat": {
+                    sb.Append(value: pad)
+                        .Append(value: "repeat ").Append(value: (step["count"]?.GetValue<int>() ?? 1).ToString(provider: CultureInfo.InvariantCulture))
+                        .Append(value: " as ").Append(value: (step["index"]?.GetValue<string>() ?? "i"))
+                        .Append(value: " {\n");
+                    WriteBody(
+                        sb: sb,
+                        body: (step["body"] as JsonArray),
+                        indentLevel: (indentLevel + 1)
+                    );
+                    sb.Append(value: pad).Append(value: "}\n");
+
+                    break;
+                }
+
+            case "break":
+                sb.Append(value: pad).Append(value: "break\n");
+
+                break;
+
+            case { } kind:
+                WriteCallStep(
+                    kind: kind,
+                    pad: pad,
+                    sb: sb,
+                    step: step
+                );
+
+                break;
+        }
+    }
     // Data sections print as the DSL value that lowers back to them. A long numeric array wraps at a fixed column
     // count so the source stays readable without changing what it means.
     private static void WriteValue(StringBuilder sb, JsonNode? node, int indentLevel) {
         switch (node) {
             case null:
-                sb.Append("null");
+                sb.Append(value: "null");
 
                 break;
 
             case JsonArray arr: {
-                if (arr.Count == 0) {
-                    sb.Append("[]");
+                    if (arr.Count == 0) {
+                        sb.Append(value: "[]");
+
+                        break;
+                    }
+
+                    var pad = string.Concat(values: Enumerable.Repeat(
+                        count: (indentLevel + 1),
+                        element: Indent
+                    ));
+
+                    sb.Append(value: "[\n");
+
+                    foreach (var item in arr) {
+                        sb.Append(value: pad);
+                        WriteValue(
+                            indentLevel: (indentLevel + 1),
+                            node: item,
+                            sb: sb
+                        );
+                        sb.Append(value: '\n');
+                    }
+
+                    sb.Append(value: string.Concat(values: Enumerable.Repeat(
+                        count: indentLevel,
+                        element: Indent
+                    ))).Append(value: ']');
 
                     break;
                 }
-
-                var pad = string.Concat(Enumerable.Repeat(element: Indent, count: (indentLevel + 1)));
-
-                sb.Append("[\n");
-
-                foreach (var item in arr) {
-                    sb.Append(pad);
-                    WriteValue(sb: sb, node: item, indentLevel: (indentLevel + 1));
-                    sb.Append('\n');
-                }
-
-                sb.Append(string.Concat(Enumerable.Repeat(element: Indent, count: indentLevel))).Append(']');
-
-                break;
-            }
 
             case JsonObject obj: {
-                if (obj.Count == 0) {
-                    sb.Append("{}");
+                    if (obj.Count == 0) {
+                        sb.Append(value: "{}");
+
+                        break;
+                    }
+
+                    var pad = string.Concat(values: Enumerable.Repeat(
+                        count: (indentLevel + 1),
+                        element: Indent
+                    ));
+
+                    sb.Append(value: "{\n");
+
+                    foreach (var pair in obj) {
+                        sb.Append(value: pad);
+                        WriteField(
+                            sb: sb,
+                            key: pair.Key,
+                            node: pair.Value,
+                            indentLevel: (indentLevel + 1)
+                        );
+                    }
+
+                    sb.Append(value: string.Concat(values: Enumerable.Repeat(
+                        count: indentLevel,
+                        element: Indent
+                    ))).Append(value: '}');
 
                     break;
                 }
 
-                var pad = string.Concat(Enumerable.Repeat(element: Indent, count: (indentLevel + 1)));
-
-                sb.Append("{\n");
-
-                foreach (var pair in obj) {
-                    sb.Append(pad);
-                    WriteField(sb: sb, key: pair.Key, node: pair.Value, indentLevel: (indentLevel + 1));
-                }
-
-                sb.Append(string.Concat(Enumerable.Repeat(element: Indent, count: indentLevel))).Append('}');
-
-                break;
-            }
-
             case JsonValue value: {
-                if (value.TryGetValue<string>(value: out var text)) {
-                    sb.Append('"').Append(text.Replace(oldValue: "\\", newValue: "\\\\").Replace(oldValue: "\"", newValue: "\\\"")).Append('"');
-                } else if (value.TryGetValue<bool>(value: out var flag)) {
-                    sb.Append(flag ? "true" : "false");
-                } else if (value.TryGetValue<long>(value: out var number)) {
-                    sb.Append(number.ToString(provider: CultureInfo.InvariantCulture));
-                } else if (value.TryGetValue<double>(value: out var real)) {
-                    sb.Append(real.ToString(format: "R", provider: CultureInfo.InvariantCulture));
-                } else {
-                    sb.Append(value.ToJsonString());
-                }
+                    if (value.TryGetValue<string>(value: out var text)) {
+                        sb.Append(value: '"').Append(value: text.Replace(
+                            newValue: "\\\\",
+                            oldValue: "\\"
+                        ).Replace(
+                            newValue: "\\\"",
+                            oldValue: "\""
+                        )).Append(value: '"');
+                    } else if (value.TryGetValue<bool>(value: out var flag)) {
+                        sb.Append(value: (flag
+                            ? "true"
+                            : "false"));
+                    } else if (value.TryGetValue<long>(value: out var number)) {
+                        sb.Append(value: number.ToString(provider: CultureInfo.InvariantCulture));
+                    } else if (value.TryGetValue<double>(value: out var real)) {
+                        sb.Append(value: real.ToString(
+                            format: "R",
+                            provider: CultureInfo.InvariantCulture
+                        ));
+                    } else {
+                        sb.Append(value: value.ToJsonString());
+                    }
 
-                break;
+                    break;
+                }
+        }
+    }
+
+    /// <summary>Writes a cartridge document out as Puck DSL source.</summary>
+    /// <param name="document">The cartridge JSON.</param>
+    /// <returns>The source text, newline-terminated.</returns>
+    public static string Decompile(JsonObject document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var sb = new StringBuilder();
+
+        sb.Append(value: "schema: \"").Append(value: (document["schema"]?.GetValue<string>() ?? CartridgeVocabulary.Schema)).Append(value: "\"\n");
+
+        foreach (var key in OrderedSections(document: document)) {
+            sb.Append(value: '\n');
+            WriteField(
+                sb: sb,
+                key: key,
+                node: document[key],
+                indentLevel: 0
+            );
+        }
+
+        if (document["rules"] is JsonArray rules) {
+            if (rules.Count == 0) { sb.Append(value: "\nrules []\n"); }
+            foreach (var rule in rules.OfType<JsonObject>()) {
+                sb.Append(value: '\n');
+                WriteRule(
+                    rule: rule,
+                    sb: sb
+                );
             }
         }
+
+        return sb.ToString();
     }
 }

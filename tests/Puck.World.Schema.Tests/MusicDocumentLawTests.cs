@@ -14,75 +14,139 @@ public sealed class MusicDocumentLawTests {
     private static MusicDocument Score() => new(
         Schema: MusicDocument.CurrentSchema,
         Name: "nexus-ambient",
-        Tempo: new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: 2100),
+        Tempo: new MusicTempoDocument(
+            BeatsPerBar: 4,
+            TicksPerBeat: 2100
+        ),
         Segments: [
-            new MusicSegmentDocument(Id: "calm", Transitions: [
-                new MusicTransitionDocument(At: MusicTransitionBoundary.BarEnd, To: "alert", When: "region.enter"),
-            ]),
-            new MusicSegmentDocument(Id: "alert", Transitions: [
-                new MusicTransitionDocument(At: MusicTransitionBoundary.BarEnd, To: "calm", When: "region.exit"),
-            ]),
+            new MusicSegmentDocument(
+                Id: "calm",
+                Transitions: [
+                new MusicTransitionDocument(
+                        At: MusicTransitionBoundary.BarEnd,
+                        To: "alert",
+                        When: "region.enter"
+                    ),
+            ]
+            ),
+            new MusicSegmentDocument(
+                Id: "alert",
+                Transitions: [
+                new MusicTransitionDocument(
+                        At: MusicTransitionBoundary.BarEnd,
+                        To: "calm",
+                        When: "region.exit"
+                    ),
+            ]
+            ),
         ]
     );
-    [Fact]
-    public void ValidMusicDocumentValidatesClean() {
-        Assert.Empty(collection: MusicCanonicalizer.Validate(document: Score()));
-    }
-    [Fact]
-    public void MusicMissingTempoIsRefused() {
-        var violations = MusicCanonicalizer.Validate(document: (Score() with { Tempo = null! }));
 
-        Assert.Contains(collection: violations, filter: violation => (violation.Path == "tempo"));
-    }
     [Fact]
-    public void MusicNonPositiveTicksPerBeatIsRefused() {
-        var violations = MusicCanonicalizer.Validate(document: (Score() with { Tempo = new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: 0) }));
+    public void MusicCanonicalizeAppliesDefaultsThenStaysFixed() {
+        var sparse = new MusicDocument(
+            Schema: MusicDocument.CurrentSchema,
+            Name: null,
+            Tempo: new MusicTempoDocument(
+                BeatsPerBar: null,
+                TicksPerBeat: 2100
+            ),
+            Segments: [new MusicSegmentDocument(
+                    Id: "calm",
+                    Transitions: null
+                )]
+        );
+        var canonical = MusicCanonicalizer.Canonicalize(document: sparse);
 
-        Assert.Contains(collection: violations, filter: violation => (violation.Path == "tempo.ticksPerBeat"));
-    }
-    [Fact]
-    public void MusicDuplicateSegmentIdIsRefused() {
-        var duplicated = (Score() with {
-            Segments = [.. Score().Segments, new MusicSegmentDocument(Id: "calm", Transitions: null)],
-        });
+        Assert.Equal(
+            expected: "score",
+            actual: canonical.Document.Name
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: canonical.Document.Tempo.BeatsPerBar
+        );
 
-        Assert.Contains(collection: MusicCanonicalizer.Validate(document: duplicated), filter: violation => violation.Message.Contains(value: "duplicated"));
-    }
-    [Fact]
-    public void MusicTransitionToUnknownSegmentIsRefused() {
-        var broken = (Score() with {
-            Segments = [
-                new MusicSegmentDocument(Id: "calm", Transitions: [
-                    new MusicTransitionDocument(At: MusicTransitionBoundary.BarEnd, To: "nowhere", When: "region.enter"),
-                ]),
-            ],
-        });
+        var reCanonical = MusicCanonicalizer.Canonicalize(document: canonical.Document);
 
-        Assert.Contains(collection: MusicCanonicalizer.Validate(document: broken), filter: violation => violation.Message.Contains(value: "does not resolve"));
+        Assert.Equal(
+            expected: canonical.Hash,
+            actual: reCanonical.Hash
+        );
     }
     [Fact]
     public void MusicCanonicalizeIsIdempotentOverItsOwnNormalForm() {
         var first = MusicCanonicalizer.Canonicalize(document: Score());
         var second = MusicCanonicalizer.Canonicalize(document: first.Document);
 
-        Assert.Equal(expected: first.Hash, actual: second.Hash);
-        Assert.Equal(expected: first.Bytes, actual: second.Bytes);
+        Assert.Equal(
+            expected: first.Hash,
+            actual: second.Hash
+        );
+        Assert.Equal(
+            expected: first.Bytes,
+            actual: second.Bytes
+        );
     }
     [Fact]
-    public void MusicCanonicalizeAppliesDefaultsThenStaysFixed() {
-        var sparse = new MusicDocument(
-            Schema: MusicDocument.CurrentSchema,
-            Name: null,
-            Tempo: new MusicTempoDocument(BeatsPerBar: null, TicksPerBeat: 2100),
-            Segments: [new MusicSegmentDocument(Id: "calm", Transitions: null)]
+    public void MusicDuplicateSegmentIdIsRefused() {
+        var duplicated = (Score() with {
+            Segments = [.. Score().Segments, new MusicSegmentDocument(
+                Id: "calm",
+                Transitions: null
+            )],
+        });
+
+        Assert.Contains(
+            collection: MusicCanonicalizer.Validate(document: duplicated),
+            filter: violation => violation.Message.Contains(value: "duplicated")
         );
-        var canonical = MusicCanonicalizer.Canonicalize(document: sparse);
+    }
+    [Fact]
+    public void MusicMissingTempoIsRefused() {
+        var violations = MusicCanonicalizer.Validate(document: (Score() with { Tempo = null! }));
 
-        Assert.Equal(expected: "score", actual: canonical.Document.Name);
-        Assert.Equal(expected: 4, actual: canonical.Document.Tempo.BeatsPerBar);
+        Assert.Contains(
+            collection: violations,
+            filter: violation => (violation.Path == "tempo")
+        );
+    }
+    [Fact]
+    public void MusicNonPositiveTicksPerBeatIsRefused() {
+        var violations = MusicCanonicalizer.Validate(document: (Score() with { Tempo = new MusicTempoDocument(
+            BeatsPerBar: 4,
+            TicksPerBeat: 0
+        ) }));
 
-        var reCanonical = MusicCanonicalizer.Canonicalize(document: canonical.Document);
+        Assert.Contains(
+            collection: violations,
+            filter: violation => (violation.Path == "tempo.ticksPerBeat")
+        );
+    }
+    [Fact]
+    public void MusicTransitionToUnknownSegmentIsRefused() {
+        var broken = (Score() with {
+            Segments = [
+                new MusicSegmentDocument(
+                Id: "calm",
+                Transitions: [
+                    new MusicTransitionDocument(
+                        At: MusicTransitionBoundary.BarEnd,
+                        To: "nowhere",
+                        When: "region.enter"
+                    ),
+                ]
+            ),
+            ],
+        });
 
-        Assert.Equal(expected: canonical.Hash, actual: reCanonical.Hash);
+        Assert.Contains(
+            collection: MusicCanonicalizer.Validate(document: broken),
+            filter: violation => violation.Message.Contains(value: "does not resolve")
+        );
+    }
+    [Fact]
+    public void ValidMusicDocumentValidatesClean() {
+        Assert.Empty(collection: MusicCanonicalizer.Validate(document: Score()));
     }
 }

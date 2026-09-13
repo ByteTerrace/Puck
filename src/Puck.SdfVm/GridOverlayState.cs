@@ -27,5 +27,13 @@ public readonly record struct GridOverlayState(
     /// <summary>Gets the no-overlay value — the all-zero upload a frame outside an editor (or with the grid hidden)
     /// sends, byte-identical to before the channel existed.</summary>
     public static GridOverlayState None =>
-        new(Flags: 0u, WorldPitch: Vector2.Zero, FloorY: 0f, ObjectOrigin: Vector3.Zero, ObjectFrame: Quaternion.Identity, ObjectPitch: Vector2.Zero, ObjectPatchRadius: 0f);
+        new(
+            Flags: 0u,
+            WorldPitch: Vector2.Zero,
+            FloorY: 0f,
+            ObjectOrigin: Vector3.Zero,
+            ObjectFrame: Quaternion.Identity,
+            ObjectPitch: Vector2.Zero,
+            ObjectPatchRadius: 0f
+        );
 }

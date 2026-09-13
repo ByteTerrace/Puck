@@ -14,36 +14,84 @@ public sealed class TetrisLook {
         if (Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK") is not "1") { return; }
 
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) { directory = directory.Parent; }
-        var json = File.ReadAllText(path: Path.Combine(path1: directory!.FullName, path2: "src/Puck.World/Assets/cartridges", path3: "tetris.cgb.cartridge.json"));
-        var document = JsonSerializer.Deserialize<CartridgeDocument>(json: json, options: new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) { directory = directory.Parent; }
+        var json = File.ReadAllText(path: Path.Combine(
+            path1: directory!.FullName,
+            path2: "src/Puck.World/Assets/cartridges",
+            path3: "tetris.cgb.cartridge.json"
+        ));
+        var document = JsonSerializer.Deserialize<CartridgeDocument>(
+            json: json,
+            options: new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+        )!;
         var result = new HgbCartridgeCompiler().Compile(document: document);
-        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "look");
+        using var machine = new VerifyMachineDriver(
+            rom: result.Rom,
+            label: "look"
+        );
 
         var art = new System.Text.StringBuilder();
         // PUCK_TETRIS_LOOK_PLAY presses through the title and the mode menu first, so the look is of a game rather than a screen.
         if (Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_PLAY") is "1") {
-            for (var screen = 0; screen < 2; ++screen) {
-                machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
-                machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
-                machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
+            for (var screen = 0; (screen < 2); ++screen) {
+                machine.RunFrames(
+                    buttons: JoypadButtons.None,
+                    frames: 40
+                );
+                machine.RunFrames(
+                    buttons: JoypadButtons.Start,
+                    frames: 4
+                );
+                machine.RunFrames(
+                    buttons: JoypadButtons.None,
+                    frames: 110
+                );
             }
         }
 
-        machine.RunFrames(buttons: JoypadButtons.None, frames: int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_FRAMES"), out var wanted) ? wanted : 200);
-        var backdrop = machine.ReadPixel(x: 158, y: 142);
-        for (var y = 0; y < 144; ++y) {
+        machine.RunFrames(
+            buttons: JoypadButtons.None,
+            frames: (int.TryParse(
+                Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_FRAMES"),
+                out var wanted
+            )
+            ? wanted
+            : 200)
+        );
+        var backdrop = machine.ReadPixel(
+            x: 158,
+            y: 142
+        );
+
+        for (var y = 0; (y < 144); ++y) {
             var line = new System.Text.StringBuilder();
-            for (var x = 0; x < 160; x += 2) {
-                line.Append(value: machine.ReadPixel(x: x, y: y) == backdrop ? ' ' : '#');
+
+            for (var x = 0; (x < 160); x += 2) {
+                line.Append(value: ((machine.ReadPixel(
+                    x: x,
+                    y: y
+                ) == backdrop)
+                    ? ' '
+                    : '#'));
             }
 
             art.AppendLine(value: line.ToString().TrimEnd());
         }
 
         File.WriteAllText(
-            path: Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_OUT")
-                ?? Path.Combine(path1: Path.GetTempPath(), path2: "tetris-look.txt"),
-            contents: art.ToString());
+            path: (Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_OUT")
+                ?? Path.Combine(
+                path1: Path.GetTempPath(),
+                path2: "tetris-look.txt"
+            )),
+            contents: art.ToString()
+        );
     }
 }

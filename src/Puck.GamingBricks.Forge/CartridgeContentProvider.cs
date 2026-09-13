@@ -12,19 +12,35 @@ internal static class CartridgeContentProvider {
             var symbols = new Dictionary<string, MachineContentSymbol>(comparer: StringComparer.Ordinal);
 
             foreach (var (name, address) in compilation.Variables) {
-                symbols.Add(key: name, value: new MachineContentSymbol(Space: "bus", Address: address));
+                symbols.Add(
+                    key: name,
+                    value: new MachineContentSymbol(
+                        Address: address,
+                        Space: "bus"
+                    )
+                );
             }
             foreach (var (name, address) in compilation.Arrays) {
-                symbols.Add(key: name, value: new MachineContentSymbol(Space: "bus", Address: address));
+                symbols.Add(
+                    key: name,
+                    value: new MachineContentSymbol(
+                        Address: address,
+                        Space: "bus"
+                    )
+                );
             }
 
             return new PreparedMachineContent(
                 Image: compilation.Rom,
                 SourceHash: compilation.SourceHash,
                 Symbols: symbols,
-                VerifiedSourceFormat: CartridgeDocument.SchemaId);
-        } catch (Exception exception) when (exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException or CartridgeCapacityException) {
-            throw new MachineContentException(message: exception.Message.ReplaceLineEndings(replacementText: " "), innerException: exception);
+                VerifiedSourceFormat: CartridgeDocument.SchemaId
+            );
+        } catch (Exception exception) when ((exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException or CartridgeCapacityException)) {
+            throw new MachineContentException(
+                message: exception.Message.ReplaceLineEndings(replacementText: " "),
+                innerException: exception
+            );
         }
     }
 }

@@ -109,33 +109,39 @@ public static class RuleBindingTokens {
         (BoundKey.Previous, "$previous", "a pattern row's value expression, as the key of the token before the current one (the absent cell on the first)"),
     ];
 
-    /// <summary>Returns the reference spelling of a binding's key token — the token without its leading <c>$</c>.</summary>
-    /// <param name="keyToken">A <see cref="Bindings"/> key token.</param>
-    public static string ReferenceTokenOf(string keyToken) => keyToken[1..];
-
     /// <summary>Returns the binding a key token spells, or <see cref="BoundKey.None"/>.</summary>
     /// <param name="key">The candidate key token.</param>
     public static BoundKey OfKeyToken(string? key) {
         foreach (var (binding, keyToken, _) in Bindings) {
-            if (string.Equals(a: key, b: keyToken, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: key,
+                b: keyToken,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return binding;
             }
         }
 
         return BoundKey.None;
     }
-
     /// <summary>Returns the binding a reference token spells, or <see cref="BoundKey.None"/>.</summary>
     /// <param name="token">The candidate reference token.</param>
     public static BoundKey OfReferenceToken(string token) {
         foreach (var (binding, keyToken, _) in Bindings) {
-            if (string.Equals(a: token, b: ReferenceTokenOf(keyToken: keyToken), comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: token,
+                b: ReferenceTokenOf(keyToken: keyToken),
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return binding;
             }
         }
 
         return BoundKey.None;
     }
+    /// <summary>Returns the reference spelling of a binding's key token — the token without its leading <c>$</c>.</summary>
+    /// <param name="keyToken">A <see cref="Bindings"/> key token.</param>
+    public static string ReferenceTokenOf(string keyToken) => keyToken[1..];
 }
 /// <summary>Which symmetry-lattice map a <see cref="RuleFacts.SymmetryPrefix"/> operand applies to its source
 /// node.</summary>
@@ -178,21 +184,21 @@ public enum MatchFacet : byte {
 }
 /// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
 public static class RuleCapacity {
-    /// <summary>The most top-level effects one rule may carry.</summary>
-    public const int MaxEffectsPerRule = 64;
     /// <summary>The most bound values one rule may declare — the width of the per-evaluation scratch every evaluator
     /// carries for them.</summary>
     public const int MaxBindingsPerRule = 16;
+    /// <summary>The most top-level effects one rule may carry.</summary>
+    public const int MaxEffectsPerRule = 64;
+    /// <summary>The most postfix tokens in one numeric expression.</summary>
+    public const int MaxExpressionTokens = 64;
+    /// <summary>The most postfix tokens in one Boolean gate.</summary>
+    public const int MaxPredicateTokens = 256;
+    /// <summary>The most effects in one atomic transaction branch.</summary>
+    public const int MaxTransactionEffects = 64;
     /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
     /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
     /// rule sweep is one of several passes a tick pays for; reserving roughly a tenth of the tick (~3.3 ms) as its
     /// worst-case share and pricing one work unit at ~1.7 ns — a plausible cost for the fixed-point compare, read,
     /// or write every rule/effect cost is built from — yields this ceiling.</summary>
     public const long MaxWorkUnitsPerTick = 2_000_000L;
-    /// <summary>The most postfix tokens in one Boolean gate.</summary>
-    public const int MaxPredicateTokens = 256;
-    /// <summary>The most postfix tokens in one numeric expression.</summary>
-    public const int MaxExpressionTokens = 64;
-    /// <summary>The most effects in one atomic transaction branch.</summary>
-    public const int MaxTransactionEffects = 64;
 }

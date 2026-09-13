@@ -7,6 +7,7 @@ namespace Puck.Abstractions.Machines;
 public interface IMachineValidationCatalog {
     /// <summary>Gets the stable metadata fingerprint for cache-partitioned composition, when this catalog can provide one.</summary>
     string CompositionFingerprint => string.Empty;
+
     /// <summary>Resolves the same provider descriptor used by runtime construction and authoring tools.</summary>
     /// <param name="engineId">The registered engine identifier.</param>
     /// <param name="descriptor">The selected provider description, or null when unavailable.</param>

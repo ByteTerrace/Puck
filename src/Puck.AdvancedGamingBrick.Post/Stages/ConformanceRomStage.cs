@@ -10,8 +10,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// run on every processor at once since each builds its own machine.
 /// </summary>
 internal sealed class ConformanceRomStage : IPostStage<PostContext> {
-    private readonly string m_group;
     private readonly IReadOnlyList<(string RelativePath, string Name)> m_cases;
+    private readonly string m_group;
 
     /// <summary>Initializes a new instance of the <see cref="ConformanceRomStage"/> class.</summary>
     /// <param name="group">The group name (also the stage-name suffix).</param>
@@ -77,10 +77,10 @@ internal static class RomCaseRunner {
                         Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
                         Name: romCase.Name,
                         Verdict: (pass
-                            ? PostCaseVerdict.Pass
-                            : PostCaseVerdict.Mismatch)
+                        ? PostCaseVerdict.Pass
+                        : PostCaseVerdict.Mismatch)
                     );
-                } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                } catch (Exception exception) when ((exception is not OutOfMemoryException)) {
                     results[index] = new PostCaseResult(
                         Detail: $"threw {exception.GetType().Name}: {exception.Message}",
                         Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
@@ -113,6 +113,7 @@ internal static class RomCaseRunner {
                     separator: ", ",
                     values: failures
                 )}"
-            ));
+            )
+        );
     }
 }

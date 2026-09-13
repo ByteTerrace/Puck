@@ -60,12 +60,12 @@ public sealed record WorldMotion(
     [property: JsonPropertyName("obstruction"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObstructionLatch? ObstructionRaw = null,
     float GroundStick = 2f
 ) {
-    /// <summary>Gets the up-axis steering rates, defaulted when the kit authors none.</summary>
-    [JsonIgnore]
-    public WorldUpTurnRates UpTurn => (UpTurnRaw ?? WorldUpTurnRates.Default);
     /// <summary>Gets the obstruction witness latch tuning, defaulted when the kit authors none.</summary>
     [JsonIgnore]
     public WorldObstructionLatch Obstruction => (ObstructionRaw ?? WorldObstructionLatch.Default);
+    /// <summary>Gets the up-axis steering rates, defaulted when the kit authors none.</summary>
+    [JsonIgnore]
+    public WorldUpTurnRates UpTurn => (UpTurnRaw ?? WorldUpTurnRates.Default);
 }
 /// <summary>How fast a body's up axis may turn to follow ambient gravity versus a measured ground contact, both as
 /// the HALF angle the steering rotor is built from (a rate of <c>r</c> turns the body a half angle of <c>r</c>
@@ -246,21 +246,6 @@ public sealed record WorldShaping(
 /// <c>held</c> gate, <see cref="WorldSpeedHeld.Channel"/>) resolve through the world's compiled channel table here,
 /// the same resolved-outside/consumed-as-ordinal seam <see cref="WorldHoldFactory"/> uses.</summary>
 public static class WorldMotionTuningFactory {
-    /// <summary>Compiles an authored scalar envelope to its fixed-point form.</summary>
-    /// <param name="envelope">The authored inclusive bound.</param>
-    /// <returns>The compiled bound.</returns>
-    public static FixedMotionScalarEnvelope Compile(in MotionScalarEnvelope envelope) => new(
-        Min: FixedQ4816.FromDouble(value: envelope.Min),
-        Max: FixedQ4816.FromDouble(value: envelope.Max)
-    );
-    /// <summary>Compiles the authored floating-point motion defaults to their fixed-point form.</summary>
-    /// <param name="motion">The authored world motion defaults.</param>
-    /// <returns>The compiled defaults.</returns>
-    public static FixedMotionDefaults Compile(in WorldMotionDefaults motion) => new(
-        MoveSpeed: FixedQ4816.FromDouble(value: motion.MoveSpeed),
-        TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
-        MaxSmoothError: FixedQ4816.FromDouble(value: motion.MaxSmoothError)
-    );
     private static FixedMotionDynamics? CompileDynamics(string? name, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
         if (
             (name is not { Length: > 0 }) ||
@@ -309,20 +294,26 @@ public static class WorldMotionTuningFactory {
                 When: gate.ToArray(),
                 Along: ((row.Along is { } along)
                 ? new FixedShapingAlong(
-                    Engage: FixedQ4816.FromDouble(value: (along.Engage ?? 0f)),
-                    ReversalRate: FixedQ4816.FromDouble(value: (along.ReversalRate ?? 0f)),
-                    Release: FixedQ4816.FromDouble(value: (along.Release ?? 0f)),
-                    BackwardSpeed: FixedQ4816.FromDouble(value: (along.BackwardSpeed ?? 0f)),
-                    Instant: ((along.Engage is null ? ShapingInstant.Engage : ShapingInstant.None)
-                        | (along.ReversalRate is null ? ShapingInstant.Reversal : ShapingInstant.None)
-                        | (along.Release is null ? ShapingInstant.Release : ShapingInstant.None))
-                )
+                        Engage: FixedQ4816.FromDouble(value: (along.Engage ?? 0f)),
+                        ReversalRate: FixedQ4816.FromDouble(value: (along.ReversalRate ?? 0f)),
+                        Release: FixedQ4816.FromDouble(value: (along.Release ?? 0f)),
+                        BackwardSpeed: FixedQ4816.FromDouble(value: (along.BackwardSpeed ?? 0f)),
+                        Instant: ((along.Engage is null)
+                    ? ShapingInstant.Engage
+                    : ShapingInstant.None)
+                        | ((along.ReversalRate is null)
+                    ? ShapingInstant.Reversal
+                    : ShapingInstant.None)
+                        | ((along.Release is null)
+                    ? ShapingInstant.Release
+                    : ShapingInstant.None)
+                    )
                 : null),
                 Across: ((row.Across is { } across)
                 ? new FixedShapingAcross(
-                    Lateral: FixedQ4816.FromDouble(value: (across.Lateral ?? 0f)),
-                    Instant: (across.Lateral is null)
-                )
+                        Lateral: FixedQ4816.FromDouble(value: (across.Lateral ?? 0f)),
+                        Instant: (across.Lateral is null)
+                    )
                 : null),
                 Dynamics: CompileDynamics(
                     name: row.Dynamics,
@@ -335,6 +326,22 @@ public static class WorldMotionTuningFactory {
 
         return compiled;
     }
+
+    /// <summary>Compiles an authored scalar envelope to its fixed-point form.</summary>
+    /// <param name="envelope">The authored inclusive bound.</param>
+    /// <returns>The compiled bound.</returns>
+    public static FixedMotionScalarEnvelope Compile(in MotionScalarEnvelope envelope) => new(
+        Min: FixedQ4816.FromDouble(value: envelope.Min),
+        Max: FixedQ4816.FromDouble(value: envelope.Max)
+    );
+    /// <summary>Compiles the authored floating-point motion defaults to their fixed-point form.</summary>
+    /// <param name="motion">The authored world motion defaults.</param>
+    /// <returns>The compiled defaults.</returns>
+    public static FixedMotionDefaults Compile(in WorldMotionDefaults motion) => new(
+        MoveSpeed: FixedQ4816.FromDouble(value: motion.MoveSpeed),
+        TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
+        MaxSmoothError: FixedQ4816.FromDouble(value: motion.MaxSmoothError)
+    );
     /// <summary>Compiles an authored kit motion row to its fixed-point form against a world's compiled channel
     /// table and its own <c>dynamics</c>-row table.</summary>
     /// <param name="tuning">The authored motion row.</param>
@@ -376,8 +383,8 @@ public static class WorldMotionTuningFactory {
             Speed: new FixedSpeed(
                 Value: FixedQ4816.FromDouble(value: tuning.Speed.Value),
                 Envelope: ((tuning.Speed.Envelope is { } envelope)
-                ? Compile(envelope: envelope)
-                : null),
+            ? Compile(envelope: envelope)
+            : null),
                 HeldOrdinal: heldOrdinal,
                 HeldMultiplier: FixedQ4816.FromDouble(value: (tuning.Speed.Held?.Multiplier ?? 1f))
             ),
@@ -398,7 +405,7 @@ public static class WorldMotionTuningFactory {
                 Contact: FixedQ4816.FromDouble(value: tuning.UpTurn.Contact)
             ),
             Obstruction: new FixedObstructionLatch(
-                DisplacementSquared: FixedQ4816.FromDouble(value: ((double)tuning.Obstruction.Displacement * tuning.Obstruction.Displacement)),
+                DisplacementSquared: FixedQ4816.FromDouble(value: (((double)tuning.Obstruction.Displacement) * tuning.Obstruction.Displacement)),
                 IdleThreshold: FixedQ4816.FromDouble(value: tuning.Obstruction.IdleThreshold),
                 GraceTicks: obstructionGraceTicks
             ),

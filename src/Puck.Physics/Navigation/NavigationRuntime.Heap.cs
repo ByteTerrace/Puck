@@ -9,7 +9,6 @@ internal interface INodeOrder {
     /// <param name="right">The second node.</param>
     int Compare(int left, int right);
 }
-
 /// <summary>The indexed binary min-heap both route searches — a domain's per-body A* and its shared destination
 /// trees — schedule open nodes through: node indices in heap order, and each node's heap slot in a position table so
 /// a cheaper rediscovery sifts in place rather than re-inserting.</summary>
@@ -19,6 +18,7 @@ internal interface INodeOrder {
 internal sealed class NodeHeap {
     private readonly int[] m_heap;
     private readonly int[] m_position;
+
     private int m_count;
 
     /// <summary>Initializes a heap sized for <paramref name="cells"/> nodes.</summary>
@@ -30,6 +30,61 @@ internal sealed class NodeHeap {
 
     /// <summary>Gets the number of queued nodes.</summary>
     public int Count => m_count;
+
+    private void SiftDown<TOrder>(int index, TOrder order) where TOrder : struct, INodeOrder {
+        while (true) {
+            var left = ((index * 2) + 1);
+
+            if (left >= m_count) {
+                break;
+            }
+
+            var right = (left + 1);
+            var best = (((right < m_count) && (order.Compare(
+                left: m_heap[right],
+                right: m_heap[left]
+            ) < 0))
+                ? right
+                : left
+            );
+
+            if (order.Compare(
+                left: m_heap[best],
+                right: m_heap[index]
+            ) >= 0) {
+                break;
+            }
+
+            Swap(
+                left: index,
+                right: best
+            );
+            index = best;
+        }
+    }
+    private void SiftUp<TOrder>(int index, TOrder order) where TOrder : struct, INodeOrder {
+        while (index > 0) {
+            var parent = ((index - 1) >> 1);
+
+            if (order.Compare(
+                left: m_heap[index],
+                right: m_heap[parent]
+            ) >= 0) {
+                break;
+            }
+
+            Swap(
+                left: index,
+                right: parent
+            );
+            index = parent;
+        }
+    }
+    private void Swap(int left, int right) {
+        (m_heap[left], m_heap[right]) = (m_heap[right], m_heap[left]);
+        m_position[m_heap[left]] = left;
+        m_position[m_heap[right]] = right;
+    }
 
     /// <summary>Empties the heap.</summary>
     public void Clear() => m_count = 0;
@@ -78,51 +133,5 @@ internal sealed class NodeHeap {
             index: m_position[node],
             order: order
         );
-    }
-
-    private void SiftDown<TOrder>(int index, TOrder order) where TOrder : struct, INodeOrder {
-        while (true) {
-            var left = ((index * 2) + 1);
-
-            if (left >= m_count) {
-                break;
-            }
-
-            var right = (left + 1);
-            var best = (((right < m_count) && (order.Compare(left: m_heap[right], right: m_heap[left]) < 0))
-                ? right
-                : left
-            );
-
-            if (order.Compare(left: m_heap[best], right: m_heap[index]) >= 0) {
-                break;
-            }
-
-            Swap(
-                left: index,
-                right: best
-            );
-            index = best;
-        }
-    }
-    private void SiftUp<TOrder>(int index, TOrder order) where TOrder : struct, INodeOrder {
-        while (index > 0) {
-            var parent = ((index - 1) >> 1);
-
-            if (order.Compare(left: m_heap[index], right: m_heap[parent]) >= 0) {
-                break;
-            }
-
-            Swap(
-                left: index,
-                right: parent
-            );
-            index = parent;
-        }
-    }
-    private void Swap(int left, int right) {
-        (m_heap[left], m_heap[right]) = (m_heap[right], m_heap[left]);
-        m_position[m_heap[left]] = left;
-        m_position[m_heap[right]] = right;
     }
 }

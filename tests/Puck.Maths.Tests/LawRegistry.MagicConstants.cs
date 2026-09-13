@@ -9,14 +9,36 @@ internal static partial class LawRegistry {
     );
 
     private static LawCase[] MagicConstantCases() => [
-        Case(id: "integer.fermat-mask-bit-oracle", run: () => Laws.Claim(
-            lawId: "integer.fermat-mask-bit-oracle", claim: Subjects.FermatMaskBitOracle)),
-        Case(id: "integer.replication-mask-bit-oracle", run: () => Laws.Claim(
-            lawId: "integer.replication-mask-bit-oracle", claim: Subjects.ReplicationMaskBitOracle)),
-        Case(id: "integer.repeat-bits-bit-oracle", run: () => Laws.SweptClaim(
-            lawId: "integer.repeat-bits-bit-oracle", domain: MagicConstants, tier: Tier.Default,
-            width: 2, claim: Subjects.RepeatBitsBitOracle)),
-        Case(id: "integer.periodic-mask-boundaries", run: () => Laws.Claim(
-            lawId: "integer.periodic-mask-boundaries", claim: Subjects.PeriodicMaskBoundaries)),
+        Case(
+            id: "integer.fermat-mask-bit-oracle",
+            run: () => Laws.Claim(
+                claim: Subjects.FermatMaskBitOracle,
+                lawId: "integer.fermat-mask-bit-oracle"
+            )
+        ),
+        Case(
+            id: "integer.replication-mask-bit-oracle",
+            run: () => Laws.Claim(
+                claim: Subjects.ReplicationMaskBitOracle,
+                lawId: "integer.replication-mask-bit-oracle"
+            )
+        ),
+        Case(
+            id: "integer.repeat-bits-bit-oracle",
+            run: () => Laws.SweptClaim(
+                claim: Subjects.RepeatBitsBitOracle,
+                domain: MagicConstants,
+                lawId: "integer.repeat-bits-bit-oracle",
+                tier: Tier.Default,
+                width: 2
+            )
+        ),
+        Case(
+            id: "integer.periodic-mask-boundaries",
+            run: () => Laws.Claim(
+                claim: Subjects.PeriodicMaskBoundaries,
+                lawId: "integer.periodic-mask-boundaries"
+            )
+        ),
     ];
 }

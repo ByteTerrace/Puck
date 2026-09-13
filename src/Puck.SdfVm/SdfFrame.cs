@@ -11,10 +11,6 @@ namespace Puck.SdfVm;
 /// <param name="Camera">The camera used to render the view.</param>
 /// <param name="Region">The view's normalized output region.</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
-    /// <summary>The <see cref="SdfWorldRenderSpec.Children"/> key backing this slot instead of an SDF camera render,
-    /// or <see langword="null"/> for an ordinary camera view. A name unresolved when <see cref="SdfEngineNode"/> first
-    /// derives its child mask takes the ordinary camera path for the life of the engine instead — see its remarks.</summary>
-    public string? Child { get; init; }
     /// <summary>The off-axis (asymmetric) frustum's tangent-space center offset — <c>(0, 0)</c> (the default) is the
     /// ordinary symmetric camera every view used before this member existed, byte-identical: the shader adds it as a
     /// trailing term (see sdf-world.hlsli's <c>cameraRayDirection</c>), and adding exactly zero changes no rounding.
@@ -25,6 +21,10 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <c>ViewportData.renderScale</c>; the row's <c>w</c> lane carries <see cref="SdfFrame.FarDistance"/>) — no row
     /// growth.</summary>
     public Vector2 AsymmetricFrustumOffset { get; init; }
+    /// <summary>The <see cref="SdfWorldRenderSpec.Children"/> key backing this slot instead of an SDF camera render,
+    /// or <see langword="null"/> for an ordinary camera view. A name unresolved when <see cref="SdfEngineNode"/> first
+    /// derives its child mask takes the ordinary camera path for the life of the engine instead — see its remarks.</summary>
+    public string? Child { get; init; }
     /// <summary>The view's internal render scale in (0, 1]: Stage 1 renders the view at this fraction of its output
     /// region (an integer-derived extent — see the shader's <c>worldRenderDims</c>) and Stage 2 upsamples it back.
     /// 1 (the default) renders native through a bit-exact copy path, so an unset frame is byte-identical to a build
@@ -72,6 +72,16 @@ public sealed record SdfFrame(
     public SdfEnvironment Environment { get; init; } = SdfEnvironment.Default();
     /// <summary>The object grid's reference frame orientation (the lattice renders in this frame's coordinates).</summary>
     public Quaternion GridObjectFrame { get; init; } = Quaternion.Identity;
+    /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
+    /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing proven"
+    /// tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data (<c>render.farDistance</c>);
+    /// the default is the exact value the shaders pinned as <c>MaxDistance</c> before it became per-frame data, so a
+    /// frame that never sets it renders bit-identically. Must be finite and positive — the render frame throws
+    /// otherwise (a document validator already refuses it by name upstream). Packed into every viewport row's
+    /// <c>renderScale.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and sdf-world.hlsli's
+    /// <c>worldFarDistance</c>) — the one buffer every marching kernel already binds — and folded into the cadence
+    /// signature through that row, so a change re-renders.</summary>
+    public float FarDistance { get; init; } = DefaultFarDistance;
 
     /// <summary>The slice debug view's plane selector: 0 (the default) = camera-locked (the plane through the world
     /// origin with normal = camera forward), 1/2/3 = a world-axis-aligned plane (X/Y/Z normal) at
@@ -98,16 +108,6 @@ public sealed record SdfFrame(
     /// (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldFarBoundDisabled</c> /
     /// <c>SdfFarFieldParams</c>); an unset frame uploads 0 and the far bound stays on.</summary>
     public bool DisableFarBound { get; init; }
-    /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
-    /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing proven"
-    /// tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data (<c>render.farDistance</c>);
-    /// the default is the exact value the shaders pinned as <c>MaxDistance</c> before it became per-frame data, so a
-    /// frame that never sets it renders bit-identically. Must be finite and positive — the render frame throws
-    /// otherwise (a document validator already refuses it by name upstream). Packed into every viewport row's
-    /// <c>renderScale.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and sdf-world.hlsli's
-    /// <c>worldFarDistance</c>) — the one buffer every marching kernel already binds — and folded into the cadence
-    /// signature through that row, so a change re-renders.</summary>
-    public float FarDistance { get; init; } = DefaultFarDistance;
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. Rides the bench-params screen-light row's <c>.w</c> lane (KEEP IN SYNC with

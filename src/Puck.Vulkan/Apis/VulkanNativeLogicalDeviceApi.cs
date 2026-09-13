@@ -13,6 +13,20 @@ namespace Puck.Vulkan;
 /// queue-retrieval, and wait-idle entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceApi {
+    // A single over-sized, zeroed block per chained struct. We only enable the FIRST VkBool32 (the primary
+    // feature) and require every trailing flag to read VK_FALSE; the driver reads exactly sizeof(struct) bytes
+    // keyed off sType, so over-allocating is harmless but UNDER-allocating lets it read uninitialized memory
+    // past the block — e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 5 flags / 40 bytes, past which a
+    // too-small block reads the adjacent block's sType as a bogus VkBool32. 256 bytes comfortably exceeds any
+    // current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
+    private const int FeatureStructureByteSize = 256;
+    // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
+    private const int PhysicalDeviceFeatureCount = 55;
+    private const uint VkStructureTypeDeviceCreateInfo = 3;
+    private const uint VkStructureTypeDeviceQueueCreateInfo = 2;
+    // Values verified against the Vulkan SDK 1.4.350 header (vulkan_core.h).
+    private const uint VkStructureTypePhysicalDeviceFeatures2 = 1000059000;
+
     private readonly IAllocator m_allocator;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeLogicalDeviceApi"/> class.</summary>
@@ -24,26 +38,13 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         m_allocator = allocator;
     }
 
-    private const uint VkStructureTypeDeviceCreateInfo = 3;
-    private const uint VkStructureTypeDeviceQueueCreateInfo = 2;
-    // Values verified against the Vulkan SDK 1.4.350 header (vulkan_core.h).
-    private const uint VkStructureTypePhysicalDeviceFeatures2 = 1000059000;
-    // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
-    private const int PhysicalDeviceFeatureCount = 55;
-
     // Every chained VkPhysicalDevice*Features struct shares the layout
     // { uint sType; nint pNext; VkBool32 flags[N]; ... } — sType at 0, pNext one pointer
     // in, the first feature flag two pointers in, the whole thing pointer-aligned.
     private static readonly int FeatureStructurePNextOffset = IntPtr.Size;
     private static readonly int FeatureStructureFlagOffset = (IntPtr.Size * 2);
-
-    // A single over-sized, zeroed block per chained struct. We only enable the FIRST VkBool32 (the primary
-    // feature) and require every trailing flag to read VK_FALSE; the driver reads exactly sizeof(struct) bytes
-    // keyed off sType, so over-allocating is harmless but UNDER-allocating lets it read uninitialized memory
-    // past the block — e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 5 flags / 40 bytes, past which a
-    // too-small block reads the adjacent block's sType as a bogus VkBool32. 256 bytes comfortably exceeds any
-    // current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
-    private const int FeatureStructureByteSize = 256;
+    private readonly ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
+    private readonly ConcurrentDictionary<nint, DevicePointers> m_devicePointers = new();
 
     private unsafe struct InstancePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult> CreateDevice;
@@ -54,26 +55,74 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         public delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void> GetDeviceQueue;
     }
 
-    private readonly ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
-    private readonly ConcurrentDictionary<nint, DevicePointers> m_devicePointers = new();
-
-    private InstancePointers GetInstancePointers(nint instanceHandle) {
-        return m_instancePointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                CreateDevice = ((delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkCreateDevice"u8, instanceHandle: handle)),
-            }
-        );
-    }
     private DevicePointers GetDevicePointers(nint deviceHandle) {
         return m_devicePointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                DestroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDevice"u8)),
-                DeviceWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDeviceWaitIdle"u8)),
-                GetDeviceQueue = ((delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetDeviceQueue"u8)),
+                DestroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyDevice"u8
+            )),
+                DeviceWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDeviceWaitIdle"u8
+            )),
+                GetDeviceQueue = ((delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetDeviceQueue"u8
+            )),
             }
         );
+    }
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                CreateDevice = ((delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkCreateDevice"u8,
+                instanceHandle: handle
+            )),
+            }
+        );
+    }
+    private MarshalledStringArray MarshalStringArray(IReadOnlyList<string> values) {
+        if (0 == values.Count) {
+            return new MarshalledStringArray(
+                Allocator: m_allocator,
+                Entries: [],
+                Pointer: 0
+            );
+        }
+
+        var pointers = new nint[values.Count];
+        var buffer = m_allocator.Alloc(size: (IntPtr.Size * values.Count));
+
+        for (var index = 0; (index < values.Count); index++) {
+            pointers[index] = MarshalUtf8(value: values[index]);
+            Marshal.WriteIntPtr(
+                ofs: (index * IntPtr.Size),
+                ptr: buffer,
+                val: pointers[index]
+            );
+        }
+
+        return new MarshalledStringArray(
+            Allocator: m_allocator,
+            Entries: pointers,
+            Pointer: buffer
+        );
+    }
+    private nint MarshalUtf8(string value) {
+        var bytes = Encoding.UTF8.GetBytes(s: (value + '\0'));
+        var pointer = m_allocator.Alloc(size: bytes.Length);
+
+        Marshal.Copy(
+            destination: pointer,
+            length: bytes.Length,
+            source: bytes,
+            startIndex: 0
+        );
+        return pointer;
     }
 
     /// <inheritdoc/>
@@ -252,21 +301,6 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         }
     }
     /// <inheritdoc/>
-    public VkResult WaitIdle(nint deviceHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        var waitIdle = GetDevicePointers(deviceHandle: deviceHandle).DeviceWaitIdle;
-
-        if (waitIdle is null) {
-            throw new InvalidOperationException(message: "vkDeviceWaitIdle is not available.");
-        }
-        return waitIdle(deviceHandle);
-    }
-    /// <inheritdoc/>
     public nint GetDeviceQueue(nint deviceHandle, uint queueFamilyIndex, uint queueIndex) {
         VulkanArgument.RequireHandle(
             handle: deviceHandle,
@@ -287,45 +321,20 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         );
         return queueHandle;
     }
-
-    private MarshalledStringArray MarshalStringArray(IReadOnlyList<string> values) {
-        if (0 == values.Count) {
-            return new MarshalledStringArray(
-                Allocator: m_allocator,
-                Entries: [],
-                Pointer: 0
-            );
-        }
-
-        var pointers = new nint[values.Count];
-        var buffer = m_allocator.Alloc(size: (IntPtr.Size * values.Count));
-
-        for (var index = 0; (index < values.Count); index++) {
-            pointers[index] = MarshalUtf8(value: values[index]);
-            Marshal.WriteIntPtr(
-                ofs: (index * IntPtr.Size),
-                ptr: buffer,
-                val: pointers[index]
-            );
-        }
-
-        return new MarshalledStringArray(
-            Allocator: m_allocator,
-            Entries: pointers,
-            Pointer: buffer
+    /// <inheritdoc/>
+    public VkResult WaitIdle(nint deviceHandle) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
         );
-    }
-    private nint MarshalUtf8(string value) {
-        var bytes = Encoding.UTF8.GetBytes(s: (value + '\0'));
-        var pointer = m_allocator.Alloc(size: bytes.Length);
 
-        Marshal.Copy(
-            destination: pointer,
-            length: bytes.Length,
-            source: bytes,
-            startIndex: 0
-        );
-        return pointer;
+        var waitIdle = GetDevicePointers(deviceHandle: deviceHandle).DeviceWaitIdle;
+
+        if (waitIdle is null) {
+            throw new InvalidOperationException(message: "vkDeviceWaitIdle is not available.");
+        }
+        return waitIdle(deviceHandle);
     }
 
     private readonly record struct MarshalledStringArray(nint Pointer, IReadOnlyList<nint> Entries, IAllocator Allocator) : IDisposable {

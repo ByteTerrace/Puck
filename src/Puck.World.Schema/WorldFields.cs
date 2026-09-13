@@ -21,10 +21,35 @@ public sealed record WorldFieldsSection(
     IReadOnlyList<WorldReaction>? Reactions = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null
 ) {
+    /// <summary>Determines whether two compiled composites carry the same runtime field inputs, including paint.</summary>
+    internal bool HasSameCompilation(WorldFieldsSection other) => (
+        (Lattice == other.Lattice) &&
+        Fields.SequenceEqual(second: other.Fields) &&
+        ReactionsEqual(
+        left: Reactions,
+        right: other.Reactions
+    ) &&
+        (Paint ?? []).SequenceEqual(second: (other.Paint ?? []))
+    );
+    /// <summary>Determines whether two compiled composites lower to the same reaction program. Paint and display
+    /// metadata remain inputs to the companion composite, not to reaction scheduling.</summary>
+    internal bool HasSameProgram(WorldFieldsSection other) => (
+        (Lattice.Width == other.Lattice.Width) &&
+        (Lattice.Depth == other.Lattice.Depth) &&
+        (Lattice.Layers == other.Lattice.Layers) &&
+        ProgramFieldsEqual(
+        left: Fields,
+        right: other.Fields
+    ) &&
+        ReactionsEqual(
+        left: Reactions,
+        right: other.Reactions
+    )
+    );
     /// <summary>Determines without allocation whether an authored state section still compiles to a cached
     /// composite.</summary>
     internal static bool MatchesState(WorldFieldsSection? composite, WorldStateSection? state) {
-        if (WorldTopologyCompilation.FindPhysical(state) is not { } topology) {
+        if (WorldTopologyCompilation.FindPhysical(state: state) is not { } topology) {
             return (composite is null);
         }
 
@@ -36,7 +61,10 @@ public sealed record WorldFieldsSection(
             (composite.Lattice.Depth != topology.Depth) ||
             (composite.Lattice.Layers != topology.Layers) ||
             (composite.Lattice.StepEveryTicks != topology.StepEveryTicks) ||
-            !ReactionsEqual(left: composite.Reactions, right: topology.Reactions)
+            !ReactionsEqual(
+            left: composite.Reactions,
+            right: topology.Reactions
+        )
         ) {
             return false;
         }
@@ -62,12 +90,20 @@ public sealed record WorldFieldsSection(
             var field = composite.Fields[fieldIndex++];
 
             if (
-                !string.Equals(a: field.Name, b: row.Name, comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(
+                a: field.Name,
+                b: row.Name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
                 (field.Initial != trait.Initial) ||
                 (field.Min != trait.Min) ||
                 (field.Max != trait.Max) ||
                 (field.HeightScale != trait.HeightScale) ||
-                !string.Equals(a: field.Color, b: trait.Color, comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(
+                a: field.Color,
+                b: trait.Color,
+                comparisonType: StringComparison.Ordinal
+            ) ||
                 (field.Medium != (trait.Medium is not null))
             ) {
                 return false;
@@ -81,8 +117,15 @@ public sealed record WorldFieldsSection(
                 if (
                     (((uint)paintIndex) >= ((uint)paint.Count)) ||
                     (fill is null) ||
-                    !string.Equals(a: paint[paintIndex].Field, b: row.Name, comparisonType: StringComparison.Ordinal) ||
-                    !FillEqual(authored: fill, compiled: paint[paintIndex])
+                    !string.Equals(
+                    a: paint[paintIndex].Field,
+                    b: row.Name,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                    !FillEqual(
+                    authored: fill,
+                    compiled: paint[paintIndex]
+                )
                 ) {
                     return false;
                 }
@@ -96,22 +139,101 @@ public sealed record WorldFieldsSection(
             (paintIndex == paint.Count)
         );
     }
-    /// <summary>Determines whether two compiled composites carry the same runtime field inputs, including paint.</summary>
-    internal bool HasSameCompilation(WorldFieldsSection other) => (
-        (Lattice == other.Lattice) &&
-        Fields.SequenceEqual(second: other.Fields) &&
-        ReactionsEqual(left: Reactions, right: other.Reactions) &&
-        (Paint ?? []).SequenceEqual(second: (other.Paint ?? []))
-    );
-    /// <summary>Determines whether two compiled composites lower to the same reaction program. Paint and display
-    /// metadata remain inputs to the companion composite, not to reaction scheduling.</summary>
-    internal bool HasSameProgram(WorldFieldsSection other) => (
-        (Lattice.Width == other.Lattice.Width) &&
-        (Lattice.Depth == other.Lattice.Depth) &&
-        (Lattice.Layers == other.Lattice.Layers) &&
-        ProgramFieldsEqual(left: Fields, right: other.Fields) &&
-        ReactionsEqual(left: Reactions, right: other.Reactions)
-    );
+
+    private static bool FillEqual(WorldLatticeFill authored, WorldLatticeFill compiled) => (authored, compiled) switch {
+        (WorldLatticeFill.Rect a, WorldLatticeFill.Rect b) => (
+            (a.Value == b.Value) &&
+            (a.MinX == b.MinX) &&
+            (a.MinZ == b.MinZ) &&
+            (a.MaxX == b.MaxX) &&
+            (a.MaxZ == b.MaxZ)
+        ),
+        (WorldLatticeFill.Noise a, WorldLatticeFill.Noise b) => (
+            (a.Value == b.Value) &&
+            (a.Frequency == b.Frequency) &&
+            (a.Threshold == b.Threshold) &&
+            (a.Octaves == b.Octaves) &&
+            (a.Seed == b.Seed)
+        ),
+        (WorldLatticeFill.Scatter a, WorldLatticeFill.Scatter b) => (
+            (a.Value == b.Value) &&
+            (a.Spacing == b.Spacing) &&
+            (a.Radius == b.Radius) &&
+            (a.Seed == b.Seed)
+        ),
+        _ => false,
+    };
+    private static bool ProgramFieldsEqual(IReadOnlyList<WorldFieldRow> left, IReadOnlyList<WorldFieldRow> right) {
+        if (left.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < left.Count); index++) {
+            var a = left[index];
+            var b = right[index];
+
+            if (
+                !string.Equals(
+                a: a.Name,
+                b: b.Name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                (a.Initial != b.Initial) ||
+                (a.Min != b.Min) ||
+                (a.Max != b.Max) ||
+                (a.HeightScale != b.HeightScale) ||
+                (a.Medium != b.Medium)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    private static bool ReactionEqual(WorldReaction left, WorldReaction right) => (left, right) switch {
+        (WorldReaction.Diffuse a, WorldReaction.Diffuse b) => (a == b),
+        (WorldReaction.Decay a, WorldReaction.Decay b) => (a == b),
+        (WorldReaction.Emit a, WorldReaction.Emit b) => (a == b),
+        (WorldReaction.Expose a, WorldReaction.Expose b) => (a == b),
+        (WorldReaction.Transform a, WorldReaction.Transform b) => (
+            (a.When ?? []).SequenceEqual(second: (b.When ?? [])) &&
+            (a.Then ?? []).SequenceEqual(second: (b.Then ?? []))
+        ),
+        (WorldReaction.Flow a, WorldReaction.Flow b) => (
+            string.Equals(
+        a: a.Field,
+        b: b.Field,
+        comparisonType: StringComparison.Ordinal
+    ) &&
+            (a.Rate == b.Rate) &&
+            (a.Over ?? []).SequenceEqual(second: (b.Over ?? [])) &&
+            string.Equals(
+        a: a.SpillRow,
+        b: b.SpillRow,
+        comparisonType: StringComparison.Ordinal
+    )
+        ),
+        _ => false,
+    };
+    private static bool ReactionsEqual(IReadOnlyList<WorldReaction>? left, IReadOnlyList<WorldReaction>? right) {
+        var leftRows = (left ?? []);
+        var rightRows = (right ?? []);
+
+        if (leftRows.Count != rightRows.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < leftRows.Count); index++) {
+            if (!ReactionEqual(
+                left: leftRows[index],
+                right: rightRows[index]
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>Compiles the state section's lattice topology and lattice-shaped rows into the runtime composite, or
     /// <see langword="null"/> when the section declares no topology. Row order is state-section declaration order --
@@ -120,7 +242,7 @@ public sealed record WorldFieldsSection(
     /// <param name="state">The state section.</param>
     /// <returns>The composite, or <see langword="null"/>.</returns>
     public static WorldFieldsSection? Compile(WorldStateSection? state) {
-        if (WorldTopologyCompilation.FindPhysical(state) is not { } topology) {
+        if (WorldTopologyCompilation.FindPhysical(state: state) is not { } topology) {
             return null;
         }
 
@@ -191,7 +313,9 @@ public sealed record WorldFieldsSection(
                     HeightScale: row.HeightScale,
                     Initial: row.Initial,
                     Max: row.Max,
-                    Medium: (row.Medium ? new WorldLatticeMedium() : null),
+                    Medium: (row.Medium
+                ? new WorldLatticeMedium()
+                : null),
                     Min: row.Min,
                     Paint: null
                 ),
@@ -201,15 +325,15 @@ public sealed record WorldFieldsSection(
 
         return new WorldStateSection(
             Lattices: [new WorldFieldTopology(
-                CellSize: composite.Lattice.CellSize,
-                Depth: composite.Lattice.Depth,
-                Layers: composite.Lattice.Layers,
-                Name: DefaultTopologyName,
-                Origin: composite.Lattice.Origin,
-                Reactions: composite.Reactions,
-                StepEveryTicks: composite.Lattice.StepEveryTicks,
-                Width: composite.Lattice.Width
-            )],
+                    CellSize: composite.Lattice.CellSize,
+                    Depth: composite.Lattice.Depth,
+                    Layers: composite.Lattice.Layers,
+                    Name: DefaultTopologyName,
+                    Origin: composite.Lattice.Origin,
+                    Reactions: composite.Reactions,
+                    StepEveryTicks: composite.Lattice.StepEveryTicks,
+                    Width: composite.Lattice.Width
+                )],
             World: rows
         );
     }
@@ -217,86 +341,6 @@ public sealed record WorldFieldsSection(
     /// <summary>The topology name a decompiled projection lattice carries — one lattice exists today, so the
     /// round-trip needs no authored name.</summary>
     public const string DefaultTopologyName = "world";
-
-    private static bool ReactionsEqual(IReadOnlyList<WorldReaction>? left, IReadOnlyList<WorldReaction>? right) {
-        var leftRows = (left ?? []);
-        var rightRows = (right ?? []);
-
-        if (leftRows.Count != rightRows.Count) {
-            return false;
-        }
-
-        for (var index = 0; (index < leftRows.Count); index++) {
-            if (!ReactionEqual(left: leftRows[index], right: rightRows[index])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    private static bool ReactionEqual(WorldReaction left, WorldReaction right) => (left, right) switch {
-        (WorldReaction.Diffuse a, WorldReaction.Diffuse b) => (a == b),
-        (WorldReaction.Decay a, WorldReaction.Decay b) => (a == b),
-        (WorldReaction.Emit a, WorldReaction.Emit b) => (a == b),
-        (WorldReaction.Expose a, WorldReaction.Expose b) => (a == b),
-        (WorldReaction.Transform a, WorldReaction.Transform b) => (
-            (a.When ?? []).SequenceEqual(second: (b.When ?? [])) &&
-            (a.Then ?? []).SequenceEqual(second: (b.Then ?? []))
-        ),
-        (WorldReaction.Flow a, WorldReaction.Flow b) => (
-            string.Equals(a: a.Field, b: b.Field, comparisonType: StringComparison.Ordinal) &&
-            (a.Rate == b.Rate) &&
-            (a.Over ?? []).SequenceEqual(second: (b.Over ?? [])) &&
-            string.Equals(a: a.SpillRow, b: b.SpillRow, comparisonType: StringComparison.Ordinal)
-        ),
-        _ => false,
-    };
-    private static bool FillEqual(WorldLatticeFill authored, WorldLatticeFill compiled) => (authored, compiled) switch {
-        (WorldLatticeFill.Rect a, WorldLatticeFill.Rect b) => (
-            (a.Value == b.Value) &&
-            (a.MinX == b.MinX) &&
-            (a.MinZ == b.MinZ) &&
-            (a.MaxX == b.MaxX) &&
-            (a.MaxZ == b.MaxZ)
-        ),
-        (WorldLatticeFill.Noise a, WorldLatticeFill.Noise b) => (
-            (a.Value == b.Value) &&
-            (a.Frequency == b.Frequency) &&
-            (a.Threshold == b.Threshold) &&
-            (a.Octaves == b.Octaves) &&
-            (a.Seed == b.Seed)
-        ),
-        (WorldLatticeFill.Scatter a, WorldLatticeFill.Scatter b) => (
-            (a.Value == b.Value) &&
-            (a.Spacing == b.Spacing) &&
-            (a.Radius == b.Radius) &&
-            (a.Seed == b.Seed)
-        ),
-        _ => false,
-    };
-    private static bool ProgramFieldsEqual(IReadOnlyList<WorldFieldRow> left, IReadOnlyList<WorldFieldRow> right) {
-        if (left.Count != right.Count) {
-            return false;
-        }
-
-        for (var index = 0; (index < left.Count); index++) {
-            var a = left[index];
-            var b = right[index];
-
-            if (
-                !string.Equals(a: a.Name, b: b.Name, comparisonType: StringComparison.Ordinal) ||
-                (a.Initial != b.Initial) ||
-                (a.Min != b.Min) ||
-                (a.Max != b.Max) ||
-                (a.HeightScale != b.HeightScale) ||
-                (a.Medium != b.Medium)
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }
 /// <summary>The physical <c>state.lattices</c> topology: a scalar field over the lattice's footprint, evolved by
 /// reactions each <paramref name="StepEveryTicks"/> — the document's own case of <see cref="LatticeTopology"/>,
@@ -314,7 +358,11 @@ public sealed record WorldFieldTopology(
     string Name, DocumentVector3 Origin, float CellSize,
     int Width, int Depth, int Layers = 1, int StepEveryTicks = 8,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null
-) : LatticeTopology(Name, Origin, CellSize) {
+) : LatticeTopology(
+    Name,
+    Origin,
+    CellSize
+) {
     /// <inheritdoc/>
     [JsonIgnore]
     public override TopologyKind Kind => TopologyKind.Field;
@@ -487,8 +535,14 @@ public sealed class WorldLatticeScalarJsonConverter : System.Text.Json.Serializa
 
         string? row = null;
 
-        while (reader.Read() && (reader.TokenType != System.Text.Json.JsonTokenType.EndObject)) {
-            if ((reader.TokenType != System.Text.Json.JsonTokenType.PropertyName) || (reader.GetString() != "row")) {
+        while (
+            reader.Read() &&
+            (reader.TokenType != System.Text.Json.JsonTokenType.EndObject)
+        ) {
+            if (
+                (reader.TokenType != System.Text.Json.JsonTokenType.PropertyName) ||
+                (reader.GetString() != "row")
+            ) {
                 throw new System.Text.Json.JsonException(message: "a reaction scalar object carries exactly one member, 'row'.");
             }
 
@@ -506,7 +560,10 @@ public sealed class WorldLatticeScalarJsonConverter : System.Text.Json.Serializa
     public override void Write(System.Text.Json.Utf8JsonWriter writer, WorldLatticeScalar value, System.Text.Json.JsonSerializerOptions options) {
         if (value.Row is { } row) {
             writer.WriteStartObject();
-            writer.WriteString(propertyName: "row", value: row);
+            writer.WriteString(
+                propertyName: "row",
+                value: row
+            );
             writer.WriteEndObject();
 
             return;
@@ -595,19 +652,19 @@ public static class WorldFieldCapacity {
     /// <summary>The most cells a lattice may declare (width × depth × layers). Eight full fields plus the rest of a
     /// primer snapshot must fit the federation wire's 32 MiB frame ceiling.</summary>
     public const int MaxCells = (1 << 18);
-    /// <summary>The most fields a section may declare.</summary>
-    public const int MaxFields = 8;
     /// <summary>The most cells along any one axis.</summary>
     public const int MaxExtent = 1024;
+    /// <summary>The most fields a section may declare.</summary>
+    public const int MaxFields = 8;
     /// <summary>The most layers along +Y — one render brick's edge.</summary>
     public const int MaxLayers = 128;
+    /// <summary>The most paint rows a section may declare.</summary>
+    public const int MaxPaint = 256;
+    /// <summary>The most reactions a section may declare.</summary>
+    public const int MaxReactions = 64;
     /// <summary>The most cells of surface a height field may raise above the origin — the render brick's edge less
     /// the voxel below the origin and the one above the top.</summary>
     public const int MaxSurfaceCells = 126;
-    /// <summary>The most reactions a section may declare.</summary>
-    public const int MaxReactions = 64;
     /// <summary>The most conditions or writes one transform reaction may declare.</summary>
     public const int MaxTransformTerms = 64;
-    /// <summary>The most paint rows a section may declare.</summary>
-    public const int MaxPaint = 256;
 }

@@ -29,7 +29,11 @@ public sealed class WorldServerMutationJournalTapLawTests {
         // A cell write against an undeclared row is refused by the compose-time gate before the mutation ever
         // reaches the journal — the tap must not fire for it.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: Seller, Row: "doesNotExist", Key: "0", Value: 1, Kind: WorldDocumentWriteKind.Set
+            Principal: Seller,
+            Row: "doesNotExist",
+            Key: "0",
+            Value: 1,
+            Kind: WorldDocumentWriteKind.Set
         ));
         fixture.Step();
 
@@ -40,7 +44,11 @@ public sealed class WorldServerMutationJournalTapLawTests {
     }
     [Fact]
     public void MutationJournalTap_FiresOnApply_AndItsReEncodedEntryReplaysToTheSameEffect() {
-        var row = new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Capacity: 8);
+        var row = new WorldStateRow(
+            Name: CellName.Parse(candidate: "gauge"),
+            Kind: CellKind.Int,
+            Capacity: 8
+        );
         var document = Fixtures.BuildDocument().WithWorldState(rows: [row]);
         using var fixture = Fixtures.FreshServer(definition: document);
         (ulong Tick, byte[] Encoded)? captured = null;
@@ -49,23 +57,30 @@ public sealed class WorldServerMutationJournalTapLawTests {
             Assert.Null(@object: captured);
             Assert.True(
                 condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
-                bytes: out var encoded,
-                failure: out var failure,
-                mutation: mutation
-            ),
+                    bytes: out var encoded,
+                    failure: out var failure,
+                    mutation: mutation
+                ),
                 userMessage: failure.ToString()
             );
             captured = (tick, encoded);
         };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: Seller, Row: "gauge", Key: "0", Value: 42, Kind: WorldDocumentWriteKind.Set
+            Principal: Seller,
+            Row: "gauge",
+            Key: "0",
+            Value: 42,
+            Kind: WorldDocumentWriteKind.Set
         ));
         fixture.Step();
 
         Assert.NotNull(@object: captured);
 
-        var liveRow = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "gauge");
+        var liveRow = WorldDefinitionRows.FindStateRow(
+            rows: fixture.Server.Definition.State,
+            name: "gauge"
+        );
 
         Assert.NotNull(@object: liveRow);
 
@@ -86,24 +101,36 @@ public sealed class WorldServerMutationJournalTapLawTests {
             profiles: FreshProfiles(definition: definition)
         );
 
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeCommittedMutation(
-            bytes: captured!.Value.Encoded,
-            failure: out var decodeFailure,
-            mutation: out var decoded
-        ), userMessage: decodeFailure.ToString());
+        Assert.True(
+            condition: WorldSubmissionCodec.TryDecodeCommittedMutation(
+                bytes: captured!.Value.Encoded,
+                failure: out var decodeFailure,
+                mutation: out var decoded
+            ),
+            userMessage: decodeFailure.ToString()
+        );
         Assert.True(condition: restoredServer.TryApplyJournalTailMutation(
             mutation: decoded!,
             tick: captured.Value.Tick
         ));
 
-        var restoredRow = WorldDefinitionRows.FindStateRow(rows: restoredServer.Definition.State, name: "gauge");
+        var restoredRow = WorldDefinitionRows.FindStateRow(
+            rows: restoredServer.Definition.State,
+            name: "gauge"
+        );
 
         var writtenKey = CellName.Parse(candidate: "0");
 
         Assert.NotNull(@object: restoredRow);
         Assert.Equal(
-            expected: StateRows.FindCell(cells: liveRow!.Cells, key: writtenKey)!.Value,
-            actual: StateRows.FindCell(cells: restoredRow!.Cells, key: writtenKey)!.Value
+            expected: StateRows.FindCell(
+                cells: liveRow!.Cells,
+                key: writtenKey
+            )!.Value,
+            actual: StateRows.FindCell(
+                cells: restoredRow!.Cells,
+                key: writtenKey
+            )!.Value
         );
     }
 }

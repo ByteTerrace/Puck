@@ -11,6 +11,25 @@ namespace Puck.World;
 /// bindings do not use this narrowing: they carry the full <see cref="CommandValue"/> range directly.
 /// </summary>
 internal static class AddonSourceVocabulary {
+    /// <summary>Indicates whether <paramref name="sourceId"/> names a control the engine genuinely has but this
+    /// shape cannot carry — a text-bearing key, or a motion source with more components than the shape's two-lane
+    /// record holds. <see cref="TryResolve"/> refuses these alongside unknown ids; this separates them so a
+    /// refusal can say which mistake was made.</summary>
+    /// <param name="sourceId">The provider-neutral source id text.</param>
+    /// <returns><see langword="true"/> when the id names a real control this shape cannot express.</returns>
+    public static bool IsUnaddressable(string sourceId) {
+        if (InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: sourceId)) {
+            return true;
+        }
+
+        return (
+            InputSourceVocabulary.TryResolveDeclaredKind(
+            kind: out var kind,
+            sourceId: sourceId
+        ) &&
+            (kind is not (CommandValueKind.Digital or CommandValueKind.Axis1D or CommandValueKind.Axis2D))
+        );
+    }
     /// <summary>Attempts to resolve <paramref name="sourceId"/> to the record value shape it carries.</summary>
     /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>
     /// <param name="shape">When this returns <see langword="true"/>, the record value shape.</param>
@@ -24,7 +43,10 @@ internal static class AddonSourceVocabulary {
             return false;
         }
 
-        if (!InputSourceVocabulary.TryResolveDeclaredKind(kind: out var kind, sourceId: sourceId)) {
+        if (!InputSourceVocabulary.TryResolveDeclaredKind(
+            kind: out var kind,
+            sourceId: sourceId
+        )) {
             return false;
         }
 
@@ -41,19 +63,5 @@ internal static class AddonSourceVocabulary {
             default:
                 return false;
         }
-    }
-    /// <summary>Indicates whether <paramref name="sourceId"/> names a control the engine genuinely has but this
-    /// shape cannot carry — a text-bearing key, or a motion source with more components than the shape's two-lane
-    /// record holds. <see cref="TryResolve"/> refuses these alongside unknown ids; this separates them so a
-    /// refusal can say which mistake was made.</summary>
-    /// <param name="sourceId">The provider-neutral source id text.</param>
-    /// <returns><see langword="true"/> when the id names a real control this shape cannot express.</returns>
-    public static bool IsUnaddressable(string sourceId) {
-        if (InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: sourceId)) {
-            return true;
-        }
-
-        return (InputSourceVocabulary.TryResolveDeclaredKind(kind: out var kind, sourceId: sourceId)
-            && (kind is not (CommandValueKind.Digital or CommandValueKind.Axis1D or CommandValueKind.Axis2D)));
     }
 }

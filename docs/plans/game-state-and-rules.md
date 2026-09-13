@@ -16,7 +16,7 @@ names in the decision records as historical:
 | `WorldStateHandle` | `StateHandle` (`src/Puck.State/StateCatalog.cs`) |
 | `WorldStateDomain` and its `[Union]` marker | `StateDomain`, with the polyfill in `src/Puck.State/Union.cs` |
 | `WorldStatePhase`, `WorldPhaseGuard` | `StatePhase`, `PhaseGuard` |
-| `CompiledWorldOperand`/`CompiledWorldEffect` unions, `WorldOperandUnionLawTests` | Replaced by the `OperandFact` and `EffectFact` class hierarchies described in the [State README](../../src/Puck.State/README.md) |
+| `CompiledWorldOperand`/`CompiledWorldEffect` unions, `WorldOperandUnionLawTests` | Replaced by the `OperandFact` and `EffectFact` class hierarchies described in the [State and rules](../reference/state.md) |
 | `setRay`, `sortZone`, `sortKeyed` transforms | `StateOperations.SetRay`, `SortZone`, `SortKeyed` |
 | The garden and frozen-island fixtures | Retired; the garden's rules, including `boneHolderTrust`, now live in `puck.world.json` |
 

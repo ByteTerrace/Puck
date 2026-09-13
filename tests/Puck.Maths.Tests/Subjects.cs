@@ -353,8 +353,8 @@ internal static partial class Subjects {
 
             if (oracleInRange != inRange) {
                 return $"the oracle {(oracleInRange
-                ? "admitted"
-                : "refused")} '{text}', expected the opposite";
+                    ? "admitted"
+                    : "refused")} '{text}', expected the opposite";
             }
             if (
                 inRange &&
@@ -832,54 +832,54 @@ internal static partial class Subjects {
     /// style actually changing the outcome, until this law.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? Q1648StyledParseIsGenuine() {
-        const string text = "1e3";
-        const long expected = (1000L << FixedQ1648.FractionBitCount);
+        const string Text = "1e3";
+        const long Expected = (1000L << FixedQ1648.FractionBitCount);
 
         if (
             !FixedQ1648.TryParse(
-            s: text,
+            s: Text,
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture,
             result: out var fromString
         ) ||
-            (fromString.Value != expected)
-        ) { return $"the styled string try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+            (fromString.Value != Expected)
+        ) { return $"the styled string try-parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
         if (
             !FixedQ1648.TryParse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture,
             result: out var fromSpan
         ) ||
-            (fromSpan.Value != expected)
-        ) { return $"the styled span try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+            (fromSpan.Value != Expected)
+        ) { return $"the styled span try-parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
         if (FixedQ1648.Parse(
-            s: text,
+            s: Text,
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"the styled string parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        ).Value != Expected) { return $"the styled string parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
         if (FixedQ1648.Parse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"the styled span parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        ).Value != Expected) { return $"the styled span parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
 
         // The same text, through the same four-argument entry point, refused at a style lacking AllowExponent —
         // Q1648TextRefusals already pins the provider-only route to this refusal; this pins the styled route too, so
         // both ends of the discriminating pair are reached directly rather than through internal forwarding. The
         // style spelled here matches FixedQ1648's own (private) DefaultParseStyle field-for-field.
-        const NumberStyles noExponentStyle = NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite |
+        const NumberStyles NoExponentStyle = NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite |
                                                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
 
         if (
             FixedQ1648.TryParse(
-            s: text,
-            style: noExponentStyle,
+            s: Text,
+            style: NoExponentStyle,
             provider: CultureInfo.InvariantCulture,
             result: out var refused
         ) ||
             (refused != default)
-        ) { return $"'{text}' was accepted under a style without AllowExponent"; }
+        ) { return $"'{Text}' was accepted under a style without AllowExponent"; }
 
         return null;
     }
@@ -893,22 +893,22 @@ internal static partial class Subjects {
     /// without touching the quotient.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? Q1648TextParseTies() {
-        const string below = "0.0000000000000053290705182007513940334320068359374";
-        const string exact = "0.0000000000000053290705182007513940334320068359375";
-        const string above = "0.0000000000000053290705182007513940334320068359376";
+        const string Below = "0.0000000000000053290705182007513940334320068359374";
+        const string Exact = "0.0000000000000053290705182007513940334320068359375";
+        const string Above = "0.0000000000000053290705182007513940334320068359376";
 
         return
             (Q1648CheckTie(
             expectedRaw: 1,
-            text: below
+            text: Below
         ) ??
             (Q1648CheckTie(
             expectedRaw: 2,
-            text: exact
+            text: Exact
         ) ??
             Q1648CheckTie(
             expectedRaw: 2,
-            text: above
+            text: Above
         )));
     }
 
@@ -1374,83 +1374,83 @@ internal static partial class Subjects {
     /// style actually changing the outcome, until this law.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? Q3232StyledParseIsGenuine() {
-        const string text = "1e3";
-        const long expected = (1000L << FixedQ3232.FractionBitCount);
+        const string Text = "1e3";
+        const long Expected = (1000L << FixedQ3232.FractionBitCount);
 
         if (
             !FixedQ3232.TryParse(
-            s: text,
+            s: Text,
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture,
             result: out var fromString
         ) ||
-            (fromString.Value != expected)
-        ) { return $"the styled string try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+            (fromString.Value != Expected)
+        ) { return $"the styled string try-parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
         if (
             !FixedQ3232.TryParse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture,
             result: out var fromSpan
         ) ||
-            (fromSpan.Value != expected)
-        ) { return $"the styled span try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+            (fromSpan.Value != Expected)
+        ) { return $"the styled span try-parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
         if (FixedQ3232.Parse(
-            s: text,
+            s: Text,
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"the styled string parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        ).Value != Expected) { return $"the styled string parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
         if (FixedQ3232.Parse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             style: NumberStyles.Float,
             provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"the styled span parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        ).Value != Expected) { return $"the styled span parse of '{Text}' under NumberStyles.Float did not return {Expected}"; }
 
         // The same text is refused both through a caller-supplied style lacking AllowExponent and through all four
         // provider-only overloads, whose fixed style has the same grammar. Calling both families here keeps this law's
         // name-based Parse/TryParse declaration honest for every overload while preserving the discriminating pair.
         if (
             FixedQ3232.TryParse(
-            s: text,
+            s: Text,
             style: Q3232DefaultParseStyle,
             provider: CultureInfo.InvariantCulture,
             result: out var refused
         ) ||
             (refused != default)
-        ) { return $"'{text}' was accepted under a style without AllowExponent"; }
+        ) { return $"'{Text}' was accepted under a style without AllowExponent"; }
         if (
             FixedQ3232.TryParse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             style: Q3232DefaultParseStyle,
             provider: CultureInfo.InvariantCulture,
             result: out var refusedStyledSpan
         ) ||
             (refusedStyledSpan != default)
-        ) { return $"the span '{text}' was accepted under a style without AllowExponent"; }
+        ) { return $"the span '{Text}' was accepted under a style without AllowExponent"; }
         if (
             FixedQ3232.TryParse(
-            s: text,
+            s: Text,
             provider: CultureInfo.InvariantCulture,
             result: out var refusedProvider
         ) ||
             (refusedProvider != default)
-        ) { return $"the provider-only string '{text}' was accepted"; }
+        ) { return $"the provider-only string '{Text}' was accepted"; }
         if (
             FixedQ3232.TryParse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             provider: CultureInfo.InvariantCulture,
             result: out var refusedProviderSpan
         ) ||
             (refusedProviderSpan != default)
-        ) { return $"the provider-only span '{text}' was accepted"; }
+        ) { return $"the provider-only span '{Text}' was accepted"; }
         if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(
-            s: text,
+            s: Text,
             provider: CultureInfo.InvariantCulture
-        ))) { return $"the provider-only throwing string parse accepted '{text}'"; }
+        ))) { return $"the provider-only throwing string parse accepted '{Text}'"; }
         if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(
-            s: text.AsSpan(),
+            s: Text.AsSpan(),
             provider: CultureInfo.InvariantCulture
-        ))) { return $"the provider-only throwing span parse accepted '{text}'"; }
+        ))) { return $"the provider-only throwing span parse accepted '{Text}'"; }
 
         return null;
     }
@@ -1464,22 +1464,22 @@ internal static partial class Subjects {
     /// without touching the quotient.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? Q3232TextParseTies() {
-        const string below = "0.000000000349245965480804443359374";
-        const string exact = "0.000000000349245965480804443359375";
-        const string above = "0.000000000349245965480804443359376";
+        const string Below = "0.000000000349245965480804443359374";
+        const string Exact = "0.000000000349245965480804443359375";
+        const string Above = "0.000000000349245965480804443359376";
 
         return
             (Q3232CheckTie(
             expectedRaw: 1,
-            text: below
+            text: Below
         ) ??
             (Q3232CheckTie(
             expectedRaw: 2,
-            text: exact
+            text: Exact
         ) ??
             Q3232CheckTie(
             expectedRaw: 2,
-            text: above
+            text: Above
         )));
     }
 
@@ -1620,7 +1620,7 @@ internal static partial class Subjects {
     /// cancels every factor of two in its denominator and leaves an odd denominator.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? Q3232DecimalConversionModes() {
-        const long expectedTruncatingAtMax = unchecked((long)0xFFFFFFFF00000000UL);
+        const long ExpectedTruncatingAtMax = unchecked((long)0xFFFFFFFF00000000UL);
         var scaledMax = ScaledDecimalAt(
             fractionBitCount: FixedQ3232.FractionBitCount,
             value: decimal.MaxValue
@@ -1636,7 +1636,7 @@ internal static partial class Subjects {
 
         var truncatedMax = ConvertTruncating<FixedQ3232, decimal>(value: decimal.MaxValue).Value;
 
-        if (truncatedMax != expectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {expectedTruncatingAtMax}"; }
+        if (truncatedMax != ExpectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {ExpectedTruncatingAtMax}"; }
 
         if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ3232, decimal>(value: decimal.MinValue))) { return "CreateChecked accepted decimal.MinValue instead of refusing it"; }
 
@@ -1646,7 +1646,7 @@ internal static partial class Subjects {
 
         var truncatedMin = ConvertTruncating<FixedQ3232, decimal>(value: decimal.MinValue).Value;
 
-        if (truncatedMin != unchecked(-expectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-expectedTruncatingAtMax)}"; }
+        if (truncatedMin != unchecked(-ExpectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-ExpectedTruncatingAtMax)}"; }
 
         // An in-range decimal: all three modes must agree with each other and with the independent oracle.
         var inRangeExpected = ((long)ScaledDecimalAt(
@@ -1900,8 +1900,8 @@ internal static partial class Subjects {
 
                 if (oracleInRange != signedInRange) {
                     return $"{label}: the oracle {(oracleInRange
-                    ? "admitted"
-                    : "refused")} the validated value, expected the opposite";
+                        ? "admitted"
+                        : "refused")} the validated value, expected the opposite";
                 }
                 if (
                     signedInRange &&
@@ -1915,8 +1915,8 @@ internal static partial class Subjects {
 
                 if (unsignedOracleInRange != unsignedInRange) {
                     return $"{label}: the unsigned oracle {(unsignedOracleInRange
-                    ? "admitted"
-                    : "refused")} the validated value, expected the opposite";
+                        ? "admitted"
+                        : "refused")} the validated value, expected the opposite";
                 }
                 if (
                     unsignedInRange &&

@@ -32,9 +32,9 @@ public static class Extensions {
             attribute = Type
                 .GetType(typeName: entryPoint[..lastSegmentIndex])
                 ?.GetMethod(
-                    bindingAttr: BindingFlags.Instance | BindingFlags.Public,
-                    name: entryPoint[(lastSegmentIndex + 1)..]
-                )
+                bindingAttr: BindingFlags.Instance | BindingFlags.Public,
+                name: entryPoint[(lastSegmentIndex + 1)..]
+            )
                 ?.GetCustomAttribute<T>();
         }
 
@@ -45,10 +45,9 @@ public static class Extensions {
             .TraceContext
             .TraceParent
             .Split(
-                options: StringSplitOptions.None,
-                separator: '-'
-            )[1]
-        );
+            options: StringSplitOptions.None,
+            separator: '-'
+        )[1]);
     public static string? GetTriggerType(this FunctionContext context) =>
         context
             .FunctionDefinition
@@ -57,10 +56,9 @@ public static class Extensions {
             .FirstOrDefault(predicate: bindingMetadata => bindingMetadata
                 .Type
                 .EndsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: "Trigger"
-                )
-            )
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "Trigger"
+        ))
             ?.Type;
     public static bool TryAddConfigurationStore(
         this IServiceCollection services,
@@ -92,35 +90,35 @@ public static class Extensions {
                 action: appConfigOptions => {
                     appConfigOptions
                         .Connect(
-                            credential: tokenCredential,
-                            endpoint: endpointUri
-                        )
+                        credential: tokenCredential,
+                        endpoint: endpointUri
+                    )
                         .ConfigureKeyVault(configure: keyVaultOptions => {
                             keyVaultOptions.SetCredential(credential: tokenCredential);
                         })
                         .ConfigureRefresh(configure: refreshOptions => {
                             refreshOptions
                                 .Register(
-                                    key: (sentinel ?? "Version"),
-                                    refreshAll: true
-                                )
+                                key: (sentinel ?? "Version"),
+                                refreshAll: true
+                            )
                                 .SetRefreshInterval(refreshInterval: refreshInterval);
                         })
                         .ConfigureStartupOptions(configure: startupOptions => {
                             startupOptions.Timeout = TimeSpan.FromSeconds(value: 17);
                         })
                         .Select(
-                            keyFilter: KeyFilter.Any,
-                            labelFilter: LabelFilter.Null,
-                            tagFilters: default
-                        )
+                        keyFilter: KeyFilter.Any,
+                        labelFilter: LabelFilter.Null,
+                        tagFilters: default
+                    )
                         .UseFeatureFlags(configure: featureFlagOptions => {
                             featureFlagOptions
                                 .Select(
-                                    featureFlagFilter: KeyFilter.Any,
-                                    labelFilter: LabelFilter.Null,
-                                    tagFilters: default
-                                )
+                                featureFlagFilter: KeyFilter.Any,
+                                labelFilter: LabelFilter.Null,
+                                tagFilters: default
+                            )
                                 .SetRefreshInterval(refreshInterval: refreshInterval);
                         });
                 },
@@ -158,29 +156,23 @@ public static class Extensions {
                                     .Parse(configuration: redisCacheOptions.Configuration!)
                                     .ConfigureForAzureWithTokenCredentialAsync(tokenCredential: tokenCredential)
                                     .GetAwaiter()
-                                    .GetResult()
-                                )
+                                    .GetResult())
                                 .GetAwaiter()
-                                .GetResult()
-                        )
+                                .GetResult())
                         .ConfigureOptions(configureOptions: (redisCacheOptions, serviceProvider) => {
                             redisCacheOptions.Configuration = configuration;
                             redisCacheOptions.ConnectionMultiplexerFactory = () =>
                                 Task.FromResult(result: serviceProvider
                                     .GetRequiredService<IAzureClientFactory<IConnectionMultiplexer>>()
-                                    .CreateClient(name: clientName)
-                            );
+                                    .CreateClient(name: clientName));
                         })
                         .WithName(name: clientName);
                 });
             services
-                .Add(item: ServiceDescriptor.Singleton<IDistributedCache, RedisCache>(
-                    implementationFactory: serviceProvider =>
+                .Add(item: ServiceDescriptor.Singleton<IDistributedCache, RedisCache>(implementationFactory: serviceProvider =>
                         new(optionsAccessor: serviceProvider
                             .GetRequiredService<IOptionsMonitor<RedisCacheOptions>>()
-                            .Get(name: clientName)
-                        )
-                ));
+                            .Get(name: clientName))));
         }
 
         services
@@ -206,14 +198,14 @@ public static class Extensions {
         this IFunctionsWorkerApplicationBuilder builder
     ) =>
         builder.UseWhenHttpTrigger<AuthorizationMiddleware>();
-    public static IFunctionsWorkerApplicationBuilder UseHttpExceptionHandler(
-        this IFunctionsWorkerApplicationBuilder builder
-    ) =>
-        builder.UseWhenHttpTrigger<HttpExceptionMiddleware>();
     public static IFunctionsWorkerApplicationBuilder UseFeatureGate(
         this IFunctionsWorkerApplicationBuilder builder
     ) =>
         builder.UseWhenHttpTrigger<FeatureGateMiddleware>();
+    public static IFunctionsWorkerApplicationBuilder UseHttpExceptionHandler(
+        this IFunctionsWorkerApplicationBuilder builder
+    ) =>
+        builder.UseWhenHttpTrigger<HttpExceptionMiddleware>();
     public static IFunctionsWorkerApplicationBuilder UseTriggerTargetingContext(
         this IFunctionsWorkerApplicationBuilder builder
     ) =>

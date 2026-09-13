@@ -19,6 +19,7 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
     private bool m_synchronizer;
     // Derived from the pipeline stages; refresh only when those stages change, not at every bus charge.
     private bool m_pipelineQuiescent = true;
+
     internal AgbClockState? ClockState { get; private set; }
 
     internal void ObserveClockState(AgbClockState state) {

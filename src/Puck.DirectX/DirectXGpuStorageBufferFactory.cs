@@ -44,7 +44,11 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
 
         void* mapped;
 
-        ((ID3D12Resource*)buffer)->Map(Subresource: 0, pReadRange: ((D3D12_RANGE*)null), ppData: &mapped);
+        ((ID3D12Resource*)buffer)->Map(
+            Subresource: 0,
+            pReadRange: ((D3D12_RANGE*)null),
+            ppData: &mapped
+        );
 
         return new DirectXGpuStorageBuffer(
             bufferHandle: ((nint)buffer),
@@ -99,9 +103,15 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
         // UAV -> INDIRECT_ARGUMENT before ExecuteIndirect). Host-visible (default): an upload-heap buffer, already a
         // legal ExecuteIndirect source — its GENERIC_READ creation state includes INDIRECT_ARGUMENT and upload
         // resources never leave it, so no buffer-state transition is needed. Neither needs an extra D3D12 buffer flag.
-        return Create(deviceContext: deviceContext, sizeBytes: sizeBytes);
+        return Create(
+            deviceContext: deviceContext,
+            sizeBytes: sizeBytes
+        );
     }
     /// <inheritdoc/>
     public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        CreateDeviceLocal(deviceContext: deviceContext, sizeBytes: sizeBytes);
+        CreateDeviceLocal(
+            deviceContext: deviceContext,
+            sizeBytes: sizeBytes
+        );
 }

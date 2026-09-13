@@ -8,10 +8,28 @@ namespace Puck.Cli.Format;
 // passes. Passes run in sequence with a re-parse between them, so chaining is identical to running them
 // back to back — except each file is written once.
 internal static class SourceRewrite {
+    // Applies the pass pipeline once, re-parsing between passes so each sees the prior's output.
+    private static string ApplyAll(string text, IReadOnlyList<FormatPass> passes) {
+        foreach (var pass in passes) {
+            var node = CSharpSyntaxTree.ParseText(text: text).GetRoot();
+
+            text = pass.Apply!(arg: node).ToFullString();
+        }
+
+        return text;
+    }
+
     public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<FormatPass> passes, string[]? targets = null) {
         var files = targets;
 
-        if ((files is null) && !SourceFiles.TryEnumerate(files: out files, rootArgument: rootArgument, scanRoot: out _)) {
+        if (
+            (files is null) &&
+            !SourceFiles.TryEnumerate(
+            files: out files,
+            rootArgument: rootArgument,
+            scanRoot: out _
+        )
+        ) {
             return 2;
         }
 
@@ -24,21 +42,39 @@ internal static class SourceRewrite {
 
         foreach (var file in files) {
             var original = File.ReadAllText(path: file);
-            var current = ApplyAll(passes: passes, text: original);
+            var current = ApplyAll(
+                passes: passes,
+                text: original
+            );
 
-            if (RewriteIo.ContentEquals(a: current, b: original)) {
+            if (RewriteIo.ContentEquals(
+                a: current,
+                b: original
+            )) {
                 continue;
             }
 
             var relative = CliPaths.ToDisplay(fullPath: file);
 
-            if (RewriteIo.HasSyntaxErrors(original: original, rewritten: current)) {
+            if (RewriteIo.HasSyntaxErrors(
+                original: original,
+                rewritten: current
+            )) {
                 corrupted.Add(item: relative);
 
                 continue;
             }
 
-            if (verify && !RewriteIo.ContentEquals(a: ApplyAll(passes: passes, text: current), b: current)) {
+            if (
+                verify &&
+                !RewriteIo.ContentEquals(
+                a: ApplyAll(
+                    passes: passes,
+                    text: current
+                ),
+                b: current
+            )
+            ) {
                 nonConvergent.Add(item: relative);
 
                 continue;
@@ -47,7 +83,10 @@ internal static class SourceRewrite {
             drifted.Add(item: relative);
 
             if (writing) {
-                RewriteIo.WriteText(file: file, text: current);
+                RewriteIo.WriteText(
+                    file: file,
+                    text: current
+                );
             }
         }
 
@@ -59,17 +98,7 @@ internal static class SourceRewrite {
             problems: [
                 ("have syntax errors before or after rewriting — SKIPPED", corrupted),
                 ("do not converge (a pass is not idempotent) — SKIPPED", nonConvergent),
-            ]);
-    }
-
-    // Applies the pass pipeline once, re-parsing between passes so each sees the prior's output.
-    private static string ApplyAll(string text, IReadOnlyList<FormatPass> passes) {
-        foreach (var pass in passes) {
-            var node = CSharpSyntaxTree.ParseText(text: text).GetRoot();
-
-            text = pass.Apply!(arg: node).ToFullString();
-        }
-
-        return text;
+            ]
+        );
     }
 }

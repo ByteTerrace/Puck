@@ -12,7 +12,8 @@ public static class WorldExtensionVocabularyHook {
     /// <returns>True or false for a known catalog, or null when this environment has no catalog.</returns>
     /// <exception cref="InvalidOperationException">The composition root did not install the hook.</exception>
     public static bool? IsRegisteredPostRenderExtension(string extensionId) =>
-        PostRenderExtensionCheck is { } check
+        ((PostRenderExtensionCheck is { } check)
             ? check(extensionId)
-            : throw new InvalidOperationException("WorldExtensionVocabularyHook.PostRenderExtensionCheck was never installed; post-render extensions cannot be validated.");
+            : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.PostRenderExtensionCheck was never installed; post-render extensions cannot be validated.")
+        );
 }

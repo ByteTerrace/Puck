@@ -214,6 +214,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The interaction family's own EDGE latch — the SAME shape m_ruleGateHeld is, kept separate for the identical
     // aliasing reason m_interactions itself is kept separate from m_rules.
     private readonly RuleLatch m_interactionGateHeld = new();
+
     // The state library's evaluator over this server as its host (WorldServer.RuleHost.cs): the loop, the edge
     // latching, the trace, the refusal ledger, and every state-neutral effect's firing.
     private readonly RuleEvaluator m_evaluator;
@@ -230,19 +231,36 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         var mutations = new WorldMutation[writes.Count];
 
-        for (var index = 0; index < writes.Count; index++) {
+        for (var index = 0; (index < writes.Count); index++) {
             mutations[index] = ToSearchMutation(write: writes[index]);
         }
 
-        return new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: mutations);
+        return new WorldMutation.Batch(
+            Principal: WorldPrincipal.World,
+            Mutations: mutations
+        );
     }
     private static WorldMutation ToSearchMutation(SearchWrite write) => write switch {
-        SearchWrite.Cell cell => new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: cell.Row, Key: cell.Key, Value: cell.Value, Kind: WorldDocumentWriteKind.Set),
-        SearchWrite.ClearBoard clear => new WorldMutation.TransformState(Principal: WorldPrincipal.World, Transform: new StateTransform.BoardCombine(Row: clear.Row, Operation: BoardCombineOp.Clear)),
+        SearchWrite.Cell cell => new WorldMutation.UpsertStateCell(
+        Principal: WorldPrincipal.World,
+        Row: cell.Row,
+        Key: cell.Key,
+        Value: cell.Value,
+        Kind: WorldDocumentWriteKind.Set
+    ),
+        SearchWrite.ClearBoard clear => new WorldMutation.TransformState(
+        Principal: WorldPrincipal.World,
+        Transform: new StateTransform.BoardCombine(
+            Row: clear.Row,
+            Operation: BoardCombineOp.Clear
+        )
+    ),
         _ => throw new InvalidOperationException(message: $"unrecognized search write '{write.GetType().Name}'"),
     };
+
     // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
     private readonly Stack<WorldDefinition> m_preflightScopes = new();
+
     // The value frame every state effect writes during EvaluateWorldRules (WorldServer.RuleFrame.cs), laid out from
     // the installed catalog and loaded fresh from the installed rows at the start of every tick's rule evaluation.
     private FrameLayout? m_ruleFrameLayout;
@@ -259,6 +277,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The document EvaluateWorldRules started this tick from — what the once-per-tick fold replays m_ruleFrameMutations
     // against, so a mid-tick cross-row flush (TryApplyCrossRowStateMutation) never becomes the fold's own baseline.
     private WorldDefinition? m_ruleFrameTickBaseline;
+
     // Every state and document effect fired this tick, in firing order, spanning every rule/interaction and its
     // preflight scopes — one flat sequence a scope's rejection truncates and the tick's own end folds as one
     // mutation. Reassigned (never cleared) once folded, since the fold may hand the SAME list to a WorldMutation.Batch.
@@ -268,10 +287,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly Stack<int> m_ruleFrameJournalMarks = new();
     // Where in m_ruleFrameMutations each currently open scope started, so its own rejection truncates only its own tail.
     private readonly Stack<int> m_ruleFrameMutationMarks = new();
+
     // Bumped every time TryApplyCrossRowStateMutation re-derives the frame from a composed candidate — a whole-frame
     // Load that bypasses the journal, so a scope closing under a stamp different from the one it began under cannot
     // trust RewindJournalScope and re-derives the frame from m_definition instead (ResyncRuleFrame).
     private long m_ruleFrameReloadStamp;
+
     private readonly Stack<long> m_ruleFrameReloadMarks = new();
     // Reused carrier/key scratch for rule evaluation: left (and forEach keys) and right, both live during one
     // distance interaction.
@@ -296,9 +317,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     // distance's neutral-for-absence value must never read as "close", or a within-range gate (compareState against
     // lessOrEqual) would spuriously OPEN for a body reference that resolved to nothing.
     private static readonly FixedQ4816 NoBodyDistance = FixedQ4816.MaxValue;
-
     // WorldRuleFacts.UprightPrefix's rotated axis: a body's own local +Y before FixedOrientation is applied.
-    private static readonly FixedVector3 s_localUp = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+    private static readonly FixedVector3 LocalUp = new(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.One,
+        Z: FixedQ4816.Zero
+    );
 
     // Per-body "the last FULLY-DRAINED tick reported this body contended" latch — the SAME once-per-episode shape as
     // m_driveDenied (checked BEFORE the current tick's outcome overwrites it, so the transition into a contended state
@@ -318,7 +342,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     // the fifth, machine-memory watches, is addon-scoped instead). Collected once per Step, after the population
     // advances; drained by WorldAddonRuntime.ResolveReads the same tick.
     private readonly WorldEventFeed m_events;
-
     // The tick-denominated musical clock and its event-driven segment director, compiled once at construction from
     // the FIRST declared definition.Music row (a world authoring none carries neither). Stepped in Step, right
     // after m_events.Collect — see the call site's own remarks for the projection order this depends on.
@@ -639,8 +662,15 @@ public sealed partial class WorldServer : IWorldServerHost {
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        if (!WorldDefinitionValidator.TryValidateLocally(definition, machines.ValidationCatalog, out var machineAdmissionReason)) {
-            throw new ArgumentException($"World machine admission refused: {machineAdmissionReason}", nameof(definition));
+        if (!WorldDefinitionValidator.TryValidateLocally(
+            definition: definition,
+            machines: machines.ValidationCatalog,
+            reason: out var machineAdmissionReason
+        )) {
+            throw new ArgumentException(
+                message: $"World machine admission refused: {machineAdmissionReason}",
+                paramName: nameof(definition)
+            );
         }
 
         if (narrationSink is not null) {
@@ -654,12 +684,20 @@ public sealed partial class WorldServer : IWorldServerHost {
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         m_machines = machines;
-        if (!machines.TryPrepare(null, definition, out var machinePlan, out var machineReason)) {
-            throw new ArgumentException($"World machine preparation refused: {machineReason}", nameof(definition));
+        if (!machines.TryPrepare(
+            candidate: definition,
+            current: null,
+            plan: out var machinePlan,
+            reason: out var machineReason
+        )) {
+            throw new ArgumentException(
+                message: $"World machine preparation refused: {machineReason}",
+                paramName: nameof(definition)
+            );
         }
         using (machinePlan) {
-            machines.Commit(machinePlan!);
-            machines.Finish(machinePlan!);
+            machines.Commit(plan: machinePlan!);
+            machines.Finish(plan: machinePlan!);
         }
         m_driveDenied = new bool[population.Capacity];
         m_contended = new bool[population.Capacity];
@@ -669,14 +707,29 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         m_tables = CompileTables(definition: definition);
         m_evaluator = new RuleEvaluator(host: this);
-        m_search = new SearchRuntime(live: () => m_definition!.State, narrate: (channel, text) => {
+        m_search = new SearchRuntime(
+            live: () => m_definition!.State,
+            narrate: (channel, text) => {
             if (m_output.HasNarrationSink) {
-                m_output.Narrate(channel: channel, text: text);
+                m_output.Narrate(
+                    channel: channel,
+                    text: text
+                );
             }
-        });
-        m_searchApply = writes => TryApplyMutation(mutation: ComposeSearchMutation(writes: writes), tick: m_searchTick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
+        }
+        );
+        m_searchApply = writes => TryApplyMutation(
+            mutation: ComposeSearchMutation(writes: writes),
+            tick: m_searchTick,
+            connectionId: SubmissionEnvelope.LocalConnectionId,
+            correlationId: 0,
+            preMetered: false
+        );
 
-        if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
+        if (
+            (definition.Music is { Count: > 0 } music) &&
+            (music[0] is { } row)
+        ) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by
             // WorldDefinitionValidator — this load is expected to succeed by construction.
             if (!WorldAssetRowLoader.TryLoadMusic(

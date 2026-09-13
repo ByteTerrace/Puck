@@ -10,34 +10,90 @@ public sealed class WorldExpressionConverterLawTests {
     [Fact]
     public void TheConverterReadsBothSpellingsAndWritesEachBackInItsOwn() {
         var info = WorldJsonContext.Default.ValueExpression;
-        var fromText = JsonSerializer.Deserialize("\"hp - minimum(damage, hp)\"", info)!;
-        var fromTokens = JsonSerializer.Deserialize(
-            "{\"tokens\":[{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"state\",\"name\":\"damage\"},{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"min\"},{\"$type\":\"subtract\"}]}",
-            info
+        var fromText = JsonSerializer.Deserialize(
+            json: "\"hp - minimum(damage, hp)\"",
+            jsonTypeInfo: info
         )!;
-        Assert.Equal(fromTokens.Tokens, fromText.Tokens);
-        Assert.Equal("hp - minimum(damage, hp)", fromText.Text);
-        Assert.Null(fromTokens.Text);
-        Assert.Equal("\"hp - minimum(damage, hp)\"", JsonSerializer.Serialize(fromText, info));
-        Assert.Contains("\"tokens\": [", JsonSerializer.Serialize(fromTokens, info), StringComparison.Ordinal);
-        Assert.Equal(fromTokens.Tokens, JsonSerializer.Deserialize(JsonSerializer.Serialize(fromTokens, info), info)!.Tokens);
+        var fromTokens = JsonSerializer.Deserialize(
+            json: "{\"tokens\":[{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"state\",\"name\":\"damage\"},{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"min\"},{\"$type\":\"subtract\"}]}",
+            jsonTypeInfo: info
+        )!;
 
-        var refusal = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("\"a +\"", info));
-        Assert.Contains("reached the end", refusal.Message, StringComparison.Ordinal);
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("{\"text\":\"a\"}", info));
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("12", info));
+        Assert.Equal(
+            fromTokens.Tokens,
+            fromText.Tokens
+        );
+        Assert.Equal(
+            "hp - minimum(damage, hp)",
+            fromText.Text
+        );
+        Assert.Null(@object: fromTokens.Text);
+        Assert.Equal(
+            "\"hp - minimum(damage, hp)\"",
+            JsonSerializer.Serialize(
+                jsonTypeInfo: info,
+                value: fromText
+            )
+        );
+        Assert.Contains(
+            "\"tokens\": [",
+            JsonSerializer.Serialize(
+                jsonTypeInfo: info,
+                value: fromTokens
+            ),
+            StringComparison.Ordinal
+        );
+        Assert.Equal(
+            fromTokens.Tokens,
+            JsonSerializer.Deserialize(
+                json: JsonSerializer.Serialize(
+                    jsonTypeInfo: info,
+                    value: fromTokens
+                ),
+                jsonTypeInfo: info
+            )!.Tokens
+        );
+
+        var refusal = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
+            json: "\"a +\"",
+            jsonTypeInfo: info
+        ));
+
+        Assert.Contains(
+            "reached the end",
+            refusal.Message,
+            StringComparison.Ordinal
+        );
+        Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
+            json: "{\"text\":\"a\"}",
+            jsonTypeInfo: info
+        ));
+        Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
+            json: "12",
+            jsonTypeInfo: info
+        ));
     }
-
     [Fact]
     public void TheSchemaAdmitsBothSpellings() {
         var schema = WorldSchema.Export(postRenderExtensions: []);
         var defs = schema.Common["$defs"]!.AsObject();
         var expression = defs["ValueExpression"]!.AsObject();
         var arms = expression["anyOf"]!.AsArray();
-        Assert.Equal(2, arms.Count);
-        Assert.Equal("string", arms[0]!["type"]!.GetValue<string>());
-        Assert.Contains("ValueExpressionTokens", arms[1]!.ToJsonString(), StringComparison.Ordinal);
-        Assert.True(defs.ContainsKey("ValueExpressionTokens"));
-        Assert.True(defs.ContainsKey("ValueToken"));
+
+        Assert.Equal(
+            2,
+            arms.Count
+        );
+        Assert.Equal(
+            "string",
+            arms[0]!["type"]!.GetValue<string>()
+        );
+        Assert.Contains(
+            "ValueExpressionTokens",
+            arms[1]!.ToJsonString(),
+            StringComparison.Ordinal
+        );
+        Assert.True(condition: defs.ContainsKey(propertyName: "ValueExpressionTokens"));
+        Assert.True(condition: defs.ContainsKey(propertyName: "ValueToken"));
     }
 }

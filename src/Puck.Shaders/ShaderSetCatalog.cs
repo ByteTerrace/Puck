@@ -8,7 +8,13 @@ namespace Puck.Shaders;
 public sealed class ShaderSetCatalog : ManifestCatalog<ShaderSetManifest> {
     private const string Description = "shader set";
 
-    private ShaderSetCatalog(Dictionary<string, string> pathsById) : base(description: Description, pathsById: pathsById) { }
+    private ShaderSetCatalog(Dictionary<string, string> pathsById) : base(
+        description: Description,
+        pathsById: pathsById
+    ) { }
+
+    /// <inheritdoc/>
+    protected override ShaderSetManifest LoadManifest(string manifestPath) => ShaderSetManifest.Load(manifestPath: manifestPath);
 
     /// <summary>Scans a directory tree for shader-set manifests. A missing root yields an empty catalog.</summary>
     /// <param name="rootDirectory">The root to scan.</param>
@@ -20,7 +26,4 @@ public sealed class ShaderSetCatalog : ManifestCatalog<ShaderSetManifest> {
             fileSuffix: ShaderSetManifest.FileSuffix,
             rootDirectory: rootDirectory
         ));
-
-    /// <inheritdoc/>
-    protected override ShaderSetManifest LoadManifest(string manifestPath) => ShaderSetManifest.Load(manifestPath: manifestPath);
 }

@@ -9,82 +9,205 @@ namespace Puck.World.Schema.Tests;
 public sealed class WorldCostReportLawTests {
     private static WorldDefinition Document(int rate = 240) => new(
         Simulation: new WorldSimulationDefaults(RateHz: rate),
-        StateRaw: new WorldStateSection(World: [new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)])]),
-        Rules: [new WorldRule(CellName.Parse("step"), [new ActionEffect.AddState(State: "count", Value: 1m)])]
+        StateRaw: new WorldStateSection(World: [new WorldStateRow(
+                CellName.Parse(candidate: "count"),
+                CellKind.Int,
+                Cells: [new StateCell(
+                        WorldStateRow.SlotKey,
+                        0L
+                    )]
+            )]),
+        Rules: [new WorldRule(
+                CellName.Parse(candidate: "step"),
+                [new ActionEffect.AddState(
+                        State: "count",
+                        Value: 1m
+                    )]
+            )]
     );
-
-    [Theory]
-    [InlineData(240, 210L, 6_250_000L)]
-    [InlineData(30, 1_680L, 50_000_000L)]
-    [InlineData(144, 350L, 10_416_666L)]
-    public void PortablePolicyHasExactPeriodsAndAdmissionBoundaries(int rate, long period, long allowance) {
-        var profile = CostModelProfile.Portable;
-        Assert.Equal(period, profile.StepPeriodEngineTicks(rate));
-        Assert.Equal(allowance, profile.AuthoredBudgetCycles(rate));
-        Assert.True(profile.Admits(CostBound.Known(allowance), rate));
-        Assert.False(profile.Admits(CostBound.Known(allowance + 1), rate));
-        Assert.False(profile.Admits(CostBound.Overflow, rate));
-        Assert.False(profile.Admits(CostBound.Unmodeled("missing kernel"), rate));
-    }
 
     [Fact]
     public void ConversionsDoNotLosePrecisionOrSaturateBeforeDivision() {
         var profile = CostModelProfile.Portable;
-        foreach (var cycles in new[] { 0L, 1L, 1_500_000L, 6_250_000L, long.MaxValue }) {
-            var product = (BigInteger)cycles * 50_400;
-            var quotient = BigInteger.DivRem(product, 3_000_000_000L, out var remainder);
-            Assert.Equal((long)(quotient + (remainder.IsZero ? 0 : 1)), profile.ReferenceEngineTicks(cycles));
-        }
-        var precise = new CostModelProfile("test", 50_400, 1, 1);
-        const long beyondDouble = 9_007_199_254_740_993L;
-        Assert.Equal(beyondDouble, precise.ReferenceEngineTicks(beyondDouble));
-        var largeShare = new CostModelProfile("test", long.MaxValue, long.MaxValue, long.MaxValue);
-        Assert.Equal(long.MaxValue / 240, largeShare.AuthoredBudgetCycles(240));
-        Assert.False(largeShare.Admits(CostBound.Known(long.MaxValue), 50_400));
-        var fraction = profile.ReferenceStepFraction(long.MaxValue, 240);
-        Assert.Equal((BigInteger)long.MaxValue * 240, (BigInteger)fraction.Numerator);
-        Assert.Equal(3_000_000_000L, fraction.Denominator);
-        Assert.Throws<OverflowException>(() => new CostModelProfile("test", 1, 1, 1).ReferenceEngineTicks(long.MaxValue));
-    }
 
+        foreach (var cycles in new[] { 0L, 1L, 1_500_000L, 6_250_000L, long.MaxValue }) {
+            var product = (((BigInteger)cycles) * 50_400);
+            var quotient = BigInteger.DivRem(
+                dividend: product,
+                divisor: 3_000_000_000L,
+                remainder: out var remainder
+            );
+
+            Assert.Equal(
+                ((long)(quotient + (remainder.IsZero
+                ? 0
+                : 1))),
+                profile.ReferenceEngineTicks(cycles: cycles)
+            );
+        }
+        var precise = new CostModelProfile(
+            cyclesPerSecond: 50_400,
+            name: "test",
+            subsystemShareDenominator: 1,
+            subsystemShareNumerator: 1
+        );
+        const long BeyondDouble = 9_007_199_254_740_993L;
+
+        Assert.Equal(
+            BeyondDouble,
+            precise.ReferenceEngineTicks(cycles: BeyondDouble)
+        );
+        var largeShare = new CostModelProfile(
+            cyclesPerSecond: long.MaxValue,
+            name: "test",
+            subsystemShareDenominator: long.MaxValue,
+            subsystemShareNumerator: long.MaxValue
+        );
+
+        Assert.Equal(
+            (long.MaxValue / 240),
+            largeShare.AuthoredBudgetCycles(rateHz: 240)
+        );
+        Assert.False(condition: largeShare.Admits(
+            bound: CostBound.Known(cycles: long.MaxValue),
+            rateHz: 50_400
+        ));
+        var fraction = profile.ReferenceStepFraction(
+            cycles: long.MaxValue,
+            rateHz: 240
+        );
+
+        Assert.Equal(
+            actual: ((BigInteger)fraction.Numerator),
+            expected: (((BigInteger)long.MaxValue) * 240)
+        );
+        Assert.Equal(
+            actual: fraction.Denominator,
+            expected: 3_000_000_000L
+        );
+        Assert.Throws<OverflowException>(testCode: () => new CostModelProfile(
+            cyclesPerSecond: 1,
+            name: "test",
+            subsystemShareDenominator: 1,
+            subsystemShareNumerator: 1
+        ).ReferenceEngineTicks(cycles: long.MaxValue));
+    }
+    [Fact]
+    public void FailedSearchPlanningIsUnmodeledRatherThanAFreeReservation() {
+        var definition = Document() with { SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(
+                Name: "missing",
+                Tokens: "absent"
+            )]) };
+        var report = WorldCostReport.Generate(definition);
+
+        Assert.True(condition: report.SearchReservations.IsUnmodeled);
+        Assert.False(condition: report.Admitted);
+        Assert.Contains(
+            collection: report.Issues,
+            filter: issue => issue.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "Search planning issue:"
+            )
+        );
+    }
+    [InlineData(240)]
+    [InlineData(0)]
+    [Theory]
+    public void HeuristicTotalsDoNotCertifyReferenceDeadlines(int rate) {
+        var definition = Document(rate: rate);
+        var report = WorldCostReport.Generate(definition);
+
+        Assert.Equal(
+            "puck.cost.portable-model.v1",
+            report.ModelId
+        );
+        Assert.True(condition: report.RecurringBound.IsUnmodeled);
+        Assert.True(condition: report.TotalBound.IsUnmodeled);
+        Assert.Equal(
+            CostBound.Zero,
+            report.SearchReservations
+        );
+        Assert.Null(value: report.ReferenceEngineTicks);
+        Assert.False(condition: report.Admitted);
+        Assert.Single(collection: report.Contributors);
+        Assert.NotEmpty(collection: report.Issues);
+        Assert.Equal(
+            WorldRuleWorkBudget.Measure(definition: definition).WorkUnitsPerTick,
+            report.HeuristicWorkUnitsPerTick
+        );
+    }
+    [InlineData(240, 210L, 6_250_000L)]
+    [InlineData(30, 1_680L, 50_000_000L)]
+    [InlineData(144, 350L, 10_416_666L)]
+    [Theory]
+    public void PortablePolicyHasExactPeriodsAndAdmissionBoundaries(int rate, long period, long allowance) {
+        var profile = CostModelProfile.Portable;
+
+        Assert.Equal(
+            period,
+            profile.StepPeriodEngineTicks(rateHz: rate)
+        );
+        Assert.Equal(
+            allowance,
+            profile.AuthoredBudgetCycles(rateHz: rate)
+        );
+        Assert.True(condition: profile.Admits(
+            bound: CostBound.Known(cycles: allowance),
+            rateHz: rate
+        ));
+        Assert.False(condition: profile.Admits(
+            bound: CostBound.Known(cycles: (allowance + 1)),
+            rateHz: rate
+        ));
+        Assert.False(condition: profile.Admits(
+            bound: CostBound.Overflow,
+            rateHz: rate
+        ));
+        Assert.False(condition: profile.Admits(
+            bound: CostBound.Unmodeled(reason: "missing kernel"),
+            rateHz: rate
+        ));
+    }
     [Fact]
     public void ZeroRateHasNoRecurringDeadlineAndInvalidPoliciesAreRefused() {
         var profile = CostModelProfile.Portable;
-        Assert.Equal(0L, profile.AuthoredBudgetCycles(0));
-        Assert.Equal(0L, profile.StepPeriodEngineTicks(0));
-        Assert.False(profile.Admits(CostBound.Zero, 0));
-        Assert.False(profile.Admits(CostBound.Overflow, 0));
-        Assert.Throws<ArgumentException>(() => profile.StepPeriodEngineTicks(31));
-        Assert.Throws<ArgumentException>(() => profile.AuthoredBudgetCycles(31));
-        Assert.Throws<ArgumentOutOfRangeException>(() => profile.AuthoredBudgetCycles(-1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CostModelProfile("test", 0, 1, 2));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CostModelProfile("test", 1, 2, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CostModelProfile("test", 1, 1, 0));
-    }
 
-    [Theory]
-    [InlineData(240)]
-    [InlineData(0)]
-    public void HeuristicTotalsDoNotCertifyReferenceDeadlines(int rate) {
-        var definition = Document(rate);
-        var report = WorldCostReport.Generate(definition);
-        Assert.Equal("puck.cost.portable-model.v1", report.ModelId);
-        Assert.True(report.RecurringBound.IsUnmodeled);
-        Assert.True(report.TotalBound.IsUnmodeled);
-        Assert.Equal(CostBound.Zero, report.SearchReservations);
-        Assert.Null(report.ReferenceEngineTicks);
-        Assert.False(report.Admitted);
-        Assert.Single(report.Contributors);
-        Assert.NotEmpty(report.Issues);
-        Assert.Equal(WorldRuleWorkBudget.Measure(definition).WorkUnitsPerTick, report.HeuristicWorkUnitsPerTick);
-    }
-
-    [Fact]
-    public void FailedSearchPlanningIsUnmodeledRatherThanAFreeReservation() {
-        var definition = Document() with { SearchRaw = new WorldSearchSection([new WorldSearchRow(Name: "missing", Tokens: "absent")]) };
-        var report = WorldCostReport.Generate(definition);
-        Assert.True(report.SearchReservations.IsUnmodeled);
-        Assert.False(report.Admitted);
-        Assert.Contains(report.Issues, issue => issue.StartsWith("Search planning issue:", StringComparison.Ordinal));
+        Assert.Equal(
+            0L,
+            profile.AuthoredBudgetCycles(rateHz: 0)
+        );
+        Assert.Equal(
+            0L,
+            profile.StepPeriodEngineTicks(rateHz: 0)
+        );
+        Assert.False(condition: profile.Admits(
+            bound: CostBound.Zero,
+            rateHz: 0
+        ));
+        Assert.False(condition: profile.Admits(
+            bound: CostBound.Overflow,
+            rateHz: 0
+        ));
+        Assert.Throws<ArgumentException>(testCode: () => profile.StepPeriodEngineTicks(rateHz: 31));
+        Assert.Throws<ArgumentException>(testCode: () => profile.AuthoredBudgetCycles(rateHz: 31));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => profile.AuthoredBudgetCycles(rateHz: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new CostModelProfile(
+            cyclesPerSecond: 0,
+            name: "test",
+            subsystemShareDenominator: 2,
+            subsystemShareNumerator: 1
+        ));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new CostModelProfile(
+            cyclesPerSecond: 1,
+            name: "test",
+            subsystemShareDenominator: 1,
+            subsystemShareNumerator: 2
+        ));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new CostModelProfile(
+            cyclesPerSecond: 1,
+            name: "test",
+            subsystemShareDenominator: 0,
+            subsystemShareNumerator: 1
+        ));
     }
 }

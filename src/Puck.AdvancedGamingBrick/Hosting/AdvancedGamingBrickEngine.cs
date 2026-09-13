@@ -26,18 +26,28 @@ public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachine
     }
 
     private static (byte[] Bios, MachineBootMode Mode) ResolveStartup(string? options) {
-        if (string.Equals(a: options?.Trim(), b: "stub", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(
+            a: options?.Trim(),
+            b: "stub",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             return (Bios: new byte[ReplacementBios.ImageSize], Mode: MachineBootMode.Fast);
         }
 
-        var boot = MachineBootOptions.Parse(options: options, machineTokens: out var tokens);
+        var boot = MachineBootOptions.Parse(
+            options: options,
+            machineTokens: out var tokens
+        );
+
         if (tokens.Length != 0) {
-            throw new ArgumentException(message: $"Unknown advanced-gaming-brick option '{tokens[0]}'; expected cold, fast, a final bios=<path>, or the standalone diagnostic stub option.", paramName: nameof(options));
+            throw new ArgumentException(
+                message: $"Unknown advanced-gaming-brick option '{tokens[0]}'; expected cold, fast, a final bios=<path>, or the standalone diagnostic stub option.",
+                paramName: nameof(options)
+            );
         }
 
         return (Bios: ResolveBios(path: boot.ImagePath), Mode: boot.Mode);
     }
-
     private static byte[] ResolveBios(string? path) {
         if (path is null) {
             return AgbFirmware.GetImage();
@@ -54,7 +64,10 @@ public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachine
             }
 
             if (AgbBiosProfile.Identify(image: bios).Kind == AgbBiosKind.ReplacementStub) {
-                throw new ArgumentException(message: "The BIOS image is zero-filled and cannot execute BIOS services. Use a working BIOS image, or stub explicitly for BIOS-independent diagnostics.", paramName: nameof(path));
+                throw new ArgumentException(
+                    message: "The BIOS image is zero-filled and cannot execute BIOS services. Use a working BIOS image, or stub explicitly for BIOS-independent diagnostics.",
+                    paramName: nameof(path)
+                );
             }
 
             return bios;

@@ -30,23 +30,32 @@ internal sealed class Sm83BankedData {
         ArgumentNullException.ThrowIfNull(argument: bytes);
 
         if (bytes.Length > FrameworkCartridge.BankSize) {
-            throw new ArgumentException(message: $"A {bytes.Length} byte payload does not fit the {FrameworkCartridge.BankSize}-byte bank window.", paramName: nameof(bytes));
+            throw new ArgumentException(
+                message: $"A {bytes.Length} byte payload does not fit the {FrameworkCartridge.BankSize}-byte bank window.",
+                paramName: nameof(bytes)
+            );
         }
 
-        for (var index = 0; index < m_banks.Count; ++index) {
-            if (m_banks[index].Count + bytes.Length <= FrameworkCartridge.BankSize) {
-                var address = (ushort)(RomDataBuilder.BaseAddress + m_banks[index].Count);
+        for (var index = 0; (index < m_banks.Count); ++index) {
+            if ((m_banks[index].Count + bytes.Length) <= FrameworkCartridge.BankSize) {
+                var address = ((ushort)(RomDataBuilder.BaseAddress + m_banks[index].Count));
+
                 m_banks[index].AddRange(collection: bytes);
 
-                return new Placement(Bank: index + 2, Address: address);
+                return new Placement(
+                    Address: address,
+                    Bank: (index + 2)
+                );
             }
         }
 
         m_banks.Add(item: [.. bytes]);
 
-        return new Placement(Bank: m_banks.Count + 1, Address: RomDataBuilder.BaseAddress);
+        return new Placement(
+            Bank: (m_banks.Count + 1),
+            Address: RomDataBuilder.BaseAddress
+        );
     }
-
     /// <summary>Emits the write that pages a bank into the switchable window.</summary>
     /// <param name="emitter">The routine emitter.</param>
     /// <param name="bank">The bank number.</param>
@@ -54,7 +63,7 @@ internal sealed class Sm83BankedData {
     public static void EmitSelect(Sm83Emitter emitter, int bank) {
         ArgumentNullException.ThrowIfNull(argument: emitter);
 
-        emitter.LoadAImmediate(value: (byte)(bank & 0xFF));
+        emitter.LoadAImmediate(value: ((byte)(bank & 0xFF)));
         emitter.StoreAToAddress(address: 0x2000);
     }
 }

@@ -6,7 +6,10 @@ namespace Puck.Cli.Shaders;
 /// <c>puck.shader.manifest.v1</c> recipe.</summary>
 internal static class ShadersCommand {
     public static Command Create() {
-        var command = new Command(description: "Shader authoring verbs.", name: "shaders");
+        var command = new Command(
+            description: "Shader authoring verbs.",
+            name: "shaders"
+        );
 
         command.Subcommands.Add(item: CompileShaderCommand.Create());
         command.Subcommands.Add(item: PipelineCommand.Create());

@@ -87,7 +87,13 @@ public sealed record StateCycle(
         get {
             var word = Word;
 
-            if ((m_generator is not { } baked) || !ReferenceEquals(objA: m_generatorWord, objB: word)) {
+            if (
+                (m_generator is not { } baked) ||
+                !ReferenceEquals(
+                objA: m_generatorWord,
+                objB: word
+            )
+            ) {
                 baked = Bake(word: word);
                 m_generator = baked;
                 m_generatorWord = word;
@@ -110,21 +116,28 @@ public sealed record StateCycle(
     private static SymmetryWord Bake(IReadOnlyList<int>? word) =>
         ((word is null)
             ? SymmetryWord.Coxeter
-            : SymmetryWord.Create(mirrors: [.. word]));
+            : SymmetryWord.Create(mirrors: [.. word])
+        );
 
     /// <summary>Returns the stored phase of a cell in whole units — the raw value itself for an <see cref="CellKind.Int"/>
     /// row, the whole part of a <see cref="CellKind.Fixed"/> row's raw value.</summary>
     /// <param name="kind">The carrying row's kind.</param>
     /// <param name="baseValue">The stored raw cell value.</param>
     public static long Phase(CellKind kind, long baseValue) =>
-        ((kind == CellKind.Fixed) ? (baseValue >> FixedQ4816.FractionBitCount) : baseValue);
+        ((kind == CellKind.Fixed)
+            ? (baseValue >> FixedQ4816.FractionBitCount)
+            : baseValue
+        );
     /// <summary>Resolves the generator without throwing, naming the authoring defect when the word cannot bake.</summary>
     /// <param name="generator">The baked generator, on success.</param>
     /// <param name="reason">Why the word was refused, on failure.</param>
     /// <returns><see langword="true"/> when the word bakes.</returns>
     public bool TryResolveGenerator([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SymmetryWord? generator, out string reason) {
         if (Word is { } letters) {
-            if ((letters.Count < 1) || (letters.Count > SymmetryWord.MaximumLength)) {
+            if (
+                (letters.Count < 1) ||
+                (letters.Count > SymmetryWord.MaximumLength)
+            ) {
                 generator = null;
                 reason = $"word holds {letters.Count} letters — a word is one to {SymmetryWord.MaximumLength} mirror nodes, or omitted for the lattice's own cycle";
 
@@ -132,9 +145,12 @@ public sealed record StateCycle(
             }
 
             for (var index = 0; (index < letters.Count); index++) {
-                if ((letters[index] < 0) || (letters[index] >= SymmetryLattice.NodeCount)) {
+                if (
+                    (letters[index] < 0) ||
+                    (letters[index] >= SymmetryLattice.NodeCount)
+                ) {
                     generator = null;
-                    reason = $"word[{index}] {letters[index]} is not a symmetry-lattice node 0..{SymmetryLattice.NodeCount - 1}";
+                    reason = $"word[{index}] {letters[index]} is not a symmetry-lattice node 0..{(SymmetryLattice.NodeCount - 1)}";
 
                     return false;
                 }
@@ -170,10 +186,16 @@ public sealed record StateCycle(
         ArgumentNullException.ThrowIfNull(argument: row);
 
         long value;
-        var phase = Phase(baseValue: baseValue, kind: row.Kind);
+        var phase = Phase(
+            baseValue: baseValue,
+            kind: row.Kind
+        );
 
         if (IsLatticeOutput(output: Output)) {
-            var node = CurrentNode(currentTick: currentTick, phaseNode: phase);
+            var node = CurrentNode(
+                currentTick: currentTick,
+                phaseNode: phase
+            );
 
             value = Output switch {
                 CycleOutput.Node => node,
@@ -183,13 +205,22 @@ public sealed record StateCycle(
             };
         } else {
             var order = Order;
-            var index = RotationIndex(currentTick: currentTick, phase: phase);
+            var index = RotationIndex(
+                currentTick: currentTick,
+                phase: phase
+            );
 
             value = Output switch {
                 CycleOutput.Step => index,
                 CycleOutput.Turns => ((((long)index) << FixedQ4816.FractionBitCount) / order),
-                CycleOutput.Cos => CyclicRotation.Rotor(step: index, order: order).Real.Value,
-                _ => CyclicRotation.Rotor(step: index, order: order).Imaginary.Value,
+                CycleOutput.Cos => CyclicRotation.Rotor(
+                order: order,
+                step: index
+            ).Real.Value,
+                _ => CyclicRotation.Rotor(
+                order: order,
+                step: index
+            ).Imaginary.Value,
             };
         }
 
@@ -204,19 +235,40 @@ public sealed record StateCycle(
     public long SettledPhase(StateRow row, long baseValue, ulong currentTick) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
-        var phase = Phase(baseValue: baseValue, kind: row.Kind);
+        var phase = Phase(
+            baseValue: baseValue,
+            kind: row.Kind
+        );
         long settled = (IsLatticeOutput(output: Output)
-            ? CurrentNode(currentTick: currentTick, phaseNode: phase)
-            : RotationIndex(currentTick: currentTick, phase: phase));
+            ? CurrentNode(
+                currentTick: currentTick,
+                phaseNode: phase
+            )
+            : RotationIndex(
+                currentTick: currentTick,
+                phase: phase
+            )
+        );
 
-        return ((row.Kind == CellKind.Fixed) ? (settled << FixedQ4816.FractionBitCount) : settled);
+        return ((row.Kind == CellKind.Fixed)
+            ? (settled << FixedQ4816.FractionBitCount)
+            : settled
+        );
     }
-
     /// <summary>Returns the elapsed remainder within the current step when settling at a tick.</summary>
     public long SettledSubstep(ulong currentTick) {
-        var duration = ((ulong)Math.Max(val1: TicksPerStep, val2: 1L));
+        var duration = ((ulong)Math.Max(
+            val1: TicksPerStep,
+            val2: 1L
+        ));
         var elapsedRemainder = (Elapsed(currentTick: currentTick) % duration);
-        var carried = Math.Min(val1: ((ulong)Math.Max(val1: SubstepTicks, val2: 0L)), val2: (duration - 1UL));
+        var carried = Math.Min(
+            val1: ((ulong)Math.Max(
+                val1: SubstepTicks,
+                val2: 0L
+            )),
+            val2: (duration - 1UL)
+        );
 
         return ((long)((carried + elapsedRemainder) % duration));
     }
@@ -224,13 +276,16 @@ public sealed record StateCycle(
     /// output, step length, epoch and substep.</summary>
     /// <param name="other">The trait to compare with.</param>
     public bool Equals(StateCycle? other) =>
-        (other is not null) &&
+        ((other is not null) &&
         (Power == other.Power) &&
         (Output == other.Output) &&
         (TicksPerStep == other.TicksPerStep) &&
         (EpochTick == other.EpochTick) &&
         (SubstepTicks == other.SubstepTicks) &&
-        SameWord(left: Word, right: other.Word);
+        SameWord(
+            left: Word,
+            right: other.Word
+        ));
     /// <inheritdoc/>
     public override int GetHashCode() {
         var hash = new HashCode();
@@ -249,8 +304,15 @@ public sealed record StateCycle(
     }
 
     private static bool SameWord(IReadOnlyList<int>? left, IReadOnlyList<int>? right) {
-        if (ReferenceEquals(objA: left, objB: right)) { return true; }
-        if ((left is null) || (right is null) || (left.Count != right.Count)) { return false; }
+        if (ReferenceEquals(
+            objA: left,
+            objB: right
+        )) { return true; }
+        if (
+            (left is null) ||
+            (right is null) ||
+            (left.Count != right.Count)
+        ) { return false; }
 
         for (var index = 0; (index < left.Count); index++) {
             if (left[index] != right[index]) { return false; }
@@ -261,15 +323,31 @@ public sealed record StateCycle(
     // The generator applications reached at a tick: whole steps since the epoch (with the carried substep), reduced
     // modulo the order before the power multiplies them, so no tick count can overflow the arithmetic.
     private long Rotation(ulong currentTick) {
-        var duration = ((ulong)Math.Max(val1: TicksPerStep, val2: 1L));
+        var duration = ((ulong)Math.Max(
+            val1: TicksPerStep,
+            val2: 1L
+        ));
         var elapsed = Elapsed(currentTick: currentTick);
-        var carried = Math.Min(val1: ((ulong)Math.Max(val1: SubstepTicks, val2: 0L)), val2: (duration - 1UL));
+        var carried = Math.Min(
+            val1: ((ulong)Math.Max(
+                val1: SubstepTicks,
+                val2: 0L
+            )),
+            val2: (duration - 1UL)
+        );
         var steps = ((elapsed / duration) + (((elapsed % duration) + carried) / duration));
 
         return (((long)(steps % ((ulong)Order))) * Power);
     }
     private ulong Elapsed(ulong currentTick) {
-        var epoch = ((ulong)Math.Max(val1: EpochTick, val2: 0L));
-        return ((currentTick <= epoch) ? 0UL : (currentTick - epoch));
+        var epoch = ((ulong)Math.Max(
+            val1: EpochTick,
+            val2: 0L
+        ));
+
+        return ((currentTick <= epoch)
+            ? 0UL
+            : (currentTick - epoch)
+        );
     }
 }

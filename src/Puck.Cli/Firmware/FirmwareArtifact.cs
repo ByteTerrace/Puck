@@ -6,7 +6,10 @@ namespace Puck.Cli.Firmware;
 internal static class FirmwareArtifact {
     public static bool WriteOrVerify(string path, byte[] bytes, bool verify, string machine) {
         var hash = Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes));
-        var displayPath = Path.GetRelativePath(relativeTo: Environment.CurrentDirectory, path: path);
+        var displayPath = Path.GetRelativePath(
+            relativeTo: Environment.CurrentDirectory,
+            path: path
+        );
 
         if (verify) {
             if (!File.Exists(path: path)) {
@@ -19,17 +22,26 @@ internal static class FirmwareArtifact {
             }
         } else {
             Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-            var temporary = path + $".{Guid.NewGuid():N}.tmp";
+            var temporary = (path + $".{Guid.NewGuid():N}.tmp");
 
             try {
-                File.WriteAllBytes(path: temporary, bytes: bytes);
-                File.Move(sourceFileName: temporary, destFileName: path, overwrite: true);
+                File.WriteAllBytes(
+                    bytes: bytes,
+                    path: temporary
+                );
+                File.Move(
+                    destFileName: path,
+                    overwrite: true,
+                    sourceFileName: temporary
+                );
             } finally {
                 File.Delete(path: temporary);
             }
         }
 
-        Console.Out.WriteLine(value: $"firmware {machine}: {(verify ? "verified" : "wrote")} {displayPath} ({bytes.Length} bytes; SHA-256 {hash}).");
+        Console.Out.WriteLine(value: $"firmware {machine}: {(verify
+            ? "verified"
+            : "wrote")} {displayPath} ({bytes.Length} bytes; SHA-256 {hash}).");
         return true;
     }
 }

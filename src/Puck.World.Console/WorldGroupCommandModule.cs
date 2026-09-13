@@ -55,11 +55,26 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 }
 
                 _ = echo.Head(head: "kind")
-                    .Field(key: "name", value: kind.Name)
-                    .Field(key: "roles", value: $"[{roles}]")
-                    .Field(key: "lifetime", value: kind.Lifetime.ToString())
-                    .Field(key: "eviction", value: kind.EvictionPolicy.ToString())
-                    .Field(key: "cap", value: kind.Capacity);
+                    .Field(
+                    key: "name",
+                    value: kind.Name
+                )
+                    .Field(
+                    key: "roles",
+                    value: $"[{roles}]"
+                )
+                    .Field(
+                    key: "lifetime",
+                    value: kind.Lifetime.ToString()
+                )
+                    .Field(
+                    key: "eviction",
+                    value: kind.EvictionPolicy.ToString()
+                )
+                    .Field(
+                    key: "cap",
+                    value: kind.Capacity
+                );
 
                 _ = echo.Segment();
             }
@@ -78,12 +93,21 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             }
 
             _ = echo.Head(head: "group")
-                .Field(key: "id", value: group.Id)
-                .Field(key: "kind", value: group.KindName)
-                .Field(key: "members", value: $"[{string.Join(
-                separator: ',',
-                values: DescribeMembers(members: group.Members)
-            )}]")
+                .Field(
+                key: "id",
+                value: group.Id
+            )
+                .Field(
+                key: "kind",
+                value: group.KindName
+            )
+                .Field(
+                key: "members",
+                value: $"[{string.Join(
+                    separator: ',',
+                    values: DescribeMembers(members: group.Members)
+                )}]"
+            )
                 .Segment();
         }
 
@@ -99,8 +123,14 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 };
 
                 _ = echo.Head(head: "ownership")
-                    .Field(key: "subject", value: $"{ownership.Subject.Kind}:{ownership.Subject.Id}")
-                    .Field(key: "owner", value: owner)
+                    .Field(
+                    key: "subject",
+                    value: $"{ownership.Subject.Kind}:{ownership.Subject.Id}"
+                )
+                    .Field(
+                    key: "owner",
+                    value: owner
+                )
                     .Segment();
             }
         }
@@ -109,9 +139,10 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
     }
     private static IEnumerable<string> DescribeMembers(IReadOnlyList<WorldGroupMember> members) {
         foreach (var member in members) {
-            yield return (member.Role is { } role)
+            yield return ((member.Role is { } role)
                 ? $"{member.Ref.Describe()}@{role}#{member.JoinOrdinal}"
-                : $"{member.Ref.Describe()}#{member.JoinOrdinal}";
+                : $"{member.Ref.Describe()}#{member.JoinOrdinal}"
+            );
         }
     }
 

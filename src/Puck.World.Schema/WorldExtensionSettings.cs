@@ -13,7 +13,10 @@ public static class WorldExtensionSettings {
         if (settings.ValueKind == JsonValueKind.Object) {
             var properties = settings.EnumerateObject();
 
-            if (properties.MoveNext() && properties.Current.NameEquals(text: name)) {
+            if (
+                properties.MoveNext() &&
+                properties.Current.NameEquals(text: name)
+            ) {
                 var value = properties.Current.Value;
 
                 if (!properties.MoveNext()) { return value; }

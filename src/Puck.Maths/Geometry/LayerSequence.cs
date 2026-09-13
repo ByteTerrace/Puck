@@ -85,14 +85,16 @@ public readonly record struct LayerSequence {
     /// <summary>Gets the change in layer size from each layer to the next; negative values bound the sequence.</summary>
     public long Step { get; }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Int128 CountUnchecked(Int128 layerCount) =>
-        ((((Int128)Seed) + (((Int128)Start) * layerCount)) + (((Int128)Step) * ((layerCount * (layerCount - Int128.One)) / 2)));
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private long CountBeforeGeneralLayer(long layer) => ((long)CountUnchecked(layerCount: (layer - 1L)));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private long CountBeforeLayer(long layer) {
         if (Step == 0L) { return (Seed + ((layer - 1L) * Start)); }
 
-        if ((Start == Step) && (Step > 0L)) {
+        if (
+            (Start == Step) &&
+            (Step > 0L)
+        ) {
             // This is the prefix before an already located index, hence the scaled result fits long.
             // layer<=2^32, so even the unhalved product fits ulong.
             var n = ((ulong)layer);
@@ -100,7 +102,10 @@ public readonly record struct LayerSequence {
             return (Seed + ((long)(((n * (n - 1UL)) >> 1) * ((ulong)Start))));
         }
 
-        if ((Start == 1L) && (Step == 2L)) {
+        if (
+            (Start == 1L) &&
+            (Step == 2L)
+        ) {
             var n = (layer - 1L);
 
             return (Seed + (n * n));
@@ -108,42 +113,9 @@ public readonly record struct LayerSequence {
 
         return CountBeforeGeneralLayer(layer: layer);
     }
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private long CountBeforeGeneralLayer(long layer) => ((long)CountUnchecked(layerCount: (layer - 1L)));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private long LocateLayer(long index) {
-        if (0L == Step) {
-            // Start >= 1 here: a bounded flat sequence never reaches this path. The containing layer itself must
-            // remain representable, just like Count and LayerSize require their long result to remain representable.
-            return checked((1L + ((index - Seed) / Start)));
-        }
-
-        if ((Start == Step) && (Step > 0L)) {
-            // Count(n) = Seed + Start*T(n). Divide out Start before taking a root, so even
-            // the largest coefficients and indices never need a 128-bit discriminant here.
-            var triangularIndex = (((ulong)(index - Seed)) / ((ulong)Start));
-
-            return LocateTriangular(index: triangularIndex);
-        }
-
-        if ((Start == 1L) && (Step == 2L)) {
-            return (((long)((ulong)(index - Seed)).SquareRoot()) + 1L);
-        }
-
-        return LocateGeneralLayer(index: index);
-    }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long LocateTriangular(ulong index) {
-        if (index <= (ulong.MaxValue >> 3)) {
-            return ((long)(((((index << 3) | 1UL).SquareRoot()) + 1UL) >> 1));
-        }
-
-        // Here index <= long.MaxValue. Let s=floor(sqrt(2*index)); the largest n with
-        // T(n)<=index is s or s-1. Also s<=2^32-1, so s*(s+1) fits ulong exactly.
-        var root = (index << 1).SquareRoot();
-
-        return ((long)(root + ((((root * (root + 1UL)) >> 1) <= index) ? 1UL : 0UL)));
-    }
+    private Int128 CountUnchecked(Int128 layerCount) =>
+        ((((Int128)Seed) + (((Int128)Start) * layerCount)) + (((Int128)Step) * ((layerCount * (layerCount - Int128.One)) / 2)));
     [MethodImpl(MethodImplOptions.NoInlining)]
     private long LocateGeneralLayer(long index) {
         var b = ((2 * ((Int128)Start)) - Step);
@@ -178,6 +150,48 @@ public readonly record struct LayerSequence {
         return (((long)layer) + 1L);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private long LocateLayer(long index) {
+        if (0L == Step) {
+            // Start >= 1 here: a bounded flat sequence never reaches this path. The containing layer itself must
+            // remain representable, just like Count and LayerSize require their long result to remain representable.
+            return checked((1L + ((index - Seed) / Start)));
+        }
+
+        if (
+            (Start == Step) &&
+            (Step > 0L)
+        ) {
+            // Count(n) = Seed + Start*T(n). Divide out Start before taking a root, so even
+            // the largest coefficients and indices never need a 128-bit discriminant here.
+            var triangularIndex = (((ulong)(index - Seed)) / ((ulong)Start));
+
+            return LocateTriangular(index: triangularIndex);
+        }
+
+        if (
+            (Start == 1L) &&
+            (Step == 2L)
+        ) {
+            return (((long)((ulong)(index - Seed)).SquareRoot()) + 1L);
+        }
+
+        return LocateGeneralLayer(index: index);
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long LocateTriangular(ulong index) {
+        if (index <= (ulong.MaxValue >> 3)) {
+            return ((long)(((((index << 3) | 1UL).SquareRoot()) + 1UL) >> 1));
+        }
+
+        // Here index <= long.MaxValue. Let s=floor(sqrt(2*index)); the largest n with
+        // T(n)<=index is s or s-1. Also s<=2^32-1, so s*(s+1) fits ulong exactly.
+        var root = (index << 1).SquareRoot();
+
+        return ((long)(root + ((((root * (root + 1UL)) >> 1) <= index)
+            ? 1UL
+            : 0UL)));
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfOutOfRange(long index) {
         if (0L > index) {
             throw new ArgumentOutOfRangeException(
@@ -187,7 +201,8 @@ public readonly record struct LayerSequence {
         }
 
         if (
-            (Step <= 0L) && (index >= Seed) &&
+            (Step <= 0L) &&
+            (index >= Seed) &&
             (CapacityLimit <= index)
         ) {
             throw new ArgumentOutOfRangeException(

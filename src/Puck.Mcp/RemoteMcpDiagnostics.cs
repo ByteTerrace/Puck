@@ -12,20 +12,50 @@ public static class RemoteMcpInstrumentation {
 
 internal sealed partial class RemoteMcpDiagnostics : IDisposable {
     private readonly ILogger<RemoteMcpDiagnostics> m_logger;
-    private readonly ActivitySource m_activities = new(RemoteMcpInstrumentation.Name);
-    private readonly Meter m_meter = new(RemoteMcpInstrumentation.Name);
+
+    private readonly ActivitySource m_activities = new(name: RemoteMcpInstrumentation.Name);
+    private readonly Meter m_meter = new(name: RemoteMcpInstrumentation.Name);
+
     private readonly Histogram<double> m_duration;
+
     public RemoteMcpDiagnostics(ILogger<RemoteMcpDiagnostics> logger) {
         m_logger = logger;
-        m_duration = m_meter.CreateHistogram<double>("puck.mcp.operation.duration", "ms");
+        m_duration = m_meter.CreateHistogram<double>(
+            "puck.mcp.operation.duration",
+            "ms"
+        );
     }
-    internal Activity? Start(string tool) => m_activities.StartActivity(tool, ActivityKind.Internal);
+
+    internal Activity? Start(string tool) => m_activities.StartActivity(
+        kind: ActivityKind.Internal,
+        name: tool
+    );
     internal void Completed(string subject, string tool, string outcome, long start, string? requestId) {
-        var elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        m_duration.Record(elapsed, new KeyValuePair<string, object?>("tool", tool), new("outcome", outcome));
-        Operation(m_logger, subject, tool, outcome, requestId, elapsed);
+        var elapsed = Stopwatch.GetElapsedTime(startingTimestamp: start).TotalMilliseconds;
+
+        m_duration.Record(
+            elapsed,
+            new KeyValuePair<string, object?>(
+                key: "tool",
+                value: tool
+            ),
+            new(
+                key: "outcome",
+                value: outcome
+            )
+        );
+        Operation(
+            elapsedMilliseconds: elapsed,
+            logger: m_logger,
+            outcome: outcome,
+            requestId: requestId,
+            subject: subject,
+            tool: tool
+        );
     }
+
     [LoggerMessage(Level = LogLevel.Information, Message = "MCP subject {Subject} tool {Tool} outcome {Outcome} host request {RequestId} elapsed {ElapsedMilliseconds} ms")]
     private static partial void Operation(ILogger logger, string subject, string tool, string outcome, string? requestId, double elapsedMilliseconds);
+
     public void Dispose() { m_activities.Dispose(); m_meter.Dispose(); }
 }

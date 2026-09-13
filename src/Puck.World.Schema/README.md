@@ -462,7 +462,7 @@ reference fails the build with a `PUCKARCH` diagnostic naming the arrival
 path.
 
 The state and rule engine beneath the document is
-[`Puck.State`](../Puck.State/README.md): the section contract (`IStateSection`),
+[`Puck.State`](../../docs/reference/state.md): the section contract (`IStateSection`),
 the row/cell substrate, the traits, the domains, the topologies, the generators,
 the patterns, the catalog, and the reader all live there with no world name.
 What stays here is what names a world: the document's own section and row
@@ -1926,7 +1926,7 @@ active-entry count), `$region:<placementId>` (that region's live occupant count)
 `$reduce:<max|min|sum|count|arrangementRank>:<row>` (an aggregate over a row's cells; append
 `:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero, or
 `:between:<lower>:<upper>` to filter live values by inclusive bounds; both compose
-on the [state reduction contract](../Puck.State/README.md), and neither applies to `arrangementRank`;
+on the [state reduction contract](../../docs/reference/state.md), and neither applies to `arrangementRank`;
 `arrangementRank` is an ordered zone's order as one integer—the Lehmer rank
 relative to its token domain's order, over k! for k ≤ 20 tokens, -1 past that—
 and the `arrange` transform is its inverse),
@@ -2040,7 +2040,7 @@ occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
 8x8 board symmetries `byteSwap` (rank mirror) and `bitReverse` (half turn);
 `replicationMask(width)` and `repeatBits(pattern, width)` construct periodic
 64-bit masks, with Int operands and strict block bounds described in
-[Puck.State](../Puck.State/README.md);
+[Puck.State](../../docs/reference/state.md);
 `parallelBitExtract`/`parallelBitDeposit` (pext/pdep: occupancy along a set
 of squares as a dense index and back); `bitField` (value, offset, width) and
 `bitInsert` (value, field, offset, width) for packed fields, refusing a

@@ -23,11 +23,30 @@ public sealed class CaptureRequestSlot {
     public void Arm(FrameCaptureRequest request, string? pendingPath) {
         ArgumentNullException.ThrowIfNull(argument: request);
 
-        if ((pendingPath is not null) || request.Completion.IsCompleted) {
+        if (
+            (pendingPath is not null) ||
+            request.Completion.IsCompleted
+        ) {
             throw new InvalidOperationException(message: "A capture is already pending or the request is terminal.");
         }
 
         m_request = request;
+    }
+    /// <summary>Hands an armed request to a capture-capable inner node, so the readback lands on whatever actually
+    /// produced the shown frame. A request stays armed here when the inner cannot serve it, which is what stops it
+    /// from vanishing silently.</summary>
+    /// <param name="target">The inner node, or <see langword="null"/> when it captures nothing.</param>
+    public void Forward(ICaptureRequestTarget? target) {
+        if (
+            (m_request is not { } request) ||
+            (target is null)
+        ) {
+            return;
+        }
+
+        target.RequestCapture(request: request);
+
+        m_request = null;
     }
     /// <summary>Fails an unserved request and clears the slot — the disposal path, where no frame will ever serve it.</summary>
     /// <param name="error">The reason no capture will be written.</param>
@@ -56,18 +75,5 @@ public sealed class CaptureRequestSlot {
         if (request.Write(writer: writer).Error is { } error) {
             Console.Error.WriteLine(value: $"{failureLabel} -> {request.Path} ({error.Message})");
         }
-    }
-    /// <summary>Hands an armed request to a capture-capable inner node, so the readback lands on whatever actually
-    /// produced the shown frame. A request stays armed here when the inner cannot serve it, which is what stops it
-    /// from vanishing silently.</summary>
-    /// <param name="target">The inner node, or <see langword="null"/> when it captures nothing.</param>
-    public void Forward(ICaptureRequestTarget? target) {
-        if ((m_request is not { } request) || (target is null)) {
-            return;
-        }
-
-        target.RequestCapture(request: request);
-
-        m_request = null;
     }
 }

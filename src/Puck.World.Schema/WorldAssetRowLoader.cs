@@ -78,6 +78,16 @@ public static class WorldAssetRowLoader {
             error: out error,
             source: row.Source
         );
+    /// <summary>Loads a <see cref="WorldPatch"/>'s referenced <c>puck.synthesizer-patch.v1</c> document.</summary>
+    /// <param name="row">The reference row.</param>
+    /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
+    /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
+    public static bool TryLoadPatch(WorldPatch row, out SynthPatchDocument? document, out string? error) =>
+        TryLoad(
+            document: out document,
+            error: out error,
+            source: row.Source
+        );
     /// <summary>Loads a <see cref="TableRow"/>'s referenced <c>puck.table.v1</c> document.</summary>
     /// <param name="row">The reference row.</param>
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
@@ -93,16 +103,6 @@ public static class WorldAssetRowLoader {
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
     /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
     public static bool TryLoadTune(WorldTune row, out AudioDocument? document, out string? error) =>
-        TryLoad(
-            document: out document,
-            error: out error,
-            source: row.Source
-        );
-    /// <summary>Loads a <see cref="WorldPatch"/>'s referenced <c>puck.synthesizer-patch.v1</c> document.</summary>
-    /// <param name="row">The reference row.</param>
-    /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
-    /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
-    public static bool TryLoadPatch(WorldPatch row, out SynthPatchDocument? document, out string? error) =>
         TryLoad(
             document: out document,
             error: out error,

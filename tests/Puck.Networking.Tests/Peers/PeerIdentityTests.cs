@@ -55,6 +55,26 @@ public sealed class PeerIdentityTests {
         Assert.False(condition: File.Exists(path: (path + ".tmp")));
     }
     [Fact]
+    public void Save_OnUnix_CreatesTheFileReadableAndWritableByItsOwnerAlone() {
+        if (OperatingSystem.IsWindows()) {
+            Assert.Skip(reason: "a Unix create mode has no meaning on Windows");
+
+            return;
+        }
+
+        using var directory = new TemporaryDirectory();
+        using var identity = PeerIdentity.Create();
+
+        var path = directory.PathOf(fileName: "peer.key");
+
+        identity.Save(path: path);
+
+        Assert.Equal(
+            expected: UnixFileMode.UserRead | UnixFileMode.UserWrite,
+            actual: File.GetUnixFileMode(path: path)
+        );
+    }
+    [Fact]
     public void Save_ReplacesAnExistingFile_AndAStaleTemporaryFile() {
         using var directory = new TemporaryDirectory();
         using var previous = PeerIdentity.Create();
@@ -84,26 +104,6 @@ public sealed class PeerIdentityTests {
         );
         Assert.False(condition: File.Exists(path: (path + ".tmp")));
     }
-    [Fact]
-    public void Save_OnUnix_CreatesTheFileReadableAndWritableByItsOwnerAlone() {
-        if (OperatingSystem.IsWindows()) {
-            Assert.Skip(reason: "a Unix create mode has no meaning on Windows");
-
-            return;
-        }
-
-        using var directory = new TemporaryDirectory();
-        using var identity = PeerIdentity.Create();
-
-        var path = directory.PathOf(fileName: "peer.key");
-
-        identity.Save(path: path);
-
-        Assert.Equal(
-            expected: UnixFileMode.UserRead | UnixFileMode.UserWrite,
-            actual: File.GetUnixFileMode(path: path)
-        );
-    }
 
     /// <summary>A per-law directory under the temp root, created on construction and deleted whole on dispose; a
     /// deletion failure fails the law rather than masking a handle the tested code left open.</summary>
@@ -117,13 +117,13 @@ public sealed class PeerIdentityTests {
             Directory.CreateDirectory(path: m_root);
         }
 
-        public string PathOf(string fileName) => Path.Combine(
-            path1: m_root,
-            path2: fileName
-        );
         public void Dispose() => Directory.Delete(
             path: m_root,
             recursive: true
+        );
+        public string PathOf(string fileName) => Path.Combine(
+            path1: m_root,
+            path2: fileName
         );
     }
 }

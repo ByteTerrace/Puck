@@ -11,7 +11,20 @@ namespace Puck.Vulkan;
 /// enumeration and query entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDeviceApi {
+    // VkPhysicalDeviceProperties field offsets: apiVersion(0), driverVersion(4), vendorID(8), deviceID(12),
+    // deviceType(16), deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE=256](20).
+    private const int PhysicalDeviceApiVersionOffset = 0;
+    // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
+    private const int PhysicalDeviceFeatureCount = 55;
+    private const int PhysicalDeviceNameOffset = (sizeof(uint) * 5);
+    private const int PhysicalDevicePropertiesBufferSize = 2048;
+    private const int PhysicalDeviceTypeOffset = (sizeof(uint) * 4);
+    private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
+    private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
+    private const uint StructureTypePhysicalDeviceProperties2 = 1000059001;
+
     private readonly IAllocator m_allocator;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativePhysicalDeviceApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -22,17 +35,86 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         m_allocator = allocator;
     }
 
-    private const int PhysicalDevicePropertiesBufferSize = 2048;
-    // VkPhysicalDeviceProperties field offsets: apiVersion(0), driverVersion(4), vendorID(8), deviceID(12),
-    // deviceType(16), deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE=256](20).
-    private const int PhysicalDeviceApiVersionOffset = 0;
-    private const int PhysicalDeviceNameOffset = (sizeof(uint) * 5);
-    private const int PhysicalDeviceTypeOffset = (sizeof(uint) * 4);
-    // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
-    private const int PhysicalDeviceFeatureCount = 55;
-    private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
-    private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
-    private const uint StructureTypePhysicalDeviceProperties2 = 1000059001;
+    private InstancePointers GetPointers(nint instanceHandle) {
+        return m_pointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                EnumeratePhysicalDevices = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkEnumeratePhysicalDevices"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceProperties"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceQueueFamilyProperties = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceSurfaceSupportKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceSurfaceCapabilitiesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceSurfaceFormatsKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceSurfacePresentModesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceFeatures = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceFeatures"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkGetPhysicalDeviceFeatures2"u8,
+                instanceHandle: handle
+            )),
+                GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkGetPhysicalDeviceProperties2"u8,
+                instanceHandle: handle
+            )),
+                EnumerateDeviceExtensionProperties = ((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkEnumerateDeviceExtensionProperties"u8,
+                instanceHandle: handle
+            )),
+            }
+        );
+    }
+    private static unsafe void ValidatePhysicalDeviceInputs(nint instanceHandle, nint physicalDeviceHandle) {
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(instanceHandle)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: physicalDeviceHandle,
+            handleDescription: "physical-device",
+            paramName: nameof(physicalDeviceHandle)
+        );
+    }
+    private static unsafe void ValidatePhysicalDeviceSurfaceInputs(
+        nint instanceHandle,
+        nint physicalDeviceHandle,
+        nint surfaceHandle
+    ) {
+        ValidatePhysicalDeviceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: surfaceHandle,
+            handleDescription: "surface",
+            paramName: nameof(surfaceHandle)
+        );
+    }
 
     /// <inheritdoc/>
     public IReadOnlyList<nint> EnumeratePhysicalDevices(nint instanceHandle) {
@@ -82,37 +164,6 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public VkPhysicalDeviceType GetPhysicalDeviceType(nint instanceHandle, nint physicalDeviceHandle) {
-        ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle
-        );
-
-        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
-
-        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
-
-        try {
-            getPhysicalDeviceProperties(
-                physicalDeviceHandle,
-                propertiesBuffer
-            );
-            var deviceType = Marshal.ReadInt32(
-                ofs: PhysicalDeviceTypeOffset,
-                ptr: propertiesBuffer
-            );
-
-            return (Enum.IsDefined(
-                enumType: typeof(VkPhysicalDeviceType),
-                value: deviceType
-            )
-                ? (VkPhysicalDeviceType)deviceType
-                : VkPhysicalDeviceType.Other);
-        } finally {
-            m_allocator.Free(ptr: propertiesBuffer);
-        }
-    }
-    /// <inheritdoc/>
     public uint GetDeviceApiVersion(nint instanceHandle, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
             instanceHandle: instanceHandle,
@@ -133,32 +184,6 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 ofs: PhysicalDeviceApiVersionOffset,
                 ptr: propertiesBuffer
             ));
-        } finally {
-            m_allocator.Free(ptr: propertiesBuffer);
-        }
-    }
-    /// <inheritdoc/>
-    public string GetDeviceName(nint instanceHandle, nint physicalDeviceHandle) {
-        ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle
-        );
-
-        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
-
-        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
-
-        try {
-            getPhysicalDeviceProperties(
-                physicalDeviceHandle,
-                propertiesBuffer
-            );
-
-            // deviceName is a NUL-terminated UTF-8 char[256]; PtrToStringUTF8 stops at the terminator.
-            return (Marshal.PtrToStringUTF8(ptr: IntPtr.Add(
-                offset: PhysicalDeviceNameOffset,
-                pointer: propertiesBuffer
-            )) ?? "(unknown device)");
         } finally {
             m_allocator.Free(ptr: propertiesBuffer);
         }
@@ -196,6 +221,146 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         // The 8-byte LUID is laid out exactly as a Win32 LUID (LowPart then HighPart), matching DxgiInterop's
         // packing, so reading it as a little-endian long yields a value directly comparable to a DXGI adapter LUID.
         return *((long*)idProperties.DeviceLuid);
+    }
+    /// <inheritdoc/>
+    public string GetDeviceName(nint instanceHandle, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+
+        try {
+            getPhysicalDeviceProperties(
+                physicalDeviceHandle,
+                propertiesBuffer
+            );
+
+            // deviceName is a NUL-terminated UTF-8 char[256]; PtrToStringUTF8 stops at the terminator.
+            return (Marshal.PtrToStringUTF8(ptr: IntPtr.Add(
+                offset: PhysicalDeviceNameOffset,
+                pointer: propertiesBuffer
+            )) ?? "(unknown device)");
+        } finally {
+            m_allocator.Free(ptr: propertiesBuffer);
+        }
+    }
+    /// <inheritdoc/>
+    public IReadOnlyList<bool> GetFeatureSupport(nint instanceHandle, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var getPhysicalDeviceFeatures = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceFeatures;
+        var featureBytes = (PhysicalDeviceFeatureCount * sizeof(uint));
+        var buffer = m_allocator.Alloc(size: featureBytes);
+
+        try {
+            getPhysicalDeviceFeatures(
+                physicalDeviceHandle,
+                buffer
+            );
+
+            var support = new bool[PhysicalDeviceFeatureCount];
+
+            for (var index = 0; (index < PhysicalDeviceFeatureCount); index++) {
+                support[index] = (0 != Marshal.ReadInt32(
+                    ofs: (index * sizeof(uint)),
+                    ptr: buffer
+                ));
+            }
+
+            return support;
+        } finally {
+            m_allocator.Free(ptr: buffer);
+        }
+    }
+    /// <inheritdoc/>
+    public VkPhysicalDeviceType GetPhysicalDeviceType(nint instanceHandle, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+
+        try {
+            getPhysicalDeviceProperties(
+                physicalDeviceHandle,
+                propertiesBuffer
+            );
+            var deviceType = Marshal.ReadInt32(
+                ofs: PhysicalDeviceTypeOffset,
+                ptr: propertiesBuffer
+            );
+
+            return (Enum.IsDefined(
+                enumType: typeof(VkPhysicalDeviceType),
+                value: deviceType
+            )
+                ? (VkPhysicalDeviceType)deviceType
+                : VkPhysicalDeviceType.Other
+            );
+        } finally {
+            m_allocator.Free(ptr: propertiesBuffer);
+        }
+    }
+    /// <inheritdoc/>
+    public IReadOnlyList<uint> GetPresentModes(nint instanceHandle, nint physicalDeviceHandle, nint surfaceHandle) {
+        ValidatePhysicalDeviceSurfaceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            surfaceHandle: surfaceHandle
+        );
+
+        var getPresentModes = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfacePresentModesKhr;
+
+        var modeCount = 0U;
+        var result = getPresentModes(
+            physicalDeviceHandle,
+            surfaceHandle,
+            ref modeCount,
+            0
+        );
+
+        result.ThrowIfFailed(operation: "vkGetPhysicalDeviceSurfacePresentModesKHR");
+
+        if (0 == modeCount) {
+            return [];
+        }
+
+        var modeBuffer = m_allocator.Alloc(size: (sizeof(uint) * checked((int)modeCount)));
+
+        try {
+            result = getPresentModes(
+                physicalDeviceHandle,
+                surfaceHandle,
+                ref modeCount,
+                modeBuffer
+            );
+            result.ThrowIfFailed(operation: "vkGetPhysicalDeviceSurfacePresentModesKHR");
+
+            var presentModes = new int[modeCount];
+
+            Marshal.Copy(
+                destination: presentModes,
+                length: ((int)modeCount),
+                source: modeBuffer,
+                startIndex: 0
+            );
+            return Array.ConvertAll(
+                array: presentModes,
+                converter: static mode => unchecked((uint)mode)
+            );
+        } finally {
+            m_allocator.Free(ptr: modeBuffer);
+        }
     }
     /// <inheritdoc/>
     public IReadOnlyList<VkQueueFamilyInfo> GetQueueFamilies(nint instanceHandle, nint physicalDeviceHandle) {
@@ -247,31 +412,6 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         } finally {
             m_allocator.Free(ptr: queueFamilyBuffer);
         }
-    }
-    /// <inheritdoc/>
-    public bool GetSurfaceSupport(
-        nint instanceHandle,
-        nint physicalDeviceHandle,
-        uint queueFamilyIndex,
-        nint surfaceHandle
-    ) {
-        ValidatePhysicalDeviceSurfaceInputs(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle,
-            surfaceHandle: surfaceHandle
-        );
-
-        var getSurfaceSupport = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfaceSupportKhr;
-
-        var result = getSurfaceSupport(
-            physicalDeviceHandle,
-            queueFamilyIndex,
-            surfaceHandle,
-            out var supported
-        );
-
-        result.ThrowIfFailed(operation: "vkGetPhysicalDeviceSurfaceSupportKHR");
-        return (0 != supported);
     }
     /// <inheritdoc/>
     public VulkanSurfaceCapabilities GetSurfaceCapabilities(
@@ -368,55 +508,29 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public IReadOnlyList<uint> GetPresentModes(nint instanceHandle, nint physicalDeviceHandle, nint surfaceHandle) {
+    public bool GetSurfaceSupport(
+        nint instanceHandle,
+        nint physicalDeviceHandle,
+        uint queueFamilyIndex,
+        nint surfaceHandle
+    ) {
         ValidatePhysicalDeviceSurfaceInputs(
             instanceHandle: instanceHandle,
             physicalDeviceHandle: physicalDeviceHandle,
             surfaceHandle: surfaceHandle
         );
 
-        var getPresentModes = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfacePresentModesKhr;
+        var getSurfaceSupport = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfaceSupportKhr;
 
-        var modeCount = 0U;
-        var result = getPresentModes(
+        var result = getSurfaceSupport(
             physicalDeviceHandle,
+            queueFamilyIndex,
             surfaceHandle,
-            ref modeCount,
-            0
+            out var supported
         );
 
-        result.ThrowIfFailed(operation: "vkGetPhysicalDeviceSurfacePresentModesKHR");
-
-        if (0 == modeCount) {
-            return [];
-        }
-
-        var modeBuffer = m_allocator.Alloc(size: (sizeof(uint) * checked((int)modeCount)));
-
-        try {
-            result = getPresentModes(
-                physicalDeviceHandle,
-                surfaceHandle,
-                ref modeCount,
-                modeBuffer
-            );
-            result.ThrowIfFailed(operation: "vkGetPhysicalDeviceSurfacePresentModesKHR");
-
-            var presentModes = new int[modeCount];
-
-            Marshal.Copy(
-                destination: presentModes,
-                length: ((int)modeCount),
-                source: modeBuffer,
-                startIndex: 0
-            );
-            return Array.ConvertAll(
-                array: presentModes,
-                converter: static mode => unchecked((uint)mode)
-            );
-        } finally {
-            m_allocator.Free(ptr: modeBuffer);
-        }
+        result.ThrowIfFailed(operation: "vkGetPhysicalDeviceSurfaceSupportKHR");
+        return (0 != supported);
     }
     /// <inheritdoc/>
     public VulkanTimestampCapabilities GetTimestampCapabilities(
@@ -511,11 +625,11 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
         if (
             (VkResult.Success != enumerateDeviceExtensionProperties(
-                physicalDeviceHandle,
-                0,
-                ((nint)(&count)),
-                0
-            )) ||
+            physicalDeviceHandle,
+            0,
+            ((nint)(&count)),
+            0
+        )) ||
             (0 == count)
         ) {
             return false;
@@ -554,37 +668,6 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
 
         return false;
-    }
-    /// <inheritdoc/>
-    public IReadOnlyList<bool> GetFeatureSupport(nint instanceHandle, nint physicalDeviceHandle) {
-        ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle
-        );
-
-        var getPhysicalDeviceFeatures = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceFeatures;
-        var featureBytes = (PhysicalDeviceFeatureCount * sizeof(uint));
-        var buffer = m_allocator.Alloc(size: featureBytes);
-
-        try {
-            getPhysicalDeviceFeatures(
-                physicalDeviceHandle,
-                buffer
-            );
-
-            var support = new bool[PhysicalDeviceFeatureCount];
-
-            for (var index = 0; (index < PhysicalDeviceFeatureCount); index++) {
-                support[index] = (0 != Marshal.ReadInt32(
-                    ofs: (index * sizeof(uint)),
-                    ptr: buffer
-                ));
-            }
-
-            return support;
-        } finally {
-            m_allocator.Free(ptr: buffer);
-        }
     }
     /// <inheritdoc/>
     public bool IsExtensionFeatureSupported(nint instanceHandle, nint physicalDeviceHandle, uint structureType) {
@@ -628,36 +711,6 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         return (0 != *((uint*)(featureBlock + FeatureFlagOffset)));
     }
 
-    private static unsafe void ValidatePhysicalDeviceInputs(nint instanceHandle, nint physicalDeviceHandle) {
-        VulkanArgument.RequireHandle(
-            handle: instanceHandle,
-            handleDescription: "instance",
-            paramName: nameof(instanceHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: physicalDeviceHandle,
-            handleDescription: "physical-device",
-            paramName: nameof(physicalDeviceHandle)
-        );
-    }
-    private static unsafe void ValidatePhysicalDeviceSurfaceInputs(
-        nint instanceHandle,
-        nint physicalDeviceHandle,
-        nint surfaceHandle
-    ) {
-        ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: surfaceHandle,
-            handleDescription: "surface",
-            paramName: nameof(surfaceHandle)
-        );
-    }
-
     private unsafe struct InstancePointers {
         public delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult> EnumeratePhysicalDevices;
         public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceProperties;
@@ -670,26 +723,5 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceFeatures2;
         public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceProperties2;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult> EnumerateDeviceExtensionProperties;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
-
-    private InstancePointers GetPointers(nint instanceHandle) {
-        return m_pointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                EnumeratePhysicalDevices = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkEnumeratePhysicalDevices"u8, instanceHandle: handle)),
-                GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceProperties"u8, instanceHandle: handle)),
-                GetPhysicalDeviceQueueFamilyProperties = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8, instanceHandle: handle)),
-                GetPhysicalDeviceSurfaceSupportKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8, instanceHandle: handle)),
-                GetPhysicalDeviceSurfaceCapabilitiesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8, instanceHandle: handle)),
-                GetPhysicalDeviceSurfaceFormatsKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8, instanceHandle: handle)),
-                GetPhysicalDeviceSurfacePresentModesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8, instanceHandle: handle)),
-                GetPhysicalDeviceFeatures = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceFeatures"u8, instanceHandle: handle)),
-                GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkGetPhysicalDeviceFeatures2"u8, instanceHandle: handle)),
-                GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkGetPhysicalDeviceProperties2"u8, instanceHandle: handle)),
-                EnumerateDeviceExtensionProperties = ((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkEnumerateDeviceExtensionProperties"u8, instanceHandle: handle)),
-            }
-        );
     }
 }

@@ -12,13 +12,19 @@ internal sealed record ParityContract(
     /// <summary>Resolves the thresholds for one manifest station: an exact-named entry first, then the
     /// <c>"default"</c> entry if the contract declares one.</summary>
     public bool TryResolveStation(string station, out ParityStationContract resolved) {
-        if (Stations.TryGetValue(key: station, value: out var exact)) {
+        if (Stations.TryGetValue(
+            key: station,
+            value: out var exact
+        )) {
             resolved = exact;
 
             return true;
         }
 
-        return Stations.TryGetValue(key: FallbackStationName, value: out resolved!);
+        return Stations.TryGetValue(
+            key: FallbackStationName,
+            value: out resolved!
+        );
     }
 }
 /// <summary>One station's gate floors and per-tile pixel thresholds.</summary>

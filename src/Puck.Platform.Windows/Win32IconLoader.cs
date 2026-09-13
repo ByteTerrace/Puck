@@ -28,50 +28,10 @@ internal static class Win32IconLoader {
     private static readonly Dictionary<string, WindowIcons> CachedIcons = new(capacity: 2);
     private static readonly Lock SyncLock = new();
 
-    /// <summary>Returns the icon pair for one authored icon path, loading it on first use.</summary>
-    /// <param name="iconPath">The <c>.ico</c> path to load, or <see langword="null"/> for the host executable's own
-    /// icon. A relative path resolves against <see cref="AppContext.BaseDirectory"/>.</param>
-    /// <param name="instanceHandle">The module supplying the unauthored default — <c>GetModuleHandleW(null)</c>.</param>
-    /// <returns>The pair. A member is <c>0</c> only when even the shell's stock icon failed to load.</returns>
-    public static WindowIcons GetOrLoadIcons(string? iconPath, nint instanceHandle) {
-        var cacheKey = (iconPath ?? string.Empty);
-
-        lock (SyncLock) {
-            if (CachedIcons.TryGetValue(key: cacheKey, value: out var cached)) {
-                return cached;
-            }
-
-            // The system-wide metrics, not the per-monitor ones: the pair is a window-class property resolved once
-            // per process, and the shell rescales for whichever monitor a window lands on.
-            var extents = new IconExtents(
-                CxBig: Fallback(metric: User32.GetSystemMetrics(index: SmCxIcon), whenUnavailable: 32),
-                CxSmall: Fallback(metric: User32.GetSystemMetrics(index: SmCxSmIcon), whenUnavailable: 16),
-                CyBig: Fallback(metric: User32.GetSystemMetrics(index: SmCyIcon), whenUnavailable: 32),
-                CySmall: Fallback(metric: User32.GetSystemMetrics(index: SmCySmIcon), whenUnavailable: 16)
-            );
-            var resolved = (TryLoadFromFile(
-                extents: extents,
-                icons: out var authored,
-                path: iconPath
-            )
-                ? authored
-                : LoadFromModule(
-                    extents: extents,
-                    instanceHandle: instanceHandle
-                )
-            );
-
-            CachedIcons[cacheKey] = resolved;
-
-            return resolved;
-        }
-    }
-
     private static int Fallback(int metric, int whenUnavailable) => ((metric > 0)
         ? metric
         : whenUnavailable
     );
-
     /// <summary>Loads the module's own group icon, falling back to the shell's stock application icon.</summary>
     private static WindowIcons LoadFromModule(IconExtents extents, nint instanceHandle) {
         var big = ((nint)0);
@@ -97,16 +57,24 @@ internal static class Win32IconLoader {
         }
 
         if (big == 0) {
-            big = User32.LoadIcon(iconName: ((nint)IdiApplication), instanceHandle: 0);
+            big = User32.LoadIcon(
+                iconName: ((nint)IdiApplication),
+                instanceHandle: 0
+            );
         }
 
         if (small == 0) {
-            small = User32.LoadIcon(iconName: ((nint)IdiApplication), instanceHandle: 0);
+            small = User32.LoadIcon(
+                iconName: ((nint)IdiApplication),
+                instanceHandle: 0
+            );
         }
 
-        return new WindowIcons(BigIcon: big, SmallIcon: small);
+        return new WindowIcons(
+            BigIcon: big,
+            SmallIcon: small
+        );
     }
-
     /// <summary>Loads both extents from one file, all-or-nothing so a half-readable file never mixes an author's
     /// large icon with the executable's small one.</summary>
     /// <returns><see langword="true"/> when both extents loaded.</returns>
@@ -119,7 +87,10 @@ internal static class Win32IconLoader {
 
         var resolvedPath = (Path.IsPathRooted(path: path)
             ? path
-            : Path.Combine(path1: AppContext.BaseDirectory, path2: path)
+            : Path.Combine(
+                path1: AppContext.BaseDirectory,
+                path2: path
+            )
         );
 
         if (!File.Exists(path: resolvedPath)) {
@@ -130,7 +101,7 @@ internal static class Win32IconLoader {
             desiredHeight: extents.CyBig,
             desiredWidth: extents.CxBig,
             instanceHandle: 0,
-            loadFlags: (LrLoadFromFile | LrDefaultColor),
+            loadFlags: LrLoadFromFile | LrDefaultColor,
             name: resolvedPath,
             type: ImageIcon
         );
@@ -138,13 +109,16 @@ internal static class Win32IconLoader {
             desiredHeight: extents.CySmall,
             desiredWidth: extents.CxSmall,
             instanceHandle: 0,
-            loadFlags: (LrLoadFromFile | LrDefaultColor),
+            loadFlags: LrLoadFromFile | LrDefaultColor,
             name: resolvedPath,
             type: ImageIcon
         );
 
         // Owned handles, unlike the shared IDI_APPLICATION ones, so a partial load frees what it got.
-        if ((big == 0) || (small == 0)) {
+        if (
+            (big == 0) ||
+            (small == 0)
+        ) {
             if (big != 0) {
                 _ = User32.DestroyIcon(iconHandle: big);
             }
@@ -156,9 +130,66 @@ internal static class Win32IconLoader {
             return false;
         }
 
-        icons = new WindowIcons(BigIcon: big, SmallIcon: small);
+        icons = new WindowIcons(
+            BigIcon: big,
+            SmallIcon: small
+        );
 
         return true;
+    }
+
+    /// <summary>Returns the icon pair for one authored icon path, loading it on first use.</summary>
+    /// <param name="iconPath">The <c>.ico</c> path to load, or <see langword="null"/> for the host executable's own
+    /// icon. A relative path resolves against <see cref="AppContext.BaseDirectory"/>.</param>
+    /// <param name="instanceHandle">The module supplying the unauthored default — <c>GetModuleHandleW(null)</c>.</param>
+    /// <returns>The pair. A member is <c>0</c> only when even the shell's stock icon failed to load.</returns>
+    public static WindowIcons GetOrLoadIcons(string? iconPath, nint instanceHandle) {
+        var cacheKey = (iconPath ?? string.Empty);
+
+        lock (SyncLock) {
+            if (CachedIcons.TryGetValue(
+                key: cacheKey,
+                value: out var cached
+            )) {
+                return cached;
+            }
+
+            // The system-wide metrics, not the per-monitor ones: the pair is a window-class property resolved once
+            // per process, and the shell rescales for whichever monitor a window lands on.
+            var extents = new IconExtents(
+                CxBig: Fallback(
+                    metric: User32.GetSystemMetrics(index: SmCxIcon),
+                    whenUnavailable: 32
+                ),
+                CxSmall: Fallback(
+                    metric: User32.GetSystemMetrics(index: SmCxSmIcon),
+                    whenUnavailable: 16
+                ),
+                CyBig: Fallback(
+                    metric: User32.GetSystemMetrics(index: SmCyIcon),
+                    whenUnavailable: 32
+                ),
+                CySmall: Fallback(
+                    metric: User32.GetSystemMetrics(index: SmCySmIcon),
+                    whenUnavailable: 16
+                )
+            );
+            var resolved = (TryLoadFromFile(
+                extents: extents,
+                icons: out var authored,
+                path: iconPath
+            )
+                ? authored
+                : LoadFromModule(
+                    extents: extents,
+                    instanceHandle: instanceHandle
+                )
+            );
+
+            CachedIcons[cacheKey] = resolved;
+
+            return resolved;
+        }
     }
 
     /// <summary>The pixel extents one pair is loaded at.</summary>

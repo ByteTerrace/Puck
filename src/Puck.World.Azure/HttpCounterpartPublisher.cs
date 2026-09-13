@@ -47,7 +47,10 @@ public sealed class HttpCounterpartPublisher : ICounterpartPublisher {
                 requestUri: $"api/worlds/{worldId}/counterpart"
             ) {
                 Content = new ByteArrayContent(content: payload.ToArray()),
-                Headers = { Authorization = new AuthenticationHeaderValue(scheme: "Bearer", parameter: token.Token) },
+                Headers = { Authorization = new AuthenticationHeaderValue(
+                scheme: "Bearer",
+                parameter: token.Token
+            ) },
             };
             using var response = m_httpClient.Send(
                 cancellationToken: timeout.Token,

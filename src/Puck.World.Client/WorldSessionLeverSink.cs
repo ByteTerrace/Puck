@@ -30,7 +30,10 @@ public sealed class WorldSessionLeverSink {
     /// <param name="lever">The lever to write.</param>
     public void Apply(WorldSessionLever lever) {
         if (!TryApply(lever: lever)) {
-            Console.Error.WriteLine(value: $"[world.lever: '{lever.Name}' names no registered knob — accepted by the server and dropped here; registered: {string.Join(separator: ", ", values: m_setters.Keys.Order(comparer: StringComparer.Ordinal))}]");
+            Console.Error.WriteLine(value: $"[world.lever: '{lever.Name}' names no registered knob — accepted by the server and dropped here; registered: {string.Join(
+                separator: ", ",
+                values: m_setters.Keys.Order(comparer: StringComparer.Ordinal)
+            )}]");
         }
     }
     /// <summary>Determines whether a knob token has a registered setter.</summary>

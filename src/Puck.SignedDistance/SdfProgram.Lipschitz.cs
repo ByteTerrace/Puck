@@ -127,7 +127,7 @@ public sealed partial class SdfProgram {
         // The one-deep PushField save (SdfProgramBuilder.MaxFieldScopeDepth == 1), mirroring mapCore's
         // savedFieldDistance slot. A PUSH reseeds the accumulator to the same constant the program started from.
         var savedAccumulator = 0.0f;
-        var cellPointFactors = AnalyzeCellPointFactors(instructions);
+        var cellPointFactors = AnalyzeCellPointFactors(instructions: instructions);
         var chainIndex = 0;
 
         for (var index = 0; (index < instructions.Length); index++) {
@@ -171,7 +171,7 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 case SdfOp.CellDisplace: {
-                        accumulator += (CellDisplaceLipschitz(instruction) - 1f) * cellPointFactors[index];
+                        accumulator += ((CellDisplaceLipschitz(instruction: instruction) - 1f) * cellPointFactors[index]);
                         break;
                     }
                 case SdfOp.PopField: {
@@ -192,11 +192,11 @@ public sealed partial class SdfProgram {
                         if (scopeLipschitz > 1.0f) {
                             instructions[index] = (instruction with {
                                 Data1 = new Vector4(
-                                    x: instruction.Data1.X,
-                                    y: (1.0f / scopeLipschitz),
-                                    z: instruction.Data1.Z,
-                                    w: instruction.Data1.W
-                                ),
+                                x: instruction.Data1.X,
+                                y: (1.0f / scopeLipschitz),
+                                z: instruction.Data1.Z,
+                                w: instruction.Data1.W
+                            ),
                             });
                         }
 
@@ -298,11 +298,13 @@ public sealed partial class SdfProgram {
                 (index != 0)
             ) {
                 chainFactors.Add(item: (((FoldChainLipschitz(
-                    reachWarps: chainReachWarps,
                     reach: (chainTranslateReach + chainShapeReach),
+                    reachWarps: chainReachWarps,
                     shapeApproxMax: chainShapeApproxMax,
                     warpRates: chainWarpRates
-                ) * chainLogSphereProduct) * (chainHasShapeBlend ? chainDisplaceWarpProduct : 1.0f)) * FoldCellJitterProduct(
+                ) * chainLogSphereProduct) * (chainHasShapeBlend
+                    ? chainDisplaceWarpProduct
+                    : 1.0f)) * FoldCellJitterProduct(
                     cellJitters: chainCellJitters,
                     shapeReach: chainShapeReach,
                     translateReach: chainTranslateReach
@@ -337,6 +339,7 @@ public sealed partial class SdfProgram {
                                 y: chainScale.Z
                             )
                         );
+
                         chainTranslateReach += (new Vector3(
                             x: instruction.Data0.X,
                             y: instruction.Data0.Y,
@@ -346,7 +349,8 @@ public sealed partial class SdfProgram {
                     }
                 case SdfOp.RotatePlane: {
                         var normalAxis = instruction.Shape switch { 0u => 2u, 1u => 0u, _ => 1u };
-                        chainWarpRates.Add((MathF.Abs(instruction.Data0.X), instruction.Blend != normalAxis, MinAxis(chainScale)));
+
+                        chainWarpRates.Add(item: (MathF.Abs(x: instruction.Data0.X), (instruction.Blend != normalAxis), MinAxis(scale: chainScale)));
                         break;
                     }
                 case SdfOp.ShapeBlend: {
@@ -358,9 +362,15 @@ public sealed partial class SdfProgram {
                                 y: chainScale.Z
                             )
                         );
+
                         chainShapeReach = MathF.Max(
                             x: chainShapeReach,
-                            y: (ShapeReachRadius(convexPolygonProfiles: convexPolygonProfiles, instruction: instruction, instructionIndex: index, sweepCurves: sweepCurves) * maxScale)
+                            y: (ShapeReachRadius(
+                                convexPolygonProfiles: convexPolygonProfiles,
+                                instruction: instruction,
+                                instructionIndex: index,
+                                sweepCurves: sweepCurves
+                            ) * maxScale)
                         );
 
                         if (((SdfShapeType)instruction.Shape) == SdfShapeType.Ellipsoid) {
@@ -397,6 +407,7 @@ public sealed partial class SdfProgram {
                                 y: chainScale.Z
                             )
                         );
+
                         chainTranslateReach += ((0.8660254f * MathF.Abs(x: instruction.Data0.W)) * maxScale);
                         // (2) The STANDALONE boundary-discontinuity step factor (the LogSphere-shaped fix). Stash this op's
                         // (min spacing, jitter) so the chain-close fold can compute a REACH-INDEPENDENT factor against the
@@ -416,7 +427,7 @@ public sealed partial class SdfProgram {
                                 x: cellSpacing.Y,
                                 y: cellSpacing.Z
                             )
-                        ), instruction.Data0.W, chainTranslateReach, MinAxis(chainScale)));
+                        ), instruction.Data0.W, chainTranslateReach, MinAxis(scale: chainScale)));
                         break;
                     }
                 case SdfOp.Displace: {
@@ -436,6 +447,7 @@ public sealed partial class SdfProgram {
                                 y: chainScale.Z
                             )
                         );
+
                         chainDisplaceWarpProduct *= DisplaceWarpLipschitz(instruction: instruction);
                         chainTranslateReach += ((1.7320508f * MathF.Abs(x: instruction.Data0.W)) * maxScale);
                         break;
@@ -465,23 +477,23 @@ public sealed partial class SdfProgram {
                         // Reach-DEPENDENT like Bend/Twist (its shear term scales with the chain's XZ reach), unlike
                         // LogSphere/Displace/NoiseDisplace's reach-independent products — so it is stashed here and
                         // folded at chain-close against the FINAL reach, exactly like CellJitter's boundary factor.
-                        chainReachWarps.Add((instruction, MinAxis(chainScale), MaxAxis(chainScale)));
+                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale)));
                         break;
                     }
                 case SdfOp.Shear: {
                         // Reach-DEPENDENT like Bend/Twist/AxialProfile (the slope grows with the chain's Y reach) — stashed
                         // here and folded at chain-close against the FINAL reach (SdfProgram.ShearOperatorNorm).
-                        chainReachWarps.Add((instruction, MinAxis(chainScale), MaxAxis(chainScale)));
+                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale)));
                         break;
                     }
                 case SdfOp.GaussianPush: {
                         // The derivative bound is global; its displacement also expands preceding warps' input domains.
-                        chainReachWarps.Add((instruction, MinAxis(chainScale), MaxAxis(chainScale)));
+                        chainReachWarps.Add(item: (instruction, MinAxis(scale: chainScale), MaxAxis(scale: chainScale)));
                         chainDisplaceWarpProduct *= GaussianPushLipschitz(
                             push: new Vector3(
                                 x: instruction.Data0.W,
                                 y: instruction.Data1.W,
-                                z: BitConverter.UInt32BitsToSingle(instruction.Shape)
+                                z: BitConverter.UInt32BitsToSingle(value: instruction.Shape)
                             ),
                             radii: new Vector3(
                                 x: instruction.Data1.X,
@@ -505,11 +517,13 @@ public sealed partial class SdfProgram {
 
         // Fold the final (or only) chain.
         chainFactors.Add(item: (((FoldChainLipschitz(
-            reachWarps: chainReachWarps,
             reach: (chainTranslateReach + chainShapeReach),
+            reachWarps: chainReachWarps,
             shapeApproxMax: chainShapeApproxMax,
             warpRates: chainWarpRates
-        ) * chainLogSphereProduct) * (chainHasShapeBlend ? chainDisplaceWarpProduct : 1.0f)) * FoldCellJitterProduct(
+        ) * chainLogSphereProduct) * (chainHasShapeBlend
+            ? chainDisplaceWarpProduct
+            : 1.0f)) * FoldCellJitterProduct(
             cellJitters: chainCellJitters,
             shapeReach: chainShapeReach,
             translateReach: chainTranslateReach
@@ -519,6 +533,7 @@ public sealed partial class SdfProgram {
 
         return chainFactors;
     }
+
     /// <summary>Returns the exact extrema of <see cref="SdfOp.AxialProfile"/>'s scale profile
     /// <c>s(t) = startScale + amount·t + bulge·sin(π·t)</c> over <c>t ∈ [0, 1]</c> — exposed so an authoring door can
     /// budget-check a flare declaration against the ONE formula <see cref="SdfProgramBuilder.AxialProfile"/> bakes and
@@ -562,6 +577,7 @@ public sealed partial class SdfProgram {
 
         return (min, max);
     }
+
     // AxialProfile's conservative operator-norm bound over the chain's reach rho (see SdfOp.AxialProfile): the warp's Jacobian is
     // diag(1/s, 1, 1/s) plus a rank-1 shear from ds/dy (moving along y rescales x and z), so the triangle inequality
     // bounds its operator norm by max(1/s, 1) + rho_flared*|ds/dy|/s^2. The shear scales with the radial distance of
@@ -583,7 +599,8 @@ public sealed partial class SdfProgram {
     private static float FlareOperatorNorm(float amount, float bulge, float inverseSpan, float distanceScale, float reach, float startScale) {
         if (
             (amount == 0.0f) &&
-            (bulge == 0.0f) && (startScale == 1f)
+            (bulge == 0.0f) &&
+            (startScale == 1f)
         ) {
             return 1.0f;
         }

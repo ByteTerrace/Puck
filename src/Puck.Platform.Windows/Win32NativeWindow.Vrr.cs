@@ -38,7 +38,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             return DisplayTimingSnapshot.Unknown;
         }
 
-        var monitor = User32.MonitorFromWindow(flags: MonitorDefaultToNearest, windowHandle: m_windowHandle);
+        var monitor = User32.MonitorFromWindow(
+            flags: MonitorDefaultToNearest,
+            windowHandle: m_windowHandle
+        );
 
         if (monitor == 0) {
             return DisplayTimingSnapshot.Unknown;
@@ -48,13 +51,22 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
 
         var monitorInfo = new MonitorInfoEx { Size = ((uint)Marshal.SizeOf<MonitorInfoEx>()) };
 
-        if (!User32.GetMonitorInfoEx(monitorHandle: monitor, monitorInfo: ref monitorInfo)) {
+        if (!User32.GetMonitorInfoEx(
+            monitorHandle: monitor,
+            monitorInfo: ref monitorInfo
+        )) {
             return DisplayTimingSnapshot.Unknown;
         }
 
         if (
-            OperatingSystem.IsWindowsVersionAtLeast(major: 6, minor: 1) &&
-            TryQueryActiveDisplay(deviceName: monitorInfo.DeviceName, snapshot: out var snapshot)
+            OperatingSystem.IsWindowsVersionAtLeast(
+            major: 6,
+            minor: 1
+        ) &&
+            TryQueryActiveDisplay(
+            deviceName: monitorInfo.DeviceName,
+            snapshot: out var snapshot
+        )
         ) {
             return snapshot;
         }
@@ -62,7 +74,11 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
         // CCD can be transiently unavailable during topology changes. Preserve the useful physical-signal fact from
         // DEVMODE, but do not infer any VRR capability from selectable fixed display modes.
         if (
-            TryEnumDisplaySettings(deviceName: monitorInfo.DeviceName, mode: out var current, modeNumber: EnumCurrentSettings) &&
+            TryEnumDisplaySettings(
+            deviceName: monitorInfo.DeviceName,
+            mode: out var current,
+            modeNumber: EnumCurrentSettings
+        ) &&
             (current.DisplayFrequency > 1u)
         ) {
             return new DisplayTimingSnapshot(
@@ -85,7 +101,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
         }
 
         if (duration > TimeSpan.Zero) {
-            _ = m_precisionTimer.WaitOne(cancellationWaitHandle: null, dueTime: duration);
+            _ = m_precisionTimer.WaitOne(
+                cancellationWaitHandle: null,
+                dueTime: duration
+            );
         }
 
         return true;
@@ -99,7 +118,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             return;
         }
 
-        var monitor = User32.MonitorFromWindow(flags: MonitorDefaultToNearest, windowHandle: windowHandle);
+        var monitor = User32.MonitorFromWindow(
+            flags: MonitorDefaultToNearest,
+            windowHandle: windowHandle
+        );
 
         if (
             (monitor != 0) &&
@@ -112,20 +134,31 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
     private static bool TryEnumDisplaySettings(string deviceName, uint modeNumber, out DevMode mode) {
         mode = new DevMode { Size = ((ushort)Marshal.SizeOf<DevMode>()) };
 
-        return User32.EnumDisplaySettings(devMode: ref mode, deviceName: deviceName, modeNumber: modeNumber);
+        return User32.EnumDisplaySettings(
+            devMode: ref mode,
+            deviceName: deviceName,
+            modeNumber: modeNumber
+        );
     }
     [SupportedOSPlatform(platformName: "windows6.1")]
     private static unsafe bool TryQueryActiveDisplay(string deviceName, out DisplayTimingSnapshot snapshot) {
         snapshot = DisplayTimingSnapshot.Unknown;
 
-        if (!OperatingSystem.IsWindowsVersionAtLeast(major: 6, minor: 1)) {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            major: 6,
+            minor: 1
+        )) {
             return false;
         }
 
         var queryFlags = QUERY_DISPLAY_CONFIG_FLAGS.QDC_ONLY_ACTIVE_PATHS |
             QUERY_DISPLAY_CONFIG_FLAGS.QDC_VIRTUAL_MODE_AWARE;
 
-        if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 22000)) {
+        if (OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 22000
+        )) {
             queryFlags |= QUERY_DISPLAY_CONFIG_FLAGS.QDC_VIRTUAL_REFRESH_RATE_AWARE;
         }
 
@@ -172,14 +205,17 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             for (var pathIndex = 0u; (pathIndex < pathCount); ++pathIndex) {
                 ref readonly var path = ref paths[pathIndex];
 
-                if (!PathMatchesSource(deviceName: deviceName, path: in path)) {
+                if (!PathMatchesSource(
+                    deviceName: deviceName,
+                    path: in path
+                )) {
                     continue;
                 }
 
                 var targetModeIndex = (
-                    ((path.flags & DisplayConfigPathSupportVirtualMode) != 0u) ?
-                    path.targetInfo.Anonymous.Anonymous.targetModeInfoIdx :
-                    path.targetInfo.Anonymous.modeInfoIdx
+                    ((path.flags & DisplayConfigPathSupportVirtualMode) != 0u)
+                    ? path.targetInfo.Anonymous.Anonymous.targetModeInfoIdx
+                    : path.targetInfo.Anonymous.modeInfoIdx
                 );
 
                 if (targetModeIndex >= modeCount) {
@@ -200,7 +236,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
                 // with QDC_VIRTUAL_REFRESH_RATE_AWARE it is also the cadence applications should target under DRR.
                 var signalRate = path.targetInfo.refreshRate;
 
-                if ((signalRate.Numerator == 0u) || (signalRate.Denominator == 0u)) {
+                if (
+                    (signalRate.Numerator == 0u) ||
+                    (signalRate.Denominator == 0u)
+                ) {
                     signalRate = targetMode.Anonymous.targetMode.targetVideoSignalInfo.vSyncFreq;
                 }
 
@@ -211,14 +250,23 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
 
                 var signalHertz = (((double)signalRate.Numerator) / signalRate.Denominator);
 
-                if (!double.IsFinite(d: signalHertz) || (signalHertz <= 0.0)) {
+                if (
+                    !double.IsFinite(d: signalHertz) ||
+                    (signalHertz <= 0.0)
+                ) {
                     targetAccumulator.AddUnknownTarget();
                     continue;
                 }
 
-                var variableRefresh = QueryTargetVariableRefresh(activeSignalHertz: signalHertz, path: in path);
+                var variableRefresh = QueryTargetVariableRefresh(
+                    activeSignalHertz: signalHertz,
+                    path: in path
+                );
 
-                targetAccumulator.AddTarget(signalHertz: signalHertz, variableRefresh: variableRefresh);
+                targetAccumulator.AddTarget(
+                    signalHertz: signalHertz,
+                    variableRefresh: variableRefresh
+                );
             }
 
             return targetAccumulator.TryCreateSnapshot(snapshot: out snapshot);
@@ -240,10 +288,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
         return (
             (PInvoke.DisplayConfigGetDeviceInfo(requestPacket: ref sourceName.header) == 0) &&
             string.Equals(
-                a: sourceName.viewGdiDeviceName.ToString(),
-                b: deviceName,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )
+            a: sourceName.viewGdiDeviceName.ToString(),
+            b: deviceName,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
         );
     }
     [SupportedOSPlatform(platformName: "windows6.1")]
@@ -265,12 +313,18 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
 
         if (
             string.IsNullOrWhiteSpace(value: monitorDevicePath) ||
-            !TryReadEffectiveEdid(edid: out var edid, monitorDevicePath: monitorDevicePath)
+            !TryReadEffectiveEdid(
+            edid: out var edid,
+            monitorDevicePath: monitorDevicePath
+        )
         ) {
             return VariableRefreshCapabilities.Unknown;
         }
 
-        return EdidVariableRefreshParser.Parse(activeSignalHertz: activeSignalHertz, edid: edid);
+        return EdidVariableRefreshParser.Parse(
+            activeSignalHertz: activeSignalHertz,
+            edid: edid
+        );
     }
     [SupportedOSPlatform(platformName: "windows6.1")]
     private static unsafe bool TryReadEffectiveEdid(string monitorDevicePath, out byte[] edid) {
@@ -309,7 +363,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             RequiredSize: &requiredSize
         );
 
-        if ((requiredSize == 0u) || (Marshal.GetLastPInvokeError() != ((int)WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER))) {
+        if (
+            (requiredSize == 0u) ||
+            (Marshal.GetLastPInvokeError() != ((int)WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER))
+        ) {
             return false;
         }
 
@@ -348,20 +405,40 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
                 return false;
             }
 
-            using var deviceRegistryKey = RegistryKey.FromHandle(handle: deviceRegistryHandle, view: RegistryView.Default);
+            using var deviceRegistryKey = RegistryKey.FromHandle(
+                handle: deviceRegistryHandle,
+                view: RegistryView.Default
+            );
 
             // SetupDiOpenDevRegKey(DIREG_DEV) normally returns the device hardware key (the Device Parameters key on
             // current Windows). Retain the explicit subkey fallback for drivers that expose the device-instance root.
-            if (deviceRegistryKey.GetValue(defaultValue: null, name: "EDID", options: RegistryValueOptions.DoNotExpandEnvironmentNames) is byte[] hardwareKeyEdid) {
-                edid = ApplyEdidOverrides(parametersKey: deviceRegistryKey, rawEdid: hardwareKeyEdid);
+            if (deviceRegistryKey.GetValue(
+                defaultValue: null,
+                name: "EDID",
+                options: RegistryValueOptions.DoNotExpandEnvironmentNames
+            ) is byte[] hardwareKeyEdid) {
+                edid = ApplyEdidOverrides(
+                    parametersKey: deviceRegistryKey,
+                    rawEdid: hardwareKeyEdid
+                );
 
                 return true;
             }
 
-            using var parametersKey = deviceRegistryKey.OpenSubKey(name: "Device Parameters", writable: false);
+            using var parametersKey = deviceRegistryKey.OpenSubKey(
+                name: "Device Parameters",
+                writable: false
+            );
 
-            if (parametersKey?.GetValue(defaultValue: null, name: "EDID", options: RegistryValueOptions.DoNotExpandEnvironmentNames) is byte[] instanceRootEdid) {
-                edid = ApplyEdidOverrides(parametersKey: parametersKey, rawEdid: instanceRootEdid);
+            if (parametersKey?.GetValue(
+                defaultValue: null,
+                name: "EDID",
+                options: RegistryValueOptions.DoNotExpandEnvironmentNames
+            ) is byte[] instanceRootEdid) {
+                edid = ApplyEdidOverrides(
+                    parametersKey: parametersKey,
+                    rawEdid: instanceRootEdid
+                );
 
                 return true;
             }
@@ -373,7 +450,10 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
     }
     [SupportedOSPlatform(platformName: "windows6.1")]
     private static byte[] ApplyEdidOverrides(byte[] rawEdid, RegistryKey parametersKey) {
-        using var overrideKey = parametersKey.OpenSubKey(name: "EDID_OVERRIDE", writable: false);
+        using var overrideKey = parametersKey.OpenSubKey(
+            name: "EDID_OVERRIDE",
+            writable: false
+        );
 
         if (overrideKey is null) {
             return rawEdid;
@@ -383,9 +463,16 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
 
         foreach (var valueName in overrideKey.GetValueNames()) {
             if (
-                !int.TryParse(result: out var blockIndex, s: valueName) ||
+                !int.TryParse(
+                result: out var blockIndex,
+                s: valueName
+            ) ||
                 (blockIndex is < 0 or > 255) ||
-                (overrideKey.GetValue(defaultValue: null, name: valueName, options: RegistryValueOptions.DoNotExpandEnvironmentNames) is not byte[] block) ||
+                (overrideKey.GetValue(
+                defaultValue: null,
+                name: valueName,
+                options: RegistryValueOptions.DoNotExpandEnvironmentNames
+            ) is not byte[] block) ||
                 (block.Length != EdidBlockSize)
             ) {
                 continue;
@@ -394,10 +481,16 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             var requiredLength = checked(((blockIndex + 1) * EdidBlockSize));
 
             if (effective.Length < requiredLength) {
-                Array.Resize(array: ref effective, newSize: requiredLength);
+                Array.Resize(
+                    array: ref effective,
+                    newSize: requiredLength
+                );
             }
 
-            block.CopyTo(array: effective, index: (blockIndex * EdidBlockSize));
+            block.CopyTo(
+                array: effective,
+                index: (blockIndex * EdidBlockSize)
+            );
         }
 
         return effective;
@@ -409,9 +502,58 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
         private double m_signalHertz;
         private VariableRefreshCapabilities m_variableRefresh;
 
-        public void AddUnknownTarget() {
-            m_hasUnknownTarget = true;
+        private static VariableRefreshCapabilities Intersect(VariableRefreshCapabilities left, VariableRefreshCapabilities right) {
+            if (
+                (left.Support == VariableRefreshSupport.Unknown) ||
+                (right.Support == VariableRefreshSupport.Unknown)
+            ) {
+                return VariableRefreshCapabilities.Unknown;
+            }
+
+            if (
+                (left.Support == VariableRefreshSupport.Unsupported) ||
+                (right.Support == VariableRefreshSupport.Unsupported)
+            ) {
+                return VariableRefreshCapabilities.Unsupported;
+            }
+
+            if (
+                (left.Range is not { } leftRange) ||
+                (right.Range is not { } rightRange)
+            ) {
+                return VariableRefreshCapabilities.Unknown;
+            }
+
+            var minimum = Math.Max(
+                val1: leftRange.MinimumHertz,
+                val2: rightRange.MinimumHertz
+            );
+            var maximum = (leftRange.MaximumHertz, rightRange.MaximumHertz) switch {
+                ( { } leftMaximum, { } rightMaximum) => ((double?)Math.Min(
+                val1: leftMaximum,
+                val2: rightMaximum
+            )),
+                ( { } leftMaximum, null) => ((double?)leftMaximum),
+                (null, { } rightMaximum) => ((double?)rightMaximum),
+                _ => ((double?)null),
+            };
+
+            if (
+                (maximum is { } maximumHertz) &&
+                (maximumHertz <= minimum)
+            ) {
+                return VariableRefreshCapabilities.Unknown;
+            }
+
+            return VariableRefreshCapabilities.CreateSupported(
+                range: new VariableRefreshRange(
+                    maximumHertz: maximum,
+                    minimumHertz: minimum
+                ),
+                source: left.Source | right.Source
+            );
         }
+
         public void AddTarget(double signalHertz, VariableRefreshCapabilities variableRefresh) {
             if (!m_hasTarget) {
                 m_hasTarget = true;
@@ -421,8 +563,17 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
                 return;
             }
 
-            m_signalHertz = Math.Min(val1: m_signalHertz, val2: signalHertz);
-            m_variableRefresh = Intersect(left: m_variableRefresh, right: variableRefresh);
+            m_signalHertz = Math.Min(
+                val1: m_signalHertz,
+                val2: signalHertz
+            );
+            m_variableRefresh = Intersect(
+                left: m_variableRefresh,
+                right: variableRefresh
+            );
+        }
+        public void AddUnknownTarget() {
+            m_hasUnknownTarget = true;
         }
         public readonly bool TryCreateSnapshot(out DisplayTimingSnapshot snapshot) {
             // One unreadable member of a cloned source makes both the clone-wide signal ceiling and VRR intersection
@@ -446,43 +597,6 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
             );
 
             return true;
-        }
-
-        private static VariableRefreshCapabilities Intersect(VariableRefreshCapabilities left, VariableRefreshCapabilities right) {
-            if (
-                (left.Support == VariableRefreshSupport.Unknown) ||
-                (right.Support == VariableRefreshSupport.Unknown)
-            ) {
-                return VariableRefreshCapabilities.Unknown;
-            }
-
-            if (
-                (left.Support == VariableRefreshSupport.Unsupported) ||
-                (right.Support == VariableRefreshSupport.Unsupported)
-            ) {
-                return VariableRefreshCapabilities.Unsupported;
-            }
-
-            if ((left.Range is not { } leftRange) || (right.Range is not { } rightRange)) {
-                return VariableRefreshCapabilities.Unknown;
-            }
-
-            var minimum = Math.Max(val1: leftRange.MinimumHertz, val2: rightRange.MinimumHertz);
-            var maximum = (leftRange.MaximumHertz, rightRange.MaximumHertz) switch {
-                ( { } leftMaximum, { } rightMaximum) => ((double?)Math.Min(val1: leftMaximum, val2: rightMaximum)),
-                ( { } leftMaximum, null) => ((double?)leftMaximum),
-                (null, { } rightMaximum) => ((double?)rightMaximum),
-                _ => ((double?)null),
-            };
-
-            if ((maximum is { } maximumHertz) && (maximumHertz <= minimum)) {
-                return VariableRefreshCapabilities.Unknown;
-            }
-
-            return VariableRefreshCapabilities.CreateSupported(
-                range: new VariableRefreshRange(maximumHertz: maximum, minimumHertz: minimum),
-                source: left.Source | right.Source
-            );
         }
     }
 }

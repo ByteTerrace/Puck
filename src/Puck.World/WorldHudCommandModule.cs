@@ -26,37 +26,6 @@ namespace Puck.World;
 internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts) : ICommandModule {
     private const string SeatFilterPrefix = "seat:";
 
-    // A frame element's candidates in rank order (source JSON plus its condition, when one is authored) and the
-    // candidate winning now for the scope asked about — the same first-holding rule the feed publishes by. slot -1
-    // is the world scope (any joined seat).
-    private string DescribeFrameCandidates(WorldHudElement element, int slot) {
-        var candidates = element.FrameCandidates;
-        var winner = OverlayRanking.FirstHolding(
-            candidates: candidates,
-            evaluator: facts,
-            slot: slot,
-            when: static candidate => candidate.When
-        );
-        var builder = new System.Text.StringBuilder(value: " candidates=[");
-
-        for (var index = 0; (index < candidates.Count); index++) {
-            var candidate = candidates[index];
-
-            _ = builder.Append(value: ((index == 0) ? "" : " | ")).Append(value: JsonSerializer.Serialize(
-                value: candidate.Source,
-                jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
-            ));
-
-            if (candidate.When is { } when) {
-                _ = builder.Append(value: " when=").Append(value: when.GetType().Name.ToLowerInvariant());
-            }
-        }
-
-        return builder.Append(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"] winner={((winner >= 0) ? winner.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none")} fadeSeconds={element.FadeSeconds:0.###} fit={element.Fit.ToString().ToLowerInvariant()} mirror={(element.Mirror ? "true" : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
-        ).ToString();
-    }
     private string DescribeElement(string panelId, WorldHudElement element, int slot) {
         var bindingToken = (element.Binding ?? "(none)");
         var frameText = string.Empty;
@@ -95,6 +64,43 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         }
 
         return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}]";
+    }
+    // A frame element's candidates in rank order (source JSON plus its condition, when one is authored) and the
+    // candidate winning now for the scope asked about — the same first-holding rule the feed publishes by. slot -1
+    // is the world scope (any joined seat).
+    private string DescribeFrameCandidates(WorldHudElement element, int slot) {
+        var candidates = element.FrameCandidates;
+        var winner = OverlayRanking.FirstHolding(
+            candidates: candidates,
+            evaluator: facts,
+            slot: slot,
+            when: static candidate => candidate.When
+        );
+        var builder = new System.Text.StringBuilder(value: " candidates=[");
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            var candidate = candidates[index];
+
+            _ = builder.Append(value: ((index == 0)
+                ? ""
+                : " | ")).Append(value: JsonSerializer.Serialize(
+                value: candidate.Source,
+                jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
+            ));
+
+            if (candidate.When is { } when) {
+                _ = builder.Append(value: " when=").Append(value: when.GetType().Name.ToLowerInvariant());
+            }
+        }
+
+        return builder.Append(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"] winner={((winner >= 0)
+            ? winner.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+            : "none")} fadeSeconds={element.FadeSeconds:0.###} fit={element.Fit.ToString().ToLowerInvariant()} mirror={(element.Mirror
+            ? "true"
+            : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
+        ).ToString();
     }
     private string DescribeHud() {
         var section = server.Definition.Hud;

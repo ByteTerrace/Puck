@@ -1053,9 +1053,9 @@ internal static partial class Subjects {
 
             foreach (var mirror in system.Mirrors) {
                 image = SymmetryLattice.Reflect(
-                mirror: mirror,
-                node: image
-            );
+                    mirror: mirror,
+                    node: image
+                );
             }
 
             row[point] = system.Points.IndexOf(value: image);
@@ -1558,18 +1558,18 @@ internal static partial class Subjects {
             rightKey: right
         ) != target) {
             return $"the ordered pair ({left}, {right}) composes to {compiled.Target(
-            leftKey: left,
-            rightKey: right
-        )}, not {target}";
+                leftKey: left,
+                rightKey: right
+            )}, not {target}";
         }
         if (compiled.Charge(
             leftKey: left,
             rightKey: right
         ) != charge) {
             return $"the ordered pair ({left}, {right}) carries the charge {compiled.Charge(
-            leftKey: left,
-            rightKey: right
-        )}, not {charge}";
+                leftKey: left,
+                rightKey: right
+            )}, not {charge}";
         }
 
         return null;
@@ -1777,9 +1777,9 @@ internal static partial class Subjects {
 
                 for (var entry = 0; (entry < keys.Length); ++entry) {
                     scaled[entry] = material.Multiply(
-                    left: hook.Coefficients[entry],
-                    right: loopCharge
-                );
+                        left: hook.Coefficients[entry],
+                        right: loopCharge
+                    );
                 }
 
                 if (!algebra.AreEqual(

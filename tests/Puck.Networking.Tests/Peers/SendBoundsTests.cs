@@ -10,40 +10,6 @@ namespace Puck.Networking.Tests.Peers;
 /// exception paid for with a signature, and a send whose signing key was disposed under it (the last step of the
 /// owning peer's disposal) is refused by the same name rather than escaping as the key's own exception.</summary>
 public sealed class SendBoundsTests {
-    [Fact]
-    public async Task SendAsync_OneByteOverTheCap_ThrowsBeforeSendingAnything_AndTheLinkStaysOpen() {
-        using var deadline = Laws.SocketDeadline();
-
-        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
-
-        await using var disposeA = peerA;
-        await using var disposeB = peerB;
-
-        var thrown = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(testCode: () => linkAtoB.SendAsync(
-            ct: deadline.Token,
-            payload: new byte[(PeerWireProtocol.MaxMessagePayloadBytes + 1)]
-        ));
-
-        Assert.Equal(
-            expected: "payload",
-            actual: thrown.ParamName
-        );
-        Assert.True(condition: linkAtoB.IsOpen);
-
-        // Nothing reached the wire: the receiver's very next event is the honest message that follows, not a
-        // refusal of an oversized frame and not a closure.
-        await linkAtoB.SendAsync(
-            ct: deadline.Token,
-            payload: "still open"u8.ToArray()
-        );
-
-        var received = Assert.IsType<PeerEvent.Received>(@object: await PeerTestSupport.NextEventAsync(link: linkBtoA));
-
-        Assert.Equal(
-            expected: "still open",
-            actual: Encoding.UTF8.GetString(bytes: received.Payload.Span)
-        );
-    }
     /// <summary>The control for the cap: a payload of exactly <see cref="PeerWireProtocol.MaxMessagePayloadBytes"/>
     /// is delivered, so the constant names the largest payload that fits the frame, not one past it.</summary>
     [Fact]
@@ -92,6 +58,40 @@ public sealed class SendBoundsTests {
         Assert.Equal(
             expected: PeerRefusal.ConnectionClosed,
             actual: thrown.Failure.Refusal
+        );
+    }
+    [Fact]
+    public async Task SendAsync_OneByteOverTheCap_ThrowsBeforeSendingAnything_AndTheLinkStaysOpen() {
+        using var deadline = Laws.SocketDeadline();
+
+        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+
+        await using var disposeA = peerA;
+        await using var disposeB = peerB;
+
+        var thrown = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(testCode: () => linkAtoB.SendAsync(
+            ct: deadline.Token,
+            payload: new byte[(PeerWireProtocol.MaxMessagePayloadBytes + 1)]
+        ));
+
+        Assert.Equal(
+            expected: "payload",
+            actual: thrown.ParamName
+        );
+        Assert.True(condition: linkAtoB.IsOpen);
+
+        // Nothing reached the wire: the receiver's very next event is the honest message that follows, not a
+        // refusal of an oversized frame and not a closure.
+        await linkAtoB.SendAsync(
+            ct: deadline.Token,
+            payload: "still open"u8.ToArray()
+        );
+
+        var received = Assert.IsType<PeerEvent.Received>(@object: await PeerTestSupport.NextEventAsync(link: linkBtoA));
+
+        Assert.Equal(
+            expected: "still open",
+            actual: Encoding.UTF8.GetString(bytes: received.Payload.Span)
         );
     }
     [Fact]

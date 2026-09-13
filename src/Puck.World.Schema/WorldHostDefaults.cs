@@ -61,7 +61,7 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// </summary>
 /// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen slots the probe reserves, bounded by the
 /// engine's <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
-    /// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
+/// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
 /// the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count;
 /// these independent conservative buffer floors are not a strict row quota.</param>
 /// <param name="MinPlacementScale">Live-consumed. The placement uniform-scale envelope's floor — a pure validator
@@ -102,6 +102,7 @@ public sealed record WorldPlacementPolicyDefaults(
         MinPlacementScale: 0f,
         PreviewDeadlineFrames: 0
     );
+
     /// <summary>Derives what an unauthored <c>placements.policy</c> means: no live placement authoring — zero
     /// headroom (placements and screens), no derived faces, no candidate ring, no preview deadline — and a scale
     /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
@@ -119,7 +120,10 @@ public sealed record WorldPlacementPolicyDefaults(
         for (var index = 0; (index < placements.Count); index++) {
             var scale = placements[index].Scale;
 
-            if (!float.IsFinite(f: scale) || (scale <= 0f)) {
+            if (
+                !float.IsFinite(f: scale) ||
+                (scale <= 0f)
+            ) {
                 continue;
             }
 

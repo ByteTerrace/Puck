@@ -10,7 +10,6 @@ namespace Puck.World;
 /// element and <c>[name]</c> a <c>$type</c> arm.</param>
 /// <param name="Field">The registration the path carries.</param>
 public sealed record WorldNameSite(string Path, WorldNameField Field);
-
 public static partial class WorldNameRegistry {
     // Member names that read as a name position when their type is a plain string or string list; a member matching
     // one of these must be registered or excluded.
@@ -23,7 +22,6 @@ public static partial class WorldNameRegistry {
         "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names",
     };
     private static readonly string[] NameShapedSuffixes = ["State", "Row", "Key", "Rule", "Table", "Pattern", "Zone", "Zones", "Topology", "Field", "Binding", "Expression"];
-
     private static readonly Lazy<Walk> Walked = new(valueFactory: static () => Walk.Run(fields: Fields));
 
     /// <summary>Gets every JSON path a registered member reaches, in document order.</summary>
@@ -38,7 +36,6 @@ public static partial class WorldNameRegistry {
     /// <returns>Every name-shaped member the list leaves neither registered nor excluded.</returns>
     public static IReadOnlyList<string> UncoveredUnder(IReadOnlyList<WorldNameField> fields) =>
         Walk.Run(fields: fields).Uncovered;
-
     /// <summary>Renders the registry as the Markdown document <c>docs/world-name-registry.md</c> holds.</summary>
     /// <returns>The document text, LF-terminated.</returns>
     public static string Render() {
@@ -59,8 +56,9 @@ public static partial class WorldNameRegistry {
         foreach (var site in walk.Sites) {
             _ = output.Append(value: ((site.Field.Member.Length == 0)
                 ? $"| `{site.Path}` | | | | re-enters `{TypeName(type: site.Field.Owner)}` |\n"
-                : $"| `{site.Path}` | {site.Field.Kind} | {site.Field.Role} | {((site.Field.Role == WorldNameRole.Declares) ? "" : site.Field.Facet.ToString())} | `{TypeName(type: site.Field.Owner)}.{site.Field.Member}` |\n"
-            ));
+                : $"| `{site.Path}` | {site.Field.Kind} | {site.Field.Role} | {((site.Field.Role == WorldNameRole.Declares)
+                    ? ""
+                    : site.Field.Facet.ToString())} | `{TypeName(type: site.Field.Owner)}.{site.Field.Member}` |\n"));
         }
 
         _ = output.Append(value: "\n## Name-shaped fields carrying no module name\n\n| Path | Member | Reason |\n|---|---|---|\n");
@@ -73,7 +71,11 @@ public static partial class WorldNameRegistry {
     }
 
     private static string TypeName(Type type) =>
-        ((type.DeclaringType is { } outer) ? $"{TypeName(type: outer)}.{type.Name}" : type.Name);
+        ((type.DeclaringType is { } outer)
+            ? $"{TypeName(type: outer)}.{type.Name}"
+            : type.Name
+        );
+
     // Resolves a JSON property to the C# member that declares it: the metadata's own attribute provider when it
     // carries one, else the public property whose camel-cased name is the JSON name.
     internal static (Type DeclaringType, string Member) ResolveMember(JsonPropertyInfo property) {
@@ -81,8 +83,12 @@ public static partial class WorldNameRegistry {
             return ((member.DeclaringType ?? property.DeclaringType), member.Name);
         }
 
-        foreach (var candidate in property.DeclaringType.GetProperties(bindingAttr: (BindingFlags.Public | BindingFlags.Instance))) {
-            if (string.Equals(a: JsonNamingPolicy.CamelCase.ConvertName(name: candidate.Name), b: property.Name, comparisonType: StringComparison.Ordinal)) {
+        foreach (var candidate in property.DeclaringType.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+            if (string.Equals(
+                a: JsonNamingPolicy.CamelCase.ConvertName(name: candidate.Name),
+                b: property.Name,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return ((candidate.DeclaringType ?? property.DeclaringType), candidate.Name);
             }
         }
@@ -92,11 +98,19 @@ public static partial class WorldNameRegistry {
     // A state row is converter-backed, so its metadata lists no properties; the converter reads the record's own
     // init-able members by camel-cased name, which is what the walk reflects here.
     internal static IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)> ReflectedRowMembers(Type type) =>
-        RowMembers.GetOrAdd(key: type, valueFactory: static type => {
+        RowMembers.GetOrAdd(
+            key: type,
+            valueFactory: static type => {
             var members = new List<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>();
 
-            foreach (var property in type.GetProperties(bindingAttr: (BindingFlags.Public | BindingFlags.Instance))) {
-                if ((property.SetMethod is null) || property.IsDefined(attributeType: typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), inherit: true)) {
+            foreach (var property in type.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+                if (
+                    (property.SetMethod is null) ||
+                    property.IsDefined(
+                    attributeType: typeof(System.Text.Json.Serialization.JsonIgnoreAttribute),
+                    inherit: true
+                )
+                ) {
                     continue;
                 }
 
@@ -104,8 +118,11 @@ public static partial class WorldNameRegistry {
             }
 
             return members;
-        });
+        }
+        );
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>> RowMembers = new();
+
     /// <summary>Finds the registration for a member, or the implicit one its type carries: a
     /// <see cref="BindableScalar"/>/<see cref="BindableColor"/> member is a state binding wherever it sits.</summary>
     /// <param name="declaringType">The type the member was found on.</param>
@@ -114,33 +131,57 @@ public static partial class WorldNameRegistry {
     /// <param name="field">The registration, when one applies.</param>
     /// <returns><see langword="true"/> when the member carries a name.</returns>
     public static bool TryResolve(Type declaringType, string member, Type propertyType, out WorldNameField field) {
-        if (TryFind(declaringType: declaringType, member: member, field: out field)) {
+        if (TryFind(
+            declaringType: declaringType,
+            field: out field,
+            member: member
+        )) {
             return true;
         }
 
         var leaf = Unwrap(type: propertyType);
 
-        if ((leaf == typeof(BindableScalar)) || (leaf == typeof(BindableColor))) {
-            field = new WorldNameField(Owner: declaringType, Member: member, Kind: WorldNameKind.State, Role: WorldNameRole.Binding, Facet: WorldExportFacet.Binding);
+        if (
+            (leaf == typeof(BindableScalar)) ||
+            (leaf == typeof(BindableColor))
+        ) {
+            field = new WorldNameField(
+                Facet: WorldExportFacet.Binding,
+                Kind: WorldNameKind.State,
+                Member: member,
+                Owner: declaringType,
+                Role: WorldNameRole.Binding
+            );
 
             return true;
         }
 
         return false;
     }
+
     internal static Type Unwrap(Type type) {
         type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
-        if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))) {
+        if (
+            type.IsGenericType &&
+            (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
+        ) {
             return Unwrap(type: type.GetGenericArguments()[0]);
         }
 
         return type;
     }
+
     private static bool IsNameShaped(Type propertyType, string member) {
         var leaf = Unwrap(type: propertyType);
 
-        if ((leaf == typeof(CellName)) || (leaf == typeof(ValueExpression)) || (leaf == typeof(BindableScalar)) || (leaf == typeof(BindableColor)) || (leaf == typeof(WorldLatticeScalar))) {
+        if (
+            (leaf == typeof(CellName)) ||
+            (leaf == typeof(ValueExpression)) ||
+            (leaf == typeof(BindableScalar)) ||
+            (leaf == typeof(BindableColor)) ||
+            (leaf == typeof(WorldLatticeScalar))
+        ) {
             return true;
         }
 
@@ -153,7 +194,13 @@ public static partial class WorldNameRegistry {
         }
 
         foreach (var suffix in NameShapedSuffixes) {
-            if ((member.Length > suffix.Length) && member.EndsWith(value: suffix, comparisonType: StringComparison.Ordinal)) {
+            if (
+                (member.Length > suffix.Length) &&
+                member.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: suffix
+            )
+            ) {
                 return true;
             }
         }
@@ -163,6 +210,7 @@ public static partial class WorldNameRegistry {
 
     private sealed class Walk {
         private readonly IReadOnlyList<WorldNameField> m_fields;
+
         private readonly List<Type> m_stack = [];
         private readonly JsonSerializerOptions m_options = WorldJsonContext.Default.Options;
 
@@ -172,30 +220,90 @@ public static partial class WorldNameRegistry {
 
         private Walk(IReadOnlyList<WorldNameField> fields) => m_fields = fields;
 
-        public static Walk Run(IReadOnlyList<WorldNameField> fields) {
-            var walk = new Walk(fields: fields);
+        private void Record(string path, Type declaringType, string member, Type propertyType) {
+            if (TryFind(
+                declaringType: declaringType,
+                field: out var field,
+                fields: m_fields,
+                member: member
+            )) {
+                Sites.Add(item: new WorldNameSite(
+                    Field: field,
+                    Path: path
+                ));
 
-            walk.VisitType(type: typeof(WorldDefinition), path: string.Empty);
+                return;
+            }
 
-            return walk;
+            var leaf = Unwrap(type: propertyType);
+
+            if (
+                (leaf == typeof(BindableScalar)) ||
+                (leaf == typeof(BindableColor))
+            ) {
+                Sites.Add(item: new WorldNameSite(
+                    Path: path,
+                    Field: new WorldNameField(
+                        Facet: WorldExportFacet.Binding,
+                        Kind: WorldNameKind.State,
+                        Member: member,
+                        Owner: declaringType,
+                        Role: WorldNameRole.Binding
+                    )
+                ));
+
+                return;
+            }
+
+            if (leaf == typeof(WorldLatticeScalar)) {
+                return;
+            }
+
+            if (ExclusionReason(
+                declaringType: declaringType,
+                member: member
+            ) is { } reason) {
+                Excluded.Add(item: (path, declaringType, member, reason));
+
+                return;
+            }
+
+            if (IsNameShaped(
+                member: member,
+                propertyType: propertyType
+            )) {
+                Uncovered.Add(item: $"{path} ({TypeName(type: declaringType)}.{member}: {Unwrap(type: propertyType).Name})");
+            }
         }
-
         private void VisitType(Type type, string path) {
             type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
             if (type == typeof(ValueExpression)) {
-                VisitType(type: typeof(ValueExpressionTokens), path: $"{path}{{tokens}}");
+                VisitType(
+                    path: $"{path}{{tokens}}",
+                    type: typeof(ValueExpressionTokens)
+                );
 
                 return;
             }
 
             if (type == typeof(WorldLatticeScalar)) {
-                Record(path: $"{path}{{row}}", declaringType: typeof(WorldLatticeScalar), member: nameof(WorldLatticeScalar.Row), propertyType: typeof(string));
+                Record(
+                    path: $"{path}{{row}}",
+                    declaringType: typeof(WorldLatticeScalar),
+                    member: nameof(WorldLatticeScalar.Row),
+                    propertyType: typeof(string)
+                );
 
                 return;
             }
 
-            if (type.IsPrimitive || type.IsEnum || (type == typeof(string)) || (type == typeof(decimal))) {
+            if (
+                type.IsPrimitive ||
+                type.IsEnum ||
+                (type == typeof(string)) ||
+                (type == typeof(decimal))
+            ) {
                 return;
             }
 
@@ -208,7 +316,15 @@ public static partial class WorldNameRegistry {
             }
 
             if (m_stack.Contains(item: type)) {
-                Sites.Add(item: new WorldNameSite(Path: $"{path}…", Field: new WorldNameField(Owner: type, Member: string.Empty, Kind: WorldNameKind.State, Role: WorldNameRole.Names)));
+                Sites.Add(item: new WorldNameSite(
+                    Path: $"{path}…",
+                    Field: new WorldNameField(
+                        Owner: type,
+                        Member: string.Empty,
+                        Kind: WorldNameKind.State,
+                        Role: WorldNameRole.Names
+                    )
+                ));
 
                 return;
             }
@@ -219,8 +335,16 @@ public static partial class WorldNameRegistry {
                 foreach (var (jsonName, declaringType, member, propertyType) in ReflectedRowMembers(type: type)) {
                     var childPath = $"{path}.{jsonName}";
 
-                    Record(path: childPath, declaringType: declaringType, member: member, propertyType: propertyType);
-                    VisitType(type: propertyType, path: childPath);
+                    Record(
+                        declaringType: declaringType,
+                        member: member,
+                        path: childPath,
+                        propertyType: propertyType
+                    );
+                    VisitType(
+                        path: childPath,
+                        type: propertyType
+                    );
                 }
 
                 m_stack.RemoveAt(index: (m_stack.Count - 1));
@@ -231,64 +355,70 @@ public static partial class WorldNameRegistry {
             switch (typeInfo.Kind) {
                 case JsonTypeInfoKind.Object:
                     foreach (var property in typeInfo.Properties) {
-                        if (property.IsExtensionData || (property.Get is null) || (property.Set is null)) {
+                        if (
+                            property.IsExtensionData ||
+                            (property.Get is null) ||
+                            (property.Set is null)
+                        ) {
                             continue;
                         }
 
                         var (declaringType, member) = ResolveMember(property: property);
-                        var childPath = ((path.Length == 0) ? property.Name : $"{path}.{property.Name}");
+                        var childPath = ((path.Length == 0)
+                            ? property.Name
+                            : $"{path}.{property.Name}"
+                        );
 
-                        Record(path: childPath, declaringType: declaringType, member: member, propertyType: property.PropertyType);
-                        VisitType(type: property.PropertyType, path: childPath);
+                        Record(
+                            path: childPath,
+                            declaringType: declaringType,
+                            member: member,
+                            propertyType: property.PropertyType
+                        );
+                        VisitType(
+                            type: property.PropertyType,
+                            path: childPath
+                        );
                     }
 
                     if (typeInfo.PolymorphismOptions is { } polymorphism) {
                         foreach (var derived in polymorphism.DerivedTypes) {
-                            VisitType(type: derived.DerivedType, path: $"{path}[{derived.TypeDiscriminator}]");
+                            VisitType(
+                                type: derived.DerivedType,
+                                path: $"{path}[{derived.TypeDiscriminator}]"
+                            );
                         }
                     }
 
                     break;
                 case JsonTypeInfoKind.Enumerable:
-                    VisitType(type: typeInfo.ElementType!, path: $"{path}[]");
+                    VisitType(
+                        type: typeInfo.ElementType!,
+                        path: $"{path}[]"
+                    );
 
                     break;
                 case JsonTypeInfoKind.Dictionary:
-                    VisitType(type: typeInfo.ElementType!, path: $"{path}{{*}}");
+                    VisitType(
+                        type: typeInfo.ElementType!,
+                        path: $"{path}{{*}}"
+                    );
 
                     break;
             }
 
             m_stack.RemoveAt(index: (m_stack.Count - 1));
         }
-        private void Record(string path, Type declaringType, string member, Type propertyType) {
-            if (TryFind(fields: m_fields, declaringType: declaringType, member: member, field: out var field)) {
-                Sites.Add(item: new WorldNameSite(Path: path, Field: field));
 
-                return;
-            }
+        public static Walk Run(IReadOnlyList<WorldNameField> fields) {
+            var walk = new Walk(fields: fields);
 
-            var leaf = Unwrap(type: propertyType);
+            walk.VisitType(
+                path: string.Empty,
+                type: typeof(WorldDefinition)
+            );
 
-            if ((leaf == typeof(BindableScalar)) || (leaf == typeof(BindableColor))) {
-                Sites.Add(item: new WorldNameSite(Path: path, Field: new WorldNameField(Owner: declaringType, Member: member, Kind: WorldNameKind.State, Role: WorldNameRole.Binding, Facet: WorldExportFacet.Binding)));
-
-                return;
-            }
-
-            if (leaf == typeof(WorldLatticeScalar)) {
-                return;
-            }
-
-            if (ExclusionReason(declaringType: declaringType, member: member) is { } reason) {
-                Excluded.Add(item: (path, declaringType, member, reason));
-
-                return;
-            }
-
-            if (IsNameShaped(propertyType: propertyType, member: member)) {
-                Uncovered.Add(item: $"{path} ({TypeName(type: declaringType)}.{member}: {Unwrap(type: propertyType).Name})");
-            }
+            return walk;
         }
     }
 }

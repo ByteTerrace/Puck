@@ -21,15 +21,8 @@ namespace Puck.World;
 /// same thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
 /// </summary>
 internal sealed class WorldOverlayFeed {
-    private readonly WorldBindingBarControl m_bindingBar;
-    private readonly WorldSeatBindings m_bindings;
-    private readonly GamepadManager? m_gamepads;
-    private readonly WorldIconTable m_icons;
-    private readonly string[][] m_hintLines;
-    // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
-    // reference-stable per page), so the per-frame publish is a reference handoff.
-    private readonly BindingPageView?[] m_hintViews;
-    private readonly OverlayBindingModifier[][] m_modifiers;
+    private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
+
     // Per-SEAT parsed-slot-set cache: re-parses the authored button-name strings only when the resolved
     // WorldBindingBarAuthoring instance changes (a document delivery or profile switch), never every frame — the
     // resolved document graph is reference-stable while nothing changes, so reference equality is the change key.
@@ -37,32 +30,37 @@ internal sealed class WorldOverlayFeed {
     // ctor-time) closures read, so a physical-press probe threads through every bank's ComposeBank call with no
     // per-frame delegate allocation.
     private readonly BindingPageView?[] m_activeBarView;
-    private readonly Func<string, bool>[] m_pressedBySource;
+    private readonly WorldBindingBarControl m_bindingBar;
+    private readonly WorldSeatBindings m_bindings;
+    private readonly GamepadManager? m_gamepads;
+    private readonly string[][] m_hintLines;
+    // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
+    // reference-stable per page), so the per-frame publish is a reference handoff.
+    private readonly BindingPageView?[] m_hintViews;
+    private readonly WorldIconTable m_icons;
+    private readonly OverlayBindingModifier[][] m_modifiers;
     // One cached pressed-probe delegate per SEAT SLOT (the router's held state is slot-keyed), so the per-frame
     // compose closes over nothing.
     private readonly Func<string, bool>[] m_pressedBySlot;
+    private readonly Func<string, bool>[] m_pressedBySource;
     // Cached ONCE (never per tick, never per bank): the icon table's own resolvers are stateless, and the
     // family-aware badge resolver's only per-tick input (the connected family) rides the mutable m_currentFamily cell
     // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedBySource already takes.
     private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
-
-    private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
-
     // Same "mutable cell + preallocated delegate" shape as m_resolveBadge: the per-tick input is WHICH state row
     // this seat's bar named (m_currentIconRow), so the delegate is allocated once rather than per seat per tick.
     // Nothing is cached across ticks — the row's cells are live, so an ordinary state mutation retargets an icon
     // between frames.
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
-
-    private string? m_currentIconRow;
-    private int m_currentSlot;
-    private GamepadType m_currentFamily;
-
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
     private readonly OverlayBindingSlot[][] m_slots;
     private readonly BindingBarStore m_store;
     private readonly WorldSeatViewports m_viewports;
+
+    private GamepadType m_currentFamily;
+    private string? m_currentIconRow;
+    private int m_currentSlot;
 
     /// <summary>Initializes a new instance of the <see cref="WorldOverlayFeed"/> class.</summary>
     /// <param name="roster">The participant roster (which seats are joined).</param>
@@ -314,14 +312,16 @@ internal sealed class WorldOverlayFeed {
                         continue;
                     }
 
-                    if (!stacked && !isActiveBank) {
+                    if (
+                        !stacked &&
+                        !isActiveBank
+                    ) {
                         continue;
                     }
 
                     var bankAlpha = (barAlpha * (isActiveBank
                         ? (bank.ActiveAlpha ?? 1f)
-                        : bank.Alpha
-                    ));
+                        : bank.Alpha));
                     // Single: one bar that swaps in place — the active bank's page drawn in the first authored
                     // bank's frame and plates; its frame already carries the extent every bank gives it, so nothing
                     // moves between the models. Multi: every bank the live layout places, where it places it.
@@ -355,18 +355,18 @@ internal sealed class WorldOverlayFeed {
                         // Only the active bank lights a held control: a wing shows what a chord would make the
                         // control do, and a press is happening on the page that is live, not on that hypothetical.
                         isPressed: (isActiveBank
-                            ? m_pressedBySource[slot]
-                            : null),
+                        ? m_pressedBySource[slot]
+                        : null),
                         isCommandHeld: m_pressedBySlot[slot],
                         // The physical-button badge belongs to the live page too: a wing shows what a chord would
                         // make each plate do, and which control a plate is comes off the active bank.
                         resolveBadge: (isActiveBank
-                            ? m_resolveBadge
-                            : NoBadge),
+                        ? m_resolveBadge
+                        : NoBadge),
                         resolveIcon: m_resolveIcon,
                         slotSet: ((slotCount == slotSet.Count)
-                            ? slotSet
-                            : slotSet.Take(count: slotCount).ToArray()),
+                        ? slotSet
+                        : slotSet.Take(count: slotCount).ToArray()),
                         text: barText,
                         view: bankView
                     );
@@ -391,14 +391,14 @@ internal sealed class WorldOverlayFeed {
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
                 Hints: (barText
-                    ? HintLinesFor(
+                ? HintLinesFor(
                         slot: slot,
                         view: view
                     )
-                    : ReadOnlyMemory<string>.Empty),
+                : ReadOnlyMemory<string>.Empty),
                 Label: (barText
-                    ? (view.Label ?? view.PageId)
-                    : string.Empty),
+                ? (view.Label ?? view.PageId)
+                : string.Empty),
                 Modifiers: m_modifiers[viewIndex].AsMemory(
                     length: modifierCount,
                     start: 0

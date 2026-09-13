@@ -16,6 +16,28 @@ public sealed class DocumentValueComparer : IComparer<JsonNode?> {
     private DocumentValueComparer() {
     }
 
+    private static int Rank(JsonNode? node) {
+        if (node is not JsonValue value) {
+            return 3;
+        }
+
+        if (DocumentLowering.TryReadNumber(
+            node: node,
+            number: out _
+        )) {
+            return 0;
+        }
+
+        if (value.TryGetValue<string>(value: out _)) {
+            return 1;
+        }
+
+        return (value.TryGetValue<bool>(value: out _)
+            ? 2
+            : 3
+        );
+    }
+
     /// <summary>Orders two lowered values.</summary>
     /// <param name="x">The left value.</param>
     /// <param name="y">The right value.</param>
@@ -29,35 +51,35 @@ public sealed class DocumentValueComparer : IComparer<JsonNode?> {
         }
 
         if (left == 0) {
-            return DocumentNumbers.Compare(x, y);
+            return DocumentNumbers.Compare(
+                left: x,
+                right: y
+            );
         }
 
-        if ((left == 1) && (x is JsonValue xValue) && (y is JsonValue yValue) &&
-            xValue.TryGetValue<string>(value: out var xText) && yValue.TryGetValue<string>(value: out var yText)) {
-            return string.CompareOrdinal(strA: xText, strB: yText);
+        if (
+            (left == 1) &&
+            (x is JsonValue xValue) &&
+            (y is JsonValue yValue) &&
+            xValue.TryGetValue<string>(value: out var xText) &&
+            yValue.TryGetValue<string>(value: out var yText)
+        ) {
+            return string.CompareOrdinal(
+                strA: xText,
+                strB: yText
+            );
         }
 
-        if ((left == 2) && (x is JsonValue xFlag) && (y is JsonValue yFlag) &&
-            xFlag.TryGetValue<bool>(value: out var xBool) && yFlag.TryGetValue<bool>(value: out var yBool)) {
+        if (
+            (left == 2) &&
+            (x is JsonValue xFlag) &&
+            (y is JsonValue yFlag) &&
+            xFlag.TryGetValue<bool>(value: out var xBool) &&
+            yFlag.TryGetValue<bool>(value: out var yBool)
+        ) {
             return xBool.CompareTo(value: yBool);
         }
 
         return 0;
-    }
-
-    private static int Rank(JsonNode? node) {
-        if (node is not JsonValue value) {
-            return 3;
-        }
-
-        if (DocumentLowering.TryReadNumber(node: node, number: out _)) {
-            return 0;
-        }
-
-        if (value.TryGetValue<string>(value: out _)) {
-            return 1;
-        }
-
-        return value.TryGetValue<bool>(value: out _) ? 2 : 3;
     }
 }

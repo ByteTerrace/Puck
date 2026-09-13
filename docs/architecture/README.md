@@ -2,7 +2,7 @@
 
 The architecture documents explain how a Puck world moves from durable data to
 an observed frame. They describe current contracts and settled boundaries; the
-source project READMEs own implementation detail.
+linked manual topics and specialized source references own implementation detail.
 
 ## The path through the engine
 
@@ -19,6 +19,12 @@ The [worlds and federation manual](worlds.md) defines the relationships between
 worlds, authority, sessions, destinations, and transfer. It also explains why
 the document, validation, simulation, snapshot, and presentation layers stay
 separate.
+
+For the reusable simulation layers, read [Commands and input](../reference/commands.md)
+for input dispatch, [State and rules](../reference/state.md) for rule evaluation,
+[Deterministic numerics](../reference/maths.md) for reproducible values, and
+[Physics kernels](../reference/physics.md) for motion and spatial interactions.
+[Device input](../reference/input.md) connects physical devices to the command layer.
 
 For implementation detail, follow the owning projects:
 

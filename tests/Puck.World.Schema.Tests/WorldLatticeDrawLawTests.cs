@@ -17,31 +17,49 @@ public sealed class WorldLatticeDrawLawTests {
         Source: GeneratorSource.WeightedNumeric,
         Mode: mode,
         Weighted: [
-            new GeneratorWeightedNumeric(Value: 1, Weight: 1UL, Multiplicity: 2),
-            new GeneratorWeightedNumeric(Value: 2, Weight: 1UL),
-            new GeneratorWeightedNumeric(Value: 3, Weight: 4UL, Multiplicity: 3),
+            new GeneratorWeightedNumeric(
+                Multiplicity: 2,
+                Value: 1,
+                Weight: 1UL
+            ),
+            new GeneratorWeightedNumeric(
+                Value: 2,
+                Weight: 1UL
+            ),
+            new GeneratorWeightedNumeric(
+                Multiplicity: 3,
+                Value: 3,
+                Weight: 4UL
+            ),
         ]
-    );
-    private static (ulong Seed, ulong Stream) Keys() => (
-        GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, documentSeed: WorldSeed),
-        GeneratorEngine.ComputeStreamId(site: Site)
     );
     private static GeneratorEngine.FireResult Fire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks) {
         var (seed, stream) = Keys();
 
-        Assert.True(condition: GeneratorEngine.TryFire(generator: generator, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: cursor, masks: masks, result: out var result, reason: out var reason), userMessage: reason);
+        Assert.True(
+            condition: GeneratorEngine.TryFire(
+                generator: generator,
+                targetKind: CellKind.Fixed,
+                seedState: seed,
+                stream: stream,
+                cursor: cursor,
+                masks: masks,
+                result: out var result,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
 
         return result;
     }
-    private static string Validate(WorldStateSection state, IReadOnlyList<GeneratorRow>? generators = null) {
-        var definition = new WorldDefinition(
-            Generators: generators,
-            Simulation: new WorldSimulationDefaults(RateHz: 240),
-            StateRaw: state
-        );
-
-        return (WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason) ? string.Empty : reason);
-    }
+    private static (ulong Seed, ulong Stream) Keys() => (
+        GeneratorEngine.ComputeSeedState(
+        documentSeed: WorldSeed,
+        instanceIdentity: Instance,
+        site: Site
+    ),
+        GeneratorEngine.ComputeStreamId(site: Site)
+    );
     private static WorldStateSection LatticeState(WorldLatticeFill? fill, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null, WorldLatticeFill? second = null) {
         var paint = new List<WorldLatticeFill>();
 
@@ -56,15 +74,137 @@ public sealed class WorldLatticeDrawLawTests {
                     DrawCursor: cursor,
                     DrawnMasks: masks,
                     Domain: new StateDomain.CellsOf(Topology: "grid"),
-                    Field: new WorldStateFieldTrait(Max: 4f, Paint: ((paint.Count == 0) ? null : paint))
+                    Field: new WorldStateFieldTrait(
+                        Max: 4f,
+                        Paint: ((paint.Count == 0)
+            ? null
+            : paint)
+                    )
                 ),
             ],
             Lattices: [
-                new WorldFieldTopology(Name: "grid", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1, Layers: 1, StepEveryTicks: 1),
+                new WorldFieldTopology(
+                    Name: "grid",
+                    Origin: new DocumentVector3(
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
+                    ),
+                    CellSize: 1f,
+                    Width: 4,
+                    Depth: 1,
+                    Layers: 1,
+                    StepEveryTicks: 1
+                ),
             ]
         );
     }
+    private static string Validate(WorldStateSection state, IReadOnlyList<GeneratorRow>? generators = null) {
+        var definition = new WorldDefinition(
+            Generators: generators,
+            Simulation: new WorldSimulationDefaults(RateHz: 240),
+            StateRaw: state
+        );
 
+        return (WorldDefinitionValidator.TryValidateLocally(
+            definition: definition,
+            reason: out var reason
+        )
+            ? string.Empty
+            : reason
+        );
+    }
+
+    [Fact]
+    public void ABatch_IsTheSitesOwnStream_CellByCell() {
+        var (seed, stream) = Keys();
+
+        foreach (var generator in new[] { CountedBag(mode: GeneratorMode.RestartOnExhaustion), CountedBag(mode: GeneratorMode.WithReplacement), new StateGenerator(
+            Source: GeneratorSource.UniformRange,
+            RangeMin: -5,
+            RangeMax: 5
+        ), new StateGenerator(Source: GeneratorSource.StreamDraw) }) {
+            var cells = new long[13];
+
+            Assert.True(
+                condition: GeneratorEngine.TryFireBatch(
+                    generator: generator,
+                    targetKind: CellKind.Fixed,
+                    seedState: seed,
+                    stream: stream,
+                    cursor: 7L,
+                    masks: null,
+                    values: cells,
+                    masksAfter: out var masksAfter,
+                    reason: out var reason
+                ),
+                userMessage: reason
+            );
+            Assert.True(
+                condition: GeneratorEngine.TryAdvanceBatch(
+                    generator: generator,
+                    targetKind: CellKind.Fixed,
+                    seedState: seed,
+                    stream: stream,
+                    cursor: 7L,
+                    masks: null,
+                    sampleCount: cells.Length,
+                    masksAfter: out var advancedMasks,
+                    reason: out var advanceReason
+                ),
+                userMessage: advanceReason
+            );
+
+            var cursor = 7L;
+            IReadOnlyList<ClosedBitset256>? masks = null;
+
+            for (var cell = 0; (cell < cells.Length); cell++) {
+                var single = Fire(
+                    cursor: cursor,
+                    generator: generator,
+                    masks: masks
+                );
+
+                Assert.Equal(
+                    expected: single.Numeric,
+                    actual: cells[cell]
+                );
+                cursor += single.Samples;
+                masks = single.Masks;
+            }
+
+            Assert.Equal(
+                actual: masksAfter,
+                expected: masks
+            );
+            Assert.Equal(
+                actual: advancedMasks,
+                expected: masksAfter
+            );
+        }
+
+        var text = new StateGenerator(
+            Source: GeneratorSource.Markov,
+            Start: CellName.Parse(candidate: "x"),
+            Contexts: [new GeneratorContext(Key: CellName.Parse(candidate: "x"))]
+        );
+
+        Assert.False(condition: GeneratorEngine.TryFireBatch(
+            generator: text,
+            targetKind: CellKind.Fixed,
+            seedState: seed,
+            stream: stream,
+            cursor: 0L,
+            masks: null,
+            values: new long[2],
+            masksAfter: out _,
+            reason: out var textReason
+        ));
+        Assert.Contains(
+            actualString: textReason,
+            expectedSubstring: "cannot fill cells"
+        );
+    }
     [Fact]
     public void AMultiplicity_IsExactlyThatManyUnitsPerPass() {
         var bag = CountedBag(mode: GeneratorMode.RestartOnExhaustion);
@@ -75,30 +215,54 @@ public sealed class WorldLatticeDrawLawTests {
             var drawn = new List<long>();
 
             for (var draw = 0; (draw < 6); draw++) {
-                var fired = Fire(generator: bag, cursor: cursor, masks: masks);
+                var fired = Fire(
+                    cursor: cursor,
+                    generator: bag,
+                    masks: masks
+                );
 
                 drawn.Add(item: fired.Numeric!.Value);
                 cursor += fired.Samples;
                 masks = fired.Masks;
             }
 
-            Assert.Equal(expected: new long[] { 1L, 1L, 2L, 3L, 3L, 3L }, actual: drawn.Order().ToArray());
+            Assert.Equal(
+                expected: new long[] { 1L, 1L, 2L, 3L, 3L, 3L },
+                actual: drawn.Order().ToArray()
+            );
         }
 
         var once = CountedBag(mode: GeneratorMode.WithoutReplacement);
+
         var (seed, stream) = Keys();
         cursor = 0L;
         masks = null;
 
         for (var draw = 0; (draw < 6); draw++) {
-            var fired = Fire(generator: once, cursor: cursor, masks: masks);
+            var fired = Fire(
+                cursor: cursor,
+                generator: once,
+                masks: masks
+            );
 
             cursor += fired.Samples;
             masks = fired.Masks;
         }
 
-        Assert.False(condition: GeneratorEngine.TryFire(generator: once, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: cursor, masks: masks, result: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "drawn out (6 units", actualString: reason);
+        Assert.False(condition: GeneratorEngine.TryFire(
+            generator: once,
+            targetKind: CellKind.Fixed,
+            seedState: seed,
+            stream: stream,
+            cursor: cursor,
+            masks: masks,
+            result: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "drawn out (6 units"
+        );
     }
     [Fact]
     public void AMultipliedMarkovContext_DrawsItsUnitsOncePerPass() {
@@ -107,101 +271,218 @@ public sealed class WorldLatticeDrawLawTests {
             Start: CellName.Parse(candidate: "bag"),
             Mode: GeneratorMode.WithoutReplacement,
             Contexts: [
-                new GeneratorContext(Key: CellName.Parse(candidate: "bag"), Alternatives: [
-                    new GeneratorAlternative(Token: "a", Weight: 1UL, Next: CellName.Parse(candidate: "end"), Multiplicity: 3),
-                    new GeneratorAlternative(Token: "b", Weight: 1UL, Next: CellName.Parse(candidate: "end")),
-                ]),
+                new GeneratorContext(
+                    Key: CellName.Parse(candidate: "bag"),
+                    Alternatives: [
+                    new GeneratorAlternative(
+                            Token: "a",
+                            Weight: 1UL,
+                            Next: CellName.Parse(candidate: "end"),
+                            Multiplicity: 3
+                        ),
+                    new GeneratorAlternative(
+                            Token: "b",
+                            Weight: 1UL,
+                            Next: CellName.Parse(candidate: "end")
+                        ),
+                ]
+                ),
                 new GeneratorContext(Key: CellName.Parse(candidate: "end")),
             ]
         );
+
         var (seed, stream) = Keys();
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
         var drawn = new List<string>();
 
         for (var draw = 0; (draw < 4); draw++) {
-            Assert.True(condition: GeneratorEngine.TryFire(generator: walk, targetKind: CellKind.Text, seedState: seed, stream: stream, cursor: cursor, masks: masks, result: out var fired, reason: out var reason), userMessage: reason);
+            Assert.True(
+                condition: GeneratorEngine.TryFire(
+                    generator: walk,
+                    targetKind: CellKind.Text,
+                    seedState: seed,
+                    stream: stream,
+                    cursor: cursor,
+                    masks: masks,
+                    result: out var fired,
+                    reason: out var reason
+                ),
+                userMessage: reason
+            );
 
             drawn.Add(item: fired.Text!);
             cursor += fired.Samples;
             masks = fired.Masks;
         }
 
-        Assert.Equal(expected: new[] { "a", "a", "a", "b" }, actual: drawn.Order(comparer: StringComparer.Ordinal).ToArray());
-        Assert.False(condition: GeneratorEngine.TryFire(generator: walk, targetKind: CellKind.Text, seedState: seed, stream: stream, cursor: cursor, masks: masks, result: out _, reason: out _));
-    }
-    [Fact]
-    public void ABatch_IsTheSitesOwnStream_CellByCell() {
-        var (seed, stream) = Keys();
-
-        foreach (var generator in new[] { CountedBag(mode: GeneratorMode.RestartOnExhaustion), CountedBag(mode: GeneratorMode.WithReplacement), new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: -5, RangeMax: 5), new StateGenerator(Source: GeneratorSource.StreamDraw) }) {
-            var cells = new long[13];
-
-            Assert.True(condition: GeneratorEngine.TryFireBatch(generator: generator, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: 7L, masks: null, values: cells, masksAfter: out var masksAfter, reason: out var reason), userMessage: reason);
-            Assert.True(condition: GeneratorEngine.TryAdvanceBatch(generator: generator, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: 7L, masks: null, sampleCount: cells.Length, masksAfter: out var advancedMasks, reason: out var advanceReason), userMessage: advanceReason);
-
-            var cursor = 7L;
-            IReadOnlyList<ClosedBitset256>? masks = null;
-
-            for (var cell = 0; (cell < cells.Length); cell++) {
-                var single = Fire(generator: generator, cursor: cursor, masks: masks);
-
-                Assert.Equal(expected: single.Numeric, actual: cells[cell]);
-                cursor += single.Samples;
-                masks = single.Masks;
-            }
-
-            Assert.Equal(expected: masks, actual: masksAfter);
-            Assert.Equal(expected: masksAfter, actual: advancedMasks);
-        }
-
-        var text = new StateGenerator(Source: GeneratorSource.Markov, Start: CellName.Parse(candidate: "x"), Contexts: [new GeneratorContext(Key: CellName.Parse(candidate: "x"))]);
-
-        Assert.False(condition: GeneratorEngine.TryFireBatch(generator: text, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: 0L, masks: null, values: new long[2], masksAfter: out _, reason: out var textReason));
-        Assert.Contains(expectedSubstring: "cannot fill cells", actualString: textReason);
+        Assert.Equal(
+            expected: new[] { "a", "a", "a", "b" },
+            actual: drawn.Order(comparer: StringComparer.Ordinal).ToArray()
+        );
+        Assert.False(condition: GeneratorEngine.TryFire(
+            generator: walk,
+            targetKind: CellKind.Text,
+            seedState: seed,
+            stream: stream,
+            cursor: cursor,
+            masks: masks,
+            result: out _,
+            reason: out _
+        ));
     }
     [Fact]
     public void Validator_AdmitsOneNumericDrawFillPerLatticeRow() {
         var numeric = new WorldLatticeFill.Draw(Generator: CountedBag(mode: GeneratorMode.RestartOnExhaustion));
-        var markov = new WorldLatticeFill.Draw(Generator: new StateGenerator(Source: GeneratorSource.Markov, Start: CellName.Parse(candidate: "x"), Contexts: [new GeneratorContext(Key: CellName.Parse(candidate: "x"))]));
+        var markov = new WorldLatticeFill.Draw(Generator: new StateGenerator(
+            Source: GeneratorSource.Markov,
+            Start: CellName.Parse(candidate: "x"),
+            Contexts: [new GeneratorContext(Key: CellName.Parse(candidate: "x"))]
+        ));
         var named = new WorldLatticeFill.Draw(Source: CellName.Parse(candidate: "loot"));
-        var generators = new[] { new GeneratorRow(Name: CellName.Parse(candidate: "loot"), Generator: CountedBag(mode: GeneratorMode.WithoutReplacement)) };
+        var generators = new[] { new GeneratorRow(
+            Name: CellName.Parse(candidate: "loot"),
+            Generator: CountedBag(mode: GeneratorMode.WithoutReplacement)
+        ) };
 
-        Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: numeric)));
-        Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: named, cursor: 8L, masks: [new(Word0: 0b101UL)]), generators: generators));
-        Assert.Contains(expectedSubstring: "writes text", actualString: Validate(state: LatticeState(fill: markov)));
-        Assert.Contains(expectedSubstring: "names no declared generator", actualString: Validate(state: LatticeState(fill: named)));
-        Assert.Contains(expectedSubstring: "second draw fill", actualString: Validate(state: LatticeState(fill: numeric, second: numeric)));
-        Assert.Contains(expectedSubstring: "drawCursor without draw", actualString: Validate(state: LatticeState(fill: null, cursor: 4L)));
-    }
-    [Fact]
-    public void Validator_RefusesBadMultiplicities_AndTooManyUnits() {
-        static string Refusal(StateGenerator generator) => Validate(state: new WorldStateSection(World: [
-            new WorldStateRow(Name: CellName.Parse(candidate: "loot"), Kind: CellKind.Int, Draw: new Draw(Generator: generator, Timing: DrawTiming.Event)),
-        ]));
-
-        Assert.Contains(expectedSubstring: ".multiplicity 0 must be at least 1", actualString: Refusal(new StateGenerator(Source: GeneratorSource.WeightedNumeric, Weighted: [new GeneratorWeightedNumeric(Value: 1, Weight: 1UL, Multiplicity: 0)])));
-        Assert.Contains(expectedSubstring: "holds 257 units", actualString: Refusal(new StateGenerator(Source: GeneratorSource.WeightedNumeric, Weighted: [new GeneratorWeightedNumeric(Value: 1, Weight: 1UL, Multiplicity: 257)])));
-        Assert.Equal(expected: string.Empty, actual: Refusal(new StateGenerator(Source: GeneratorSource.WeightedNumeric, Weighted: [new GeneratorWeightedNumeric(Value: 1, Weight: 1UL, Multiplicity: 256)])));
-        var oversized = new StateGenerator(Source: GeneratorSource.WeightedNumeric, Weighted: [
-            new GeneratorWeightedNumeric(Value: 1, Weight: 1UL, Multiplicity: int.MaxValue),
-            new GeneratorWeightedNumeric(Value: 2, Weight: 1UL, Multiplicity: int.MaxValue),
-        ]);
-
-        Assert.Contains(expectedSubstring: "4294967294 units", actualString: Refusal(oversized));
-        Assert.False(condition: GeneratorEngine.TryFire(generator: oversized, targetKind: CellKind.Int, seedState: 1UL, stream: 1UL, cursor: 0L, masks: null, result: out _, reason: out var oversizedReason));
-        Assert.Contains(expectedSubstring: "4294967294 units", actualString: oversizedReason);
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Validate(state: LatticeState(fill: numeric))
+        );
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Validate(
+                state: LatticeState(
+                    fill: named,
+                    cursor: 8L,
+                    masks: [new(Word0: 0b101UL)]
+                ),
+                generators: generators
+            )
+        );
+        Assert.Contains(
+            expectedSubstring: "writes text",
+            actualString: Validate(state: LatticeState(fill: markov))
+        );
+        Assert.Contains(
+            expectedSubstring: "names no declared generator",
+            actualString: Validate(state: LatticeState(fill: named))
+        );
+        Assert.Contains(
+            expectedSubstring: "second draw fill",
+            actualString: Validate(state: LatticeState(
+                fill: numeric,
+                second: numeric
+            ))
+        );
+        Assert.Contains(
+            expectedSubstring: "drawCursor without draw",
+            actualString: Validate(state: LatticeState(
+                fill: null,
+                cursor: 4L
+            ))
+        );
     }
     [Fact]
     public void Validator_RefusesAWithoutReplacementPassThatCannotFillTheLattice() {
         var oneOutcome = new StateGenerator(
             Source: GeneratorSource.WeightedNumeric,
             Mode: GeneratorMode.WithoutReplacement,
-            Weighted: [new GeneratorWeightedNumeric(Value: 1, Weight: 1UL)]
+            Weighted: [new GeneratorWeightedNumeric(
+                    Value: 1,
+                    Weight: 1UL
+                )]
         );
         var refusal = Validate(state: LatticeState(fill: new WorldLatticeFill.Draw(Generator: oneOutcome)));
 
-        Assert.Contains(expectedSubstring: "can supply only 1 positive-weight undrawn unit", actualString: refusal);
-        Assert.Contains(expectedSubstring: "lattice pass requires 4 samples", actualString: refusal);
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: "can supply only 1 positive-weight undrawn unit"
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: "lattice pass requires 4 samples"
+        );
+    }
+    [Fact]
+    public void Validator_RefusesBadMultiplicities_AndTooManyUnits() {
+        static string Refusal(StateGenerator generator) => Validate(state: new WorldStateSection(World: [
+            new WorldStateRow(
+                Name: CellName.Parse(candidate: "loot"),
+                Kind: CellKind.Int,
+                Draw: new Draw(
+                    Generator: generator,
+                    Timing: DrawTiming.Event
+                )
+            ),
+        ]));
+
+        Assert.Contains(
+            expectedSubstring: ".multiplicity 0 must be at least 1",
+            actualString: Refusal(generator: new StateGenerator(
+                Source: GeneratorSource.WeightedNumeric,
+                Weighted: [new GeneratorWeightedNumeric(
+                        Multiplicity: 0,
+                        Value: 1,
+                        Weight: 1UL
+                    )]
+            ))
+        );
+        Assert.Contains(
+            expectedSubstring: "holds 257 units",
+            actualString: Refusal(generator: new StateGenerator(
+                Source: GeneratorSource.WeightedNumeric,
+                Weighted: [new GeneratorWeightedNumeric(
+                        Multiplicity: 257,
+                        Value: 1,
+                        Weight: 1UL
+                    )]
+            ))
+        );
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Refusal(generator: new StateGenerator(
+                Source: GeneratorSource.WeightedNumeric,
+                Weighted: [new GeneratorWeightedNumeric(
+                        Multiplicity: 256,
+                        Value: 1,
+                        Weight: 1UL
+                    )]
+            ))
+        );
+        var oversized = new StateGenerator(
+            Source: GeneratorSource.WeightedNumeric,
+            Weighted: [
+            new GeneratorWeightedNumeric(
+                    Multiplicity: int.MaxValue,
+                    Value: 1,
+                    Weight: 1UL
+                ),
+            new GeneratorWeightedNumeric(
+                    Multiplicity: int.MaxValue,
+                    Value: 2,
+                    Weight: 1UL
+                ),
+        ]
+        );
+
+        Assert.Contains(
+            expectedSubstring: "4294967294 units",
+            actualString: Refusal(generator: oversized)
+        );
+        Assert.False(condition: GeneratorEngine.TryFire(
+            generator: oversized,
+            targetKind: CellKind.Int,
+            seedState: 1UL,
+            stream: 1UL,
+            cursor: 0L,
+            masks: null,
+            result: out _,
+            reason: out var oversizedReason
+        ));
+        Assert.Contains(
+            actualString: oversizedReason,
+            expectedSubstring: "4294967294 units"
+        );
     }
 }

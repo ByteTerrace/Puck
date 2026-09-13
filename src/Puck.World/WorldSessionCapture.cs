@@ -150,29 +150,6 @@ internal static class WorldSessionCapture {
 
         return captured;
     }
-    private static bool MachinesDrifted(IReadOnlyList<WorldMachine> authored, WorldScreenBinder binder) {
-        var current = binder.CaptureInstances();
-        if (current.Count != authored.Count) {
-            return true;
-        }
-
-        for (var index = 0; index < authored.Count; index++) {
-            var expected = authored[index];
-            var actual = current[index];
-            if (
-                !string.Equals(expected.Name, actual.Name, StringComparison.Ordinal) ||
-                !string.Equals(expected.Engine, actual.Engine, StringComparison.Ordinal) ||
-                expected.Running != actual.Running ||
-                !JsonElement.DeepEquals(expected.Configuration, actual.Configuration) ||
-                !Equals(expected.Memory, actual.Memory) ||
-                !Equals(expected.Cable, actual.Cable)
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     // The save-time settle: a row declaring its OWN Advance (a slot-shaped row) gets its one cell rebased to the live
     // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (StateCell.Advance)
     // settle the same way, one at a time, leaving any non-advancing cell in the same row untouched. Both read through
@@ -212,6 +189,48 @@ internal static class WorldSessionCapture {
         }
 
         return (((IReadOnlyList<WorldStateRow>?)captured) ?? rows);
+    }
+    private static bool MachinesDrifted(IReadOnlyList<WorldMachine> authored, WorldScreenBinder binder) {
+        var current = binder.CaptureInstances();
+
+        if (current.Count != authored.Count) {
+            return true;
+        }
+
+        for (var index = 0; (index < authored.Count); index++) {
+            var expected = authored[index];
+            var actual = current[index];
+
+            if (
+                !string.Equals(
+                a: expected.Name,
+                b: actual.Name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                !string.Equals(
+                a: expected.Engine,
+                b: actual.Engine,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                (expected.Running != actual.Running) ||
+                !JsonElement.DeepEquals(
+                element1: expected.Configuration,
+                element2: actual.Configuration
+            ) ||
+                !Equals(
+                objA: expected.Memory,
+                objB: actual.Memory
+            ) ||
+                !Equals(
+                objA: expected.Cable,
+                objB: actual.Cable
+            )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
@@ -303,7 +322,11 @@ internal static class WorldSessionCapture {
 
             return (row with {
                 Cycle = (rowCycle with { EpochTick = 0, SubstepTicks = rowCycle.SettledSubstep(currentTick: tick) }),
-                Cells = [(slot with { Value = rowCycle.SettledPhase(baseValue: slot.Value, currentTick: tick, row: row) })],
+                Cells = [(slot with { Value = rowCycle.SettledPhase(
+                    baseValue: slot.Value,
+                    currentTick: tick,
+                    row: row
+                ) })],
             });
         }
 
@@ -333,7 +356,11 @@ internal static class WorldSessionCapture {
             if (cell.Cycle is { } cellCycle) {
                 settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
-                    Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
+                    Value = cellCycle.SettledPhase(
+                    baseValue: cell.Value,
+                    currentTick: tick,
+                    row: row
+                ),
                     Cycle = (cellCycle with { EpochTick = 0, SubstepTicks = cellCycle.SettledSubstep(currentTick: tick) }),
                 });
 
@@ -456,7 +483,10 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "population");
         }
 
-        if (MachinesDrifted(authored: definition.Machines, binder: binder)) {
+        if (MachinesDrifted(
+            authored: definition.Machines,
+            binder: binder
+        )) {
             drifted.Add(item: "machines");
         }
 
@@ -487,9 +517,9 @@ internal static class WorldSessionCapture {
         // folded, so an unforced (or already-agreeing) bar never reports drift.
         if (!ReferenceEquals(
             objA: CaptureBindingOverlays(
-            definition: definition,
-            visibility: bindingBar
-        ),
+                definition: definition,
+                visibility: bindingBar
+            ),
             objB: definition.BindingOverlaysRaw
         )) {
             drifted.Add(item: "bindings");

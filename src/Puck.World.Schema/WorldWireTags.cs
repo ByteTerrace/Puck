@@ -12,21 +12,14 @@ namespace Puck.World.Protocol;
 /// so every codec that touches this vocabulary calls here rather than re-deriving a cast that reorders on a future
 /// member insertion.</summary>
 public static class WorldWireTags {
-    /// <summary>Maps a <see cref="WorldCapability"/> to its pinned wire byte. Wire value 2 is retired (the removed
-    /// <c>Present</c> capability) and is never reassigned.</summary>
-    /// <param name="value">The capability.</param>
-    /// <param name="wire">The pinned wire byte, on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="value"/> has a wire value.</returns>
-    public static bool TryToWire(WorldCapability value, out byte wire) {
-        switch (value) {
-            case WorldCapability.Drive: wire = 0; return true;
-            case WorldCapability.Observe: wire = 1; return true;
-            case WorldCapability.Control: wire = 3; return true;
-            case WorldCapability.Mutate: wire = 4; return true;
-            case WorldCapability.Edit: wire = 5; return true;
-            default: wire = default; return false;
-        }
-    }
+    /// <summary>Gets a value indicating whether <paramref name="wire"/> is the retired <see cref="WorldCapability"/>
+    /// wire value (2) — distinct from an undeclared byte for callers that report the two differently.</summary>
+    /// <param name="wire">The wire byte.</param>
+    public static bool IsRetiredCapabilityWire(byte wire) => (wire == 2);
+    /// <summary>Gets a value indicating whether <paramref name="wire"/> is the retired <see cref="GrantSubjectKind"/>
+    /// wire value (8) — distinct from an undeclared byte for callers that report the two differently.</summary>
+    /// <param name="wire">The wire byte.</param>
+    public static bool IsRetiredGrantSubjectWire(byte wire) => (wire == 8);
     /// <summary>Maps a pinned wire byte back to its <see cref="WorldCapability"/>. Fails for the retired value 2 the
     /// same as for any other undeclared byte — callers that want a distinct "retired" message check
     /// <see cref="IsRetiredCapabilityWire"/> first.</summary>
@@ -43,26 +36,6 @@ public static class WorldWireTags {
             default: value = default; return false;
         }
     }
-    /// <summary>Gets a value indicating whether <paramref name="wire"/> is the retired <see cref="WorldCapability"/>
-    /// wire value (2) — distinct from an undeclared byte for callers that report the two differently.</summary>
-    /// <param name="wire">The wire byte.</param>
-    public static bool IsRetiredCapabilityWire(byte wire) => (wire == 2);
-    /// <summary>Maps a <see cref="PrincipalKind"/> to its pinned wire byte. <see cref="PrincipalKind.Document"/> and
-    /// <see cref="PrincipalKind.World"/> have no live wire value — a document principal never acts, and the world's
-    /// own program is stamped structurally, never carried on a submission — so both fail here.</summary>
-    /// <param name="value">The principal kind.</param>
-    /// <param name="wire">The pinned wire byte, on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="value"/> has a live wire value.</returns>
-    public static bool TryToWire(PrincipalKind value, out byte wire) {
-        switch (value) {
-            case PrincipalKind.Seat: wire = 0; return true;
-            case PrincipalKind.Console: wire = 1; return true;
-            case PrincipalKind.Addon: wire = 2; return true;
-            case PrincipalKind.Peer: wire = 3; return true;
-            case PrincipalKind.Group: wire = 4; return true;
-            default: wire = default; return false;
-        }
-    }
     /// <summary>Maps a pinned wire byte back to its <see cref="PrincipalKind"/>.</summary>
     /// <param name="wire">The wire byte.</param>
     /// <param name="value">The principal kind, on success.</param>
@@ -75,28 +48,6 @@ public static class WorldWireTags {
             case 3: value = PrincipalKind.Peer; return true;
             case 4: value = PrincipalKind.Group; return true;
             default: value = default; return false;
-        }
-    }
-    /// <summary>Maps a <see cref="GrantSubjectKind"/> to its pinned wire byte. Wire value 8 is retired (the removed
-    /// <c>Table</c> subject) and is never reassigned.</summary>
-    /// <param name="value">The subject kind.</param>
-    /// <param name="wire">The pinned wire byte, on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="value"/> has a wire value.</returns>
-    public static bool TryToWire(GrantSubjectKind value, out byte wire) {
-        switch (value) {
-            case GrantSubjectKind.All: wire = 0; return true;
-            case GrantSubjectKind.Body: wire = 1; return true;
-            case GrantSubjectKind.Screen: wire = 2; return true;
-            case GrantSubjectKind.Section: wire = 3; return true;
-            case GrantSubjectKind.Composition: wire = 4; return true;
-            case GrantSubjectKind.State: wire = 5; return true;
-            case GrantSubjectKind.Region: wire = 6; return true;
-            case GrantSubjectKind.Seat: wire = 7; return true;
-            case GrantSubjectKind.Creation: wire = 9; return true;
-            case GrantSubjectKind.Placement: wire = 10; return true;
-            case GrantSubjectKind.Adjacency: wire = 11; return true;
-            case GrantSubjectKind.Machine: wire = 12; return true;
-            default: wire = default; return false;
         }
     }
     /// <summary>Maps a pinned wire byte back to its <see cref="GrantSubjectKind"/>. Fails for the retired value 8 the
@@ -122,10 +73,68 @@ public static class WorldWireTags {
             default: value = default; return false;
         }
     }
-    /// <summary>Gets a value indicating whether <paramref name="wire"/> is the retired <see cref="GrantSubjectKind"/>
-    /// wire value (8) — distinct from an undeclared byte for callers that report the two differently.</summary>
+    /// <summary>Maps a wire byte back to its <see cref="WorldSection"/>.</summary>
     /// <param name="wire">The wire byte.</param>
-    public static bool IsRetiredGrantSubjectWire(byte wire) => (wire == 8);
+    /// <param name="value">The section, on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="wire"/> names a declared member.</returns>
+    public static bool TryFromWire(byte wire, out WorldSection value) {
+        value = ((WorldSection)wire);
+
+        return Enum.IsDefined(value: value);
+    }
+    /// <summary>Maps a <see cref="WorldCapability"/> to its pinned wire byte. Wire value 2 is retired (the removed
+    /// <c>Present</c> capability) and is never reassigned.</summary>
+    /// <param name="value">The capability.</param>
+    /// <param name="wire">The pinned wire byte, on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> has a wire value.</returns>
+    public static bool TryToWire(WorldCapability value, out byte wire) {
+        switch (value) {
+            case WorldCapability.Drive: wire = 0; return true;
+            case WorldCapability.Observe: wire = 1; return true;
+            case WorldCapability.Control: wire = 3; return true;
+            case WorldCapability.Mutate: wire = 4; return true;
+            case WorldCapability.Edit: wire = 5; return true;
+            default: wire = default; return false;
+        }
+    }
+    /// <summary>Maps a <see cref="PrincipalKind"/> to its pinned wire byte. <see cref="PrincipalKind.Document"/> and
+    /// <see cref="PrincipalKind.World"/> have no live wire value — a document principal never acts, and the world's
+    /// own program is stamped structurally, never carried on a submission — so both fail here.</summary>
+    /// <param name="value">The principal kind.</param>
+    /// <param name="wire">The pinned wire byte, on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> has a live wire value.</returns>
+    public static bool TryToWire(PrincipalKind value, out byte wire) {
+        switch (value) {
+            case PrincipalKind.Seat: wire = 0; return true;
+            case PrincipalKind.Console: wire = 1; return true;
+            case PrincipalKind.Addon: wire = 2; return true;
+            case PrincipalKind.Peer: wire = 3; return true;
+            case PrincipalKind.Group: wire = 4; return true;
+            default: wire = default; return false;
+        }
+    }
+    /// <summary>Maps a <see cref="GrantSubjectKind"/> to its pinned wire byte. Wire value 8 is retired (the removed
+    /// <c>Table</c> subject) and is never reassigned.</summary>
+    /// <param name="value">The subject kind.</param>
+    /// <param name="wire">The pinned wire byte, on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> has a wire value.</returns>
+    public static bool TryToWire(GrantSubjectKind value, out byte wire) {
+        switch (value) {
+            case GrantSubjectKind.All: wire = 0; return true;
+            case GrantSubjectKind.Body: wire = 1; return true;
+            case GrantSubjectKind.Screen: wire = 2; return true;
+            case GrantSubjectKind.Section: wire = 3; return true;
+            case GrantSubjectKind.Composition: wire = 4; return true;
+            case GrantSubjectKind.State: wire = 5; return true;
+            case GrantSubjectKind.Region: wire = 6; return true;
+            case GrantSubjectKind.Seat: wire = 7; return true;
+            case GrantSubjectKind.Creation: wire = 9; return true;
+            case GrantSubjectKind.Placement: wire = 10; return true;
+            case GrantSubjectKind.Adjacency: wire = 11; return true;
+            case GrantSubjectKind.Machine: wire = 12; return true;
+            default: wire = default; return false;
+        }
+    }
     /// <summary>Maps a <see cref="WorldSection"/> to its wire byte — its own declaration ordinal, validated rather
     /// than assumed, so a future retirement in this enum has exactly one place to gain a gap. No member is retired
     /// today.</summary>
@@ -141,14 +150,5 @@ public static class WorldWireTags {
         wire = default;
 
         return false;
-    }
-    /// <summary>Maps a wire byte back to its <see cref="WorldSection"/>.</summary>
-    /// <param name="wire">The wire byte.</param>
-    /// <param name="value">The section, on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="wire"/> names a declared member.</returns>
-    public static bool TryFromWire(byte wire, out WorldSection value) {
-        value = ((WorldSection)wire);
-
-        return Enum.IsDefined(value: value);
     }
 }

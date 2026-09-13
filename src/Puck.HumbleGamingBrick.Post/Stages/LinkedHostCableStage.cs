@@ -15,105 +15,22 @@ namespace Puck.HumbleGamingBrick.Post;
 internal sealed class LinkedHostCableStage : IPostStage<PostContext> {
     private const int AudioSampleRate = 32_000;
     private const int BackpressureSubmissions = 64;
-    private const int LinkedSteps = 24;
-    private const int SeveredSteps = 4;
     // The images the two seats' ROMs must sample: South folds to the console's A (action bit 0) and Start to its Start
     // (action bit 3), so the seats are distinguishable in one byte.
     private const byte FirstSeatImage = 0x01;
+    private const int LinkedSteps = 24;
     private const byte SecondSeatImage = 0x08;
+    private const int SeveredSteps = 4;
 
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
     /// <inheritdoc/>
     public string Name =>
         "linked-host-cable";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
-
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        using var first = LinkedHostFixture.NewHost(
-            audioSampleRate: AudioSampleRate,
-            internalClock: true
-        );
-        using var second = LinkedHostFixture.NewHost(
-            audioSampleRate: AudioSampleRate,
-            internalClock: false
-        );
-        var engine = new GamingBrickEngine();
-
-        if (!engine.TryLink(
-            machines: [first, second],
-            link: out var established,
-            reason: out var reason
-        )) {
-            return PostStageOutcome.Fail(detail: $"the engine refused to link two running machines: {reason}");
-        }
-
-        var link = ((LinkedMachineGroup)established!);
-        var firstPad = LinkedHostFixture.Pad(buttons: MachineButtons.South);
-        var secondPad = LinkedHostFixture.Pad(buttons: MachineButtons.Start);
-        var stepsBeforeLink = (First: first.CompletedSteps, Second: second.CompletedSteps);
-        var lightBeforeLink = (First: first.EmittedLight, Second: second.EmittedLight);
-
-        try {
-            for (var step = 0; (step < LinkedSteps); ++step) {
-                link.Step(
-                    deltaTicks: LinkedHostFixture.FrameTicks,
-                    inputs: [firstPad, secondPad]
-                );
-            }
-
-            if (link.CompletedTransfers <= 0L) {
-                return PostStageOutcome.Fail(detail: $"the link carried no serial traffic across {LinkedSteps} stepped frames; the cable is dormant, not live");
-            }
-
-            if (Exclusivity(
-                first: first,
-                firstPad: in firstPad,
-                second: second,
-                secondPad: in secondPad
-            ) is { } exclusivityFailure) {
-                return PostStageOutcome.Fail(detail: exclusivityFailure);
-            }
-
-            if (Routing(
-                first: first,
-                second: second
-            ) is { } routingFailure) {
-                return PostStageOutcome.Fail(detail: routingFailure);
-            }
-
-            if (Publication(
-                first: first,
-                lightBeforeLink: lightBeforeLink,
-                second: second,
-                stepsBeforeLink: stepsBeforeLink
-            ) is { } publicationFailure) {
-                return PostStageOutcome.Fail(detail: publicationFailure);
-            }
-
-            if (Backpressure(
-                firstPad: in firstPad,
-                link: link,
-                secondPad: in secondPad
-            ) is { } backpressureFailure) {
-                return PostStageOutcome.Fail(detail: backpressureFailure);
-            }
-        } finally {
-            link.Dispose();
-        }
-
-        return Severed(
-            first: first,
-            firstPad: in firstPad,
-            link: link,
-            second: second,
-            secondPad: in secondPad
-        );
-    }
 
     // Sustained pressure on the group's own bounded window: submissions outrun the link thread and wait for capacity
     // rather than dropping or coalescing a segment, and the synchronous step still drains the whole backlog.
@@ -277,5 +194,88 @@ internal sealed class LinkedHostCableStage : IPostStage<PostContext> {
         }
 
         return PostStageOutcome.Pass(detail: $"{transfersAtSever} bytes crossed the live cable (seat transfer counters 0x{counters.First:X2}/0x{counters.Second:X2}), per-seat pads landed 0x{FirstSeatImage:X2}/0x{SecondSeatImage:X2} on the right machines, both members published frames and audio throughout, the group backpressured as a unit, and the sever left the external-clock seat's transfer pending while both machines stepped independently again");
+    }
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        using var first = LinkedHostFixture.NewHost(
+            audioSampleRate: AudioSampleRate,
+            internalClock: true
+        );
+        using var second = LinkedHostFixture.NewHost(
+            audioSampleRate: AudioSampleRate,
+            internalClock: false
+        );
+        var engine = new GamingBrickEngine();
+
+        if (!engine.TryLink(
+            link: out var established,
+            machines: [first, second],
+            reason: out var reason
+        )) {
+            return PostStageOutcome.Fail(detail: $"the engine refused to link two running machines: {reason}");
+        }
+
+        var link = ((LinkedMachineGroup)established!);
+        var firstPad = LinkedHostFixture.Pad(buttons: MachineButtons.South);
+        var secondPad = LinkedHostFixture.Pad(buttons: MachineButtons.Start);
+        var stepsBeforeLink = (First: first.CompletedSteps, Second: second.CompletedSteps);
+        var lightBeforeLink = (First: first.EmittedLight, Second: second.EmittedLight);
+
+        try {
+            for (var step = 0; (step < LinkedSteps); ++step) {
+                link.Step(
+                    deltaTicks: LinkedHostFixture.FrameTicks,
+                    inputs: [firstPad, secondPad]
+                );
+            }
+
+            if (link.CompletedTransfers <= 0L) {
+                return PostStageOutcome.Fail(detail: $"the link carried no serial traffic across {LinkedSteps} stepped frames; the cable is dormant, not live");
+            }
+
+            if (Exclusivity(
+                first: first,
+                firstPad: in firstPad,
+                second: second,
+                secondPad: in secondPad
+            ) is { } exclusivityFailure) {
+                return PostStageOutcome.Fail(detail: exclusivityFailure);
+            }
+
+            if (Routing(
+                first: first,
+                second: second
+            ) is { } routingFailure) {
+                return PostStageOutcome.Fail(detail: routingFailure);
+            }
+
+            if (Publication(
+                first: first,
+                lightBeforeLink: lightBeforeLink,
+                second: second,
+                stepsBeforeLink: stepsBeforeLink
+            ) is { } publicationFailure) {
+                return PostStageOutcome.Fail(detail: publicationFailure);
+            }
+
+            if (Backpressure(
+                firstPad: in firstPad,
+                link: link,
+                secondPad: in secondPad
+            ) is { } backpressureFailure) {
+                return PostStageOutcome.Fail(detail: backpressureFailure);
+            }
+        } finally {
+            link.Dispose();
+        }
+
+        return Severed(
+            first: first,
+            firstPad: in firstPad,
+            link: link,
+            second: second,
+            secondPad: in secondPad
+        );
     }
 }

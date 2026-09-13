@@ -51,16 +51,16 @@ public sealed record StateSection(
 ) : IStateSection {
     /// <inheritdoc cref="Rows"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateRow>? Rows { get => field; init => field = Freeze(value); } = Freeze(Rows);
+    public IReadOnlyList<StateRow>? Rows { get => field; init => field = Freeze(items: value); } = Freeze(items: Rows);
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(value); } = Freeze(Lattices);
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
     /// <inheritdoc cref="ParticipantSlots"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSlot>? ParticipantSlots { get => field; init => field = Freeze(value); } = Freeze(ParticipantSlots);
+    public IReadOnlyList<StateSlot>? ParticipantSlots { get => field; init => field = Freeze(items: value); } = Freeze(items: ParticipantSlots);
     /// <inheritdoc cref="IdentitySlots"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSlot>? IdentitySlots { get => field; init => field = Freeze(value); } = Freeze(IdentitySlots);
+    public IReadOnlyList<StateSlot>? IdentitySlots { get => field; init => field = Freeze(items: value); } = Freeze(items: IdentitySlots);
 
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => ParticipantSlots;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => IdentitySlots;

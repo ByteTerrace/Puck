@@ -24,16 +24,23 @@ public abstract class MachineSnapshot<TSnapshot, TIdentity, TClock>
         m_image = image;
     }
 
-    /// <summary>Gets the machine identity.</summary>
-    public TIdentity Identity { get; }
-    /// <summary>Gets the captured clock instant.</summary>
-    public TClock TakenAt { get; }
-    /// <summary>Gets the size of the captured state, in bytes.</summary>
-    public int Size => m_image.Size;
-    /// <summary>Gets the component byte ranges covering the captured state.</summary>
-    public IReadOnlyList<SnapshotSection> Sections => m_image.Sections;
     /// <summary>Gets the raw captured state bytes.</summary>
     public ReadOnlySpan<byte> Data => m_image.Data;
+    /// <summary>Gets the machine identity.</summary>
+    public TIdentity Identity { get; }
+    /// <summary>Gets the component byte ranges covering the captured state.</summary>
+    public IReadOnlyList<SnapshotSection> Sections => m_image.Sections;
+    /// <summary>Gets the size of the captured state, in bytes.</summary>
+    public int Size => m_image.Size;
+    /// <summary>Gets the captured clock instant.</summary>
+    public TClock TakenAt { get; }
+
+    /// <summary>Creates the concrete snapshot over a byte image.</summary>
+    /// <param name="identity">The machine identity.</param>
+    /// <param name="takenAt">The captured clock instant.</param>
+    /// <param name="image">The immutable state image.</param>
+    /// <returns>The concrete snapshot.</returns>
+    protected abstract TSnapshot Create(TIdentity identity, TClock takenAt, SnapshotImage image);
 
     /// <summary>Indicates whether another snapshot has the same identity, instant, and state bytes.</summary>
     /// <param name="other">The snapshot to compare with.</param>
@@ -42,25 +49,27 @@ public abstract class MachineSnapshot<TSnapshot, TIdentity, TClock>
     public bool ContentEquals(TSnapshot other) {
         ArgumentNullException.ThrowIfNull(argument: other);
 
-        return (Identity.Equals(other: other.Identity)
-            && TakenAt.Equals(other: other.TakenAt)
-            && m_image.BytesEqual(other: other.m_image));
+        return (
+            Identity.Equals(other: other.Identity) &&
+            TakenAt.Equals(other: other.TakenAt) &&
+            m_image.BytesEqual(other: other.m_image)
+        );
     }
+    /// <summary>Opens a forward-only reader over the captured state.</summary>
+    /// <returns>The state reader.</returns>
+    public StateReader OpenReader() => m_image.OpenReader();
     /// <summary>Returns a copy with one captured state byte overwritten.</summary>
     /// <param name="offset">The byte offset to overwrite.</param>
     /// <param name="value">The replacement byte.</param>
     /// <returns>A new snapshot carrying the modified byte image.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is outside <see cref="Data"/>.</exception>
     public TSnapshot WithPokedByte(int offset, byte value) =>
-        Create(identity: Identity, takenAt: TakenAt, image: m_image.WithPokedByte(offset: offset, value: value));
-    /// <summary>Opens a forward-only reader over the captured state.</summary>
-    /// <returns>The state reader.</returns>
-    public StateReader OpenReader() => m_image.OpenReader();
-
-    /// <summary>Creates the concrete snapshot over a byte image.</summary>
-    /// <param name="identity">The machine identity.</param>
-    /// <param name="takenAt">The captured clock instant.</param>
-    /// <param name="image">The immutable state image.</param>
-    /// <returns>The concrete snapshot.</returns>
-    protected abstract TSnapshot Create(TIdentity identity, TClock takenAt, SnapshotImage image);
+        Create(
+            identity: Identity,
+            takenAt: TakenAt,
+            image: m_image.WithPokedByte(
+                offset: offset,
+                value: value
+            )
+        );
 }

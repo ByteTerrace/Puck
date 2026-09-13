@@ -21,8 +21,8 @@ namespace Puck.Vulkan;
 public sealed class VulkanSurfaceUpload : IDisposable {
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
-    private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly IVulkanFrameSynchronizationApi? m_frameSynchronizationApi;
+    private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
     private readonly IVulkanStorageBufferFactory m_storageBufferFactory;
@@ -73,6 +73,180 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_storageBufferFactory = storageBufferFactory;
     }
 
+    private void DisposeResources() {
+        var device = m_device;
+        // A dead device (destroyed at host teardown before a late owner released through it) freed every child
+        // object with itself — destroying a pool/buffer/view against its stale handle is a native fault, so each
+        // destroy below gates on liveness and only the managed references are dropped (mirroring the fence guard
+        // this method always had).
+        var deviceAlive = ((device is not null) && !device.IsDisposed);
+
+        // The staging/command resources may still feed an outstanding pipelined copy — drain it first.
+        WaitForPendingUpload();
+
+        if (
+            deviceAlive &&
+            (0 != m_fence)
+        ) {
+            m_frameSynchronizationApi!.DestroyFence(
+                deviceHandle: device!.Handle,
+                fenceHandle: m_fence
+            );
+        }
+
+        m_fence = 0;
+
+        m_uploadPending = false;
+
+        if (deviceAlive) {
+            m_commandResources?.Dispose();
+            m_stagingBuffer?.Dispose();
+        }
+
+        m_commandResources = null;
+        m_stagingBuffer = null;
+
+        if (
+            deviceAlive &&
+            (0 != m_imageViewHandle)
+        ) {
+            m_framebufferSetApi.DestroyImageView(
+                deviceHandle: device!.Handle,
+                imageViewHandle: m_imageViewHandle
+            );
+        }
+
+        m_imageViewHandle = 0;
+
+        if (deviceAlive) {
+            m_offscreenImageApi.DestroyColorImage(
+                deviceHandle: device!.Handle,
+                imageHandle: m_imageHandle,
+                memoryHandle: m_memoryHandle
+            );
+        }
+
+        m_imageHandle = 0;
+        m_memoryHandle = 0;
+    }
+    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat) {
+        var device = deviceContext.LogicalDevice;
+
+        if (
+            (0 != m_imageViewHandle) &&
+            (m_device is not null) &&
+            (m_device.Handle == device.Handle) &&
+            (m_width == width) &&
+            (m_height == height) &&
+            (m_format == vulkanFormat)
+        ) {
+            return;
+        }
+
+        // A resize or format change destroys the image and view that in-flight GPU work — the SDF views kernel's
+        // screen sampler, the presenter blit — may still be reading. WaitForPendingUpload (inside DisposeResources)
+        // drains only this uploader's own copy fence, not those consumers, so idle the whole device first, exactly as
+        // Dispose does. The null-conditional skips the first allocation, where nothing has been submitted yet.
+        m_device?.TryWaitIdle();
+
+        DisposeResources();
+
+        var instance = deviceContext.Instance;
+        var image = m_offscreenImageApi.CreateColorImage(request: new VulkanOffscreenImageCreateRequest(
+            DeviceHandle: device.Handle,
+            Format: vulkanFormat,
+            Height: height,
+            InstanceHandle: instance.Handle,
+            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
+            UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferDestination,
+            Width: width
+        ));
+
+        m_imageHandle = image.ImageHandle;
+        m_memoryHandle = image.MemoryHandle;
+
+        m_framebufferSetApi.CreateImageView(
+            imageViewHandle: out m_imageViewHandle,
+            request: new VulkanImageViewCreateRequest(
+                DeviceHandle: device.Handle,
+                Format: vulkanFormat,
+                ImageHandle: m_imageHandle
+            )
+        ).ThrowIfFailed(operation: "vkCreateImageView");
+
+        m_commandResources = m_commandResourcesFactory.Create(
+            commandBufferCount: 1,
+            logicalDevice: device
+        );
+        m_device = device;
+        m_format = vulkanFormat;
+        m_height = height;
+        m_stagingBuffer = m_storageBufferFactory.Create(
+            logicalDevice: device,
+            sizeBytes: checked((ulong)Surface.RequiredByteLength(
+                height: height,
+                width: width
+            )),
+            vulkanInstance: instance
+        );
+        m_width = width;
+
+        // The pipelined path's completion fence (see the class remarks) — device-scoped, so a device/extent change
+        // rebuilds it alongside the buffer (DisposeResources destroyed the old one just above). Absent (0) when no
+        // frame-synchronization API was supplied: the legacy blocking submit applies.
+        if (m_frameSynchronizationApi is not null) {
+            m_frameSynchronizationApi.CreateFence(
+                fenceHandle: out m_fence,
+                request: new VulkanFrameSynchronizationCreateRequest(
+                    DeviceHandle: device.Handle,
+                    StartSignaled: false
+                )
+            ).ThrowIfFailed(operation: "vkCreateFence");
+        }
+    }
+    // Drains the pipelined path's outstanding copy (fence wait + reset); a no-op when none is outstanding. A lost
+    // device has nothing left to wait on — clear the flag so teardown proceeds (mirroring TryWaitIdle's tolerance).
+    private void WaitForPendingUpload() {
+        if (
+            !m_uploadPending ||
+            (m_device is null) ||
+            m_device.IsDisposed ||
+            (0 == m_fence)
+        ) {
+            m_uploadPending = false;
+
+            return;
+        }
+
+        var waitResult = m_frameSynchronizationApi!.WaitForFence(
+            deviceHandle: m_device.Handle,
+            fenceHandle: m_fence,
+            timeout: ulong.MaxValue
+        );
+
+        m_uploadPending = false;
+
+        if (waitResult == Bindings.VkResult.ErrorDeviceLost) {
+            return;
+        }
+
+        waitResult.ThrowIfFailed(operation: "vkWaitForFences");
+        m_frameSynchronizationApi.ResetFence(
+            deviceHandle: m_device.Handle,
+            fenceHandle: m_fence
+        ).ThrowIfFailed(operation: "vkResetFences");
+    }
+
+    /// <summary>Waits for device idle, then frees the staging buffer, image, view, and command resources. Safe to call more than once.</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+        m_device?.TryWaitIdle();
+        DisposeResources();
+    }
     /// <summary>Uploads a CPU-pixel surface and returns the handle of a shader-readable image view over it.</summary>
     /// <param name="deviceContext">The device the image is created and uploaded on.</param>
     /// <param name="pixels">The CPU-pixel data to upload; it must be tightly packed.</param>
@@ -91,7 +265,10 @@ public sealed class VulkanSurfaceUpload : IDisposable {
 
         ArgumentOutOfRangeException.ThrowIfZero(value: width);
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
-        var requiredByteLength = Surface.RequiredByteLength(height: height, width: width);
+        var requiredByteLength = Surface.RequiredByteLength(
+            height: height,
+            width: width
+        );
 
         if (pixels.Length != requiredByteLength) {
             throw new ArgumentException(
@@ -191,171 +368,5 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         }
 
         return m_imageViewHandle;
-    }
-
-    // Drains the pipelined path's outstanding copy (fence wait + reset); a no-op when none is outstanding. A lost
-    // device has nothing left to wait on — clear the flag so teardown proceeds (mirroring TryWaitIdle's tolerance).
-    private void WaitForPendingUpload() {
-        if (
-            !m_uploadPending ||
-            (m_device is null) ||
-            m_device.IsDisposed ||
-            (0 == m_fence)
-        ) {
-            m_uploadPending = false;
-
-            return;
-        }
-
-        var waitResult = m_frameSynchronizationApi!.WaitForFence(
-            deviceHandle: m_device.Handle,
-            fenceHandle: m_fence,
-            timeout: ulong.MaxValue
-        );
-
-        m_uploadPending = false;
-
-        if (waitResult == Bindings.VkResult.ErrorDeviceLost) {
-            return;
-        }
-
-        waitResult.ThrowIfFailed(operation: "vkWaitForFences");
-        m_frameSynchronizationApi.ResetFence(
-            deviceHandle: m_device.Handle,
-            fenceHandle: m_fence
-        ).ThrowIfFailed(operation: "vkResetFences");
-    }
-    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat) {
-        var device = deviceContext.LogicalDevice;
-
-        if (
-            (0 != m_imageViewHandle) &&
-            (m_device is not null) &&
-            (m_device.Handle == device.Handle) &&
-            (m_width == width) &&
-            (m_height == height) &&
-            (m_format == vulkanFormat)
-        ) {
-            return;
-        }
-
-        // A resize or format change destroys the image and view that in-flight GPU work — the SDF views kernel's
-        // screen sampler, the presenter blit — may still be reading. WaitForPendingUpload (inside DisposeResources)
-        // drains only this uploader's own copy fence, not those consumers, so idle the whole device first, exactly as
-        // Dispose does. The null-conditional skips the first allocation, where nothing has been submitted yet.
-        m_device?.TryWaitIdle();
-
-        DisposeResources();
-
-        var instance = deviceContext.Instance;
-        var image = m_offscreenImageApi.CreateColorImage(request: new VulkanOffscreenImageCreateRequest(
-            DeviceHandle: device.Handle,
-            Format: vulkanFormat,
-            Height: height,
-            InstanceHandle: instance.Handle,
-            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferDestination,
-            Width: width
-        ));
-
-        m_imageHandle = image.ImageHandle;
-        m_memoryHandle = image.MemoryHandle;
-
-        m_framebufferSetApi.CreateImageView(
-            imageViewHandle: out m_imageViewHandle,
-            request: new VulkanImageViewCreateRequest(
-                DeviceHandle: device.Handle,
-                Format: vulkanFormat,
-                ImageHandle: m_imageHandle
-            )
-        ).ThrowIfFailed(operation: "vkCreateImageView");
-
-        m_commandResources = m_commandResourcesFactory.Create(
-            commandBufferCount: 1,
-            logicalDevice: device
-        );
-        m_device = device;
-        m_format = vulkanFormat;
-        m_height = height;
-        m_stagingBuffer = m_storageBufferFactory.Create(
-            logicalDevice: device,
-            sizeBytes: checked((ulong)Surface.RequiredByteLength(height: height, width: width)),
-            vulkanInstance: instance
-        );
-        m_width = width;
-
-        // The pipelined path's completion fence (see the class remarks) — device-scoped, so a device/extent change
-        // rebuilds it alongside the buffer (DisposeResources destroyed the old one just above). Absent (0) when no
-        // frame-synchronization API was supplied: the legacy blocking submit applies.
-        if (m_frameSynchronizationApi is not null) {
-            m_frameSynchronizationApi.CreateFence(
-                fenceHandle: out m_fence,
-                request: new VulkanFrameSynchronizationCreateRequest(DeviceHandle: device.Handle, StartSignaled: false)
-            ).ThrowIfFailed(operation: "vkCreateFence");
-        }
-    }
-    private void DisposeResources() {
-        var device = m_device;
-        // A dead device (destroyed at host teardown before a late owner released through it) freed every child
-        // object with itself — destroying a pool/buffer/view against its stale handle is a native fault, so each
-        // destroy below gates on liveness and only the managed references are dropped (mirroring the fence guard
-        // this method always had).
-        var deviceAlive = ((device is not null) && !device.IsDisposed);
-
-        // The staging/command resources may still feed an outstanding pipelined copy — drain it first.
-        WaitForPendingUpload();
-
-        if (
-            deviceAlive &&
-            (0 != m_fence)
-        ) {
-            m_frameSynchronizationApi!.DestroyFence(deviceHandle: device!.Handle, fenceHandle: m_fence);
-        }
-
-        m_fence = 0;
-
-        m_uploadPending = false;
-
-        if (deviceAlive) {
-            m_commandResources?.Dispose();
-            m_stagingBuffer?.Dispose();
-        }
-
-        m_commandResources = null;
-        m_stagingBuffer = null;
-
-        if (
-            deviceAlive &&
-            (0 != m_imageViewHandle)
-        ) {
-            m_framebufferSetApi.DestroyImageView(
-                deviceHandle: device!.Handle,
-                imageViewHandle: m_imageViewHandle
-            );
-        }
-
-        m_imageViewHandle = 0;
-
-        if (deviceAlive) {
-            m_offscreenImageApi.DestroyColorImage(
-                deviceHandle: device!.Handle,
-                imageHandle: m_imageHandle,
-                memoryHandle: m_memoryHandle
-            );
-        }
-
-        m_imageHandle = 0;
-        m_memoryHandle = 0;
-    }
-
-    /// <summary>Waits for device idle, then frees the staging buffer, image, view, and command resources. Safe to call more than once.</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_device?.TryWaitIdle();
-        DisposeResources();
     }
 }

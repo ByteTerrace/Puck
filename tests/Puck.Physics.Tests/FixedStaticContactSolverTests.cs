@@ -6,27 +6,6 @@ public sealed class FixedStaticContactSolverTests {
     // cos(45 degrees): a normal must lean no further than that from +Y to ground the body.
     private static readonly FixedQ4816 GroundedThreshold = FixedQ4816.FromDouble(value: 0.70710678d);
 
-    private static FixedStaticContactSolver Solver(int iterations = 4) =>
-        new(
-            ContactSkin: FixedQ4816.Zero,
-            GroundedThreshold: GroundedThreshold,
-            MaxIterations: iterations
-        );
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        );
-    private static FixedBodyColliderVolume UnitSphere() =>
-        new(
-            Center: FixedVector3.Zero,
-            Endpoint: FixedVector3.Zero,
-            HalfExtents: FixedVector3.Zero,
-            Kind: FixedBodyColliderKind.Sphere,
-            Radius: FixedQ4816.One,
-            Rotation: FixedQuaternion.Identity
-        );
     private static FixedStaticCollider Floor(double height) =>
         FixedStaticCollider.HalfSpace(
             normal: Vector(
@@ -39,6 +18,27 @@ public sealed class FixedStaticContactSolverTests {
                 y: height,
                 z: 0d
             )
+        );
+    private static FixedStaticContactSolver Solver(int iterations = 4) =>
+        new(
+            ContactSkin: FixedQ4816.Zero,
+            GroundedThreshold: GroundedThreshold,
+            MaxIterations: iterations
+        );
+    private static FixedBodyColliderVolume UnitSphere() =>
+        new(
+            Center: FixedVector3.Zero,
+            Endpoint: FixedVector3.Zero,
+            HalfExtents: FixedVector3.Zero,
+            Kind: FixedBodyColliderKind.Sphere,
+            Radius: FixedQ4816.One,
+            Rotation: FixedQuaternion.Identity
+        );
+    private static FixedVector3 Vector(double x, double y, double z) =>
+        new(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
         );
 
     [Fact]
@@ -60,7 +60,11 @@ public sealed class FixedStaticContactSolverTests {
             colliders: colliders,
             dynamicColliders: [],
             orientation: FixedQuaternion.Identity,
-            up: Vector(x: 0d, y: 1d, z: 0d),
+            up: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            ),
             position: ref position,
             velocity: ref velocity,
             volumes: volumes
@@ -108,7 +112,11 @@ public sealed class FixedStaticContactSolverTests {
             colliders: colliders,
             dynamicColliders: [],
             orientation: FixedQuaternion.Identity,
-            up: Vector(x: 0d, y: 1d, z: 0d),
+            up: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            ),
             position: ref position,
             velocity: ref velocity,
             volumes: volumes
@@ -161,7 +169,11 @@ public sealed class FixedStaticContactSolverTests {
             colliders: floor,
             dynamicColliders: wall,
             orientation: FixedQuaternion.Identity,
-            up: Vector(x: 0d, y: 1d, z: 0d),
+            up: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            ),
             position: ref split,
             velocity: ref splitVelocity,
             volumes: volumes
@@ -170,7 +182,11 @@ public sealed class FixedStaticContactSolverTests {
             colliders: [.. floor, .. wall],
             dynamicColliders: [],
             orientation: FixedQuaternion.Identity,
-            up: Vector(x: 0d, y: 1d, z: 0d),
+            up: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            ),
             position: ref combined,
             velocity: ref combinedVelocity,
             volumes: volumes
@@ -204,7 +220,11 @@ public sealed class FixedStaticContactSolverTests {
             colliders: [],
             dynamicColliders: [],
             orientation: FixedQuaternion.Identity,
-            up: Vector(x: 0d, y: 1d, z: 0d),
+            up: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            ),
             position: ref position,
             velocity: ref velocity,
             volumes: volumes

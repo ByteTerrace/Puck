@@ -907,7 +907,11 @@ internal static class WorldAddonMutationDecoder {
             members: members,
             name: "instance"
         );
-        var output = RequireString(context: context, members: members, name: "output");
+        var output = RequireString(
+            context: context,
+            members: members,
+            name: "output"
+        );
 
         return new WorldScreenSource.Machine(
             Instance: instance,

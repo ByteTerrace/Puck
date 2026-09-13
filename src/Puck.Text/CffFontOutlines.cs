@@ -1221,14 +1221,14 @@ internal sealed class CffFontOutlines {
         private bool m_widthSeen = cff2;
 
         private CffContour? m_currentContour;
-        private int m_segmentCount;
         private int m_operationCount;
+        private int m_segmentCount;
         private int m_stemCount;
         private double m_x;
         private double m_y;
 
         private void AddCurve(double dx1, double dy1, double dx2, double dy2, double dx3, double dy3) {
-            budget?.Geometry(1);
+            budget?.Geometry(amount: 1);
             EnsureCurrentContour();
             var start = new Vector2(
                 x: ((float)m_x),
@@ -1258,7 +1258,7 @@ internal sealed class CffFontOutlines {
             EnsureSegmentLimit();
         }
         private void AddLine(double dx, double dy) {
-            budget?.Geometry(1);
+            budget?.Geometry(amount: 1);
             EnsureCurrentContour();
             var start = new Vector2(
                 x: ((float)m_x),
@@ -1341,6 +1341,7 @@ internal sealed class CffFontOutlines {
                 // The next relative moveto starts at the last explicitly drawn endpoint.
                 var previousX = m_x;
                 var previousY = m_y;
+
                 AddLine(
                     dx: (contour.Start.X - m_x),
                     dy: (contour.Start.Y - m_y)
@@ -2084,7 +2085,7 @@ internal sealed class CffFontOutlines {
                 (depth >= 16)
             ) {
                 segmentCount++;
-                budget?.Geometry(1);
+                budget?.Geometry(amount: 1);
 
                 if (segmentCount > MaximumGlyphSegments) {
                     throw new InvalidDataException(message: "A flattened CFF glyph exceeds Puck's one-million-segment safety limit.");
@@ -2330,7 +2331,7 @@ internal sealed class CffFontOutlines {
                         );
                     } else {
                         flattenedSegmentCount++;
-                        budget?.Geometry(1);
+                        budget?.Geometry(amount: 1);
 
                         if (flattenedSegmentCount > MaximumGlyphSegments) {
                             throw new InvalidDataException(message: "A flattened CFF glyph exceeds Puck's one-million-segment safety limit.");

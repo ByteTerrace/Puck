@@ -55,6 +55,42 @@ public abstract record SdfDomainOp {
 /// <summary>Applies an ordered <see cref="SdfDomainOp"/> list to a builder chain — the one place the family's
 /// argument mapping onto <see cref="SdfProgramBuilder"/> is written.</summary>
 public static class SdfDomainOps {
+    private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, SdfDomainOp op) {
+        return op switch {
+            SdfDomainOp.Symmetry symmetry => chain.SymmetryPlane(
+            normal: symmetry.Normal,
+            offset: symmetry.Offset
+        ),
+            SdfDomainOp.Repeat repeat => chain.Translate(offset: repeat.Origin)
+                .RepeatLimited(
+            limit: repeat.Limit,
+            spacing: repeat.Spacing
+        )
+                .Translate(offset: -repeat.Origin),
+            SdfDomainOp.Polar polar => chain.Translate(offset: polar.Origin)
+                .RepeatPolar(
+            axis: polar.Axis,
+            count: polar.Count,
+            materialStride: polar.MaterialStride,
+            mirror: polar.Mirror
+        )
+                .Translate(offset: -polar.Origin),
+            SdfDomainOp.Wallpaper wallpaper => chain.WallpaperFold(
+            cell: wallpaper.Cell,
+            group: wallpaper.Group,
+            limit: wallpaper.Limit,
+            lodDistance: wallpaper.LodDistance,
+            materialStride: wallpaper.MaterialStride,
+            plane: wallpaper.Plane
+        ),
+            _ => throw new ArgumentOutOfRangeException(
+            paramName: nameof(op),
+            actualValue: op,
+            message: "The domain op kind is not defined."
+        ),
+        };
+    }
+
     /// <summary>Applies every op in <paramref name="domain"/>, in order.</summary>
     /// <param name="chain">The builder chain, already advanced past whatever frame precedes the fold.</param>
     /// <param name="domain">The ordered ops, or null/empty for no-op.</param>
@@ -75,41 +111,5 @@ public static class SdfDomainOps {
         }
 
         return chain;
-    }
-
-    private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, SdfDomainOp op) {
-        return op switch {
-            SdfDomainOp.Symmetry symmetry => chain.SymmetryPlane(
-                normal: symmetry.Normal,
-                offset: symmetry.Offset
-            ),
-            SdfDomainOp.Repeat repeat => chain.Translate(offset: repeat.Origin)
-                .RepeatLimited(
-                    limit: repeat.Limit,
-                    spacing: repeat.Spacing
-                )
-                .Translate(offset: -repeat.Origin),
-            SdfDomainOp.Polar polar => chain.Translate(offset: polar.Origin)
-                .RepeatPolar(
-                    axis: polar.Axis,
-                    count: polar.Count,
-                    materialStride: polar.MaterialStride,
-                    mirror: polar.Mirror
-                )
-                .Translate(offset: -polar.Origin),
-            SdfDomainOp.Wallpaper wallpaper => chain.WallpaperFold(
-                cell: wallpaper.Cell,
-                group: wallpaper.Group,
-                limit: wallpaper.Limit,
-                lodDistance: wallpaper.LodDistance,
-                materialStride: wallpaper.MaterialStride,
-                plane: wallpaper.Plane
-            ),
-            _ => throw new ArgumentOutOfRangeException(
-                paramName: nameof(op),
-                actualValue: op,
-                message: "The domain op kind is not defined."
-            ),
-        };
     }
 }

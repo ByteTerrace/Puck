@@ -15,6 +15,148 @@ namespace Puck.HumbleGamingBrick.Post;
 /// the interactive authoring and inspection surface.
 /// </summary>
 internal static class LinkExplore {
+    private static void Dump(MachineInstance machine, string outDir, string tag, int frame) {
+        var framebuffer = machine.GetRequiredService<IFramebuffer>();
+        var pixels = framebuffer.Pixels;
+        var rgba = FramebufferRgba.Pack(pixels: pixels);
+
+        var path = Path.Combine(
+            path1: outDir,
+            path2: $"{tag}_{frame:D5}.png"
+        );
+
+        PngEncoder.Write(
+            path: path,
+            rgba: rgba,
+            width: framebuffer.Width,
+            height: framebuffer.Height
+        );
+        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} (fb 0x{Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels)):X16})");
+    }
+    private static int IntArg(string[] args, string name, int fallback) {
+        var value = CommandLineArguments.Value(
+            args: args,
+            name: name
+        );
+
+        return (((value is not null) && int.TryParse(
+            result: out var parsed,
+            s: value
+        ))
+            ? parsed
+            : fallback
+        );
+    }
+    private static ConsoleModel ModelArg(string[] args, string name, ConsoleModel fallback) {
+        var value = CommandLineArguments.Value(
+            args: args,
+            name: name
+        );
+
+        return value?.ToLowerInvariant() switch {
+            "dmg" => ConsoleModel.DmgC,
+            "cgb" => ConsoleModel.CgbE,
+            "agb" => ConsoleModel.Agb,
+            _ => fallback,
+        };
+    }
+    private static List<string> Positionals(string[] args, int afterIndex) {
+        var positionals = new List<string>();
+
+        for (var index = (afterIndex + 1); (index < args.Length); ++index) {
+            if (args[index].StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "--"
+            )) {
+                break;
+            }
+
+            positionals.Add(item: args[index]);
+        }
+
+        return positionals;
+    }
+    private static void RunLinked(
+        string romAPath, string scriptAPath, ConsoleModel modelA,
+        string romBPath, string scriptBPath, ConsoleModel modelB,
+        int frames, int dumpEvery, string outDir
+    ) {
+        using var machineA = PostMachine.Build(
+            model: modelA,
+            rom: File.ReadAllBytes(path: romAPath)
+        );
+        using var machineB = PostMachine.Build(
+            model: modelB,
+            rom: File.ReadAllBytes(path: romBPath)
+        );
+
+        var scriptA = LinkInputScript.Load(path: scriptAPath);
+        var scriptB = LinkInputScript.Load(path: scriptBPath);
+        var tagA = $"A-{Path.GetFileNameWithoutExtension(path: romAPath)}-{modelA}";
+        var tagB = $"B-{Path.GetFileNameWithoutExtension(path: romBPath)}-{modelB}";
+
+        Console.WriteLine(value: $"== link-explore (linked {modelA}<->{modelB}), {frames} frames, dump every {dumpEvery} ==");
+
+        var result = LinkReplay.Run(
+            first: machineA,
+            firstScript: scriptA,
+            second: machineB,
+            secondScript: scriptB,
+            frames: frames,
+            onFrame: frame => {
+                if (
+                    (((frame + 1) % dumpEvery) == 0) ||
+                    ((frame + 1) == frames)
+                ) {
+                    Dump(
+                        frame: (frame + 1),
+                        machine: machineA,
+                        outDir: outDir,
+                        tag: tagA
+                    );
+                    Dump(
+                        frame: (frame + 1),
+                        machine: machineB,
+                        outDir: outDir,
+                        tag: tagB
+                    );
+                }
+            }
+        );
+
+        Console.WriteLine(value: $"  A: masterSends={result.First.MasterSends} completions={result.First.Completions} trafficHash=0x{result.First.TrafficHash:X16}");
+        Console.WriteLine(value: $"  B: masterSends={result.Second.MasterSends} completions={result.Second.Completions} trafficHash=0x{result.Second.TrafficHash:X16}");
+    }
+    private static void RunLone(string romPath, string scriptPath, ConsoleModel model, int frames, int dumpEvery, string outDir) {
+        using var machine = PostMachine.Build(
+            model: model,
+            rom: File.ReadAllBytes(path: romPath)
+        );
+
+        var script = LinkInputScript.Load(path: scriptPath);
+        var joypad = machine.GetRequiredService<IJoypad>();
+        var tag = Path.GetFileNameWithoutExtension(path: romPath);
+
+        Console.WriteLine(value: $"== link-explore (lone {model}) {tag}, {frames} frames, dump every {dumpEvery} ==");
+
+        for (var frame = 0; (frame < frames); ++frame) {
+            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+
+            if (
+                (((frame + 1) % dumpEvery) == 0) ||
+                ((frame + 1) == frames)
+            ) {
+                Dump(
+                    frame: (frame + 1),
+                    machine: machine,
+                    outDir: outDir,
+                    tag: tag
+                );
+            }
+        }
+    }
+
     /// <summary>Dispatches <c>--link-explore</c>. Usage:
     /// <c>--link-explore &lt;romA&gt; &lt;scriptA&gt; [&lt;romB&gt; &lt;scriptB&gt;] --frames N --dump-every M --out DIR
     /// [--modelA cgb] [--modelB agb]</c>. With only romA/scriptA a lone machine is driven; with a second pair the two
@@ -91,146 +233,5 @@ internal static class LinkExplore {
         }
 
         return true;
-    }
-
-    private static void RunLone(string romPath, string scriptPath, ConsoleModel model, int frames, int dumpEvery, string outDir) {
-        using var machine = PostMachine.Build(
-            model: model,
-            rom: File.ReadAllBytes(path: romPath)
-        );
-
-        var script = LinkInputScript.Load(path: scriptPath);
-        var joypad = machine.GetRequiredService<IJoypad>();
-        var tag = Path.GetFileNameWithoutExtension(path: romPath);
-
-        Console.WriteLine(value: $"== link-explore (lone {model}) {tag}, {frames} frames, dump every {dumpEvery} ==");
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-
-            if (
-                (((frame + 1) % dumpEvery) == 0) ||
-                ((frame + 1) == frames)
-            ) {
-                Dump(
-                    frame: (frame + 1),
-                    machine: machine,
-                    outDir: outDir,
-                    tag: tag
-                );
-            }
-        }
-    }
-    private static void RunLinked(
-        string romAPath, string scriptAPath, ConsoleModel modelA,
-        string romBPath, string scriptBPath, ConsoleModel modelB,
-        int frames, int dumpEvery, string outDir
-    ) {
-        using var machineA = PostMachine.Build(
-            model: modelA,
-            rom: File.ReadAllBytes(path: romAPath)
-        );
-        using var machineB = PostMachine.Build(
-            model: modelB,
-            rom: File.ReadAllBytes(path: romBPath)
-        );
-
-        var scriptA = LinkInputScript.Load(path: scriptAPath);
-        var scriptB = LinkInputScript.Load(path: scriptBPath);
-        var tagA = $"A-{Path.GetFileNameWithoutExtension(path: romAPath)}-{modelA}";
-        var tagB = $"B-{Path.GetFileNameWithoutExtension(path: romBPath)}-{modelB}";
-
-        Console.WriteLine(value: $"== link-explore (linked {modelA}<->{modelB}), {frames} frames, dump every {dumpEvery} ==");
-
-        var result = LinkReplay.Run(
-            first: machineA,
-            firstScript: scriptA,
-            second: machineB,
-            secondScript: scriptB,
-            frames: frames,
-            onFrame: frame => {
-                if (
-                    (((frame + 1) % dumpEvery) == 0) ||
-                    ((frame + 1) == frames)
-                ) {
-                    Dump(
-                        frame: (frame + 1),
-                        machine: machineA,
-                        outDir: outDir,
-                        tag: tagA
-                    );
-                    Dump(
-                        frame: (frame + 1),
-                        machine: machineB,
-                        outDir: outDir,
-                        tag: tagB
-                    );
-                }
-            }
-        );
-
-        Console.WriteLine(value: $"  A: masterSends={result.First.MasterSends} completions={result.First.Completions} trafficHash=0x{result.First.TrafficHash:X16}");
-        Console.WriteLine(value: $"  B: masterSends={result.Second.MasterSends} completions={result.Second.Completions} trafficHash=0x{result.Second.TrafficHash:X16}");
-    }
-    private static void Dump(MachineInstance machine, string outDir, string tag, int frame) {
-        var framebuffer = machine.GetRequiredService<IFramebuffer>();
-        var pixels = framebuffer.Pixels;
-        var rgba = FramebufferRgba.Pack(pixels: pixels);
-
-        var path = Path.Combine(
-            path1: outDir,
-            path2: $"{tag}_{frame:D5}.png"
-        );
-
-        PngEncoder.Write(
-            path: path,
-            rgba: rgba,
-            width: framebuffer.Width,
-            height: framebuffer.Height
-        );
-        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} (fb 0x{Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels)):X16})");
-    }
-    private static List<string> Positionals(string[] args, int afterIndex) {
-        var positionals = new List<string>();
-
-        for (var index = (afterIndex + 1); (index < args.Length); ++index) {
-            if (args[index].StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "--"
-            )) {
-                break;
-            }
-
-            positionals.Add(item: args[index]);
-        }
-
-        return positionals;
-    }
-    private static int IntArg(string[] args, string name, int fallback) {
-        var value = CommandLineArguments.Value(
-            args: args,
-            name: name
-        );
-
-        return (((value is not null) && int.TryParse(
-            result: out var parsed,
-            s: value
-        ))
-            ? parsed
-            : fallback);
-    }
-    private static ConsoleModel ModelArg(string[] args, string name, ConsoleModel fallback) {
-        var value = CommandLineArguments.Value(
-            args: args,
-            name: name
-        );
-
-        return value?.ToLowerInvariant() switch {
-            "dmg" => ConsoleModel.DmgC,
-            "cgb" => ConsoleModel.CgbE,
-            "agb" => ConsoleModel.Agb,
-            _ => fallback,
-        };
     }
 }

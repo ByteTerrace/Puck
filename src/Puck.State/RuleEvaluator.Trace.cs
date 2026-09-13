@@ -6,44 +6,77 @@ namespace Puck.State;
 /// and what each effect did. An observer only: capturing never touches simulation state, so a traced run hashes
 /// identically to an untraced one.</summary>
 public sealed class RuleTraceEvaluation {
-    /// <summary>Gets the simulation tick the evaluation ran on.</summary>
-    public ulong Tick { get; init; }
-    /// <summary>Gets the name of the rule this evaluation belongs to — always populated, single-rule or
-    /// all-rules capture alike (see <see cref="RuleEvaluator.ArmTraceAll"/>).</summary>
-    public string Rule { get; init; } = "";
-    /// <summary>Gets the forEach key bound for this evaluation, or <see langword="null"/> for an unbound rule.</summary>
-    public string? EachKey { get; init; }
     /// <summary>Gets each binding as <c>name=value</c>, or <c>name=refused</c> for one that could not evaluate.</summary>
     public List<string> Bindings { get; } = [];
-    /// <summary>Gets each live zone spelling and the zone it selected, or <c>none</c> — an evaluation with any
-    /// <c>none</c> reads its gate closed without consulting it.</summary>
-    public List<string> Zones { get; } = [];
     /// <summary>Gets each gate conjunct's spelling, the two values it compared, and its verdict, in evaluation
     /// order.</summary>
     public List<string> Conjuncts { get; } = [];
-    /// <summary>Gets or sets a value indicating whether the gate held.</summary>
-    public bool GateOpen { get; set; }
+    /// <summary>Gets the forEach key bound for this evaluation, or <see langword="null"/> for an unbound rule.</summary>
+    public string? EachKey { get; init; }
     /// <summary>Gets or sets a value indicating whether an edge rule's gate was already held, so it did not fire.</summary>
     public bool EdgeHeld { get; set; }
     /// <summary>Gets each effect's spelling and outcome — applied, refused with its reason, emitted, or skipped
     /// because the write could not move its destination.</summary>
     public List<string> Effects { get; } = [];
+    /// <summary>Gets or sets a value indicating whether the gate held.</summary>
+    public bool GateOpen { get; set; }
+    /// <summary>Gets the name of the rule this evaluation belongs to — always populated, single-rule or
+    /// all-rules capture alike (see <see cref="RuleEvaluator.ArmTraceAll"/>).</summary>
+    public string Rule { get; init; } = "";
+    /// <summary>Gets the simulation tick the evaluation ran on.</summary>
+    public ulong Tick { get; init; }
+    /// <summary>Gets each live zone spelling and the zone it selected, or <c>none</c> — an evaluation with any
+    /// <c>none</c> reads its gate closed without consulting it.</summary>
+    public List<string> Zones { get; } = [];
 
     /// <summary>Formats the evaluation as one read-back line.</summary>
     /// <param name="verb">The read-back verb the line is bracketed under.</param>
     /// <param name="rule">The traced rule's name.</param>
     public string Describe(string verb, string rule) {
-        var each = ((EachKey is { } key) ? $" each={key}" : string.Empty);
-        var bindings = ((Bindings.Count > 0) ? $" bind [{string.Join(separator: ", ", values: Bindings)}]" : string.Empty);
-        var zones = ((Zones.Count > 0) ? $" zones [{string.Join(separator: ", ", values: Zones)}]" : string.Empty);
-        var gate = ((Conjuncts.Count == 0) ? (GateOpen || (Zones.Count == 0) ? "always" : "not for these zones") : string.Join(separator: "; ", values: Conjuncts));
-        var verdict = (GateOpen ? (EdgeHeld ? "open (edge already held, not fired)" : "open") : "closed");
-        var effects = ((Effects.Count > 0) ? $" -> {string.Join(separator: " | ", values: Effects)}" : string.Empty);
+        var each = ((EachKey is { } key)
+            ? $" each={key}"
+            : string.Empty
+        );
+        var bindings = ((Bindings.Count > 0)
+            ? $" bind [{string.Join(
+                separator: ", ",
+                values: Bindings
+            )}]"
+            : string.Empty
+        );
+        var zones = ((Zones.Count > 0)
+            ? $" zones [{string.Join(
+                separator: ", ",
+                values: Zones
+            )}]"
+            : string.Empty
+        );
+        var gate = ((Conjuncts.Count == 0)
+            ? ((GateOpen || (Zones.Count == 0))
+                ? "always"
+                : "not for these zones")
+            : string.Join(
+                separator: "; ",
+                values: Conjuncts
+            )
+        );
+        var verdict = (GateOpen
+            ? (EdgeHeld
+                ? "open (edge already held, not fired)"
+                : "open")
+            : "closed"
+        );
+        var effects = ((Effects.Count > 0)
+            ? $" -> {string.Join(
+                separator: " | ",
+                values: Effects
+            )}"
+            : string.Empty
+        );
 
         return $"[{verb} {rule} tick={Tick}{each}{bindings}{zones} gate={verdict}: {gate}{effects}]";
     }
 }
-
 /// <summary>One bounded runtime refusal counter and its most recent occurrence.</summary>
 /// <param name="Refusal">The refusal category — a member of <see cref="RuleEffectRefusal"/> or of a host's own
 /// tagged enum.</param>
@@ -53,7 +86,6 @@ public sealed class RuleTraceEvaluation {
 /// <param name="Effect">The latest effect description.</param>
 /// <param name="Detail">The latest concrete runtime reason.</param>
 public readonly record struct RuleRuntimeDiagnostic(Enum Refusal, ulong Count, ulong LastTick, string Rule, string Effect, string Detail);
-
 public sealed partial class RuleEvaluator {
     /// <summary>The most evaluations one trace arming captures.</summary>
     public const int MaxTraceEvaluations = 32;
@@ -61,6 +93,7 @@ public sealed partial class RuleEvaluator {
     private readonly Dictionary<(Type, int), int> m_refusalSlots = [];
     private readonly List<RuleRuntimeDiagnostic> m_refusals = [];
     private readonly List<RuleTraceEvaluation> m_traceCaptured = [];
+
     private string? m_traceRule;
     private bool m_traceAll;
     private int m_traceWanted;
@@ -82,7 +115,10 @@ public sealed partial class RuleEvaluator {
     /// <param name="evaluations">How many evaluations to capture, 1..<see cref="MaxTraceEvaluations"/>.</param>
     /// <returns><see langword="false"/> when the count is out of range.</returns>
     public bool ArmTrace(string rule, int evaluations) {
-        if ((evaluations < 1) || (evaluations > MaxTraceEvaluations)) {
+        if (
+            (evaluations < 1) ||
+            (evaluations > MaxTraceEvaluations)
+        ) {
             return false;
         }
 
@@ -132,21 +168,28 @@ public sealed partial class RuleEvaluator {
             return null;
         }
 
-        var state = ((m_traceCaptured.Count < m_traceWanted) ? "armed" : "complete");
+        var state = ((m_traceCaptured.Count < m_traceWanted)
+            ? "armed"
+            : "complete"
+        );
         var lines = new List<string>(capacity: (m_traceCaptured.Count + 1)) {
             $"[{verb} {rule}: {m_traceCaptured.Count}/{m_traceWanted} evaluation(s) captured, {state}]",
         };
 
         foreach (var evaluation in m_traceCaptured) {
-            lines.Add(item: evaluation.Describe(verb: verb, rule: rule));
+            lines.Add(item: evaluation.Describe(
+                rule: rule,
+                verb: verb
+            ));
         }
 
-        return string.Join(separator: Environment.NewLine, values: lines);
+        return string.Join(
+            separator: Environment.NewLine,
+            values: lines
+        );
     }
-
     /// <summary>Returns the refusal ledger: one entry per category that has occurred, in first-occurrence order.</summary>
     public IReadOnlyList<RuleRuntimeDiagnostic> Diagnostics() => m_refusals;
-
     /// <summary>Records a runtime refusal against a compiled effect.</summary>
     /// <typeparam name="TRefusal">The refusal enum.</typeparam>
     /// <param name="refusal">The category.</param>
@@ -155,7 +198,13 @@ public sealed partial class RuleEvaluator {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="detail">The concrete reason.</param>
     public void ReportRefusal<TRefusal>(TRefusal refusal, string ruleName, EffectFact effect, ulong tick, string detail) where TRefusal : unmanaged, Enum =>
-        ReportRefusal(refusal: refusal, ruleName: ruleName, effect: effect.Describe, tick: tick, detail: detail);
+        ReportRefusal(
+            refusal: refusal,
+            ruleName: ruleName,
+            effect: effect.Describe,
+            tick: tick,
+            detail: detail
+        );
     /// <summary>Records a runtime refusal. The counter is exact and saturating; the host narrates only the first
     /// occurrence of a category, through <see cref="IRuleHost.RefusalRecorded"/>.</summary>
     /// <typeparam name="TRefusal">The refusal enum.</typeparam>
@@ -165,13 +214,20 @@ public sealed partial class RuleEvaluator {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="detail">The concrete reason.</param>
     public void ReportRefusal<TRefusal>(TRefusal refusal, string ruleName, string effect, ulong tick, string detail) where TRefusal : unmanaged, Enum {
-        ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_refusalSlots, key: (typeof(TRefusal), Ordinal(refusal: refusal)), exists: out var exists);
+        ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: m_refusalSlots,
+            key: (typeof(TRefusal), Ordinal(refusal: refusal)),
+            exists: out var exists
+        );
         var count = 1UL;
 
         if (exists) {
             var previous = m_refusals[slot].Count;
 
-            count = ((previous == ulong.MaxValue) ? previous : (previous + 1UL));
+            count = ((previous == ulong.MaxValue)
+                ? previous
+                : (previous + 1UL)
+            );
         } else {
             slot = m_refusals.Count;
             m_refusals.Add(item: default);
@@ -179,7 +235,14 @@ public sealed partial class RuleEvaluator {
 
         m_refusalSerial++;
         m_lastRefusal = $"{refusal}: {detail}";
-        m_refusals[slot] = new RuleRuntimeDiagnostic(Refusal: refusal, Count: count, LastTick: tick, Rule: ruleName, Effect: effect, Detail: detail);
+        m_refusals[slot] = new RuleRuntimeDiagnostic(
+            Count: count,
+            Detail: detail,
+            Effect: effect,
+            LastTick: tick,
+            Refusal: refusal,
+            Rule: ruleName
+        );
 
         if (!exists) {
             m_host.RefusalRecorded(diagnostic: in System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_refusals)[slot]);
@@ -191,7 +254,13 @@ public sealed partial class RuleEvaluator {
     /// <param name="key">The missing key.</param>
     public void ReportTableKeyMissing(string table, long key) {
         m_host.TableKeyMissing = true;
-        ReportRefusal(refusal: RuleEffectRefusal.TableKeyMissing, ruleName: RuleName, effect: $"$table:{table}", tick: Tick, detail: $"key {key} is not an entry of table '{table}'");
+        ReportRefusal(
+            refusal: RuleEffectRefusal.TableKeyMissing,
+            ruleName: RuleName,
+            effect: $"$table:{table}",
+            tick: Tick,
+            detail: $"key {key} is not an entry of table '{table}'"
+        );
     }
 
     private static int Ordinal<TRefusal>(TRefusal refusal) where TRefusal : unmanaged, Enum => Unsafe.SizeOf<TRefusal>() switch {
@@ -200,17 +269,23 @@ public sealed partial class RuleEvaluator {
         4 => Unsafe.As<TRefusal, int>(source: ref refusal),
         _ => ((int)Unsafe.As<TRefusal, long>(source: ref refusal)),
     };
-
     // Null unless this rule is the armed one and the capture still has room; the entry stays current through the
     // evaluation's bindings, gate, and effects and is released by EndTrace.
     private RuleTraceEvaluation? BeginTrace(CompiledRule rule, ulong tick) {
-        var armed = (m_traceAll || ((m_traceRule is not null) && string.Equals(a: m_traceRule, b: rule.Name, comparisonType: StringComparison.Ordinal)));
+        var armed = (m_traceAll || ((m_traceRule is not null) && string.Equals(
+            a: m_traceRule,
+            b: rule.Name,
+            comparisonType: StringComparison.Ordinal
+        )));
 
-        if (!armed || (m_traceCaptured.Count >= m_traceWanted)) {
+        if (
+            !armed ||
+            (m_traceCaptured.Count >= m_traceWanted)
+        ) {
             return null;
         }
 
-        var entry = new RuleTraceEvaluation { Tick = tick, EachKey = BoundEachKey, Rule = rule.Name };
+        var entry = new RuleTraceEvaluation { EachKey = BoundEachKey, Rule = rule.Name, Tick = tick };
 
         m_traceCaptured.Add(item: entry);
         m_traceEntry = entry;
@@ -223,7 +298,10 @@ public sealed partial class RuleEvaluator {
         }
     }
     private string DescribeTracedEffect(EffectFact effect, bool applied, bool refused) {
-        var value = ((m_traceEffectValue is { } computed) ? $" = {computed}" : string.Empty);
+        var value = ((m_traceEffectValue is { } computed)
+            ? $" = {computed}"
+            : string.Empty
+        );
 
         m_traceEffectValue = null;
 
@@ -233,7 +311,8 @@ public sealed partial class RuleEvaluator {
                 ? "applied"
                 : (!effect.SubmitsMutation
                     ? "emitted"
-                    : "skipped (could not move the destination)")));
+                    : "skipped (could not move the destination)"
+        )));
 
         return $"{effect.Describe}{value}: {outcome}";
     }

@@ -670,27 +670,44 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
         public bool TryValidateShape(out string reason) {
             reason = "a batch requires members carrying its own principal and well-formed guards";
             if (Mutations is not { Count: > 0 }) { return false; }
-            for (var index = 0; index < Mutations.Count; index++) {
-                if (Mutations[index] is not { } member || member.Principal != Principal) { return false; }
+            for (var index = 0; (index < Mutations.Count); index++) {
+                if (
+                    (Mutations[index] is not { } member) ||
+                    (member.Principal != Principal)
+                ) { return false; }
             }
-            if (ExpectedDefinition is { } hash && (hash.Length != 64 || hash.Any(c => !char.IsAsciiHexDigit(c)))) { return false; }
-            if (ExpectedInputs is { } inputs && !inputs.TryValidate()) { return false; }
+            if (
+                (ExpectedDefinition is { } hash) &&
+                ((hash.Length != 64) || hash.Any(predicate: c => !char.IsAsciiHexDigit(c: c)))
+            ) { return false; }
+            if (
+                (ExpectedInputs is { } inputs) &&
+                !inputs.TryValidate()
+            ) { return false; }
             if (ExpectedStateRows is { } rows) {
                 if (ExpectedDefinition is null) { return false; }
-                for (var index = 0; index < rows.Count; index++) {
-                    if (string.IsNullOrWhiteSpace(rows[index])) { return false; }
+                for (var index = 0; (index < rows.Count); index++) {
+                    if (string.IsNullOrWhiteSpace(value: rows[index])) { return false; }
                 }
             }
             if (ExpectedCells is { } cells) {
-                for (var index = 0; index < cells.Count; index++) {
-                    if (cells[index] is not { } cell || string.IsNullOrWhiteSpace(cell.Row) || cell.Key is { Length: 0 } ||
-                        !Enum.IsDefined(cell.Comparison) || (cell.Kind is { } kind && !Enum.IsDefined(kind))) { return false; }
+                for (var index = 0; (index < cells.Count); index++) {
+                    if (
+                        (cells[index] is not { } cell) ||
+                        string.IsNullOrWhiteSpace(value: cell.Row) ||
+                        (cell.Key is { Length: 0 }) ||
+                        !Enum.IsDefined(value: cell.Comparison) ||
+                        ((cell.Kind is { } kind) && !Enum.IsDefined(value: kind))
+                    ) { return false; }
                 }
             }
             if (ExpectedSpatialReads is { } spatial) {
                 if (spatial.Count == 0) { return false; }
-                for (var index = 0; index < spatial.Count; index++) {
-                    if (spatial[index] is not { } read || !read.TryValidate(out _)) { return false; }
+                for (var index = 0; (index < spatial.Count); index++) {
+                    if (
+                        (spatial[index] is not { } read) ||
+                        !read.TryValidate(reason: out _)
+                    ) { return false; }
                 }
             }
             reason = string.Empty;

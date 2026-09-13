@@ -31,7 +31,10 @@ public sealed partial class WorldStampPool {
         );
 
         for (var i = 0; (i < count); i++) {
-            var trim = (probeWorstCase ? null : trims![i]);
+            var trim = (probeWorstCase
+                ? null
+                : trims![i]
+            );
             var referenceSlot = slot;
             var referenceType = type;
             var referenceScale = scale;
@@ -66,7 +69,7 @@ public sealed partial class WorldStampPool {
 
                 var reference = allShapes![referenceIndex];
 
-                referenceSlot = (rootSlot + 1 + referenceIndex);
+                referenceSlot = ((rootSlot + 1) + referenceIndex);
                 referenceType = reference.Type;
                 referenceScale = (reference.Scale * placementScale);
                 referenceTaper = (reference.Taper ?? 0.5f);
@@ -82,7 +85,13 @@ public sealed partial class WorldStampPool {
 
             var eroded = SdfSolidGeometry.AppendScaledPrimitive(
                 chain: builder.ResetPoint().TransformDynamic(slot: slot).PushField(compose: SdfBlendOp.Union),
-                type: type, taper: taper, profile: profile, lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
+                type: type,
+                taper: taper,
+                profile: profile,
+                lift: lift,
+                rounding: rounding,
+                chamfer: chamfer,
+                exponent: exponent,
                 scale: scale,
                 material: trimMaterial,
                 blend: SdfBlendOp.Union,
@@ -91,9 +100,17 @@ public sealed partial class WorldStampPool {
 
             _ = SdfSolidGeometry.AppendScaledPrimitive(
                 chain: eroded.ResetPoint().TransformDynamic(slot: referenceSlot),
-                type: referenceType, taper: referenceTaper, profile: referenceProfile,
-                lift: referenceLift, rounding: referenceRounding, chamfer: referenceChamfer, exponent: referenceExponent,
-                scale: ShapeTrimDocument.DilatedScale(scale: referenceScale, width: width),
+                type: referenceType,
+                taper: referenceTaper,
+                profile: referenceProfile,
+                lift: referenceLift,
+                rounding: referenceRounding,
+                chamfer: referenceChamfer,
+                exponent: referenceExponent,
+                scale: ShapeTrimDocument.DilatedScale(
+                    scale: referenceScale,
+                    width: width
+                ),
                 material: trimMaterial,
                 blend: SdfBlendOp.Intersection,
                 smooth: 0f

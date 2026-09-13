@@ -27,6 +27,46 @@ namespace Puck.World;
 public static class WorldDrawBootResolver {
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
+    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
+        fired = default;
+
+        if (!GeneratorEngine.TryResolveSource(
+            generators: definition.Generators,
+            draw: draw,
+            generator: out var generator,
+            reason: out var resolveReason
+        )) {
+            reason = $"{site} {resolveReason}";
+
+            return false;
+        }
+
+        if (!GeneratorEngine.TryFire(
+            generator: generator,
+            targetKind: targetKind,
+            seedState: GeneratorEngine.ComputeSeedState(
+                documentSeed: worldSeed,
+                instanceIdentity: instanceIdentity,
+                site: site
+            ),
+            stream: GeneratorEngine.ComputeStreamId(site: site),
+            cursor: cursor,
+            masks: masks,
+            result: out fired,
+            secret: draw.Secret,
+            reason: out var fireReason,
+            skip: draw.Skip
+        )) {
+            reason = $"{site} {fireReason}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
     /// <summary>Draws one numeric sample per selected cell of a keyed draw site, in cell order, advancing the site's
     /// cursor by the cell count — the whole-row roll of a dice tray, or a re-roll of the named <paramref name="keys"/>
     /// alone with every other cell held.</summary>
@@ -45,13 +85,21 @@ public static class WorldDrawBootResolver {
         filled = row;
         var site = WorldDrawSites.StateRow(rowName: row.Name);
 
-        if (row.Draw is not { } draw || !row.IsKeyed) {
+        if (
+            (row.Draw is not { } draw) ||
+            !row.IsKeyed
+        ) {
             reason = $"{site} is not a keyed draw site";
 
             return false;
         }
 
-        if (!GeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out var resolveReason)) {
+        if (!GeneratorEngine.TryResolveSource(
+            generators: definition.Generators,
+            draw: draw,
+            generator: out var generator,
+            reason: out var resolveReason
+        )) {
             reason = $"{site} {resolveReason}";
 
             return false;
@@ -61,12 +109,18 @@ public static class WorldDrawBootResolver {
         var selected = new List<int>(capacity: cells.Length);
 
         if (keys is null) {
-            for (var index = 0; index < cells.Length; index++) { selected.Add(item: index); }
+            for (var index = 0; (index < cells.Length); index++) { selected.Add(item: index); }
         } else {
             foreach (var key in keys) {
-                var index = Array.FindIndex(array: cells, match: cell => cell.Key.Value == key);
+                var index = Array.FindIndex(
+                    array: cells,
+                    match: cell => (cell.Key.Value == key)
+                );
 
-                if (index < 0 || selected.Contains(item: index)) {
+                if (
+                    (index < 0) ||
+                    selected.Contains(item: index)
+                ) {
                     reason = $"{site} names no distinct cell '{key}' to redraw";
 
                     return false;
@@ -89,7 +143,11 @@ public static class WorldDrawBootResolver {
         if (!GeneratorEngine.TryFireBatch(
             generator: generator,
             targetKind: row.Kind,
-            seedState: GeneratorEngine.ComputeSeedState(instanceIdentity: instanceIdentity, site: site, documentSeed: worldSeed),
+            seedState: GeneratorEngine.ComputeSeedState(
+                documentSeed: worldSeed,
+                instanceIdentity: instanceIdentity,
+                site: site
+            ),
             stream: GeneratorEngine.ComputeStreamId(site: site),
             cursor: row.DrawCursor,
             masks: row.DrawnMasks,
@@ -103,55 +161,19 @@ public static class WorldDrawBootResolver {
             return false;
         }
 
-        for (var slot = 0; slot < selected.Count; slot++) {
+        for (var slot = 0; (slot < selected.Count); slot++) {
             cells[selected[slot]] = cells[selected[slot]] with { Value = values[slot] };
         }
 
-        filled = row with { Cells = cells, DrawCursor = checked(row.DrawCursor + selected.Count), DrawnMasks = GeneratorEngine.MasksAfter(generator: generator, fired: masksAfter, previous: row.DrawnMasks) };
-        reason = string.Empty;
-
-        return true;
-    }
-    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
-        fired = default;
-
-        if (!GeneratorEngine.TryResolveSource(
-            generators: definition.Generators,
-            draw: draw,
-            generator: out var generator,
-            reason: out var resolveReason
-        )) {
-            reason = $"{site} {resolveReason}";
-
-            return false;
-        }
-
-        if (!GeneratorEngine.TryFire(
+        filled = row with { Cells = cells, DrawCursor = checked((row.DrawCursor + selected.Count)), DrawnMasks = GeneratorEngine.MasksAfter(
             generator: generator,
-            targetKind: targetKind,
-            seedState: GeneratorEngine.ComputeSeedState(
-                instanceIdentity: instanceIdentity,
-                site: site,
-                documentSeed: worldSeed
-            ),
-            stream: GeneratorEngine.ComputeStreamId(site: site),
-            cursor: cursor,
-            masks: masks,
-            result: out fired,
-            secret: draw.Secret,
-            reason: out var fireReason,
-            skip: draw.Skip
-        )) {
-            reason = $"{site} {fireReason}";
-
-            return false;
-        }
-
+            fired: masksAfter,
+            previous: row.DrawnMasks
+        ) };
         reason = string.Empty;
 
         return true;
     }
-
     /// <summary>Resolves every first-fill draw site in <paramref name="definition"/>.</summary>
     /// <param name="definition">The freshly parsed, already-validated document.</param>
     /// <param name="instanceIdentity">The running instance's own identity — the seed ladder's INSTANCE rung.</param>
@@ -179,7 +201,9 @@ public static class WorldDrawBootResolver {
             // already drew — is left exactly as it is, cursor included.
             if (
                 (row.Draw is not { } draw) ||
-                (row.IsKeyed ? ((row.DrawCursor != 0L) || (row.Cells is not { Count: > 0 })) : (row.Cells is { Count: > 0 }))
+                (row.IsKeyed
+                ? ((row.DrawCursor != 0L) || (row.Cells is not { Count: > 0 }))
+                : (row.Cells is { Count: > 0 }))
             ) {
                 state.Add(item: row);
 
@@ -187,7 +211,15 @@ public static class WorldDrawBootResolver {
             }
 
             if (row.IsKeyed) {
-                if (!TryFillKeyedSite(definition: definition, worldSeed: worldSeed, instanceIdentity: instanceIdentity, row: row, keys: null, filled: out var filledRow, reason: out reason)) {
+                if (!TryFillKeyedSite(
+                    definition: definition,
+                    filled: out var filledRow,
+                    instanceIdentity: instanceIdentity,
+                    keys: null,
+                    reason: out reason,
+                    row: row,
+                    worldSeed: worldSeed
+                )) {
                     return false;
                 }
 
@@ -232,7 +264,11 @@ public static class WorldDrawBootResolver {
                 generator: out var generator,
                 reason: out _
             );
-            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: row.DrawnMasks) }));
+            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(
+                generator: generator,
+                fired: fired.Masks,
+                previous: row.DrawnMasks
+            ) }));
             changed = true;
         }
 
@@ -240,7 +276,11 @@ public static class WorldDrawBootResolver {
         // narrated here is the row's — the row itself stays the persisted evidence, so nothing is cleared.
         if (population.CapacityRow is { } capacityRow) {
             var rows = state;
-            var declared = rows.Find(match: r => string.Equals(a: r.Name.Value, b: capacityRow, comparisonType: StringComparison.Ordinal));
+            var declared = rows.Find(match: r => string.Equals(
+                a: r.Name.Value,
+                b: capacityRow,
+                comparisonType: StringComparison.Ordinal
+            ));
 
             if (declared?.Cells is not [{ } censusCell, ..]) {
                 reason = $"bodies.capacityRow '{capacityRow}' names no filled scalar row this boot could read";
@@ -250,7 +290,10 @@ public static class WorldDrawBootResolver {
 
             var census = censusCell.Value;
 
-            if ((census < 0) || (census > int.MaxValue)) {
+            if (
+                (census < 0) ||
+                (census > int.MaxValue)
+            ) {
                 reason = $"bodies.capacityRow '{capacityRow}' read {census}, which does not fit a non-negative int32 census";
 
                 return false;
@@ -268,8 +311,14 @@ public static class WorldDrawBootResolver {
 
         if (host.BackendRow is { } backendRow) {
             var rows = state;
-            var declared = rows.Find(match: r => string.Equals(a: r.Name.Value, b: backendRow, comparisonType: StringComparison.Ordinal));
-            var token = (((declared?.Cells is [{ } tokenCell, ..]) ? tokenCell.Text : null) ?? string.Empty);
+            var declared = rows.Find(match: r => string.Equals(
+                a: r.Name.Value,
+                b: backendRow,
+                comparisonType: StringComparison.Ordinal
+            ));
+            var token = (((declared?.Cells is [{ } tokenCell, ..])
+                ? tokenCell.Text
+                : null) ?? string.Empty);
 
             if (WorldHostTokens.ParseBackend(token: token) is not { } backend) {
                 reason = $"host.backendRow '{backendRow}' read token '{token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}')";

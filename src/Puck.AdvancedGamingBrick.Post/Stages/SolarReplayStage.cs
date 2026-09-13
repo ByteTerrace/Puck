@@ -26,6 +26,36 @@ internal sealed class SolarReplayStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
+    // One complete scripted run from a freshly built, full-booted console: the light level is set once per
+    // FramesPerLevel-frame segment (mirroring a queued host's per-segment ApplyInput), never mid-segment, so the
+    // recorded input stays a pure function of frame count.
+    private static AgbMachineSnapshot RunScripted(ReadOnlyMemory<byte> bios, byte[] rom, out AgbCartridge cartridge) {
+        var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: ((byte[])rom.Clone())
+        ));
+
+        instance.Machine.Cpu.Reset();
+        cartridge = instance.GetRequiredService<AgbCartridge>();
+
+        var scriptIndex = 0;
+
+        for (var frame = 0; (frame < Frames); ++frame) {
+            if ((frame % FramesPerLevel) == 0) {
+                cartridge.SetLightLevel(level: Script[(scriptIndex % Script.Length)]);
+                ++scriptIndex;
+            }
+
+            _ = instance.Machine.RunFrame();
+        }
+
+        var snapshot = instance.Machine.Snapshot();
+
+        instance.Dispose();
+
+        return snapshot;
+    }
+
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -66,35 +96,5 @@ internal sealed class SolarReplayStage : IPostStage<PostContext> {
         }
 
         return PostStageOutcome.Pass(detail: $"{Path.GetFileName(path: romPath)}: an {Script.Length}-step varying-light script ({FramesPerLevel} frames/step) replayed byte-identically over {Frames} frames ({first.Size} state bytes)");
-    }
-
-    // One complete scripted run from a freshly built, full-booted console: the light level is set once per
-    // FramesPerLevel-frame segment (mirroring a queued host's per-segment ApplyInput), never mid-segment, so the
-    // recorded input stays a pure function of frame count.
-    private static AgbMachineSnapshot RunScripted(ReadOnlyMemory<byte> bios, byte[] rom, out AgbCartridge cartridge) {
-        var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: bios,
-            rom: ((byte[])rom.Clone())
-        ));
-
-        instance.Machine.Cpu.Reset();
-        cartridge = instance.GetRequiredService<AgbCartridge>();
-
-        var scriptIndex = 0;
-
-        for (var frame = 0; (frame < Frames); ++frame) {
-            if ((frame % FramesPerLevel) == 0) {
-                cartridge.SetLightLevel(level: Script[(scriptIndex % Script.Length)]);
-                ++scriptIndex;
-            }
-
-            _ = instance.Machine.RunFrame();
-        }
-
-        var snapshot = instance.Machine.Snapshot();
-
-        instance.Dispose();
-
-        return snapshot;
     }
 }

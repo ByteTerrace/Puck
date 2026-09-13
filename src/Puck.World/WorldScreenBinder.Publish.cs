@@ -160,26 +160,30 @@ internal sealed partial class WorldScreenBinder {
         var machineTicks = 0L;
         var windowCaptureTicks = 0L;
         var patternTicks = 0L;
+
         m_publishedMachineOutputs.Clear();
 
         foreach (var slot in m_slots.Values) {
             if (slot.MachineSource is { } source) {
                 if (
-                    (m_machines.VideoOutput(source.Instance, source.Output) is { } machine) &&
-                    m_publishedMachineOutputs.Add((source.Instance, source.Output))
+                    (m_machines.VideoOutput(
+                    instance: source.Instance,
+                    output: source.Output
+                ) is { } machine) &&
+                    m_publishedMachineOutputs.Add(item: (source.Instance, source.Output))
                 ) {
-                phaseStart = (timingEnabled
-                    ? Stopwatch.GetTimestamp()
-                    : 0L
-                );
-                machine.PublishFrame(
-                    deviceContext: deviceContext,
-                    gpu: gpu
-                );
-                machineTicks += (timingEnabled
-                    ? (Stopwatch.GetTimestamp() - phaseStart)
-                    : 0L
-                );
+                    phaseStart = (timingEnabled
+                        ? Stopwatch.GetTimestamp()
+                        : 0L
+                    );
+                    machine.PublishFrame(
+                        deviceContext: deviceContext,
+                        gpu: gpu
+                    );
+                    machineTicks += (timingEnabled
+                        ? (Stopwatch.GetTimestamp() - phaseStart)
+                        : 0L
+                    );
 
                 }
 
@@ -190,7 +194,10 @@ internal sealed partial class WorldScreenBinder {
 
             // The shared webcam and every probe output are published once (in CaptureCamera and ServiceProbeFeeds
             // above), so their screens only ride those feeds.
-            if ((slot.CameraSeat is not null) || (slot.Probe is not null)) {
+            if (
+                (slot.CameraSeat is not null) ||
+                (slot.Probe is not null)
+            ) {
                 continue;
             }
 

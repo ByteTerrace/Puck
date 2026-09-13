@@ -16,10 +16,10 @@ public static class Extensions {
         string? userObjectId
     ) {
         return (!Guid.TryParseExact(
-                format: "D",
-                input: userObjectId,
-                result: out _
-            )
+            format: "D",
+            input: userObjectId,
+            result: out _
+        )
             ? throw new InvalidOperationException(message: "User identity must be a valid GUID in \"D\" format.")
             : (!Uri.TryCreate(
                 result: out var endpointUri,
@@ -27,14 +27,15 @@ public static class Extensions {
                 // Uri.ToString() includes a trailing slash; a doubled separator loses the SDK's container name.
                 uriString: $"{endpoint?.TrimEnd(trimChar: '/')}/{userObjectId}"
             )
-            ? throw new InvalidOperationException(message: "Blob storage endpoint must be a valid URI.")
-            : new(
-                blobContainerUri: endpointUri,
-                credential: tokenCredential.ToOnBehalfOfCredential(
-                    options: onBehalfOfOptions,
-                    userAssertion: userAssertion
+                ? throw new InvalidOperationException(message: "Blob storage endpoint must be a valid URI.")
+                : new(
+                    blobContainerUri: endpointUri,
+                    credential: tokenCredential.ToOnBehalfOfCredential(
+                        options: onBehalfOfOptions,
+                        userAssertion: userAssertion
+                    )
                 )
-            )));
+        ));
     }
     public static bool TryAddConfigurationStore(
         this IServiceCollection services,
@@ -62,28 +63,28 @@ public static class Extensions {
                 action: appConfigOptions => {
                     appConfigOptions
                         .Connect(
-                            credential: tokenCredential,
-                            endpoint: endpointUri
-                        )
+                        credential: tokenCredential,
+                        endpoint: endpointUri
+                    )
                         .ConfigureKeyVault(configure: keyVaultOptions => {
                             keyVaultOptions.SetCredential(credential: tokenCredential);
                         })
                         .ConfigureRefresh(configure: refreshOptions => {
                             refreshOptions
                                 .Register(
-                                    key: (sentinel ?? "Version"),
-                                    refreshAll: true
-                                )
+                                key: (sentinel ?? "Version"),
+                                refreshAll: true
+                            )
                                 .SetRefreshInterval(refreshInterval: refreshInterval);
                         })
                         .ConfigureStartupOptions(configure: startupOptions => {
                             startupOptions.Timeout = TimeSpan.FromSeconds(value: 17);
                         })
                         .Select(
-                            keyFilter: KeyFilter.Any,
-                            labelFilter: LabelFilter.Null,
-                            tagFilters: default
-                        );
+                        keyFilter: KeyFilter.Any,
+                        labelFilter: LabelFilter.Null,
+                        tagFilters: default
+                    );
                 },
                 optional: optional
             );
@@ -136,15 +137,15 @@ public static class Extensions {
                     );
                 })
                 .AddAzureBlobGrainStorage(
-                    Constants.UserStateStorageName,
-                    ((Action<Orleans.Configuration.AzureBlobStorageOptions>)(blobStorageOptions => {
-                        blobStorageOptions.BlobServiceClient = new BlobServiceClient(
-                            credential: tokenCredential,
-                            serviceUri: privateBlobEndpointUri
-                        );
-                        blobStorageOptions.ContainerName = (configuration.GetValue<string>(key: "Orleans:GrainStateContainerName") ?? "orleans-state");
-                    }))
-                );
+                Constants.UserStateStorageName,
+                ((Action<Orleans.Configuration.AzureBlobStorageOptions>)(blobStorageOptions => {
+                    blobStorageOptions.BlobServiceClient = new BlobServiceClient(
+                        credential: tokenCredential,
+                        serviceUri: privateBlobEndpointUri
+                    );
+                    blobStorageOptions.ContainerName = (configuration.GetValue<string>(key: "Orleans:GrainStateContainerName") ?? "orleans-state");
+                }))
+            );
         } else {
             siloBuilder
                 .UseLocalhostClustering()

@@ -89,48 +89,63 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         );
 
     [Fact]
-    public void ExhaustedMarchReportsAnObstructionRatherThanAClearLine() {
-        var evaluator = BuildGrazingScene(sphereX: 0.7f);
+    public void AnUnrepresentableStepScaleNeverRoundsUpIntoAnUnsafeAdvance() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        // 1e-5 sits in [half-ULP, ULP) of Q48.16, the ONE band where the two conversion policies disagree: nearest
+        // rounds it to raw 1, a directed floor to raw 0. An eccentricity twice this large scales below half a ULP,
+        // where both policies produce zero and no fixture can tell them apart.
+        _ = builder.Ellipsoid(
+            radii: new Vector3(
+                x: 100_000f,
+                y: 1f,
+                z: 100_000f
+            ),
+            material: material
+        );
+
+        var program = builder.Build();
+
+        Assert.InRange(
+            actual: program.StepScale,
+            low: (((float)((double)FixedQ4816.Epsilon)) * 0.5f),
+            high: ((float)((double)FixedQ4816.Epsilon))
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: program);
+        // Twenty thousand units of clearance above the disc's pole. A scale rounded up to one raw tick authorizes an
+        // advance of f/65536 per iteration — three hundred metres a step out here — so the whole budget marches
+        // thousands of units on a proof that authorizes none. At the floored scale nothing is authorized at all and
+        // the march can only creep at the format's own minimum, whose total is the point-cast reach.
+        const double PointMarchReach = 0.515625; // 512 iterations * HitEpsilon, which quantizes to raw 66.
+
         var origin = Local(
             x: 0.0,
-            y: 0.0011,
+            y: 20_000.0,
             z: 0.0
         );
 
-        // There IS something on this ray: the field at the sphere's centre height along the grazing line reads inside.
-        Assert.True(condition: (Distance(
-            evaluator: evaluator,
-            position: Local(
-                x: 0.7,
-                y: 0.0011,
-                z: 0.0
-            )
-        ) < FixedQ4816.Zero));
-
-        // The plane throttles each step to ~0.0011, so 512 iterations cover ~0.56 — short of the sphere at 0.68. The
-        // march cannot decide, and an undecided march may not assert the half of the contract that changes state:
-        // "clear".
         Assert.True(condition: evaluator.Raycast(
-            dir: Vector(
-                x: 1.0,
-                y: 0.0,
-                z: 0.0
-            ),
+            dir: Down,
             hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 5L),
+            maxDist: FixedQ4816.FromInteger(value: 20_000L),
             origin: origin
         ));
         Assert.Equal(
             expected: WorldQueryConfidence.Bounded,
             actual: hit.Confidence
         );
-        Assert.False(condition: evaluator.LineOfSight(
-            from: origin,
-            to: Local(
-                x: 2.0,
-                y: 0.0011,
-                z: 0.0
-            )
+        Assert.InRange(
+            actual: ((double)hit.Distance),
+            high: PointMarchReach,
+            low: 0.0
+        );
+        // The same claim on the verb with no march in it: with no authorized scaled clearance, twenty thousand units
+        // of open sky reads as occupied rather than as a proof of separation.
+        Assert.True(condition: evaluator.Overlap(
+            center: origin,
+            radius: FixedQ4816.Zero
         ));
     }
     [Fact]
@@ -180,184 +195,49 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         ));
     }
     [Fact]
-    public void ShapeFreeProgramMissesRatherThanReportingAnObstruction() {
-        // "Nothing declared" is an answer, not a non-convergence: a program with no shape must not be folded into the
-        // conservative branch, or an empty world would read as solid everywhere.
-        var evaluator = new SdfFieldEvaluator(program: new SdfProgramBuilder().Build());
+    public void ExhaustedMarchReportsAnObstructionRatherThanAClearLine() {
+        var evaluator = BuildGrazingScene(sphereX: 0.7f);
+        var origin = Local(
+            x: 0.0,
+            y: 0.0011,
+            z: 0.0
+        );
 
-        Assert.False(condition: evaluator.TryDistance(
-            distance: out _,
-            material: out _,
-            position: FixedPosition.Zero
-        ));
-        Assert.False(condition: evaluator.Raycast(
+        // There IS something on this ray: the field at the sphere's centre height along the grazing line reads inside.
+        Assert.True(condition: (Distance(
+            evaluator: evaluator,
+            position: Local(
+                x: 0.7,
+                y: 0.0011,
+                z: 0.0
+            )
+        ) < FixedQ4816.Zero));
+
+        // The plane throttles each step to ~0.0011, so 512 iterations cover ~0.56 — short of the sphere at 0.68. The
+        // march cannot decide, and an undecided march may not assert the half of the contract that changes state:
+        // "clear".
+        Assert.True(condition: evaluator.Raycast(
             dir: Vector(
                 x: 1.0,
                 y: 0.0,
                 z: 0.0
             ),
-            hit: out _,
-            maxDist: FixedQ4816.FromInteger(value: 5L),
-            origin: FixedPosition.Zero
-        ));
-    }
-    [Fact]
-    public void OverlapTreatsAnUnrepresentableWorldPointAsObstructed() {
-        var outsideCarrier = new FixedPosition(
-            cellX: long.MaxValue,
-            cellY: 0L,
-            cellZ: 0L,
-            local: FixedVector3.Zero
-        );
-        var evaluator = BuildUnitSphere();
-
-        Assert.False(condition: evaluator.TryDistance(
-            distance: out _,
-            material: out _,
-            position: outsideCarrier
-        ));
-
-        Assert.True(condition: evaluator.Overlap(
-            center: outsideCarrier,
-            radius: FixedQ4816.Zero
-        ));
-
-        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one.
-        Assert.False(condition: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()).Overlap(
-            center: outsideCarrier,
-            radius: FixedQ4816.Zero
-        ));
-    }
-    [Fact]
-    public void QueryEvaluatesTheWholeHierarchicalPositionNotTheCellLocalOffset() {
-        var evaluator = BuildUnitSphere();
-        var cellSize = ((double)(1L << FixedPosition.CellSizeLog2));
-
-        // One cell along X is 1,048,576 world units from a unit sphere at the origin. Reading only .Local aliases the
-        // field with that period and answers "inside" for every cell.
-        foreach (var cell in ((long[])[1L, -3L,])) {
-            var position = new FixedPosition(
-                cellX: cell,
-                cellY: 0L,
-                cellZ: 0L,
-                local: FixedVector3.Zero
-            );
-
-            Assert.Equal(
-                expected: ((Math.Abs(value: cell) * cellSize) - 1.0),
-                actual: ((double)Distance(
-                    evaluator: evaluator,
-                    position: position
-                )),
-                tolerance: 0.01
-            );
-            Assert.False(condition: evaluator.Overlap(
-                center: position,
-                radius: FixedQ4816.FromDouble(value: 0.5)
-            ));
-        }
-
-        // Past the SDF_FAR_DISTANCE seed (1e9) the accumulator's own Union saturates, exactly as mapCore's does. That
-        // is an UNDERestimate of a huge true distance, which only shortens a march step — never the "inside" the alias
-        // produced.
-        var distant = new FixedPosition(
-            cellX: 1_000_000L,
-            cellY: 0L,
-            cellZ: 0L,
-            local: FixedVector3.Zero
-        );
-
-        Assert.True(condition: (Distance(
-            evaluator: evaluator,
-            position: distant
-        ) >= FixedQ4816.FromInteger(value: 1_000_000L)));
-        Assert.False(condition: evaluator.Overlap(
-            center: distant,
-            radius: FixedQ4816.FromDouble(value: 0.5)
-        ));
-
-        // No caller has to construct a cell by hand to reach that: FromLocal carries one itself past half a cell.
-        Assert.Equal(
-            expected: (cellSize - 1.0),
-            actual: ((double)Distance(
-                evaluator: evaluator,
-                position: Local(
-                    x: cellSize,
-                    y: 0.0,
-                    z: 0.0
-                )
-            )),
-            tolerance: 0.01
-        );
-    }
-    [Fact]
-    public void GroundHeightRefusesAnUnconvergedProbeRatherThanFabricatingTerrain() {
-        // A single VERTICAL plane: there is no downward intersection anywhere in the column, at any depth. A probe
-        // hugging it is throttled to its own distance from the wall, so the descent exhausts.
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.Plane(
-            normal: Vector3.UnitX,
-            offset: 0f,
-            material: material
-        );
-
-        var evaluator = new SdfFieldEvaluator(program: builder.Build());
-        var probe = Local(
-            x: 0.0011,
-            y: 9.0,
-            z: 0.0
-        );
-
-        // The march really does exhaust rather than miss — the cast verb, whose true half asserts an OBSTRUCTION, takes
-        // the conservative branch on the same descent. Without this the refusal below would be indistinguishable from
-        // an ordinary miss and would prove nothing.
-        Assert.True(condition: evaluator.Raycast(
-            dir: Down,
             hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 50L),
-            origin: probe
+            maxDist: FixedQ4816.FromInteger(value: 5L),
+            origin: origin
         ));
         Assert.Equal(
             expected: WorldQueryConfidence.Bounded,
             actual: hit.Confidence
         );
-
-        // The denial: the same descent read as GROUND — whose true half asserts a SURFACE — must refuse. Folding
-        // exhaustion to "hit" here would hand a caller a Y from the middle of open air and ground a body on it.
-        Assert.False(condition: evaluator.TryGroundHeight(
-            groundY: out _,
-            position: probe,
-            probeDown: FixedQ4816.FromInteger(value: 50L),
-            probeUp: FixedQ4816.FromDouble(value: 0.5)
-        ));
-
-        // The control: a real floor is still found, so the verb has not simply been turned off.
-        var floorBuilder = new SdfProgramBuilder();
-        var floorMaterial = floorBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = floorBuilder.Plane(
-            normal: Vector3.UnitY,
-            offset: 0f,
-            material: floorMaterial
-        );
-
-        Assert.True(condition: new SdfFieldEvaluator(program: floorBuilder.Build()).TryGroundHeight(
-            groundY: out var groundY,
-            position: Local(
-                x: 0.0,
-                y: 2.0,
+        Assert.False(condition: evaluator.LineOfSight(
+            from: origin,
+            to: Local(
+                x: 2.0,
+                y: 0.0011,
                 z: 0.0
-            ),
-            probeDown: FixedQ4816.FromInteger(value: 50L),
-            probeUp: FixedQ4816.FromDouble(value: 0.5)
+            )
         ));
-        Assert.Equal(
-            actual: ((double)groundY),
-            expected: 0.0,
-            tolerance: 0.002
-        );
     }
     [Fact]
     public void ExhaustionReachIsInvariantUnderTheStepScale() {
@@ -434,92 +314,71 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         }
     }
     [Fact]
-    public void SphereCastDoesNotAdvanceThroughTheStepScaleClearanceGap() {
-        // The gap: raw clearance (f - r) is well outside HitEpsilon, but the SCALED advance (f*s - r) is NEGATIVE,
-        // because scaling the field shrinks it below the radius it must still clear. Advancing from here would cross a
-        // region the Lipschitz proof has not shown clear, so the sweep must report a bounded obstruction at the last
-        // safely reached point rather than manufacture an Exact contact after walking through it.
+    public void GroundHeightRefusesAnUnconvergedProbeRatherThanFabricatingTerrain() {
+        // A single VERTICAL plane: there is no downward intersection anywhere in the column, at any depth. A probe
+        // hugging it is throttled to its own distance from the wall, so the descent exhausts.
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // A floor to sweep onto, plus a 2:1 ellipsoid parked far below purely to move the analyzed step scale to 1/2
-        // without putting geometry near the cast.
-        _ = builder
-            .Plane(
-            normal: Vector3.UnitY,
+        _ = builder.Plane(
+            normal: Vector3.UnitX,
             offset: 0f,
             material: material
-        )
-            .ResetPoint()
-            .Translate(offset: new Vector3(
-            x: 0f,
-            y: -100f,
-            z: 0f
-        ))
-            .Ellipsoid(
-            radii: new Vector3(
-                x: 2f,
-                y: 1f,
-                z: 1f
-            ),
-            material: material
         );
 
-        var program = builder.Build();
-
-        Assert.Equal(
-            expected: 0.5f,
-            actual: program.StepScale
-        );
-
-        var evaluator = new SdfFieldEvaluator(program: program);
-        var radius = FixedQ4816.FromDouble(value: 0.5);
-        var origin = Local(
-            x: 0.0,
-            y: 0.55,
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var probe = Local(
+            x: 0.0011,
+            y: 9.0,
             z: 0.0
         );
 
-        // The origin really is inside the gap: 0.55 clears the radius by 0.05 (fifty HitEpsilons), while 0.55*0.5
-        // leaves the scaled advance at -0.225.
-        Assert.Equal(
-            expected: 0.55,
-            actual: ((double)Distance(
-                evaluator: evaluator,
-                position: origin
-            )),
-            tolerance: 1.0e-4
-        );
-
-        Assert.True(condition: evaluator.SphereCast(
+        // The march really does exhaust rather than miss — the cast verb, whose true half asserts an OBSTRUCTION, takes
+        // the conservative branch on the same descent. Without this the refusal below would be indistinguishable from
+        // an ordinary miss and would prove nothing.
+        Assert.True(condition: evaluator.Raycast(
             dir: Down,
             hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 2L),
-            origin: origin,
-            radius: radius
+            maxDist: FixedQ4816.FromInteger(value: 50L),
+            origin: probe
         ));
-        Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: hit.Confidence);
-        Assert.Equal(expected: FixedQ4816.Zero, actual: hit.Distance);
+        Assert.Equal(
+            expected: WorldQueryConfidence.Bounded,
+            actual: hit.Confidence
+        );
 
-        // The control, and the reason the pin above is about the GAP rather than about sphere casts: the same sweep
-        // started ABOVE the gap advances until the scaled bound stops clearing the radius, which for f = y and a
-        // half-unit radius at step scale 1/2 is y = 1 — three units of travel, half a unit short of the true contact
-        // at y = 0.5, on the conservative side. A marcher that exhausted at every origin would report zero here too.
-        Assert.True(condition: evaluator.SphereCast(
-            dir: Down,
-            hit: out var clear,
-            maxDist: FixedQ4816.FromInteger(value: 4L),
-            origin: Local(
+        // The denial: the same descent read as GROUND — whose true half asserts a SURFACE — must refuse. Folding
+        // exhaustion to "hit" here would hand a caller a Y from the middle of open air and ground a body on it.
+        Assert.False(condition: evaluator.TryGroundHeight(
+            groundY: out _,
+            position: probe,
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
+        ));
+
+        // The control: a real floor is still found, so the verb has not simply been turned off.
+        var floorBuilder = new SdfProgramBuilder();
+        var floorMaterial = floorBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = floorBuilder.Plane(
+            normal: Vector3.UnitY,
+            offset: 0f,
+            material: floorMaterial
+        );
+
+        Assert.True(condition: new SdfFieldEvaluator(program: floorBuilder.Build()).TryGroundHeight(
+            groundY: out var groundY,
+            position: Local(
                 x: 0.0,
-                y: 4.0,
+                y: 2.0,
                 z: 0.0
             ),
-            radius: radius
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
         ));
-        Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: clear.Confidence);
         Assert.Equal(
-            expected: 3.0,
-            actual: ((double)clear.Distance),
+            actual: ((double)groundY),
+            expected: 0.0,
             tolerance: 0.002
         );
     }
@@ -614,61 +473,248 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         ));
     }
     [Fact]
-    public void AnUnrepresentableStepScaleNeverRoundsUpIntoAnUnsafeAdvance() {
+    public void InCellQueriesAreUnchangedByTheRebase() {
+        // The control: rebasing against the world origin is the IDENTITY inside cell (0,0,0), which is every position
+        // room- and arena-scale content produces. A law that only proved the cross-cell half could be satisfied by a
+        // provider that answered wrong everywhere.
+        var evaluator = BuildUnitSphere();
+
+        Assert.Equal(
+            expected: -1.0,
+            actual: ((double)Distance(
+                evaluator: evaluator,
+                position: FixedPosition.Zero
+            )),
+            tolerance: 1.0e-4
+        );
+        Assert.True(condition: evaluator.Overlap(
+            center: FixedPosition.Zero,
+            radius: FixedQ4816.FromDouble(value: 0.5)
+        ));
+
+        // 524,287 is the last offset FromLocal keeps in cell 0; it read correctly before the rebase and still does.
+        Assert.Equal(
+            expected: 524_286.0,
+            actual: ((double)Distance(
+                evaluator: evaluator,
+                position: Local(
+                    x: 524_287.0,
+                    y: 0.0,
+                    z: 0.0
+                )
+            )),
+            tolerance: 1.0
+        );
+    }
+    [Fact]
+    public void OverlapTreatsAnUnrepresentableWorldPointAsObstructed() {
+        var outsideCarrier = new FixedPosition(
+            cellX: long.MaxValue,
+            cellY: 0L,
+            cellZ: 0L,
+            local: FixedVector3.Zero
+        );
+        var evaluator = BuildUnitSphere();
+
+        Assert.False(condition: evaluator.TryDistance(
+            distance: out _,
+            material: out _,
+            position: outsideCarrier
+        ));
+
+        Assert.True(condition: evaluator.Overlap(
+            center: outsideCarrier,
+            radius: FixedQ4816.Zero
+        ));
+
+        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one.
+        Assert.False(condition: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()).Overlap(
+            center: outsideCarrier,
+            radius: FixedQ4816.Zero
+        ));
+    }
+    [Fact]
+    public void QueryEvaluatesTheWholeHierarchicalPositionNotTheCellLocalOffset() {
+        var evaluator = BuildUnitSphere();
+        var cellSize = ((double)(1L << FixedPosition.CellSizeLog2));
+
+        // One cell along X is 1,048,576 world units from a unit sphere at the origin. Reading only .Local aliases the
+        // field with that period and answers "inside" for every cell.
+        foreach (var cell in ((long[])[1L, -3L,])) {
+            var position = new FixedPosition(
+                cellX: cell,
+                cellY: 0L,
+                cellZ: 0L,
+                local: FixedVector3.Zero
+            );
+
+            Assert.Equal(
+                expected: ((Math.Abs(value: cell) * cellSize) - 1.0),
+                actual: ((double)Distance(
+                    evaluator: evaluator,
+                    position: position
+                )),
+                tolerance: 0.01
+            );
+            Assert.False(condition: evaluator.Overlap(
+                center: position,
+                radius: FixedQ4816.FromDouble(value: 0.5)
+            ));
+        }
+
+        // Past the SDF_FAR_DISTANCE seed (1e9) the accumulator's own Union saturates, exactly as mapCore's does. That
+        // is an UNDERestimate of a huge true distance, which only shortens a march step — never the "inside" the alias
+        // produced.
+        var distant = new FixedPosition(
+            cellX: 1_000_000L,
+            cellY: 0L,
+            cellZ: 0L,
+            local: FixedVector3.Zero
+        );
+
+        Assert.True(condition: (Distance(
+            evaluator: evaluator,
+            position: distant
+        ) >= FixedQ4816.FromInteger(value: 1_000_000L)));
+        Assert.False(condition: evaluator.Overlap(
+            center: distant,
+            radius: FixedQ4816.FromDouble(value: 0.5)
+        ));
+
+        // No caller has to construct a cell by hand to reach that: FromLocal carries one itself past half a cell.
+        Assert.Equal(
+            expected: (cellSize - 1.0),
+            actual: ((double)Distance(
+                evaluator: evaluator,
+                position: Local(
+                    x: cellSize,
+                    y: 0.0,
+                    z: 0.0
+                )
+            )),
+            tolerance: 0.01
+        );
+    }
+    [Fact]
+    public void ShapeFreeProgramMissesRatherThanReportingAnObstruction() {
+        // "Nothing declared" is an answer, not a non-convergence: a program with no shape must not be folded into the
+        // conservative branch, or an empty world would read as solid everywhere.
+        var evaluator = new SdfFieldEvaluator(program: new SdfProgramBuilder().Build());
+
+        Assert.False(condition: evaluator.TryDistance(
+            distance: out _,
+            material: out _,
+            position: FixedPosition.Zero
+        ));
+        Assert.False(condition: evaluator.Raycast(
+            dir: Vector(
+                x: 1.0,
+                y: 0.0,
+                z: 0.0
+            ),
+            hit: out _,
+            maxDist: FixedQ4816.FromInteger(value: 5L),
+            origin: FixedPosition.Zero
+        ));
+    }
+    [Fact]
+    public void SphereCastDoesNotAdvanceThroughTheStepScaleClearanceGap() {
+        // The gap: raw clearance (f - r) is well outside HitEpsilon, but the SCALED advance (f*s - r) is NEGATIVE,
+        // because scaling the field shrinks it below the radius it must still clear. Advancing from here would cross a
+        // region the Lipschitz proof has not shown clear, so the sweep must report a bounded obstruction at the last
+        // safely reached point rather than manufacture an Exact contact after walking through it.
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // 1e-5 sits in [half-ULP, ULP) of Q48.16, the ONE band where the two conversion policies disagree: nearest
-        // rounds it to raw 1, a directed floor to raw 0. An eccentricity twice this large scales below half a ULP,
-        // where both policies produce zero and no fixture can tell them apart.
-        _ = builder.Ellipsoid(
+        // A floor to sweep onto, plus a 2:1 ellipsoid parked far below purely to move the analyzed step scale to 1/2
+        // without putting geometry near the cast.
+        _ = builder
+            .Plane(
+            normal: Vector3.UnitY,
+            offset: 0f,
+            material: material
+        )
+            .ResetPoint()
+            .Translate(offset: new Vector3(
+            x: 0f,
+            y: -100f,
+            z: 0f
+        ))
+            .Ellipsoid(
             radii: new Vector3(
-                x: 100_000f,
+                x: 2f,
                 y: 1f,
-                z: 100_000f
+                z: 1f
             ),
             material: material
         );
 
         var program = builder.Build();
 
-        Assert.InRange(
-            actual: program.StepScale,
-            low: (((float)((double)FixedQ4816.Epsilon)) * 0.5f),
-            high: ((float)((double)FixedQ4816.Epsilon))
+        Assert.Equal(
+            expected: 0.5f,
+            actual: program.StepScale
         );
 
         var evaluator = new SdfFieldEvaluator(program: program);
-        // Twenty thousand units of clearance above the disc's pole. A scale rounded up to one raw tick authorizes an
-        // advance of f/65536 per iteration — three hundred metres a step out here — so the whole budget marches
-        // thousands of units on a proof that authorizes none. At the floored scale nothing is authorized at all and
-        // the march can only creep at the format's own minimum, whose total is the point-cast reach.
-        const double PointMarchReach = 0.515625; // 512 iterations * HitEpsilon, which quantizes to raw 66.
-
+        var radius = FixedQ4816.FromDouble(value: 0.5);
         var origin = Local(
             x: 0.0,
-            y: 20_000.0,
+            y: 0.55,
             z: 0.0
         );
 
-        Assert.True(condition: evaluator.Raycast(
+        // The origin really is inside the gap: 0.55 clears the radius by 0.05 (fifty HitEpsilons), while 0.55*0.5
+        // leaves the scaled advance at -0.225.
+        Assert.Equal(
+            expected: 0.55,
+            actual: ((double)Distance(
+                evaluator: evaluator,
+                position: origin
+            )),
+            tolerance: 1.0e-4
+        );
+
+        Assert.True(condition: evaluator.SphereCast(
             dir: Down,
             hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 20_000L),
-            origin: origin
+            maxDist: FixedQ4816.FromInteger(value: 2L),
+            origin: origin,
+            radius: radius
         ));
-        Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: hit.Confidence);
-        Assert.InRange(
-            actual: ((double)hit.Distance),
-            high: PointMarchReach,
-            low: 0.0
+        Assert.Equal(
+            expected: WorldQueryConfidence.Bounded,
+            actual: hit.Confidence
         );
-        // The same claim on the verb with no march in it: with no authorized scaled clearance, twenty thousand units
-        // of open sky reads as occupied rather than as a proof of separation.
-        Assert.True(condition: evaluator.Overlap(
-            center: origin,
-            radius: FixedQ4816.Zero
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: hit.Distance
+        );
+
+        // The control, and the reason the pin above is about the GAP rather than about sphere casts: the same sweep
+        // started ABOVE the gap advances until the scaled bound stops clearing the radius, which for f = y and a
+        // half-unit radius at step scale 1/2 is y = 1 — three units of travel, half a unit short of the true contact
+        // at y = 0.5, on the conservative side. A marcher that exhausted at every origin would report zero here too.
+        Assert.True(condition: evaluator.SphereCast(
+            dir: Down,
+            hit: out var clear,
+            maxDist: FixedQ4816.FromInteger(value: 4L),
+            origin: Local(
+                x: 0.0,
+                y: 4.0,
+                z: 0.0
+            ),
+            radius: radius
         ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Bounded,
+            actual: clear.Confidence
+        );
+        Assert.Equal(
+            expected: 3.0,
+            actual: ((double)clear.Distance),
+            tolerance: 0.002
+        );
     }
     [Fact]
     public void TheScaledClearanceFloorsRatherThanRoundingToTheNearestTick() {
@@ -739,39 +785,5 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             center: exact,
             radius: radius
         ));
-    }
-    [Fact]
-    public void InCellQueriesAreUnchangedByTheRebase() {
-        // The control: rebasing against the world origin is the IDENTITY inside cell (0,0,0), which is every position
-        // room- and arena-scale content produces. A law that only proved the cross-cell half could be satisfied by a
-        // provider that answered wrong everywhere.
-        var evaluator = BuildUnitSphere();
-
-        Assert.Equal(
-            expected: -1.0,
-            actual: ((double)Distance(
-                evaluator: evaluator,
-                position: FixedPosition.Zero
-            )),
-            tolerance: 1.0e-4
-        );
-        Assert.True(condition: evaluator.Overlap(
-            center: FixedPosition.Zero,
-            radius: FixedQ4816.FromDouble(value: 0.5)
-        ));
-
-        // 524,287 is the last offset FromLocal keeps in cell 0; it read correctly before the rebase and still does.
-        Assert.Equal(
-            expected: 524_286.0,
-            actual: ((double)Distance(
-                evaluator: evaluator,
-                position: Local(
-                    x: 524_287.0,
-                    y: 0.0,
-                    z: 0.0
-                )
-            )),
-            tolerance: 1.0
-        );
     }
 }

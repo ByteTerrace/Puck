@@ -7,11 +7,16 @@ public sealed partial class SearchRuntime {
         var cells = row.Cells!;
         var baseIndex = (outcome * chance.CellCount);
 
-        for (var index = 0; index < chance.CellCount; index++) {
-            _ = frame.TryWrite(row: row, key: cells[index].Key, value: chance.Outcomes[baseIndex + index], write: StateWriteKind.Set, reason: out _);
+        for (var index = 0; (index < chance.CellCount); index++) {
+            _ = frame.TryWrite(
+                row: row,
+                key: cells[index].Key,
+                value: chance.Outcomes[(baseIndex + index)],
+                write: StateWriteKind.Set,
+                reason: out _
+            );
         }
     }
-
     // Round-half-away-from-zero over a weighted sum, exact in Int128 so SearchCapacity.MaxChanceOutcomes outcomes at
     // MateScore magnitude each never overflow the accumulator.
     private static long RoundedWeightedAverage(Int128 weightedSum, ulong totalWeight) {
@@ -23,21 +28,31 @@ public sealed partial class SearchRuntime {
 
         return ((weightedSum >= 0)
             ? ((long)((weightedSum + half) / totalWeight))
-            : (-(long)(((-weightedSum) + half) / totalWeight)));
+            : (-((long)(((-weightedSum) + half) / totalWeight)))
+        );
     }
-
     // Reads plan.Score at an arbitrary position rather than the job's own current ply — the host's one scratch
     // frame is the evaluator's only input, so a position that is not already there is copied in first.
     private long EvaluateScoreAt(SearchPlan plan, StateFrame position, ulong tick) {
         var scratch = m_host!.Frame;
 
-        if (!ReferenceEquals(objA: scratch, objB: position)) {
+        if (!ReferenceEquals(
+            objA: scratch,
+            objB: position
+        )) {
             scratch.CopyFrom(other: position);
         }
 
-        return (m_host.Evaluator.TryEvaluateExpression(program: plan.Score!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
+        return (m_host.Evaluator.TryEvaluateExpression(
+            program: plan.Score!,
+            kind: CellKind.Int,
+            tick: tick,
+            value: out var value
+        )
+            ? value
+            : 0L
+        );
     }
-
     // The value a chance node folds to its parent: the weighted average, over every baked outcome, of the position
     // `remainingDepth` further move plies on — read directly when none remain, or through a bounded, non-resumable
     // negamax that mirrors the incremental walk's own candidate door exactly, when they do.
@@ -47,21 +62,41 @@ public sealed partial class SearchRuntime {
         var sum = Int128.Zero;
         var totalWeight = 0UL;
 
-        for (var outcome = 0; outcome < chance.Weights.Length; outcome++) {
+        for (var outcome = 0; (outcome < chance.Weights.Length); outcome++) {
             scratch.CopyFrom(other: position);
-            ApplyChanceOutcome(frame: scratch, row: chanceRow, chance: chance, outcome: outcome);
+            ApplyChanceOutcome(
+                chance: chance,
+                frame: scratch,
+                outcome: outcome,
+                row: chanceRow
+            );
 
             var value = ((remainingDepth <= 0)
-                ? EvaluateScoreAt(plan: job.Plan, position: scratch, tick: tick)
-                : RecursiveNegamax(job: job, position: scratch, depthRemaining: remainingDepth, alpha: -SearchCapacity.MateScore, beta: SearchCapacity.MateScore, level: 1, tick: tick));
+                ? EvaluateScoreAt(
+                    plan: job.Plan,
+                    position: scratch,
+                    tick: tick
+                )
+                : RecursiveNegamax(
+                    alpha: -SearchCapacity.MateScore,
+                    beta: SearchCapacity.MateScore,
+                    depthRemaining: remainingDepth,
+                    job: job,
+                    level: 1,
+                    position: scratch,
+                    tick: tick
+                )
+            );
 
             sum += (((Int128)value) * chance.Weights[outcome]);
             totalWeight += chance.Weights[outcome];
         }
 
-        return RoundedWeightedAverage(weightedSum: sum, totalWeight: totalWeight);
+        return RoundedWeightedAverage(
+            totalWeight: totalWeight,
+            weightedSum: sum
+        );
     }
-
     // A bounded, non-resumable negamax beneath a chance node: every accepted candidate at `position`, resolved and
     // applied through the identical TryResolveCandidate/ApplyCandidate door the incremental walk uses, negated and
     // alpha-beta folded. `level` indexes job.ChanceFrames — pooled once per chance-bearing job so this never
@@ -69,26 +104,50 @@ public sealed partial class SearchRuntime {
     private long RecursiveNegamax(Job job, StateFrame position, int depthRemaining, long alpha, long beta, int level, ulong tick) {
         var plan = job.Plan;
 
-        if ((depthRemaining <= 0) || (plan.Score is null)) {
-            return EvaluateScoreAt(plan: plan, position: position, tick: tick);
+        if (
+            (depthRemaining <= 0) ||
+            (plan.Score is null)
+        ) {
+            return EvaluateScoreAt(
+                plan: plan,
+                position: position,
+                tick: tick
+            );
         }
 
         var rows = m_base!.Rows;
-        var tokens = StateRows.FindStateRow(rows: rows, name: plan.Tokens);
+        var tokens = StateRows.FindStateRow(
+            rows: rows,
+            name: plan.Tokens
+        );
 
         if (tokens?.Cells is not { } tokenCells) {
-            return EvaluateScoreAt(plan: plan, position: position, tick: tick);
+            return EvaluateScoreAt(
+                plan: plan,
+                position: position,
+                tick: tick
+            );
         }
 
         var cells = plan.CellCount;
-        var mover = Slot(store: position, name: plan.Turn);
+        var mover = Slot(
+            store: position,
+            name: plan.Turn
+        );
         var host = m_host!;
         var scratch = job.ChanceFrames![level];
         var best = -SearchCapacity.MateScore;
 
         foreach (var shape in plan.Shapes) {
-            for (var token = 0; token < tokenCells.Count; token++) {
-                var from = (position.TryStoredAt(row: tokens, index: token, value: out var stored) ? stored : plan.Off);
+            for (var token = 0; (token < tokenCells.Count); token++) {
+                var from = (position.TryStoredAt(
+                    index: token,
+                    row: tokens,
+                    value: out var stored
+                )
+                    ? stored
+                    : plan.Off
+                );
                 var onBoard = ((from >= 0L) && (from < cells));
 
                 if (onBoard != (shape.Kind != SearchShapeKind.Drop)) {
@@ -97,18 +156,57 @@ public sealed partial class SearchRuntime {
 
                 var bound = shape.CandidateCount(cellCount: cells);
 
-                for (var candidateIndex = 0; candidateIndex < bound; candidateIndex++) {
-                    if (!TryResolveCandidate(shape: shape, plan: plan, zones: job.ZoneRows, frame: position, tokens: tokens, tokenCells: tokenCells, token: token, from: from, candidateIndex: candidateIndex, cells: cells,
-                        target: out var target, mid: out var mid, companionIndex: out var companionIndex, companionTarget: out var companionTarget, code: out var code)) {
+                for (var candidateIndex = 0; (candidateIndex < bound); candidateIndex++) {
+                    if (!TryResolveCandidate(
+                        shape: shape,
+                        plan: plan,
+                        zones: job.ZoneRows,
+                        frame: position,
+                        tokens: tokens,
+                        tokenCells: tokenCells,
+                        token: token,
+                        from: from,
+                        candidateIndex: candidateIndex,
+                        cells: cells,
+                        target: out var target,
+                        mid: out var mid,
+                        companionIndex: out var companionIndex,
+                        companionTarget: out var companionTarget,
+                        code: out var code
+                    )) {
                         continue;
                     }
 
                     host.Frame.CopyFrom(other: position);
-                    ApplyCandidate(shape: shape, plan: plan, zones: job.ZoneRows, frame: position, scratch: host.Frame, rows: rows, tokens: tokens, tokenCells: tokenCells, token: token, from: from,
-                        target: target, mid: mid, companionIndex: companionIndex, companionTarget: companionTarget, code: code);
-                    _ = host.Judge(rules: m_judge, tick: tick);
+                    ApplyCandidate(
+                        shape: shape,
+                        plan: plan,
+                        zones: job.ZoneRows,
+                        frame: position,
+                        scratch: host.Frame,
+                        rows: rows,
+                        tokens: tokens,
+                        tokenCells: tokenCells,
+                        token: token,
+                        from: from,
+                        target: target,
+                        mid: mid,
+                        companionIndex: companionIndex,
+                        companionTarget: companionTarget,
+                        code: code
+                    );
+                    _ = host.Judge(
+                        rules: m_judge,
+                        tick: tick
+                    );
 
-                    var accepted = ((Slot(store: host.Frame, name: plan.Verdict) == plan.Accept) && (Slot(store: host.Frame, name: plan.Turn) != mover));
+                    var accepted = ((Slot(
+                        store: host.Frame,
+                        name: plan.Verdict
+                    ) == plan.Accept) && (Slot(
+                        store: host.Frame,
+                        name: plan.Turn
+                    ) != mover));
 
                     if (!accepted) {
                         continue;
@@ -117,7 +215,15 @@ public sealed partial class SearchRuntime {
                     // Snapshot the child before recursing: the recursive call reuses host.Frame as its own scratch.
                     scratch.CopyFrom(other: host.Frame);
 
-                    var value = -RecursiveNegamax(job: job, position: scratch, depthRemaining: (depthRemaining - 1), alpha: -beta, beta: -alpha, level: (level + 1), tick: tick);
+                    var value = -RecursiveNegamax(
+                        alpha: -beta,
+                        beta: -alpha,
+                        depthRemaining: (depthRemaining - 1),
+                        job: job,
+                        level: (level + 1),
+                        position: scratch,
+                        tick: tick
+                    );
 
                     if (value > best) {
                         best = value;
@@ -134,7 +240,6 @@ public sealed partial class SearchRuntime {
 
         return best;
     }
-
     // The one outcome a Tree job's playout draws at a chance ply: a weighted pick over job.Seed's own stream, the
     // same SplitMix64 sequence StepUct's move draws use.
     private static int SampleChanceOutcome(SearchChancePlan chance, ref ulong seed) {
@@ -147,10 +252,10 @@ public sealed partial class SearchRuntime {
             return 0;
         }
 
-        var draw = (Next(ref seed) % total);
+        var draw = (Next(seed: ref seed) % total);
         var cumulative = 0UL;
 
-        for (var index = 0; index < chance.Weights.Length; index++) {
+        for (var index = 0; (index < chance.Weights.Length); index++) {
             cumulative += chance.Weights[index];
 
             if (draw < cumulative) {

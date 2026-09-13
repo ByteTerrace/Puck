@@ -23,39 +23,124 @@ public sealed class InstrumentClockSourceLawTests {
     private const int StepBudgetAfterJoin = 10;
     private const int WorldTicksPerBeat = 50400;
 
-    [Fact]
-    public void EngagingTheInstrumentCommitsTheTransition_UnengagedControlLeavesItArmed() {
-        var engagedDirectory = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-engaged-").FullName;
-        var controlDirectory = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-control-").FullName;
+    /// <summary>Builds the fixture: <see cref="Fixtures.BuildDocument"/> plus a real <c>puck.music.v1</c>/
+    /// <c>puck.tune.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, an
+    /// engageable <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>, and one music segment whose
+    /// transition discriminates the fold.</summary>
+    private static WorldDefinition BuildDocument(string assetDirectory) {
+        var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
+            Schema: MusicDocument.CurrentSchema,
+            Name: "instrument-clock-law",
+            Tempo: new MusicTempoDocument(
+                BeatsPerBar: 4,
+                TicksPerBeat: WorldTicksPerBeat
+            ),
+            Segments: [
+                new MusicSegmentDocument(
+                    Id: "idle",
+                    Transitions: [new MusicTransitionDocument(
+                            At: MusicTransitionBoundary.BeatEnd,
+                            To: "driven",
+                            When: WorldAudioCue.SeatJoin
+                        )]
+                ),
+                new MusicSegmentDocument(
+                    Id: "driven",
+                    Transitions: null
+                ),
+            ]
+        ));
+        // The instrument's own authored tempo — AudioDocument's minimum (1 frame/row @ 60 fps), the fastest an
+        // instrument can author: 840 engine ticks/beat, far inside this law's step budget.
+        var instrument = AudioCanonicalizer.Canonicalize(document: new AudioDocument(
+            Effects: null,
+            Name: "fast-instrument",
+            Order: null,
+            Patterns: null,
+            Schema: AudioDocument.CurrentSchema,
+            Tempo: 1
+        ));
 
-        try {
-            var engaged = RunAndReadMusicState(assetDirectory: engagedDirectory, engage: true);
-            var control = RunAndReadMusicState(assetDirectory: controlDirectory, engage: false);
+        var musicPath = Path.Combine(
+            path1: assetDirectory,
+            path2: "instrument-clock-law.puck.music.v1.json"
+        );
+        var instrumentPath = Path.Combine(
+            path1: assetDirectory,
+            path2: "fast-instrument.puck.tune.v1.json"
+        );
 
-            Assert.Contains(actualString: engaged, comparisonType: StringComparison.Ordinal, expectedSubstring: "segment=driven");
-            Assert.Contains(actualString: control, comparisonType: StringComparison.Ordinal, expectedSubstring: "segment=idle");
-            Assert.Contains(actualString: control, comparisonType: StringComparison.Ordinal, expectedSubstring: "pending=driven");
-        } finally {
-            Directory.Delete(path: engagedDirectory, recursive: true);
-            Directory.Delete(path: controlDirectory, recursive: true);
-        }
+        File.WriteAllBytes(
+            path: musicPath,
+            bytes: music.Bytes
+        );
+        File.WriteAllBytes(
+            path: instrumentPath,
+            bytes: instrument.Bytes
+        );
+
+        var instrumentScreen = new WorldScreen(
+            Index: InstrumentScreenIndex,
+            Origin: new System.Numerics.Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
+            Right: new System.Numerics.Vector3(
+                x: 1f,
+                y: 0f,
+                z: 0f
+            ),
+            Up: new System.Numerics.Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
+            HalfWidth: 1f,
+            HalfHeight: 1f,
+            HalfDepth: 0.1f,
+            Round: 0f,
+            Source: new WorldScreenSource.Machine(
+                Instance: "instrument",
+                Output: "video"
+            ),
+            Route: new WorldScreenRoute(
+                Engageable: true,
+                EngageRadius: 1000f
+            )
+        );
+        var document = Fixtures.BuildDocument();
+
+        return document with {
+            Music = [new WorldMusicRow(
+                Name: "instrument-clock-law",
+                Source: musicPath,
+                Hash: music.Hash
+            )],
+            MachinesRaw = [.. document.Machines, new WorldMachine(
+                "instrument",
+                "tune-instrument",
+                JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.configuration.v1", content = new { path = instrumentPath } })
+            )],
+            SpeakersRaw = [new WorldSpeaker.Fixed(
+                "instrument-speaker",
+                new DocumentVector3(
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                ),
+                new WorldSpeakerFeed(
+                    new WorldSpeakerSource.Machine(
+                        Instance: "instrument",
+                        Output: "audio"
+                    ),
+                    WorldSpeakerFeed.ChannelMix,
+                    1f
+                )
+            )],
+            ScreensRaw = [.. document.Screens, instrumentScreen],
+        };
     }
-    [Fact]
-    public void TwoIndependentEngagedBootsReDeriveTheIdenticalMusicState() {
-        var directoryA = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-a-").FullName;
-        var directoryB = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-b-").FullName;
-
-        try {
-            var a = RunAndReadMusicState(assetDirectory: directoryA, engage: true);
-            var b = RunAndReadMusicState(assetDirectory: directoryB, engage: true);
-
-            Assert.Equal(actual: b, expected: a);
-        } finally {
-            Directory.Delete(path: directoryA, recursive: true);
-            Directory.Delete(path: directoryB, recursive: true);
-        }
-    }
-
     private static string RunAndReadMusicState(string assetDirectory, bool engage) {
         using var fixture = Fixtures.FreshServer(
             definition: BuildDocument(assetDirectory: assetDirectory),
@@ -63,7 +148,12 @@ public sealed class InstrumentClockSourceLawTests {
         );
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: seat, Slot: seat.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: seat,
+            Slot: seat.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         // Lands the seat.join sense edge (WorldEventFeed.Collect runs inside this Step call) — arms the transition
         // for BOTH runs identically, so the only discriminating fact below is engagement.
@@ -85,54 +175,76 @@ public sealed class InstrumentClockSourceLawTests {
 
         return fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text;
     }
-    /// <summary>Builds the fixture: <see cref="Fixtures.BuildDocument"/> plus a real <c>puck.music.v1</c>/
-    /// <c>puck.tune.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, an
-    /// engageable <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>, and one music segment whose
-    /// transition discriminates the fold.</summary>
-    private static WorldDefinition BuildDocument(string assetDirectory) {
-        var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
-            Schema: MusicDocument.CurrentSchema,
-            Name: "instrument-clock-law",
-            Tempo: new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: WorldTicksPerBeat),
-            Segments: [
-                new MusicSegmentDocument(
-                    Id: "idle",
-                    Transitions: [new MusicTransitionDocument(At: MusicTransitionBoundary.BeatEnd, To: "driven", When: WorldAudioCue.SeatJoin)]
-                ),
-                new MusicSegmentDocument(Id: "driven", Transitions: null),
-            ]
-        ));
-        // The instrument's own authored tempo — AudioDocument's minimum (1 frame/row @ 60 fps), the fastest an
-        // instrument can author: 840 engine ticks/beat, far inside this law's step budget.
-        var instrument = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "fast-instrument", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: 1));
 
-        var musicPath = Path.Combine(path1: assetDirectory, path2: "instrument-clock-law.puck.music.v1.json");
-        var instrumentPath = Path.Combine(path1: assetDirectory, path2: "fast-instrument.puck.tune.v1.json");
+    [Fact]
+    public void EngagingTheInstrumentCommitsTheTransition_UnengagedControlLeavesItArmed() {
+        var engagedDirectory = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-engaged-").FullName;
+        var controlDirectory = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-control-").FullName;
 
-        File.WriteAllBytes(path: musicPath, bytes: music.Bytes);
-        File.WriteAllBytes(path: instrumentPath, bytes: instrument.Bytes);
+        try {
+            var engaged = RunAndReadMusicState(
+                assetDirectory: engagedDirectory,
+                engage: true
+            );
+            var control = RunAndReadMusicState(
+                assetDirectory: controlDirectory,
+                engage: false
+            );
 
-        var instrumentScreen = new WorldScreen(
-            Index: InstrumentScreenIndex,
-            Origin: new System.Numerics.Vector3(x: 0f, y: 1f, z: 0f),
-            Right: new System.Numerics.Vector3(x: 1f, y: 0f, z: 0f),
-            Up: new System.Numerics.Vector3(x: 0f, y: 1f, z: 0f),
-            HalfWidth: 1f,
-            HalfHeight: 1f,
-            HalfDepth: 0.1f,
-            Round: 0f,
-            Source: new WorldScreenSource.Machine("instrument", "video"),
-            Route: new WorldScreenRoute(Engageable: true, EngageRadius: 1000f)
-        );
-        var document = Fixtures.BuildDocument();
+            Assert.Contains(
+                actualString: engaged,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "segment=driven"
+            );
+            Assert.Contains(
+                actualString: control,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "segment=idle"
+            );
+            Assert.Contains(
+                actualString: control,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "pending=driven"
+            );
+        } finally {
+            Directory.Delete(
+                path: engagedDirectory,
+                recursive: true
+            );
+            Directory.Delete(
+                path: controlDirectory,
+                recursive: true
+            );
+        }
+    }
+    [Fact]
+    public void TwoIndependentEngagedBootsReDeriveTheIdenticalMusicState() {
+        var directoryA = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-a-").FullName;
+        var directoryB = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-b-").FullName;
 
-        return document with {
-            Music = [new WorldMusicRow(Name: "instrument-clock-law", Source: musicPath, Hash: music.Hash)],
-            MachinesRaw = [.. document.Machines, new WorldMachine("instrument", "tune-instrument",
-                JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.configuration.v1", content = new { path = instrumentPath } }))],
-            SpeakersRaw = [new WorldSpeaker.Fixed("instrument-speaker", new DocumentVector3(0f, 0f, 0f),
-                new WorldSpeakerFeed(new WorldSpeakerSource.Machine("instrument", "audio"), WorldSpeakerFeed.ChannelMix, 1f))],
-            ScreensRaw = [.. document.Screens, instrumentScreen],
-        };
+        try {
+            var a = RunAndReadMusicState(
+                assetDirectory: directoryA,
+                engage: true
+            );
+            var b = RunAndReadMusicState(
+                assetDirectory: directoryB,
+                engage: true
+            );
+
+            Assert.Equal(
+                actual: b,
+                expected: a
+            );
+        } finally {
+            Directory.Delete(
+                path: directoryA,
+                recursive: true
+            );
+            Directory.Delete(
+                path: directoryB,
+                recursive: true
+            );
+        }
     }
 }

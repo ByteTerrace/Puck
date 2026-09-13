@@ -34,14 +34,22 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         ArgumentNullException.ThrowIfNull(devicePath);
 
         // The transport is inferred from the path form; VID/PID come from HidD_GetAttributes below (authoritative).
-        _ = TryGetVidPid(path: devicePath, productId: out _, transport: out var transport, vendorId: out _);
+        _ = TryGetVidPid(
+            path: devicePath,
+            productId: out _,
+            transport: out var transport,
+            vendorId: out _
+        );
 
         var fileStream = GetFileStream(
             devicePath: devicePath,
             errorCode: out var errorCode
         );
 
-        if ((errorCode != WIN32_ERROR.NO_ERROR) || (fileStream is null)) {
+        if (
+            (errorCode != WIN32_ERROR.NO_ERROR) ||
+            (fileStream is null)
+        ) {
             fileStream?.Dispose();
 
             return null;
@@ -114,7 +122,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         );
         var fileStream = default(FileStream?);
 
-        errorCode = (deviceHandle.IsInvalid ? (WIN32_ERROR)Marshal.GetLastPInvokeError() : WIN32_ERROR.NO_ERROR);
+        errorCode = (deviceHandle.IsInvalid
+            ? (WIN32_ERROR)Marshal.GetLastPInvokeError()
+            : WIN32_ERROR.NO_ERROR
+        );
 
         if (WIN32_ERROR.ERROR_ACCESS_DENIED == errorCode) { // try read-only
             deviceHandle = PInvoke.CreateFile(
@@ -126,7 +137,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 lpFileName: devicePath,
                 lpSecurityAttributes: null
             );
-            errorCode = (deviceHandle.IsInvalid ? (WIN32_ERROR)Marshal.GetLastPInvokeError() : WIN32_ERROR.NO_ERROR);
+            errorCode = (deviceHandle.IsInvalid
+                ? (WIN32_ERROR)Marshal.GetLastPInvokeError()
+                : WIN32_ERROR.NO_ERROR
+            );
             accessMode = FileAccess.Read;
         }
 
@@ -140,7 +154,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 lpFileName: devicePath,
                 lpSecurityAttributes: null
             );
-            errorCode = (deviceHandle.IsInvalid ? (WIN32_ERROR)Marshal.GetLastPInvokeError() : WIN32_ERROR.NO_ERROR);
+            errorCode = (deviceHandle.IsInvalid
+                ? (WIN32_ERROR)Marshal.GetLastPInvokeError()
+                : WIN32_ERROR.NO_ERROR
+            );
             accessMode = FileAccess.Write;
         }
 
@@ -154,7 +171,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 lpFileName: devicePath,
                 lpSecurityAttributes: null
             );
-            errorCode = (deviceHandle.IsInvalid ? (WIN32_ERROR)Marshal.GetLastPInvokeError() : WIN32_ERROR.NO_ERROR);
+            errorCode = (deviceHandle.IsInvalid
+                ? (WIN32_ERROR)Marshal.GetLastPInvokeError()
+                : WIN32_ERROR.NO_ERROR
+            );
             accessMode = FileAccess.Read;
         }
 
@@ -168,7 +188,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 lpFileName: devicePath,
                 lpSecurityAttributes: null
             );
-            errorCode = (deviceHandle.IsInvalid ? (WIN32_ERROR)Marshal.GetLastPInvokeError() : WIN32_ERROR.NO_ERROR);
+            errorCode = (deviceHandle.IsInvalid
+                ? (WIN32_ERROR)Marshal.GetLastPInvokeError()
+                : WIN32_ERROR.NO_ERROR
+            );
             accessMode = FileAccess.Read;
         }
 
@@ -287,7 +310,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 errorCode: out var pathErrorCode
             );
 
-            if ((pathErrorCode == WIN32_ERROR.NO_ERROR) && (devicePath.Length > 0)) {
+            if (
+                (pathErrorCode == WIN32_ERROR.NO_ERROR) &&
+                (devicePath.Length > 0)
+            ) {
                 _ = TryGetVidPid(
                     path: devicePath,
                     productId: out var productId,
@@ -309,13 +335,35 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         // USB device paths carry "vid_XXXX&pid_XXXX"; Bluetooth paths carry "..._VID&sssspppp_PID&pppp" — an
         // 8-hex vid field whose high word is the id-source. The separator after the token (`_` vs `&`) is what
         // distinguishes the two forms, so the token includes it.
-        if (TryParseHexRun(path: path, token: "vid_", value: out vendorId) && TryParseHexRun(path: path, token: "pid_", value: out productId)) {
+        if (
+            TryParseHexRun(
+            path: path,
+            token: "vid_",
+            value: out vendorId
+        ) &&
+            TryParseHexRun(
+            path: path,
+            token: "pid_",
+            value: out productId
+        )
+        ) {
             transport = HidTransport.Usb;
 
             return true;
         }
 
-        if (TryParseHexRun(path: path, token: "vid&", value: out vendorId) && TryParseHexRun(path: path, token: "pid&", value: out productId)) {
+        if (
+            TryParseHexRun(
+            path: path,
+            token: "vid&",
+            value: out vendorId
+        ) &&
+            TryParseHexRun(
+            path: path,
+            token: "pid&",
+            value: out productId
+        )
+        ) {
             transport = HidTransport.Bluetooth;
 
             return true;
@@ -332,7 +380,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     private static bool TryParseHexRun(string path, string token, out ushort value) {
         value = 0;
 
-        var index = path.IndexOf(comparisonType: StringComparison.OrdinalIgnoreCase, value: token);
+        var index = path.IndexOf(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: token
+        );
 
         if (index < 0) {
             return false;
@@ -341,16 +392,25 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         var start = (index + token.Length);
         var end = start;
 
-        while ((end < path.Length) && char.IsAsciiHexDigit(c: path[end])) {
+        while (
+            (end < path.Length) &&
+            char.IsAsciiHexDigit(c: path[end])
+        ) {
             ++end;
         }
 
-        if ((end == start) || !uint.TryParse(
+        if (
+            (end == start) ||
+            !uint.TryParse(
             provider: CultureInfo.InvariantCulture,
             result: out var parsed,
-            s: path.AsSpan(length: (end - start), start: start),
+            s: path.AsSpan(
+                length: (end - start),
+                start: start
+            ),
             style: NumberStyles.HexNumber
-        )) {
+        )
+        ) {
             return false;
         }
 
@@ -455,7 +515,8 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             : fileStream.ReadAsync(
                 buffer: buffer,
                 cancellationToken: cancellationToken
-            ));
+            )
+        );
     }
     /// <inheritdoc />
     public async ValueTask<int> ReadAsync(
@@ -525,7 +586,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     public unsafe bool TryGetFeatureReport(Span<byte> buffer) {
         var fileStream = m_fileStream;
 
-        if ((fileStream is null) || buffer.IsEmpty) {
+        if (
+            (fileStream is null) ||
+            buffer.IsEmpty
+        ) {
             return false;
         }
 
@@ -542,7 +606,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     public unsafe bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
         var fileStream = m_fileStream;
 
-        if ((fileStream is null) || buffer.IsEmpty) {
+        if (
+            (fileStream is null) ||
+            buffer.IsEmpty
+        ) {
             return false;
         }
 

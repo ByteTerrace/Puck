@@ -18,7 +18,8 @@ Post stages are authoritative; update stale skill guidance in the same change.
   preserve them across forks and include behavioral options in typed snapshot identity.
 - Preserve direct embedding through the public synchronous `AdvancedGamingBrickCore`
   and `HumbleGamingBrickCore` APIs and default factory composition. The shared
-  `Puck.GamingBricks` README owns the host contract; both Post `embedding` stages
+  [Machine hosting runtime](../../../docs/emulation/shared/machine-hosting.md) owns
+  the host contract; both Post `embedding` stages
   exercise it without a worker, renderer or audio device.
 - Keep firmware identity separate from startup mode. `MachineBootMode.Fast` skips startup without discarding the
   selected image; AGB still executes runtime BIOS services from that image. Explicit low-level diagnostic inputs

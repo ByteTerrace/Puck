@@ -85,7 +85,10 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
     /// <param name="right">The multiplier.</param>
     /// <returns>The product, each component's two products accumulated exactly with one rounding.</returns>
     public static FixedComplex operator *(FixedComplex left, FixedComplex right) {
-        if (ProductFitsLong(left: left, right: right)) {
+        if (ProductFitsLong(
+            left: left,
+            right: right
+        )) {
             return new(
                 Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((left.Real.Value * right.Real.Value) - (left.Imaginary.Value * right.Imaginary.Value))))),
                 Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((left.Real.Value * right.Imaginary.Value) + (left.Imaginary.Value * right.Real.Value)))))
@@ -101,78 +104,12 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
     /// <summary>Returns the real component of <c>left * right</c>, rounded once — the same bits the product's
     /// <see cref="Real"/> would carry, without forming the imaginary component.</summary>
     internal static FixedQ4816 RealOfProduct(FixedComplex left, FixedComplex right) =>
-        FixedQ4816.FromRawBits(value: (ProductFitsLong(left: left, right: right)
+        FixedQ4816.FromRawBits(value: (ProductFitsLong(
+            left: left,
+            right: right
+        )
             ? FixedQ4816.RoundProductSum(productSum: unchecked(((left.Real.Value * right.Real.Value) - (left.Imaginary.Value * right.Imaginary.Value))))
             : FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.Real.Value) * right.Real.Value) - (((Int128)left.Imaginary.Value) * right.Imaginary.Value))))));
-
-    // The narrow-lane gate, asymmetric in the operands: each component product is below 2^(bits(left) + bits(right)),
-    // so a sum of two stays inside a signed long whenever those bit lengths total at most 62 — which a unit rotation
-    // (raw components at most 2^16) satisfies against any operand below 2^46, not merely 2^31 against 2^31.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ProductFitsLong(FixedComplex left, FixedComplex right) {
-        var leftMagnitude = FusedArithmetic.RawMagnitude(value: left.Real.Value) | FusedArithmetic.RawMagnitude(value: left.Imaginary.Value);
-        var rightMagnitude = FusedArithmetic.RawMagnitude(value: right.Real.Value) | FusedArithmetic.RawMagnitude(value: right.Imaginary.Value);
-
-        return ((BitOperations.LeadingZeroCount(value: leftMagnitude) + BitOperations.LeadingZeroCount(value: rightMagnitude)) >= 66);
-    }
-
-    /// <summary>Divides <paramref name="left"/> by <paramref name="right"/>.</summary>
-    /// <param name="left">The dividend.</param>
-    /// <param name="right">The divisor; must be non-zero.</param>
-    /// <returns>The quotient <c>left·conj(right) / |right|²</c>, each component rounded once.</returns>
-    /// <exception cref="DivideByZeroException"><paramref name="right"/> is zero.</exception>
-    public static FixedComplex operator /(FixedComplex left, FixedComplex right) {
-        const ulong NarrowLimit = (1UL << 31);
-
-        if (
-            (FusedArithmetic.RawMagnitude(value: left.Real.Value) < NarrowLimit) &&
-            (FusedArithmetic.RawMagnitude(value: left.Imaginary.Value) < NarrowLimit) &&
-            (FusedArithmetic.RawMagnitude(value: right.Real.Value) < NarrowLimit) &&
-            (FusedArithmetic.RawMagnitude(value: right.Imaginary.Value) < NarrowLimit)
-        ) {
-            // Exact-equivalent fast path: every product sum fits Int64 in this range, so the scalar divider produces
-            // the same result as the full-width sign/magnitude path without its UInt128 restoring division.
-            var narrowDenominator = FixedQ4816.FromRawBits(value: unchecked(((right.Real.Value * right.Real.Value) + (right.Imaginary.Value * right.Imaginary.Value))));
-
-            return new(
-                Real: (FixedQ4816.FromRawBits(value: unchecked(((left.Real.Value * right.Real.Value) + (left.Imaginary.Value * right.Imaginary.Value)))) / narrowDenominator),
-                Imaginary: (FixedQ4816.FromRawBits(value: unchecked(((left.Imaginary.Value * right.Real.Value) - (left.Real.Value * right.Imaginary.Value)))) / narrowDenominator)
-            );
-        }
-
-        // Keep the Q32 products at full width. A signed Int128 sum is one bit too narrow for the positive extreme
-        // (MinValue*MinValue + MinValue*MinValue == 2^127), so product sums use sign + UInt128 magnitude.
-        var denominator = (FusedArithmetic.SquareMagnitude(value: right.Real.Value) + FusedArithmetic.SquareMagnitude(value: right.Imaginary.Value));
-
-        if (denominator == UInt128.Zero) {
-            throw new DivideByZeroException();
-        }
-
-        var realNumerator = FusedArithmetic.AddProducts(
-            firstLeft: left.Real.Value,
-            firstRight: right.Real.Value,
-            secondLeft: left.Imaginary.Value,
-            secondRight: right.Imaginary.Value
-        );
-        var imaginaryNumerator = FusedArithmetic.AddProducts(
-            firstLeft: left.Imaginary.Value,
-            firstRight: right.Real.Value,
-            secondLeft: left.Real.Value,
-            secondRight: right.Imaginary.Value,
-            subtractSecond: true
-        );
-
-        return new(
-            Real: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
-                denominator: denominator,
-                numerator: realNumerator
-            )),
-            Imaginary: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
-                denominator: denominator,
-                numerator: imaginaryNumerator
-            ))
-        );
-    }
 
     private static FixedComplex NormalizeScaled(long real, long imaginary) {
         (real, imaginary) = FixedVectorMath.Normalize(
@@ -184,6 +121,16 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             Real: FixedQ4816.FromRawBits(value: real),
             Imaginary: FixedQ4816.FromRawBits(value: imaginary)
         );
+    }
+    // The narrow-lane gate, asymmetric in the operands: each component product is below 2^(bits(left) + bits(right)),
+    // so a sum of two stays inside a signed long whenever those bit lengths total at most 62 — which a unit rotation
+    // (raw components at most 2^16) satisfies against any operand below 2^46, not merely 2^31 against 2^31.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool ProductFitsLong(FixedComplex left, FixedComplex right) {
+        var leftMagnitude = FusedArithmetic.RawMagnitude(value: left.Real.Value) | FusedArithmetic.RawMagnitude(value: left.Imaginary.Value);
+        var rightMagnitude = FusedArithmetic.RawMagnitude(value: right.Real.Value) | FusedArithmetic.RawMagnitude(value: right.Imaginary.Value);
+
+        return ((BitOperations.LeadingZeroCount(value: leftMagnitude) + BitOperations.LeadingZeroCount(value: rightMagnitude)) >= 66);
     }
 
     /// <summary>Returns the conjugate — the inverse rotation for a unit complex number.</summary>
@@ -343,4 +290,62 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             y: Imaginary.Value,
             result: out squaredMagnitude
         );
+
+    /// <summary>Divides <paramref name="left"/> by <paramref name="right"/>.</summary>
+    /// <param name="left">The dividend.</param>
+    /// <param name="right">The divisor; must be non-zero.</param>
+    /// <returns>The quotient <c>left·conj(right) / |right|²</c>, each component rounded once.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="right"/> is zero.</exception>
+    public static FixedComplex operator /(FixedComplex left, FixedComplex right) {
+        const ulong NarrowLimit = (1UL << 31);
+
+        if (
+            (FusedArithmetic.RawMagnitude(value: left.Real.Value) < NarrowLimit) &&
+            (FusedArithmetic.RawMagnitude(value: left.Imaginary.Value) < NarrowLimit) &&
+            (FusedArithmetic.RawMagnitude(value: right.Real.Value) < NarrowLimit) &&
+            (FusedArithmetic.RawMagnitude(value: right.Imaginary.Value) < NarrowLimit)
+        ) {
+            // Exact-equivalent fast path: every product sum fits Int64 in this range, so the scalar divider produces
+            // the same result as the full-width sign/magnitude path without its UInt128 restoring division.
+            var narrowDenominator = FixedQ4816.FromRawBits(value: unchecked(((right.Real.Value * right.Real.Value) + (right.Imaginary.Value * right.Imaginary.Value))));
+
+            return new(
+                Real: (FixedQ4816.FromRawBits(value: unchecked(((left.Real.Value * right.Real.Value) + (left.Imaginary.Value * right.Imaginary.Value)))) / narrowDenominator),
+                Imaginary: (FixedQ4816.FromRawBits(value: unchecked(((left.Imaginary.Value * right.Real.Value) - (left.Real.Value * right.Imaginary.Value)))) / narrowDenominator)
+            );
+        }
+
+        // Keep the Q32 products at full width. A signed Int128 sum is one bit too narrow for the positive extreme
+        // (MinValue*MinValue + MinValue*MinValue == 2^127), so product sums use sign + UInt128 magnitude.
+        var denominator = (FusedArithmetic.SquareMagnitude(value: right.Real.Value) + FusedArithmetic.SquareMagnitude(value: right.Imaginary.Value));
+
+        if (denominator == UInt128.Zero) {
+            throw new DivideByZeroException();
+        }
+
+        var realNumerator = FusedArithmetic.AddProducts(
+            firstLeft: left.Real.Value,
+            firstRight: right.Real.Value,
+            secondLeft: left.Imaginary.Value,
+            secondRight: right.Imaginary.Value
+        );
+        var imaginaryNumerator = FusedArithmetic.AddProducts(
+            firstLeft: left.Imaginary.Value,
+            firstRight: right.Real.Value,
+            secondLeft: left.Real.Value,
+            secondRight: right.Imaginary.Value,
+            subtractSecond: true
+        );
+
+        return new(
+            Real: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: realNumerator
+            )),
+            Imaginary: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: imaginaryNumerator
+            ))
+        );
+    }
 }

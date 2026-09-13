@@ -41,37 +41,66 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
     public MediaFoundationVideoEncoder(IMFTransform transform, EncoderCodec codec, string mftName, int width, int height, int frameRate, int bitrateKilobitsPerSecond) {
         // Hold an independent Media Foundation startup reference for the encoder's whole lifetime — the factory's own
         // startup/shutdown pair only brackets enumeration and is released before the first EncodeFrame.
-        MfInterop.Check(hr: MfInterop.MFStartup(Version: MfInterop.MfVersion, dwFlags: 0));
+        MfInterop.Check(hr: MfInterop.MFStartup(
+            Version: MfInterop.MfVersion,
+            dwFlags: 0
+        ));
 
         m_transform = transform;
         m_codec = codec;
         m_frameRate = frameRate;
         MftName = mftName;
-        CodecId = ((codec == EncoderCodec.Av1) ? "V_AV1" : "V_MPEG4/ISO/AVC");
+        CodecId = ((codec == EncoderCodec.Av1)
+            ? "V_AV1"
+            : "V_MPEG4/ISO/AVC"
+        );
 
         try {
             // Unlocking is a no-op on a synchronous MFT; a hardware async MFT refuses to stream without it.
             if (transform.GetAttributes(pAttributes: out var attributes) >= 0) {
                 var unlockKey = MF_TRANSFORM_ASYNC_UNLOCK;
 
-                _ = attributes.SetUINT32(guidKey: ref unlockKey, unValue: 1);
+                _ = attributes.SetUINT32(
+                    guidKey: ref unlockKey,
+                    unValue: 1
+                );
             }
 
-            ConfigureTypes(bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, frameRate: frameRate, height: height, width: width);
+            ConfigureTypes(
+                bitrateKilobitsPerSecond: bitrateKilobitsPerSecond,
+                frameRate: frameRate,
+                height: height,
+                width: width
+            );
 
-            Check(hr: m_transform.GetOutputStreamInfo(dwOutputStreamID: 0, pStreamInfo: out var streamInfo));
+            Check(hr: m_transform.GetOutputStreamInfo(
+                dwOutputStreamID: 0,
+                pStreamInfo: out var streamInfo
+            ));
 
             m_providesSamples = ((streamInfo.dwFlags & MftOutputStreamProvidesSamples) != 0);
-            m_outputSampleSize = Math.Max(val1: streamInfo.cbSize, val2: ((uint)((width * height) * 4)));
+            m_outputSampleSize = Math.Max(
+                val1: streamInfo.cbSize,
+                val2: ((uint)((width * height) * 4))
+            );
             m_eventGenerator = TryQueryEventGenerator(transform: transform);
             m_isAsync = (m_eventGenerator is not null);
 
-            TuneCodec(bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, frameRate: frameRate);
+            TuneCodec(
+                bitrateKilobitsPerSecond: bitrateKilobitsPerSecond,
+                frameRate: frameRate
+            );
 
-            Check(hr: m_transform.ProcessMessage(eMessage: MftMessageNotifyBeginStreaming, ulParam: 0));
+            Check(hr: m_transform.ProcessMessage(
+                eMessage: MftMessageNotifyBeginStreaming,
+                ulParam: 0
+            ));
 
             if (m_isAsync) {
-                Check(hr: m_transform.ProcessMessage(eMessage: MftMessageNotifyStartOfStream, ulParam: 0));
+                Check(hr: m_transform.ProcessMessage(
+                    eMessage: MftMessageNotifyStartOfStream,
+                    ulParam: 0
+                ));
             }
         } catch {
             _ = MfInterop.MFShutdown();
@@ -79,7 +108,11 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             throw;
         }
 
-        Console.Error.WriteLine(value: $"[recording] video encoder '{mftName}' ({CodecId}, {(m_isAsync ? "async" : "sync")}, {(m_providesSamples ? "provides-samples" : "caller-allocates")}) at {width}x{height}@{frameRate} {bitrateKilobitsPerSecond}kbps.");
+        Console.Error.WriteLine(value: $"[recording] video encoder '{mftName}' ({CodecId}, {(m_isAsync
+            ? "async"
+            : "sync")}, {(m_providesSamples
+            ? "provides-samples"
+            : "caller-allocates")}) at {width}x{height}@{frameRate} {bitrateKilobitsPerSecond}kbps.");
     }
 
     /// <summary>The Media Foundation MFT's friendly name (for status echoes).</summary>
@@ -91,25 +124,45 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
 
     /// <inheritdoc/>
     public IReadOnlyList<RecordedPacket> EncodeFrame(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
         m_packets.Clear();
 
-        var input = BuildInputSample(format: format, height: height, pixels: pixels, timestampNanoseconds: timestampNanoseconds, width: width);
+        var input = BuildInputSample(
+            format: format,
+            height: height,
+            pixels: pixels,
+            timestampNanoseconds: timestampNanoseconds,
+            width: width
+        );
 
         try {
             if (m_isAsync) {
                 var generator = m_eventGenerator!;
 
                 while (m_needInputCredits == 0) {
-                    Check(hr: generator.GetEvent(dwFlags: 0, ppEvent: out var blockingEvent));
+                    Check(hr: generator.GetEvent(
+                        dwFlags: 0,
+                        ppEvent: out var blockingEvent
+                    ));
                     HandleEvent(mediaEvent: blockingEvent);
                 }
 
                 m_needInputCredits--;
-                Check(hr: m_transform.ProcessInput(dwFlags: 0, dwInputStreamID: 0, pSample: input));
+                Check(hr: m_transform.ProcessInput(
+                    dwFlags: 0,
+                    dwInputStreamID: 0,
+                    pSample: input
+                ));
                 DrainReadyEvents(generator: generator);
             } else {
-                Check(hr: m_transform.ProcessInput(dwFlags: 0, dwInputStreamID: 0, pSample: input));
+                Check(hr: m_transform.ProcessInput(
+                    dwFlags: 0,
+                    dwInputStreamID: 0,
+                    pSample: input
+                ));
                 DrainSynchronousOutputs();
             }
         } finally {
@@ -120,18 +173,30 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
     }
     /// <inheritdoc/>
     public IReadOnlyList<RecordedPacket> Drain() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
         m_packets.Clear();
 
-        _ = m_transform.ProcessMessage(eMessage: MftMessageNotifyEndOfStream, ulParam: 0);
-        _ = m_transform.ProcessMessage(eMessage: MftMessageCommandDrain, ulParam: 0);
+        _ = m_transform.ProcessMessage(
+            eMessage: MftMessageNotifyEndOfStream,
+            ulParam: 0
+        );
+        _ = m_transform.ProcessMessage(
+            eMessage: MftMessageCommandDrain,
+            ulParam: 0
+        );
 
         if (m_isAsync) {
             var generator = m_eventGenerator!;
             var draining = true;
 
             while (draining) {
-                if (generator.GetEvent(dwFlags: 0, ppEvent: out var mediaEvent) < 0) {
+                if (generator.GetEvent(
+                    dwFlags: 0,
+                    ppEvent: out var mediaEvent
+                ) < 0) {
                     break;
                 }
 
@@ -141,7 +206,10 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             DrainSynchronousOutputs();
         }
 
-        _ = m_transform.ProcessMessage(eMessage: MftMessageNotifyEndStreaming, ulParam: 0);
+        _ = m_transform.ProcessMessage(
+            eMessage: MftMessageNotifyEndStreaming,
+            ulParam: 0
+        );
 
         return m_packets;
     }
@@ -167,7 +235,10 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         var majorKey = MF_MT_MAJOR_TYPE;
         var video = MFMediaType_Video;
         var subtypeKey = MF_MT_SUBTYPE;
-        var codecSubtype = ((m_codec == EncoderCodec.Av1) ? MFVideoFormat_AV1 : MFVideoFormat_H264);
+        var codecSubtype = ((m_codec == EncoderCodec.Av1)
+            ? MFVideoFormat_AV1
+            : MFVideoFormat_H264
+        );
         var frameSizeKey = MF_MT_FRAME_SIZE;
         var frameRateKey = MF_MT_FRAME_RATE;
         var parKey = MF_MT_PIXEL_ASPECT_RATIO;
@@ -175,35 +246,106 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         var bitrateKey = MF_MT_AVG_BITRATE;
         var keyframeKey = MF_MT_MAX_KEYFRAME_SPACING;
 
-        Check(hr: outputType.SetGUID(guidKey: ref majorKey, guidValue: ref video));
-        Check(hr: outputType.SetGUID(guidKey: ref subtypeKey, guidValue: ref codecSubtype));
-        Check(hr: outputType.SetUINT64(guidKey: ref frameSizeKey, unValue: PackU32Pair(high: ((uint)width), low: ((uint)height))));
-        Check(hr: outputType.SetUINT64(guidKey: ref frameRateKey, unValue: PackU32Pair(high: ((uint)frameRate), low: 1)));
-        Check(hr: outputType.SetUINT64(guidKey: ref parKey, unValue: PackU32Pair(high: 1, low: 1)));
-        Check(hr: outputType.SetUINT32(guidKey: ref interlaceKey, unValue: InterlaceModeProgressive));
-        Check(hr: outputType.SetUINT32(guidKey: ref bitrateKey, unValue: ((uint)(bitrateKilobitsPerSecond * 1000))));
-        _ = outputType.SetUINT32(guidKey: ref keyframeKey, unValue: ((uint)(frameRate * 2)));
+        Check(hr: outputType.SetGUID(
+            guidKey: ref majorKey,
+            guidValue: ref video
+        ));
+        Check(hr: outputType.SetGUID(
+            guidKey: ref subtypeKey,
+            guidValue: ref codecSubtype
+        ));
+        Check(hr: outputType.SetUINT64(
+            guidKey: ref frameSizeKey,
+            unValue: PackU32Pair(
+                high: ((uint)width),
+                low: ((uint)height)
+            )
+        ));
+        Check(hr: outputType.SetUINT64(
+            guidKey: ref frameRateKey,
+            unValue: PackU32Pair(
+                high: ((uint)frameRate),
+                low: 1
+            )
+        ));
+        Check(hr: outputType.SetUINT64(
+            guidKey: ref parKey,
+            unValue: PackU32Pair(
+                high: 1,
+                low: 1
+            )
+        ));
+        Check(hr: outputType.SetUINT32(
+            guidKey: ref interlaceKey,
+            unValue: InterlaceModeProgressive
+        ));
+        Check(hr: outputType.SetUINT32(
+            guidKey: ref bitrateKey,
+            unValue: ((uint)(bitrateKilobitsPerSecond * 1000))
+        ));
+        _ = outputType.SetUINT32(
+            guidKey: ref keyframeKey,
+            unValue: ((uint)(frameRate * 2))
+        );
 
         if (m_codec == EncoderCodec.H264) {
             var profileKey = MF_MT_MPEG2_PROFILE;
 
-            _ = outputType.SetUINT32(guidKey: ref profileKey, unValue: 77); // eAVEncH264VProfile_Main
+            _ = outputType.SetUINT32(
+                guidKey: ref profileKey,
+                unValue: 77
+            ); // eAVEncH264VProfile_Main
         }
 
-        Check(hr: m_transform.SetOutputType(dwFlags: 0, dwOutputStreamID: 0, pType: outputType));
+        Check(hr: m_transform.SetOutputType(
+            dwFlags: 0,
+            dwOutputStreamID: 0,
+            pType: outputType
+        ));
         _ = Marshal.ReleaseComObject(o: outputType);
 
         Check(hr: MFCreateMediaType(ppMFType: out var inputType));
 
         var nv12 = MFVideoFormat_NV12;
 
-        Check(hr: inputType.SetGUID(guidKey: ref majorKey, guidValue: ref video));
-        Check(hr: inputType.SetGUID(guidKey: ref subtypeKey, guidValue: ref nv12));
-        Check(hr: inputType.SetUINT64(guidKey: ref frameSizeKey, unValue: PackU32Pair(high: ((uint)width), low: ((uint)height))));
-        Check(hr: inputType.SetUINT64(guidKey: ref frameRateKey, unValue: PackU32Pair(high: ((uint)frameRate), low: 1)));
-        Check(hr: inputType.SetUINT64(guidKey: ref parKey, unValue: PackU32Pair(high: 1, low: 1)));
-        Check(hr: inputType.SetUINT32(guidKey: ref interlaceKey, unValue: InterlaceModeProgressive));
-        Check(hr: m_transform.SetInputType(dwFlags: 0, dwInputStreamID: 0, pType: inputType));
+        Check(hr: inputType.SetGUID(
+            guidKey: ref majorKey,
+            guidValue: ref video
+        ));
+        Check(hr: inputType.SetGUID(
+            guidKey: ref subtypeKey,
+            guidValue: ref nv12
+        ));
+        Check(hr: inputType.SetUINT64(
+            guidKey: ref frameSizeKey,
+            unValue: PackU32Pair(
+                high: ((uint)width),
+                low: ((uint)height)
+            )
+        ));
+        Check(hr: inputType.SetUINT64(
+            guidKey: ref frameRateKey,
+            unValue: PackU32Pair(
+                high: ((uint)frameRate),
+                low: 1
+            )
+        ));
+        Check(hr: inputType.SetUINT64(
+            guidKey: ref parKey,
+            unValue: PackU32Pair(
+                high: 1,
+                low: 1
+            )
+        ));
+        Check(hr: inputType.SetUINT32(
+            guidKey: ref interlaceKey,
+            unValue: InterlaceModeProgressive
+        ));
+        Check(hr: m_transform.SetInputType(
+            dwFlags: 0,
+            dwInputStreamID: 0,
+            pType: inputType
+        ));
         _ = Marshal.ReleaseComObject(o: inputType);
     }
     // Best-effort rate-control/GOP/B-frame configuration through ICodecAPI; hardware encoders honour a subset, so each
@@ -217,10 +359,26 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             return;
         }
 
-        TrySetU32(api: CODECAPI_AVEncCommonRateControlMode, codecApi: codecApi, value: 0); // CBR
-        TrySetU32(api: CODECAPI_AVEncCommonMeanBitRate, codecApi: codecApi, value: ((uint)(bitrateKilobitsPerSecond * 1000)));
-        TrySetU32(api: CODECAPI_AVEncMPVGOPSize, codecApi: codecApi, value: ((uint)(frameRate * 2)));
-        TrySetU32(api: CODECAPI_AVEncMPVDefaultBPictureCount, codecApi: codecApi, value: 0);
+        TrySetU32(
+            api: CODECAPI_AVEncCommonRateControlMode,
+            codecApi: codecApi,
+            value: 0
+        ); // CBR
+        TrySetU32(
+            api: CODECAPI_AVEncCommonMeanBitRate,
+            codecApi: codecApi,
+            value: ((uint)(bitrateKilobitsPerSecond * 1000))
+        );
+        TrySetU32(
+            api: CODECAPI_AVEncMPVGOPSize,
+            codecApi: codecApi,
+            value: ((uint)(frameRate * 2))
+        );
+        TrySetU32(
+            api: CODECAPI_AVEncMPVDefaultBPictureCount,
+            codecApi: codecApi,
+            value: 0
+        );
     }
     private static void TrySetU32(ICodecAPI codecApi, Guid api, uint value) {
         var apiGuid = api;
@@ -229,7 +387,10 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             vt = VtUi4,
         };
 
-        _ = codecApi.SetValue(Api: ref apiGuid, Value: ref variant);
+        _ = codecApi.SetValue(
+            Api: ref apiGuid,
+            Value: ref variant
+        );
     }
     private static IMFMediaEventGenerator? TryQueryEventGenerator(IMFTransform transform) {
         try {
@@ -239,17 +400,41 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         }
     }
     private IMFSample2 BuildInputSample(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds) {
-        var nv12Size = PixelToNv12Converter.Nv12Size(height: height, width: width);
+        var nv12Size = PixelToNv12Converter.Nv12Size(
+            height: height,
+            width: width
+        );
 
         if (m_nv12Scratch.Length < nv12Size) {
             m_nv12Scratch = new byte[nv12Size];
         }
 
-        PixelToNv12Converter.Convert(pixels: pixels, format: format, width: width, height: height, destination: m_nv12Scratch.AsSpan(length: nv12Size, start: 0));
+        PixelToNv12Converter.Convert(
+            pixels: pixels,
+            format: format,
+            width: width,
+            height: height,
+            destination: m_nv12Scratch.AsSpan(
+                length: nv12Size,
+                start: 0
+            )
+        );
 
-        Check(hr: MFCreateMemoryBuffer(cbMaxLength: ((uint)nv12Size), ppBuffer: out var buffer));
-        Check(hr: buffer.Lock(pcbCurrentLength: out _, pcbMaxLength: out _, ppbBuffer: out var pointer));
-        Marshal.Copy(destination: pointer, length: nv12Size, source: m_nv12Scratch, startIndex: 0);
+        Check(hr: MFCreateMemoryBuffer(
+            cbMaxLength: ((uint)nv12Size),
+            ppBuffer: out var buffer
+        ));
+        Check(hr: buffer.Lock(
+            pcbCurrentLength: out _,
+            pcbMaxLength: out _,
+            ppbBuffer: out var pointer
+        ));
+        Marshal.Copy(
+            destination: pointer,
+            length: nv12Size,
+            source: m_nv12Scratch,
+            startIndex: 0
+        );
         Check(hr: buffer.Unlock());
         Check(hr: buffer.SetCurrentLength(cbCurrentLength: ((uint)nv12Size)));
 
@@ -292,7 +477,10 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
     }
     private void DrainReadyEvents(IMFMediaEventGenerator generator) {
         while (true) {
-            var hr = generator.GetEvent(dwFlags: MfEventFlagNoWait, ppEvent: out var mediaEvent);
+            var hr = generator.GetEvent(
+                dwFlags: MfEventFlagNoWait,
+                ppEvent: out var mediaEvent
+            );
 
             if (hr == MfENoEventsAvailable) {
                 return;
@@ -312,16 +500,29 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
     // Pulls one output through ProcessOutput. Returns false when the MFT needs more input (no packet produced). A
     // hardware MFT provides its own sample (pSample null going in); a software MFT reads into a caller-allocated one.
     private bool CollectOutput() {
-        var allocated = (m_providesSamples ? null : CreateOutputSample());
+        var allocated = (m_providesSamples
+            ? null
+            : CreateOutputSample()
+        );
         var dataBuffer = new MftOutputDataBuffer {
             dwStreamID = 0,
-            pSample = ((allocated is not null) ? Marshal.GetIUnknownForObject(o: allocated) : 0),
+            pSample = ((allocated is not null)
+            ? Marshal.GetIUnknownForObject(o: allocated)
+            : 0),
         };
 
         try {
-            var hr = m_transform.ProcessOutput(cOutputBufferCount: 1, dwFlags: 0, pOutputSamples: ref dataBuffer, pdwStatus: out _);
+            var hr = m_transform.ProcessOutput(
+                cOutputBufferCount: 1,
+                dwFlags: 0,
+                pOutputSamples: ref dataBuffer,
+                pdwStatus: out _
+            );
 
-            if ((hr == MfETransformNeedMoreInput) || (hr == MfETransformStreamChange)) {
+            if (
+                (hr == MfETransformNeedMoreInput) ||
+                (hr == MfETransformStreamChange)
+            ) {
                 return false;
             }
 
@@ -353,16 +554,23 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         }
     }
     private void ReadOutputSample(IMFSample2 sample) {
-        var timestampNanoseconds = ((sample.GetSampleTime(phnsSampleTime: out var hns) >= 0) ? (hns * 100) : 0);
+        var timestampNanoseconds = ((sample.GetSampleTime(phnsSampleTime: out var hns) >= 0)
+            ? (hns * 100)
+            : 0
+        );
         var cleanPointKey = MFSampleExtension_CleanPoint;
-        var cleanResult = sample.GetUINT32(guidKey: ref cleanPointKey, punValue: out var clean);
+        var cleanResult = sample.GetUINT32(
+            guidKey: ref cleanPointKey,
+            punValue: out var clean
+        );
 
         // What the MFT claims, used only where the bitstream itself cannot answer (see EmitPacket). Hardware MFTs are
         // not reliable here — the NVIDIA AV1 encoder sets no CleanPoint at all, so this alone reports exactly one
         // keyframe per session and leaves every later random-access point invisible to the container.
         var reportedKeyframe = ((cleanResult >= 0)
             ? (clean != 0)
-            : !m_firstOutputSeen);
+            : !m_firstOutputSeen
+        );
 
         m_firstOutputSeen = true;
 
@@ -370,7 +578,11 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
 
         try {
             Check(hr: buffer.GetCurrentLength(pcbCurrentLength: out var length));
-            Check(hr: buffer.Lock(pcbCurrentLength: out _, pcbMaxLength: out _, ppbBuffer: out var pointer));
+            Check(hr: buffer.Lock(
+                pcbCurrentLength: out _,
+                pcbMaxLength: out _,
+                ppbBuffer: out var pointer
+            ));
 
             try {
                 var count = ((int)length);
@@ -379,8 +591,20 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
                     m_outputScratch = new byte[count];
                 }
 
-                Marshal.Copy(destination: m_outputScratch, length: count, source: pointer, startIndex: 0);
-                EmitPacket(encoded: m_outputScratch.AsSpan(length: count, start: 0), timestampNanoseconds: timestampNanoseconds, reportedKeyframe: reportedKeyframe);
+                Marshal.Copy(
+                    destination: m_outputScratch,
+                    length: count,
+                    source: pointer,
+                    startIndex: 0
+                );
+                EmitPacket(
+                    encoded: m_outputScratch.AsSpan(
+                        length: count,
+                        start: 0
+                    ),
+                    timestampNanoseconds: timestampNanoseconds,
+                    reportedKeyframe: reportedKeyframe
+                );
             } finally {
                 _ = buffer.Unlock();
             }
@@ -394,30 +618,55 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
     private void EmitPacket(ReadOnlySpan<byte> encoded, long timestampNanoseconds, bool reportedKeyframe) {
         if (m_codec == EncoderCodec.H264) {
             var isKeyframe = (AvcBitstream.TryReadIsIdr(annexB: encoded) ?? reportedKeyframe);
-            var payload = AvcBitstream.ToLengthPrefixed(annexB: encoded, pps: ref m_pps, sps: ref m_sps);
+            var payload = AvcBitstream.ToLengthPrefixed(
+                annexB: encoded,
+                pps: ref m_pps,
+                sps: ref m_sps
+            );
 
-            if ((m_codecPrivate.Length == 0) && (m_sps is not null) && (m_pps is not null)) {
-                m_codecPrivate = AvcBitstream.BuildConfigRecord(pps: m_pps, sps: m_sps);
+            if (
+                (m_codecPrivate.Length == 0) &&
+                (m_sps is not null) &&
+                (m_pps is not null)
+            ) {
+                m_codecPrivate = AvcBitstream.BuildConfigRecord(
+                    pps: m_pps,
+                    sps: m_sps
+                );
             }
 
             if (payload.Length == 0) {
                 return;
             }
 
-            m_packets.Add(item: new RecordedPacket(Data: payload, IsKeyframe: isKeyframe, TimestampNanoseconds: timestampNanoseconds));
+            m_packets.Add(item: new RecordedPacket(
+                Data: payload,
+                IsKeyframe: isKeyframe,
+                TimestampNanoseconds: timestampNanoseconds
+            ));
         } else {
             var isKeyframe = (Av1Bitstream.TryReadIsKeyFrame(temporalUnit: encoded) ?? reportedKeyframe);
             var payload = encoded.ToArray();
 
-            if ((m_codecPrivate.Length == 0) && isKeyframe) {
+            if (
+                (m_codecPrivate.Length == 0) &&
+                isKeyframe
+            ) {
                 m_codecPrivate = Av1Bitstream.BuildConfigRecord(temporalUnit: payload);
             }
 
-            m_packets.Add(item: new RecordedPacket(Data: payload, IsKeyframe: isKeyframe, TimestampNanoseconds: timestampNanoseconds));
+            m_packets.Add(item: new RecordedPacket(
+                Data: payload,
+                IsKeyframe: isKeyframe,
+                TimestampNanoseconds: timestampNanoseconds
+            ));
         }
     }
     private IMFSample2 CreateOutputSample() {
-        Check(hr: MFCreateMemoryBuffer(cbMaxLength: m_outputSampleSize, ppBuffer: out var buffer));
+        Check(hr: MFCreateMemoryBuffer(
+            cbMaxLength: m_outputSampleSize,
+            ppBuffer: out var buffer
+        ));
         Check(hr: MFCreateSample(ppIMFSample: out var sample));
         Check(hr: sample.AddBuffer(pBuffer: buffer));
         _ = Marshal.ReleaseComObject(o: buffer);

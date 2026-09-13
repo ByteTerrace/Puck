@@ -42,41 +42,14 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
         if (!configuration.ExecutesBootRom) {
             m_select = ((configuration.Model.DeselectsJoypadOnBoot() || dmgCompatibility.IsActive)
                 ? SelectMask
-                : (byte)0x00);
+                : (byte)0x00
+            );
         }
     }
 
     /// <inheritdoc/>
     public bool AnyButtonHeld =>
         (m_buttons != 0);
-
-    /// <inheritdoc/>
-    public byte ReadRegister() =>
-        ((byte)(0xC0 | m_select | CurrentLine()));
-    /// <inheritdoc/>
-    public void WriteRegister(byte value) {
-        m_select = ((byte)(value & SelectMask));
-
-        UpdateInterrupt();
-    }
-    /// <inheritdoc/>
-    public void SetButtons(JoypadButtons pressed) {
-        m_buttons = ((byte)pressed);
-
-        UpdateInterrupt();
-    }
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_buttons);
-        writer.WriteByte(value: m_select);
-        writer.WriteByte(value: m_previousLine);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_buttons = reader.ReadByte();
-        m_select = reader.ReadByte();
-        m_previousLine = reader.ReadByte();
-    }
 
     // The four input lines (P10–P13) active-low for the currently selected group(s): a bit is 0 when its group is
     // selected and the button is held. A group is selected when its select bit is driven low.
@@ -102,5 +75,33 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
         }
 
         m_previousLine = line;
+    }
+
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_buttons = reader.ReadByte();
+        m_select = reader.ReadByte();
+        m_previousLine = reader.ReadByte();
+    }
+    /// <inheritdoc/>
+    public byte ReadRegister() =>
+        ((byte)(0xC0 | m_select | CurrentLine()));
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteByte(value: m_buttons);
+        writer.WriteByte(value: m_select);
+        writer.WriteByte(value: m_previousLine);
+    }
+    /// <inheritdoc/>
+    public void SetButtons(JoypadButtons pressed) {
+        m_buttons = ((byte)pressed);
+
+        UpdateInterrupt();
+    }
+    /// <inheritdoc/>
+    public void WriteRegister(byte value) {
+        m_select = ((byte)(value & SelectMask));
+
+        UpdateInterrupt();
     }
 }

@@ -37,8 +37,14 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
         List<SignedAttestation> chain;
 
         try {
-            claim = AttestationProfile.Base.DecodeAttestation(codec: m_codec, wire: Convert.FromBase64String(s: signature.Claim));
-            chain = signature.Chain.Select(selector: entry => AttestationProfile.Base.DecodeAttestation(codec: m_codec, wire: Convert.FromBase64String(s: entry))).ToList();
+            claim = AttestationProfile.Base.DecodeAttestation(
+                codec: m_codec,
+                wire: Convert.FromBase64String(s: signature.Claim)
+            );
+            chain = signature.Chain.Select(selector: entry => AttestationProfile.Base.DecodeAttestation(
+                codec: m_codec,
+                wire: Convert.FromBase64String(s: entry)
+            )).ToList();
         } catch (FormatException exception) {
             return ReleaseVerifyOutcome.Refuse(reason: $"malformed signature: {exception.Message}");
         }
@@ -53,7 +59,13 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             trustList: m_trustList
         );
 
-        if (!result.TryGetReplayCommit(requirement: out var replayCommit, slot: Slot) || (replayCommit is not { } requirement)) {
+        if (
+            !result.TryGetReplayCommit(
+            requirement: out var replayCommit,
+            slot: Slot
+        ) ||
+            (replayCommit is not { } requirement)
+        ) {
             return ReleaseVerifyOutcome.Refuse(reason: (result.RefusalReason ?? "the claim did not verify as an admitted sequenced release bearer claim"));
         }
 
@@ -75,15 +87,30 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: "the signed claim payload does not match this manifest's own canonical bytes");
         }
 
-        if ((manifest.Revoked is { Count: > 0 } revoked) && revoked.Contains(value: manifest.Version, comparer: StringComparer.Ordinal)) {
+        if (
+            (manifest.Revoked is { Count: > 0 } revoked) &&
+            revoked.Contains(
+            value: manifest.Version,
+            comparer: StringComparer.Ordinal
+        )
+        ) {
             return ReleaseVerifyOutcome.Refuse(reason: $"version '{manifest.Version}' is revoked");
         }
 
-        if ((manifest.MinimumSupported is { } minimumSupported) && ReleaseVersion.IsStrictlyGreaterThan(left: minimumSupported, right: installedVersion)) {
+        if (
+            (manifest.MinimumSupported is { } minimumSupported) &&
+            ReleaseVersion.IsStrictlyGreaterThan(
+            left: minimumSupported,
+            right: installedVersion
+        )
+        ) {
             return ReleaseVerifyOutcome.Refuse(reason: $"installed version '{installedVersion}' is below this release's minimumSupported floor '{minimumSupported}'");
         }
 
-        if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: installedVersion)) {
+        if (!ReleaseVersion.IsStrictlyGreaterThan(
+            left: manifest.Version,
+            right: installedVersion
+        )) {
             return ReleaseVerifyOutcome.Refuse(reason: $"version '{manifest.Version}' is not strictly greater than the installed version '{installedVersion}'");
         }
 

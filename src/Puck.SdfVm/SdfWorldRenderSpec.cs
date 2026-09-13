@@ -23,6 +23,11 @@ public sealed record SdfWorldRenderSpec(
     /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
     /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
     public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
+    /// <summary>The resolved <c>host.rayQuery</c> document toggle (permitted by default). Parallel to
+    /// <see cref="Timing"/>; see <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults
+    /// it yet.</summary>
+    public bool RayQuery { get; init; } = true;
+
     /// <summary>Child render nodes keyed by name (each <see cref="SdfViewSnapshot.Child"/> naming one supplies that
     /// frame's slot surface instead of an SDF camera render). The name is the registry key a <see cref="SdfFrame"/>'s
     /// per-view bindings resolve against, not a fixed viewport slot — see <see cref="SdfEngineNode"/>'s remarks for the
@@ -51,21 +56,17 @@ public sealed record SdfWorldRenderSpec(
     /// <summary>A floor on the program buffer's packed-word capacity — the capacity envelope for a frame source
     /// that hot-swaps programs larger than the first frame's.</summary>
     public int ProgramWordCapacity { get; init; }
-    /// <summary>The resolved <c>host.rayQuery</c> document toggle (permitted by default). Parallel to
-    /// <see cref="Timing"/>; see <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults
-    /// it yet.</summary>
-    public bool RayQuery { get; init; } = true;
     /// <summary>Screen-light color providers, parallel to <see cref="ScreenSources"/>: the colored glow each screen
     /// emits into the room (its framebuffer average), keyed by screen index.</summary>
     public IReadOnlyDictionary<int, Func<Vector3>>? ScreenLights { get; init; }
-    /// <summary>Screen-source handle providers keyed by the program-declared screen index (the diegetic-screen seam).
-    /// Use <see cref="ScreenSourceFrames"/> instead for an asynchronously updated source that needs submission-lifetime
-    /// protection.</summary>
-    public IReadOnlyDictionary<int, Func<nint>>? ScreenSources { get; init; }
     /// <summary>Frame-scoped screen-source providers keyed by the program-declared screen index. The engine node
     /// retires each returned acquisition only after the submission that sampled its view has completed. A provider in
     /// this map replaces a same-index handle provider from <see cref="ScreenSources"/>.</summary>
     public IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>>? ScreenSourceFrames { get; init; }
+    /// <summary>Screen-source handle providers keyed by the program-declared screen index (the diegetic-screen seam).
+    /// Use <see cref="ScreenSourceFrames"/> instead for an asynchronously updated source that needs submission-lifetime
+    /// protection.</summary>
+    public IReadOnlyDictionary<int, Func<nint>>? ScreenSources { get; init; }
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.

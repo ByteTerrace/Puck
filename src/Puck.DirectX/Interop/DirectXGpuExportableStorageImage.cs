@@ -109,7 +109,9 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         // UNORDERED_ACCESS (the compute recorder's seeded state).
         device->CreateCommittedResource(
             HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
-            InitialResourceState: (UsesCommonInitialState(access: access) ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+            InitialResourceState: (UsesCommonInitialState(access: access)
+            ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
             pDesc: in textureDesc,
             pHeapProperties: in heapProperties,
             pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
@@ -117,7 +119,12 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
             riidResource: in resourceIid
         );
         m_resource = ((nint)resource);
-        DirectXResourceStates.Register(m_resource, UsesCommonInitialState(access) ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        DirectXResourceStates.Register(
+            m_resource,
+            (UsesCommonInitialState(access: access)
+            ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+        );
 
         if (access != DirectXExportableImageAccess.ComputeWrite) {
             DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
@@ -203,7 +210,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         }
 
         m_disposed = true;
-        DirectXResourceStates.Forget(m_resource);
+        DirectXResourceStates.Forget(resource: m_resource);
         DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
 
         // Drain the producer queue only while the device context is still alive: at host shutdown the DI container

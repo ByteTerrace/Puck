@@ -50,23 +50,34 @@ public static class ApuNotePeriod {
         ["C6"] = 1_046_502,
     };
 
-    /// <summary>Resolves the 11-bit period register value for a frequency: <c>period = 2048 - round(131072 Hz / f)</c>
-    /// — pure integer math over millihertz so every build emits identical bytes.</summary>
-    /// <param name="millihertz">The note frequency, in millihertz (&gt; 0).</param>
-    /// <returns>The period value (0..2047).</returns>
-    public static int Period(int millihertz) {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: millihertz, other: 0, paramName: nameof(millihertz));
-
-        return (2048 - ((int)(((131_072_000L + (millihertz / 2)) / millihertz))));
-    }
     /// <summary>Resolves a note name (e.g. <c>"C5"</c>, <c>"G#4"</c>) to its millihertz frequency.</summary>
     /// <param name="noteName">The note name (scientific pitch notation, octaves 3..6).</param>
     /// <returns>The frequency in millihertz.</returns>
     public static int MillihertzFor(string noteName) {
         ArgumentException.ThrowIfNullOrEmpty(noteName);
 
-        return (Millihertz.TryGetValue(key: noteName, value: out var value)
+        return (Millihertz.TryGetValue(
+            key: noteName,
+            value: out var value
+        )
             ? value
-            : throw new ArgumentException(message: $"'{noteName}' is not a recognized note name (expected e.g. \"C5\", \"G#4\", octaves 3..6).", paramName: nameof(noteName)));
+            : throw new ArgumentException(
+                message: $"'{noteName}' is not a recognized note name (expected e.g. \"C5\", \"G#4\", octaves 3..6).",
+                paramName: nameof(noteName)
+            )
+        );
+    }
+    /// <summary>Resolves the 11-bit period register value for a frequency: <c>period = 2048 - round(131072 Hz / f)</c>
+    /// — pure integer math over millihertz so every build emits identical bytes.</summary>
+    /// <param name="millihertz">The note frequency, in millihertz (&gt; 0).</param>
+    /// <returns>The period value (0..2047).</returns>
+    public static int Period(int millihertz) {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            value: millihertz,
+            other: 0,
+            paramName: nameof(millihertz)
+        );
+
+        return (2048 - ((int)(((131_072_000L + (millihertz / 2)) / millihertz))));
     }
 }

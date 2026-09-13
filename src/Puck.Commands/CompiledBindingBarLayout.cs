@@ -46,41 +46,6 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
         Frames: ReadOnlyMemory<BindingBarFrame>.Empty
     );
 
-    /// <summary>Returns the button size at which every frame fits a region of the given aspect: the authored size,
-    /// shrunk until each frame's inset plus its extent along its edge's axis fits that axis and its extent across
-    /// fits the other. One uniform size, so the frames keep their relationships.</summary>
-    /// <param name="buttonSize">The authored (scaled) button size, region-height units.</param>
-    /// <param name="aspect">The region's width over its height.</param>
-    public float FitButtonSize(float buttonSize, float aspect) =>
-        FitButtonSize(
-            aspect: aspect,
-            buttonSize: buttonSize,
-            frames: Frames.Span
-        );
-    /// <summary>Returns the button size at which every one of <paramref name="frames"/> fits a region of the given
-    /// aspect — see <see cref="FitButtonSize(float, float)"/>.</summary>
-    /// <param name="frames">The frames.</param>
-    /// <param name="buttonSize">The authored (scaled) button size, region-height units.</param>
-    /// <param name="aspect">The region's width over its height.</param>
-    public static float FitButtonSize(ReadOnlySpan<BindingBarFrame> frames, float buttonSize, float aspect) {
-        var fitted = buttonSize;
-
-        foreach (var frame in frames) {
-            // Plates are one pitch wide: a frame spans (extent + 1) pitches, plus its inset along its own axis.
-            var alongPitches = ((frame.Along + 1f) + frame.Inset);
-            var acrossPitches = (frame.Across + 1f);
-
-            var (alongLimit, acrossLimit) = (frame.Sideways
-                ? (aspect, 1f)
-                : (1f, aspect)
-            );
-
-            fitted = MathF.Min(x: fitted, y: (alongLimit / alongPitches));
-            fitted = MathF.Min(x: fitted, y: (acrossLimit / acrossPitches));
-        }
-
-        return fitted;
-    }
     /// <summary>Builds a compiled layout from raw bank tables: every plate of every bank sharing an edge and inset
     /// forms one frame, and each frame's plates are shifted so its nearest plate sits at pitch 0 along the edge's
     /// axis and its extent is centered across it. Every plate counts toward the extent, bound or not, so what a
@@ -106,10 +71,22 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
             var bounds = frameBounds[frame];
 
             foreach (var plate in plates.Values) {
-                bounds.MinX = MathF.Min(x: bounds.MinX, y: plate.Position.X);
-                bounds.MaxX = MathF.Max(x: bounds.MaxX, y: plate.Position.X);
-                bounds.MinY = MathF.Min(x: bounds.MinY, y: plate.Position.Y);
-                bounds.MaxY = MathF.Max(x: bounds.MaxY, y: plate.Position.Y);
+                bounds.MinX = MathF.Min(
+                    x: bounds.MinX,
+                    y: plate.Position.X
+                );
+                bounds.MaxX = MathF.Max(
+                    x: bounds.MaxX,
+                    y: plate.Position.X
+                );
+                bounds.MinY = MathF.Min(
+                    x: bounds.MinY,
+                    y: plate.Position.Y
+                );
+                bounds.MaxY = MathF.Max(
+                    x: bounds.MaxY,
+                    y: plate.Position.Y
+                );
             }
 
             frameBounds[frame] = bounds;
@@ -144,11 +121,11 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
             shifts[index] = shift;
             frames[index] = new BindingBarFrame(
                 Across: (sideways
-                    ? (maxY - minY)
-                    : (maxX - minX)),
+                ? (maxY - minY)
+                : (maxX - minX)),
                 Along: (sideways
-                    ? (maxX - minX)
-                    : (maxY - minY)),
+                ? (maxX - minX)
+                : (maxY - minY)),
                 Edge: edge,
                 Inset: inset
             );
@@ -157,7 +134,10 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
         var compiled = new Dictionary<string, CompiledBindingBarBank>(comparer: StringComparer.Ordinal);
 
         foreach (var (id, frame, plates) in raw) {
-            var normalized = new Dictionary<string, BindingPlatePlacement>(capacity: plates.Count, comparer: StringComparer.Ordinal);
+            var normalized = new Dictionary<string, BindingPlatePlacement>(
+                capacity: plates.Count,
+                comparer: StringComparer.Ordinal
+            );
 
             foreach (var (source, plate) in plates) {
                 normalized[source] = plate with { Position = (plate.Position - shifts[frame]), };
@@ -173,5 +153,46 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
             Banks: compiled,
             Frames: frames
         );
+    }
+    /// <summary>Returns the button size at which every frame fits a region of the given aspect: the authored size,
+    /// shrunk until each frame's inset plus its extent along its edge's axis fits that axis and its extent across
+    /// fits the other. One uniform size, so the frames keep their relationships.</summary>
+    /// <param name="buttonSize">The authored (scaled) button size, region-height units.</param>
+    /// <param name="aspect">The region's width over its height.</param>
+    public float FitButtonSize(float buttonSize, float aspect) =>
+        FitButtonSize(
+            aspect: aspect,
+            buttonSize: buttonSize,
+            frames: Frames.Span
+        );
+    /// <summary>Returns the button size at which every one of <paramref name="frames"/> fits a region of the given
+    /// aspect — see <see cref="FitButtonSize(float, float)"/>.</summary>
+    /// <param name="frames">The frames.</param>
+    /// <param name="buttonSize">The authored (scaled) button size, region-height units.</param>
+    /// <param name="aspect">The region's width over its height.</param>
+    public static float FitButtonSize(ReadOnlySpan<BindingBarFrame> frames, float buttonSize, float aspect) {
+        var fitted = buttonSize;
+
+        foreach (var frame in frames) {
+            // Plates are one pitch wide: a frame spans (extent + 1) pitches, plus its inset along its own axis.
+            var alongPitches = ((frame.Along + 1f) + frame.Inset);
+            var acrossPitches = (frame.Across + 1f);
+
+            var (alongLimit, acrossLimit) = (frame.Sideways
+                ? (aspect, 1f)
+                : (1f, aspect)
+            );
+
+            fitted = MathF.Min(
+                x: fitted,
+                y: (alongLimit / alongPitches)
+            );
+            fitted = MathF.Min(
+                x: fitted,
+                y: (acrossLimit / acrossPitches)
+            );
+        }
+
+        return fitted;
     }
 }

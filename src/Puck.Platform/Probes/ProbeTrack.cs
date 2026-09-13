@@ -47,8 +47,8 @@ public sealed class ProbeTrackPlayer {
     private readonly int m_channelCount;
     private readonly long m_loopTicks;
     private readonly ProbeReadingRing m_ring;
-    private readonly ProbeTrackSample[] m_samples;
     private readonly long[] m_sampleTicks;
+    private readonly ProbeTrackSample[] m_samples;
 
     private int m_cursor = -1;
     private long m_loop = -1L;
@@ -69,10 +69,17 @@ public sealed class ProbeTrackPlayer {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(ring);
 
-        if (!string.Equals(a: document.Schema, b: ProbeTrackDocument.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: document.Schema,
+            b: ProbeTrackDocument.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new InvalidDataException(message: $"a probe track's $schema must be '{ProbeTrackDocument.SchemaVersion}'.");
         }
-        if (!double.IsFinite(d: document.RateHz) || (document.RateHz <= 0.0)) {
+        if (
+            !double.IsFinite(d: document.RateHz) ||
+            (document.RateHz <= 0.0)
+        ) {
             throw new InvalidDataException(message: "a probe track's rateHz must be positive.");
         }
         if (
@@ -97,7 +104,10 @@ public sealed class ProbeTrackPlayer {
             if ((sample.C?.Count ?? 0) != document.Channels) {
                 throw new InvalidDataException(message: $"every probe track sample must carry exactly {document.Channels} channel value(s).");
             }
-            if (!double.IsFinite(d: sample.T) || (sample.T < 0.0)) {
+            if (
+                !double.IsFinite(d: sample.T) ||
+                (sample.T < 0.0)
+            ) {
                 throw new InvalidDataException(message: $"probe track sample {index} has t {sample.T}; every t must be finite and non-negative.");
             }
 
@@ -111,7 +121,10 @@ public sealed class ProbeTrackPlayer {
             previousTicks = ticks;
         }
 
-        var periodTicks = Math.Max(val1: 1L, val2: ((long)Math.Round(a: (Stopwatch.Frequency / document.RateHz))));
+        var periodTicks = Math.Max(
+            val1: 1L,
+            val2: ((long)Math.Round(a: (Stopwatch.Frequency / document.RateHz)))
+        );
 
         m_channelCount = document.Channels;
         m_loopTicks = (previousTicks + periodTicks);
@@ -130,7 +143,10 @@ public sealed class ProbeTrackPlayer {
             m_originTimestamp = nowTimestamp;
         }
 
-        var elapsedTicks = Math.Max(val1: 0L, val2: (nowTimestamp - m_originTimestamp));
+        var elapsedTicks = Math.Max(
+            val1: 0L,
+            val2: (nowTimestamp - m_originTimestamp)
+        );
         var loop = (elapsedTicks / m_loopTicks);
         var offsetTicks = (elapsedTicks % m_loopTicks);
 
@@ -141,7 +157,10 @@ public sealed class ProbeTrackPlayer {
 
         var index = m_cursor;
 
-        while (((index + 1) < m_sampleTicks.Length) && (m_sampleTicks[(index + 1)] <= offsetTicks)) {
+        while (
+            ((index + 1) < m_sampleTicks.Length) &&
+            (m_sampleTicks[(index + 1)] <= offsetTicks)
+        ) {
             index++;
         }
 

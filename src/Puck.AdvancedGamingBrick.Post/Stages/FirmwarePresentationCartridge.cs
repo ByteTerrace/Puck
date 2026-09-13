@@ -4,25 +4,47 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>Hand-assembled cartridge with a conventional header layout and an observable native entry point.</summary>
 internal static class FirmwarePresentationCartridge {
+    private static void Write(byte[] rom, int offset, uint value) =>
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: rom.AsSpan(
+                length: 4,
+                start: offset
+            ),
+            value: value
+        );
+
     /// <summary>Creates an original diagnostic image; its logo fields are deliberately not retail artwork.</summary>
     /// <param name="alternateLogo">Selects a second, independently authored header-logo byte pattern.</param>
     /// <param name="malformedHeader">Corrupts the fixed byte and complement checksum without changing executable code.</param>
     /// <returns>A cartridge that writes an EWRAM completion marker and a constant display backdrop after handoff.</returns>
     public static byte[] Create(bool alternateLogo = false, bool malformedHeader = false) {
-        var rom = new byte[32 * 1024];
-        Write(rom: rom, offset: 0, value: 0xEA00002E); // ARM branch over the header to 0x080000C0.
-        for (var index = 0; index < 156; ++index) {
-            rom[index + 4] = alternateLogo ? (byte)(index * 17 + 3) : (byte)((index / 4 % 2 == 0) ? 0x3C : 0xC3);
+        var rom = new byte[(32 * 1024)];
+
+        Write(
+            offset: 0,
+            rom: rom,
+            value: 0xEA00002E
+        ); // ARM branch over the header to 0x080000C0.
+        for (var index = 0; (index < 156); ++index) {
+            rom[(index + 4)] = (alternateLogo
+                ? (byte)((index * 17) + 3)
+                : (byte)((((index / 4) % 2) == 0)
+                    ? 0x3C
+                    : 0xC3)
+            );
         }
         "PUCK POST   "u8.CopyTo(destination: rom.AsSpan(start: 0xA0));
-        (alternateLogo ? "TEST"u8 : "PUCK"u8).CopyTo(destination: rom.AsSpan(start: 0xAC));
+        (alternateLogo
+            ? "TEST"u8
+            : "PUCK"u8).CopyTo(destination: rom.AsSpan(start: 0xAC));
         "BT"u8.CopyTo(destination: rom.AsSpan(start: 0xB0));
         rom[0xB2] = 0x96;
         var checksum = -0x19;
-        for (var index = 0xA0; index <= 0xBC; ++index) {
+
+        for (var index = 0xA0; (index <= 0xBC); ++index) {
             checksum -= rom[index];
         }
-        rom[0xBD] = (byte)checksum;
+        rom[0xBD] = ((byte)checksum);
         if (malformedHeader) {
             rom[0xB2] = 0;
             rom[0xBD] ^= 0xFF;
@@ -40,12 +62,14 @@ internal static class FirmwarePresentationCartridge {
             0xEAFFFFFE, // b .
             0x00001234,
         ];
-        for (var index = 0; index < instructions.Length; ++index) {
-            Write(rom: rom, offset: 0xC0 + index * 4, value: instructions[index]);
+
+        for (var index = 0; (index < instructions.Length); ++index) {
+            Write(
+                rom: rom,
+                offset: (0xC0 + (index * 4)),
+                value: instructions[index]
+            );
         }
         return rom;
     }
-
-    private static void Write(byte[] rom, int offset, uint value) =>
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: rom.AsSpan(start: offset, length: 4), value: value);
 }

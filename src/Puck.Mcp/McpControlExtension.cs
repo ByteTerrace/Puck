@@ -21,7 +21,10 @@ public sealed class McpControlExtension : IControlExtension {
             var fullPath = Path.GetFullPath(path: configurationPath);
             var options = RemoteMcpServer.ReadOptionsAsync(configurationPath: fullPath).GetAwaiter().GetResult();
             var target = (options.Target ?? "silo");
-            var controlHost = new McpHostingExtensions.HostedControlHost(host: host, target: target);
+            var controlHost = new McpHostingExtensions.HostedControlHost(
+                host: host,
+                target: target
+            );
 
             return new McpHostingExtensions.McpHostedService(
                 configurationPath: fullPath,

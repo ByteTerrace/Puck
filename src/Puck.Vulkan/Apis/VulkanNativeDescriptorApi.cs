@@ -18,6 +18,38 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                AllocateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkAllocateDescriptorSets"u8
+            )),
+                CreateDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateDescriptorPool"u8
+            )),
+                CreateSampler = ((delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateSampler"u8
+            )),
+                DestroyDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyDescriptorPool"u8
+            )),
+                DestroySampler = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroySampler"u8
+            )),
+                UpdateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkUpdateDescriptorSets"u8
+            )),
+            }
+        );
+    }
+
     /// <inheritdoc/>
     public nint AllocateSet(VulkanDescriptorSetAllocateRequest request) {
         var pointers = GetPointers(deviceHandle: request.DeviceHandle);
@@ -223,19 +255,5 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyDescriptorPool;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroySampler;
         public delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void> UpdateDescriptorSets;
-    }
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateDescriptorSets"u8)),
-                CreateDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorPool"u8)),
-                CreateSampler = ((delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSampler"u8)),
-                DestroyDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorPool"u8)),
-                DestroySampler = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySampler"u8)),
-                UpdateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUpdateDescriptorSets"u8)),
-            }
-        );
     }
 }

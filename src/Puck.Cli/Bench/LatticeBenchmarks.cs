@@ -24,18 +24,51 @@ public class LatticeKernels {
         m_cusps = new (long, long)[Count];
 
         for (var i = 0; (i < Count); ++i) {
-            m_positions[i] = new(X: FixedQ4816.FromRawBits(value: rng.NextInt64(maxValue: (1L << 30), minValue: -(1L << 30))), Y: FixedQ4816.FromRawBits(value: rng.NextInt64(maxValue: (1L << 30), minValue: -(1L << 30))), Z: FixedQ4816.FromRawBits(value: rng.NextInt64(maxValue: (1L << 30), minValue: -(1L << 30))));
-            m_cells[i] = new(Q: rng.Next(maxValue: 1 << 20, minValue: -(1 << 20)), R: rng.Next(maxValue: 1 << 20, minValue: -(1 << 20)));
-            m_cusps[i] = (rng.NextInt64(maxValue: 1L << 20, minValue: -(1L << 20)), rng.NextInt64(maxValue: 1L << 20, minValue: 1L));
+            m_positions[i] = new(
+                X: FixedQ4816.FromRawBits(value: rng.NextInt64(
+                    maxValue: (1L << 30),
+                    minValue: -(1L << 30)
+                )),
+                Y: FixedQ4816.FromRawBits(value: rng.NextInt64(
+                    maxValue: (1L << 30),
+                    minValue: -(1L << 30)
+                )),
+                Z: FixedQ4816.FromRawBits(value: rng.NextInt64(
+                    maxValue: (1L << 30),
+                    minValue: -(1L << 30)
+                ))
+            );
+            m_cells[i] = new(
+                Q: rng.Next(
+                    maxValue: (1 << 20),
+                    minValue: -(1 << 20)
+                ),
+                R: rng.Next(
+                    maxValue: (1 << 20),
+                    minValue: -(1 << 20)
+                )
+            );
+            m_cusps[i] = (rng.NextInt64(
+                maxValue: (1L << 20),
+                minValue: -(1L << 20)
+            ), rng.NextInt64(
+                maxValue: (1L << 20),
+                minValue: 1L
+            ));
         }
 
-        m_word = (ModularTransform.T * ModularTransform.S * ModularTransform.T * ModularTransform.T);
+        m_word = (((ModularTransform.T * ModularTransform.S) * ModularTransform.T) * ModularTransform.T);
     }
     [Benchmark]
     public long FieldNoiseSample() {
         var sink = 0L;
 
-        for (var i = 0; (i < Count); ++i) { sink ^= FieldNoise.Sample(position: m_positions[i], seed: 42UL).Value; }
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= FieldNoise.Sample(
+                position: m_positions[i],
+                seed: 42UL
+            ).Value;
+        }
 
         return sink;
     }
@@ -43,7 +76,13 @@ public class LatticeKernels {
     public long FieldNoiseFourOctaves() {
         var sink = 0L;
 
-        for (var i = 0; (i < Count); ++i) { sink ^= FieldNoise.Sample(octaves: 4, position: m_positions[i], seed: 42UL).Value; }
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= FieldNoise.Sample(
+                octaves: 4,
+                position: m_positions[i],
+                seed: 42UL
+            ).Value;
+        }
 
         return sink;
     }
@@ -51,7 +90,14 @@ public class LatticeKernels {
     public long LatticeValueNoise() {
         var sink = 0L;
 
-        for (var i = 0; (i < Count); ++i) { sink ^= Pcg3dLatticeNoise.ValueNoise01(cellX: i, cellZ: (Count - i), noiseCells: 37, seed: 7U).Value; }
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= Pcg3dLatticeNoise.ValueNoise01(
+                cellX: i,
+                cellZ: (Count - i),
+                noiseCells: 37,
+                seed: 7U
+            ).Value;
+        }
 
         return sink;
     }
@@ -59,7 +105,12 @@ public class LatticeKernels {
     public long HexDistance() {
         var sink = 0L;
 
-        for (var i = 1; (i < Count); ++i) { sink += HexagonalCoordinate.Distance(left: m_cells[i], right: m_cells[(i - 1)]); }
+        for (var i = 1; (i < Count); ++i) {
+            sink += HexagonalCoordinate.Distance(
+                left: m_cells[i],
+                right: m_cells[(i - 1)]
+            );
+        }
 
         return sink;
     }
@@ -68,7 +119,10 @@ public class LatticeKernels {
         var sink = 0L;
 
         for (var i = 0; (i < Count); ++i) {
-            var (numerator, denominator) = m_word.Apply(denominator: m_cusps[i].Denominator, numerator: m_cusps[i].Numerator);
+            var (numerator, denominator) = m_word.Apply(
+                denominator: m_cusps[i].Denominator,
+                numerator: m_cusps[i].Numerator
+            );
 
             sink ^= (numerator + denominator);
         }
@@ -79,7 +133,11 @@ public class LatticeKernels {
     public long SieveWindow() {
         var count = 0L;
 
-        NumberTheoryFunctions.SegmentedPrimeSieve(high: (1UL << 32) + (1UL << 20), low: (1UL << 32), onPrime: _ => ++count);
+        NumberTheoryFunctions.SegmentedPrimeSieve(
+            high: ((1UL << 32) + (1UL << 20)),
+            low: (1UL << 32),
+            onPrime: _ => ++count
+        );
 
         return count;
     }

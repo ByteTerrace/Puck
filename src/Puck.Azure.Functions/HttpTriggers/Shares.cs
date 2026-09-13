@@ -41,7 +41,8 @@ public sealed class Shares(
         var blobName = request?.BlobName?.Trim();
         var recipientIdentifier = request?.RecipientIdentifier?.Trim();
 
-        if (string.IsNullOrWhiteSpace(value: blobName) ||
+        if (
+            string.IsNullOrWhiteSpace(value: blobName) ||
             string.IsNullOrWhiteSpace(value: recipientIdentifier) ||
             recipientIdentifier.Contains(value: '\'')
         ) {
@@ -51,14 +52,14 @@ public sealed class Shares(
         var matches = await graphServiceClient
             .Users
             .GetAsync(
-                cancellationToken: cancellationToken,
-                requestConfiguration: requestConfiguration => {
+            cancellationToken: cancellationToken,
+            requestConfiguration: requestConfiguration => {
                     requestConfiguration.QueryParameters.Filter =
                         $"mail eq '{recipientIdentifier}' or userPrincipalName eq '{recipientIdentifier}'";
                     requestConfiguration.QueryParameters.Select = ["displayName", "id"];
                     requestConfiguration.QueryParameters.Top = 1;
                 }
-            );
+        );
         var recipient = matches?.Value?.FirstOrDefault();
 
         if (recipient?.Id is null) {

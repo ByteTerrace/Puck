@@ -22,15 +22,59 @@ public static class DocumentScalars {
     /// <summary>The names folded in double, because their domain includes fractions. Every
     /// <see cref="ExpressionDomain.Integer"/> name is folded too, by delegation — see <see cref="Delegated"/> — so
     /// the refused set is what is left: the fixed-point-only and specialized-lowering entries, refused BY NAME.</summary>
-    private static readonly HashSet<string> InDouble = new(StringComparer.Ordinal) {
+    private static readonly HashSet<string> InDouble = new(comparer: StringComparer.Ordinal) {
         "absolute", "ceiling", "clamp", "cosine", "floor", "maximum", "minimum", "round", "sign", "sine",
         "squareRoot",
     };
 
-    /// <summary>Returns a value indicating whether a name is a scalar function of the expression language.</summary>
-    /// <param name="name">The call name.</param>
-    /// <returns><see langword="true"/> when the shared vocabulary names it.</returns>
-    public static bool IsScalar(string name) => ExpressionVocabulary.Functions.ContainsKey(name);
+    // An integer-domain function is the engine's to evaluate: integers are exact in both languages, so calling the
+    // rule evaluator is what makes a numeric disagreement impossible rather than merely unlikely.
+    private static JsonNode? Delegated(CallExpressionNode call, ExpressionFunction function, DocumentScope scope, string? fieldKey) {
+        var arguments = new long[function.Arity];
+
+        for (var index = 0; (index < arguments.Length); ++index) {
+            var argument = DocumentLowering.EvaluateValue(
+                call.Arguments[index].Value,
+                scope,
+                fieldKey
+            );
+
+            if (!DocumentNumbers.TryInteger(
+                node: argument,
+                number: out arguments[index]
+            )) {
+                return Refuse(
+                    scope: scope,
+                    call: call,
+                    message: $"{call.Name} reads signed 64-bit whole numbers"
+                );
+            }
+        }
+
+        if (!ExpressionArithmetic.TryFunction(
+            operation: function.Operation,
+            kind: CellKind.Int,
+            arguments: arguments,
+            value: out var value
+        )) {
+            return Refuse(
+                scope: scope,
+                call: call,
+                message: $"{call.Name} is not defined for those arguments"
+            );
+        }
+
+        return JsonValue.Create(value: value);
+    }
+    private static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.BuiltinRefused,
+            message: message,
+            span: call.Span
+        );
+
+        return null;
+    }
 
     /// <summary>Folds a scalar call to the value it denotes.</summary>
     /// <param name="call">The call as written.</param>
@@ -43,30 +87,50 @@ public static class DocumentScalars {
 
         var function = ExpressionVocabulary.Functions[call.Name];
 
-        if (!InDouble.Contains(call.Name) && (function.Domain is not (ExpressionDomain.Integer or ExpressionDomain.Select))) {
+        if (
+            !InDouble.Contains(item: call.Name) &&
+            (function.Domain is not (ExpressionDomain.Integer or ExpressionDomain.Select))
+        ) {
             return Refuse(
                 scope: scope,
                 call: call,
-                message: $"the rule language evaluates '{call.Name}'; the document language does not fold it");
+                message: $"the rule language evaluates '{call.Name}'; the document language does not fold it"
+            );
         }
 
         if (call.Arguments.Count != function.Arity) {
-            return Refuse(scope: scope, call: call, message: $"{call.Name} takes {function.Arity} argument(s)");
+            return Refuse(
+                scope: scope,
+                call: call,
+                message: $"{call.Name} takes {function.Arity} argument(s)"
+            );
         }
 
         // `select` reads its condition as a truth value, not as a number, so it is folded before the numeric read
         // that every other function needs.
         if (function.Domain == ExpressionDomain.Select) {
-            var condition = DocumentLowering.LowerValue(expr: call.Arguments[0].Value, scope: scope, fieldKey: fieldKey);
+            var condition = DocumentLowering.LowerValue(
+                expr: call.Arguments[0].Value,
+                scope: scope,
+                fieldKey: fieldKey
+            );
 
             return DocumentLowering.LowerValue(
-                expr: call.Arguments[DocumentLowering.IsTruthy(node: condition) ? 1 : 2].Value,
+                expr: call.Arguments[(DocumentLowering.IsTruthy(node: condition)
+                ? 1
+                : 2)].Value,
                 scope: scope,
-                fieldKey: fieldKey);
+                fieldKey: fieldKey
+            );
         }
 
         if (function.Domain == ExpressionDomain.Integer) {
-            return Delegated(call: call, function: function, scope: scope, fieldKey: fieldKey);
+            return Delegated(
+                call: call,
+                fieldKey: fieldKey,
+                function: function,
+                scope: scope
+            );
         }
 
         var numbers = new double[function.Arity];
@@ -74,73 +138,119 @@ public static class DocumentScalars {
         var allIntegers = true;
 
         for (var index = 0; (index < function.Arity); ++index) {
-            var lowered = DocumentLowering.EvaluateValue(expr: call.Arguments[index].Value, scope: scope, fieldKey: fieldKey);
-            allIntegers &= DocumentNumbers.TryInteger(lowered, out integers[index]);
+            var lowered = DocumentLowering.EvaluateValue(
+                expr: call.Arguments[index].Value,
+                scope: scope,
+                fieldKey: fieldKey
+            );
 
-            if (!DocumentLowering.TryReadNumber(node: lowered, number: out numbers[index])) {
-                return Refuse(scope: scope, call: call, message: $"{call.Name} reads numbers known at compile time");
+            allIntegers &= DocumentNumbers.TryInteger(
+                node: lowered,
+                number: out integers[index]
+            );
+
+            if (!DocumentLowering.TryReadNumber(
+                node: lowered,
+                number: out numbers[index]
+            )) {
+                return Refuse(
+                    scope: scope,
+                    call: call,
+                    message: $"{call.Name} reads numbers known at compile time"
+                );
             }
         }
 
-        if (call.Name == "clamp" && (allIntegers ? integers[1] > integers[2] : numbers[1] > numbers[2])) {
-            return Refuse(scope, call, "clamp's minimum must not exceed its maximum");
+        if (
+            (call.Name == "clamp") &&
+            (allIntegers
+            ? (integers[1] > integers[2])
+            : (numbers[1] > numbers[2]))
+        ) {
+            return Refuse(
+                call: call,
+                message: "clamp's minimum must not exceed its maximum",
+                scope: scope
+            );
         }
-        if (call.Name == "squareRoot" && numbers[0] < 0) {
-            return Refuse(scope, call, "squareRoot takes a nonnegative number");
+        if (
+            (call.Name == "squareRoot") &&
+            (numbers[0] < 0)
+        ) {
+            return Refuse(
+                call: call,
+                message: "squareRoot takes a nonnegative number",
+                scope: scope
+            );
         }
 
-        if (allIntegers && call.Name is not ("cosine" or "sine" or "squareRoot")) {
-            if (call.Name == "absolute" && integers[0] == long.MinValue) {
-                return Refuse(scope, call, "absolute overflows a signed 64-bit integer");
+        if (
+            allIntegers &&
+            (call.Name is not ("cosine" or "sine" or "squareRoot"))
+        ) {
+            if (
+                (call.Name == "absolute") &&
+                (integers[0] == long.MinValue)
+            ) {
+                return Refuse(
+                    call: call,
+                    message: "absolute overflows a signed 64-bit integer",
+                    scope: scope
+                );
             }
             return JsonValue.Create(call.Name switch {
-                "absolute" => Math.Abs(integers[0]),
-                "clamp" => Math.Clamp(integers[0], integers[1], integers[2]),
-                "maximum" => Math.Max(integers[0], integers[1]),
-                "minimum" => Math.Min(integers[0], integers[1]),
-                "sign" => Math.Sign(integers[0]),
+                "absolute" => Math.Abs(value: integers[0]),
+                "clamp" => Math.Clamp(
+                integers[0],
+                integers[1],
+                integers[2]
+            ),
+                "maximum" => Math.Max(
+                val1: integers[0],
+                val2: integers[1]
+            ),
+                "minimum" => Math.Min(
+                val1: integers[0],
+                val2: integers[1]
+            ),
+                "sign" => Math.Sign(value: integers[0]),
                 _ => integers[0],
             });
         }
 
-        return DocumentLowering.NumberNode(value: call.Name switch {
+        return DocumentLowering.NumberNode(
+            value: call.Name switch {
             "absolute" => Math.Abs(value: numbers[0]),
             "ceiling" => Math.Ceiling(a: numbers[0]),
-            "clamp" => Math.Clamp(value: numbers[0], min: numbers[1], max: numbers[2]),
+            "clamp" => Math.Clamp(
+                value: numbers[0],
+                min: numbers[1],
+                max: numbers[2]
+            ),
             "cosine" => Math.Cos(d: numbers[0]),
             "floor" => Math.Floor(d: numbers[0]),
-            "maximum" => Math.Max(val1: numbers[0], val2: numbers[1]),
-            "minimum" => Math.Min(val1: numbers[0], val2: numbers[1]),
-            "round" => Math.Round(value: numbers[0], mode: MidpointRounding.ToEven),
+            "maximum" => Math.Max(
+                val1: numbers[0],
+                val2: numbers[1]
+            ),
+            "minimum" => Math.Min(
+                val1: numbers[0],
+                val2: numbers[1]
+            ),
+            "round" => Math.Round(
+                value: numbers[0],
+                mode: MidpointRounding.ToEven
+            ),
             "sign" => Math.Sign(value: numbers[0]),
             "sine" => Math.Sin(a: numbers[0]),
             "squareRoot" => Math.Sqrt(d: numbers[0]),
             _ => 0,
-        }, span: call.Span);
+        },
+            span: call.Span
+        );
     }
-
-    // An integer-domain function is the engine's to evaluate: integers are exact in both languages, so calling the
-    // rule evaluator is what makes a numeric disagreement impossible rather than merely unlikely.
-    private static JsonNode? Delegated(CallExpressionNode call, ExpressionFunction function, DocumentScope scope, string? fieldKey) {
-        var arguments = new long[function.Arity];
-
-        for (var index = 0; (index < arguments.Length); ++index) {
-            var argument = DocumentLowering.EvaluateValue(call.Arguments[index].Value, scope, fieldKey);
-            if (!DocumentNumbers.TryInteger(argument, out arguments[index])) {
-                return Refuse(scope: scope, call: call, message: $"{call.Name} reads signed 64-bit whole numbers");
-            }
-        }
-
-        if (!ExpressionArithmetic.TryFunction(operation: function.Operation, kind: CellKind.Int, arguments: arguments, value: out var value)) {
-            return Refuse(scope: scope, call: call, message: $"{call.Name} is not defined for those arguments");
-        }
-
-        return JsonValue.Create(value: value);
-    }
-
-    private static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {
-        scope.Diagnostics.ReportError(PuckDiagnosticCodes.BuiltinRefused, message, call.Span);
-
-        return null;
-    }
+    /// <summary>Returns a value indicating whether a name is a scalar function of the expression language.</summary>
+    /// <param name="name">The call name.</param>
+    /// <returns><see langword="true"/> when the shared vocabulary names it.</returns>
+    public static bool IsScalar(string name) => ExpressionVocabulary.Functions.ContainsKey(key: name);
 }

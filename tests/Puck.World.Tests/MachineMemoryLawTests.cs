@@ -26,7 +26,13 @@ public sealed class MachineMemoryLawTests {
     private static string RepoRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
 
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
             directory = directory.Parent;
         }
 
@@ -40,19 +46,30 @@ public sealed class MachineMemoryLawTests {
     // same reason: 76 and 68 were pip's authored initials, and every one of them had to be chased by hand the moment
     // the cabinet's game changed. A law about the HOST asserts the host's contract and derives everything that is a
     // fact about content.
-    private static string CartridgePath() => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", "hgb-mirror.cgb.cartridge.json");
+    private static string CartridgePath() => Path.Combine(
+        RepoRoot(),
+        "src",
+        "Puck.World",
+        "Assets",
+        "cartridges",
+        "hgb-mirror.cgb.cartridge.json"
+    );
     // The compiled image's own bus address for a named variable — read the same way the machine host reads the
     // booted image, so the law addresses the byte the running cartridge actually owns rather than a guessed offset.
     private static CartridgeDocument Document() => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath()));
-
     private static int VariableAddress(string name) {
         var compilation = ((ICartridgeCompiler)TestHookInstaller.CreateMachineCatalog().ContentProviders[CgbEngine]).Compile(document: Document());
 
-        Assert.True(condition: compilation.Variables.TryGetValue(key: name, value: out var address), userMessage: $"the cartridge declares no variable '{name}'");
+        Assert.True(
+            condition: compilation.Variables.TryGetValue(
+                key: name,
+                value: out var address
+            ),
+            userMessage: $"the cartridge declares no variable '{name}'"
+        );
 
         return checked((int)address);
     }
-
     /// <summary>The name and authored reset value of a variable the cartridge declares, by position — so the law
     /// names no game's symbol and carries no game's number.</summary>
     /// <param name="ordinal">Which declared variable to take.</param>
@@ -60,64 +77,113 @@ public sealed class MachineMemoryLawTests {
     private static (string Name, byte Initial) Variable(int ordinal) {
         var variables = Document().Variables;
 
-        Assert.True(condition: (variables.Length > ordinal), userMessage: $"the cartridge declares no variable at {ordinal}");
+        Assert.True(
+            condition: (variables.Length > ordinal),
+            userMessage: $"the cartridge declares no variable at {ordinal}"
+        );
 
         return (variables[ordinal].Name, checked((byte)variables[ordinal].Initial));
     }
     private static WorldDefinition WithMachineScreen(IReadOnlyList<WorldScreenMemory>? memory) {
         var document = Fixtures.BuildDocument();
-        var namedMemory = memory?.Select((binding, index) => new WorldMachineMemory(
+        var namedMemory = memory?.Select(selector: (binding, index) => new WorldMachineMemory(
             Name: $"binding{index}",
-            Direction: binding.Direction == WorldScreenMemoryDirection.Read ? WorldMachineMemoryDirection.Read : WorldMachineMemoryDirection.Write,
+            Direction: ((binding.Direction == WorldScreenMemoryDirection.Read)
+            ? WorldMachineMemoryDirection.Read
+            : WorldMachineMemoryDirection.Write),
             Space: "bus",
-            Format: binding.Width == 1 ? "u8" : "u16",
+            Format: ((binding.Width == 1)
+            ? "u8"
+            : "u16"),
             Row: binding.Row,
             Address: checked((ulong)binding.Address),
             Key: binding.Key,
-            Access: binding.Direction == WorldScreenMemoryDirection.Read ? "inspect" : "patch"
+            Access: ((binding.Direction == WorldScreenMemoryDirection.Read)
+            ? "inspect"
+            : "patch")
         )).ToArray();
 
         document = document.WithWorldState(rows: [
             .. document.State,
-            new WorldStateRow(Name: Name(value: "pipX"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
-            new WorldStateRow(Name: Name(value: "pipY"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
+            new WorldStateRow(
+                Name: Name(value: "pipX"),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 0
+                    )]
+            ),
+            new WorldStateRow(
+                Name: Name(value: "pipY"),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 0
+                    )]
+            ),
         ]);
 
         return document with {
-            MachinesRaw = [.. document.Machines, new WorldMachine("cabinet", CgbEngine,
+            MachinesRaw = [.. document.Machines, new WorldMachine(
+                "cabinet",
+                CgbEngine,
                 JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = CartridgePath() } }),
-                Memory: namedMemory)],
+                Memory: namedMemory
+            )],
             ScreensRaw = [
                 .. document.Screens,
                 new WorldScreen(
-                    Index: MachineScreen,
-                    Origin: new Vector3(x: 0f, y: 1f, z: 3f),
-                    Right: new Vector3(x: 1f, y: 0f, z: 0f),
-                    Up: new Vector3(x: 0f, y: 1f, z: 0f),
-                    HalfWidth: 0.3f,
-                    HalfHeight: 0.27f,
-                    HalfDepth: 0.03f,
-                    Round: 0f,
-                    Source: new WorldScreenSource.Machine("cabinet", "video"),
-                    Route: WorldScreenRoute.Passive,
-                    Memory: null
+                Index: MachineScreen,
+                Origin: new Vector3(
+                    x: 0f,
+                    y: 1f,
+                    z: 3f
                 ),
+                Right: new Vector3(
+                    x: 1f,
+                    y: 0f,
+                    z: 0f
+                ),
+                Up: new Vector3(
+                    x: 0f,
+                    y: 1f,
+                    z: 0f
+                ),
+                HalfWidth: 0.3f,
+                HalfHeight: 0.27f,
+                HalfDepth: 0.03f,
+                Round: 0f,
+                Source: new WorldScreenSource.Machine(
+                    Instance: "cabinet",
+                    Output: "video"
+                ),
+                Route: WorldScreenRoute.Passive,
+                Memory: null
+            ),
             ],
         };
     }
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Slot(WorldDefinition definition, string name) {
-        var row = WorldDefinitionRows.FindStateRow(rows: definition.State, name: name);
+        var row = WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: name
+        );
 
         Assert.NotNull(@object: row);
 
-        return Assert.Single(collection: (row!.Cells ?? []), predicate: static cell => (cell.Key == WorldStateRow.SlotKey)).Value;
+        return Assert.Single(
+            collection: (row!.Cells ?? []),
+            predicate: static cell => (cell.Key == WorldStateRow.SlotKey)
+        ).Value;
     }
 
     private readonly ITestOutputHelper m_output;
+
     public MachineMemoryLawTests(ITestOutputHelper output) {
         m_output = output;
     }
+
     [Fact]
     public void AReadBindingMirrorsTheByteTheCartridgeWrites() {
         // The mirrored byte is the variable's own authored reset value, read out of the document rather than
@@ -126,71 +192,190 @@ public sealed class MachineMemoryLawTests {
         var (readName, readInitial) = Variable(ordinal: 0);
         var xAddress = VariableAddress(name: readName);
         var document = WithMachineScreen(memory: [
-            new WorldScreenMemory(Address: xAddress, Width: 1, Row: "pipX", Key: null, Direction: WorldScreenMemoryDirection.Read),
+            new WorldScreenMemory(
+                Address: xAddress,
+                Direction: WorldScreenMemoryDirection.Read,
+                Key: null,
+                Row: "pipX",
+                Width: 1
+            ),
         ]);
-        using var fixture = Fixtures.FreshServer(definition: document, machineCatalog: TestHookInstaller.CreateMachineCatalog());
+        using var fixture = Fixtures.FreshServer(
+            definition: document,
+            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+        );
 
-        Assert.NotNull(fixture.Server.Machines.InstanceState("cabinet"));
+        Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "cabinet"));
 
         for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
         }
 
-        Assert.Equal(expected: (long)readInitial, actual: Slot(definition: fixture.Server.Definition, name: "pipX"));
+        Assert.Equal(
+            expected: ((long)readInitial),
+            actual: Slot(
+                definition: fixture.Server.Definition,
+                name: "pipX"
+            )
+        );
 
         // The control: peeking the same address directly agrees with the mirror — the binding did not invent a value.
-        var direct = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)xAddress), 1));
-        Assert.Equal(MachineAccessStatus.Available, direct.Status);
-        Assert.Equal(expected: readInitial, actual: (byte)direct.Value);
+        var direct = fixture.Server.Machines.Inspect(
+            "cabinet",
+            new(
+                Address: checked((ulong)xAddress),
+                Space: "bus",
+                Width: 1
+            )
+        );
+
+        Assert.Equal(
+            MachineAccessStatus.Available,
+            direct.Status
+        );
+        Assert.Equal(
+            expected: readInitial,
+            actual: ((byte)direct.Value)
+        );
     }
     [Fact]
     public void AWriteBindingsPokeIsVisibleToTheCartridgeOnItsNextFrame() {
         var (writeName, writeInitial) = Variable(ordinal: 1);
         var yAddress = VariableAddress(name: writeName);
         var document = WithMachineScreen(memory: [
-            new WorldScreenMemory(Address: yAddress, Width: 1, Row: "pipY", Key: null, Direction: WorldScreenMemoryDirection.Write),
+            new WorldScreenMemory(
+                Address: yAddress,
+                Direction: WorldScreenMemoryDirection.Write,
+                Key: null,
+                Row: "pipY",
+                Width: 1
+            ),
         ]);
-        using var fixture = Fixtures.FreshServer(definition: document, machineCatalog: TestHookInstaller.CreateMachineCatalog());
+        using var fixture = Fixtures.FreshServer(
+            definition: document,
+            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+        );
 
-        Assert.NotNull(fixture.Server.Machines.InstanceState("cabinet"));
+        Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "cabinet"));
 
         for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
         }
 
         // Before the poke the variable still carries its own boot-initialized value, never the console-side row.
-        var beforeResult = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)yAddress), 1));
-        Assert.Equal(MachineAccessStatus.Available, beforeResult.Status);
-        Assert.Equal(expected: writeInitial, actual: (byte)beforeResult.Value);
+        var beforeResult = fixture.Server.Machines.Inspect(
+            "cabinet",
+            new(
+                Address: checked((ulong)yAddress),
+                Space: "bus",
+                Width: 1
+            )
+        );
+
+        Assert.Equal(
+            MachineAccessStatus.Available,
+            beforeResult.Status
+        );
+        Assert.Equal(
+            expected: writeInitial,
+            actual: ((byte)beforeResult.Value)
+        );
 
         // wall-north/wall-south clamp y to 8..128, so 50 rides through untouched by the cartridge's own rules.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "pipY", Key: WorldStateRow.SlotKey.Value, Value: 50, Kind: WorldDocumentWriteKind.Set));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: WorldPrincipal.Console,
+            Row: "pipY",
+            Key: WorldStateRow.SlotKey.Value,
+            Value: 50,
+            Kind: WorldDocumentWriteKind.Set
+        ));
         fixture.Step();
 
-        var afterResult = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)yAddress), 1));
-        Assert.Equal(MachineAccessStatus.Available, afterResult.Status);
-        Assert.Equal(expected: (byte)50, actual: (byte)afterResult.Value);
+        var afterResult = fixture.Server.Machines.Inspect(
+            "cabinet",
+            new(
+                Address: checked((ulong)yAddress),
+                Space: "bus",
+                Width: 1
+            )
+        );
+
+        Assert.Equal(
+            MachineAccessStatus.Available,
+            afterResult.Status
+        );
+        Assert.Equal(
+            expected: ((byte)50),
+            actual: ((byte)afterResult.Value)
+        );
 
         // A second quiet tick: the poke already landed, so the byte holds — nothing re-pokes it away.
         fixture.Step();
 
-        var stillResult = fixture.Server.Machines.Inspect("cabinet", new("bus", checked((ulong)yAddress), 1));
-        Assert.Equal(MachineAccessStatus.Available, stillResult.Status);
-        Assert.Equal(expected: (byte)50, actual: (byte)stillResult.Value);
+        var stillResult = fixture.Server.Machines.Inspect(
+            "cabinet",
+            new(
+                Address: checked((ulong)yAddress),
+                Space: "bus",
+                Width: 1
+            )
+        );
+
+        Assert.Equal(
+            MachineAccessStatus.Available,
+            stillResult.Status
+        );
+        Assert.Equal(
+            expected: ((byte)50),
+            actual: ((byte)stillResult.Value)
+        );
     }
     [Fact]
     public void AnAddressOutsideTheEnginesMemoryRefusesByName() {
         var denied = WithMachineScreen(memory: [
-            new WorldScreenMemory(Address: 0xFFFF, Width: 2, Row: "pipX", Key: null, Direction: WorldScreenMemoryDirection.Read),
+            new WorldScreenMemory(
+                Address: 0xFFFF,
+                Direction: WorldScreenMemoryDirection.Read,
+                Key: null,
+                Row: "pipX",
+                Width: 2
+            ),
         ]);
         var admitted = WithMachineScreen(memory: [
-            new WorldScreenMemory(Address: 0xFFFE, Width: 2, Row: "pipX", Key: null, Direction: WorldScreenMemoryDirection.Read),
+            new WorldScreenMemory(
+                Address: 0xFFFE,
+                Direction: WorldScreenMemoryDirection.Read,
+                Key: null,
+                Row: "pipX",
+                Width: 2
+            ),
         ]);
 
-        using var host = new WorldMachineHost([], TestHookInstaller.CreateMachineCatalog());
-        Assert.False(condition: host.TryPrepare(null, denied, out _, out var deniedReason));
-        Assert.Contains(expectedSubstring: "outside space", actualString: deniedReason, comparisonType: StringComparison.Ordinal);
-        Assert.True(condition: host.TryPrepare(null, admitted, out var plan, out var controlReason), userMessage: controlReason);
+        using var host = new WorldMachineHost(
+            [],
+            TestHookInstaller.CreateMachineCatalog()
+        );
+
+        Assert.False(condition: host.TryPrepare(
+            candidate: denied,
+            current: null,
+            plan: out _,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "outside space"
+        );
+        Assert.True(
+            condition: host.TryPrepare(
+                candidate: admitted,
+                current: null,
+                plan: out var plan,
+                reason: out var controlReason
+            ),
+            userMessage: controlReason
+        );
         plan!.Dispose();
     }
     // A Read binding must peek every tick to know whether the byte moved at all — that peek's own marshaled round
@@ -203,17 +388,36 @@ public sealed class MachineMemoryLawTests {
     public void AQuietMachineAllocatesNothing() {
         var yAddress = VariableAddress(name: Variable(ordinal: 1).Name);
         var document = WithMachineScreen(memory: [
-            new WorldScreenMemory(Address: yAddress, Width: 1, Row: "pipY", Key: null, Direction: WorldScreenMemoryDirection.Write),
+            new WorldScreenMemory(
+                Address: yAddress,
+                Direction: WorldScreenMemoryDirection.Write,
+                Key: null,
+                Row: "pipY",
+                Width: 1
+            ),
         ]);
 
-        var quiet = MeasureWrite(definition: document, changingEachTick: false);
-        var changing = MeasureWrite(definition: document, changingEachTick: true);
+        var quiet = MeasureWrite(
+            changingEachTick: false,
+            definition: document
+        );
+        var changing = MeasureWrite(
+            changingEachTick: true,
+            definition: document
+        );
 
-        m_output.WriteLine($"machine memory write: quiet median {quiet:N0} bytes/tick, changing median {changing:N0} bytes/tick");
-        Assert.True(condition: (quiet < changing), userMessage: $"a quiet Write binding allocated {quiet:N0} bytes/tick, not fewer than a changing one's {changing:N0}");
+        m_output.WriteLine(message: $"machine memory write: quiet median {quiet:N0} bytes/tick, changing median {changing:N0} bytes/tick");
+        Assert.True(
+            condition: (quiet < changing),
+            userMessage: $"a quiet Write binding allocated {quiet:N0} bytes/tick, not fewer than a changing one's {changing:N0}"
+        );
     }
+
     private static long MeasureWrite(WorldDefinition definition, bool changingEachTick) {
-        using var fixture = Fixtures.FreshServer(definition: definition, machineCatalog: TestHookInstaller.CreateMachineCatalog());
+        using var fixture = Fixtures.FreshServer(
+            definition: definition,
+            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+        );
 
         for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
@@ -221,14 +425,26 @@ public sealed class MachineMemoryLawTests {
 
         // One committed poke first, so the QUIET run's memo already holds this value — its every sampled tick is
         // the fast "unchanged" path, never the one-time first-poke every binding pays once.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "pipY", Key: WorldStateRow.SlotKey.Value, Value: 40, Kind: WorldDocumentWriteKind.Set));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: WorldPrincipal.Console,
+            Row: "pipY",
+            Key: WorldStateRow.SlotKey.Value,
+            Value: 40,
+            Kind: WorldDocumentWriteKind.Set
+        ));
         fixture.Step();
 
         var samples = new long[60];
 
         for (var tick = 0; (tick < samples.Length); tick++) {
             if (changingEachTick) {
-                fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "pipY", Key: WorldStateRow.SlotKey.Value, Value: (40 + (tick % 20)), Kind: WorldDocumentWriteKind.Set));
+                fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+                    Principal: WorldPrincipal.Console,
+                    Row: "pipY",
+                    Key: WorldStateRow.SlotKey.Value,
+                    Value: (40 + (tick % 20)),
+                    Kind: WorldDocumentWriteKind.Set
+                ));
             }
 
             var before = GC.GetAllocatedBytesForCurrentThread();

@@ -20,12 +20,24 @@ public interface IWorldTransferForwarder {
     bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason);
     /// <summary>Forwards a typed submission while preserving its caller operation id.</summary>
     bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
-        if (operationId == Guid.Empty && payload is WorldSubmissionPayload.Mutation) {
-            result = new WorldSubmissionResult.Refusal("world.mutation.operation_id_missing", "mutation operation id is required");
+        if (
+            (operationId == Guid.Empty) &&
+            (payload is WorldSubmissionPayload.Mutation)
+        ) {
+            result = new WorldSubmissionResult.Refusal(
+                Code: "world.mutation.operation_id_missing",
+                Detail: "mutation operation id is required"
+            );
             reason = "mutation operation id is required";
             return false;
         }
-        return TryForwardSubmission(source, in mobility, payload, out result, out reason);
+        return TryForwardSubmission(
+            mobility: in mobility,
+            payload: payload,
+            reason: out reason,
+            result: out result,
+            source: source
+        );
     }
     /// <summary>Resolves the final observable authority epoch behind a departed traveler incarnation.</summary>
     bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription route, out string reason);

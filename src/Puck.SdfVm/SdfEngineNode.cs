@@ -53,6 +53,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     private const ulong TimingReportInterval = 60;
 
     private readonly int m_brickPoolVoxelCapacity;
+
     // Not readonly: RegisterChild swaps the shared empty singleton for a private map on the first post-construction
     // registration (see the constructor's copy remark).
     private Dictionary<string, IRenderNode> m_children;
@@ -60,6 +61,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     // resolved against m_children, and handed to the engine (SetChildMask) before its SetChildSource calls — the one
     // answer ProduceChildren/StepChildren/the SetChildSource loop all share for "is this slot a child this frame".
     private uint m_childSlotMask;
+
     private readonly Func<IGpuDeviceContext, IGpuStorageImage>? m_createStorageImage;
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
@@ -72,12 +74,14 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
     /// the <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
     public int LiveProgramWords { get; private set; }
+
     /// <summary>Copies the currently uploaded packed program for inspection, or returns an empty array before
     /// the engine is initialized. The caller owns the copy; editing it cannot change the renderer.</summary>
     /// <returns>The live program's 32-bit words, excluding reserved capacity and per-frame transform/grid buffers.</returns>
     /// <remarks>Call on the render pump thread, as with the live console diagnostics. This performs a CPU copy,
     /// not a GPU readback. The packed format follows <see cref="SdfProgram"/> and is not a durable asset format.</remarks>
-    public uint[] CopyLiveProgramWords() => m_engine?.CopyLiveProgramWords() ?? [];
+    public uint[] CopyLiveProgramWords() => (m_engine?.CopyLiveProgramWords() ?? []);
+
     /// <summary>Gets the last uploaded program's instance count, or 0 before the first upload.</summary>
     public int LiveProgramInstances { get; private set; }
     /// <summary>Gets the bounded volume count in the most recently submitted frame, before per-ray rejection.</summary>
@@ -88,9 +92,11 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
     /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>
     public SdfStepScaleBinder? LiveProgramStepScaleBinder { get; private set; }
+
     /// <summary>Gets the last uploaded program's non-unit field-scope clamps, or an empty list before upload.
     /// These candidate-local bounds remain active when <see cref="LiveProgramStepScale"/> is one.</summary>
     public IReadOnlyList<SdfFieldScopeClamp> LiveProgramFieldScopeClamps { get; private set; } = [];
+
     /// <summary>Gets whether <paramref name="name"/> is registered in this node's <c>children</c> map (see the
     /// constructor) — the read-back a caller (e.g. a <c>world.view.state</c> echo) uses to tell an unresolved child
     /// binding apart from a live one, since a slot naming an unregistered child falls back to the ordinary SDF
@@ -121,17 +127,24 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             key: name,
             value: node
         )) {
-            throw new ArgumentException(message: $"A child named '{name}' is already registered.", paramName: nameof(name));
+            throw new ArgumentException(
+                message: $"A child named '{name}' is already registered.",
+                paramName: nameof(name)
+            );
         }
     }
     /// <summary>Removes a named child after retiring submissions that may sample its output. Pump-thread only.</summary>
     /// <param name="name">The child to remove; an absent name is a no-op.</param>
     public void RemoveChild(string name) {
-        if (!m_children.TryGetValue(name, out var child)) { return; }
+        if (!m_children.TryGetValue(
+            key: name,
+            value: out var child
+        )) { return; }
         m_deviceContext.TryWaitIdle();
-        m_children.Remove(name);
+        m_children.Remove(key: name);
         child.Dispose();
     }
+
     /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
     public int ProgramWordCapacity => m_programWordCapacity;
 
@@ -191,11 +204,16 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         public static CpuPhaseTimer Start(bool enabled) {
             return new CpuPhaseTimer(
                 enabled: enabled,
-                startTicks: (enabled ? Stopwatch.GetTimestamp() : 0L)
+                startTicks: (enabled
+                ? Stopwatch.GetTimestamp()
+                : 0L)
             );
         }
         public long Stop() {
-            return (m_enabled ? (Stopwatch.GetTimestamp() - m_startTicks) : 0L);
+            return (m_enabled
+                ? (Stopwatch.GetTimestamp() - m_startTicks)
+                : 0L
+            );
         }
     }
 
@@ -211,12 +229,12 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         SurfaceId: SurfaceId.New()
     );
     private Surface[] m_childSurfaces = [];
-    private readonly Dictionary<IRenderNode, Surface> m_producedChildren = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<IRenderNode, Surface> m_producedChildren = new(comparer: ReferenceEqualityComparer.Instance);
 
     private int m_pendingScreenSourceFrameCount;
 
     private ISteppableRenderNode[] m_steppableChildren = [];
-    private readonly HashSet<IRenderNode> m_preparedChildren = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<IRenderNode> m_preparedChildren = new(comparer: ReferenceEqualityComparer.Instance);
 
     private static SdfScreenSourceFrame[][] BuildScreenSourceFrameRing(int capacity) {
         var ring = new SdfScreenSourceFrame[SdfWorldEngine.FrameRingSize][];
@@ -334,7 +352,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             (slot < frame.Views.Count) &&
             (0 != (m_childSlotMask & (1u << slot))) &&
             (frame.Views[slot].Child is { } name) &&
-            m_children.TryGetValue(key: name, value: out child!)
+            m_children.TryGetValue(
+            key: name,
+            value: out child!
+        )
         );
     }
     // Render each hosted child viewport's surface at its slot's pixel rect. Children resolve the same shared device
@@ -370,7 +391,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 continue;
             }
 
-            if (m_producedChildren.TryGetValue(child, out var produced)) {
+            if (m_producedChildren.TryGetValue(
+                key: child,
+                value: out var produced
+            )) {
                 m_childSurfaces[slot] = produced;
                 continue;
             }
@@ -387,7 +411,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 val2: ((uint)(region.Width * m_width))
             ),
             });
-            m_producedChildren.Add(child, m_childSurfaces[slot]);
+            m_producedChildren.Add(
+                key: child,
+                value: m_childSurfaces[slot]
+            );
         }
     }
     // A world load may replace (or remove) its immutable atlas without rebuilding this node. Polling the reference is
@@ -484,6 +511,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     // just runs inline — no point paying the fork.
     private void StepChildren(in FrameContext context, SdfFrame frame) {
         var ready = 0;
+
         m_preparedChildren.Clear();
 
         // The SAME eligibility as the produce loop (TryChildForSlot): a child whose slot is not this frame's child
@@ -499,7 +527,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             }
 
             if (
-                (child is ISteppableRenderNode steppable) && m_preparedChildren.Add(child) &&
+                (child is ISteppableRenderNode steppable) &&
+                m_preparedChildren.Add(item: child) &&
                 steppable.PrepareStep(context: in context)
             ) {
                 if (m_steppableChildren.Length < m_children.Count) {
@@ -532,9 +561,16 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             retained[index] = default;
         }
 
-        m_pendingScreenSourceFrames.AsSpan(length: m_pendingScreenSourceFrameCount, start: 0).CopyTo(destination: retained);
+        m_pendingScreenSourceFrames.AsSpan(
+            length: m_pendingScreenSourceFrameCount,
+            start: 0
+        ).CopyTo(destination: retained);
         m_retainedScreenSourceFrameCounts[frameSlot] = m_pendingScreenSourceFrameCount;
-        Array.Clear(array: m_pendingScreenSourceFrames, index: 0, length: m_pendingScreenSourceFrameCount);
+        Array.Clear(
+            array: m_pendingScreenSourceFrames,
+            index: 0,
+            length: m_pendingScreenSourceFrameCount
+        );
         m_pendingScreenSourceFrameCount = 0;
     }
     private void RetirePendingScreenSourceFrames() {
@@ -653,12 +689,12 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         );
         // Empty is a valid result while an asynchronous child is waiting for its first successful compile.
         // Keep that slot on the initialized SDF path until it publishes an image; never bind a null GPU view.
-        for (var slot = 0; slot < frame.Views.Count; slot++) {
+        for (var slot = 0; (slot < frame.Views.Count); slot++) {
             if ((m_childSlotMask & (1u << slot)) == 0) { continue; }
             if (m_childSurfaces[slot].IsEmpty) {
                 m_childSlotMask &= ~(1u << slot);
             } else if (!m_childSurfaces[slot].IsSameDeviceImage) {
-                throw new InvalidOperationException($"Child viewport {slot} must publish a same-device image surface.");
+                throw new InvalidOperationException(message: $"Child viewport {slot} must publish a same-device image surface.");
             }
         }
         EnsureEngine(
@@ -864,7 +900,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
         m_debugCapture.Arm(
             pendingPath: PendingCapturePath,
             request: request
@@ -994,7 +1033,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         // is observably identical. A null map shares the empty singleton.
         m_children = ((children is null)
             ? EmptyChildren
-            : new Dictionary<string, IRenderNode>(collection: children, comparer: StringComparer.Ordinal)
+            : new Dictionary<string, IRenderNode>(
+                collection: children,
+                comparer: StringComparer.Ordinal
+            )
         );
         m_createStorageImage = createStorageImage;
         m_dynamicTransformCapacity = dynamicTransformCapacity;

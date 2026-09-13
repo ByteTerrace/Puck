@@ -52,182 +52,35 @@ public static class StateHoisting {
     /// joint" — matches the 4-decimal authoring rounding <see cref="CreationBuilder.Round4(Vector3)"/> applies.</summary>
     public const float JointEpsilonSquared = 1e-7f;
 
-    /// <summary>Runs the hoisting pass over <paramref name="builder"/>'s built document.</summary>
-    public static Result Apply(CreationBuilder builder, Options options) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-        ArgumentNullException.ThrowIfNull(argument: options);
+    private static JsonObject BuildTextRow(string name, IReadOnlyDictionary<string, string> cells) {
+        var cellArray = new JsonArray();
 
-        var document = builder.Build();
-        var shapes = (document.Shapes ?? []);
-        var rotationUsage = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-
-        foreach (var shape in shapes) {
-            if (builder.TryRotationName(
-                name: out var name,
-                value: shape.Rotation.Value
-            )) {
-                rotationUsage[name] = (rotationUsage.GetValueOrDefault(key: name) + 1);
-            }
+        foreach (var (key, value) in cells) {
+            cellArray.Add(value: new JsonObject { ["key"] = key, ["value"] = value });
         }
 
-        var hoistedRotations = builder.NamedRotations
-            .Where(predicate: entry => (options.HoistAllRotations || (rotationUsage.GetValueOrDefault(key: entry.Name) >= 2)))
-            .ToList();
-        var hoistedRotationNames = hoistedRotations.Select(selector: entry => entry.Name).ToHashSet(comparer: StringComparer.Ordinal);
-        var scaleGroups = GroupScales(shapes: shapes);
-        var scaleNameByValue = new Dictionary<Vector3, string>();
-
-        foreach (var group in scaleGroups) {
-            scaleNameByValue[group.Value] = group.Name;
-        }
-
-        var hoistedShapes = new List<ShapeDocument>(capacity: shapes.Count);
-
-        foreach (var shape in shapes) {
-            var rotation = shape.Rotation;
-
-            if (builder.TryRotationName(
-                name: out var rotationName,
-                value: rotation.Value
-            ) && hoistedRotationNames.Contains(item: rotationName)) {
-                rotation = DocumentReferences.Quaternion(reference: $"state.{options.RotationsRow}.{rotationName}");
-            }
-
-            var scale = shape.Scale;
-
-            if (scaleNameByValue.TryGetValue(
-                key: scale.Value,
-                value: out var scaleName
-            )) {
-                scale = DocumentReferences.Vector3(reference: $"state.{options.ScalesRow}.{scaleName}");
-            }
-
-            hoistedShapes.Add(item: shape with {
-                Rotation = rotation,
-                Scale = scale,
-                Slides = HoistSlides(
-                    options: options,
-                    shapeName: (shape.Name?.Value ?? string.Empty),
-                    slides: shape.Slides
-                ),
-                Swings = HoistSwings(
-                    options: options,
-                    shapeName: (shape.Name?.Value ?? string.Empty),
-                    swings: shape.Swings
-                ),
-            });
-        }
-
-        var hoisted = (document with { Shapes = hoistedShapes });
-        var rows = new List<JsonObject> {
-            BuildTextRow(
-                cells: hoistedRotations.ToDictionary(
-                    keySelector: static entry => entry.Name,
-                    elementSelector: static entry => VectorText(new[] { entry.Value.X, entry.Value.Y, entry.Value.Z, entry.Value.W })
-                ),
-                name: options.RotationsRow
-            ),
-        };
-
-        if (scaleGroups.Count > 0) {
-            rows.Add(item: BuildTextRow(
-                cells: scaleGroups.ToDictionary(
-                    keySelector: static group => group.Name,
-                    elementSelector: static group => VectorText(new[] { group.Value.X, group.Value.Y, group.Value.Z })
-                ),
-                name: options.ScalesRow
-            ));
-        }
-
-        return new Result(
-            Document: hoisted,
-            StateRows: rows
-        );
+        return new JsonObject { ["cells"] = cellArray, ["kind"] = "Text", ["name"] = name };
     }
+    private static string DeriveScaleBaseName(string shapeName) {
+        var end = shapeName.Length;
 
-    private static IReadOnlyList<ShapeSwingDocument>? HoistSwings(IReadOnlyList<ShapeSwingDocument>? swings, string shapeName, Options options) {
-        if (swings is not { Count: > 0 }) {
-            return swings;
+        while (
+            (end > 0) &&
+            char.IsAsciiDigit(c: shapeName[(end - 1)])
+        ) {
+            end--;
         }
 
-        var result = new List<ShapeSwingDocument>(capacity: swings.Count);
-
-        foreach (var swing in swings) {
-            var pivot = swing.Pivot;
-
-            if (
-                (pivot.Reference is null) &&
-                TryFindJoint(
-                    joint: out var joint,
-                    joints: options.Joints,
-                    position: pivot.Value
-                )
-            ) {
-                pivot = DocumentReferences.Vector3(reference: $"state.{options.JointsRow}.{joint}");
-            }
-
-            var amplitude = HoistAmplitude(
-                amplitude: swing.Amplitude,
-                driver: swing.Driver,
-                options: options,
-                shapeName: shapeName
-            );
-
-            result.Add(item: swing with { Amplitude = amplitude, Pivot = pivot });
-        }
-
-        return result;
-    }
-    private static IReadOnlyList<ShapeSlideDocument>? HoistSlides(IReadOnlyList<ShapeSlideDocument>? slides, string shapeName, Options options) {
-        if (slides is not { Count: > 0 }) {
-            return slides;
-        }
-
-        var result = new List<ShapeSlideDocument>(capacity: slides.Count);
-
-        foreach (var slide in slides) {
-            result.Add(item: (slide with {
-                Amplitude = HoistAmplitude(
-                    amplitude: slide.Amplitude,
-                    driver: slide.Driver,
-                    options: options,
-                    shapeName: shapeName
-                ),
-            }));
-        }
-
-        return result;
-    }
-    private static DocumentScalar HoistAmplitude(DocumentScalar amplitude, string driver, string shapeName, Options options) {
-        if (amplitude.Reference is not null) {
-            return amplitude;
-        }
+        var trimmed = shapeName[..end];
 
         if (
-            (options.TuningCellSelector(driver, shapeName) is not { } cell) ||
-            !options.Tuning.TryGetValue(
-                key: cell,
-                value: out var tuned
-            ) ||
-            (MathF.Abs(x: (amplitude.Value - tuned)) >= AmplitudeEpsilon)
+            (trimmed.Length > 1) &&
+            (trimmed[^1] is ('L' or 'R'))
         ) {
-            return amplitude;
+            trimmed = trimmed[..^1];
         }
 
-        return DocumentReferences.Scalar(reference: $"state.{options.TuningRow}.{cell}");
-    }
-    private static bool TryFindJoint(IReadOnlyList<SculptJoint> joints, Vector3 position, out string joint) {
-        foreach (var candidate in joints) {
-            if (Vector3.DistanceSquared(value1: candidate.Position, value2: position) <= JointEpsilonSquared) {
-                joint = candidate.Name;
-
-                return true;
-            }
-        }
-
-        joint = string.Empty;
-
-        return false;
+        return trimmed;
     }
     // Groups shapes by their (already 4-decimal-rounded) scale, in first-seen order, keeping only groups with two
     // or more members — mirroring the Python post-pass's usage threshold. A group's name derives from its FIRST
@@ -273,29 +126,194 @@ public static class StateHoisting {
 
         return groups;
     }
-    private static string DeriveScaleBaseName(string shapeName) {
-        var end = shapeName.Length;
-
-        while ((end > 0) && char.IsAsciiDigit(c: shapeName[end - 1])) {
-            end--;
+    private static DocumentScalar HoistAmplitude(DocumentScalar amplitude, string driver, string shapeName, Options options) {
+        if (amplitude.Reference is not null) {
+            return amplitude;
         }
 
-        var trimmed = shapeName[..end];
-
-        if ((trimmed.Length > 1) && (trimmed[^1] is ('L' or 'R'))) {
-            trimmed = trimmed[..^1];
+        if (
+            (options.TuningCellSelector(
+            driver,
+            shapeName
+        ) is not { } cell) ||
+            !options.Tuning.TryGetValue(
+            key: cell,
+            value: out var tuned
+        ) ||
+            (MathF.Abs(x: (amplitude.Value - tuned)) >= AmplitudeEpsilon)
+        ) {
+            return amplitude;
         }
 
-        return trimmed;
+        return DocumentReferences.Scalar(reference: $"state.{options.TuningRow}.{cell}");
     }
-    private static JsonObject BuildTextRow(string name, IReadOnlyDictionary<string, string> cells) {
-        var cellArray = new JsonArray();
-
-        foreach (var (key, value) in cells) {
-            cellArray.Add(value: new JsonObject { ["key"] = key, ["value"] = value });
+    private static IReadOnlyList<ShapeSlideDocument>? HoistSlides(IReadOnlyList<ShapeSlideDocument>? slides, string shapeName, Options options) {
+        if (slides is not { Count: > 0 }) {
+            return slides;
         }
 
-        return new JsonObject { ["cells"] = cellArray, ["kind"] = "Text", ["name"] = name };
+        var result = new List<ShapeSlideDocument>(capacity: slides.Count);
+
+        foreach (var slide in slides) {
+            result.Add(item: (slide with {
+                Amplitude = HoistAmplitude(
+                amplitude: slide.Amplitude,
+                driver: slide.Driver,
+                options: options,
+                shapeName: shapeName
+            ),
+            }));
+        }
+
+        return result;
     }
-    private static string VectorText(IReadOnlyList<float> components) => $"[{string.Join(separator: ", ", values: components.Select(selector: static c => c.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)))}]";
+    private static IReadOnlyList<ShapeSwingDocument>? HoistSwings(IReadOnlyList<ShapeSwingDocument>? swings, string shapeName, Options options) {
+        if (swings is not { Count: > 0 }) {
+            return swings;
+        }
+
+        var result = new List<ShapeSwingDocument>(capacity: swings.Count);
+
+        foreach (var swing in swings) {
+            var pivot = swing.Pivot;
+
+            if (
+                (pivot.Reference is null) &&
+                TryFindJoint(
+                joint: out var joint,
+                joints: options.Joints,
+                position: pivot.Value
+            )
+            ) {
+                pivot = DocumentReferences.Vector3(reference: $"state.{options.JointsRow}.{joint}");
+            }
+
+            var amplitude = HoistAmplitude(
+                amplitude: swing.Amplitude,
+                driver: swing.Driver,
+                options: options,
+                shapeName: shapeName
+            );
+
+            result.Add(item: swing with { Amplitude = amplitude, Pivot = pivot });
+        }
+
+        return result;
+    }
+    private static bool TryFindJoint(IReadOnlyList<SculptJoint> joints, Vector3 position, out string joint) {
+        foreach (var candidate in joints) {
+            if (Vector3.DistanceSquared(
+                value1: candidate.Position,
+                value2: position
+            ) <= JointEpsilonSquared) {
+                joint = candidate.Name;
+
+                return true;
+            }
+        }
+
+        joint = string.Empty;
+
+        return false;
+    }
+    private static string VectorText(IReadOnlyList<float> components) => $"[{string.Join(
+        separator: ", ",
+        values: components.Select(selector: static c => c.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))
+    )}]";
+
+    /// <summary>Runs the hoisting pass over <paramref name="builder"/>'s built document.</summary>
+    public static Result Apply(CreationBuilder builder, Options options) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+        ArgumentNullException.ThrowIfNull(argument: options);
+
+        var document = builder.Build();
+        var shapes = (document.Shapes ?? []);
+        var rotationUsage = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        foreach (var shape in shapes) {
+            if (builder.TryRotationName(
+                name: out var name,
+                value: shape.Rotation.Value
+            )) {
+                rotationUsage[name] = (rotationUsage.GetValueOrDefault(key: name) + 1);
+            }
+        }
+
+        var hoistedRotations = builder.NamedRotations
+            .Where(predicate: entry => (options.HoistAllRotations || (rotationUsage.GetValueOrDefault(key: entry.Name) >= 2)))
+            .ToList();
+        var hoistedRotationNames = hoistedRotations.Select(selector: entry => entry.Name).ToHashSet(comparer: StringComparer.Ordinal);
+        var scaleGroups = GroupScales(shapes: shapes);
+        var scaleNameByValue = new Dictionary<Vector3, string>();
+
+        foreach (var group in scaleGroups) {
+            scaleNameByValue[group.Value] = group.Name;
+        }
+
+        var hoistedShapes = new List<ShapeDocument>(capacity: shapes.Count);
+
+        foreach (var shape in shapes) {
+            var rotation = shape.Rotation;
+
+            if (
+                builder.TryRotationName(
+                name: out var rotationName,
+                value: rotation.Value
+            ) &&
+                hoistedRotationNames.Contains(item: rotationName)
+            ) {
+                rotation = DocumentReferences.Quaternion(reference: $"state.{options.RotationsRow}.{rotationName}");
+            }
+
+            var scale = shape.Scale;
+
+            if (scaleNameByValue.TryGetValue(
+                key: scale.Value,
+                value: out var scaleName
+            )) {
+                scale = DocumentReferences.Vector3(reference: $"state.{options.ScalesRow}.{scaleName}");
+            }
+
+            hoistedShapes.Add(item: shape with {
+                Rotation = rotation,
+                Scale = scale,
+                Slides = HoistSlides(
+                options: options,
+                shapeName: (shape.Name?.Value ?? string.Empty),
+                slides: shape.Slides
+            ),
+                Swings = HoistSwings(
+                options: options,
+                shapeName: (shape.Name?.Value ?? string.Empty),
+                swings: shape.Swings
+            ),
+            });
+        }
+
+        var hoisted = (document with { Shapes = hoistedShapes });
+        var rows = new List<JsonObject> {
+            BuildTextRow(
+            cells: hoistedRotations.ToDictionary(
+                keySelector: static entry => entry.Name,
+                elementSelector: static entry => VectorText(components: new[] { entry.Value.X, entry.Value.Y, entry.Value.Z, entry.Value.W })
+            ),
+            name: options.RotationsRow
+        ),
+        };
+
+        if (scaleGroups.Count > 0) {
+            rows.Add(item: BuildTextRow(
+                cells: scaleGroups.ToDictionary(
+                    keySelector: static group => group.Name,
+                    elementSelector: static group => VectorText(components: new[] { group.Value.X, group.Value.Y, group.Value.Z })
+                ),
+                name: options.ScalesRow
+            ));
+        }
+
+        return new Result(
+            Document: hoisted,
+            StateRows: rows
+        );
+    }
 }

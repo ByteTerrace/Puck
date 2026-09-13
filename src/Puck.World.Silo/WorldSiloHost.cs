@@ -11,7 +11,6 @@ namespace Puck.World.Silo;
 
 /// <summary>Result of the explicit managed group publication barrier.</summary>
 public enum WorldReleaseAdmissionPublication { Opened, CandidatePrivate, Refused }
-
 /// <summary>
 /// The silo's own <see cref="IWorldAuthorityHost"/> — one boot-free <see cref="WorldInstanceHost"/>, one activation
 /// mailbox drained at the tick thread's master boundary, and the per-row bookkeeping (federation identity, adjacency
@@ -24,33 +23,29 @@ public enum WorldReleaseAdmissionPublication { Opened, CandidatePrivate, Refused
 public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver {
     private sealed class RowBookkeeping {
         public required WorldAdjacencyFields Adjacencies { get; init; }
-        public required WorldConsoleWaitGate Gate { get; init; }
         public required WorldAuthorityFence Fence { get; init; }
+        public required WorldConsoleWaitGate Gate { get; init; }
+        public required bool Pinned { get; init; }
+
         public long PublishedJournalSequence = -1;
-        public bool PersistenceBlocked;
-        public bool Released;
         public bool Initializing = true;
-
-        public int CheckpointDeferredCount;
-
         // All checkpoint and journal publications share this queue. A snapshot is enqueued at capture time,
         // before later mutations, so its coverage watermark can never include a mutation absent from its bytes.
         // Only the pump replaces the tail; continuations update PublishedJournalSequence in queue order.
         public Task JournalTail = Task.CompletedTask;
-
-        public int PendingJournalAppends;
-        public long CheckpointTimestamp;
-        public long JournalTimestamp;
-        public bool JournalFailed;
-        public ulong JournalFailureTick;
-
         public string LastCheckpointOutcome = "never captured";
         public string LastJournalOutcome = "none yet";
         public long LastCheckpointOrdinal = -1;
 
+        public int CheckpointDeferredCount;
+        public long CheckpointTimestamp;
+        public bool JournalFailed;
+        public ulong JournalFailureTick;
+        public long JournalTimestamp;
         public ulong LastCheckpointTick;
-
-        public required bool Pinned { get; init; }
+        public int PendingJournalAppends;
+        public bool PersistenceBlocked;
+        public bool Released;
     }
 
     private readonly IObjectBlobStore m_blobStore;
@@ -73,14 +68,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly IWorldAuthorityStore m_store;
     private readonly WorldReleaseGroupStore? m_releaseGroupStore;
     private readonly WorldSiloReleaseManagement? m_releaseManagement;
+
     private int m_releaseAdmissionOpen;
     private Guid m_publishedAdmissionClaim;
-
     private ulong m_masterElapsedEngineTicks;
     private int m_draining;
 
     private readonly Lock m_drainLock = new();
-    private readonly SemaphoreSlim m_activationGate = new(1, 1);
+    private readonly SemaphoreSlim m_activationGate = new(
+        initialCount: 1,
+        maxCount: 1
+    );
 
     private Task? m_drainTask;
 
@@ -88,6 +86,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly List<Task> m_persistenceOperations = [];
 
     private bool m_ready;
+
     private readonly Func<WorldSiloExtension, Puck.Networking.IAuthenticator, Puck.Networking.IAuthenticator>? m_authentication;
 
     /// <summary>Initializes the silo host over a validated document and its resolved blob store.</summary>
@@ -109,7 +108,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
         m_definition = definition;
         m_machineCatalog = machineCatalog;
-        m_contentAdmissionPolicy = contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(MachineAssetAdmission.Allow);
+        m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
         m_catalogFingerprint = machineCatalog.CompositionFingerprint;
         m_authentication = authentication;
         m_blobStore = blobStore;
@@ -120,9 +119,14 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             target: m_storageTarget
         );
         m_releaseManagement = definition.Release;
-        m_releaseGroupStore = (m_releaseManagement is { } managed)
-            ? new WorldReleaseGroupStore(blobStore, m_storageTarget, managed.Owner)
-            : null;
+        m_releaseGroupStore = ((m_releaseManagement is { } managed)
+            ? new WorldReleaseGroupStore(
+                blobStore,
+                m_storageTarget,
+                managed.Owner
+            )
+            : null
+        );
         m_machineId = ResolveMachineId(stateDir: definition.StateDir);
         Instances = new WorldInstanceHost(
             admitsSpawn: false,
@@ -136,11 +140,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             catalogFingerprint: m_catalogFingerprint
         );
         if (ClosedGroupRewind) {
-            if (definition.Worlds.Any(row => !row.Pinned || row.Owner != m_releaseManagement!.Owner)) {
-                throw new InvalidDataException("closed rewind group requires every declared world to be pinned under its owner");
+            if (definition.Worlds.Any(predicate: row => (!row.Pinned || (row.Owner != m_releaseManagement!.Owner)))) {
+                throw new InvalidDataException(message: "closed rewind group requires every declared world to be pinned under its owner");
             }
-            Instances.ConstrainTransferInventory(definition.Worlds.Select(row => row.World.Value));
-            foreach (var row in definition.Worlds) { m_rewindAuthorities.Add(row.World.Value); }
+            Instances.ConstrainTransferInventory(names: definition.Worlds.Select(selector: row => row.World.Value));
+            foreach (var row in definition.Worlds) { m_rewindAuthorities.Add(item: row.World.Value); }
         }
     }
 
@@ -149,129 +153,249 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     /// <summary>Gets the stable fingerprint of the selected machine metadata.</summary>
     public string MachineCatalogFingerprint => m_catalogFingerprint;
     /// <summary>Whether all pinned worlds have established their durable startup baseline.</summary>
-    public bool Ready { get => Volatile.Read(location: ref m_ready); internal set => Volatile.Write(location: ref m_ready, value: value); }
+    public bool Ready { get => Volatile.Read(location: ref m_ready); internal set => Volatile.Write(
+        location: ref m_ready,
+        value: value
+    ); }
     /// <summary>Whether the host has stopped stepping worlds for retirement.</summary>
     public bool IsDraining => (Volatile.Read(location: ref m_draining) != 0);
     /// <summary>Whether managed public, federation, and row-console admission has passed the durable release gate.</summary>
-    public bool ReleaseAdmissionOpen => (m_releaseGroupStore is null) || (Volatile.Read(location: ref m_releaseAdmissionOpen) != 0);
+    public bool ReleaseAdmissionOpen => ((m_releaseGroupStore is null) || (Volatile.Read(location: ref m_releaseAdmissionOpen) != 0));
     /// <summary>Whether the host can be observed privately while a managed candidate remains held.</summary>
-    public bool PrivateCandidateHealthy => Ready && !IsDraining;
+    public bool PrivateCandidateHealthy => (Ready && !IsDraining);
 
     /// <summary>Reads the fresh persisted fence census for every pinned managed row.</summary>
     public async Task<IReadOnlyList<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>> CaptureReleaseFencesAsync(CancellationToken ct = default) {
-        var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        m_mailbox.Enqueue(() => {
+        var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        m_mailbox.Enqueue(item: () => {
             try {
                 var rows = new List<(WorldAuthorityIdentity, WorldAuthorityFence)>();
-                foreach (var declared in m_definition.Worlds.Where(static row => row.Pinned)) {
-                    if (IsDraining || !m_rows.TryGetValue(declared.World.Value, out var bookkeeping) || bookkeeping.Initializing || bookkeeping.Released || bookkeeping.PersistenceBlocked) {
-                        throw new InvalidOperationException($"'{declared.World}' does not own a ready activation");
+
+                foreach (var declared in m_definition.Worlds.Where(predicate: static row => row.Pinned)) {
+                    if (
+                        IsDraining ||
+                        !m_rows.TryGetValue(
+                        key: declared.World.Value,
+                        value: out var bookkeeping
+                    ) ||
+                        bookkeeping.Initializing ||
+                        bookkeeping.Released ||
+                        bookkeeping.PersistenceBlocked
+                    ) {
+                        throw new InvalidOperationException(message: $"'{declared.World}' does not own a ready activation");
                     }
-                    rows.Add((new(declared.Owner, declared.World), bookkeeping.Fence));
+                    rows.Add(item: (new(
+                        Owner: declared.Owner,
+                        World: declared.World
+                    ), bookkeeping.Fence));
                 }
-                captured.TrySetResult(rows);
-            } catch (Exception error) { captured.TrySetException(error); }
+                captured.TrySetResult(result: rows);
+            } catch (Exception error) { captured.TrySetException(exception: error); }
         });
-        var census = await captured.Task.WaitAsync(ct).ConfigureAwait(false);
+        var census = await captured.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+
         foreach (var row in census) {
-            var root = await m_store.LoadRootAsync(row.Identity, ct).ConfigureAwait(false);
-            if (root is not { } current || current.Root.Epoch != row.Fence.Epoch || current.Root.FenceToken != row.Fence.Token) {
-                throw new InvalidOperationException($"'{row.Identity.World}' lost its activation fence");
+            var root = await m_store.LoadRootAsync(
+                cancellationToken: ct,
+                identity: row.Identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                (root is not { } current) ||
+                (current.Root.Epoch != row.Fence.Epoch) ||
+                (current.Root.FenceToken != row.Fence.Token)
+            ) {
+                throw new InvalidOperationException(message: $"'{row.Identity.World}' lost its activation fence");
             }
         }
         return census;
     }
-
     /// <summary>Persists immutable, operation-bound recovery roots for every pinned row after a successful drain.</summary>
     public async Task<IReadOnlyDictionary<string, string>> CaptureReleaseRootsAsync(Guid operationId, CancellationToken ct = default) {
-        if (!IsDraining || m_store is not IWorldAuthorityRecoveryStore recovery) {
-            throw new InvalidOperationException("release capture requires a drained host and a recovery-capable authority store");
+        if (
+            !IsDraining ||
+            (m_store is not IWorldAuthorityRecoveryStore recovery)
+        ) {
+            throw new InvalidOperationException(message: "release capture requires a drained host and a recovery-capable authority store");
         }
-        _ = await RequireSourceOperationAsync(operationId, WorldReleaseOperationPhase.Drain, ct).ConfigureAwait(false);
-        var roots = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var row in m_definition.Worlds.Where(static row => row.Pinned)) {
-            var identity = new WorldAuthorityIdentity(row.Owner, row.World);
-            var root = await recovery.CaptureRecoveryRootAsync(identity, operationId, ct).ConfigureAwait(false);
-            if (root is not { } current || current.Root.FenceToken != Guid.Empty) {
-                throw new InvalidDataException($"authority root for '{identity.World}' is missing or still owned");
+        _ = await RequireSourceOperationAsync(
+            ct: ct,
+            operationId: operationId,
+            phase: WorldReleaseOperationPhase.Drain
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var roots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var row in m_definition.Worlds.Where(predicate: static row => row.Pinned)) {
+            var identity = new WorldAuthorityIdentity(
+                Owner: row.Owner,
+                World: row.World
+            );
+            var root = await recovery.CaptureRecoveryRootAsync(
+                cancellationToken: ct,
+                identity: identity,
+                operationId: operationId
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                (root is not { } current) ||
+                (current.Root.FenceToken != Guid.Empty)
+            ) {
+                throw new InvalidDataException(message: $"authority root for '{identity.World}' is missing or still owned");
             }
             roots[$"{identity.Owner:D}/{identity.World.Value}"] = current.Pin;
         }
-        _ = await RequireSourceOperationAsync(operationId, WorldReleaseOperationPhase.Drain, ct).ConfigureAwait(false);
+        _ = await RequireSourceOperationAsync(
+            ct: ct,
+            operationId: operationId,
+            phase: WorldReleaseOperationPhase.Drain
+        ).ConfigureAwait(continueOnCapturedContext: false);
         return roots;
     }
-
     /// <summary>Restores every operation-bound root before this empty host is permitted to activate the source.</summary>
     public async Task RestoreReleaseRootsAsync(WorldReleaseGroupRecord operation, CancellationToken ct = default) {
-        if (m_store is not IWorldAuthorityRecoveryStore recovery || m_releaseGroupStore is null || m_releaseManagement is not { } managed) {
-            throw new InvalidOperationException("managed recovery requires a recovery-capable authority store");
+        if (
+            (m_store is not IWorldAuthorityRecoveryStore recovery) ||
+            (m_releaseGroupStore is null) ||
+            (m_releaseManagement is not { } managed)
+        ) {
+            throw new InvalidOperationException(message: "managed recovery requires a recovery-capable authority store");
         }
-        var rows = m_definition.Worlds.Where(static row => row.Pinned).ToArray();
-        if (operation.PendingOperationId is not { } operationId || operation.RecoveryRoots.Count != rows.Length || operation.DeploymentGroup != managed.Group || operation.Owner != managed.Owner) {
-            throw new InvalidOperationException("the recovery inventory does not match this managed group");
+        var rows = m_definition.Worlds.Where(predicate: static row => row.Pinned).ToArray();
+
+        if (
+            (operation.PendingOperationId is not { } operationId) ||
+            (operation.RecoveryRoots.Count != rows.Length) ||
+            (operation.DeploymentGroup != managed.Group) ||
+            (operation.Owner != managed.Owner)
+        ) {
+            throw new InvalidOperationException(message: "the recovery inventory does not match this managed group");
         }
-        await m_activationGate.WaitAsync(ct).ConfigureAwait(false);
+        await m_activationGate.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
         try {
-            var empty = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            m_mailbox.Enqueue(() => empty.TrySetResult(m_rows.Count == 0 && !ReleaseAdmissionOpen && !IsDraining));
-            if (!await empty.Task.WaitAsync(ct).ConfigureAwait(false)) { throw new InvalidOperationException("source restoration requires an empty private host"); }
+            var empty = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+            m_mailbox.Enqueue(item: () => empty.TrySetResult(result: ((m_rows.Count == 0) && !ReleaseAdmissionOpen && !IsDraining)));
+            if (!await empty.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) { throw new InvalidOperationException(message: "source restoration requires an empty private host"); }
             foreach (var row in rows) {
-                var identity = new WorldAuthorityIdentity(row.Owner, row.World);
-                if (!operation.RecoveryRoots.TryGetValue($"{identity.Owner:D}/{identity.World}", out var pin) ||
-                    await recovery.LoadRecoveryRootAsync(identity, pin, operationId, ct).ConfigureAwait(false) is null) {
-                    throw new InvalidDataException($"protected root for '{row.World}' is missing");
+                var identity = new WorldAuthorityIdentity(
+                    Owner: row.Owner,
+                    World: row.World
+                );
+
+                if (
+                    !operation.RecoveryRoots.TryGetValue(
+                    key: $"{identity.Owner:D}/{identity.World}",
+                    value: out var pin
+                ) ||
+                    (await recovery.LoadRecoveryRootAsync(
+                    cancellationToken: ct,
+                    identity: identity,
+                    operationId: operationId,
+                    pin: pin
+                ).ConfigureAwait(continueOnCapturedContext: false) is null)
+                ) {
+                    throw new InvalidDataException(message: $"protected root for '{row.World}' is missing");
                 }
             }
             foreach (var row in rows) {
-                var state = await RequireSourceOperationAsync(operationId, WorldReleaseOperationPhase.Recover, ct).ConfigureAwait(false);
-                if (state.RecoveryRoots.Count != operation.RecoveryRoots.Count || operation.RecoveryRoots.Any(root =>
-                    !state.RecoveryRoots.TryGetValue(root.Key, out var pin) || pin != root.Value)) {
-                    throw new InvalidOperationException("the recovery operation changed before root restoration");
+                var state = await RequireSourceOperationAsync(
+                    ct: ct,
+                    operationId: operationId,
+                    phase: WorldReleaseOperationPhase.Recover
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (
+                    (state.RecoveryRoots.Count != operation.RecoveryRoots.Count) ||
+                    operation.RecoveryRoots.Any(predicate: root =>
+                    (!state.RecoveryRoots.TryGetValue(
+                    key: root.Key,
+                    value: out var pin
+                ) || (pin != root.Value)))
+                ) {
+                    throw new InvalidOperationException(message: "the recovery operation changed before root restoration");
                 }
-                var identity = new WorldAuthorityIdentity(row.Owner, row.World);
-                var fence = await m_store.AcquireActivationAsync(identity, ct).ConfigureAwait(false) ?? throw new IOException("maintenance ownership could not be acquired");
-                var restored = await recovery.RestoreRecoveryRootAsync(identity, operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"], operationId, fence, ct).ConfigureAwait(false);
-                if (!restored.Ok) { throw new IOException($"'{row.World}' restoration refused: {restored.Detail}"); }
+                var identity = new WorldAuthorityIdentity(
+                    Owner: row.Owner,
+                    World: row.World
+                );
+                var fence = (await m_store.AcquireActivationAsync(
+                    cancellationToken: ct,
+                    identity: identity
+                ).ConfigureAwait(continueOnCapturedContext: false) ?? throw new IOException(message: "maintenance ownership could not be acquired"));
+                var restored = await recovery.RestoreRecoveryRootAsync(
+                    identity,
+                    operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"],
+                    operationId,
+                    fence,
+                    ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (!restored.Ok) { throw new IOException(message: $"'{row.World}' restoration refused: {restored.Detail}"); }
             }
         } finally { m_activationGate.Release(); }
     }
 
     private async Task<WorldReleaseGroupRecord> RequireSourceOperationAsync(Guid operationId, WorldReleaseOperationPhase phase, CancellationToken ct) {
-        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed || operationId == Guid.Empty) {
-            throw new InvalidOperationException("source maintenance requires a managed release operation");
+        if (
+            (m_releaseGroupStore is not { } groups) ||
+            (m_releaseManagement is not { } managed) ||
+            (operationId == Guid.Empty)
+        ) {
+            throw new InvalidOperationException(message: "source maintenance requires a managed release operation");
         }
-        var snapshot = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
-        if (snapshot is not { } state || state.Record.PendingOperationId != operationId || state.Record.PendingPhase != phase ||
-            state.Record.PendingCommitted || (state.Record.PendingSourceRelease ?? state.Record.PendingTargetRelease) != managed.ExpectedRelease) {
-            throw new InvalidOperationException("the source release or maintenance operation no longer matches the durable group");
+        var snapshot = await groups.LoadAsync(
+            managed.Group,
+            ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (
+            (snapshot is not { } state) ||
+            (state.Record.PendingOperationId != operationId) ||
+            (state.Record.PendingPhase != phase) ||
+            state.Record.PendingCommitted ||
+            ((state.Record.PendingSourceRelease ?? state.Record.PendingTargetRelease) != managed.ExpectedRelease)
+        ) {
+            throw new InvalidOperationException(message: "the source release or maintenance operation no longer matches the durable group");
         }
         return state.Record;
     }
 
     /// <summary>Reads this worker's authoritative deployment group from its configured private store.</summary>
     public async Task<WorldReleaseGroupSnapshot> ReadManagedReleaseAsync(CancellationToken ct = default) {
-        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
-            throw new InvalidOperationException("this worker does not have managed release configuration");
+        if (
+            (m_releaseGroupStore is not { } groups) ||
+            (m_releaseManagement is not { } managed)
+        ) {
+            throw new InvalidOperationException(message: "this worker does not have managed release configuration");
         }
-        return await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("the managed deployment group is missing");
+        return (await groups.LoadAsync(
+            managed.Group,
+            ct
+        ).ConfigureAwait(continueOnCapturedContext: false)
+            ?? throw new InvalidOperationException(message: "the managed deployment group is missing"));
     }
-
     /// <summary>Stops a private failed candidate without requiring its uncommitted state to checkpoint successfully.</summary>
     public async Task AbandonPrivateReleaseAsync(CancellationToken ct = default) {
-        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        m_mailbox.Enqueue(() => {
+        var stopped = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        m_mailbox.Enqueue(item: () => {
             try {
-                if (m_releaseManagement is null || ReleaseAdmissionOpen) { throw new InvalidOperationException("an admitted world cannot be abandoned as a private candidate"); }
-                Volatile.Write(ref m_draining, 1);
+                if (
+                    (m_releaseManagement is null) ||
+                    ReleaseAdmissionOpen
+                ) { throw new InvalidOperationException(message: "an admitted world cannot be abandoned as a private candidate"); }
+                Volatile.Write(
+                    location: ref m_draining,
+                    value: 1
+                );
                 Ready = false;
                 Instances.Dispose();
                 stopped.TrySetResult();
-            } catch (Exception error) { stopped.TrySetException(error); }
+            } catch (Exception error) { stopped.TrySetException(exception: error); }
         });
-        await stopped.Task.WaitAsync(ct).ConfigureAwait(false);
+        await stopped.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
     }
-
     /// <summary>Freezes all worlds at one pump boundary and durably saves them before retirement.</summary>
     /// <param name="ct">This caller's retirement deadline. A caller may retry a cancelled or failed save.</param>
     /// <returns>Completion after the final checkpoints are durable. Concurrent callers share an attempt, but each
@@ -284,9 +408,15 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             Task attempt;
 
             lock (m_drainLock) {
-                if ((m_drainTask is null) || (m_drainTask.IsCompleted && !m_drainTask.IsCompletedSuccessfully)) {
+                if (
+                    (m_drainTask is null) ||
+                    (m_drainTask.IsCompleted && !m_drainTask.IsCompletedSuccessfully)
+                ) {
                     ObserveCompleted(operations: m_persistenceOperations);
-                    m_drainTask = DrainCoreAsync(ct: ct, pendingOperations: m_persistenceOperations.ToArray());
+                    m_drainTask = DrainCoreAsync(
+                        ct: ct,
+                        pendingOperations: m_persistenceOperations.ToArray()
+                    );
                 }
                 attempt = m_drainTask;
             }
@@ -296,27 +426,59 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
     private async Task DrainCoreAsync(CancellationToken ct, Task[] pendingOperations) {
         // Accepted reloads need a subsequent simulation step. Let them settle before freezing the pump.
-        await ObservePersistenceAsync(Task.WhenAll(pendingOperations), ct);
-        await ObservePersistenceAsync(Task.WhenAll(m_pendingReleases.Values.Select(static release => release.Applied)), ct);
+        await ObservePersistenceAsync(
+            Task.WhenAll(pendingOperations),
+            ct
+        );
+        await ObservePersistenceAsync(
+            Task.WhenAll(tasks: m_pendingReleases.Values.Select(selector: static release => release.Applied)),
+            ct
+        );
         var capture = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, RowBookkeeping Bookkeeping, Task<WorldAuthorityStoreOutcome> Save)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(() => {
+        m_mailbox.Enqueue(item: () => {
             try {
                 ct.ThrowIfCancellationRequested();
-                Volatile.Write(location: ref m_draining, value: 1);
+                Volatile.Write(
+                    location: ref m_draining,
+                    value: 1
+                );
                 var rows = new List<(WorldAuthorityIdentity, RowBookkeeping, Task<WorldAuthorityStoreOutcome>)>();
 
                 foreach (var declared in m_definition.Worlds) {
-                    if (!Instances.TryGet(declared.World.Value, out var row) || (row is null)) { continue; }
+                    if (
+                        !Instances.TryGet(
+                        declared.World.Value,
+                        out var row
+                    ) ||
+                        (row is null)
+                    ) { continue; }
                     var bookkeeping = m_rows[declared.World.Value];
+
                     if (bookkeeping.Released) { continue; }
                     row.Door?.SuspendIngress();
                     row.Server.FreezeForRetirement();
-                    if (!TryCaptureRow(encoded: out var encoded, outcome: out var outcome, row: row, tick: out var tick)) {
+                    if (!TryCaptureRow(
+                        encoded: out var encoded,
+                        outcome: out var outcome,
+                        row: row,
+                        tick: out var tick
+                    )) {
                         throw new InvalidOperationException(message: $"Cannot retire '{declared.World}': {outcome}");
                     }
-                    var identity = new WorldAuthorityIdentity(Owner: declared.Owner, World: declared.World);
-                    rows.Add(item: (identity, bookkeeping, QueueCheckpoint(encoded, identity, row.Name, tick, bookkeeping, ct)));
+                    var identity = new WorldAuthorityIdentity(
+                        Owner: declared.Owner,
+                        World: declared.World
+                    );
+
+                    rows.Add(item: (identity, bookkeeping, QueueCheckpoint(
+                        encoded,
+                        identity,
+                        row.Name,
+                        tick,
+                        bookkeeping,
+                        ct
+                    )));
                 }
                 capture.TrySetResult(result: rows);
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) { capture.TrySetCanceled(cancellationToken: ct); } catch (Exception ex) { capture.TrySetException(exception: ex); }
@@ -324,12 +486,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         var captured = await capture.Task.WaitAsync(cancellationToken: ct);
 
         foreach (var row in captured) {
-            var result = await row.Save.WaitAsync(ct);
+            var result = await row.Save.WaitAsync(cancellationToken: ct);
 
             ct.ThrowIfCancellationRequested();
             if (!result.Ok) { throw new IOException(message: $"Final checkpoint for '{row.Identity}' failed: {result.Detail}"); }
-            var release = await m_store.ReleaseActivationAsync(row.Identity, row.Bookkeeping.Fence, ct);
-            if (!release.Ok) { throw new IOException($"Authority release for '{row.Identity}' failed: {release.Detail}"); }
+            var release = await m_store.ReleaseActivationAsync(
+                row.Identity,
+                row.Bookkeeping.Fence,
+                ct
+            );
+
+            if (!release.Ok) { throw new IOException(message: $"Authority release for '{row.Identity}' failed: {release.Detail}"); }
             row.Bookkeeping.Released = true;
         }
         Console.Error.WriteLine(value: $"[silo.drain: saved {captured.Count} worlds]");
@@ -349,11 +516,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     }
     // Runtime creation and replay use the same selected catalog and policy as document admission.
     private IWorldMachineHost MachineHostFactory(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath, WorldOutputHub? narrationHub) => new WorldMachineHost(
-        screens: screens,
         catalog: m_machineCatalog,
+        contentAdmissionPolicy: m_contentAdmissionPolicy,
         documentPath: documentPath,
         narrationHub: narrationHub,
-        contentAdmissionPolicy: m_contentAdmissionPolicy
+        screens: screens
     );
 
     /// <summary>Gets the silo document this host was built from.</summary>
@@ -440,10 +607,15 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     /// <returns>The write outcome.</returns>
     public Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken ct) {
         lock (m_drainLock) {
-            if (m_drainTask is not null) { return Task.FromResult(WorldAuthorityStoreOutcome.Failed("The silo is retiring.")); }
-            ObserveCompleted(m_persistenceOperations);
-            var operation = PublishDefinitionCoreAsync(identity, composed, ct);
-            m_persistenceOperations.Add(operation);
+            if (m_drainTask is not null) { return Task.FromResult(result: WorldAuthorityStoreOutcome.Failed(detail: "The silo is retiring.")); }
+            ObserveCompleted(operations: m_persistenceOperations);
+            var operation = PublishDefinitionCoreAsync(
+                composed: composed,
+                ct: ct,
+                identity: identity
+            );
+
+            m_persistenceOperations.Add(item: operation);
             return operation;
         }
     }
@@ -533,7 +705,13 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     encoded: captured,
                     identity: new WorldAuthorityIdentity(
                         Owner: (FindWorldRow(name: name)?.Owner ?? Guid.Empty),
-                        World: (SafeName.TryParse(candidate: name, name: out var world, reason: out _) ? world : default)
+                        World: (SafeName.TryParse(
+                            candidate: name,
+                            name: out var world,
+                            reason: out _
+                        )
+                    ? world
+                    : default)
                     ),
                     tick: capturedTick,
                     worldId: name,
@@ -572,7 +750,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 instance: out var row,
                 name: name
             ) ||
-                (row is not { IsPaused: false, AwaitingMirrors: false }) || row.Server.IsRetiring
+                (row is not { IsPaused: false, AwaitingMirrors: false }) ||
+                row.Server.IsRetiring
             ) {
                 continue;
             }
@@ -597,8 +776,13 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 instance: out var row,
                 name: name
             ) &&
-                (row is { AwaitingMirrors: true }) && !row.Server.IsRetiring &&
-                m_rows.TryGetValue(name, out var bookkeeping) && !bookkeeping.Initializing &&
+                (row is { AwaitingMirrors: true }) &&
+                !row.Server.IsRetiring &&
+                m_rows.TryGetValue(
+                key: name,
+                value: out var bookkeeping
+            ) &&
+                !bookkeeping.Initializing &&
                 AllAdjacenciesPrimed(row: row)
             ) {
                 Instances.ReleaseHold(row: row);
@@ -606,7 +790,10 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
     private bool TryBuildFederationIdentity(WorldDefinition definition, WorldSiloWorldRow worldRow, Func<IReadOnlyList<WorldAdmissionEntry>?> trustEntries, out WorldFederationIdentity federation, out string reason) {
-        if (string.IsNullOrEmpty(value: definition.Host.Authority) && !string.IsNullOrEmpty(value: definition.Host.Listen)) {
+        if (
+            string.IsNullOrEmpty(value: definition.Host.Authority) &&
+            !string.IsNullOrEmpty(value: definition.Host.Listen)
+        ) {
             federation = default;
             reason = $"'{worldRow.World}' declares host.listen without host.authority — a listening row needs an advertised endpoint";
 
@@ -624,23 +811,34 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             // Match WorldServer.AuthorityIdentity for a colocated row: it signs as its stable instance name
             // and has no remote endpoint. The configured row inventory keeps names unique in this host.
-            var subject = definition.Host.Authority ?? worldRow.World.Value;
+            var subject = (definition.Host.Authority ?? worldRow.World.Value);
+
             if (ClosedGroupRewind) {
-                lock (m_rewindAuthoritiesGate) { m_rewindAuthorities.Add(subject); }
+                lock (m_rewindAuthoritiesGate) { m_rewindAuthorities.Add(item: subject); }
                 key.Dispose();
             }
 
             federation = new WorldFederationIdentity(
-                Authenticator: WrapAuthentication(worldRow, new WorldAttestedAuthenticator(
-                    oracle: ClosedGroupRewind ? null : new LocalKeySigningOracle(
-                        key: key,
-                        subject: subject,
-                        validity: WorldAttestedAuthenticator.MaximumClaimAge
-                    ),
-                    trustEntries: ClosedGroupRewind ? null : trustEntries
-                )),
+                Authenticator: WrapAuthentication(
+                    worldRow,
+                    new WorldAttestedAuthenticator(
+                        oracle: (ClosedGroupRewind
+                ? null
+                : new LocalKeySigningOracle(
+                                key: key,
+                                subject: subject,
+                                validity: WorldAttestedAuthenticator.MaximumClaimAge
+                            )),
+                        trustEntries: (ClosedGroupRewind
+                ? null
+                : trustEntries)
+                    )
+                ),
                 Subject: subject,
-                Network: new WorldPeerNetwork(identityFile: worldRow.Federation.KeyFile, allowOutbound: !ClosedGroupRewind)
+                Network: new WorldPeerNetwork(
+                    identityFile: worldRow.Federation.KeyFile,
+                    allowOutbound: !ClosedGroupRewind
+                )
             );
             reason = string.Empty;
 
@@ -653,10 +851,13 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
     private Puck.Networking.IAuthenticator WrapAuthentication(WorldSiloWorldRow row, Puck.Networking.IAuthenticator federation) =>
-        row.Federation.Authentication is { } selection
-            ? (m_authentication ?? throw new InvalidOperationException("No authentication provider registry is installed."))(selection, federation)
-            : federation;
-
+        ((row.Federation.Authentication is { } selection)
+            ? (m_authentication ?? throw new InvalidOperationException(message: "No authentication provider registry is installed."))(
+                selection,
+                federation
+            )
+            : federation
+        );
     private bool TryCaptureRow(WorldInstance row, out byte[] encoded, out string outcome, out ulong tick) {
         var hostRow = Instances.CaptureRow(row: row);
 
@@ -680,7 +881,16 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     }
     private void RecordCheckpointFailure(string worldId, RowBookkeeping bookkeeping, Exception error) {
         m_mailbox.Enqueue(item: () => {
-            if (m_rows.TryGetValue(key: worldId, value: out var current) && ReferenceEquals(current, bookkeeping)) {
+            if (
+                m_rows.TryGetValue(
+                key: worldId,
+                value: out var current
+            ) &&
+                ReferenceEquals(
+                objA: current,
+                objB: bookkeeping
+            )
+            ) {
                 bookkeeping.LastCheckpointOutcome = $"failed ({error.Message})";
             }
         });
@@ -688,15 +898,27 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private Task<WorldAuthorityStoreOutcome> QueueCheckpoint(byte[] encoded, WorldAuthorityIdentity identity, string worldId, ulong tick,
         RowBookkeeping bookkeeping, CancellationToken cancellationToken) {
         var previous = bookkeeping.JournalTail;
-        var queued = UploadCheckpointAsync(encoded, identity, worldId, tick, bookkeeping, previous, cancellationToken);
+        var queued = UploadCheckpointAsync(
+            bookkeeping: bookkeeping,
+            cancellationToken: cancellationToken,
+            encoded: encoded,
+            identity: identity,
+            previous: previous,
+            tick: tick,
+            worldId: worldId
+        );
+
         bookkeeping.JournalTail = queued;
         return queued;
     }
     private async Task<WorldAuthorityStoreOutcome> UploadCheckpointAsync(byte[] encoded, WorldAuthorityIdentity identity, string worldId, ulong tick,
         RowBookkeeping bookkeeping, Task previous, CancellationToken cancellationToken) {
         try {
-            await ObservePersistenceAsync(previous, cancellationToken);
-            if (bookkeeping.PersistenceBlocked) { return WorldAuthorityStoreOutcome.RecoveryRequired("This activation must recover before publishing again."); }
+            await ObservePersistenceAsync(
+                ct: cancellationToken,
+                operation: previous
+            );
+            if (bookkeeping.PersistenceBlocked) { return WorldAuthorityStoreOutcome.RecoveryRequired(detail: "This activation must recover before publishing again."); }
             var outcome = await m_store.WriteCheckpointAsync(
                 cancellationToken: cancellationToken,
                 encoded: encoded,
@@ -705,13 +927,23 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 fence: bookkeeping.Fence,
                 capturedJournalSequence: bookkeeping.PublishedJournalSequence
             );
-            ObservePublication(bookkeeping, outcome);
+
+            ObservePublication(
+                bookkeeping: bookkeeping,
+                outcome: outcome
+            );
 
             m_mailbox.Enqueue(item: () => {
-                if (m_rows.TryGetValue(
+                if (
+                    m_rows.TryGetValue(
                     key: worldId,
                     value: out var current
-                ) && ReferenceEquals(current, bookkeeping)) {
+                ) &&
+                    ReferenceEquals(
+                    objA: current,
+                    objB: bookkeeping
+                )
+                ) {
                     bookkeeping.LastCheckpointOutcome = (outcome.Ok
                         ? "ok"
                         : $"failed ({outcome.Detail})"
@@ -726,27 +958,45 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             });
             return outcome;
         } catch (Exception error) {
-            RecordCheckpointFailure(error: error, worldId: worldId, bookkeeping: bookkeeping);
+            RecordCheckpointFailure(
+                bookkeeping: bookkeeping,
+                error: error,
+                worldId: worldId
+            );
             throw;
         }
     }
     private async Task AppendJournalEntryAsync(WorldAuthorityIdentity identity, string worldId, ulong tick, byte[] encoded, RowBookkeeping bookkeeping) {
         try {
-            var outcome = bookkeeping.PersistenceBlocked
-                ? WorldAuthorityStoreOutcome.RecoveryRequired("This activation must recover before publishing again.")
+            var outcome = (bookkeeping.PersistenceBlocked
+                ? WorldAuthorityStoreOutcome.RecoveryRequired(detail: "This activation must recover before publishing again.")
                 : await m_store.AppendJournalAsync(
-                cancellationToken: CancellationToken.None,
-                entry: new WorldMutationJournalEntry(Encoded: encoded, Tick: tick),
-                identity: identity,
-                fence: bookkeeping.Fence
+                    cancellationToken: CancellationToken.None,
+                    entry: new WorldMutationJournalEntry(
+                        Encoded: encoded,
+                        Tick: tick
+                    ),
+                    identity: identity,
+                    fence: bookkeeping.Fence
+                )
             );
-            ObservePublication(bookkeeping, outcome);
+
+            ObservePublication(
+                bookkeeping: bookkeeping,
+                outcome: outcome
+            );
 
             m_mailbox.Enqueue(item: () => {
-                if (m_rows.TryGetValue(
+                if (
+                    m_rows.TryGetValue(
                     key: worldId,
                     value: out var current
-                ) && ReferenceEquals(current, bookkeeping)) {
+                ) &&
+                    ReferenceEquals(
+                    objA: current,
+                    objB: bookkeeping
+                )
+                ) {
                     bookkeeping.PendingJournalAppends--;
                     bookkeeping.JournalTimestamp = m_clock.GetTimestamp();
                     bookkeeping.JournalFailed |= !outcome.Ok;
@@ -759,7 +1009,16 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             });
         } catch (Exception error) {
             m_mailbox.Enqueue(item: () => {
-                if (m_rows.TryGetValue(key: worldId, value: out var current) && ReferenceEquals(current, bookkeeping)) {
+                if (
+                    m_rows.TryGetValue(
+                    key: worldId,
+                    value: out var current
+                ) &&
+                    ReferenceEquals(
+                    objA: current,
+                    objB: bookkeeping
+                )
+                ) {
                     bookkeeping.PendingJournalAppends--;
                     bookkeeping.JournalFailed = true;
                     bookkeeping.JournalFailureTick = tick;
@@ -778,7 +1037,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return;
         }
 
-        if (!Instances.TryGet(worldId, out var active) || active is null || !ReferenceEquals(active.Server, source)) { return; }
+        if (
+            !Instances.TryGet(
+            instance: out var active,
+            name: worldId
+        ) ||
+            (active is null) ||
+            !ReferenceEquals(
+            objA: active.Server,
+            objB: source
+        )
+        ) { return; }
 
         if (!WorldSubmissionCodec.TryEncodeCommittedMutation(
             bytes: out var encoded,
@@ -797,11 +1066,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         bookkeeping.PendingJournalAppends++;
         bookkeeping.JournalTail = bookkeeping.JournalTail.ContinueWith(
             continuationFunction: _ => AppendJournalEntryAsync(
+                bookkeeping: bookkeeping,
                 encoded: encoded,
                 identity: identity,
                 tick: tick,
-                worldId: worldId,
-                bookkeeping: bookkeeping
+                worldId: worldId
             ),
             scheduler: TaskScheduler.Default
         ).Unwrap();
@@ -810,151 +1079,333 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     /// <inheritdoc/>
     public Task<bool> ActivateAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
         lock (m_drainLock) {
-            if (m_drainTask is not null) { return Task.FromResult(false); }
-            ObserveCompleted(m_persistenceOperations);
-            var operation = ActivateSerializedAsync(identity, ct);
-            m_persistenceOperations.Add(operation);
+            if (m_drainTask is not null) { return Task.FromResult(result: false); }
+            ObserveCompleted(operations: m_persistenceOperations);
+            var operation = ActivateSerializedAsync(
+                ct: ct,
+                identity: identity
+            );
+
+            m_persistenceOperations.Add(item: operation);
             return operation;
         }
     }
+
     private async Task<bool> ActivateSerializedAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
-        if (FindWorldRow(identity) is null) { return false; }
-        await m_activationGate.WaitAsync(ct);
+        if (FindWorldRow(identity: identity) is null) { return false; }
+        await m_activationGate.WaitAsync(cancellationToken: ct);
         try {
-            var existing = new TaskCompletionSource<bool?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            m_mailbox.Enqueue(() => existing.TrySetResult(Instances.TryGet(identity.World.Value, out var row) && row is not null
-                ? !row.Server.IsRetiring : null));
-            if (await existing.Task.WaitAsync(ct) is { } active) { return active; }
-            return await ActivateCoreAsync(identity, ct);
+            var existing = new TaskCompletionSource<bool?>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+            m_mailbox.Enqueue(item: () => existing.TrySetResult(result: ((Instances.TryGet(
+                identity.World.Value,
+                out var row
+            ) && (row is not null))
+                ? !row.Server.IsRetiring
+                : null)));
+            if (await existing.Task.WaitAsync(cancellationToken: ct) is { } active) { return active; }
+            return await ActivateCoreAsync(
+                ct: ct,
+                identity: identity
+            );
         } finally { m_activationGate.Release(); }
     }
     private async Task<bool> CheckReleaseBeforeActivationAsync(WorldSiloWorldRow worldRow, CancellationToken ct) {
-        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
+        if (
+            (m_releaseGroupStore is not { } groups) ||
+            (m_releaseManagement is not { } managed)
+        ) {
             return true;
         }
         if (worldRow.Owner != managed.Owner) {
-            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (managed release owner does not match the row)]");
+            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (managed release owner does not match the row)]");
             return false;
         }
         WorldReleaseGroupSnapshot? snapshot;
+
         try {
-            snapshot = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
-        } catch (Exception error) when (error is InvalidDataException or ArgumentException) {
-            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (release group: {error.Message})]");
+            snapshot = await groups.LoadAsync(
+                managed.Group,
+                ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception error) when ((error is InvalidDataException or ArgumentException)) {
+            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (release group: {error.Message})]");
             return false;
         }
         if (snapshot is not { } state) {
-            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (managed release group '{managed.Group}' is not initialized)]");
+            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (managed release group '{managed.Group}' is not initialized)]");
             return false;
         }
         var record = state.Record;
-        var candidate = (string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal) &&
-            (record.PendingOperationId is null || (record.PendingPhase == WorldReleaseOperationPhase.Prepare && record.Admission == WorldReleaseAdmissionState.Open) || record.PendingPhase == WorldReleaseOperationPhase.RecoverActivate)) ||
-            (record.PendingOperationId is not null && (record.PendingPhase is WorldReleaseOperationPhase.Activate or WorldReleaseOperationPhase.Verify or WorldReleaseOperationPhase.Commit) && string.Equals(record.PendingTargetRelease, managed.ExpectedRelease, StringComparison.Ordinal));
+        var candidate = ((string.Equals(
+            a: record.ActiveRelease,
+            b: managed.ExpectedRelease,
+            comparisonType: StringComparison.Ordinal
+        ) &&
+            ((record.PendingOperationId is null) || ((record.PendingPhase == WorldReleaseOperationPhase.Prepare) && (record.Admission == WorldReleaseAdmissionState.Open)) || (record.PendingPhase == WorldReleaseOperationPhase.RecoverActivate))) ||
+            ((record.PendingOperationId is not null) && (record.PendingPhase is WorldReleaseOperationPhase.Activate or WorldReleaseOperationPhase.Verify or WorldReleaseOperationPhase.Commit) && string.Equals(
+            a: record.PendingTargetRelease,
+            b: managed.ExpectedRelease,
+            comparisonType: StringComparison.Ordinal
+        )));
+
         if (!candidate) {
-            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (expected release '{managed.ExpectedRelease}' is not the active or pending candidate)]");
+            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (expected release '{managed.ExpectedRelease}' is not the active or pending candidate)]");
             return false;
         }
         return true;
     }
-
     private Task<bool> EstablishReleaseAdmissionAsync(WorldAuthorityIdentity identity, WorldAuthorityFence fence, CancellationToken ct) {
         // Managed publication is a group barrier. Activation only loads a private candidate; the startup coordinator
         // calls PublishManagedReleaseAdmissionAsync after every pinned row has restored and passed its private checks.
         if (m_releaseGroupStore is not null) {
-            return Task.FromResult(false);
+            return Task.FromResult(result: false);
         }
-        return Task.FromResult(true);
+        return Task.FromResult(result: true);
     }
 
     /// <summary>Publishes managed admission once, after every pinned candidate is ready and each row owns a fresh fence.</summary>
     public async Task<WorldReleaseAdmissionPublication> PublishManagedReleaseAdmissionAsync(CancellationToken ct = default, bool completeRecovery = false) {
-        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
-            Volatile.Write(location: ref m_releaseAdmissionOpen, value: 1);
+        if (
+            (m_releaseGroupStore is not { } groups) ||
+            (m_releaseManagement is not { } managed)
+        ) {
+            Volatile.Write(
+                location: ref m_releaseAdmissionOpen,
+                value: 1
+            );
             return WorldReleaseAdmissionPublication.Opened;
         }
         var previousPublicationClaim = Guid.Empty;
-        var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        m_mailbox.Enqueue(() => {
+        var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        m_mailbox.Enqueue(item: () => {
             try {
                 var rows = new List<(WorldAuthorityIdentity, WorldAuthorityFence)>();
+
                 previousPublicationClaim = m_publishedAdmissionClaim;
-                foreach (var declared in m_definition.Worlds.Where(static row => row.Pinned)) {
-                    if (IsDraining || !m_rows.TryGetValue(declared.World.Value, out var bookkeeping) || bookkeeping.Initializing || bookkeeping.PersistenceBlocked || bookkeeping.Released || !Instances.TryGet(declared.World.Value, out var instance) || instance is null || instance.Server.IsRetiring) {
-                        captured.TrySetResult([]);
+                foreach (var declared in m_definition.Worlds.Where(predicate: static row => row.Pinned)) {
+                    if (
+                        IsDraining ||
+                        !m_rows.TryGetValue(
+                        key: declared.World.Value,
+                        value: out var bookkeeping
+                    ) ||
+                        bookkeeping.Initializing ||
+                        bookkeeping.PersistenceBlocked ||
+                        bookkeeping.Released ||
+                        !Instances.TryGet(
+                        declared.World.Value,
+                        out var instance
+                    ) ||
+                        (instance is null) ||
+                        instance.Server.IsRetiring
+                    ) {
+                        captured.TrySetResult(result: []);
                         return;
                     }
-                    if (instance.AwaitingMirrors || !m_routing.TryGetSession(declared.World.Value, out _)) { previousPublicationClaim = Guid.Empty; }
-                    rows.Add((new WorldAuthorityIdentity(declared.Owner, declared.World), bookkeeping.Fence));
+                    if (
+                        instance.AwaitingMirrors ||
+                        !m_routing.TryGetSession(
+                        declared.World.Value,
+                        out _
+                    )
+                    ) { previousPublicationClaim = Guid.Empty; }
+                    rows.Add(item: (new WorldAuthorityIdentity(
+                        Owner: declared.Owner,
+                        World: declared.World
+                    ), bookkeeping.Fence));
                 }
-                captured.TrySetResult(rows);
-            } catch (Exception error) { captured.TrySetException(error); }
+                captured.TrySetResult(result: rows);
+            } catch (Exception error) { captured.TrySetException(exception: error); }
         });
-        var rowsReady = await captured.Task.WaitAsync(ct).ConfigureAwait(false);
-        if (rowsReady.Count != m_definition.Worlds.Count(static row => row.Pinned)) { return WorldReleaseAdmissionPublication.Refused; }
+        var rowsReady = await captured.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (rowsReady.Count != m_definition.Worlds.Count(predicate: static row => row.Pinned)) { return WorldReleaseAdmissionPublication.Refused; }
         foreach (var row in rowsReady) {
-            var root = await m_store.LoadRootAsync(row.Identity, ct).ConfigureAwait(false);
-            if (root is not { } currentRoot || currentRoot.Root.Epoch != row.Fence.Epoch || currentRoot.Root.FenceToken != row.Fence.Token) {
+            var root = await m_store.LoadRootAsync(
+                cancellationToken: ct,
+                identity: row.Identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                (root is not { } currentRoot) ||
+                (currentRoot.Root.Epoch != row.Fence.Epoch) ||
+                (currentRoot.Root.FenceToken != row.Fence.Token)
+            ) {
                 return WorldReleaseAdmissionPublication.Refused;
             }
         }
-        var groupClaim = WorldReleaseFenceClaim.Compute(rowsReady);
-        var snapshot = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
+        var groupClaim = WorldReleaseFenceClaim.Compute(fences: rowsReady);
+        var snapshot = await groups.LoadAsync(
+            managed.Group,
+            ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         if (snapshot is not { } state) { return WorldReleaseAdmissionPublication.Refused; }
         // Recheck after the group read: the first census may have raced a replacement activation. The group CAS below
         // is still the publication gate, and this second census prevents an already stale host from reaching it.
         foreach (var row in rowsReady) {
-            var root = await m_store.LoadRootAsync(row.Identity, ct).ConfigureAwait(false);
-            if (root is not { } currentRoot || currentRoot.Root.Epoch != row.Fence.Epoch || currentRoot.Root.FenceToken != row.Fence.Token) {
+            var root = await m_store.LoadRootAsync(
+                cancellationToken: ct,
+                identity: row.Identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (
+                (root is not { } currentRoot) ||
+                (currentRoot.Root.Epoch != row.Fence.Epoch) ||
+                (currentRoot.Root.FenceToken != row.Fence.Token)
+            ) {
                 return WorldReleaseAdmissionPublication.Refused;
             }
         }
         var record = state.Record;
         WorldReleaseGroupOutcome opened;
-        if (record.PendingOperationId is { } operationId && record.PendingPhase == WorldReleaseOperationPhase.Commit && record.PendingCommitted) {
-            opened = await groups.OpenAdmissionAsync(state, managed.ExpectedRelease, operationId, groupClaim, ct).ConfigureAwait(false);
-        } else if (record.PendingPhase == WorldReleaseOperationPhase.RecoverActivate && string.Equals(record.PendingSourceRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
+
+        if (
+            (record.PendingOperationId is { } operationId) &&
+            (record.PendingPhase == WorldReleaseOperationPhase.Commit) &&
+            record.PendingCommitted
+        ) {
+            opened = await groups.OpenAdmissionAsync(
+                state,
+                managed.ExpectedRelease,
+                operationId,
+                groupClaim,
+                ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } else if (
+            (record.PendingPhase == WorldReleaseOperationPhase.RecoverActivate) &&
+            string.Equals(
+            a: record.PendingSourceRelease,
+            b: managed.ExpectedRelease,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             if (!completeRecovery) { return WorldReleaseAdmissionPublication.CandidatePrivate; }
-            opened = await groups.CompleteRecoveryAsync(state, ct, groupClaim).ConfigureAwait(false);
-        } else if (record.PendingOperationId is not null && record.PendingPhase == WorldReleaseOperationPhase.Prepare && record.Admission == WorldReleaseAdmissionState.Open && string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
+            opened = await groups.CompleteRecoveryAsync(
+                cancellationToken: ct,
+                current: state,
+                sourceAuthorityLease: groupClaim
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } else if (
+            (record.PendingOperationId is not null) &&
+            (record.PendingPhase == WorldReleaseOperationPhase.Prepare) &&
+            (record.Admission == WorldReleaseAdmissionState.Open) &&
+            string.Equals(
+            a: record.ActiveRelease,
+            b: managed.ExpectedRelease,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             // Preflight has no runtime mutation and therefore leaves the source serving while this host restarts;
             // the group lease still changes through CAS so a delayed prepare writer cannot publish over Drain.
-            opened = await groups.RebindPrepareAdmissionAsync(state, managed.ExpectedRelease, groupClaim, ct).ConfigureAwait(false);
-        } else if (record.PendingOperationId is null && record.Admission == WorldReleaseAdmissionState.Open && string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
-            opened = await groups.RebindAdmissionAsync(state, managed.ExpectedRelease, groupClaim, ct).ConfigureAwait(false);
-        } else if (record.PendingOperationId is null && string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
-            opened = await groups.OpenRecoveredAdmissionAsync(state, managed.ExpectedRelease, groupClaim, ct).ConfigureAwait(false);
+            opened = await groups.RebindPrepareAdmissionAsync(
+                state,
+                managed.ExpectedRelease,
+                groupClaim,
+                ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } else if (
+            (record.PendingOperationId is null) &&
+            (record.Admission == WorldReleaseAdmissionState.Open) &&
+            string.Equals(
+            a: record.ActiveRelease,
+            b: managed.ExpectedRelease,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            opened = await groups.RebindAdmissionAsync(
+                state,
+                managed.ExpectedRelease,
+                groupClaim,
+                ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } else if (
+            (record.PendingOperationId is null) &&
+            string.Equals(
+            a: record.ActiveRelease,
+            b: managed.ExpectedRelease,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            opened = await groups.OpenRecoveredAdmissionAsync(
+                state,
+                managed.ExpectedRelease,
+                groupClaim,
+                ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
         } else {
-            return (record.PendingOperationId is not null && string.Equals(record.PendingTargetRelease, managed.ExpectedRelease, StringComparison.Ordinal))
+            return (((record.PendingOperationId is not null) && string.Equals(
+                a: record.PendingTargetRelease,
+                b: managed.ExpectedRelease,
+                comparisonType: StringComparison.Ordinal
+            ))
                 ? WorldReleaseAdmissionPublication.CandidatePrivate
-                : WorldReleaseAdmissionPublication.Refused;
+                : WorldReleaseAdmissionPublication.Refused
+            );
         }
         if (!opened.Ok) { return WorldReleaseAdmissionPublication.Refused; }
         // A completed publication under these exact fences already registered routes and started doors. Keep
         // the guarded group write above, but do not repeat host effects or wait for another simulation boundary.
-        if (previousPublicationClaim == groupClaim && ReleaseAdmissionOpen && !IsDraining) { return WorldReleaseAdmissionPublication.Opened; }
-        var published = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        m_mailbox.Enqueue(() => {
+        if (
+            (previousPublicationClaim == groupClaim) &&
+            ReleaseAdmissionOpen &&
+            !IsDraining
+        ) { return WorldReleaseAdmissionPublication.Opened; }
+        var published = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        m_mailbox.Enqueue(item: () => {
             try {
-                if (ct.IsCancellationRequested || IsDraining) { published.TrySetResult(false); return; }
+                if (
+                    ct.IsCancellationRequested ||
+                    IsDraining
+                ) { published.TrySetResult(result: false); return; }
                 var instances = new List<WorldInstance>();
-                foreach (var declared in m_definition.Worlds.Where(static row => row.Pinned)) {
-                    if (!Instances.TryGet(declared.World.Value, out var instance) || instance is null || !m_rows.TryGetValue(declared.World.Value, out var bookkeeping) || bookkeeping.Initializing || bookkeeping.PersistenceBlocked || bookkeeping.Released || instance.Server.IsRetiring) { published.TrySetResult(false); return; }
-                    instances.Add(instance);
+
+                foreach (var declared in m_definition.Worlds.Where(predicate: static row => row.Pinned)) {
+                    if (
+                        !Instances.TryGet(
+                        declared.World.Value,
+                        out var instance
+                    ) ||
+                        (instance is null) ||
+                        !m_rows.TryGetValue(
+                        key: declared.World.Value,
+                        value: out var bookkeeping
+                    ) ||
+                        bookkeeping.Initializing ||
+                        bookkeeping.PersistenceBlocked ||
+                        bookkeeping.Released ||
+                        instance.Server.IsRetiring
+                    ) { published.TrySetResult(result: false); return; }
+                    instances.Add(item: instance);
                 }
-                Volatile.Write(location: ref m_releaseAdmissionOpen, value: 1);
+                Volatile.Write(
+                    location: ref m_releaseAdmissionOpen,
+                    value: 1
+                );
                 foreach (var instance in instances) {
-                    var declared = m_definition.Worlds.First(row => string.Equals(row.World.Value, instance.Name, StringComparison.Ordinal));
-                    if (!m_routing.TryGetSession(declared.World.Value, out _)) { _ = m_routing.Register(declared.World.Value); }
-                    if (AllAdjacenciesPrimed(instance)) { Instances.ReleaseHold(instance); }
+                    var declared = m_definition.Worlds.First(predicate: row => string.Equals(
+                        a: row.World.Value,
+                        b: instance.Name,
+                        comparisonType: StringComparison.Ordinal
+                    ));
+
+                    if (!m_routing.TryGetSession(
+                        declared.World.Value,
+                        out _
+                    )) { _ = m_routing.Register(worldId: declared.World.Value); }
+                    if (AllAdjacenciesPrimed(row: instance)) { Instances.ReleaseHold(row: instance); }
                 }
                 m_publishedAdmissionClaim = groupClaim;
-                published.TrySetResult(true);
-            } catch (Exception error) { published.TrySetException(error); }
+                published.TrySetResult(result: true);
+            } catch (Exception error) { published.TrySetException(exception: error); }
         });
-        return await published.Task.WaitAsync(ct).ConfigureAwait(false)
+        return (await published.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)
             ? WorldReleaseAdmissionPublication.Opened
-            : WorldReleaseAdmissionPublication.Refused;
+            : WorldReleaseAdmissionPublication.Refused
+        );
     }
 
     private async Task<bool> ActivateCoreAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
@@ -964,18 +1415,36 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             return false;
         }
-        if (!await CheckReleaseBeforeActivationAsync(worldRow, ct).ConfigureAwait(false)) {
+        if (!await CheckReleaseBeforeActivationAsync(
+            ct: ct,
+            worldRow: worldRow
+        ).ConfigureAwait(continueOnCapturedContext: false)) {
             return false;
         }
 
-        await RequireRewindActivationAsync(identity, ct).ConfigureAwait(false);
-        var acquired = await m_store.AcquireActivationAsync(identity, ct);
+        await RequireRewindActivationAsync(
+            identity: identity,
+            token: ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var acquired = await m_store.AcquireActivationAsync(
+            cancellationToken: ct,
+            identity: identity
+        );
+
         if (acquired is not { } fence) { return false; }
         var admitted = false;
+
         try {
-            var recovery = await m_store.LoadRecoveryAsync(identity, ct)
-                ?? throw new InvalidDataException("The acquired authority has no recovery root.");
-            if (recovery.Root.Root.Epoch != fence.Epoch || recovery.Root.Root.FenceToken != fence.Token) { return false; }
+            var recovery = (await m_store.LoadRecoveryAsync(
+                cancellationToken: ct,
+                identity: identity
+            )
+                ?? throw new InvalidDataException(message: "The acquired authority has no recovery root."));
+
+            if (
+                (recovery.Root.Root.Epoch != fence.Epoch) ||
+                (recovery.Root.Root.FenceToken != fence.Token)
+            ) { return false; }
             var origin = new WorldHostedOrigin(
                 owner: identity.Owner,
                 store: m_blobStore,
@@ -984,6 +1453,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             );
 
             var definition = recovery.Definition;
+
             if (definition is null) {
                 Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (no published definition)]");
 
@@ -1062,7 +1532,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             }
 
             server.Neighbours = origin.Neighbours;
-            if (ClosedGroupRewind) { server.ConstrainTransferAuthorities(ContainsRewindAuthority); }
+            if (ClosedGroupRewind) { server.ConstrainTransferAuthorities(allowed: ContainsRewindAuthority); }
             // Attached BEFORE journal-tail replay and live admission. TryApplyMutation and ApplyRebuild both refuse an
             // addon-affecting operation outright when NO host is attached at all, so this is not what stops those two —
             // it is what closes world.undo's own gap: WorldServer.AddonsCanPrepare treats a null m_addons as vacuously
@@ -1188,7 +1658,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         Fence = fence,
                         PublishedJournalSequence = recovery.Root.Root.JournalSequence,
                         LastCheckpointOrdinal = (checkpointBlob?.Ordinal ?? -1),
-                        LastCheckpointOutcome = ((checkpointBlob is null) ? "never captured" : "restored"),
+                        LastCheckpointOutcome = ((checkpointBlob is null)
+                        ? "never captured"
+                        : "restored"),
                         LastCheckpointTick = (checkpointBlob?.Tick ?? 0UL),
                         CheckpointTimestamp = m_clock.GetTimestamp(),
                         Pinned = worldRow.Pinned,
@@ -1204,34 +1676,55 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             if (!admitted) { return false; }
             try {
                 // A journal is relative to a checkpoint. Establish that baseline before socket or console admission.
-                if (checkpointBlob is null && !await CheckpointNowCoreAsync(identity, ct)) {
-                    throw new IOException("The initial authority checkpoint could not be published.");
+                if (
+                    (checkpointBlob is null) &&
+                    !await CheckpointNowCoreAsync(
+                    ct: ct,
+                    identity: identity
+                )
+                ) {
+                    throw new IOException(message: "The initial authority checkpoint could not be published.");
                 }
-                var releaseOpen = await EstablishReleaseAdmissionAsync(identity, fence, ct).ConfigureAwait(false);
-                var releaseHold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                m_mailbox.Enqueue(() => {
+                var releaseOpen = await EstablishReleaseAdmissionAsync(
+                    ct: ct,
+                    fence: fence,
+                    identity: identity
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                var releaseHold = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+                m_mailbox.Enqueue(item: () => {
                     try {
                         var bookkeeping = m_rows[row.Name];
+
                         bookkeeping.Initializing = false;
-                        Volatile.Write(location: ref m_releaseAdmissionOpen, value: releaseOpen ? 1 : 0);
+                        Volatile.Write(
+                            location: ref m_releaseAdmissionOpen,
+                            value: (releaseOpen
+                            ? 1
+                            : 0)
+                        );
                         if (releaseOpen) {
                             _ = m_routing.Register(worldId: row.Name);
-                            if (AllAdjacenciesPrimed(row)) { Instances.ReleaseHold(row); }
+                            if (AllAdjacenciesPrimed(row: row)) { Instances.ReleaseHold(row: row); }
                         }
                         releaseHold.TrySetResult();
-                    } catch (Exception error) { releaseHold.TrySetException(error); }
+                    } catch (Exception error) { releaseHold.TrySetException(exception: error); }
                 });
                 await releaseHold.Task;
             } catch {
-                var cleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                m_mailbox.Enqueue(() => {
+                var cleanup = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+                m_mailbox.Enqueue(item: () => {
                     try {
                         row.Server.FreezeForRetirement();
-                        _ = Instances.TryStop(row.Name, out _);
-                        _ = m_rows.Remove(row.Name);
-                        m_routing.Unregister(row.Name);
+                        _ = Instances.TryStop(
+                            name: row.Name,
+                            reason: out _
+                        );
+                        _ = m_rows.Remove(key: row.Name);
+                        m_routing.Unregister(worldId: row.Name);
                         cleanup.TrySetResult();
-                    } catch (Exception error) { cleanup.TrySetException(error); }
+                    } catch (Exception error) { cleanup.TrySetException(exception: error); }
                 });
                 await cleanup.Task;
                 admitted = false;
@@ -1240,11 +1733,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return admitted;
         } finally {
             if (!admitted) {
-                using var releaseDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                _ = await m_store.ReleaseActivationAsync(identity, fence, releaseDeadline.Token);
+                using var releaseDeadline = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 10));
+
+                _ = await m_store.ReleaseActivationAsync(
+                    identity,
+                    fence,
+                    releaseDeadline.Token
+                );
             }
         }
     }
+
     /// <summary>Requests an immediate checkpoint for one activated row — <c>silo.checkpoint &lt;key&gt;</c>.</summary>
     /// <param name="identity">The row to checkpoint.</param>
     /// <param name="ct">A token to observe.</param>
@@ -1253,7 +1752,10 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         lock (m_drainLock) {
             if (m_drainTask is not null) { return Task.FromResult(result: false); }
             ObserveCompleted(operations: m_persistenceOperations);
-            var operation = CheckpointNowCoreAsync(ct: ct, identity: identity);
+            var operation = CheckpointNowCoreAsync(
+                ct: ct,
+                identity: identity
+            );
 
             m_persistenceOperations.Add(item: operation);
             return operation;
@@ -1286,7 +1788,14 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         row: row,
                         tick: out var tick
                     )) {
-                        captureTcs.TrySetResult(result: QueueCheckpoint(encoded, identity, worldId, tick, m_rows[worldId], ct));
+                        captureTcs.TrySetResult(result: QueueCheckpoint(
+                            encoded,
+                            identity,
+                            worldId,
+                            tick,
+                            m_rows[worldId],
+                            ct
+                        ));
                     } else {
                         if (m_rows.TryGetValue(
                             key: worldId,
@@ -1298,13 +1807,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
                         captureTcs.TrySetResult(result: null);
                     }
-                } catch (OperationCanceledException) when (ct.IsCancellationRequested) { captureTcs.TrySetCanceled(ct); } catch (Exception error) { captureTcs.TrySetException(error); }
+                } catch (OperationCanceledException) when (ct.IsCancellationRequested) { captureTcs.TrySetCanceled(cancellationToken: ct); } catch (Exception error) { captureTcs.TrySetException(exception: error); }
             });
 
-            var queued = await captureTcs.Task.WaitAsync(ct);
-            return queued is not null && (await queued.WaitAsync(ct)).Ok;
+            var queued = await captureTcs.Task.WaitAsync(cancellationToken: ct);
+
+            return (
+                (queued is not null) &&
+                (await queued.WaitAsync(cancellationToken: ct)).Ok
+            );
         } catch (Exception error) {
-            Console.Error.WriteLine($"[silo.checkpoint: '{identity}' failed ({error.Message})]");
+            Console.Error.WriteLine(value: $"[silo.checkpoint: '{identity}' failed ({error.Message})]");
             throw;
         }
     }
@@ -1312,9 +1825,15 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     /// <inheritdoc/>
     public Task DeactivateAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
         lock (m_drainLock) {
-            if (IsDraining || (m_drainTask is { IsCompleted: false })) { return Task.FromException(exception: new InvalidOperationException(message: "The silo is retiring.")); }
+            if (
+                IsDraining ||
+                (m_drainTask is { IsCompleted: false })
+            ) { return Task.FromException(exception: new InvalidOperationException(message: "The silo is retiring.")); }
             ObserveCompleted(operations: m_persistenceOperations);
-            var operation = DeactivateCoreAsync(ct: ct, identity: identity);
+            var operation = DeactivateCoreAsync(
+                ct: ct,
+                identity: identity
+            );
 
             m_persistenceOperations.Add(item: operation);
             return operation;
@@ -1329,20 +1848,34 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             m_mailbox.Enqueue(item: () => {
                 try {
                     ct.ThrowIfCancellationRequested();
-                    if (!Instances.TryGet(instance: out var row, name: worldId) || row is null) {
+                    if (
+                        !Instances.TryGet(
+                        instance: out var row,
+                        name: worldId
+                    ) ||
+                        (row is null)
+                    ) {
                         captureTcs.TrySetResult(result: null);
                         return;
                     }
                     row.Door?.SuspendIngress();
                     row.Server.FreezeForRetirement();
                     if (TryCaptureRow(
-                    encoded: out var encoded,
-                    outcome: out _,
-                    row: row,
-                    tick: out var tick
+                        encoded: out var encoded,
+                        outcome: out _,
+                        row: row,
+                        tick: out var tick
                     )) {
                         var bookkeeping = m_rows[worldId];
-                        captureTcs.TrySetResult(result: (bookkeeping, QueueCheckpoint(encoded, identity, worldId, tick, bookkeeping, ct)));
+
+                        captureTcs.TrySetResult(result: (bookkeeping, QueueCheckpoint(
+                            bookkeeping: bookkeeping,
+                            cancellationToken: ct,
+                            encoded: encoded,
+                            identity: identity,
+                            tick: tick,
+                            worldId: worldId
+                        )));
                     } else {
                         captureTcs.TrySetResult(result: null);
                     }
@@ -1353,22 +1886,38 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 }
             });
 
-            var captured = await captureTcs.Task.WaitAsync(ct);
+            var captured = await captureTcs.Task.WaitAsync(cancellationToken: ct);
+
             if (captured is not { } saved) {
                 throw new InvalidOperationException(message: $"Cannot deactivate '{worldId}': no final checkpoint could be captured.");
             }
-            var outcome = await saved.Save.WaitAsync(ct);
+            var outcome = await saved.Save.WaitAsync(cancellationToken: ct);
+
             if (!outcome.Ok) { throw new IOException(message: $"Cannot deactivate '{worldId}': {outcome.Detail}"); }
-            var release = await m_store.ReleaseActivationAsync(identity, saved.Bookkeeping.Fence, ct);
-            if (!release.Ok) { throw new IOException($"Cannot release '{worldId}': {release.Detail}"); }
+            var release = await m_store.ReleaseActivationAsync(
+                identity,
+                saved.Bookkeeping.Fence,
+                ct
+            );
+
+            if (!release.Ok) { throw new IOException(message: $"Cannot release '{worldId}': {release.Detail}"); }
             saved.Bookkeeping.Released = true;
             Console.Error.WriteLine(value: $"[silo.deactivate: '{RowKey(identity: identity)}' final checkpoint ok]");
 
             var removeTcs = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
             m_mailbox.Enqueue(item: () => {
-                if (!m_rows.TryGetValue(worldId, out var current) || !ReferenceEquals(current, saved.Bookkeeping)) {
-                    removeTcs.TrySetException(new InvalidOperationException("The activation changed before retirement removal."));
+                if (
+                    !m_rows.TryGetValue(
+                    key: worldId,
+                    value: out var current
+                ) ||
+                    !ReferenceEquals(
+                    objA: current,
+                    objB: saved.Bookkeeping
+                )
+                ) {
+                    removeTcs.TrySetException(exception: new InvalidOperationException(message: "The activation changed before retirement removal."));
                     return;
                 }
                 _ = Instances.TryStop(
@@ -1382,7 +1931,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             await removeTcs.Task;
         } catch (Exception error) {
-            Console.Error.WriteLine($"[silo.deactivate: '{identity}' failed ({error.Message})]");
+            Console.Error.WriteLine(value: $"[silo.deactivate: '{identity}' failed ({error.Message})]");
             throw;
         }
     }
@@ -1403,7 +1952,10 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     /// silo-wide capture request at the accumulated threshold.</summary>
     /// <param name="stepTicks">The master step's own engine-tick width.</param>
     public void NoteMasterStep(ulong stepTicks) {
-        Volatile.Write(location: ref m_progressTimestamp, value: m_clock.GetTimestamp());
+        Volatile.Write(
+            location: ref m_progressTimestamp,
+            value: m_clock.GetTimestamp()
+        );
         m_masterElapsedEngineTicks += stepTicks;
         m_cadence.NoteMasterStep(stepTicks: stepTicks);
 
@@ -1444,8 +1996,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             ElapsedEngineTicks = row.ElapsedEngineTicks,
             FederationSubject = row.Federation.Subject,
             Key = ((FindWorldRow(name: worldId) is { } worldRow)
-                ? RowKey(identity: new WorldAuthorityIdentity(Owner: worldRow.Owner, World: worldRow.World))
-                : worldId),
+            ? RowKey(identity: new WorldAuthorityIdentity(
+                Owner: worldRow.Owner,
+                World: worldRow.World
+            ))
+            : worldId),
             LastCheckpointOrdinal = (bookkeeping?.LastCheckpointOrdinal ?? -1),
             LastCheckpointOutcome = (bookkeeping?.LastCheckpointOutcome ?? "never captured"),
             LastCheckpointTick = (bookkeeping?.LastCheckpointTick ?? 0UL),

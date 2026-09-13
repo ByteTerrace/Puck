@@ -313,13 +313,25 @@ public sealed partial class WorldBody {
             ticksPerSecond: EngineTicksPerSecond
         );
         m_planarFollower = new SecondOrderState3(
-            X: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawX, velocityRaw: state.PlanarFollowerVelocityRawX),
-            Y: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawY, velocityRaw: state.PlanarFollowerVelocityRawY),
-            Z: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawZ, velocityRaw: state.PlanarFollowerVelocityRawZ)
+            X: SecondOrderState.FromRawBits(
+                positionRaw: state.PlanarFollowerPositionRawX,
+                velocityRaw: state.PlanarFollowerVelocityRawX
+            ),
+            Y: SecondOrderState.FromRawBits(
+                positionRaw: state.PlanarFollowerPositionRawY,
+                velocityRaw: state.PlanarFollowerVelocityRawY
+            ),
+            Z: SecondOrderState.FromRawBits(
+                positionRaw: state.PlanarFollowerPositionRawZ,
+                velocityRaw: state.PlanarFollowerVelocityRawZ
+            )
         );
         m_planarPreviousTarget = state.PlanarFollowerPreviousTarget;
         m_planarFollowerSeeded = true;
-        m_verticalFollower = SecondOrderState.FromRawBits(positionRaw: state.VerticalFollowerPositionRaw, velocityRaw: state.VerticalFollowerVelocityRaw);
+        m_verticalFollower = SecondOrderState.FromRawBits(
+            positionRaw: state.VerticalFollowerPositionRaw,
+            velocityRaw: state.VerticalFollowerVelocityRaw
+        );
         m_verticalPreviousTarget = state.VerticalFollowerPreviousTarget;
         m_verticalFollowerSeeded = true;
         m_overlayAccumulator = FixedVector3RateAccumulator.FromRemainders(

@@ -18,19 +18,21 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal static class InfraredRom {
     private const int EntryPoint = 0x0100;
+    private const int PatternBase = 0x0180;
+    private const int ReceiveAddress = 0x0150;
+    // Offset of Receive's "cp <expected count>" operand within the Receive array — patched per ROM.
+    private const int ReceiveExpectedCountOffset = 29;
+    private const int RomSize = 0x8000;
+    // The inner settle count between driving a bit and the receiver's matching sample. 0x20 iterations (~7 cycles each)
+    // dwarfs the ~1-instruction lock-step skew the furthest-behind interleave can leave, so the transmitted bit is
+    // always stable before the receiver samples it.
+    private const byte SettleCount = 0x20;
     // Transmit at 0x0110, Receive at 0x0150 (see the two subroutines' comments for the exact byte layout); the pattern
     // table starts right after Receive ends. Receive is placed AFTER the cartridge header's 0x0134-0x014F title/color-flag
     // span rather than overlapping it (Transmit alone fits before it): the header's color flag must read as this engine's
     // own machine-code bytes only by construction, never by coincidence, so a byte the header setup wants to control (see
     // Assemble) is never also a live opcode.
     private const int TransmitAddress = 0x0110;
-    private const int PatternBase = 0x0180;
-    private const int ReceiveAddress = 0x0150;
-    private const int RomSize = 0x8000;
-    // The inner settle count between driving a bit and the receiver's matching sample. 0x20 iterations (~7 cycles each)
-    // dwarfs the ~1-instruction lock-step skew the furthest-behind interleave can leave, so the transmitted bit is
-    // always stable before the receiver samples it.
-    private const byte SettleCount = 0x20;
     // Cycle-matching is load-bearing, not cosmetic: the furthest-behind interleave keeps both machines' clocks
     // synced, but says nothing about where in a routine either one currently stands — that phase relationship is set
     // by each side's own per-iteration T-cycle cost. Receive's tail (store, publish progress, compare) costs 44T more
@@ -41,15 +43,15 @@ internal static class InfraredRom {
     // constant, not accumulating, across every bit.
     private const int TransmitPaddingNopCount = 11;
 
-    /// <summary>The work-RAM address of the first received bit (one <c>0</c>/<c>1</c> byte per pattern bit, ascending).</summary>
-    public const ushort ReceiveBufferAddress = 0xC000;
+    /// <summary>The completion-marker value.</summary>
+    public const byte CompletionMarker = 0xA5;
     /// <summary>The work-RAM address of the completion marker (<see cref="CompletionMarker"/> once every expected bit is received).</summary>
     public const ushort CompletionMarkerAddress = 0xC0F0;
     /// <summary>The work-RAM address of the running progress counter — how many bits have been received so far, updated
     /// after each one so a host can pick a mid-exchange churn boundary deterministically.</summary>
     public const ushort ProgressAddress = 0xC0F1;
-    /// <summary>The completion-marker value.</summary>
-    public const byte CompletionMarker = 0xA5;
+    /// <summary>The work-RAM address of the first received bit (one <c>0</c>/<c>1</c> byte per pattern bit, ascending).</summary>
+    public const ushort ReceiveBufferAddress = 0xC000;
 
     // Transmit (0x0110): drains the 0xFF-terminated pattern table at HL, driving RP = bit (0 or 1) with the
     // data-read-enable bits NEVER set, so this side never self-senses (and correctness never depends on whether it
@@ -129,26 +131,40 @@ internal static class InfraredRom {
         0xC9,
     ];
 
-    // Offset of Receive's "cp <expected count>" operand within the Receive array — patched per ROM.
-    private const int ReceiveExpectedCountOffset = 29;
+    private static byte[] Assemble(byte[] dispatcher, ReadOnlySpan<byte> patternBits, int expectedReceiveCount) {
+        // A zero-filled image already carries a valid ROM-only header (see SyntheticRom) except for the color flag,
+        // set explicitly below: both machines here run the CGB infrared port through the bus, which reads/writes it
+        // live only when the header declares Color support (see DmgCompatibilityState) — a bare monochrome flag would
+        // seal RP instead. Both roles share the same Transmit/Receive subroutine bytes at the same fixed addresses;
+        // only the tiny dispatcher (call order) and the baked expected-count/pattern table differ.
+        var rom = new byte[RomSize];
 
-    /// <summary>Expands a source byte sequence into the MSB-first bit pattern one side blinks — the deterministic transcript
-    /// the peer must receive back exactly.</summary>
-    /// <param name="sourceBytes">The bytes to expand (each becomes eight pattern bits, most-significant first).</param>
-    /// <returns>One <c>0</c>/<c>1</c> byte per bit.</returns>
-    public static byte[] ExpandPattern(ReadOnlySpan<byte> sourceBytes) {
-        var bits = new byte[(sourceBytes.Length * 8)];
+        rom[0x0143] = 0x80;
 
-        for (var index = 0; (index < sourceBytes.Length); ++index) {
-            var value = sourceBytes[index];
+        dispatcher.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
+        Transmit.CopyTo(
+            array: rom,
+            index: TransmitAddress
+        );
+        Receive.CopyTo(
+            array: rom,
+            index: ReceiveAddress
+        );
 
-            for (var bit = 0; (bit < 8); ++bit) {
-                bits[((index * 8) + bit)] = ((byte)((value >> (7 - bit)) & 0x01));
-            }
+        rom[(ReceiveAddress + ReceiveExpectedCountOffset)] = ((byte)expectedReceiveCount);
+
+        for (var index = 0; (index < patternBits.Length); ++index) {
+            rom[(PatternBase + index)] = ((byte)(patternBits[index] & 0x01));
         }
 
-        return bits;
+        rom[(PatternBase + patternBits.Length)] = 0xFF;
+
+        return rom;
     }
+
     /// <summary>Creates the TRANSMIT-then-RECEIVE side's ROM: sends <paramref name="patternBits"/> first, then listens
     /// for <paramref name="expectedReceiveCount"/> bits. Pair with the peer's <see cref="CreateSecondary"/> so the
     /// transmit phase lands inside the peer's matching receive phase.</summary>
@@ -194,38 +210,21 @@ internal static class InfraredRom {
             patternBits: patternBits,
             expectedReceiveCount: expectedReceiveCount
         );
+    /// <summary>Expands a source byte sequence into the MSB-first bit pattern one side blinks — the deterministic transcript
+    /// the peer must receive back exactly.</summary>
+    /// <param name="sourceBytes">The bytes to expand (each becomes eight pattern bits, most-significant first).</param>
+    /// <returns>One <c>0</c>/<c>1</c> byte per bit.</returns>
+    public static byte[] ExpandPattern(ReadOnlySpan<byte> sourceBytes) {
+        var bits = new byte[(sourceBytes.Length * 8)];
 
-    private static byte[] Assemble(byte[] dispatcher, ReadOnlySpan<byte> patternBits, int expectedReceiveCount) {
-        // A zero-filled image already carries a valid ROM-only header (see SyntheticRom) except for the color flag,
-        // set explicitly below: both machines here run the CGB infrared port through the bus, which reads/writes it
-        // live only when the header declares Color support (see DmgCompatibilityState) — a bare monochrome flag would
-        // seal RP instead. Both roles share the same Transmit/Receive subroutine bytes at the same fixed addresses;
-        // only the tiny dispatcher (call order) and the baked expected-count/pattern table differ.
-        var rom = new byte[RomSize];
+        for (var index = 0; (index < sourceBytes.Length); ++index) {
+            var value = sourceBytes[index];
 
-        rom[0x0143] = 0x80;
-
-        dispatcher.CopyTo(
-            array: rom,
-            index: EntryPoint
-        );
-        Transmit.CopyTo(
-            array: rom,
-            index: TransmitAddress
-        );
-        Receive.CopyTo(
-            array: rom,
-            index: ReceiveAddress
-        );
-
-        rom[(ReceiveAddress + ReceiveExpectedCountOffset)] = ((byte)expectedReceiveCount);
-
-        for (var index = 0; (index < patternBits.Length); ++index) {
-            rom[(PatternBase + index)] = ((byte)(patternBits[index] & 0x01));
+            for (var bit = 0; (bit < 8); ++bit) {
+                bits[((index * 8) + bit)] = ((byte)((value >> (7 - bit)) & 0x01));
+            }
         }
 
-        rom[(PatternBase + patternBits.Length)] = 0xFF;
-
-        return rom;
+        return bits;
     }
 }

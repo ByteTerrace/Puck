@@ -19,57 +19,54 @@ public sealed class IdentityProjectionWireLawTests {
     private const string PrivateChatPeer = "chat-allow-list-secret-peer";
     private const string PrivateStateRow = "crossGameProgressSecret";
 
-    [Fact]
-    public void ReservationWire_CarriesAppearanceAndRates_NeverTheOwnedDocument() {
-        var defaults = Fixtures.BuildDocument().PlayerDefaults;
-        var owned = OwnedIdentityDocument();
-        var identity = new WorldIdentity(defaults: defaults, document: owned);
-        var request = new WorldTransferReservationRequest(
-            TransferId: 5UL,
-            SourceAuthority: "machine-a/boot",
-            SourceRateHz: 240,
-            SourceTick: 0UL,
-            DeadlineSourceTick: 60UL,
-            Border: "east",
-            BorderCapacity: null,
-            PartyAllOrNothing: true,
-            PeerAdmission: true,
-            Members: [
-                new WorldTransferReservationMember(
-                    Principal: WorldPrincipal.Console,
-                    PreferredSlot: 0,
-                    Identity: identity,
-                    Source: default,
-                    BodyColor: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
-                    CatalogRig: 3,
-                    Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "machine-a/boot", Generation: 1, Index: 0), Epoch: 0UL)),
-            ]);
+    private static WorldDefinition OwnedIdentityDocument() {
+        var document = Fixtures.BuildDocument();
 
-        var encoded = WorldFederationCodec.EncodeReservation(request: request);
-        var frame = Encoding.UTF8.GetString(bytes: encoded);
-
-        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: PrivateChatPeer);
-        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: PrivateStateRow);
-        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "puck.world.definition.v1");
-        // The control: what the destination legitimately needs did cross.
-        Assert.Contains(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "traveller-one");
-
-        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: encoded, defaults: defaults, failure: out var failure, request: out var decoded), userMessage: failure.ToString());
-        Assert.NotNull(@object: decoded);
-
-        var arrived = decoded!.Members[0].Identity;
-
-        Assert.NotNull(@object: arrived);
-        Assert.Equal(expected: identity.Id, actual: arrived!.Id);
-        Assert.Equal(expected: identity.Name, actual: arrived.Name);
-        Assert.Equal(expected: identity.ColorHex, actual: arrived.ColorHex);
-        Assert.Equal(expected: identity.FixedMoveSpeed, actual: arrived.FixedMoveSpeed);
-        Assert.Equal(expected: identity.FixedTurnSpeed, actual: arrived.FixedTurnSpeed);
-        // Nothing the destination can read its way back into: no document, so no grants, no state, no bindings.
-        Assert.Null(@object: arrived.Document);
-        Assert.Null(@object: arrived.Bindings);
-        Assert.Null(@object: arrived.Hud);
-        Assert.False(condition: arrived.TryReadState(name: PrivateStateRow, row: out _));
+        return document with {
+            DocumentId = "traveller-one",
+            Identity = new WorldIdentityDefinition(
+            Id: SafeName.Parse(candidate: "traveller-one"),
+            Name: "Traveller One",
+            Color: "#3366cc",
+            MoveSpeedState: CellName.Parse(candidate: "ownMoveSpeed"),
+            TurnSpeedState: CellName.Parse(candidate: "ownTurnSpeed"),
+            Controllers: []
+        ),
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(
+                Name: CellName.Parse(candidate: "ownMoveSpeed"),
+                Kind: CellKind.Fixed,
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
+                        Value: FixedQ4816.FromDouble(value: 4.5).Value
+                    )]
+            ),
+                new WorldStateRow(
+                Name: CellName.Parse(candidate: "ownTurnSpeed"),
+                Kind: CellKind.Fixed,
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
+                        Value: FixedQ4816.FromDouble(value: 2.25).Value
+                    )]
+            ),
+                new WorldStateRow(
+                Name: CellName.Parse(candidate: PrivateStateRow),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
+                        Value: 91L
+                    )]
+            ),
+            ]),
+            GrantsRaw = [
+                new WorldGrant(
+                Principal: WorldPrincipal.Document(id: PrivateChatPeer),
+                Capability: WorldCapability.Mutate,
+                Subject: GrantSubject.Section(section: WorldSection.State),
+                Exclusive: false
+            ),
+            ],
+        };
     }
 
     [Fact]
@@ -79,13 +76,23 @@ public sealed class IdentityProjectionWireLawTests {
         // An identity claiming no rates: the named slots exist, their rows do not.
         var rateless = owned with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: CellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new StateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
+                new WorldStateRow(
+                Name: CellName.Parse(candidate: PrivateStateRow),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
+                        Value: 91L
+                    )]
+            ),
             ]),
         };
-        var identity = new WorldIdentity(document: rateless, defaults: defaults);
+        var identity = new WorldIdentity(
+            defaults: defaults,
+            document: rateless
+        );
 
-        Assert.Null(identity.FixedMoveSpeed);
-        Assert.Null(identity.FixedTurnSpeed);
+        Assert.Null(value: identity.FixedMoveSpeed);
+        Assert.Null(value: identity.FixedTurnSpeed);
 
         var request = new WorldTransferReservationRequest(
             TransferId: 6UL,
@@ -103,42 +110,150 @@ public sealed class IdentityProjectionWireLawTests {
                     PreferredSlot: 0,
                     Identity: identity,
                     Source: default,
-                    BodyColor: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
+                    BodyColor: new Vector3(
+                        x: 0.1f,
+                        y: 0.2f,
+                        z: 0.3f
+                    ),
                     CatalogRig: 3,
-                    Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "machine-a/boot", Index: 0, Generation: 1), Epoch: 0UL)),
-            ]);
+                    Mobility: new WorldMobilityIdentity(
+                        Incarnation: new WorldEntityAddress(
+                            Authority: "machine-a/boot",
+                            Generation: 1,
+                            Index: 0
+                        ),
+                        Epoch: 0UL
+                    )
+                ),
+            ]
+        );
 
         var encoded = WorldFederationCodec.EncodeReservation(request: request);
 
-        Assert.True(WorldFederationCodec.TryDecodeReservation(body: encoded, defaults: defaults, request: out var decoded, failure: out var failure), failure.ToString());
+        Assert.True(
+            condition: WorldFederationCodec.TryDecodeReservation(
+                body: encoded,
+                defaults: defaults,
+                failure: out var failure,
+                request: out var decoded
+            ),
+            userMessage: failure.ToString()
+        );
 
         var arrived = decoded!.Members[0].Identity;
 
-        Assert.NotNull(arrived);
-        Assert.Null(arrived!.FixedMoveSpeed);
-        Assert.Null(arrived.FixedTurnSpeed);
+        Assert.NotNull(@object: arrived);
+        Assert.Null(value: arrived!.FixedMoveSpeed);
+        Assert.Null(value: arrived.FixedTurnSpeed);
     }
+    [Fact]
+    public void ReservationWire_CarriesAppearanceAndRates_NeverTheOwnedDocument() {
+        var defaults = Fixtures.BuildDocument().PlayerDefaults;
+        var owned = OwnedIdentityDocument();
+        var identity = new WorldIdentity(
+            defaults: defaults,
+            document: owned
+        );
+        var request = new WorldTransferReservationRequest(
+            TransferId: 5UL,
+            SourceAuthority: "machine-a/boot",
+            SourceRateHz: 240,
+            SourceTick: 0UL,
+            DeadlineSourceTick: 60UL,
+            Border: "east",
+            BorderCapacity: null,
+            PartyAllOrNothing: true,
+            PeerAdmission: true,
+            Members: [
+                new WorldTransferReservationMember(
+                    Principal: WorldPrincipal.Console,
+                    PreferredSlot: 0,
+                    Identity: identity,
+                    Source: default,
+                    BodyColor: new Vector3(
+                        x: 0.1f,
+                        y: 0.2f,
+                        z: 0.3f
+                    ),
+                    CatalogRig: 3,
+                    Mobility: new WorldMobilityIdentity(
+                        Incarnation: new WorldEntityAddress(
+                            Authority: "machine-a/boot",
+                            Generation: 1,
+                            Index: 0
+                        ),
+                        Epoch: 0UL
+                    )
+                ),
+            ]
+        );
 
-    private static WorldDefinition OwnedIdentityDocument() {
-        var document = Fixtures.BuildDocument();
+        var encoded = WorldFederationCodec.EncodeReservation(request: request);
+        var frame = Encoding.UTF8.GetString(bytes: encoded);
 
-        return document with {
-            DocumentId = "traveller-one",
-            Identity = new WorldIdentityDefinition(
-                Id: SafeName.Parse(candidate: "traveller-one"),
-                Name: "Traveller One",
-                Color: "#3366cc",
-                MoveSpeedState: CellName.Parse(candidate: "ownMoveSpeed"),
-                TurnSpeedState: CellName.Parse(candidate: "ownTurnSpeed"),
-                Controllers: []),
-            StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: CellName.Parse(candidate: "ownMoveSpeed"), Kind: CellKind.Fixed, Cells: [new StateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 4.5).Value)]),
-                new WorldStateRow(Name: CellName.Parse(candidate: "ownTurnSpeed"), Kind: CellKind.Fixed, Cells: [new StateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 2.25).Value)]),
-                new WorldStateRow(Name: CellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new StateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
-            ]),
-            GrantsRaw = [
-                new WorldGrant(Principal: WorldPrincipal.Document(id: PrivateChatPeer), Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: WorldSection.State), Exclusive: false),
-            ],
-        };
+        Assert.DoesNotContain(
+            actualString: frame,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: PrivateChatPeer
+        );
+        Assert.DoesNotContain(
+            actualString: frame,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: PrivateStateRow
+        );
+        Assert.DoesNotContain(
+            actualString: frame,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "puck.world.definition.v1"
+        );
+        // The control: what the destination legitimately needs did cross.
+        Assert.Contains(
+            actualString: frame,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "traveller-one"
+        );
+
+        Assert.True(
+            condition: WorldFederationCodec.TryDecodeReservation(
+                body: encoded,
+                defaults: defaults,
+                failure: out var failure,
+                request: out var decoded
+            ),
+            userMessage: failure.ToString()
+        );
+        Assert.NotNull(@object: decoded);
+
+        var arrived = decoded!.Members[0].Identity;
+
+        Assert.NotNull(@object: arrived);
+        Assert.Equal(
+            expected: identity.Id,
+            actual: arrived!.Id
+        );
+        Assert.Equal(
+            expected: identity.Name,
+            actual: arrived.Name
+        );
+        Assert.Equal(
+            expected: identity.ColorHex,
+            actual: arrived.ColorHex
+        );
+        Assert.Equal(
+            expected: identity.FixedMoveSpeed,
+            actual: arrived.FixedMoveSpeed
+        );
+        Assert.Equal(
+            expected: identity.FixedTurnSpeed,
+            actual: arrived.FixedTurnSpeed
+        );
+        // Nothing the destination can read its way back into: no document, so no grants, no state, no bindings.
+        Assert.Null(@object: arrived.Document);
+        Assert.Null(@object: arrived.Bindings);
+        Assert.Null(@object: arrived.Hud);
+        Assert.False(condition: arrived.TryReadState(
+            name: PrivateStateRow,
+            row: out _
+        ));
     }
 }

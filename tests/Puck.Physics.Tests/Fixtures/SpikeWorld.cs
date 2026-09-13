@@ -10,10 +10,10 @@ namespace Puck.Physics.Tests.Fixtures;
 /// </summary>
 internal sealed class SpikeWorld {
     private readonly List<FixedContactCandidate> m_candidates = [];
-    private readonly ISpikeSurface[] m_surfaces;
     private readonly FixedRigidSolverOptions m_options;
     private readonly FixedQ4816 m_stepSecondsCeiling;
     private readonly FixedQ4816 m_stepSecondsNearest;
+    private readonly ISpikeSurface[] m_surfaces;
 
     private int m_step;
 
@@ -43,7 +43,8 @@ internal sealed class SpikeWorld {
             result: out var ceiling
         )
             ? FixedQ4816.FromRawBits(value: ceiling)
-            : m_stepSecondsNearest);
+            : m_stepSecondsNearest
+        );
 
         Body = body;
         Pose = pose;
@@ -56,25 +57,66 @@ internal sealed class SpikeWorld {
 
     /// <summary>Gets the dynamic body.</summary>
     internal FixedRigidBody Body { get; }
+    /// <summary>Gets the fingerprint of everything a replay would have to reproduce.</summary>
+    internal ulong Digest {
+        get {
+            var digest = FixedRigidArithmetic.DigestSeed;
+
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Center.X.Value
+            );
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Center.Y.Value
+            );
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Center.Z.Value
+            );
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Orientation.X.Value
+            );
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Orientation.Y.Value
+            );
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Orientation.Z.Value
+            );
+            digest = FixedRigidArithmetic.Fold(
+                digest: digest,
+                value: Pose.Orientation.W.Value
+            );
+            digest = Body.Fold(digest: digest);
+
+            return Slots.Fold(
+                digest: digest,
+                step: m_step
+            );
+        }
+    }
+    /// <summary>Gets the activation bound the most recent step used.</summary>
+    internal FixedQ4816 LastStepActivationBound { get; private set; }
+    /// <summary>Gets the number of candidates the most recent step generated.</summary>
+    internal int LastStepCandidateCount { get; private set; }
+    /// <summary>Gets the number of field samples the most recent step consumed.</summary>
+    internal int LastStepSampleCount { get; private set; }
+    /// <summary>Gets or sets a rewriting of the candidate list applied after generation and before the solver sees it
+    /// — the D4 law's permutation hook, and nothing the production path would carry.</summary>
+    internal Func<List<FixedContactCandidate>, List<FixedContactCandidate>>? Permutation { get; set; }
     /// <summary>Gets the body's absolute placement.</summary>
     internal BodyPose Pose { get; }
-    /// <summary>Gets the body's solid.</summary>
-    internal SpikeShape Shape { get; }
     /// <summary>Gets the body's bounding radius about its centre of mass.</summary>
     internal FixedQ4816 Reach { get; }
+    /// <summary>Gets the body's solid.</summary>
+    internal SpikeShape Shape { get; }
     /// <summary>Gets the body's persistent manifold slots.</summary>
     internal FixedManifoldSlotTable Slots { get; }
     /// <summary>Gets the solver.</summary>
     internal FixedRigidSolver Solver { get; }
-    /// <summary>Gets the number of field samples the most recent step consumed.</summary>
-    internal int LastStepSampleCount { get; private set; }
-    /// <summary>Gets the number of candidates the most recent step generated.</summary>
-    internal int LastStepCandidateCount { get; private set; }
-    /// <summary>Gets the activation bound the most recent step used.</summary>
-    internal FixedQ4816 LastStepActivationBound { get; private set; }
-    /// <summary>Gets or sets a rewriting of the candidate list applied after generation and before the solver sees it
-    /// — the D4 law's permutation hook, and nothing the production path would carry.</summary>
-    internal Func<List<FixedContactCandidate>, List<FixedContactCandidate>>? Permutation { get; set; }
 
     /// <summary>Advances the world by one step.</summary>
     internal void Advance() {
@@ -90,7 +132,12 @@ internal sealed class SpikeWorld {
         LastStepActivationBound = bound;
 
         for (var index = 0; (index < m_surfaces.Length); ++index) {
-            m_surfaces[index].Generate(pose: Pose, shape: Shape, activationBound: bound, output: m_candidates);
+            m_surfaces[index].Generate(
+                pose: Pose,
+                shape: Shape,
+                activationBound: bound,
+                output: m_candidates
+            );
         }
 
         if (Permutation is not null) {
@@ -107,7 +154,12 @@ internal sealed class SpikeWorld {
             LastStepSampleCount += m_surfaces[index].SampleCount;
         }
 
-        Solver.Step(body: Body, slots: Slots, candidates: m_candidates, step: m_step);
+        Solver.Step(
+            body: Body,
+            slots: Slots,
+            candidates: m_candidates,
+            step: m_step
+        );
         Pose.Center += Body.DeltaPosition;
         Pose.Orientation = (Body.DeltaRotation * Pose.Orientation).Normalize();
         Body.Orientation = Pose.Orientation;
@@ -117,24 +169,6 @@ internal sealed class SpikeWorld {
     internal void Advance(int count) {
         for (var index = 0; (index < count); ++index) {
             Advance();
-        }
-    }
-
-    /// <summary>Gets the fingerprint of everything a replay would have to reproduce.</summary>
-    internal ulong Digest {
-        get {
-            var digest = FixedRigidArithmetic.DigestSeed;
-
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Center.X.Value);
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Center.Y.Value);
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Center.Z.Value);
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Orientation.X.Value);
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Orientation.Y.Value);
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Orientation.Z.Value);
-            digest = FixedRigidArithmetic.Fold(digest: digest, value: Pose.Orientation.W.Value);
-            digest = Body.Fold(digest: digest);
-
-            return Slots.Fold(digest: digest, step: m_step);
         }
     }
 
@@ -153,7 +187,10 @@ internal sealed class SpikeWorld {
         }
 
         var spin = FixedRigidArithmetic.CeilingProduct(
-            left: FixedRigidArithmetic.CeilingProduct(left: FixedRigidArithmetic.CeilingMagnitude(value: Body.AngularVelocity), right: Reach),
+            left: FixedRigidArithmetic.CeilingProduct(
+                left: FixedRigidArithmetic.CeilingMagnitude(value: Body.AngularVelocity),
+                right: Reach
+            ),
             right: m_stepSecondsCeiling
         );
 
@@ -166,35 +203,13 @@ internal sealed class SpikeWorld {
 }
 /// <summary>Builds solver bodies from authored solids and one density, through the shared mass-property kernels.</summary>
 internal static class SpikeBodies {
-    /// <summary>The fraction bit count mass is derived at before it is inverted.</summary>
-    internal const int MassFractionBitCount = 32;
-    /// <summary>The fraction bit count inertia is derived at before it is inverted.</summary>
-    internal const int InertiaFractionBitCount = 32;
     /// <summary>The fraction bit count a density is authored at.</summary>
     internal const int DensityFractionBitCount = 16;
+    /// <summary>The fraction bit count inertia is derived at before it is inverted.</summary>
+    internal const int InertiaFractionBitCount = 32;
+    /// <summary>The fraction bit count mass is derived at before it is inverted.</summary>
+    internal const int MassFractionBitCount = 32;
 
-    /// <summary>Builds a sphere body.</summary>
-    /// <param name="radius">The radius.</param>
-    /// <param name="density">The density.</param>
-    /// <param name="scales">Where the inverse properties are placed.</param>
-    /// <returns>The body.</returns>
-    /// <exception cref="InvalidOperationException">A mass-property kernel refused the authored solid.</exception>
-    internal static FixedRigidBody Sphere(FixedQ4816 radius, FixedQ4816 density, FixedRigidScales scales) {
-        if (!FixedMassProperties.TrySphereBody(
-            density: density.Value,
-            fractionBitsDensity: DensityFractionBitCount,
-            radius: radius.Value,
-            fractionBitsLength: FixedQ4816.FractionBitCount,
-            fractionBitsMass: MassFractionBitCount,
-            fractionBitsInertia: InertiaFractionBitCount,
-            mass: out var mass,
-            inertia: out var inertia
-        )) {
-            throw new InvalidOperationException(message: "The sphere's mass properties are not representable at the requested placement.");
-        }
-
-        return Assemble(ixx: inertia, iyy: inertia, izz: inertia, mass: mass, scales: scales);
-    }
     /// <summary>Builds a box body.</summary>
     /// <param name="halfExtents">The half-extents.</param>
     /// <param name="density">The density.</param>
@@ -219,7 +234,13 @@ internal static class SpikeBodies {
             throw new InvalidOperationException(message: "The box's mass properties are not representable at the requested placement.");
         }
 
-        return Assemble(ixx: ixx, iyy: iyy, izz: izz, mass: mass, scales: scales);
+        return Assemble(
+            ixx: ixx,
+            iyy: iyy,
+            izz: izz,
+            mass: mass,
+            scales: scales
+        );
     }
     /// <summary>Builds a capsule body whose segment lies along the body's X axis.</summary>
     /// <param name="radius">The radius.</param>
@@ -246,11 +267,50 @@ internal static class SpikeBodies {
             throw new InvalidOperationException(message: "The capsule's mass properties are not representable at the requested placement.");
         }
 
-        return Assemble(ixx: axial, iyy: perpendicular, izz: perpendicular, mass: mass, scales: scales);
+        return Assemble(
+            ixx: axial,
+            iyy: perpendicular,
+            izz: perpendicular,
+            mass: mass,
+            scales: scales
+        );
+    }
+    /// <summary>Builds a sphere body.</summary>
+    /// <param name="radius">The radius.</param>
+    /// <param name="density">The density.</param>
+    /// <param name="scales">Where the inverse properties are placed.</param>
+    /// <returns>The body.</returns>
+    /// <exception cref="InvalidOperationException">A mass-property kernel refused the authored solid.</exception>
+    internal static FixedRigidBody Sphere(FixedQ4816 radius, FixedQ4816 density, FixedRigidScales scales) {
+        if (!FixedMassProperties.TrySphereBody(
+            density: density.Value,
+            fractionBitsDensity: DensityFractionBitCount,
+            radius: radius.Value,
+            fractionBitsLength: FixedQ4816.FractionBitCount,
+            fractionBitsMass: MassFractionBitCount,
+            fractionBitsInertia: InertiaFractionBitCount,
+            mass: out var mass,
+            inertia: out var inertia
+        )) {
+            throw new InvalidOperationException(message: "The sphere's mass properties are not representable at the requested placement.");
+        }
+
+        return Assemble(
+            ixx: inertia,
+            iyy: inertia,
+            izz: inertia,
+            mass: mass,
+            scales: scales
+        );
     }
 
     private static FixedRigidBody Assemble(long mass, long ixx, long iyy, long izz, FixedRigidScales scales) {
-        if (!FixedMassProperties.TryInvertMass(mass: mass, fractionBitsMass: MassFractionBitCount, fractionBitsOut: scales.InverseMass, inverseMass: out var inverseMass)) {
+        if (!FixedMassProperties.TryInvertMass(
+            mass: mass,
+            fractionBitsMass: MassFractionBitCount,
+            fractionBitsOut: scales.InverseMass,
+            inverseMass: out var inverseMass
+        )) {
             throw new InvalidOperationException(message: "The inverse mass is not representable at the requested placement.");
         }
 

@@ -175,14 +175,14 @@ public sealed record OfficialManifest(
 /// unexported fragments merge wholesale and still fall here, since they are neither a standalone world nor named nor
 /// shard-placed).</summary>
 public static class OfficialDocumentRoles {
-    /// <summary>A document under <c>shards/</c>.</summary>
-    public const string Shard = "shard";
     /// <summary>The one document named <c>standard.basis.json</c>.</summary>
     public const string Basis = "basis";
-    /// <summary>A document declaring a non-empty <c>documentId</c> (and not already classified <see cref="Shard"/>).</summary>
-    public const string World = "world";
     /// <summary>Everything else — imported into a host, whether or not it declares <c>exports</c>.</summary>
     public const string Fragment = "fragment";
+    /// <summary>A document under <c>shards/</c>.</summary>
+    public const string Shard = "shard";
+    /// <summary>A document declaring a non-empty <c>documentId</c> (and not already classified <see cref="Shard"/>).</summary>
+    public const string World = "world";
 
     /// <summary>Every recognized role.</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(comparer: StringComparer.Ordinal) { Shard, Basis, World, Fragment };
@@ -194,18 +194,18 @@ public static class OfficialDocumentRoles {
 /// reserved for a row type this codebase does not yet declare — a build never emits an entry under one of those
 /// three today, and none is an error.</summary>
 public static class OfficialAssetFamilies {
-    /// <summary>A <c>WorldMusicRow</c> (<c>puck.music.v1</c>).</summary>
-    public const string Music = "music";
-    /// <summary>A <c>TableRow</c> (<c>puck.table.v1</c>).</summary>
-    public const string Table = "table";
     /// <summary>Reserved — no row type declares this family today.</summary>
     public const string Audio = "audio";
     /// <summary>Reserved — no row type declares this family today.</summary>
-    public const string Synth = "synth";
-    /// <summary>Reserved — no row type declares this family today.</summary>
     public const string Font = "font";
+    /// <summary>A <c>WorldMusicRow</c> (<c>puck.music.v1</c>).</summary>
+    public const string Music = "music";
     /// <summary>A <c>WorldPatch</c> row (<c>puck.synthesizer-patch.v1</c>).</summary>
     public const string Patch = "patch";
+    /// <summary>Reserved — no row type declares this family today.</summary>
+    public const string Synth = "synth";
+    /// <summary>A <c>TableRow</c> (<c>puck.table.v1</c>).</summary>
+    public const string Table = "table";
     /// <summary>A <c>WorldTune</c> row (<c>puck.tune.v1</c>).</summary>
     public const string Tune = "tune";
 

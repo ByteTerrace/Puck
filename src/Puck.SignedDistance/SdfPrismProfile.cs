@@ -19,7 +19,6 @@ public enum SdfPrismProfileKind {
     /// convex-polygon SDF, not the study's smoothed half-plane intersection.</summary>
     Convex,
 }
-
 /// <summary>Authored profile controls for a solid prism. The profile is extruded along local Z.</summary>
 /// <param name="Kind">The profile family.</param>
 /// <param name="CornerRadius">A fraction of the profile's smaller half-extent, in [0, 1]: RoundedRectangle's corner
@@ -30,28 +29,31 @@ public enum SdfPrismProfileKind {
 /// XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no
 /// coincident or collinear vertices, and convex. Ignored by every other kind.</param>
 public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadius = 0.15f, int Sides = 6, IReadOnlyList<Vector2>? Vertices = null) {
-    /// <summary>The fewest vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry.</summary>
-    public const int MinConvexVertices = 3;
     /// <summary>The most vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry — the side table's
     /// per-shape budget (<see cref="SdfProgramBuilder.MaxConvexPolygonWordsPerShape"/> covers it) and the packed
     /// instruction's 4-bit vertex-count lane.</summary>
     public const int MaxConvexVertices = 8;
+    /// <summary>The fewest vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry.</summary>
+    public const int MinConvexVertices = 3;
 
     /// <summary>Whether all controls are finite and within the supported intervals.</summary>
     /// <returns>True for a supported profile with valid controls.</returns>
     public bool IsValid() =>
-        Enum.IsDefined(Kind) &&
-        float.IsFinite(CornerRadius) && CornerRadius >= 0f && CornerRadius <= 1f &&
-        Sides >= 3 && Sides <= 32 &&
-        (Kind != SdfPrismProfileKind.Convex || IsValidConvexHull(Vertices));
-
+        (Enum.IsDefined(value: Kind) &&
+        float.IsFinite(f: CornerRadius) && (CornerRadius >= 0f) && (CornerRadius <= 1f) &&
+        (Sides >= 3) && (Sides <= 32) &&
+        ((Kind != SdfPrismProfileKind.Convex) || IsValidConvexHull(vertices: Vertices)));
     /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex polygon: 3 to
     /// <see cref="MaxConvexVertices"/> finite points inside the unit square (each coordinate in [-1, 1] — the
     /// profile is scaled by the shape's own XY scale like every other Prism profile, and the Prism's cull reach
     /// assumes exactly that frame), no two coincident, no three collinear, and every consecutive edge pair turning
     /// the same way (a strictly negative 2D cross product at every vertex).</summary>
     public static bool IsValidConvexHull(IReadOnlyList<Vector2>? vertices) {
-        if ((vertices is null) || (vertices.Count < MinConvexVertices) || (vertices.Count > MaxConvexVertices)) {
+        if (
+            (vertices is null) ||
+            (vertices.Count < MinConvexVertices) ||
+            (vertices.Count > MaxConvexVertices)
+        ) {
             return false;
         }
 
@@ -60,15 +62,20 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
         for (var i = 0; (i < count); i++) {
             var vertex = vertices[i];
 
-            if (!float.IsFinite(vertex.X) || !float.IsFinite(vertex.Y) || (MathF.Abs(vertex.X) > 1f) || (MathF.Abs(vertex.Y) > 1f)) {
+            if (
+                !float.IsFinite(f: vertex.X) ||
+                !float.IsFinite(f: vertex.Y) ||
+                (MathF.Abs(x: vertex.X) > 1f) ||
+                (MathF.Abs(x: vertex.Y) > 1f)
+            ) {
                 return false;
             }
         }
 
         for (var i = 0; (i < count); i++) {
-            var previous = vertices[((i - 1) + count) % count];
+            var previous = vertices[(((i - 1) + count) % count)];
             var current = vertices[i];
-            var next = vertices[(i + 1) % count];
+            var next = vertices[((i + 1) % count)];
             var edgeIn = (current - previous);
             var edgeOut = (next - current);
             var cross = ((edgeIn.X * edgeOut.Y) - (edgeIn.Y * edgeOut.X));

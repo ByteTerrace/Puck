@@ -28,6 +28,41 @@ internal static class TransformKernels {
             }
         }
     }
+    /// <summary>Validates the overlap contract for a convolution and reports whether both operands are the exact same span.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="left">The first operand.</param>
+    /// <param name="right">The second operand.</param>
+    /// <param name="destination">The destination, which must be disjoint from both operands.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> and <paramref name="right"/> are the exact same span; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="left"/> and <paramref name="right"/> overlap without being the exact same span, or <paramref name="destination"/> overlaps an operand.</exception>
+    public static bool RequireConvolutionAliasing<T>(ReadOnlySpan<T> left, ReadOnlySpan<T> right, ReadOnlySpan<T> destination) {
+        var operandsOverlap = left.Overlaps(
+            elementOffset: out var operandOffset,
+            other: right
+        );
+
+        if (
+            operandsOverlap &&
+            (0 != operandOffset)
+        ) {
+            throw new ArgumentException(
+                message: "right may be the exact same span as left, but may not otherwise overlap it.",
+                paramName: "right"
+            );
+        }
+
+        if (
+            destination.Overlaps(other: left) ||
+            destination.Overlaps(other: right)
+        ) {
+            throw new ArgumentException(
+                message: "destination may not overlap either operand.",
+                paramName: "destination"
+            );
+        }
+
+        return operandsOverlap;
+    }
     /// <summary>Refuses a span whose length is not the plan's.</summary>
     /// <typeparam name="T">The element type.</typeparam>
     /// <param name="expected">The plan's length.</param>
@@ -65,38 +100,6 @@ internal static class TransformKernels {
             );
         }
     }
-    /// <summary>Validates the overlap contract for a convolution and reports whether both operands are the exact same span.</summary>
-    /// <typeparam name="T">The element type.</typeparam>
-    /// <param name="left">The first operand.</param>
-    /// <param name="right">The second operand.</param>
-    /// <param name="destination">The destination, which must be disjoint from both operands.</param>
-    /// <returns><see langword="true"/> when <paramref name="left"/> and <paramref name="right"/> are the exact same span; otherwise <see langword="false"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="left"/> and <paramref name="right"/> overlap without being the exact same span, or <paramref name="destination"/> overlaps an operand.</exception>
-    public static bool RequireConvolutionAliasing<T>(ReadOnlySpan<T> left, ReadOnlySpan<T> right, ReadOnlySpan<T> destination) {
-        var operandsOverlap = left.Overlaps(
-            elementOffset: out var operandOffset,
-            other: right
-        );
-
-        if (operandsOverlap && (0 != operandOffset)) {
-            throw new ArgumentException(
-                message: "right may be the exact same span as left, but may not otherwise overlap it.",
-                paramName: "right"
-            );
-        }
-
-        if (
-            destination.Overlaps(other: left) ||
-            destination.Overlaps(other: right)
-        ) {
-            throw new ArgumentException(
-                message: "destination may not overlap either operand.",
-                paramName: "destination"
-            );
-        }
-
-        return operandsOverlap;
-    }
     /// <summary>Refuses a pointwise destination that overlaps either operand without being the exact same span.</summary>
     /// <typeparam name="T">The element type.</typeparam>
     /// <param name="left">The first operand.</param>
@@ -105,8 +108,14 @@ internal static class TransformKernels {
     /// <exception cref="ArgumentException"><paramref name="destination"/> partially overlaps an operand.</exception>
     public static void RequirePointwiseAliasing<T>(ReadOnlySpan<T> left, ReadOnlySpan<T> right, ReadOnlySpan<T> destination) {
         if (
-            (destination.Overlaps(elementOffset: out var leftOffset, other: left) && (0 != leftOffset)) ||
-            (destination.Overlaps(elementOffset: out var rightOffset, other: right) && (0 != rightOffset))
+            (destination.Overlaps(
+            elementOffset: out var leftOffset,
+            other: left
+        ) && (0 != leftOffset)) ||
+            (destination.Overlaps(
+            elementOffset: out var rightOffset,
+            other: right
+        ) && (0 != rightOffset))
         ) {
             throw new ArgumentException(
                 message: "destination may be the exact same span as either operand, but may not otherwise overlap one.",

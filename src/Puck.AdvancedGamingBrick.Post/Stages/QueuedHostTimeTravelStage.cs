@@ -16,14 +16,26 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     private const int RequestedSampleRate = 32_000;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-time-travel";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
+
+    // The emitted light of the synthetic ROM's uniform backdrop (its palette-entry-0 walk), folded to a long. The
+    // backdrop colour is a monotone function of the CPU iterations the machine ran, so it reflects the exact cycle
+    // position: a rewind that restored the wrong tick-to-cycle phase lands the authority on a different cycle total and
+    // this fold diverges.
+    private static long ObserveState(AdvancedMachineHost host) {
+        var light = host.EmittedLight;
+
+        return (((long)BitConverter.SingleToUInt32Bits(value: light.X)) << 32)
+            ^ (((long)BitConverter.SingleToUInt32Bits(value: light.Y)) << 16)
+            ^ BitConverter.SingleToUInt32Bits(value: light.Z);
+    }
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -45,18 +57,7 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
 
         return (result.Passed
             ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
-    }
-
-    // The emitted light of the synthetic ROM's uniform backdrop (its palette-entry-0 walk), folded to a long. The
-    // backdrop colour is a monotone function of the CPU iterations the machine ran, so it reflects the exact cycle
-    // position: a rewind that restored the wrong tick-to-cycle phase lands the authority on a different cycle total and
-    // this fold diverges.
-    private static long ObserveState(AdvancedMachineHost host) {
-        var light = host.EmittedLight;
-
-        return (((long)BitConverter.SingleToUInt32Bits(value: light.X)) << 32)
-            ^ (((long)BitConverter.SingleToUInt32Bits(value: light.Y)) << 16)
-            ^ BitConverter.SingleToUInt32Bits(value: light.Z);
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

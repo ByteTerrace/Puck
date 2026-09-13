@@ -8,15 +8,28 @@ namespace Puck.World.Server;
 /// <typeparam name="TToken">The opaque payload an owner reads back when its entry comes due — a key, an index, or
 /// whatever else identifies which of the owner's own things this deadline belongs to.</typeparam>
 public sealed class WorldDeadlineTable<TToken> {
+    private int m_count;
     private long[] m_dueTicks = [];
     private TToken[] m_tokens = [];
-    private int m_count;
 
     /// <summary>The number of live (not yet dequeued) entries.</summary>
     public int Count => m_count;
 
-    /// <summary>Removes every entry.</summary>
-    public void Clear() => m_count = 0;
+    private void Grow() {
+        var capacity = Math.Max(
+            val1: 4,
+            val2: (m_dueTicks.Length * 2)
+        );
+
+        Array.Resize(
+            array: ref m_dueTicks,
+            newSize: capacity
+        );
+        Array.Resize(
+            array: ref m_tokens,
+            newSize: capacity
+        );
+    }
 
     /// <summary>Registers one deadline, keeping the backing arrays sorted ascending by due tick. Two entries may
     /// share a due tick; ties dequeue in the order they were added.</summary>
@@ -29,9 +42,12 @@ public sealed class WorldDeadlineTable<TToken> {
 
         var index = m_count;
 
-        while ((index > 0) && (m_dueTicks[index - 1] > dueTick)) {
-            m_dueTicks[index] = m_dueTicks[index - 1];
-            m_tokens[index] = m_tokens[index - 1];
+        while (
+            (index > 0) &&
+            (m_dueTicks[(index - 1)] > dueTick)
+        ) {
+            m_dueTicks[index] = m_dueTicks[(index - 1)];
+            m_tokens[index] = m_tokens[(index - 1)];
             index--;
         }
 
@@ -39,7 +55,8 @@ public sealed class WorldDeadlineTable<TToken> {
         m_tokens[index] = token;
         m_count++;
     }
-
+    /// <summary>Removes every entry.</summary>
+    public void Clear() => m_count = 0;
     /// <summary>Removes the first entry equal to <paramref name="token"/>, wherever it sits, ahead of its own
     /// deadline — the cancellation half of a table an owner adds to eagerly (a lease that commits or aborts before
     /// it expires). A no-op when no such entry is live.</summary>
@@ -49,15 +66,30 @@ public sealed class WorldDeadlineTable<TToken> {
         var comparer = EqualityComparer<TToken>.Default;
 
         for (var index = 0; (index < m_count); index++) {
-            if (!comparer.Equals(m_tokens[index], token)) {
+            if (!comparer.Equals(
+                x: m_tokens[index],
+                y: token
+            )) {
                 continue;
             }
 
             var tail = ((m_count - index) - 1);
 
             if (tail > 0) {
-                Array.Copy(sourceArray: m_dueTicks, sourceIndex: (index + 1), destinationArray: m_dueTicks, destinationIndex: index, length: tail);
-                Array.Copy(sourceArray: m_tokens, sourceIndex: (index + 1), destinationArray: m_tokens, destinationIndex: index, length: tail);
+                Array.Copy(
+                    destinationArray: m_dueTicks,
+                    destinationIndex: index,
+                    length: tail,
+                    sourceArray: m_dueTicks,
+                    sourceIndex: (index + 1)
+                );
+                Array.Copy(
+                    destinationArray: m_tokens,
+                    destinationIndex: index,
+                    length: tail,
+                    sourceArray: m_tokens,
+                    sourceIndex: (index + 1)
+                );
             }
 
             m_count--;
@@ -68,14 +100,16 @@ public sealed class WorldDeadlineTable<TToken> {
 
         return false;
     }
-
     /// <summary>Pops the earliest entry when its due tick has arrived, leaving the remaining entries sorted. A
     /// caller sweeps by looping this until it returns <see langword="false"/>.</summary>
     /// <param name="tick">The current tick, compared against the earliest entry's due tick.</param>
     /// <param name="token">The dequeued entry's payload, or <see langword="default"/> when nothing was due.</param>
     /// <returns><see langword="true"/> when an entry was due and has been removed.</returns>
     public bool TryDequeueDue(long tick, out TToken token) {
-        if ((m_count == 0) || (m_dueTicks[0] > tick)) {
+        if (
+            (m_count == 0) ||
+            (m_dueTicks[0] > tick)
+        ) {
             token = default!;
 
             return false;
@@ -86,8 +120,20 @@ public sealed class WorldDeadlineTable<TToken> {
         var tail = (m_count - 1);
 
         if (tail > 0) {
-            Array.Copy(sourceArray: m_dueTicks, sourceIndex: 1, destinationArray: m_dueTicks, destinationIndex: 0, length: tail);
-            Array.Copy(sourceArray: m_tokens, sourceIndex: 1, destinationArray: m_tokens, destinationIndex: 0, length: tail);
+            Array.Copy(
+                destinationArray: m_dueTicks,
+                destinationIndex: 0,
+                length: tail,
+                sourceArray: m_dueTicks,
+                sourceIndex: 1
+            );
+            Array.Copy(
+                destinationArray: m_tokens,
+                destinationIndex: 0,
+                length: tail,
+                sourceArray: m_tokens,
+                sourceIndex: 1
+            );
         }
 
         m_count--;
@@ -95,15 +141,7 @@ public sealed class WorldDeadlineTable<TToken> {
 
         return true;
     }
-
-    private void Grow() {
-        var capacity = Math.Max(4, (m_dueTicks.Length * 2));
-
-        Array.Resize(array: ref m_dueTicks, newSize: capacity);
-        Array.Resize(array: ref m_tokens, newSize: capacity);
-    }
 }
-
 public sealed partial class WorldServer {
     // Ownership escrow reclaim, transfer-lease expiry, and contribution-tenure retraction all evaluate on the same
     // tick-driven, replay-deterministic terms (see ReclaimExpiredEscrows' own remarks) — one call keeps that shared

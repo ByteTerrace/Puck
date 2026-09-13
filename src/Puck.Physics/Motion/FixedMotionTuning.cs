@@ -60,13 +60,13 @@ public enum ShapingInstant : byte {
     None = 0,
 
     /// <summary>The engage lane converges immediately.</summary>
-    Engage = 1 << 0,
+    Engage = (1 << 0),
 
     /// <summary>The reversal lane converges immediately.</summary>
-    Reversal = 1 << 1,
+    Reversal = (1 << 1),
 
     /// <summary>The release lane converges immediately.</summary>
-    Release = 1 << 2,
+    Release = (1 << 2),
 }
 /// <summary>The compiled form of a <c>shaping</c> row's <c>along</c> facet: the whole-vector response law's
 /// engage/release rates (read when the row carries no <see cref="FixedShapingAcross"/>), and the drive
@@ -148,8 +148,6 @@ public readonly record struct FixedMotionTuning(
     FixedObstructionLatch Obstruction,
     FixedQ4816 GroundStick
 ) {
-    /// <summary>Gets the number of recency clocks the shaping table's recency gates share.</summary>
-    public int RecencySlots => ShapingRecencyFacts.Length;
     /// <summary>Gets a value indicating whether any shaping row names a second-order follower — whether the body's
     /// planar/vertical follower state is live and needs carrying across an up-axis transport.</summary>
     public bool HasDynamics {
@@ -163,4 +161,6 @@ public readonly record struct FixedMotionTuning(
             return false;
         }
     }
+    /// <summary>Gets the number of recency clocks the shaping table's recency gates share.</summary>
+    public int RecencySlots => ShapingRecencyFacts.Length;
 }

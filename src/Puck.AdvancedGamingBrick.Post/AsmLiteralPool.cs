@@ -20,7 +20,8 @@ internal static class AsmLiteralPool {
         foreach (var (instr, rd, value, label) in loads) {
             var resolved = ((label is null)
                 ? value
-                : (romBase + (((uint)labels[label]) * 4u)));
+                : (romBase + (((uint)labels[label]) * 4u))
+            );
             var poolIndex = pool.IndexOf(item: resolved);
 
             if (poolIndex < 0) {

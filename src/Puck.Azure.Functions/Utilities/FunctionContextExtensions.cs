@@ -17,14 +17,14 @@ internal static class FunctionContextExtensions {
             .Claims
             .Any(predicate: static claim =>
                 (("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type))
-            );
+                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)));
 
         return (hasScopes
             ? user
                 .Identity
                 ?.Name
                 ?.ToLowerInvariant()
-            : null);
+            : null
+        );
     }
 }

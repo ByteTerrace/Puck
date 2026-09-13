@@ -268,30 +268,38 @@ public sealed class DriveLawTests {
         "fffffffffffd2583 fffffffffff31fdd fffffffffff55d49 fffffffffff62afb 0000000000027e14 ffffffffffedd197 ffffffffffe60000 0000000000007ee7 0000000000001eb8",
     ];
 
-    // The drive decomposition, spelled as two shaping rows: a held-gated drift row authored first (its own lateral
-    // rate and turnScale apply while the drift channel reads held), and the ordinary row behind it (unconditional,
-    // last) — the FIRST open row governs, so the drift row's own facets replace the ordinary row's whenever it
-    // wins. Both rows share the same longitudinal along facet; only across.lateral and turnScale differ.
-    private static WorldShaping[] Shaping(float lateral = 22f) => [
-        new WorldShaping(
-            When: new WorldPredicate.Held(Channel: "drift"),
-            Along: new WorldShapingAlong(Engage: 96f, ReversalRate: 120f, Release: 20f, BackwardSpeed: 5f),
-            Across: new WorldShapingAcross(Lateral: 6f),
-            TurnScale: 1.4f
-        ),
-        new WorldShaping(
-            Along: new WorldShapingAlong(Engage: 96f, ReversalRate: 120f, Release: 20f, BackwardSpeed: 5f),
-            Across: new WorldShapingAcross(Lateral: lateral)
-        ),
-    ];
     private static WorldDefinition BuildDriveDocument(float lateral = 22f, bool authorDrive = true) {
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
-            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-            new(Name: "drift", Shape: ChannelShape.Binary, Composition: true),
-            new(Name: "boost", Shape: ChannelShape.Binary, Composition: true),
-            new(Name: "pitch", Shape: ChannelShape.Bipolar, Role: ChannelRole.Pitch),
+            new(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        ),
+            new(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        ),
+            new(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        ),
+            new(
+            Name: "drift",
+            Shape: ChannelShape.Binary,
+            Composition: true
+        ),
+            new(
+            Name: "boost",
+            Shape: ChannelShape.Binary,
+            Composition: true
+        ),
+            new(
+            Name: "pitch",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Pitch
+        ),
         };
 
         var drive = new BodyMotionProgram(
@@ -319,22 +327,36 @@ public sealed class DriveLawTests {
             Motion: new WorldMotion(
                 Speed: new WorldSpeed(
                     Value: 16f,
-                    Envelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
-                    Held: new WorldSpeedHeld(Channel: "boost", Multiplier: 1.5f)
+                    Envelope: new MotionScalarEnvelope(
+                        Max: 16f,
+                        Min: 16f
+                    ),
+                    Held: new WorldSpeedHeld(
+                        Channel: "boost",
+                        Multiplier: 1.5f
+                    )
                 ),
-                Turn: new WorldTurn(Rate: 2.4f, ReferenceSpeed: 4f, Falloff: 0.55f, PitchRate: 0.9f),
+                Turn: new WorldTurn(
+                    Rate: 2.4f,
+                    ReferenceSpeed: 4f,
+                    Falloff: 0.55f,
+                    PitchRate: 0.9f
+                ),
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
                         Envelope: new WorldHoldEnvelope(SinkSpeed: 30f),
-                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f),
+                        Gravity: new WorldHoldGravity(
+                            Fall: 26f,
+                            Rise: 14f
+                        ),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
                 ],
                 Shaping: (authorDrive
-                ? Shaping(lateral: lateral)
-                : [])
+            ? Shaping(lateral: lateral)
+            : [])
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters>(),
             ActionsRaw: new Dictionary<string, ActionSpec>(),
@@ -348,6 +370,10 @@ public sealed class DriveLawTests {
             DefaultSeatKitRaw = "kart-test",
         };
     }
+    private static string Hex(FixedQ4816 value) => value.Value.ToString(
+        format: "x16",
+        provider: CultureInfo.InvariantCulture
+    );
     // The scripted intent, one span per tick range: throttle to the pinned speed, steer while moving (where lateral
     // lateral bites), back-throttle through a reversal into backward, a held drift stretch, a held sprint stretch, and a
     // pitched climb.
@@ -355,44 +381,141 @@ public sealed class DriveLawTests {
         var intent = default(PlayerIntent);
 
         if (tick < 40) {
-            return intent.WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One);
+            return intent.WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            );
         }
         if (tick < 88) {
             return intent
-                .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
-                .WithChannel(ordinal: TurnOrdinal, value: FixedQ4816.One);
+                .WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: TurnOrdinal,
+                value: FixedQ4816.One
+            );
         }
         if (tick < 136) {
             return intent
-                .WithChannel(ordinal: ForwardOrdinal, value: -FixedQ4816.One)
-                .WithChannel(ordinal: TurnOrdinal, value: -FixedQ4816.One);
+                .WithChannel(
+                ordinal: ForwardOrdinal,
+                value: -FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: TurnOrdinal,
+                value: -FixedQ4816.One
+            );
         }
         if (tick < 176) {
             return intent
-                .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
-                .WithChannel(ordinal: TurnOrdinal, value: FixedQ4816.One)
-                .WithChannel(ordinal: DriftOrdinal, value: FixedQ4816.One);
+                .WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: TurnOrdinal,
+                value: FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: DriftOrdinal,
+                value: FixedQ4816.One
+            );
         }
         if (tick < 208) {
             return intent
-                .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
-                .WithChannel(ordinal: TurnOrdinal, value: FixedQ4816.One)
-                .WithChannel(ordinal: BoostOrdinal, value: FixedQ4816.One);
+                .WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: TurnOrdinal,
+                value: FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: BoostOrdinal,
+                value: FixedQ4816.One
+            );
         }
 
         return intent
-            .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
-            .WithChannel(ordinal: PitchOrdinal, value: FixedQ4816.One);
+            .WithChannel(
+            ordinal: ForwardOrdinal,
+            value: FixedQ4816.One
+        )
+            .WithChannel(
+            ordinal: PitchOrdinal,
+            value: FixedQ4816.One
+        );
     }
-    private static string Hex(FixedQ4816 value) => value.Value.ToString(
-        format: "x16",
-        provider: CultureInfo.InvariantCulture
-    );
+    // Full-pitch input held far longer than either ceiling takes to reach, so both scenarios have fully saturated
+    // their own clamp by the last tick.
+    private static FixedQ4816 SaturatedDrivePitch(WorldDefinition definition) {
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var intent = default(PlayerIntent)
+            .WithChannel(
+            ordinal: ForwardOrdinal,
+            value: FixedQ4816.One
+        )
+            .WithChannel(
+            ordinal: PitchOrdinal,
+            value: FixedQ4816.One
+        );
+
+        for (var tick = 0; (tick < 75); tick++) {
+            body.SubmitIntent(intent: intent);
+            fixture.Step();
+        }
+
+        return body.CaptureTransferState().DrivePitch;
+    }
+    // The drive decomposition, spelled as two shaping rows: a held-gated drift row authored first (its own lateral
+    // rate and turnScale apply while the drift channel reads held), and the ordinary row behind it (unconditional,
+    // last) — the FIRST open row governs, so the drift row's own facets replace the ordinary row's whenever it
+    // wins. Both rows share the same longitudinal along facet; only across.lateral and turnScale differ.
+    private static WorldShaping[] Shaping(float lateral = 22f) => [
+        new WorldShaping(
+            When: new WorldPredicate.Held(Channel: "drift"),
+            Along: new WorldShapingAlong(
+                BackwardSpeed: 5f,
+                Engage: 96f,
+                Release: 20f,
+                ReversalRate: 120f
+            ),
+            Across: new WorldShapingAcross(Lateral: 6f),
+            TurnScale: 1.4f
+        ),
+        new WorldShaping(
+            Along: new WorldShapingAlong(
+                BackwardSpeed: 5f,
+                Engage: 96f,
+                Release: 20f,
+                ReversalRate: 120f
+            ),
+            Across: new WorldShapingAcross(Lateral: lateral)
+        ),
+    ];
     private static string[] Trace(WorldDefinition definition) {
         using var fixture = Fixtures.FreshServer(definition: definition);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
         var lines = new string[240];
@@ -424,41 +547,25 @@ public sealed class DriveLawTests {
     }
 
     [Fact]
-    public void TheDriveRowReproducesTheRecordedTrace_WhereChangingOneDriveFacetDiverges() {
-        Assert.Equal(
-            expected: DriveTrace240,
-            actual: Trace(definition: BuildDriveDocument())
-        );
-
-        var perturbed = Trace(definition: BuildDriveDocument(lateral: 9f));
-        var moved = 0;
-
-        for (var tick = 0; (tick < DriveTrace240.Length); tick++) {
-            if (!string.Equals(
-                a: DriveTrace240[tick],
-                b: perturbed[tick],
-                comparisonType: StringComparison.Ordinal
-            )) {
-                moved++;
-            }
-        }
-
-        Assert.True(condition: (moved > 0), userMessage: "a slidier drive lateral rate must move the trace, or the trace pins nothing about it");
-    }
-    [Fact]
     public void ADriveProgramOnAKitAuthoringNoShapingRow_RefusesValidationNamingTheFacet() {
-        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: BuildDriveDocument(),
-            reason: out var admittedReason
-        ), userMessage: admittedReason);
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: BuildDriveDocument(),
+                reason: out var admittedReason
+            ),
+            userMessage: admittedReason
+        );
         Assert.False(
             condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: BuildDriveDocument(authorDrive: false),
-            reason: out var deniedReason
-        ),
+                definition: BuildDriveDocument(authorDrive: false),
+                reason: out var deniedReason
+            ),
             userMessage: "a drive program against a kit authoring no shaping row was expected to refuse"
         );
-        Assert.Contains(actualString: deniedReason, expectedSubstring: "Shaping");
+        Assert.Contains(
+            actualString: deniedReason,
+            expectedSubstring: "Shaping"
+        );
     }
     [Fact]
     public void AShapingRowsOwnRatesAndDriftAreRangeCheckedByName() {
@@ -506,44 +613,59 @@ public sealed class DriveLawTests {
 
             Assert.False(
                 condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: (document with { KitRowsRaw = kits }),
-                reason: out var reason
-            ),
+                    definition: (document with { KitRowsRaw = kits }),
+                    reason: out var reason
+                ),
                 userMessage: $"a shaping row failing {token} was expected to refuse"
             );
-            Assert.Contains(actualString: reason, expectedSubstring: token);
+            Assert.Contains(
+                actualString: reason,
+                expectedSubstring: token
+            );
         }
     }
     // The default kit (no maxPitch authored) climbs to exactly 1.2 radians — the engine's old hardcoded clamp, bit
     // for bit. A kit authoring a tighter ceiling climbs to its OWN bound instead, never the engine default.
     [Fact]
     public void MaxPitchClampsTheDriveFrameAtItsAuthoredCeilingNotAHardcodedOne() {
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.2), actual: SaturatedDrivePitch(definition: BuildDriveDocument()));
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 1.2),
+            actual: SaturatedDrivePitch(definition: BuildDriveDocument())
+        );
 
         var kits = BuildDriveDocument().Kits.ToList();
+
         kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { Turn = kits[0].Motion!.Turn with { MaxPitch = 0.3f } }) });
         var narrowed = (BuildDriveDocument() with { KitRowsRaw = kits });
 
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.3), actual: SaturatedDrivePitch(definition: narrowed));
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 0.3),
+            actual: SaturatedDrivePitch(definition: narrowed)
+        );
     }
-    // Full-pitch input held far longer than either ceiling takes to reach, so both scenarios have fully saturated
-    // their own clamp by the last tick.
-    private static FixedQ4816 SaturatedDrivePitch(WorldDefinition definition) {
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+    [Fact]
+    public void TheDriveRowReproducesTheRecordedTrace_WhereChangingOneDriveFacetDiverges() {
+        Assert.Equal(
+            expected: DriveTrace240,
+            actual: Trace(definition: BuildDriveDocument())
+        );
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var perturbed = Trace(definition: BuildDriveDocument(lateral: 9f));
+        var moved = 0;
 
-        var body = fixture.Server.Body(index: actor.Index)!;
-        var intent = default(PlayerIntent)
-            .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
-            .WithChannel(ordinal: PitchOrdinal, value: FixedQ4816.One);
-
-        for (var tick = 0; (tick < 75); tick++) {
-            body.SubmitIntent(intent: intent);
-            fixture.Step();
+        for (var tick = 0; (tick < DriveTrace240.Length); tick++) {
+            if (!string.Equals(
+                a: DriveTrace240[tick],
+                b: perturbed[tick],
+                comparisonType: StringComparison.Ordinal
+            )) {
+                moved++;
+            }
         }
 
-        return body.CaptureTransferState().DrivePitch;
+        Assert.True(
+            condition: (moved > 0),
+            userMessage: "a slidier drive lateral rate must move the trace, or the trace pins nothing about it"
+        );
     }
 }

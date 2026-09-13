@@ -48,9 +48,9 @@ public static class DataProtectionExtensions {
                 .AddAzureClients(configureClients: clientFactoryBuilder => {
                     clientFactoryBuilder
                         .AddBlobServiceClient(serviceUri: new(
-                            baseUri: blobUri,
-                            relativeUri: $"/{blobContainer}"
-                        ))
+                        baseUri: blobUri,
+                        relativeUri: $"/{blobContainer}"
+                    ))
                         .WithName(name: ClientName);
                     clientFactoryBuilder
                         .AddCryptographyClient(vaultUri: keyUri)
@@ -58,23 +58,19 @@ public static class DataProtectionExtensions {
                 });
             services
                 .AddDataProtection()
-                .PersistKeysToAzureBlobStorage(
-                    blobClientFactory: serviceProvider =>
+                .PersistKeysToAzureBlobStorage(blobClientFactory: serviceProvider =>
                         serviceProvider
                             .GetRequiredService<IAzureClientFactory<BlobServiceClient>>()
                             .CreateClient(name: ClientName)
                             .GetBlobContainerClient(blobContainerName: blobContainer)
-                            .GetBlobClient(blobName: blobName)
-                )
+                            .GetBlobClient(blobName: blobName))
                 .ProtectKeysWithAzureKeyVault(
-                    keyIdentifier: keyUri,
-                    keyResolverFactory: static serviceProvider =>
-                        new StaticKeyResolver(
-                            keyEncryptionKey: serviceProvider
+                keyIdentifier: keyUri,
+                keyResolverFactory: static serviceProvider =>
+                        new StaticKeyResolver(keyEncryptionKey: serviceProvider
                                 .GetRequiredService<IAzureClientFactory<CryptographyClient>>()
-                                .CreateClient(name: ClientName)
-                        )
-                )
+                                .CreateClient(name: ClientName))
+            )
                 .SetApplicationName(applicationName: applicationName)
                 .UseCryptographicAlgorithms(configuration: new() {
                     EncryptionAlgorithm = EncryptionAlgorithm.AES_256_GCM,

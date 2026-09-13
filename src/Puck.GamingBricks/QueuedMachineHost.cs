@@ -12,8 +12,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     IMachineVideoOutputs, IMachineVideoOutput, IMachineAudioOutputs, IAudioMachine,
     IMachineInputPorts, IMachineInputPort, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime {
     private readonly QueuedMachineWorker m_worker;
-    private MachinePadState m_input = MachinePadState.Neutral;
 
+    private MachinePadState m_input = MachinePadState.Neutral;
     private string? m_savePath;
 
     /// <summary>Initializes a queued screen-machine host.</summary>
@@ -25,9 +25,9 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <param name="savePath">The initial battery-save path.</param>
     protected QueuedMachineHost(int width, int height, int maximumPendingSteps, string workerName, int audioSampleRate, string? savePath) {
         m_savePath = savePath;
-        VideoOutputs = new Dictionary<string, IMachineVideoOutput> { ["video"] = this }.ToFrozenDictionary(StringComparer.Ordinal);
-        AudioOutputs = new Dictionary<string, IAudioMachine> { ["audio"] = this }.ToFrozenDictionary(StringComparer.Ordinal);
-        InputPorts = new Dictionary<string, IMachineInputPort> { ["controls"] = this }.ToFrozenDictionary(StringComparer.Ordinal);
+        VideoOutputs = new Dictionary<string, IMachineVideoOutput> { ["video"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        AudioOutputs = new Dictionary<string, IAudioMachine> { ["audio"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        InputPorts = new Dictionary<string, IMachineInputPort> { ["controls"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         m_worker = new QueuedMachineWorker(
             audioSampleRate: audioSampleRate,
             height: height,
@@ -37,42 +37,16 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
         );
     }
 
-    /// <summary>Gets the worker used by machine-specific interfaces and by the cable-link substrate, which lends this
-    /// host's core to a <see cref="LinkedMachineGroup"/> through it.</summary>
-    public QueuedMachineWorker Worker => m_worker;
-
-    /// <inheritdoc/>
-    public MachineRuntimeStatus Status => QueueFault is not null ? MachineRuntimeStatus.Faulted
-        : IsAssigned ? MachineRuntimeStatus.Running : MachineRuntimeStatus.Empty;
-    /// <inheritdoc/>
-    public IReadOnlyDictionary<string, IMachineVideoOutput> VideoOutputs { get; }
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, IAudioMachine> AudioOutputs { get; }
-    /// <inheritdoc/>
-    public IReadOnlyDictionary<string, IMachineInputPort> InputPorts { get; }
-    /// <inheritdoc/>
-    public MachinePadState State => m_input;
-    /// <inheritdoc/>
-    public void SetState(in MachinePadState state) => m_input = state;
-    /// <inheritdoc/>
-    public byte[] CaptureCheckpoint() => m_worker.CaptureCheckpoint().Encode(m_input);
-    /// <inheritdoc/>
-    public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
-        var restored = QueuedMachineCheckpoint.Decode(checkpoint);
-        m_worker.RestoreCheckpoint(restored.Checkpoint);
-        m_input = restored.Input;
-    }
-    /// <inheritdoc/>
-    public bool Advance(ulong deltaTicks) => Step(deltaTicks, in m_input);
-    /// <inheritdoc/>
-    public QueuedMachineSubmission Submit(ulong deltaTicks) => Submit(deltaTicks, in m_input);
-
     /// <inheritdoc/>
     public long BackpressureEvents => m_worker.BackpressureEvents;
     /// <inheritdoc/>
     public long CompletedSteps => m_worker.CompletedSteps;
     /// <inheritdoc/>
     public Vector3 EmittedLight => m_worker.EmittedLight;
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IMachineInputPort> InputPorts { get; }
     /// <inheritdoc/>
     public bool IsAssigned => m_worker.IsAssigned;
     /// <inheritdoc/>
@@ -90,8 +64,22 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public int SampleRate =>
         m_worker.AudioSampleRate;
     /// <inheritdoc/>
+    public MachinePadState State => m_input;
+    /// <inheritdoc/>
+    public MachineRuntimeStatus Status => ((QueueFault is not null)
+        ? MachineRuntimeStatus.Faulted
+        : (IsAssigned
+            ? MachineRuntimeStatus.Running
+            : MachineRuntimeStatus.Empty
+    ));
+    /// <inheritdoc/>
     public TimeTravelStatus TimeTravelStatus =>
         m_worker.TimeTravelStatus;
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IMachineVideoOutput> VideoOutputs { get; }
+    /// <summary>Gets the worker used by machine-specific interfaces and by the cable-link substrate, which lends this
+    /// host's core to a <see cref="LinkedMachineGroup"/> through it.</summary>
+    public QueuedMachineWorker Worker => m_worker;
 
     /// <summary>Creates a machine-specific core for newly loaded content.</summary>
     /// <param name="data">The content bytes.</param>
@@ -99,6 +87,13 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <returns>The core owned by the worker.</returns>
     protected abstract IQueuedMachineCore CreateCore(byte[] data, string? savePath);
 
+    /// <inheritdoc/>
+    public bool Advance(ulong deltaTicks) => Step(
+        deltaTicks: deltaTicks,
+        input: in m_input
+    );
+    /// <inheritdoc/>
+    public byte[] CaptureCheckpoint() => m_worker.CaptureCheckpoint().Encode(input: m_input);
     /// <inheritdoc/>
     public void Dispose() =>
         m_worker.Dispose();
@@ -131,6 +126,13 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public int ReadSamples(Span<short> destination) =>
         m_worker.ReadAudioSamples(destination: destination);
     /// <inheritdoc/>
+    public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
+        var restored = QueuedMachineCheckpoint.Decode(bytes: checkpoint);
+
+        m_worker.RestoreCheckpoint(checkpoint: restored.Checkpoint);
+        m_input = restored.Input;
+    }
+    /// <inheritdoc/>
     public int RewindBy(int frames) =>
         m_worker.RewindBy(frames: frames);
     /// <inheritdoc/>
@@ -142,6 +144,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public void SetRunahead(int frames) =>
         m_worker.SetRunahead(frames: frames);
+    /// <inheritdoc/>
+    public void SetState(in MachinePadState state) => m_input = state;
     /// <summary>Synchronously advances with an explicit controller image for standalone hardware callers.</summary>
     /// <param name="deltaTicks">The exact tick budget.</param>
     /// <param name="input">The controller image held throughout the budget.</param>
@@ -151,6 +155,11 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
             deltaTicks: deltaTicks,
             input: in input
         );
+    /// <inheritdoc/>
+    public QueuedMachineSubmission Submit(ulong deltaTicks) => Submit(
+        deltaTicks: deltaTicks,
+        input: in m_input
+    );
     /// <summary>Queues an exact tick and controller segment for standalone hardware callers.</summary>
     /// <param name="deltaTicks">The exact tick budget.</param>
     /// <param name="input">The controller image captured by this submission.</param>

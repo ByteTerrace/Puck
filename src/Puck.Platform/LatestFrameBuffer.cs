@@ -73,7 +73,10 @@ public sealed class LatestFrameBuffer {
                 destination = new byte[m_frame.Length];
             }
 
-            m_frame.CopyTo(array: destination, index: 0);
+            m_frame.CopyTo(
+                array: destination,
+                index: 0
+            );
             height = m_height;
             width = m_width;
 

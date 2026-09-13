@@ -23,11 +23,17 @@ internal static class KeyedReconciler {
             return default;
         }
 
-        if (isRecreateRequired(live, row)) {
+        if (isRecreateRequired(
+            live,
+            row
+        )) {
             return recreate(row);
         }
 
-        update(live, row);
+        update(
+            live,
+            row
+        );
 
         return live;
     }

@@ -10,25 +10,6 @@ namespace Puck.Cli.Tests.Creation;
 /// <summary><c>puck creation</c>: the shipped sculpt registry is empty, an unknown sculpt name and a malformed
 /// world file both refuse without writing, and <c>stats</c> reports the moth prototype's shape budget.</summary>
 public sealed class CreationCommandTests {
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
-    private static string TempWorldCopy() {
-        var source = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "avatars", "moth.world.json");
-        var target = Path.Combine(Path.GetTempPath(), $"puck-creation-cli-{Guid.NewGuid():N}.world.json");
-
-        File.Copy(sourceFileName: source, destFileName: target);
-
-        return target;
-    }
     private static (int ExitCode, string Output) Invoke(params string[] args) {
         var originalOut = Console.Out;
         var originalError = Console.Error;
@@ -44,14 +25,87 @@ public sealed class CreationCommandTests {
             Console.SetError(newError: originalError);
         }
     }
+    private static string RepoRoot() {
+        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
 
-    /// <summary>The shipped registry carries no sculpts.</summary>
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(@object: directory);
+
+        return directory!.FullName;
+    }
+    private static string TempWorldCopy() {
+        var source = Path.Combine(
+            RepoRoot(),
+            "src",
+            "Puck.World",
+            "Assets",
+            "worlds",
+            "avatars",
+            "moth.world.json"
+        );
+        var target = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-creation-cli-{Guid.NewGuid():N}.world.json"
+        );
+
+        File.Copy(
+            destFileName: target,
+            sourceFileName: source
+        );
+
+        return target;
+    }
+
+    /// <summary>A world file that is not a JSON object, requested under an unknown sculpt name, is refused before
+    /// the file is ever parsed — with an empty registry, no name reaches the JSON-parse step.</summary>
     [Fact]
-    public void SculptsReportsAnEmptyRegistry() {
-        var (exitCode, output) = Invoke("creation", "sculpts");
+    public void SculptRefusesAMalformedWorldFileWithoutWriting() {
+        var path = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-creation-cli-{Guid.NewGuid():N}.world.json"
+        );
 
-        Assert.Equal(expected: 0, actual: exitCode);
-        Assert.Contains(expectedSubstring: "none registered", actualString: output, comparisonType: StringComparison.Ordinal);
+        File.WriteAllText(
+            contents: "[1, 2, 3]",
+            path: path
+        );
+
+        var before = File.ReadAllBytes(path: path);
+
+        try {
+            var (exitCode, output) = Invoke(
+                "creation",
+                "sculpt",
+                "not-a-real-sculpt",
+                "--world",
+                path
+            );
+
+            Assert.Equal(
+                actual: exitCode,
+                expected: 2
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "unknown sculpt"
+            );
+            Assert.Equal(
+                expected: before,
+                actual: File.ReadAllBytes(path: path)
+            );
+        } finally {
+            File.Delete(path: path);
+        }
     }
     /// <summary>An unknown sculpt name is refused BY NAME (naming the empty registry) and the file is left
     /// untouched.</summary>
@@ -61,32 +115,280 @@ public sealed class CreationCommandTests {
         var before = File.ReadAllBytes(path: path);
 
         try {
-            var (exitCode, output) = Invoke("creation", "sculpt", "not-a-real-sculpt", "--world", path);
+            var (exitCode, output) = Invoke(
+                "creation",
+                "sculpt",
+                "not-a-real-sculpt",
+                "--world",
+                path
+            );
 
-            Assert.Equal(expected: 2, actual: exitCode);
-            Assert.Contains(expectedSubstring: "unknown sculpt", actualString: output, comparisonType: StringComparison.Ordinal);
-            Assert.Contains(expectedSubstring: "none registered", actualString: output, comparisonType: StringComparison.Ordinal);
-            Assert.Equal(expected: before, actual: File.ReadAllBytes(path: path));
+            Assert.Equal(
+                actual: exitCode,
+                expected: 2
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "unknown sculpt"
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "none registered"
+            );
+            Assert.Equal(
+                expected: before,
+                actual: File.ReadAllBytes(path: path)
+            );
         } finally {
             File.Delete(path: path);
         }
     }
-    /// <summary>A world file that is not a JSON object, requested under an unknown sculpt name, is refused before
-    /// the file is ever parsed — with an empty registry, no name reaches the JSON-parse step.</summary>
+    /// <summary>The shipped registry carries no sculpts.</summary>
     [Fact]
-    public void SculptRefusesAMalformedWorldFileWithoutWriting() {
-        var path = Path.Combine(Path.GetTempPath(), $"puck-creation-cli-{Guid.NewGuid():N}.world.json");
+    public void SculptsReportsAnEmptyRegistry() {
+        var (exitCode, output) = Invoke(
+            "creation",
+            "sculpts"
+        );
 
-        File.WriteAllText(path: path, contents: "[1, 2, 3]");
-
-        var before = File.ReadAllBytes(path: path);
+        Assert.Equal(
+            actual: exitCode,
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "none registered"
+        );
+    }
+    /// <summary>Schema and render admission cannot stand in for contact compilation. A Convex prism leaves a
+    /// residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
+    [Theory]
+    [InlineData(true, true, 1)]
+    [InlineData(true, false, 0)]
+    [InlineData(false, true, 0)]
+    public void StatsConstructsContactForSolidPlacements(bool solid, bool nonuniform, int expectedExitCode) {
+        var path = TempWorldCopy();
 
         try {
-            var (exitCode, output) = Invoke("creation", "sculpt", "not-a-real-sculpt", "--world", path);
+            var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
+            var shape = new ShapeDocument(
+                Id: 0,
+                Name: "convex",
+                Type: SdfSolidPrimitive.Prism,
+                Position: Vector3.Zero,
+                Rotation: Quaternion.Identity,
+                Scale: (nonuniform
+                ? new Vector3(
+                        x: .4f,
+                        y: .2f,
+                        z: .1f
+                    )
+                : new Vector3(value: .2f)),
+                Material: 0,
+                Blend: SdfBlendOp.Union,
+                Smooth: 0f,
+                Group: 0,
+                Profile: new(
+                    SdfPrismProfileKind.Convex,
+                    Vertices: [
+                    new(
+                            -1f,
+                            -1f
+                        ), new(
+                            -1f,
+                            1f
+                        ), new(
+                            1f,
+                            1f
+                        ), new(
+                            1f,
+                            -1f
+                        ),
+                ]
+                )
+            );
+            var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(
+                Schema: CreationDocument.CurrentSchema,
+                Name: "contact-proof",
+                Palette: null,
+                Shapes: [shape],
+                Frames: null
+            ));
 
-            Assert.Equal(expected: 2, actual: exitCode);
-            Assert.Contains(expectedSubstring: "unknown sculpt", actualString: output, comparisonType: StringComparison.Ordinal);
-            Assert.Equal(expected: before, actual: File.ReadAllBytes(path: path));
+            WorldDefinitionSerialization.Save(
+                definition: definition with {
+                CreationsRaw = [.. definition.Creations, new WorldPrototype(
+                        "contact-proof",
+                        canonical.Document,
+                        canonical.Hash
+                    )],
+                PlacementRowsRaw = [.. definition.Placements, new WorldPlacement(
+                        Id: "contact-proof",
+                        PrototypeId: "contact-proof",
+                        Position: new Vector3(
+                            x: 3f,
+                            y: 1f,
+                            z: 0f
+                        ),
+                        YawDegrees: 0f,
+                        Scale: 1f,
+                        Solid: (solid
+                ? new WorldSolid(Margin: 0f)
+                : null)
+                    )],
+            },
+                path: path
+            );
+            var before = File.ReadAllBytes(path: path);
+            // Deliberately filter to Moth: contact coverage is world-wide, not limited to the report's prototype.
+            var (exitCode, output) = Invoke(
+                "creation",
+                "stats",
+                "--world",
+                path,
+                "--prototype",
+                "moth"
+            );
+
+            Assert.Equal(
+                actual: exitCode,
+                expected: expectedExitCode
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: ((expectedExitCode == 0)
+                ? "contact: accepted"
+                : "contact inspection failed")
+            );
+            if (expectedExitCode != 0) {
+                Assert.Contains(
+                    actualString: output,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: "Scale"
+                );
+            }
+            Assert.Equal(
+                before,
+                File.ReadAllBytes(path: path)
+            );
+        } finally {
+            File.Delete(path: path);
+        }
+    }
+    [Fact]
+    public void StatsExposesSharedFlareClampsInsteadOfOnlyTheUnitGlobalScale() {
+        var path = TempWorldCopy();
+
+        try {
+            var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
+            var shape = new ShapeDocument(
+                Id: 0,
+                Name: "flared",
+                Type: SdfSolidPrimitive.Sphere,
+                Position: Vector3.Zero,
+                Rotation: Quaternion.Identity,
+                Scale: Vector3.One,
+                Material: 0,
+                Blend: SdfBlendOp.Union,
+                Smooth: 0f,
+                Group: 1,
+                Flare: new ShapeFlareDocument(
+                    2f,
+                    0f,
+                    1f
+                )
+            );
+            var document = new CreationDocument(
+                Schema: CreationDocument.CurrentSchema,
+                Name: "scope-proof",
+                Palette: null,
+                Shapes: [shape, shape with { Id = 1, Name = "cutter", Flare = null, Blend = SdfBlendOp.Subtraction }],
+                Frames: null,
+                Noise: null
+            );
+            var canonical = CreationCanonicalizer.Canonicalize(document);
+
+            WorldDefinitionSerialization.Save(
+                definition: definition with {
+                CreationsRaw = [.. definition.Creations, new WorldPrototype(
+                        "scope-proof",
+                        canonical.Document,
+                        canonical.Hash
+                    )],
+            },
+                path: path
+            );
+            var before = File.ReadAllBytes(path: path);
+
+            var (exitCode, output) = Invoke(
+                "creation",
+                "stats",
+                "--world",
+                path,
+                "--prototype",
+                "scope-proof"
+            );
+
+            Assert.Equal(
+                actual: exitCode,
+                expected: 0
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "shape 0 (flared): flare"
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "static: globalStepScale 1, scoped clamps 1 (1 shared)"
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "pooled: globalStepScale 1, scoped clamps 1 (1 shared)"
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "2 shape(s) sharing one clamp"
+            );
+            Assert.Equal(
+                before,
+                File.ReadAllBytes(path: path)
+            );
+        } finally {
+            File.Delete(path: path);
+        }
+    }
+    /// <summary>An unknown prototype id is refused, naming that it names no such prototype.</summary>
+    [Fact]
+    public void StatsRefusesAnUnknownPrototypeId() {
+        var path = TempWorldCopy();
+
+        try {
+            var (exitCode, output) = Invoke(
+                "creation",
+                "stats",
+                "--world",
+                path,
+                "--prototype",
+                "not-a-real-prototype"
+            );
+
+            Assert.Equal(
+                actual: exitCode,
+                expected: 2
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "names no prototype"
+            );
         } finally {
             File.Delete(path: path);
         }
@@ -104,99 +406,35 @@ public sealed class CreationCommandTests {
                 b: "moth",
                 comparisonType: StringComparison.Ordinal
             ));
-            var (exitCode, output) = Invoke("creation", "stats", "--world", path, "--prototype", "moth");
 
-            Assert.Equal(expected: 0, actual: exitCode);
-            Assert.Contains(expectedSubstring: $"[moth] shapes: {moth.Document.Shapes!.Count}, stamp budget: {moth.Document.StampShapeCount()}/{WorldPlacementPolicy.MaxShapesPerStamp}", actualString: output, comparisonType: StringComparison.Ordinal);
-            Assert.Contains(expectedSubstring: "primitive:", actualString: output, comparisonType: StringComparison.Ordinal);
-            Assert.Contains("contact: accepted", output, StringComparison.Ordinal);
-        } finally {
-            File.Delete(path: path);
-        }
-    }
-    /// <summary>Schema and render admission cannot stand in for contact compilation. A Convex prism leaves a
-    /// residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
-    [Theory]
-    [InlineData(true, true, 1)]
-    [InlineData(true, false, 0)]
-    [InlineData(false, true, 0)]
-    public void StatsConstructsContactForSolidPlacements(bool solid, bool nonuniform, int expectedExitCode) {
-        var path = TempWorldCopy();
-        try {
-            var definition = WorldDefinitionSerialization.Deserialize(File.ReadAllBytes(path));
-            var shape = new ShapeDocument(
-                Id: 0, Name: "convex", Type: SdfSolidPrimitive.Prism,
-                Position: Vector3.Zero, Rotation: Quaternion.Identity,
-                Scale: nonuniform ? new Vector3(.4f, .2f, .1f) : new Vector3(.2f),
-                Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0,
-                Profile: new(SdfPrismProfileKind.Convex, Vertices: [
-                    new(-1f, -1f), new(-1f, 1f), new(1f, 1f), new(1f, -1f),
-                ]));
-            var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(
-                Schema: CreationDocument.CurrentSchema, Name: "contact-proof", Palette: null,
-                Shapes: [shape], Frames: null));
-            WorldDefinitionSerialization.Save(definition with {
-                CreationsRaw = [.. definition.Creations, new WorldPrototype("contact-proof", canonical.Document, canonical.Hash)],
-                PlacementRowsRaw = [.. definition.Placements, new WorldPlacement(
-                    Id: "contact-proof", PrototypeId: "contact-proof", Position: new Vector3(3f, 1f, 0f),
-                    YawDegrees: 0f, Scale: 1f, Solid: solid ? new WorldSolid(Margin: 0f) : null)],
-            }, path);
-            var before = File.ReadAllBytes(path);
-            // Deliberately filter to Moth: contact coverage is world-wide, not limited to the report's prototype.
-            var (exitCode, output) = Invoke("creation", "stats", "--world", path, "--prototype", "moth");
+            var (exitCode, output) = Invoke(
+                "creation",
+                "stats",
+                "--world",
+                path,
+                "--prototype",
+                "moth"
+            );
 
-            Assert.Equal(expectedExitCode, exitCode);
-            Assert.Contains(expectedExitCode == 0 ? "contact: accepted" : "contact inspection failed", output, StringComparison.Ordinal);
-            if (expectedExitCode != 0) {
-                Assert.Contains("Scale", output, StringComparison.Ordinal);
-            }
-            Assert.Equal(before, File.ReadAllBytes(path));
-        } finally {
-            File.Delete(path);
-        }
-    }
-    [Fact]
-    public void StatsExposesSharedFlareClampsInsteadOfOnlyTheUnitGlobalScale() {
-        var path = TempWorldCopy();
-        try {
-            var definition = WorldDefinitionSerialization.Deserialize(File.ReadAllBytes(path));
-            var shape = new ShapeDocument(
-                Id: 0, Name: "flared", Type: SdfSolidPrimitive.Sphere,
-                Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: Vector3.One,
-                Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 1,
-                Flare: new ShapeFlareDocument(2f, 0f, 1f));
-            var document = new CreationDocument(
-                Schema: CreationDocument.CurrentSchema, Name: "scope-proof", Palette: null,
-                Shapes: [shape, shape with { Id = 1, Name = "cutter", Flare = null, Blend = SdfBlendOp.Subtraction }],
-                Frames: null, Noise: null);
-            var canonical = CreationCanonicalizer.Canonicalize(document);
-            WorldDefinitionSerialization.Save(definition with {
-                CreationsRaw = [.. definition.Creations, new WorldPrototype("scope-proof", canonical.Document, canonical.Hash)],
-            }, path);
-            var before = File.ReadAllBytes(path);
-            var (exitCode, output) = Invoke("creation", "stats", "--world", path, "--prototype", "scope-proof");
-
-            Assert.Equal(0, exitCode);
-            Assert.Contains("shape 0 (flared): flare", output, StringComparison.Ordinal);
-            Assert.Contains("static: globalStepScale 1, scoped clamps 1 (1 shared)", output, StringComparison.Ordinal);
-            Assert.Contains("pooled: globalStepScale 1, scoped clamps 1 (1 shared)", output, StringComparison.Ordinal);
-            Assert.Contains("2 shape(s) sharing one clamp", output, StringComparison.Ordinal);
-            Assert.Equal(before, File.ReadAllBytes(path));
-        } finally {
-            File.Delete(path);
-        }
-    }
-
-    /// <summary>An unknown prototype id is refused, naming that it names no such prototype.</summary>
-    [Fact]
-    public void StatsRefusesAnUnknownPrototypeId() {
-        var path = TempWorldCopy();
-
-        try {
-            var (exitCode, output) = Invoke("creation", "stats", "--world", path, "--prototype", "not-a-real-prototype");
-
-            Assert.Equal(expected: 2, actual: exitCode);
-            Assert.Contains(expectedSubstring: "names no prototype", actualString: output, comparisonType: StringComparison.Ordinal);
+            Assert.Equal(
+                actual: exitCode,
+                expected: 0
+            );
+            Assert.Contains(
+                expectedSubstring: $"[moth] shapes: {moth.Document.Shapes!.Count}, stamp budget: {moth.Document.StampShapeCount()}/{WorldPlacementPolicy.MaxShapesPerStamp}",
+                actualString: output,
+                comparisonType: StringComparison.Ordinal
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "primitive:"
+            );
+            Assert.Contains(
+                actualString: output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "contact: accepted"
+            );
         } finally {
             File.Delete(path: path);
         }

@@ -27,15 +27,15 @@ public sealed class AgbMachineConfiguration {
         Bios = bios;
         BootMode = bootMode;
         Rom = rom;
-        Options = options ?? new AgbMachineOptions();
+        Options = (options ?? new AgbMachineOptions());
     }
 
     /// <summary>Gets the BIOS image the machine boots with.</summary>
     public ReadOnlyMemory<byte> Bios { get; }
     /// <summary>Gets whether the host executes firmware from reset or seeds the cartridge handoff.</summary>
     public MachineBootMode BootMode { get; }
-    /// <summary>Gets the cartridge ROM image the machine runs.</summary>
-    public byte[] Rom { get; }
     /// <summary>Gets the explicit per-machine options retained by forks.</summary>
     public AgbMachineOptions Options { get; }
+    /// <summary>Gets the cartridge ROM image the machine runs.</summary>
+    public byte[] Rom { get; }
 }

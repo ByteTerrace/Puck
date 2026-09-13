@@ -71,11 +71,22 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 case WorldPlacementResponseCondition.FieldCondition field:
-                    ValidateFieldCondition(condition: field, fieldNames: fieldNames, definition: definition, entryPath: entryPath, errors: errors);
+                    ValidateFieldCondition(
+                        condition: field,
+                        definition: definition,
+                        entryPath: entryPath,
+                        errors: errors,
+                        fieldNames: fieldNames
+                    );
 
                     break;
                 case WorldPlacementResponseCondition.StateCondition state:
-                    ValidateStateCondition(condition: state, definition: definition, entryPath: entryPath, errors: errors);
+                    ValidateStateCondition(
+                        condition: state,
+                        definition: definition,
+                        entryPath: entryPath,
+                        errors: errors
+                    );
 
                     break;
             }
@@ -115,7 +126,13 @@ public static partial class WorldDefinitionValidator {
     // Returns the resolved row's kind so a comparand's kind can be checked against it, or null when the row itself
     // already refused (so the caller does not pile a second, confusing error on top).
     private static CellKind? ValidateStateCell(string? row, string? key, string entryPath, WorldDefinition definition, List<string> errors) {
-        if ((row is null) || (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row) is not { } declared)) {
+        if (
+            (row is null) ||
+            (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: row
+        ) is not { } declared)
+        ) {
             errors.Add(item: $"{entryPath} references state row '{row}', which the document does not declare.");
 
             return null;
@@ -125,11 +142,24 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath} references state row '{row}', which is kind=Text — a response compares numbers, never text.");
         }
 
-        if (declared.IsKeyed && (key is null)) {
+        if (
+            declared.IsKeyed &&
+            (key is null)
+        ) {
             errors.Add(item: $"{entryPath} names keyed row '{row}' without a 'key' — a keyed row has no single cell, so name the one you mean.");
-        } else if (!declared.IsKeyed && (key is not null)) {
+        } else if (
+            !declared.IsKeyed &&
+            (key is not null)
+        ) {
             errors.Add(item: $"{entryPath} names row '{row}' with a 'key', but the row is not keyed — omit 'key' to read its slot cell.");
-        } else if ((key is not null) && !CellName.TryParse(candidate: key, name: out _, reason: out var reason)) {
+        } else if (
+            (key is not null) &&
+            !CellName.TryParse(
+            candidate: key,
+            name: out _,
+            reason: out var reason
+        )
+        ) {
             errors.Add(item: $"{entryPath} key '{key}' {reason}");
         }
 
@@ -140,19 +170,27 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath}.when.comparison '{condition.Comparison}' is unknown.");
         }
 
-        var kind = ValidateStateCell(row: condition.State, key: condition.Key, entryPath: $"{entryPath}.when.state", definition: definition, errors: errors);
+        var kind = ValidateStateCell(
+            row: condition.State,
+            key: condition.Key,
+            entryPath: $"{entryPath}.when.state",
+            definition: definition,
+            errors: errors
+        );
         var hasValue = (condition.Value is not null);
         var hasComparand = (condition.ComparandState is not null);
 
-        if ((condition.ComparandKey is not null) && (condition.ComparandState is null)) {
+        if (
+            (condition.ComparandKey is not null) &&
+            (condition.ComparandState is null)
+        ) {
             errors.Add(item: $"{entryPath}.when names 'comparandKey' without 'comparandState' — a comparand key addresses a cell inside a comparand row, which must be named.");
         }
 
         if (hasValue == hasComparand) {
             errors.Add(item: (hasValue
                 ? $"{entryPath}.when names both 'value' and 'comparandState' — a state condition spells exactly one comparand, never both."
-                : $"{entryPath}.when names neither 'value' nor 'comparandState' — a state condition must spell exactly one comparand."
-            ));
+                : $"{entryPath}.when names neither 'value' nor 'comparandState' — a state condition must spell exactly one comparand."));
 
             return;
         }
@@ -165,9 +203,19 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        var comparandKind = ValidateStateCell(row: condition.ComparandState, key: condition.ComparandKey, entryPath: $"{entryPath}.when.comparandState", definition: definition, errors: errors);
+        var comparandKind = ValidateStateCell(
+            row: condition.ComparandState,
+            key: condition.ComparandKey,
+            entryPath: $"{entryPath}.when.comparandState",
+            definition: definition,
+            errors: errors
+        );
 
-        if ((kind is { } primaryKind) && (comparandKind is { } otherKind) && (primaryKind != otherKind)) {
+        if (
+            (kind is { } primaryKind) &&
+            (comparandKind is { } otherKind) &&
+            (primaryKind != otherKind)
+        ) {
             errors.Add(item: $"{entryPath}.when '{condition.State}' is kind={primaryKind} but comparand '{condition.ComparandState}' is kind={otherKind} — mixed-kind comparisons are refused; author both sides the same kind.");
         }
     }

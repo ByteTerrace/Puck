@@ -37,7 +37,10 @@ public sealed class VulkanGpuTimingPoolFactory(IVulkanQueryPoolApi queryPoolApi,
         var physicalDeviceHandle = context.PhysicalDevice.Handle;
         var graphicsQueueFamilyIndex = 0u;
 
-        foreach (var family in physicalDeviceApi.GetQueueFamilies(instanceHandle: instanceHandle, physicalDeviceHandle: physicalDeviceHandle)) {
+        foreach (var family in physicalDeviceApi.GetQueueFamilies(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        )) {
             if (family.Flags.HasFlag(flag: VkQueueFlags.Graphics)) {
                 graphicsQueueFamilyIndex = family.Index;
 

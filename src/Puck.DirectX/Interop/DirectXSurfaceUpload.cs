@@ -116,7 +116,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         );
         ArgumentOutOfRangeException.ThrowIfZero(value: width);
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
-        var requiredByteLength = Surface.RequiredByteLength(height: height, width: width);
+        var requiredByteLength = Surface.RequiredByteLength(
+            height: height,
+            width: width
+        );
 
         if (pixels.Length != requiredByteLength) {
             throw new ArgumentException(
@@ -251,10 +254,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM => 4u,
             DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM => 4u,
             _ => throw new ArgumentOutOfRangeException(
-                actualValue: format,
-                message: "The pixel format has no known byte size.",
-                paramName: nameof(format)
-            ),
+            actualValue: format,
+            message: "The pixel format has no known byte size.",
+            paramName: nameof(format)
+        ),
         };
     }
     private void EnsureResources(uint width, uint height, DXGI_FORMAT format) {
@@ -395,13 +398,13 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             for (var row = 0; (row < m_height); row++) {
                 pixels
                     .Slice(
-                        length: packedRowBytes,
-                        start: (row * packedRowBytes)
-                    )
+                    length: packedRowBytes,
+                    start: (row * packedRowBytes)
+                )
                     .CopyTo(destination: destination.Slice(
-                        length: packedRowBytes,
-                        start: (row * paddedRowPitch)
-                    ));
+                    length: packedRowBytes,
+                    start: (row * paddedRowPitch)
+                ));
             }
         } finally {
             uploadBuffer->Unmap(

@@ -142,8 +142,8 @@ public sealed class FontAtlas {
         ArgumentNullException.ThrowIfNull(glyphs);
         ArgumentNullException.ThrowIfNull(kerningPairs);
 
-        m_allGlyphs = Array.AsReadOnly(glyphs.ToArray());
-        m_kerningPairs = Array.AsReadOnly(kerningPairs.ToArray());
+        m_allGlyphs = Array.AsReadOnly(array: glyphs.ToArray());
+        m_kerningPairs = Array.AsReadOnly(array: kerningPairs.ToArray());
 
         Kind = kind;
         ImagePath = imagePath;

@@ -19,9 +19,31 @@ public sealed class InhabitCountLawTests {
     private const string CourtPlacementId = "court";
     private const int DistributionSampleCount = 4;
     private const int ExtraPeerSlots = 6;
-    private static readonly Vector3 CourtCenter = new(x: 5f, y: 0f, z: 5f);
-    private static readonly WorldSequence Fill = new(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f);
 
+    private static readonly Vector3 CourtCenter = new(
+        x: 5f,
+        y: 0f,
+        z: 5f
+    );
+    private static readonly WorldSequence Fill = new(
+        Name: WorldSequence.Additive,
+        Offset: 0,
+        Step: 0.618034f
+    );
+
+    // Compares the PLANAR offset only (X/Z) — what the distribution's fan actually places — never Y: a freshly
+    // admitted body's first advanced tick settles its exact vertical rest by the ordinary motion program, a fact
+    // about the kit's contact resolution, not the region's fill sequence this law is proving.
+    private static void AssertPlanarOffset(FixedVector3 expected, FixedVector3 actual) {
+        Assert.Equal(
+            expected: expected.X,
+            actual: actual.X
+        );
+        Assert.Equal(
+            expected: expected.Z,
+            actual: actual.Z
+        );
+    }
     private static WorldPrototype Creation() {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
@@ -43,9 +65,16 @@ public sealed class InhabitCountLawTests {
             ],
             Frames: null
         );
-        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: CourtCreation);
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: document,
+            source: CourtCreation
+        );
 
-        return new WorldPrototype(Id: CourtCreation, Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(
+            Id: CourtCreation,
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
     }
     // A court whose inhabit count reads the "courtSize" Int slot cell (initial value initial), fanned over a
     // radius-2 Disc distribution sampled at DistributionSampleCount — a bound tighter than the authored peer
@@ -57,22 +86,25 @@ public sealed class InhabitCountLawTests {
             CreationsRaw = [Creation()],
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: CourtPlacementId,
-                    PrototypeId: CourtCreation,
-                    Position: new Puck.Assets.Documents.DocumentVector3(value: CourtCenter),
-                    YawDegrees: 0f,
-                    Scale: 1f,
-                    Inhabit: new WorldPlacementInhabit(
-                        Kit: Fixtures.SeatKitName,
-                        Look: null,
-                        Source: IntentSource.Idle,
-                        Count: new WorldPlacementInhabitCount(Row: CountRow),
-                        Distribution: new WorldDistribution(
-                            Region: new WorldDistributionRegion.Disc(Radius: 2f, SampleCount: DistributionSampleCount),
-                            Fill: Fill
-                        )
+                Id: CourtPlacementId,
+                PrototypeId: CourtCreation,
+                Position: new Puck.Assets.Documents.DocumentVector3(value: CourtCenter),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Inhabit: new WorldPlacementInhabit(
+                    Kit: Fixtures.SeatKitName,
+                    Look: null,
+                    Source: IntentSource.Idle,
+                    Count: new WorldPlacementInhabitCount(Row: CountRow),
+                    Distribution: new WorldDistribution(
+                        Region: new WorldDistributionRegion.Disc(
+                            Radius: 2f,
+                            SampleCount: DistributionSampleCount
+                        ),
+                        Fill: Fill
                     )
-                ),
+                )
+            ),
             ],
             PopulationRaw = (document.Population with {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + ExtraPeerSlots),
@@ -81,7 +113,16 @@ public sealed class InhabitCountLawTests {
                 ReconnectGraceSeconds = 0f,
             }),
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: CellName.Parse(candidate: CountRow), Kind: CellKind.Int, Min: 0, Max: 100, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: initial)]),
+                new WorldStateRow(
+                Name: CellName.Parse(candidate: CountRow),
+                Kind: CellKind.Int,
+                Min: 0,
+                Max: 100,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: initial
+                    )]
+            ),
             ]),
         });
     }
@@ -93,26 +134,21 @@ public sealed class InhabitCountLawTests {
     private static FixedVector3 ExpectedOffset(int ordinal) {
         var radius = FixedQ4816.FromDouble(value: 2.0);
         var fraction = (FixedQ4816.FromInteger(value: ((2L * ordinal) + 1L)) / FixedQ4816.FromInteger(value: (2L * DistributionSampleCount)));
-        var angle = WorldSequenceSampling.FixedAngle(sequence: Fill, index: ordinal);
+        var angle = WorldSequenceSampling.FixedAngle(
+            index: ordinal,
+            sequence: Fill
+        );
         var r = (radius * FixedQ4816.Sqrt(value: fraction));
+
         var (sin, cos) = FixedQ4816.SinCos(angle: angle);
         var center = FixedVector3.FromVector3(value: CourtCenter);
 
-        return new FixedVector3(X: (center.X + (r * cos)), Y: center.Y, Z: (center.Z + (r * sin)));
+        return new FixedVector3(
+            X: (center.X + (r * cos)),
+            Y: center.Y,
+            Z: (center.Z + (r * sin))
+        );
     }
-    // Drives WorldPopulation.ReconcileInhabitCounts directly against a COPY of the fixture's own document whose
-    // count cell reads `value` — the server's own live definition and mutation pipeline are never touched, so this
-    // exercises the reconcile primitive in isolation (no rule frame, no tick advance, no unrelated allocation) —
-    // exactly the shape a rule-frame fold's end-of-tick install hands it in the live game.
-    private static WorldDefinition WithCellValue(WorldFixture fixture, int value) => (fixture.Server.Definition with {
-        StateRaw = (fixture.Server.Definition.StateRaw! with {
-            World = [
-                new WorldStateRow(Name: CellName.Parse(candidate: CountRow), Kind: CellKind.Int, Min: 0, Max: 100, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)]),
-            ],
-        }),
-    });
-    private static void Reconcile(WorldFixture fixture, int cellValue, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) =>
-        fixture.Server.Population.ReconcileInhabitCounts(definition: WithCellValue(fixture: fixture, value: cellValue), tick: fixture.Server.NextInputTick, admitted: admitted, disconnected: disconnected);
     // The court's own inhabitants, in ADMISSION order (highest body index first — see HighestFreeSlot's own
     // remarks: the first body admitted claims the highest free slot, so admission order is descending index order).
     private static int[] Inhabitants(WorldFixture fixture) {
@@ -120,20 +156,47 @@ public sealed class InhabitCountLawTests {
         var found = new List<int>();
 
         for (var index = (population.Capacity - 1); (index >= population.LocalSeatCount); index--) {
-            if (string.Equals(a: population.InhabitantPlacementId(index: index), b: CourtPlacementId, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: population.InhabitantPlacementId(index: index),
+                b: CourtPlacementId,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 found.Add(item: index);
             }
         }
 
         return [.. found];
     }
-    // Compares the PLANAR offset only (X/Z) — what the distribution's fan actually places — never Y: a freshly
-    // admitted body's first advanced tick settles its exact vertical rest by the ordinary motion program, a fact
-    // about the kit's contact resolution, not the region's fill sequence this law is proving.
-    private static void AssertPlanarOffset(FixedVector3 expected, FixedVector3 actual) {
-        Assert.Equal(expected: expected.X, actual: actual.X);
-        Assert.Equal(expected: expected.Z, actual: actual.Z);
-    }
+    private static void Reconcile(WorldFixture fixture, int cellValue, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) =>
+        fixture.Server.Population.ReconcileInhabitCounts(
+            definition: WithCellValue(
+                fixture: fixture,
+                value: cellValue
+            ),
+            tick: fixture.Server.NextInputTick,
+            admitted: admitted,
+            disconnected: disconnected
+        );
+    // Drives WorldPopulation.ReconcileInhabitCounts directly against a COPY of the fixture's own document whose
+    // count cell reads `value` — the server's own live definition and mutation pipeline are never touched, so this
+    // exercises the reconcile primitive in isolation (no rule frame, no tick advance, no unrelated allocation) —
+    // exactly the shape a rule-frame fold's end-of-tick install hands it in the live game.
+    private static WorldDefinition WithCellValue(WorldFixture fixture, int value) => (fixture.Server.Definition with {
+        StateRaw = (fixture.Server.Definition.StateRaw! with {
+            World = [
+                new WorldStateRow(
+            Name: CellName.Parse(candidate: CountRow),
+            Kind: CellKind.Int,
+            Min: 0,
+            Max: 100,
+            Cells: [new StateCell(
+                    Key: WorldStateRow.SlotKey,
+                    Value: value
+                )]
+        ),
+            ],
+        }),
+    });
 
     [Fact]
     public void ANewWorldAdmitsACellDrivenPlacementFromItsCellAtBoot() {
@@ -141,58 +204,19 @@ public sealed class InhabitCountLawTests {
 
         // The structural install (ReconcileInhabitants) skips a cell-driven facet; the boot's own ReconcileInhabitCounts
         // then resolves it from the cell's authored value, so the world never waits for a first write to fill it.
-        Assert.Equal(expected: 3, actual: Inhabitants(fixture: fixture).Length);
-    }
-    [Fact]
-    public void RaisingTheCellAdmitsBodiesAtTheDistributionsNextOffsets() {
-        using var fixture = Fixtures.FreshServer(definition: Document(initial: 0));
-
-        Reconcile(fixture: fixture, cellValue: 2);
-
-        var afterTwo = Inhabitants(fixture: fixture);
-
-        Assert.Equal(expected: 2, actual: afterTwo.Length);
-        AssertPlanarOffset(expected: ExpectedOffset(ordinal: 0), actual: fixture.Server.Population.EntryBody(index: afterTwo[0])!.FixedPosition);
-        AssertPlanarOffset(expected: ExpectedOffset(ordinal: 1), actual: fixture.Server.Population.EntryBody(index: afterTwo[1])!.FixedPosition);
-
-        // Raising again: the two existing inhabitants keep the position their own ordinal already resolved to, and
-        // the newly admitted third lands at the region's next ordinal (2) — never a re-fan across the two survivors.
-        Reconcile(fixture: fixture, cellValue: 3);
-
-        var afterThree = Inhabitants(fixture: fixture);
-
-        Assert.Equal(expected: 3, actual: afterThree.Length);
-        AssertPlanarOffset(expected: ExpectedOffset(ordinal: 0), actual: fixture.Server.Population.EntryBody(index: afterThree[0])!.FixedPosition);
-        AssertPlanarOffset(expected: ExpectedOffset(ordinal: 1), actual: fixture.Server.Population.EntryBody(index: afterThree[1])!.FixedPosition);
-        AssertPlanarOffset(expected: ExpectedOffset(ordinal: 2), actual: fixture.Server.Population.EntryBody(index: afterThree[2])!.FixedPosition);
-    }
-    [Fact]
-    public void LoweringTheCellRetiresTheLastAdmittedFirst() {
-        using var fixture = Fixtures.FreshServer(definition: Document(initial: 3));
-
-        Reconcile(fixture: fixture, cellValue: 3);
-
-        var before = Inhabitants(fixture: fixture);
-
-        Assert.Equal(expected: 3, actual: before.Length);
-
-        Reconcile(fixture: fixture, cellValue: 2);
-
-        var after = Inhabitants(fixture: fixture);
-
-        // The last-admitted inhabitant is the lowest index (HighestFreeSlot claims downward, so the first admission
-        // sits at the highest index and each later one at a lower one) — before[2] (lowest of the three) retires;
-        // the two earlier (higher-index) inhabitants stand untouched.
-        Assert.Equal(expected: 2, actual: after.Length);
-        Assert.Equal(expected: before[0], actual: after[0]);
-        Assert.Equal(expected: before[1], actual: after[1]);
-        Assert.False(condition: fixture.Server.Population.IsActive(index: before[2]));
+        Assert.Equal(
+            expected: 3,
+            actual: Inhabitants(fixture: fixture).Length
+        );
     }
     [Fact]
     public void ASeatDrivenBodyIsNeverRetired() {
         using var fixture = Fixtures.FreshServer(definition: Document(initial: 3));
 
-        Reconcile(fixture: fixture, cellValue: 3);
+        Reconcile(
+            fixture: fixture,
+            cellValue: 3
+        );
 
         var inhabitants = Inhabitants(fixture: fixture);
         var lastAdmitted = inhabitants[2];
@@ -202,25 +226,168 @@ public sealed class InhabitCountLawTests {
         // authored above) fully tears the slot down, and re-admitting it as IntentSource.Live at the same index sets
         // Entry.IsRemoteHuman — the same field IsHumanOccupied reads for a live federated seat's own claimed body —
         // while restoring its inhabited PlacementId, so the population still counts it toward the court's census.
-        Assert.True(condition: population.TryCaptureTransferredEntity(index: lastAdmitted, peer: out var captured));
+        Assert.True(condition: population.TryCaptureTransferredEntity(
+            index: lastAdmitted,
+            peer: out var captured
+        ));
 
-        population.ApplyPeerDisconnected(peer: captured, tick: fixture.Server.NextInputTick);
+        population.ApplyPeerDisconnected(
+            peer: captured,
+            tick: fixture.Server.NextInputTick
+        );
 
         Assert.False(condition: population.IsActive(index: lastAdmitted));
 
-        population.ApplyPeerAdmitted(peer: (captured with { Source = IntentSource.Live, PlacementId = CourtPlacementId }), grantTemplates: []);
+        population.ApplyPeerAdmitted(
+            peer: (captured with { Source = IntentSource.Live, PlacementId = CourtPlacementId }),
+            grantTemplates: []
+        );
 
         Assert.True(condition: population.IsHumanOccupied(bodyIndex: lastAdmitted));
-        Assert.Equal(expected: CourtPlacementId, actual: population.InhabitantPlacementId(index: lastAdmitted));
+        Assert.Equal(
+            expected: CourtPlacementId,
+            actual: population.InhabitantPlacementId(index: lastAdmitted)
+        );
 
         // Asking for zero: every non-occupied inhabitant retires, but the seat-driven one survives — the shrink
         // stops short of the resolved count (0) rather than evicting a live occupant.
-        Reconcile(fixture: fixture, cellValue: 0);
+        Reconcile(
+            fixture: fixture,
+            cellValue: 0
+        );
 
         var remaining = Inhabitants(fixture: fixture);
 
-        Assert.Equal(expected: (int[])[lastAdmitted], actual: remaining);
+        Assert.Equal(
+            actual: remaining,
+            expected: ((int[])[lastAdmitted])
+        );
         Assert.True(condition: population.IsActive(index: lastAdmitted));
+    }
+    [Fact]
+    public void AnUnchangedCellAllocatesNothingOnTheQuietSweep() {
+        using var fixture = Fixtures.FreshServer(definition: Document(initial: 2));
+        // Built once and reused across every call below: Reconcile's own WithCellValue constructs a fresh document
+        // per call (the test harness's own cost, not the reconcile primitive's), so isolating the measured
+        // allocation to ReconcileInhabitCounts itself means calling it directly against one unchanging reference.
+        var definition = WithCellValue(
+            fixture: fixture,
+            value: 2
+        );
+
+        // Warms the memo (first call always resolves and, here, admits) and lets the JIT settle before measuring.
+        fixture.Server.Population.ReconcileInhabitCounts(
+            definition: definition,
+            tick: fixture.Server.NextInputTick
+        );
+        fixture.Server.Population.ReconcileInhabitCounts(
+            definition: definition,
+            tick: fixture.Server.NextInputTick
+        );
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        fixture.Server.Population.ReconcileInhabitCounts(
+            definition: definition,
+            tick: fixture.Server.NextInputTick
+        );
+
+        var after = GC.GetAllocatedBytesForCurrentThread();
+
+        Assert.Equal(
+            actual: after,
+            expected: before
+        );
+    }
+    [Fact]
+    public void LoweringTheCellRetiresTheLastAdmittedFirst() {
+        using var fixture = Fixtures.FreshServer(definition: Document(initial: 3));
+
+        Reconcile(
+            fixture: fixture,
+            cellValue: 3
+        );
+
+        var before = Inhabitants(fixture: fixture);
+
+        Assert.Equal(
+            expected: 3,
+            actual: before.Length
+        );
+
+        Reconcile(
+            fixture: fixture,
+            cellValue: 2
+        );
+
+        var after = Inhabitants(fixture: fixture);
+
+        // The last-admitted inhabitant is the lowest index (HighestFreeSlot claims downward, so the first admission
+        // sits at the highest index and each later one at a lower one) — before[2] (lowest of the three) retires;
+        // the two earlier (higher-index) inhabitants stand untouched.
+        Assert.Equal(
+            expected: 2,
+            actual: after.Length
+        );
+        Assert.Equal(
+            expected: before[0],
+            actual: after[0]
+        );
+        Assert.Equal(
+            expected: before[1],
+            actual: after[1]
+        );
+        Assert.False(condition: fixture.Server.Population.IsActive(index: before[2]));
+    }
+    [Fact]
+    public void RaisingTheCellAdmitsBodiesAtTheDistributionsNextOffsets() {
+        using var fixture = Fixtures.FreshServer(definition: Document(initial: 0));
+
+        Reconcile(
+            fixture: fixture,
+            cellValue: 2
+        );
+
+        var afterTwo = Inhabitants(fixture: fixture);
+
+        Assert.Equal(
+            expected: 2,
+            actual: afterTwo.Length
+        );
+        AssertPlanarOffset(
+            expected: ExpectedOffset(ordinal: 0),
+            actual: fixture.Server.Population.EntryBody(index: afterTwo[0])!.FixedPosition
+        );
+        AssertPlanarOffset(
+            expected: ExpectedOffset(ordinal: 1),
+            actual: fixture.Server.Population.EntryBody(index: afterTwo[1])!.FixedPosition
+        );
+
+        // Raising again: the two existing inhabitants keep the position their own ordinal already resolved to, and
+        // the newly admitted third lands at the region's next ordinal (2) — never a re-fan across the two survivors.
+        Reconcile(
+            fixture: fixture,
+            cellValue: 3
+        );
+
+        var afterThree = Inhabitants(fixture: fixture);
+
+        Assert.Equal(
+            expected: 3,
+            actual: afterThree.Length
+        );
+        AssertPlanarOffset(
+            expected: ExpectedOffset(ordinal: 0),
+            actual: fixture.Server.Population.EntryBody(index: afterThree[0])!.FixedPosition
+        );
+        AssertPlanarOffset(
+            expected: ExpectedOffset(ordinal: 1),
+            actual: fixture.Server.Population.EntryBody(index: afterThree[1])!.FixedPosition
+        );
+        AssertPlanarOffset(
+            expected: ExpectedOffset(ordinal: 2),
+            actual: fixture.Server.Population.EntryBody(index: afterThree[2])!.FixedPosition
+        );
     }
     [Fact]
     public void TheClampEchoesOnTheWorldPlacementChannel() {
@@ -231,33 +398,27 @@ public sealed class InhabitCountLawTests {
 
         // Above both the peer-capacity ceiling (ExtraPeerSlots = 6) and the distribution's own SampleCount (4) —
         // the tighter of the two (4) governs, and the narration names it.
-        Reconcile(fixture: fixture, cellValue: 10);
-
-        Assert.Equal(expected: DistributionSampleCount, actual: Inhabitants(fixture: fixture).Length);
-        Assert.Contains(collection: sink.Narrations, filter: narration =>
-            (narration.Channel == "world.placement") &&
-            narration.Text.Contains(value: $"count {DistributionSampleCount} of {CountRow}", comparisonType: StringComparison.Ordinal) &&
-            narration.Text.Contains(value: $"clamped by {DistributionSampleCount}", comparisonType: StringComparison.Ordinal)
+        Reconcile(
+            fixture: fixture,
+            cellValue: 10
         );
-    }
-    [Fact]
-    public void AnUnchangedCellAllocatesNothingOnTheQuietSweep() {
-        using var fixture = Fixtures.FreshServer(definition: Document(initial: 2));
-        // Built once and reused across every call below: Reconcile's own WithCellValue constructs a fresh document
-        // per call (the test harness's own cost, not the reconcile primitive's), so isolating the measured
-        // allocation to ReconcileInhabitCounts itself means calling it directly against one unchanging reference.
-        var definition = WithCellValue(fixture: fixture, value: 2);
 
-        // Warms the memo (first call always resolves and, here, admits) and lets the JIT settle before measuring.
-        fixture.Server.Population.ReconcileInhabitCounts(definition: definition, tick: fixture.Server.NextInputTick);
-        fixture.Server.Population.ReconcileInhabitCounts(definition: definition, tick: fixture.Server.NextInputTick);
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        fixture.Server.Population.ReconcileInhabitCounts(definition: definition, tick: fixture.Server.NextInputTick);
-
-        var after = GC.GetAllocatedBytesForCurrentThread();
-
-        Assert.Equal(expected: before, actual: after);
+        Assert.Equal(
+            expected: DistributionSampleCount,
+            actual: Inhabitants(fixture: fixture).Length
+        );
+        Assert.Contains(
+            collection: sink.Narrations,
+            filter: narration =>
+            ((narration.Channel == "world.placement") &&
+            narration.Text.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: $"count {DistributionSampleCount} of {CountRow}"
+            ) &&
+            narration.Text.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: $"clamped by {DistributionSampleCount}"
+            ))
+        );
     }
 }

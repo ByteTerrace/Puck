@@ -13,40 +13,71 @@ internal static class CliProcess {
         var command = arguments.ToList();
 
         // The cmd.exe launchers behind az and npm re-parse their arguments; their interpreters take a clean vector.
-        if (OperatingSystem.IsWindows() && (executable is "az" or "npm")) {
+        if (
+            OperatingSystem.IsWindows() &&
+            (executable is "az" or "npm")
+        ) {
             var home = Path.GetDirectoryName(path: FindOnPath(name: (executable + ".cmd")))!;
 
             if (executable == "az") {
-                executable = Path.GetFullPath(path: Path.Combine(path1: home, path2: "../python.exe"));
-                command.InsertRange(collection: ["-I", "-B", "-X", "utf8", "-m", "azure.cli"], index: 0);
+                executable = Path.GetFullPath(path: Path.Combine(
+                    path1: home,
+                    path2: "../python.exe"
+                ));
+                command.InsertRange(
+                    collection: ["-I", "-B", "-X", "utf8", "-m", "azure.cli"],
+                    index: 0
+                );
             } else {
-                executable = Path.Combine(path1: home, path2: "node.exe");
-                command.Insert(index: 0, item: Path.Combine(path1: home, path2: "node_modules/npm/bin/npm-cli.js"));
+                executable = Path.Combine(
+                    path1: home,
+                    path2: "node.exe"
+                );
+                command.Insert(
+                    index: 0,
+                    item: Path.Combine(
+                        path1: home,
+                        path2: "node_modules/npm/bin/npm-cli.js"
+                    )
+                );
             }
         }
         var info = new ProcessStartInfo(fileName: executable) {
+            CreateNoWindow = true,
             RedirectStandardError = capture,
             RedirectStandardInput = (input is not null),
             RedirectStandardOutput = capture,
             UseShellExecute = false,
-            CreateNoWindow = true,
             WorkingDirectory = root,
         };
 
         if (capture) { info.StandardErrorEncoding = Encoding.UTF8; info.StandardOutputEncoding = Encoding.UTF8; }
         foreach (var argument in command) { info.ArgumentList.Add(item: argument); }
         using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {executable}."));
-        var output = (capture ? process.StandardOutput.ReadToEndAsync() : Task.FromResult(result: ""));
-        var errors = (capture ? process.StandardError.ReadToEndAsync() : Task.FromResult(result: ""));
+        var output = (capture
+            ? process.StandardOutput.ReadToEndAsync()
+            : Task.FromResult(result: "")
+        );
+        var errors = (capture
+            ? process.StandardError.ReadToEndAsync()
+            : Task.FromResult(result: "")
+        );
 
         try {
-            if (input is not null) { await process.StandardInput.WriteAsync(input.AsMemory(), cancellationToken); process.StandardInput.Close(); }
-            await process.WaitForExitAsync(cancellationToken);
+            if (input is not null) {
+                await process.StandardInput.WriteAsync(
+                    input.AsMemory(),
+                    cancellationToken
+                ); process.StandardInput.Close();
+            }
+            await process.WaitForExitAsync(cancellationToken: cancellationToken);
         } catch (OperationCanceledException) {
-            try { if (!process.HasExited) { process.Kill(entireProcessTree: true); } }
-            catch (InvalidOperationException) when (process.HasExited) { }
-            await process.WaitForExitAsync(CancellationToken.None);
-            await Task.WhenAll(output, errors);
+            try { if (!process.HasExited) { process.Kill(entireProcessTree: true); } } catch (InvalidOperationException) when (process.HasExited) { }
+            await process.WaitForExitAsync(cancellationToken: CancellationToken.None);
+            await Task.WhenAll(
+                output,
+                errors
+            );
             throw;
         }
         var text = await output;
@@ -56,23 +87,12 @@ internal static class CliProcess {
         if (process.ExitCode != 0) {
             throw new InvalidOperationException(message: $"{Path.GetFileName(path: executable)} exited with code {process.ExitCode}. {errorText}".TrimEnd());
         }
-        if (capture && !string.IsNullOrWhiteSpace(value: errorText)) { Console.Error.WriteLine(value: errorText); }
+        if (
+            capture &&
+            !string.IsNullOrWhiteSpace(value: errorText)
+        ) { Console.Error.WriteLine(value: errorText); }
         return text;
     }
-
-    private static string FindOnPath(string name) {
-        foreach (var directory in (Environment.GetEnvironmentVariable(variable: "PATH") ?? "").Split(Path.PathSeparator)) {
-            var path = Path.Combine(path1: directory.Trim(trimChar: '"'), path2: name);
-
-            if (File.Exists(path: path)) { return path; }
-        }
-        throw new FileNotFoundException(message: $"Cannot find {name} on PATH.");
-    }
-
-    public static int RunStreamed(string fileName, params string[] arguments) {
-        return RunStreamedInDirectory(fileName: fileName, workingDirectory: Environment.CurrentDirectory, arguments: arguments);
-    }
-
     internal static int RunStreamedInDirectory(string fileName, string workingDirectory, params string[] arguments) {
         var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false, WorkingDirectory = workingDirectory };
 
@@ -88,8 +108,146 @@ internal static class CliProcess {
         return process.ExitCode;
     }
 
+    private static string FindOnPath(string name) {
+        foreach (var directory in (Environment.GetEnvironmentVariable(variable: "PATH") ?? "").Split(Path.PathSeparator)) {
+            var path = Path.Combine(
+                path1: directory.Trim(trimChar: '"'),
+                path2: name
+            );
+
+            if (File.Exists(path: path)) { return path; }
+        }
+        throw new FileNotFoundException(message: $"Cannot find {name} on PATH.");
+    }
+    private static async Task<string> PumpAsync(
+        StreamReader reader,
+        CliProcessOutputStream stream,
+        List<CliProcessOutputLine> events,
+        object eventGate,
+        Func<long> nextSequence
+    ) {
+        var text = new StringBuilder();
+
+        while (await reader.ReadLineAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+            text.AppendLine(value: line);
+
+            lock (eventGate) {
+                events.Add(item: new CliProcessOutputLine(
+                    Line: line,
+                    Sequence: nextSequence(),
+                    Stream: stream
+                ));
+            }
+        }
+
+        return text.ToString();
+    }
+    private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
+        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        var startInfo = new ProcessStartInfo {
+            CreateNoWindow = true,
+            FileName = fileName,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            StandardErrorEncoding = utf8NoBom,
+            StandardInputEncoding = utf8NoBom,
+            StandardOutputEncoding = utf8NoBom,
+            UseShellExecute = false,
+        };
+
+        foreach (var argument in arguments) {
+            startInfo.ArgumentList.Add(item: argument);
+        }
+
+        using var process = (Process.Start(startInfo: startInfo)
+            ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
+        using var cancellation = new CancellationTokenSource(delay: timeout);
+        var events = new List<CliProcessOutputLine>();
+        var eventGate = new object();
+        var sequence = 0L;
+        var stdout = PumpAsync(
+            reader: process.StandardOutput,
+            stream: CliProcessOutputStream.Stdout,
+            events: events,
+            eventGate: eventGate,
+            nextSequence: () => Interlocked.Increment(location: ref sequence)
+        );
+        var stderr = PumpAsync(
+            reader: process.StandardError,
+            stream: CliProcessOutputStream.Stderr,
+            events: events,
+            eventGate: eventGate,
+            nextSequence: () => Interlocked.Increment(location: ref sequence)
+        );
+        var inputPump = WriteInputAsync(
+            writer: process.StandardInput,
+            input: input,
+            cancellationToken: cancellation.Token
+        );
+        var timedOut = false;
+
+        try {
+            await Task.WhenAll(
+                process.WaitForExitAsync(cancellationToken: cancellation.Token),
+                inputPump
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (OperationCanceledException) when (cancellation.IsCancellationRequested) {
+            timedOut = true;
+
+            try {
+                process.Kill(entireProcessTree: true);
+            } catch (InvalidOperationException) {
+                // The child won the race with the timeout. Waiting below still drains both streams completely.
+            }
+
+            await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
+        }
+
+        var streams = await Task.WhenAll(
+            stdout,
+            stderr
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return new CliProcessResult(
+            ExitCode: process.ExitCode,
+            OutputLines: events.OrderBy(keySelector: static line => line.Sequence).ToArray(),
+            Stderr: streams[1],
+            Stdout: streams[0],
+            TimedOut: timedOut
+        );
+    }
+    private static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken) {
+        try {
+            if (input.Length != 0) {
+                await writer.WriteAsync(
+                    buffer: input.AsMemory(),
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+        } catch (IOException) {
+            // An early-exiting child closes its pipe. The missing runner-owned terminal response makes the proof fail;
+            // the writer does not replace that decision with an infrastructure exception.
+        } finally {
+            writer.Close();
+        }
+    }
+
+    /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is
+    /// zero or negative once the budget is spent.</summary>
+    /// <param name="clock">The running suite clock.</param>
+    /// <param name="budget">The suite-wide time budget.</param>
+    /// <remarks>A caller must refuse its work outright once this is too small to hold it, and never clamp a child's
+    /// timeout down to the remainder: <see cref="RunCaptured"/> kills a child whose timeout elapses, and on Windows a
+    /// killed child reports exit code -1 with both streams empty — indistinguishable from a failure to launch.</remarks>
+    public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) => (budget - clock.Elapsed);
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
-        RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
+        RunCapturedAsync(
+            arguments: arguments,
+            fileName: fileName,
+            input: input,
+            timeout: timeout
+        ).GetAwaiter().GetResult();
     /// <summary>Spawns <paramref name="fileName"/>, drains both streams to their end exactly as read (no line
     /// splitting or re-joining, so byte content — including line endings — passes through unchanged), waits for
     /// exit, and returns the raw text alongside the exit code. Unlike <see cref="RunCaptured"/> this leaves the
@@ -121,100 +279,18 @@ internal static class CliProcess {
 
         process.WaitForExit();
 
-        return new CliRawProcessResult(ExitCode: process.ExitCode, Stderr: stderr, Stdout: stdout);
-    }
-    /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is
-    /// zero or negative once the budget is spent.</summary>
-    /// <param name="clock">The running suite clock.</param>
-    /// <param name="budget">The suite-wide time budget.</param>
-    /// <remarks>A caller must refuse its work outright once this is too small to hold it, and never clamp a child's
-    /// timeout down to the remainder: <see cref="RunCaptured"/> kills a child whose timeout elapses, and on Windows a
-    /// killed child reports exit code -1 with both streams empty — indistinguishable from a failure to launch.</remarks>
-    public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) => (budget - clock.Elapsed);
-
-    private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
-        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        var startInfo = new ProcessStartInfo {
-            CreateNoWindow = true,
-            FileName = fileName,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            StandardErrorEncoding = utf8NoBom,
-            StandardInputEncoding = utf8NoBom,
-            StandardOutputEncoding = utf8NoBom,
-            UseShellExecute = false,
-        };
-
-        foreach (var argument in arguments) {
-            startInfo.ArgumentList.Add(item: argument);
-        }
-
-        using var process = (Process.Start(startInfo: startInfo)
-            ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
-        using var cancellation = new CancellationTokenSource(delay: timeout);
-        var events = new List<CliProcessOutputLine>();
-        var eventGate = new object();
-        var sequence = 0L;
-        var stdout = PumpAsync(reader: process.StandardOutput, stream: CliProcessOutputStream.Stdout, events: events, eventGate: eventGate, nextSequence: () => Interlocked.Increment(location: ref sequence));
-        var stderr = PumpAsync(reader: process.StandardError, stream: CliProcessOutputStream.Stderr, events: events, eventGate: eventGate, nextSequence: () => Interlocked.Increment(location: ref sequence));
-        var inputPump = WriteInputAsync(writer: process.StandardInput, input: input, cancellationToken: cancellation.Token);
-        var timedOut = false;
-
-        try {
-            await Task.WhenAll(process.WaitForExitAsync(cancellationToken: cancellation.Token), inputPump).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (OperationCanceledException) when (cancellation.IsCancellationRequested) {
-            timedOut = true;
-
-            try {
-                process.Kill(entireProcessTree: true);
-            } catch (InvalidOperationException) {
-                // The child won the race with the timeout. Waiting below still drains both streams completely.
-            }
-
-            await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
-        }
-
-        var streams = await Task.WhenAll(stdout, stderr).ConfigureAwait(continueOnCapturedContext: false);
-
-        return new CliProcessResult(
+        return new CliRawProcessResult(
             ExitCode: process.ExitCode,
-            OutputLines: events.OrderBy(keySelector: static line => line.Sequence).ToArray(),
-            Stderr: streams[1],
-            Stdout: streams[0],
-            TimedOut: timedOut
+            Stderr: stderr,
+            Stdout: stdout
         );
     }
-    private static async Task<string> PumpAsync(
-        StreamReader reader,
-        CliProcessOutputStream stream,
-        List<CliProcessOutputLine> events,
-        object eventGate,
-        Func<long> nextSequence
-    ) {
-        var text = new StringBuilder();
-
-        while (await reader.ReadLineAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false) is { } line) {
-            text.AppendLine(value: line);
-
-            lock (eventGate) {
-                events.Add(item: new CliProcessOutputLine(Line: line, Sequence: nextSequence(), Stream: stream));
-            }
-        }
-
-        return text.ToString();
-    }
-    private static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken) {
-        try {
-            if (input.Length != 0) {
-                await writer.WriteAsync(buffer: input.AsMemory(), cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-            }
-        } catch (IOException) {
-            // An early-exiting child closes its pipe. The missing runner-owned terminal response makes the proof fail;
-            // the writer does not replace that decision with an infrastructure exception.
-        } finally {
-            writer.Close();
-        }
+    public static int RunStreamed(string fileName, params string[] arguments) {
+        return RunStreamedInDirectory(
+            fileName: fileName,
+            workingDirectory: Environment.CurrentDirectory,
+            arguments: arguments
+        );
     }
 }
 internal enum CliProcessOutputStream {

@@ -8,10 +8,9 @@ namespace Puck.Vulkan.Interop;
 /// the per-image render-finished semaphores — and destroys them when disposed.
 /// </summary>
 public sealed class VulkanFrameSynchronization : IDisposable {
-    private bool m_disposed;
-
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
 
+    private bool m_disposed;
     private nint[] m_renderFinishedSemaphoreHandles;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the primitives.</summary>
@@ -62,9 +61,9 @@ public sealed class VulkanFrameSynchronization : IDisposable {
         if (
             (renderFinishedSemaphoreHandles.Length == 0) ||
             (Array.IndexOf(
-                array: renderFinishedSemaphoreHandles,
-                value: ((nint)0)
-            ) >= 0)
+            array: renderFinishedSemaphoreHandles,
+            value: ((nint)0)
+        ) >= 0)
         ) {
             throw new ArgumentException(
                 message: "Vulkan render-finished semaphore handles must be non-empty and non-zero.",

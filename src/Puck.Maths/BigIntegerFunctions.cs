@@ -152,6 +152,47 @@ public static class BigIntegerFunctions {
             ? divisor
             : throw new InvalidOperationException(message: $"The cycle-walk splitter exhausted its step budget on {value}, which is therefore not the odd composite it requires. A prime reaching here means a primality gate upstream answered wrongly.")
         );
+    // Round-to-nearest-even of magnitude · 2^binaryExponent for a positive magnitude: the kept width is fifty-three
+    // bits, or fewer below the normal range so the result lands on the subnormal grid; the first discarded bit is the
+    // round bit, and every bit under it plus any reported remainder forms the sticky bit. An exactly representable
+    // magnitude is scaled without rounding.
+    private static double RoundToDouble(BigInteger magnitude, int binaryExponent, bool hasRemainder) {
+        var bits = ((long)magnitude.GetBitLength());
+        var top = (bits + binaryExponent);
+
+        if (top > 1024L) { return double.PositiveInfinity; }
+
+        var precision = Math.Min(
+            val1: 53L,
+            val2: (top + 1074L)
+        );
+
+        if (precision < 0L) { return 0.0; }
+
+        var drop = (bits - precision);
+
+        if (drop <= 0L) {
+            return Math.ScaleB(
+                n: binaryExponent,
+                x: ((double)((long)magnitude))
+            );
+        }
+
+        var shifted = ((long)(magnitude >> ((int)(drop - 1L))));
+        var kept = (shifted >> 1);
+        var roundBit = ((shifted & 1L) != 0L);
+        var sticky = (hasRemainder || (BigInteger.TrailingZeroCount(value: magnitude) < (drop - 1L)));
+
+        if (
+            roundBit &&
+            (sticky || ((kept & 1L) != 0L))
+        ) { ++kept; }
+
+        return Math.ScaleB(
+            n: ((int)(binaryExponent + drop)),
+            x: ((double)kept)
+        );
+    }
     /// <summary>Attempts a split within an explicit step budget, reporting exhaustion instead of throwing.</summary>
     /// <param name="value">The odd value to split.</param>
     /// <param name="budget">The walk steps this attempt may spend.</param>
@@ -394,7 +435,10 @@ public static class BigIntegerFunctions {
             magnitude: BigInteger.Abs(value: value)
         );
 
-        return ((value.Sign < 0) ? -result : result);
+        return ((value.Sign < 0)
+            ? -result
+            : result
+        );
     }
     /// <summary>Converts a toward-zero truncation of a magnitude to the nearest <see cref="double"/> of the value it
     /// truncates, so a quotient's discarded remainder still steers the rounding.</summary>
@@ -406,11 +450,20 @@ public static class BigIntegerFunctions {
     /// <exception cref="ArgumentException"><paramref name="hasRemainder"/> is set on a magnitude narrower than fifty-four bits, whose remainder could reach the rounding position.</exception>
     public static double ToDouble(BigInteger truncatedMagnitude, int binaryExponent, bool hasRemainder) {
         if (truncatedMagnitude.Sign < 0) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(truncatedMagnitude), message: "A truncated magnitude is non-negative; the caller carries the sign.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(truncatedMagnitude),
+                message: "A truncated magnitude is non-negative; the caller carries the sign."
+            );
         }
 
-        if (hasRemainder && (truncatedMagnitude.GetBitLength() < 54L)) {
-            throw new ArgumentException(message: "A remainder can only steer the rounding of a magnitude at least fifty-four bits wide.", paramName: nameof(truncatedMagnitude));
+        if (
+            hasRemainder &&
+            (truncatedMagnitude.GetBitLength() < 54L)
+        ) {
+            throw new ArgumentException(
+                message: "A remainder can only steer the rounding of a magnitude at least fifty-four bits wide.",
+                paramName: nameof(truncatedMagnitude)
+            );
         }
 
         if (truncatedMagnitude.IsZero) { return 0.0; }
@@ -421,43 +474,6 @@ public static class BigIntegerFunctions {
             magnitude: truncatedMagnitude
         );
     }
-
-    // Round-to-nearest-even of magnitude · 2^binaryExponent for a positive magnitude: the kept width is fifty-three
-    // bits, or fewer below the normal range so the result lands on the subnormal grid; the first discarded bit is the
-    // round bit, and every bit under it plus any reported remainder forms the sticky bit. An exactly representable
-    // magnitude is scaled without rounding.
-    private static double RoundToDouble(BigInteger magnitude, int binaryExponent, bool hasRemainder) {
-        var bits = ((long)magnitude.GetBitLength());
-        var top = (bits + binaryExponent);
-
-        if (top > 1024L) { return double.PositiveInfinity; }
-
-        var precision = Math.Min(val1: 53L, val2: (top + 1074L));
-
-        if (precision < 0L) { return 0.0; }
-
-        var drop = (bits - precision);
-
-        if (drop <= 0L) {
-            return Math.ScaleB(
-                n: binaryExponent,
-                x: ((double)((long)magnitude))
-            );
-        }
-
-        var shifted = ((long)(magnitude >> ((int)(drop - 1L))));
-        var kept = (shifted >> 1);
-        var roundBit = ((shifted & 1L) != 0L);
-        var sticky = (hasRemainder || (BigInteger.TrailingZeroCount(value: magnitude) < (drop - 1L)));
-
-        if (roundBit && (sticky || ((kept & 1L) != 0L))) { ++kept; }
-
-        return Math.ScaleB(
-            n: ((int)(binaryExponent + drop)),
-            x: ((double)kept)
-        );
-    }
-
     /// <summary>Attempts to compute a square root of a value modulo an odd prime.</summary>
     /// <param name="value">The value to take the root of. It is reduced modulo <paramref name="oddPrime"/> on entry, so any sign and magnitude are admitted.</param>
     /// <param name="oddPrime">The modulus. It must be an odd prime of at least three: the oddness and the lower bound are enforced, primality is not — see the remarks.</param>

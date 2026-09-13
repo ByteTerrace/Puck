@@ -85,14 +85,14 @@ public enum BodyFacts : ushort {
     Resting = (1 << 8),
 
     /// <summary>Every declared bit — the decoder's admission mask.</summary>
-    All = (Grounded | Airborne | Rising | Falling | InMedium | AtMediumBand | HoldingUnwalkable | Unsupported | Resting),
+    All = Grounded | Airborne | Rising | Falling | InMedium | AtMediumBand | HoldingUnwalkable | Unsupported | Resting,
 }
 /// <summary>The one mapping between the predicate vocabulary, its publishable bit, and the wire spelling every
 /// read-back echoes — a single ordered table, so a new fact is added in exactly one place.</summary>
 public static class BodyFactVocabulary {
     // Bit order is the wire order: Publishable's iteration order and Describe's joined order both derive from this
     // table's declaration order, so reordering a row changes the wire.
-    private static readonly (ActionFact Fact, BodyFacts Bit, string Token)[] s_rows = [
+    private static readonly (ActionFact Fact, BodyFacts Bit, string Token)[] Rows = [
         (ActionFact.Grounded, BodyFacts.Grounded, "grounded"),
         (ActionFact.Airborne, BodyFacts.Airborne, "airborne"),
         (ActionFact.Rising, BodyFacts.Rising, "rising"),
@@ -103,21 +103,21 @@ public static class BodyFactVocabulary {
         (ActionFact.Unsupported, BodyFacts.Unsupported, "unsupported"),
         (ActionFact.Resting, BodyFacts.Resting, "resting"),
     ];
-    private static readonly ActionFact[] s_publishable = Array.ConvertAll(
-        array: s_rows,
+    private static readonly ActionFact[] PublishableValue = Array.ConvertAll(
+        array: Rows,
         converter: static row => row.Fact
     );
     // Indexed by (int)ActionFact — a dense byte enum — so the per-body per-tick publish loop (WorldBody.Facts)
     // reads a bit per fact without scanning s_rows. Built once from it, so the wire order stays the single
     // s_rows declaration.
-    private static readonly BodyFacts[] s_bitByFact = BuildBitByFact();
-    private static readonly string[] s_tokenByFact = BuildTokenByFact();
+    private static readonly BodyFacts[] BitByFact = BuildBitByFact();
+    private static readonly string[] TokenByFact = BuildTokenByFact();
 
     private static BodyFacts[] BuildBitByFact() {
         var table = new BodyFacts[(Enum.GetValues<ActionFact>().Length)];
 
-        foreach (var row in s_rows) {
-            table[(int)row.Fact] = row.Bit;
+        foreach (var row in Rows) {
+            table[((int)row.Fact)] = row.Bit;
         }
 
         return table;
@@ -130,22 +130,18 @@ public static class BodyFactVocabulary {
             value: "affectedby"
         );
 
-        foreach (var row in s_rows) {
-            table[(int)row.Fact] = row.Token;
+        foreach (var row in Rows) {
+            table[((int)row.Fact)] = row.Token;
         }
 
         return table;
     }
 
-    /// <summary>The body-state facts carrying a <see cref="BodyFacts"/> bit, in bit order — the order every echo
-    /// joins them in.</summary>
-    public static ReadOnlySpan<ActionFact> Publishable => s_publishable;
-
     /// <summary>Returns the mask bit a publishable fact carries, or <see cref="BodyFacts.None"/> for a fact with no
     /// bit (<see cref="ActionFact.AffectedBy"/>).</summary>
     /// <param name="fact">The fact to map.</param>
     /// <returns>The bit.</returns>
-    public static BodyFacts Bit(ActionFact fact) => s_bitByFact[(int)fact];
+    public static BodyFacts Bit(ActionFact fact) => BitByFact[((int)fact)];
     /// <summary>Formats a mask as lower-case, <c>|</c>-joined tokens in bit order, or <c>none</c> when empty — the
     /// read-back spelling <c>body.where</c> echoes.</summary>
     /// <param name="facts">The mask to spell.</param>
@@ -170,9 +166,14 @@ public static class BodyFactVocabulary {
 
         return text.ToString();
     }
-    /// <summary>The gate token meaning "no gate" — a driver's weight holds regardless of the body's facts.</summary>
-    public const string Always = "always";
-
+    /// <summary>Returns whether a gate holds against a body's facts — an ungated token always holds.</summary>
+    /// <param name="gate">The gate bit, or <see cref="BodyFacts.None"/>.</param>
+    /// <param name="facts">The body's published facts.</param>
+    public static bool Holds(BodyFacts gate, BodyFacts facts) => ((gate == BodyFacts.None) || ((facts & gate) == gate));
+    /// <summary>Returns a publishable fact's lower-case wire spelling.</summary>
+    /// <param name="fact">The fact to spell.</param>
+    /// <returns>The token.</returns>
+    public static string Token(ActionFact fact) => TokenByFact[((int)fact)];
     /// <summary>Resolves an authored gate token to the single <see cref="BodyFacts"/> bit it tests: a publishable
     /// fact's member name (case-sensitive, like every document token), or <see cref="Always"/>/null for no gate.</summary>
     /// <param name="name">The authored token.</param>
@@ -184,10 +185,10 @@ public static class BodyFactVocabulary {
         if (
             (name is null) ||
             string.Equals(
-                a: name,
-                b: Always,
-                comparisonType: StringComparison.Ordinal
-            )
+            a: name,
+            b: Always,
+            comparisonType: StringComparison.Ordinal
+        )
         ) {
             return true;
         }
@@ -206,14 +207,13 @@ public static class BodyFactVocabulary {
 
         return false;
     }
-    /// <summary>Returns whether a gate holds against a body's facts — an ungated token always holds.</summary>
-    /// <param name="gate">The gate bit, or <see cref="BodyFacts.None"/>.</param>
-    /// <param name="facts">The body's published facts.</param>
-    public static bool Holds(BodyFacts gate, BodyFacts facts) => ((gate == BodyFacts.None) || ((facts & gate) == gate));
-    /// <summary>Returns a publishable fact's lower-case wire spelling.</summary>
-    /// <param name="fact">The fact to spell.</param>
-    /// <returns>The token.</returns>
-    public static string Token(ActionFact fact) => s_tokenByFact[(int)fact];
+
+    /// <summary>The body-state facts carrying a <see cref="BodyFacts"/> bit, in bit order — the order every echo
+    /// joins them in.</summary>
+    public static ReadOnlySpan<ActionFact> Publishable => PublishableValue;
+
+    /// <summary>The gate token meaning "no gate" — a driver's weight holds regardless of the body's facts.</summary>
+    public const string Always = "always";
 }
 /// <summary>The storage kind of a named persistent action-state slot.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ActionStateKind>))]

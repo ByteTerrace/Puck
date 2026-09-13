@@ -81,39 +81,68 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
     public virtual void CollectReads(List<RuleAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        RuleDataflow.CollectGate(gate: Gate, into: into);
+        RuleDataflow.CollectGate(
+            gate: Gate,
+            into: into
+        );
         foreach (var binding in (Bindings ?? [])) {
-            RuleDataflow.CollectExpression(tokens: binding.Expression, into: into);
+            RuleDataflow.CollectExpression(
+                tokens: binding.Expression,
+                into: into
+            );
         }
-        RuleDataflow.CollectEffectReads(effects: Effects, into: into);
+        RuleDataflow.CollectEffectReads(
+            effects: Effects,
+            into: into
+        );
     }
-
     /// <summary>Appends every state cell one evaluation writes.</summary>
     /// <param name="into">The write set being collected.</param>
     public virtual void CollectWrites(List<RuleAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        RuleDataflow.CollectEffectWrites(effects: Effects, into: into);
+        RuleDataflow.CollectEffectWrites(
+            effects: Effects,
+            into: into
+        );
     }
-
-    /// <summary>Returns the orthogonal cost components: per-rule setup, per-evaluation check, and per-firing effects.</summary>
-    /// <param name="context">The compile context the rule was resolved against.</param>
-    public virtual RuleCost CostBreakdown(RuleCompileContext context) {
-        var check = RuleWorkBudget.SaturatingAdd(left: 1L, right: RuleWorkBudget.GateCost(tokens: Gate, context: context));
-
-        foreach (var binding in (Bindings ?? [])) {
-            check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.ExpressionCost(tokens: binding.Expression, kind: binding.Kind, context: context));
-        }
-
-        var effects = RuleWorkBudget.EffectsCost(effects: Effects, context: context);
-
-        return new RuleCost(Setup: 0L, Check: check, Effects: effects);
-    }
-
     /// <summary>Returns the conservative work units one evaluation costs: one for the visit, plus the gate, the
     /// bindings, and the effects.</summary>
     /// <param name="context">The compile context the rule was resolved against.</param>
     public virtual long Cost(RuleCompileContext context) => CostBreakdown(context: context).Total;
+    /// <summary>Returns the orthogonal cost components: per-rule setup, per-evaluation check, and per-firing effects.</summary>
+    /// <param name="context">The compile context the rule was resolved against.</param>
+    public virtual RuleCost CostBreakdown(RuleCompileContext context) {
+        var check = RuleWorkBudget.SaturatingAdd(
+            left: 1L,
+            right: RuleWorkBudget.GateCost(
+                tokens: Gate,
+                context: context
+            )
+        );
+
+        foreach (var binding in (Bindings ?? [])) {
+            check = RuleWorkBudget.SaturatingAdd(
+                left: check,
+                right: RuleWorkBudget.ExpressionCost(
+                    tokens: binding.Expression,
+                    kind: binding.Kind,
+                    context: context
+                )
+            );
+        }
+
+        var effects = RuleWorkBudget.EffectsCost(
+            effects: Effects,
+            context: context
+        );
+
+        return new RuleCost(
+            Check: check,
+            Effects: effects,
+            Setup: 0L
+        );
+    }
 }
 /// <summary>One compiled <see cref="RuleBinding"/>: its ordinal is its slot in the evaluation's bound-value
 /// scratch, and its expression may read only bindings with a smaller ordinal.</summary>
@@ -131,7 +160,10 @@ public sealed record CompiledRuleBinding(string Name, CellKind Kind, CompiledExp
         if (m_schedule is null) {
             var reads = new List<RuleAccess>();
 
-            RuleDataflow.CollectExpression(tokens: Expression, into: reads);
+            RuleDataflow.CollectExpression(
+                tokens: Expression,
+                into: reads
+            );
             m_schedule = RuleSchedule.Build(
                 reads: reads,
                 volatileBase: (RuleDataflow.ExpressionReadsHost(tokens: Expression) || RuleDataflow.ExpressionReadsTick(tokens: Expression)),

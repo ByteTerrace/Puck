@@ -18,7 +18,6 @@ namespace Puck.State;
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public sealed class UnionAttribute : Attribute;
-
 /// <summary>The polyfilled stand-in for the future C# union pattern's own marker interface: a union carrier STRUCT
 /// (never the class/record form of <see cref="UnionAttribute"/>, which needs no boxed indirection) exposes its one
 /// boxed case through <see cref="Value"/>, untyped, for reflection or generic tooling that does not know the concrete

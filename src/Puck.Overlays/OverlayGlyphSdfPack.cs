@@ -281,27 +281,44 @@ public sealed class OverlayGlyphSdfPack {
             val1: 1,
             val2: ((int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)))
         );
+
         bool FitsCell(FontAtlasBounds bounds) =>
-            float.IsFinite(bounds.Left) && float.IsFinite(bounds.Top) &&
-            bounds.Left == MathF.Truncate(bounds.Left) && bounds.Top == MathF.Truncate(bounds.Top) &&
-            bounds.Right - bounds.Left == atlasCellWidth && bounds.Bottom - bounds.Top == atlasCellHeight &&
-            bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= image.Width && bounds.Bottom <= image.Height;
+            (float.IsFinite(f: bounds.Left) && float.IsFinite(f: bounds.Top) &&
+            (bounds.Left == MathF.Truncate(x: bounds.Left)) && (bounds.Top == MathF.Truncate(x: bounds.Top)) &&
+            ((bounds.Right - bounds.Left) == atlasCellWidth) && ((bounds.Bottom - bounds.Top) == atlasCellHeight) &&
+            (bounds.Left >= 0) && (bounds.Top >= 0) && (bounds.Right <= image.Width) && (bounds.Bottom <= image.Height));
 
         var extraCount = (extraCodePoints?.Count ?? 0);
-        var cellStrideLong = (long)atlasCellWidth * atlasCellHeight;
-        var glyphCountLong = (long)AsciiGlyphCount + extraCount;
-        if (cellStrideLong > Array.MaxLength / sizeof(uint) / glyphCountLong) { return null; }
-        if (image.Width != font.Width || image.Height != font.Height ||
-            !float.IsFinite(font.DistanceRange) || font.DistanceRange <= 0) {
+        var cellStrideLong = (((long)atlasCellWidth) * atlasCellHeight);
+        var glyphCountLong = (((long)AsciiGlyphCount) + extraCount);
+
+        if (cellStrideLong > ((Array.MaxLength / sizeof(uint)) / glyphCountLong)) { return null; }
+        if (
+            (image.Width != font.Width) ||
+            (image.Height != font.Height) ||
+            !float.IsFinite(f: font.DistanceRange) ||
+            (font.DistanceRange <= 0)
+        ) {
             return null;
         }
-        for (var index = 0; index < (long)AsciiGlyphCount + extraCount; index++) {
-            var unicode = index < AsciiGlyphCount ? FirstChar + index : extraCodePoints![index - AsciiGlyphCount];
-            if (font.TryGetGlyph(unicode, out var glyph) && glyph.AtlasBounds is { } bounds && !FitsCell(bounds)) {
+        for (var index = 0; (index < (((long)AsciiGlyphCount) + extraCount)); index++) {
+            var unicode = ((index < AsciiGlyphCount)
+                ? (FirstChar + index)
+                : extraCodePoints![(index - AsciiGlyphCount)]
+            );
+
+            if (
+                font.TryGetGlyph(
+                glyph: out var glyph,
+                unicode: unicode
+            ) &&
+                (glyph.AtlasBounds is { } bounds) &&
+                !FitsCell(bounds: bounds)
+            ) {
                 return null;
             }
         }
-        var cellStride = (int)cellStrideLong;
+        var cellStride = ((int)cellStrideLong);
         var glyphCount = (AsciiGlyphCount + extraCount);
         var packedSdf = new uint[(glyphCount * cellStride)];
         var imageWidth = image.Width;

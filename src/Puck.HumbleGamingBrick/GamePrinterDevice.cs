@@ -21,6 +21,28 @@ namespace Puck.HumbleGamingBrick;
 /// </para>
 /// </summary>
 public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
+    // The device-alive byte the printer replies once a packet's checksum verifies — the "a printer is connected" signal.
+    private const byte AliveByte = 0x81;
+    // A full DATA band is exactly 0x280 (640) decompressed bytes = two 8-pixel tile rows of twenty 2bpp tiles.
+    private const int BandByteCount = 0x280;
+    private const byte CommandData = 0x04;
+    // Command bytes (low nibble of the command byte).
+    private const byte CommandInit = 0x01;
+    private const byte CommandPrint = 0x02;
+    // The print-in-progress duration, derived from the deterministic tick clock: master T-cycles per printed pixel row.
+    // Roughly one second per 8-pixel row; this integer analogue keeps the busy window a pure function of the image
+    // height and elapsed emulated cycles, never wall time. The exact value is presentation timing, not a gate.
+    private const ulong CyclesPerPrintedRow = 8_192;
+    // The two magic bytes that frame every printer packet.
+    private const byte Magic1 = 0x88;
+    private const byte Magic2 = 0x33;
+    // Status byte values. Idle=0; checksum-error is bit 0; a stored band raises bit 3; PRINT raises print-requested +
+    // printing-in-progress (6); when the countdown elapses the printer reports done (print-requested only, 4).
+    private const byte StatusChecksumError = 0x01;
+    private const byte StatusDataFull = 0x08;
+    private const byte StatusDone = 0x04;
+    private const byte StatusPrinting = 0x06;
+
     /// <summary>The image width in pixels the printer prints (160, the console's screen width).</summary>
     public const int ImageWidth = 160;
     /// <summary>The maximum accumulated image height in pixels (200); a DATA band adds 16 rows, so the buffer holds up
@@ -28,27 +50,20 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
     /// never allocates on the emulation path.</summary>
     public const int MaxImageHeight = 200;
 
-    // A full DATA band is exactly 0x280 (640) decompressed bytes = two 8-pixel tile rows of twenty 2bpp tiles.
-    private const int BandByteCount = 0x280;
-    // The two magic bytes that frame every printer packet.
-    private const byte Magic1 = 0x88;
-    private const byte Magic2 = 0x33;
-    // The device-alive byte the printer replies once a packet's checksum verifies — the "a printer is connected" signal.
-    private const byte AliveByte = 0x81;
-    // Command bytes (low nibble of the command byte).
-    private const byte CommandInit = 0x01;
-    private const byte CommandData = 0x04;
-    private const byte CommandPrint = 0x02;
-    // Status byte values. Idle=0; checksum-error is bit 0; a stored band raises bit 3; PRINT raises print-requested +
-    // printing-in-progress (6); when the countdown elapses the printer reports done (print-requested only, 4).
-    private const byte StatusChecksumError = 0x01;
-    private const byte StatusDataFull = 0x08;
-    private const byte StatusDone = 0x04;
-    private const byte StatusPrinting = 0x06;
-    // The print-in-progress duration, derived from the deterministic tick clock: master T-cycles per printed pixel row.
-    // Roughly one second per 8-pixel row; this integer analogue keeps the busy window a pure function of the image
-    // height and elapsed emulated cycles, never wall time. The exact value is presentation timing, not a gate.
-    private const ulong CyclesPerPrintedRow = 8_192;
+    private byte m_bitsReceived;
+    private byte m_byteBeingReceived;
+    private ushort m_checksum;
+    private byte m_commandId;
+    private int m_commandLength;
+    private bool m_compression;
+    private bool m_compressionRunIsCompressed;
+    private byte m_compressionRunLength;
+    private int m_imageOffset;
+    private ushort m_lengthLeft;
+    private ulong m_remainingBusyCycles;
+    private byte m_sendByte;
+    private ParseState m_state;
+    private byte m_status;
 
     // The packet parser's position.
     private enum ParseState : byte {
@@ -68,21 +83,10 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
     private readonly byte[] m_commandData = new byte[BandByteCount];
     private readonly byte[] m_image = new byte[(ImageWidth * MaxImageHeight)];
 
-    private ParseState m_state;
-    private byte m_bitsReceived;
-    private byte m_byteBeingReceived;
-    private byte m_commandId;
-    private int m_commandLength;
-    private bool m_compression;
-    private byte m_compressionRunLength;
-    private bool m_compressionRunIsCompressed;
-    private ushort m_checksum;
-    private int m_imageOffset;
-    private ushort m_lengthLeft;
-    private ulong m_remainingBusyCycles;
-    private byte m_sendByte;
-    private byte m_status;
-
+    /// <summary>Gets the number of pixels accumulated into the image since the last INIT/PRINT — a host- and
+    /// gate-facing progress read (0 immediately after a print flushes the buffer). Snapshot state.</summary>
+    public int ImageOffset =>
+        m_imageOffset;
     /// <summary>An optional observer invoked once with the rendered <see cref="GamePrintout"/> the instant a PRINT command
     /// completes — the machine-to-host print event. Like <see cref="SerialComponent.TransferCompleted"/> it is a pure
     /// host-side observation seam: it is never serialized, so setting it cannot perturb determinism, and it is
@@ -92,10 +96,6 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
     /// printing in progress, bit 2 print requested/done, bit 3 unprocessed data). Snapshot state.</summary>
     public byte Status =>
         m_status;
-    /// <summary>Gets the number of pixels accumulated into the image since the last INIT/PRINT — a host- and
-    /// gate-facing progress read (0 immediately after a print flushes the buffer). Snapshot state.</summary>
-    public int ImageOffset =>
-        m_imageOffset;
 
     /// <inheritdoc/>
     bool ISerialPeer.ShiftBit(bool incoming) {
@@ -120,65 +120,108 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
         return outgoing;
     }
 
-    /// <summary>Advances the print-in-progress countdown by a budget of master T-cycles — the deterministic tick clock a
-    /// <see cref="GamePrinterLinkSession"/> hands in as it advances the linked machine. When the countdown elapses a
-    /// printing job reports done, so the busy → ready transition a STATUS poll observes is a pure function of emulated
-    /// cycles, never wall time.</summary>
-    /// <param name="tCycles">The master T-cycles elapsed this budget.</param>
-    public void AdvanceBusy(ulong tCycles) {
-        if (m_remainingBusyCycles == 0) {
+    // Stores one payload byte into the command buffer, decompressing an RLE run when the packet's compression flag is
+    // set: a control byte with bit 7 set introduces a compressed run of (len&0x7F)+2 copies of the next byte; bit 7
+    // clear introduces (len&0x7F)+1 raw bytes. The buffer never overruns a full band.
+    private void AppendDataByte(byte received) {
+        if (m_commandLength == BandByteCount) {
             return;
         }
 
-        if (m_remainingBusyCycles <= tCycles) {
-            m_remainingBusyCycles = 0;
+        if (!m_compression) {
+            m_commandData[m_commandLength++] = received;
 
-            if (m_status == StatusPrinting) {
-                m_status = StatusDone;
+            return;
+        }
+
+        if (m_compressionRunLength == 0) {
+            m_compressionRunIsCompressed = ((received & 0x80) != 0);
+            m_compressionRunLength = ((byte)(((received & 0x7F) + 1) + (m_compressionRunIsCompressed
+                ? 1
+                : 0)));
+
+            return;
+        }
+
+        if (m_compressionRunIsCompressed) {
+            while (m_compressionRunLength != 0) {
+                m_commandData[m_commandLength++] = received;
+                --m_compressionRunLength;
+
+                if (m_commandLength == BandByteCount) {
+                    m_compressionRunLength = 0;
+                }
             }
-        } else {
-            m_remainingBusyCycles -= tCycles;
+
+            return;
+        }
+
+        m_commandData[m_commandLength++] = received;
+        --m_compressionRunLength;
+    }
+    // Renders the accumulated image with the PRINT command's palette (each 2-bit source dot indexes the palette byte for
+    // its 0-3 shade), raises the printout to the host, arms the tick-clock print countdown, and flushes the buffer.
+    // UnpackBand keeps m_imageOffset inside the buffer by construction, so this clamp is never live on the emulation
+    // path; it stays as an explicit guarantee that a print can never index past the image source regardless of how the
+    // cursor got here (e.g. a foreign snapshot).
+    private void EmitPrint() {
+        m_status = StatusPrinting;
+
+        var margins = m_commandData[1];
+        var palette = m_commandData[2];
+        var exposure = ((byte)(m_commandData[3] & 0x7F));
+        var length = Math.Min(
+            val1: m_imageOffset,
+            val2: m_image.Length
+        );
+        var pixels = new byte[length];
+
+        for (var index = 0; (index < length); ++index) {
+            pixels[index] = ((byte)((palette >> (m_image[index] * 2)) & 0x03));
+        }
+
+        var height = (length / ImageWidth);
+
+        m_remainingBusyCycles = (((ulong)height) * CyclesPerPrintedRow);
+
+        PrintEmitted?.Invoke(obj: new GamePrintout(
+            bottomMargin: ((byte)(margins & 0x0F)),
+            exposure: exposure,
+            height: height,
+            palette: palette,
+            pixels: pixels,
+            topMargin: ((byte)(margins >> 4)),
+            width: ImageWidth
+        ));
+
+        m_imageOffset = 0;
+    }
+    // Acts on a completed packet: INIT clears the status and the image, DATA unpacks a full band into the image, PRINT
+    // renders the assembled image with the command's palette and raises it to the host, arming the print countdown.
+    private void HandleCommand() {
+        switch (m_commandId) {
+            case CommandInit:
+                m_status = 0;
+                m_imageOffset = 0;
+
+                break;
+            case CommandPrint:
+                if (m_commandLength == 4) {
+                    EmitPrint();
+                }
+
+                break;
+            case CommandData:
+                if (m_commandLength == BandByteCount) {
+                    m_status = StatusDataFull;
+                    UnpackBand();
+                }
+
+                break;
+            default:
+                break;
         }
     }
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: ((byte)m_state));
-        writer.WriteByte(value: m_bitsReceived);
-        writer.WriteByte(value: m_byteBeingReceived);
-        writer.WriteByte(value: m_commandId);
-        writer.WriteInt32(value: m_commandLength);
-        writer.WriteBoolean(value: m_compression);
-        writer.WriteByte(value: m_compressionRunLength);
-        writer.WriteBoolean(value: m_compressionRunIsCompressed);
-        writer.WriteUInt16(value: m_checksum);
-        writer.WriteInt32(value: m_imageOffset);
-        writer.WriteUInt16(value: m_lengthLeft);
-        writer.WriteUInt64(value: m_remainingBusyCycles);
-        writer.WriteByte(value: m_sendByte);
-        writer.WriteByte(value: m_status);
-        writer.WriteBlock<byte>(values: m_commandData);
-        writer.WriteBlock<byte>(values: m_image);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_state = ((ParseState)reader.ReadByte());
-        m_bitsReceived = reader.ReadByte();
-        m_byteBeingReceived = reader.ReadByte();
-        m_commandId = reader.ReadByte();
-        m_commandLength = reader.ReadInt32();
-        m_compression = reader.ReadBoolean();
-        m_compressionRunLength = reader.ReadByte();
-        m_compressionRunIsCompressed = reader.ReadBoolean();
-        m_checksum = reader.ReadUInt16();
-        m_imageOffset = reader.ReadInt32();
-        m_lengthLeft = reader.ReadUInt16();
-        m_remainingBusyCycles = reader.ReadUInt64();
-        m_sendByte = reader.ReadByte();
-        m_status = reader.ReadByte();
-        reader.ReadBlock<byte>(destination: m_commandData);
-        reader.ReadBlock<byte>(destination: m_image);
-    }
-
     // One received serial byte drives the packet parser. The reply byte defaults to 0 and is overridden by the states
     // that answer (the alive byte after a good checksum, the status byte at the end of a packet); the additive checksum
     // folds in the command..data bytes; the state advances unless it is consuming the payload.
@@ -294,108 +337,6 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
             ++m_state;
         }
     }
-    // Stores one payload byte into the command buffer, decompressing an RLE run when the packet's compression flag is
-    // set: a control byte with bit 7 set introduces a compressed run of (len&0x7F)+2 copies of the next byte; bit 7
-    // clear introduces (len&0x7F)+1 raw bytes. The buffer never overruns a full band.
-    private void AppendDataByte(byte received) {
-        if (m_commandLength == BandByteCount) {
-            return;
-        }
-
-        if (!m_compression) {
-            m_commandData[m_commandLength++] = received;
-
-            return;
-        }
-
-        if (m_compressionRunLength == 0) {
-            m_compressionRunIsCompressed = ((received & 0x80) != 0);
-            m_compressionRunLength = ((byte)(((received & 0x7F) + 1) + (m_compressionRunIsCompressed
-                ? 1
-                : 0)));
-
-            return;
-        }
-
-        if (m_compressionRunIsCompressed) {
-            while (m_compressionRunLength != 0) {
-                m_commandData[m_commandLength++] = received;
-                --m_compressionRunLength;
-
-                if (m_commandLength == BandByteCount) {
-                    m_compressionRunLength = 0;
-                }
-            }
-
-            return;
-        }
-
-        m_commandData[m_commandLength++] = received;
-        --m_compressionRunLength;
-    }
-    // Acts on a completed packet: INIT clears the status and the image, DATA unpacks a full band into the image, PRINT
-    // renders the assembled image with the command's palette and raises it to the host, arming the print countdown.
-    private void HandleCommand() {
-        switch (m_commandId) {
-            case CommandInit:
-                m_status = 0;
-                m_imageOffset = 0;
-
-                break;
-            case CommandPrint:
-                if (m_commandLength == 4) {
-                    EmitPrint();
-                }
-
-                break;
-            case CommandData:
-                if (m_commandLength == BandByteCount) {
-                    m_status = StatusDataFull;
-                    UnpackBand();
-                }
-
-                break;
-            default:
-                break;
-        }
-    }
-    // Renders the accumulated image with the PRINT command's palette (each 2-bit source dot indexes the palette byte for
-    // its 0-3 shade), raises the printout to the host, arms the tick-clock print countdown, and flushes the buffer.
-    // UnpackBand keeps m_imageOffset inside the buffer by construction, so this clamp is never live on the emulation
-    // path; it stays as an explicit guarantee that a print can never index past the image source regardless of how the
-    // cursor got here (e.g. a foreign snapshot).
-    private void EmitPrint() {
-        m_status = StatusPrinting;
-
-        var margins = m_commandData[1];
-        var palette = m_commandData[2];
-        var exposure = ((byte)(m_commandData[3] & 0x7F));
-        var length = Math.Min(
-            val1: m_imageOffset,
-            val2: m_image.Length
-        );
-        var pixels = new byte[length];
-
-        for (var index = 0; (index < length); ++index) {
-            pixels[index] = ((byte)((palette >> (m_image[index] * 2)) & 0x03));
-        }
-
-        var height = (length / ImageWidth);
-
-        m_remainingBusyCycles = (((ulong)height) * CyclesPerPrintedRow);
-
-        PrintEmitted?.Invoke(obj: new GamePrintout(
-            bottomMargin: ((byte)(margins & 0x0F)),
-            exposure: exposure,
-            height: height,
-            palette: palette,
-            pixels: pixels,
-            topMargin: ((byte)(margins >> 4)),
-            width: ImageWidth
-        ));
-
-        m_imageOffset = 0;
-    }
     // Unpacks a full 0x280-byte DATA band (two 8-pixel tile rows of twenty 2bpp tiles) into the image at the running
     // offset, MSB-first per the console's 2bpp tile format (byte pair = low then high bitplane). Reads the command
     // buffer without mutating it.
@@ -429,5 +370,64 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
             m_imageOffset = ((m_imageOffset + (8 * ImageWidth)) % m_image.Length);
         }
+    }
+
+    /// <summary>Advances the print-in-progress countdown by a budget of master T-cycles — the deterministic tick clock a
+    /// <see cref="GamePrinterLinkSession"/> hands in as it advances the linked machine. When the countdown elapses a
+    /// printing job reports done, so the busy → ready transition a STATUS poll observes is a pure function of emulated
+    /// cycles, never wall time.</summary>
+    /// <param name="tCycles">The master T-cycles elapsed this budget.</param>
+    public void AdvanceBusy(ulong tCycles) {
+        if (m_remainingBusyCycles == 0) {
+            return;
+        }
+
+        if (m_remainingBusyCycles <= tCycles) {
+            m_remainingBusyCycles = 0;
+
+            if (m_status == StatusPrinting) {
+                m_status = StatusDone;
+            }
+        } else {
+            m_remainingBusyCycles -= tCycles;
+        }
+    }
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_state = ((ParseState)reader.ReadByte());
+        m_bitsReceived = reader.ReadByte();
+        m_byteBeingReceived = reader.ReadByte();
+        m_commandId = reader.ReadByte();
+        m_commandLength = reader.ReadInt32();
+        m_compression = reader.ReadBoolean();
+        m_compressionRunLength = reader.ReadByte();
+        m_compressionRunIsCompressed = reader.ReadBoolean();
+        m_checksum = reader.ReadUInt16();
+        m_imageOffset = reader.ReadInt32();
+        m_lengthLeft = reader.ReadUInt16();
+        m_remainingBusyCycles = reader.ReadUInt64();
+        m_sendByte = reader.ReadByte();
+        m_status = reader.ReadByte();
+        reader.ReadBlock<byte>(destination: m_commandData);
+        reader.ReadBlock<byte>(destination: m_image);
+    }
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteByte(value: ((byte)m_state));
+        writer.WriteByte(value: m_bitsReceived);
+        writer.WriteByte(value: m_byteBeingReceived);
+        writer.WriteByte(value: m_commandId);
+        writer.WriteInt32(value: m_commandLength);
+        writer.WriteBoolean(value: m_compression);
+        writer.WriteByte(value: m_compressionRunLength);
+        writer.WriteBoolean(value: m_compressionRunIsCompressed);
+        writer.WriteUInt16(value: m_checksum);
+        writer.WriteInt32(value: m_imageOffset);
+        writer.WriteUInt16(value: m_lengthLeft);
+        writer.WriteUInt64(value: m_remainingBusyCycles);
+        writer.WriteByte(value: m_sendByte);
+        writer.WriteByte(value: m_status);
+        writer.WriteBlock<byte>(values: m_commandData);
+        writer.WriteBlock<byte>(values: m_image);
     }
 }

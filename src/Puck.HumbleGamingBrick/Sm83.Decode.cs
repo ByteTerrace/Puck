@@ -23,6 +23,7 @@ public sealed partial class Sm83 {
     // ld_hl_sp/oam_dma timing family and the timer conformance suite pin it: those cases distinguish which machine
     // cycle an access lands in, and this is what places the sample inside it.
     private const int LeadingTCyclesBeforeRead = 2;
+
     // Cycles of the machine cycles already begun that have not been ticked yet — the distance from the clock's current
     // position to the NEXT access's drive instant. A read leaves two (its own latch already ticked two of its four); a
     // write leaves the four it did not tick, an internal cycle adds a whole four. Deferring them is what lets a write
@@ -293,7 +294,7 @@ public sealed partial class Sm83 {
                     m_halted = true;
 
                     m_hdma.OnCpuHalted();
-            m_componentClock.Invalidate();
+                    m_componentClock.Invalidate();
                 }
 
                 return;

@@ -49,86 +49,19 @@ public sealed class UserGrain(
     private const string MigrationRetryReminderName = "migration-retry";
     private const string RetryReminderName = "provisioning-retry";
 
+    // Listing position within the current copy step. In-memory only: a silo restart re-enumerates
+    // from the front and skips already-copied blobs, which is cheap.
+    private string? m_migrationContinuationToken;
+    private IGrainTimer? m_migrationTimer;
+    private IGrainTimer? m_retryTimer;
+
     private static readonly TimeSpan MigrationTickDueTime = TimeSpan.FromSeconds(seconds: 1);
     private static readonly TimeSpan MigrationTickPeriod = TimeSpan.FromSeconds(seconds: 2);
     private static readonly TimeSpan ReminderPeriod = TimeSpan.FromMinutes(minutes: 1);
     private static readonly TimeSpan TimerDueTime = TimeSpan.FromSeconds(seconds: 29);
     private static readonly TimeSpan TimerPeriod = TimeSpan.FromSeconds(seconds: 31);
 
-    // Listing position within the current copy step. In-memory only: a silo restart re-enumerates
-    // from the front and skips already-copied blobs, which is cheap.
-    private string? migrationContinuationToken;
-    private IGrainTimer? migrationTimer;
-    private IGrainTimer? retryTimer;
-
     private string UserObjectId => this.GetPrimaryKey().ToString(format: "D");
-
-    public override Task OnActivateAsync(CancellationToken cancellationToken) {
-        // A silo restart mid-onboarding: the reminder is durable, but re-arm the fast local
-        // timer too so the propagation probe is not stuck at reminder granularity.
-        if ((ProvisioningStatus.Onboarding == state.State.Status) && (state.State.Escrow is not null)) {
-            ArmRetryTimer();
-        }
-
-        // A silo restart mid-migration: host-only steps proceed without an escrow; a user step
-        // with a dead escrow pauses cleanly until the next sign-in refreshes it.
-        if ((ProvisioningStatus.Migrating == state.State.Status) && (state.State.MigrationTargetPartition is not null)) {
-            ArmMigrationTimer();
-        }
-
-        return Task.CompletedTask;
-    }
-    public async Task<ProvisioningState> EnsureProvisionedAsync(TokenEscrow tokenEscrow) {
-        if (state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
-            // Already provisioned — but the partition count may have grown since, in which case this
-            // sign-in is the opportunity to move the user. Migration can only copy private/ while a
-            // live assertion is in hand (the platform is ABAC-denied on private/), so each sign-in
-            // deposits a fresh escrow and the migration runs off the request path on a grain timer.
-            await StartOrResumeMigrationAsync(tokenEscrow: tokenEscrow);
-
-            return Snapshot();
-        }
-
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: tokenEscrow.ProtectedAssertion);
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: tokenEscrow.TokenDiscriminator);
-
-        if (DateTimeOffset.UtcNow >= tokenEscrow.ExpiresAt) {
-            throw new InvalidOperationException(message: "Escrowed assertion is already expired.");
-        }
-
-        state.State.Escrow = tokenEscrow;
-        state.State.FaultReason = null;
-        state.State.RetryAttempts = 0;
-        state.State.Status = ProvisioningStatus.Onboarding;
-
-        await AdvanceAsync(cancellationToken: CancellationToken.None);
-
-        return Snapshot();
-    }
-    public Task<ProvisioningState> GetProvisioningStateAsync() =>
-        Task.FromResult(result: Snapshot());
-    public Task<StorageLocation> GetStorageLocationAsync() {
-        // Fall back to the computed partition only for a user with no recorded home yet (never
-        // provisioned): that is where onboarding will place them.
-        var partition = (state.State.HomePartition ?? partitionResolver.GetPartition(userObjectId: this.GetPrimaryKey()));
-
-        return Task.FromResult(result: new StorageLocation(
-            BlobEndpoint: partitionResolver.GetBlobEndpoint(partition: partition).ToString(),
-            IsMigrating: (state.State.MigrationTargetPartition is not null),
-            Partition: partition
-        ));
-    }
-    public async Task ReceiveReminder(string reminderName, TickStatus status) {
-        if (RetryReminderName == reminderName) {
-            await AdvanceAsync(cancellationToken: CancellationToken.None);
-        } else if (MigrationRetryReminderName == reminderName) {
-            if ((ProvisioningStatus.Migrating == state.State.Status) && (state.State.MigrationTargetPartition is not null)) {
-                ArmMigrationTimer();
-            } else {
-                await StopMigrationRetriesAsync();
-            }
-        }
-    }
 
     private async Task AdvanceAsync(CancellationToken cancellationToken) {
         if (state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
@@ -261,8 +194,12 @@ public sealed class UserGrain(
 
             logger.Log(
                 args: [UserObjectId, state.State.RetryAttempts,],
-                exception: (isPropagationDelay ? null : e),
-                logLevel: (isPropagationDelay ? LogLevel.Information : LogLevel.Warning),
+                exception: (isPropagationDelay
+                ? null
+                : e),
+                logLevel: (isPropagationDelay
+                ? LogLevel.Information
+                : LogLevel.Warning),
                 message: "User {UserObjectId} provisioning attempt {RetryAttempts} will be retried."
             );
 
@@ -279,7 +216,7 @@ public sealed class UserGrain(
         }
     }
     private void ArmMigrationTimer() {
-        migrationTimer ??= this.RegisterGrainTimer(
+        m_migrationTimer ??= this.RegisterGrainTimer(
             callback: ExecuteMigrationStepAsync,
             options: new() {
                 DueTime = MigrationTickDueTime,
@@ -288,7 +225,7 @@ public sealed class UserGrain(
         );
     }
     private void ArmRetryTimer() {
-        retryTimer ??= this.RegisterGrainTimer(
+        m_retryTimer ??= this.RegisterGrainTimer(
             callback: AdvanceAsync,
             options: new() {
                 DueTime = TimerDueTime,
@@ -306,7 +243,10 @@ public sealed class UserGrain(
         var sourcePartition = state.State.MigrationSourcePartition;
         var targetPartition = state.State.MigrationTargetPartition;
 
-        if ((sourcePartition is null) || (targetPartition is null)) {
+        if (
+            (sourcePartition is null) ||
+            (targetPartition is null)
+        ) {
             await StopMigrationRetriesAsync();
 
             return;
@@ -358,7 +298,7 @@ public sealed class UserGrain(
                     userObjectId: UserObjectId
                 );
 
-                migrationContinuationToken = null;
+                m_migrationContinuationToken = null;
 
                 await RecordMigrationStepAsync(step: MigrationStep.Frozen);
 
@@ -368,14 +308,14 @@ public sealed class UserGrain(
             if (!steps.HasFlag(flag: MigrationStep.SystemCopied)) {
                 var batch = await userProvisioningService.CopyPrefixAsHostAsync(
                     cancellationToken: cancellationToken,
-                    continuationToken: migrationContinuationToken,
+                    continuationToken: m_migrationContinuationToken,
                     prefix: "system/",
                     sourcePartition: sourcePartition.Value,
                     targetPartition: targetPartition.Value,
                     userObjectId: UserObjectId
                 );
 
-                migrationContinuationToken = batch.ContinuationToken;
+                m_migrationContinuationToken = batch.ContinuationToken;
 
                 if (batch.IsCompleted) {
                     await RecordMigrationStepAsync(step: MigrationStep.SystemCopied);
@@ -395,7 +335,7 @@ public sealed class UserGrain(
 
                 var batch = await userProvisioningService.CopyPrefixAsUserAsync(
                     cancellationToken: cancellationToken,
-                    continuationToken: migrationContinuationToken,
+                    continuationToken: m_migrationContinuationToken,
                     prefix: "private/",
                     sourcePartition: sourcePartition.Value,
                     targetPartition: targetPartition.Value,
@@ -403,7 +343,7 @@ public sealed class UserGrain(
                     userObjectId: UserObjectId
                 );
 
-                migrationContinuationToken = batch.ContinuationToken;
+                m_migrationContinuationToken = batch.ContinuationToken;
 
                 if (batch.IsCompleted) {
                     await RecordMigrationStepAsync(step: MigrationStep.PrivateCopied);
@@ -531,6 +471,26 @@ public sealed class UserGrain(
         );
     }
     /// <summary>
+    /// Every container that is or will be this user's: their home, the anchor holding their
+    /// public/ content, and — once it exists — an in-flight migration destination (before
+    /// Prepared, that step stamps the mirrors itself).
+    /// </summary>
+    private HashSet<int> GetOwnedPartitions() {
+        var partitions = new HashSet<int> {
+            state.State.HomePartition!.Value,
+            PartitioningOptions.AnchorPartition,
+        };
+
+        if (
+            state.State.MigrationSteps.HasFlag(flag: MigrationStep.Prepared) &&
+            (state.State.MigrationTargetPartition is int migrationTargetPartition)
+        ) {
+            partitions.Add(item: migrationTargetPartition);
+        }
+
+        return partitions;
+    }
+    /// <summary>
     /// Stops driving the migration without abandoning it: the recorded steps and the pinned
     /// source/target stay in place, Status stays Migrating, and the next sign-in (with its fresh
     /// escrow) resumes from the last completed step. Until Flipped the user's home is still the
@@ -554,95 +514,6 @@ public sealed class UserGrain(
 
         await state.WriteStateAsync();
     }
-
-    /// <summary>
-    /// The tenant's own lever: how much of their public/ prefix non-owners get (None | Read |
-    /// ReadWrite; the substrate default is Read). Stamped everywhere their public surface can
-    /// exist — home, anchor, and an in-flight migration destination — while the system
-    /// CanRead/CanWrite suspension levers remain untouched and always trump this via ABAC.
-    /// </summary>
-    public async Task<ProvisioningState> SetGuestAccessAsync(string guestAccess) {
-        if (!GuestAccessMode.IsValid(value: guestAccess)) {
-            throw new InvalidOperationException(message: $"Guest access must be one of: {GuestAccessMode.None}, {GuestAccessMode.Read}, {GuestAccessMode.ReadWrite}.");
-        }
-
-        if (!state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
-            throw new InvalidOperationException(message: "Guest access can only be changed for a fully provisioned user.");
-        }
-
-        foreach (var partition in GetOwnedPartitions()) {
-            await userProvisioningService.SetGuestAccessAsync(
-                cancellationToken: CancellationToken.None,
-                guestAccess: guestAccess,
-                partition: partition,
-                userObjectId: UserObjectId
-            );
-        }
-
-        state.State.GuestAccess = guestAccess;
-        state.State.UpdatedAt = DateTimeOffset.UtcNow;
-
-        await state.WriteStateAsync();
-
-        logger.LogInformation(
-            args: [UserObjectId, guestAccess],
-            message: "User {UserObjectId} guest access set: {GuestAccess}."
-        );
-
-        return Snapshot();
-    }
-
-    /// <summary>
-    /// Every container that is or will be this user's: their home, the anchor holding their
-    /// public/ content, and — once it exists — an in-flight migration destination (before
-    /// Prepared, that step stamps the mirrors itself).
-    /// </summary>
-    private HashSet<int> GetOwnedPartitions() {
-        var partitions = new HashSet<int> {
-            state.State.HomePartition!.Value,
-            PartitioningOptions.AnchorPartition,
-        };
-
-        if (state.State.MigrationSteps.HasFlag(flag: MigrationStep.Prepared) &&
-            (state.State.MigrationTargetPartition is int migrationTargetPartition)
-        ) {
-            partitions.Add(item: migrationTargetPartition);
-        }
-
-        return partitions;
-    }
-
-    public async Task<ProvisioningState> SetStorageAccessAsync(bool canRead, bool canWrite) {
-        // Suspension acts on a real container; a user still onboarding has no stable storage to
-        // gate, so refuse until provisioning has finalized.
-        if (!state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
-            throw new InvalidOperationException(message: "Storage access can only be changed for a fully provisioned user.");
-        }
-
-        foreach (var partition in GetOwnedPartitions()) {
-            await userProvisioningService.SetStorageAccessAsync(
-                canRead: canRead,
-                canWrite: canWrite,
-                cancellationToken: CancellationToken.None,
-                partition: partition,
-                userObjectId: UserObjectId
-            );
-        }
-
-        state.State.StorageReadEnabled = canRead;
-        state.State.StorageWriteEnabled = canWrite;
-        state.State.UpdatedAt = DateTimeOffset.UtcNow;
-
-        await state.WriteStateAsync();
-
-        logger.LogInformation(
-            args: [UserObjectId, canRead, canWrite],
-            message: "User {UserObjectId} storage access set: CanRead={CanRead}, CanWrite={CanWrite}."
-        );
-
-        return Snapshot();
-    }
-
     private ProvisioningState Snapshot() =>
         new(
             CompletedSteps: state.State.CompletedSteps,
@@ -680,7 +551,10 @@ public sealed class UserGrain(
 
             // A suspended user's copy would be ABAC-denied at the destination (its metadata
             // mirrors the suspension), so hold off; the first sign-in after reinstatement migrates.
-            if (!state.State.StorageReadEnabled || !state.State.StorageWriteEnabled) {
+            if (
+                !state.State.StorageReadEnabled ||
+                !state.State.StorageWriteEnabled
+            ) {
                 logger.LogInformation(
                     args: [UserObjectId, computedPartition,],
                     message: "User {UserObjectId} migration to partition {TargetPartition} deferred: storage access is suspended."
@@ -755,8 +629,8 @@ public sealed class UserGrain(
         ArmMigrationTimer();
     }
     private async Task StopMigrationRetriesAsync() {
-        migrationTimer?.Dispose();
-        migrationTimer = null;
+        m_migrationTimer?.Dispose();
+        m_migrationTimer = null;
 
         var reminder = await this.GetReminder(reminderName: MigrationRetryReminderName);
 
@@ -765,8 +639,8 @@ public sealed class UserGrain(
         }
     }
     private async Task StopRetriesAsync() {
-        retryTimer?.Dispose();
-        retryTimer = null;
+        m_retryTimer?.Dispose();
+        m_retryTimer = null;
 
         var reminder = await this.GetReminder(reminderName: RetryReminderName);
 
@@ -782,7 +656,150 @@ public sealed class UserGrain(
             : escrow.Unprotect(
                 dataProtectionProvider: dataProtectionProvider,
                 userObjectId: UserObjectId
-            ));
+            )
+        );
+    }
+
+    public async Task<ProvisioningState> EnsureProvisionedAsync(TokenEscrow tokenEscrow) {
+        if (state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
+            // Already provisioned — but the partition count may have grown since, in which case this
+            // sign-in is the opportunity to move the user. Migration can only copy private/ while a
+            // live assertion is in hand (the platform is ABAC-denied on private/), so each sign-in
+            // deposits a fresh escrow and the migration runs off the request path on a grain timer.
+            await StartOrResumeMigrationAsync(tokenEscrow: tokenEscrow);
+
+            return Snapshot();
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: tokenEscrow.ProtectedAssertion);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: tokenEscrow.TokenDiscriminator);
+
+        if (DateTimeOffset.UtcNow >= tokenEscrow.ExpiresAt) {
+            throw new InvalidOperationException(message: "Escrowed assertion is already expired.");
+        }
+
+        state.State.Escrow = tokenEscrow;
+        state.State.FaultReason = null;
+        state.State.RetryAttempts = 0;
+        state.State.Status = ProvisioningStatus.Onboarding;
+
+        await AdvanceAsync(cancellationToken: CancellationToken.None);
+
+        return Snapshot();
+    }
+    public Task<ProvisioningState> GetProvisioningStateAsync() =>
+        Task.FromResult(result: Snapshot());
+    public Task<StorageLocation> GetStorageLocationAsync() {
+        // Fall back to the computed partition only for a user with no recorded home yet (never
+        // provisioned): that is where onboarding will place them.
+        var partition = (state.State.HomePartition ?? partitionResolver.GetPartition(userObjectId: this.GetPrimaryKey()));
+
+        return Task.FromResult(result: new StorageLocation(
+            BlobEndpoint: partitionResolver.GetBlobEndpoint(partition: partition).ToString(),
+            IsMigrating: (state.State.MigrationTargetPartition is not null),
+            Partition: partition
+        ));
+    }
+    public override Task OnActivateAsync(CancellationToken cancellationToken) {
+        // A silo restart mid-onboarding: the reminder is durable, but re-arm the fast local
+        // timer too so the propagation probe is not stuck at reminder granularity.
+        if (
+            (ProvisioningStatus.Onboarding == state.State.Status) &&
+            (state.State.Escrow is not null)
+        ) {
+            ArmRetryTimer();
+        }
+
+        // A silo restart mid-migration: host-only steps proceed without an escrow; a user step
+        // with a dead escrow pauses cleanly until the next sign-in refreshes it.
+        if (
+            (ProvisioningStatus.Migrating == state.State.Status) &&
+            (state.State.MigrationTargetPartition is not null)
+        ) {
+            ArmMigrationTimer();
+        }
+
+        return Task.CompletedTask;
+    }
+    public async Task ReceiveReminder(string reminderName, TickStatus status) {
+        if (RetryReminderName == reminderName) {
+            await AdvanceAsync(cancellationToken: CancellationToken.None);
+        } else if (MigrationRetryReminderName == reminderName) {
+            if (
+                (ProvisioningStatus.Migrating == state.State.Status) &&
+                (state.State.MigrationTargetPartition is not null)
+            ) {
+                ArmMigrationTimer();
+            } else {
+                await StopMigrationRetriesAsync();
+            }
+        }
+    }
+    /// <summary>
+    /// The tenant's own lever: how much of their public/ prefix non-owners get (None | Read |
+    /// ReadWrite; the substrate default is Read). Stamped everywhere their public surface can
+    /// exist — home, anchor, and an in-flight migration destination — while the system
+    /// CanRead/CanWrite suspension levers remain untouched and always trump this via ABAC.
+    /// </summary>
+    public async Task<ProvisioningState> SetGuestAccessAsync(string guestAccess) {
+        if (!GuestAccessMode.IsValid(value: guestAccess)) {
+            throw new InvalidOperationException(message: $"Guest access must be one of: {GuestAccessMode.None}, {GuestAccessMode.Read}, {GuestAccessMode.ReadWrite}.");
+        }
+
+        if (!state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
+            throw new InvalidOperationException(message: "Guest access can only be changed for a fully provisioned user.");
+        }
+
+        foreach (var partition in GetOwnedPartitions()) {
+            await userProvisioningService.SetGuestAccessAsync(
+                cancellationToken: CancellationToken.None,
+                guestAccess: guestAccess,
+                partition: partition,
+                userObjectId: UserObjectId
+            );
+        }
+
+        state.State.GuestAccess = guestAccess;
+        state.State.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await state.WriteStateAsync();
+
+        logger.LogInformation(
+            args: [UserObjectId, guestAccess],
+            message: "User {UserObjectId} guest access set: {GuestAccess}."
+        );
+
+        return Snapshot();
+    }
+    public async Task<ProvisioningState> SetStorageAccessAsync(bool canRead, bool canWrite) {
+        // Suspension acts on a real container; a user still onboarding has no stable storage to
+        // gate, so refuse until provisioning has finalized.
+        if (!state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
+            throw new InvalidOperationException(message: "Storage access can only be changed for a fully provisioned user.");
+        }
+
+        foreach (var partition in GetOwnedPartitions()) {
+            await userProvisioningService.SetStorageAccessAsync(
+                canRead: canRead,
+                canWrite: canWrite,
+                cancellationToken: CancellationToken.None,
+                partition: partition,
+                userObjectId: UserObjectId
+            );
+        }
+
+        state.State.StorageReadEnabled = canRead;
+        state.State.StorageWriteEnabled = canWrite;
+        state.State.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await state.WriteStateAsync();
+
+        logger.LogInformation(
+            args: [UserObjectId, canRead, canWrite],
+            message: "User {UserObjectId} storage access set: CanRead={CanRead}, CanWrite={CanWrite}."
+        );
+
+        return Snapshot();
     }
 }
 

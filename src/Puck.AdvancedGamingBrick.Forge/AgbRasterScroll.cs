@@ -22,16 +22,16 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbRasterScroll {
-    /// <summary>Scanlines the table covers; the picture is this tall.</summary>
-    public const int ScanlineCount = 160;
-    /// <summary>Bytes the table occupies: a horizontal and a vertical halfword per scanline.</summary>
-    public const int TableByteCount = ScanlineCount * 4;
-
     private const uint ControlAddress = 0x040000BAu;
     private const uint DestinationAddress = 0x040000B4u;
     private const uint ScrollAddress = 0x04000010u;
     private const uint SourceAddress = 0x040000B0u;
     private const uint UnitCountAddress = 0x040000B8u;
+
+    /// <summary>Scanlines the table covers; the picture is this tall.</summary>
+    public const int ScanlineCount = 160;
+    /// <summary>Bytes the table occupies: a horizontal and a vertical halfword per scanline.</summary>
+    public const int TableByteCount = (ScanlineCount * 4);
 
     private readonly ThumbEmitter m_emitter;
     private readonly uint m_tableAddress;
@@ -46,16 +46,35 @@ public sealed class AgbRasterScroll {
         m_tableAddress = tableAddress;
     }
 
-    /// <summary>Emits the per-frame re-arm, which rewinds the channel to the table's start.</summary>
-    /// <remarks>Clearing the control register before setting it again is what makes the hardware latch the rewound
-    /// source; writing the source alone while the channel is enabled changes nothing.</remarks>
-    public void EmitRearm() {
-        StoreHalf(address: ControlAddress, value: 0x0000u);
-        StoreWord(address: SourceAddress, value: m_tableAddress);
-        StoreWord(address: DestinationAddress, value: ScrollAddress);
-        StoreHalf(address: UnitCountAddress, value: 2u);
-        // Enable, horizontal-blank start, repeating, destination reloading each burst, source advancing through it.
-        StoreHalf(address: ControlAddress, value: 0xA260u);
+    private void StoreHalf(uint address, uint value) {
+        m_emitter.LoadConstant(
+            destination: LowRegister.R0,
+            value: value
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R2,
+            value: address
+        );
+        m_emitter.StoreHalf(
+            baseRegister: LowRegister.R2,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
+    }
+    private void StoreWord(uint address, uint value) {
+        m_emitter.LoadConstant(
+            destination: LowRegister.R0,
+            value: value
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R2,
+            value: address
+        );
+        m_emitter.StoreWord(
+            baseRegister: LowRegister.R2,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
     }
 
     /// <summary>
@@ -69,33 +88,75 @@ public sealed class AgbRasterScroll {
         ArgumentNullException.ThrowIfNull(argument: scrollX);
         ArgumentNullException.ThrowIfNull(argument: scrollY);
 
-        var entry = Math.Max(val1: 0, val2: line - 1);
+        var entry = Math.Max(
+            val1: 0,
+            val2: (line - 1)
+        );
+
         if (entry >= ScanlineCount) {
             return;
         }
 
         var loop = m_emitter.NewLabel();
+
         scrollX(LowRegister.R5);
         scrollY(LowRegister.R6);
-        m_emitter.LoadConstant(destination: LowRegister.R4, value: m_tableAddress + ((uint)entry * 4u));
-        m_emitter.LoadConstant(destination: LowRegister.R3, value: (uint)(ScanlineCount - entry));
+        m_emitter.LoadConstant(
+            destination: LowRegister.R4,
+            value: (m_tableAddress + (((uint)entry) * 4u))
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R3,
+            value: ((uint)(ScanlineCount - entry))
+        );
         m_emitter.MarkLabel(label: loop);
-        m_emitter.StoreHalf(source: LowRegister.R5, baseRegister: LowRegister.R4, byteOffset: 0);
-        m_emitter.StoreHalf(source: LowRegister.R6, baseRegister: LowRegister.R4, byteOffset: 2);
-        m_emitter.AddImmediate(register: LowRegister.R4, value: 4);
-        m_emitter.SubtractImmediate(register: LowRegister.R3, value: 1);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: loop);
+        m_emitter.StoreHalf(
+            baseRegister: LowRegister.R4,
+            byteOffset: 0,
+            source: LowRegister.R5
+        );
+        m_emitter.StoreHalf(
+            baseRegister: LowRegister.R4,
+            byteOffset: 2,
+            source: LowRegister.R6
+        );
+        m_emitter.AddImmediate(
+            register: LowRegister.R4,
+            value: 4
+        );
+        m_emitter.SubtractImmediate(
+            register: LowRegister.R3,
+            value: 1
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: loop
+        );
     }
-
-    private void StoreHalf(uint address, uint value) {
-        m_emitter.LoadConstant(destination: LowRegister.R0, value: value);
-        m_emitter.LoadConstant(destination: LowRegister.R2, value: address);
-        m_emitter.StoreHalf(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
-    }
-
-    private void StoreWord(uint address, uint value) {
-        m_emitter.LoadConstant(destination: LowRegister.R0, value: value);
-        m_emitter.LoadConstant(destination: LowRegister.R2, value: address);
-        m_emitter.StoreWord(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
+    /// <summary>Emits the per-frame re-arm, which rewinds the channel to the table's start.</summary>
+    /// <remarks>Clearing the control register before setting it again is what makes the hardware latch the rewound
+    /// source; writing the source alone while the channel is enabled changes nothing.</remarks>
+    public void EmitRearm() {
+        StoreHalf(
+            address: ControlAddress,
+            value: 0x0000u
+        );
+        StoreWord(
+            address: SourceAddress,
+            value: m_tableAddress
+        );
+        StoreWord(
+            address: DestinationAddress,
+            value: ScrollAddress
+        );
+        StoreHalf(
+            address: UnitCountAddress,
+            value: 2u
+        );
+        // Enable, horizontal-blank start, repeating, destination reloading each burst, source advancing through it.
+        StoreHalf(
+            address: ControlAddress,
+            value: 0xA260u
+        );
     }
 }

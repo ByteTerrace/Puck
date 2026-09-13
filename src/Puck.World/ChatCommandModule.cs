@@ -305,8 +305,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
 
         m_facts.NoteSpoke(bodyIndex: ((((uint)target) < ((uint)WorldClient.EntityCapacity))
             ? target
-            : slot
-        ));
+            : slot));
     }
     // The raw text tail after skipTokensIncludingVerb whitespace-delimited tokens (verb included) — the SAME
     // reconstruction-from-raw-line approach WorldStateCommandModule.RawTextTail/IdentityCommandModule.DeliverTextTail

@@ -340,9 +340,9 @@ internal sealed partial class PlayerCommandModule {
         if (
             (args.Count is 1 or 2) &&
             args[0].StartsWith(
-                value: SpawnPrefix,
-                comparisonType: StringComparison.Ordinal
-            )
+            comparisonType: StringComparison.Ordinal,
+            value: SpawnPrefix
+        )
         ) {
             var spawnId = args[0][SpawnPrefix.Length..].ToString();
 
@@ -363,10 +363,10 @@ internal sealed partial class PlayerCommandModule {
                 if (
                     m_roster.IsJoined(slot: requestedSpawnIndex) &&
                     !string.Equals(
-                        a: location.Endpoint.Identity,
-                        b: WorldInstanceHost.BootInstanceName,
-                        comparisonType: StringComparison.Ordinal
-                    )
+                    a: location.Endpoint.Identity,
+                    b: WorldInstanceHost.BootInstanceName,
+                    comparisonType: StringComparison.Ordinal
+                )
                 ) {
                     if (WorldDefinitionRows.FindSpawnPoint(
                         spawnPoints: location.Endpoint.Definition.SpawnPoints,
@@ -894,9 +894,11 @@ internal sealed partial class PlayerCommandModule {
             : "es")} cleared]"
         );
     }
+
     // Parses a body.pose positional axis token: a literal "-" holds the value already read into `current`;
     // anything else must parse as a finite float, exactly like every other drive-a-player float argument.
     private const string SpawnPrefix = "spawn:";
+
     private static bool TryFloatOrHold(in WireArgs args, int index, float current, out float value) {
         if (args.Is(
             index: index,

@@ -87,128 +87,95 @@ public sealed class AddonSimulationPump {
         length: m_askCount,
         start: 0
     );
+    /// <summary>Gets the fuel consumed by the most recent <see cref="Pump"/> call's tick — set whether the tick
+    /// succeeded or faulted (a trap can burn its whole budget before faulting), zero if <see cref="Pump"/> has never
+    /// run. The cost-surface read: the consumer's tick loop accumulates this into a per-guest running total.</summary>
+    public ulong FuelConsumed { get; private set; }
     /// <summary>Gets the validated request-channel queries of the most recent successful <see cref="Pump"/>.</summary>
     public ReadOnlySpan<AddonQuerySubmission> Queries => m_queries.AsSpan(
         length: m_queryCount,
         start: 0
     );
-    /// <summary>Gets the fuel consumed by the most recent <see cref="Pump"/> call's tick — set whether the tick
-    /// succeeded or faulted (a trap can burn its whole budget before faulting), zero if <see cref="Pump"/> has never
-    /// run. The cost-surface read: the consumer's tick loop accumulates this into a per-guest running total.</summary>
-    public ulong FuelConsumed { get; private set; }
 
-    /// <summary>Drives one addon one tick and validates its whole output batch. On success the typed submissions are
-    /// readable from <see cref="Acts"/>/<see cref="Queries"/>/<see cref="Asks"/> until the next call. On a tick fault
-    /// or a vocabulary violation (which faults the instance, whole batch refused) every submission list is empty and
-    /// this returns <see langword="false"/>. <see cref="FuelConsumed"/> is set from the tick result either way.</summary>
-    /// <param name="instance">The admitted, enabled instance to drive.</param>
-    /// <param name="input">The host-composed input batch for this tick, within the guest's declared capacity.</param>
-    /// <returns><see langword="true"/> when the batch decoded and validated whole; otherwise <see langword="false"/>.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
-    public bool Pump(AddonInstance instance, ReadOnlySpan<AddonInCell> input) {
-        ArgumentNullException.ThrowIfNull(argument: instance);
-
+    private bool Refuse(AddonInstance instance, ushort ordinal, string reason) {
         m_actCount = 0;
         m_askCount = 0;
         m_queryCount = 0;
-
-        var result = instance.Tick(input: input);
-
-        FuelConsumed = result.FuelConsumed;
-
-        if (result.Status != AddonTickStatus.Ok) {
+        instance.FaultProtocol(reason: $"cell {ordinal} {reason}");
+        return false;
+    }
+    // The ask vocabulary: an admitted subject kind, a single-bit capability mask within THAT KIND's own admitted
+    // set, and zero handle fields (unused fields never float). Body pairs with {Drive, Observe} (the pre-existing
+    // shape), A = the body's 0-based entity index, C required zero. Section pairs with {Mutate} ALONE — the addon
+    // mutation seam's own handle shape — and is NAME-KEYED: A = a guest-memory pointer, C = the name's UTF-8 byte
+    // length, the same ptr/len wire shape RequestVerbs.SubmitMutation already uses for a payload. This method only
+    // enforces the SHAPE (a nonzero length is structurally required; a name can never be zero bytes) — the length
+    // CEILING (AddonAbi.MaxSectionNameBytes) and the guest-memory copy are guest-controlled MAGNITUDES, deferred to
+    // the resolve-time refusal WorldAddonRuntime.ResolveAsks already gives an oversized/out-of-bounds mutation
+    // payload, never a whole-batch fault here.
+    private bool TryValidateAsk(in AddonOutCell cell, ushort ordinal, out string error) {
+        if (
+            (cell.Verb != ((ushort)AddonSubjectKind.Body)) &&
+            (cell.Verb != ((ushort)AddonSubjectKind.Section))
+        ) {
+            error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
             return false;
         }
 
-        var cells = instance.OutCells;
-        var channels = instance.Channels;
-        var bindings = instance.ChannelBindings;
-        // A 64-bit seen-mask over DECLARED channel ordinals (bounded by AddonAbi.MaxChannelNames), reset every
-        // Pump call. Two Acts naming the SAME declared ordinal in one batch have no meaning under the per-tick
-        // declarative contract — there is no "later act wins" any more (see TryValidateInputAct's own doc) — so
-        // this is a protocol fault, the same posture as any other malformed record, never a silent overwrite.
-        var seenChannelOrdinals = 0UL;
+        var subjectKind = ((AddonSubjectKind)cell.Verb);
 
-        for (var index = 0; (index < cells.Length); ++index) {
-            ref readonly var cell = ref cells[index];
-            var channelKind = channels[cell.Channel].Kind;
-            var ordinal = ((ushort)index);
-
-            switch (cell.Kind) {
-                case AddonOutCellKind.Act when (channelKind == AddonChannelKind.Input): {
-                        if (!TryValidateInputAct(
-                            bindings: bindings,
-                            cell: in cell,
-                            error: out var actError,
-                            ordinal: ordinal
-                        )) {
-                            return Refuse(
-                                instance: instance,
-                                ordinal: ordinal,
-                                reason: actError
-                            );
-                        }
-
-                        // Structurally valid, so the declared ordinal is guaranteed < bindings.Length <=
-                        // AddonAbi.MaxChannelNames (64) — the shift below can never lose a bit.
-                        var declaredOrdinal = (cell.Verb >> AddonAbi.InputVerbReservedBits);
-                        var declaredBit = (1UL << declaredOrdinal);
-
-                        if ((seenChannelOrdinals & declaredBit) != 0UL) {
-                            return Refuse(
-                                instance: instance,
-                                ordinal: ordinal,
-                                reason: $"names declared channel ordinal {declaredOrdinal} more than once in one batch — duplicate channel acts are a protocol fault under the per-tick declarative contract"
-                            );
-                        }
-
-                        seenChannelOrdinals |= declaredBit;
-
-                        break;
-                    }
-                case AddonOutCellKind.Act when (channelKind == AddonChannelKind.Request): {
-                        if (!TryValidateQuery(
-                            cell: in cell,
-                            ordinal: ordinal,
-                            verbCount: channels[cell.Channel].VerbCount,
-                            error: out var queryError
-                        )) {
-                            return Refuse(
-                                instance: instance,
-                                ordinal: ordinal,
-                                reason: queryError
-                            );
-                        }
-
-                        break;
-                    }
-                case AddonOutCellKind.Ask when (channelKind == AddonChannelKind.Request): {
-                        if (!TryValidateAsk(
-                            cell: in cell,
-                            error: out var askError,
-                            ordinal: ordinal
-                        )) {
-                            return Refuse(
-                                instance: instance,
-                                ordinal: ordinal,
-                                reason: askError
-                            );
-                        }
-
-                        break;
-                    }
-                default:
-                    return Refuse(
-                        instance: instance,
-                        ordinal: ordinal,
-                        reason: $"a {cell.Kind} cell is not admissible on a {channelKind} channel"
-                    );
-            }
+        if (
+            (cell.HandleIndex != 0) ||
+            (cell.HandleGeneration != 0)
+        ) {
+            error = $"ask handle fields must be zero (index={cell.HandleIndex}, generation={cell.HandleGeneration})";
+            return false;
         }
 
+        if (cell.A < 0L) {
+            error = $"ask subject index {cell.A} is negative";
+            return false;
+        }
+
+        var mask = ((ulong)cell.B);
+        var admissible = ((subjectKind == AddonSubjectKind.Section)
+            ? AddonCapabilityMask.Mutate
+            : AddonCapabilityMask.Drive | AddonCapabilityMask.Observe
+        );
+
+        if (
+            (mask == 0UL) ||
+            ((mask & (mask - 1UL)) != 0UL) ||
+            ((mask & ~admissible) != 0UL)
+        ) {
+            error = $"ask capability mask 0x{mask:x} must be exactly one of the {subjectKind}-admissible bits (0x{admissible:x})";
+            return false;
+        }
+
+        if (subjectKind == AddonSubjectKind.Body) {
+            if (cell.C != 0L) {
+                error = $"a Body ask requires C = 0 (C={cell.C})";
+                return false;
+            }
+        } else if (cell.C <= 0L) {
+            // A Section ask's C lane is its name's UTF-8 byte length — zero or negative can never name a real
+            // WorldSection member (the shortest is non-empty), so this is a shape fault, not a magnitude one.
+            error = $"a Section ask's name length {cell.C} must be positive";
+            return false;
+        }
+
+        m_asks[m_askCount++] = new AddonAskSubmission(
+            Ordinal: ordinal,
+            SubjectKind: subjectKind,
+            SubjectIndex: cell.A,
+            CapabilityMask: mask,
+            NameLength: ((subjectKind == AddonSubjectKind.Section)
+            ? cell.C
+            : 0L)
+        );
+        error = "";
         return true;
     }
-
     // The input act vocabulary: verb = (declaredOrdinal << AddonAbi.InputVerbReservedBits), low bits REQUIRED
     // ZERO (contribution semantics are per-tick declarative — there is no phase to decode any more), declared
     // ordinal within the DECLARED table, single payload lane domain-checked against the HOST table's shape — the
@@ -357,82 +324,116 @@ public sealed class AddonSimulationPump {
         error = "";
         return true;
     }
-    // The ask vocabulary: an admitted subject kind, a single-bit capability mask within THAT KIND's own admitted
-    // set, and zero handle fields (unused fields never float). Body pairs with {Drive, Observe} (the pre-existing
-    // shape), A = the body's 0-based entity index, C required zero. Section pairs with {Mutate} ALONE — the addon
-    // mutation seam's own handle shape — and is NAME-KEYED: A = a guest-memory pointer, C = the name's UTF-8 byte
-    // length, the same ptr/len wire shape RequestVerbs.SubmitMutation already uses for a payload. This method only
-    // enforces the SHAPE (a nonzero length is structurally required; a name can never be zero bytes) — the length
-    // CEILING (AddonAbi.MaxSectionNameBytes) and the guest-memory copy are guest-controlled MAGNITUDES, deferred to
-    // the resolve-time refusal WorldAddonRuntime.ResolveAsks already gives an oversized/out-of-bounds mutation
-    // payload, never a whole-batch fault here.
-    private bool TryValidateAsk(in AddonOutCell cell, ushort ordinal, out string error) {
-        if (
-            (cell.Verb != ((ushort)AddonSubjectKind.Body)) &&
-            (cell.Verb != ((ushort)AddonSubjectKind.Section))
-        ) {
-            error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
-            return false;
-        }
 
-        var subjectKind = ((AddonSubjectKind)cell.Verb);
+    /// <summary>Drives one addon one tick and validates its whole output batch. On success the typed submissions are
+    /// readable from <see cref="Acts"/>/<see cref="Queries"/>/<see cref="Asks"/> until the next call. On a tick fault
+    /// or a vocabulary violation (which faults the instance, whole batch refused) every submission list is empty and
+    /// this returns <see langword="false"/>. <see cref="FuelConsumed"/> is set from the tick result either way.</summary>
+    /// <param name="instance">The admitted, enabled instance to drive.</param>
+    /// <param name="input">The host-composed input batch for this tick, within the guest's declared capacity.</param>
+    /// <returns><see langword="true"/> when the batch decoded and validated whole; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+    public bool Pump(AddonInstance instance, ReadOnlySpan<AddonInCell> input) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
 
-        if (
-            (cell.HandleIndex != 0) ||
-            (cell.HandleGeneration != 0)
-        ) {
-            error = $"ask handle fields must be zero (index={cell.HandleIndex}, generation={cell.HandleGeneration})";
-            return false;
-        }
-
-        if (cell.A < 0L) {
-            error = $"ask subject index {cell.A} is negative";
-            return false;
-        }
-
-        var mask = ((ulong)cell.B);
-        var admissible = ((subjectKind == AddonSubjectKind.Section)
-            ? AddonCapabilityMask.Mutate
-            : AddonCapabilityMask.Drive | AddonCapabilityMask.Observe);
-
-        if (
-            (mask == 0UL) ||
-            ((mask & (mask - 1UL)) != 0UL) ||
-            ((mask & ~admissible) != 0UL)
-        ) {
-            error = $"ask capability mask 0x{mask:x} must be exactly one of the {subjectKind}-admissible bits (0x{admissible:x})";
-            return false;
-        }
-
-        if (subjectKind == AddonSubjectKind.Body) {
-            if (cell.C != 0L) {
-                error = $"a Body ask requires C = 0 (C={cell.C})";
-                return false;
-            }
-        } else if (cell.C <= 0L) {
-            // A Section ask's C lane is its name's UTF-8 byte length — zero or negative can never name a real
-            // WorldSection member (the shortest is non-empty), so this is a shape fault, not a magnitude one.
-            error = $"a Section ask's name length {cell.C} must be positive";
-            return false;
-        }
-
-        m_asks[m_askCount++] = new AddonAskSubmission(
-            Ordinal: ordinal,
-            SubjectKind: subjectKind,
-            SubjectIndex: cell.A,
-            CapabilityMask: mask,
-            NameLength: ((subjectKind == AddonSubjectKind.Section)
-            ? cell.C
-            : 0L)
-        );
-        error = "";
-        return true;
-    }
-    private bool Refuse(AddonInstance instance, ushort ordinal, string reason) {
         m_actCount = 0;
         m_askCount = 0;
         m_queryCount = 0;
-        instance.FaultProtocol(reason: $"cell {ordinal} {reason}");
-        return false;
+
+        var result = instance.Tick(input: input);
+
+        FuelConsumed = result.FuelConsumed;
+
+        if (result.Status != AddonTickStatus.Ok) {
+            return false;
+        }
+
+        var cells = instance.OutCells;
+        var channels = instance.Channels;
+        var bindings = instance.ChannelBindings;
+        // A 64-bit seen-mask over DECLARED channel ordinals (bounded by AddonAbi.MaxChannelNames), reset every
+        // Pump call. Two Acts naming the SAME declared ordinal in one batch have no meaning under the per-tick
+        // declarative contract — there is no "later act wins" any more (see TryValidateInputAct's own doc) — so
+        // this is a protocol fault, the same posture as any other malformed record, never a silent overwrite.
+        var seenChannelOrdinals = 0UL;
+
+        for (var index = 0; (index < cells.Length); ++index) {
+            ref readonly var cell = ref cells[index];
+            var channelKind = channels[cell.Channel].Kind;
+            var ordinal = ((ushort)index);
+
+            switch (cell.Kind) {
+                case AddonOutCellKind.Act when (channelKind == AddonChannelKind.Input): {
+                        if (!TryValidateInputAct(
+                            bindings: bindings,
+                            cell: in cell,
+                            error: out var actError,
+                            ordinal: ordinal
+                        )) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: actError
+                            );
+                        }
+
+                        // Structurally valid, so the declared ordinal is guaranteed < bindings.Length <=
+                        // AddonAbi.MaxChannelNames (64) — the shift below can never lose a bit.
+                        var declaredOrdinal = (cell.Verb >> AddonAbi.InputVerbReservedBits);
+                        var declaredBit = (1UL << declaredOrdinal);
+
+                        if ((seenChannelOrdinals & declaredBit) != 0UL) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: $"names declared channel ordinal {declaredOrdinal} more than once in one batch — duplicate channel acts are a protocol fault under the per-tick declarative contract"
+                            );
+                        }
+
+                        seenChannelOrdinals |= declaredBit;
+
+                        break;
+                    }
+                case AddonOutCellKind.Act when (channelKind == AddonChannelKind.Request): {
+                        if (!TryValidateQuery(
+                            cell: in cell,
+                            ordinal: ordinal,
+                            verbCount: channels[cell.Channel].VerbCount,
+                            error: out var queryError
+                        )) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: queryError
+                            );
+                        }
+
+                        break;
+                    }
+                case AddonOutCellKind.Ask when (channelKind == AddonChannelKind.Request): {
+                        if (!TryValidateAsk(
+                            cell: in cell,
+                            error: out var askError,
+                            ordinal: ordinal
+                        )) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: askError
+                            );
+                        }
+
+                        break;
+                    }
+                default:
+                    return Refuse(
+                        instance: instance,
+                        ordinal: ordinal,
+                        reason: $"a {cell.Kind} cell is not admissible on a {channelKind} channel"
+                    );
+            }
+        }
+
+        return true;
     }
 }

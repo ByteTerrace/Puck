@@ -32,85 +32,19 @@ internal static class PresentedZetaClaims {
             for (var target = 0; (target < order); ++target) { arrows[((source * order) + target)] = (source, target, material.One); }
         }
 
-        return Presentations.Quiver<TValue, TOps>(arrows: arrows, material: material, objectCount: order);
+        return Presentations.Quiver<TValue, TOps>(
+            arrows: arrows,
+            material: material,
+            objectCount: order
+        );
+    }
+    private static ulong DrawRaw(ref ulong counter) {
+        counter += 1UL;
+
+        return (MixIndex(index: counter) % (UnitOneRaw + 1UL));
     }
     private static long Key(int source, int target, int order) =>
         ((source * order) + target);
-
-    /// <summary>Proves the power-of-two twin's ENVELOPE far side, which no case in the suite measures: past the
-    /// carrier's 2⁻³² grid the log-domain isomorphism between <see cref="MostLikelyPathMaterial"/>'s likelihood and
-    /// <see cref="TropicalMaterial"/>'s cost stops holding, because the likelihood underflows to the impossible
-    /// outcome while the cost stays an ordinary finite integer.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    /// <remarks>
-    /// <para>
-    /// A five-object simple path 0→1→2→3→4, every arc at exponent nine. Three hops cost 27, inside the carrier's
-    /// 2⁻³² grid; four hops cost 36, past it. <see cref="MostLikelyPathMaterial"/> is not a certified exact
-    /// semiring, so its guarded sum is read through the explicit finite <c>TruncatedSum</c> schedule (bound =
-    /// order − 1, the most hops a simple path over five objects can take) rather than
-    /// <c>TrySumOverAllLengths</c>; <see cref="TropicalMaterial"/> IS exact and idempotent, so its guarded sum is
-    /// read through <c>TrySumOverAllLengths</c> directly. One fixed instance rather than a swept domain, because the
-    /// claim names one specific boundary rather than a family.
-    /// </para>
-    /// <para>
-    /// This closes the gap <c>presented.unit-interval-power-of-two-twin</c> names in its own ENVELOPE leg: that case
-    /// is silent about its own far boundary, where the isomorphism becomes false past 32 fraction bits, and defers
-    /// here for it.
-    /// </para>
-    /// </remarks>
-    public static string? UnitIntervalPowerOfTwoEnvelopeBoundary() {
-        const int Order = 5;
-        const int Exponent = 9;
-
-        var likelyAlgebra = PresentedAlgebra<UnitInterval32, MostLikelyPathMaterial>.Create(
-            presentation: CodiscreteQuiver<UnitInterval32, MostLikelyPathMaterial>(material: default, order: Order)
-        );
-        var tropicalAlgebra = PresentedAlgebra<FixedQ4816, TropicalMaterial>.Create(
-            presentation: CodiscreteQuiver<FixedQ4816, TropicalMaterial>(material: default, order: Order)
-        );
-        var keys = ((long[])[Key(order: Order, source: 0, target: 1), Key(order: Order, source: 1, target: 2), Key(order: Order, source: 2, target: 3), Key(order: Order, source: 3, target: 4)]);
-        var likelyCoefficients = ((UnitInterval32[])[
-            UnitInterval32.Create(value: (UnitOneRaw >> Exponent)), UnitInterval32.Create(value: (UnitOneRaw >> Exponent)),
-            UnitInterval32.Create(value: (UnitOneRaw >> Exponent)), UnitInterval32.Create(value: (UnitOneRaw >> Exponent)),
-        ]);
-        var tropicalCoefficients = ((FixedQ4816[])[
-            FixedQ4816.FromInteger(value: Exponent), FixedQ4816.FromInteger(value: Exponent),
-            FixedQ4816.FromInteger(value: Exponent), FixedQ4816.FromInteger(value: Exponent),
-        ]);
-        var likelyElement = likelyAlgebra.FromSupport(coefficients: likelyCoefficients, keys: keys);
-        var tropicalElement = tropicalAlgebra.FromSupport(coefficients: tropicalCoefficients, keys: keys);
-        var likelyTotal = likelyAlgebra.TruncatedSum(bound: (Order - 1), value: likelyElement);
-
-        if (!tropicalAlgebra.TrySumOverAllLengths(obstruction: out var tropicalObstruction, total: out var tropicalTotal, value: tropicalElement)) {
-            return $"the tropical star was refused on the five-object chain, attempting {tropicalObstruction.Attempted}, where the exact idempotent material carries no such obstruction";
-        }
-
-        var threeHopKey = Key(order: Order, source: 0, target: 3);
-        var fourHopKey = Key(order: Order, source: 0, target: 4);
-        var threeHopCost = tropicalTotal[key: threeHopKey];
-        var fourHopCost = tropicalTotal[key: fourHopKey];
-        var threeHopLikelihood = likelyTotal[key: threeHopKey];
-        var fourHopLikelihood = likelyTotal[key: fourHopKey];
-
-        if (threeHopCost != FixedQ4816.FromInteger(value: (3 * Exponent))) {
-            return $"the three-hop tropical cost is {threeHopCost.Value}, expected exactly {(3 * Exponent)} at Q16";
-        }
-
-        if (fourHopCost != FixedQ4816.FromInteger(value: (4 * Exponent))) {
-            return $"the four-hop tropical cost is {fourHopCost.Value}, expected exactly {(4 * Exponent)} at Q16, where the tropical material names it exactly and never underflows";
-        }
-
-        if (UnitInterval32.Zero == threeHopLikelihood) {
-            return "the three-hop likelihood underflowed to the impossible outcome, where a cost of 27 sits inside the 2⁻³² grid and should read 2⁻²⁷ exactly";
-        }
-
-        if (UnitInterval32.Zero != fourHopLikelihood) {
-            return $"the four-hop likelihood read {fourHopLikelihood.Value} rather than underflowing, where a cost of 36 sits past the 2⁻³² grid the carrier holds";
-        }
-
-        return null;
-    }
-
     // ---- SplitMix64 index mixer: a pure function of a running counter, never System.Random and never wall-clock ----
 
     private static ulong MixIndex(ulong index) {
@@ -121,19 +55,21 @@ internal static class PresentedZetaClaims {
 
         return mixed ^ (mixed >> 31);
     }
-    private static ulong DrawRaw(ref ulong counter) {
-        counter += 1UL;
-
-        return (MixIndex(index: counter) % (UnitOneRaw + 1UL));
-    }
     /// <summary>Rounds an exact non-negative dyadic value to the closed-unit grid, ties to even — re-derived here
     /// rather than borrowed from <see cref="UnitInterval32"/> or from <c>Oracles.cs</c>, which is the whole point of
     /// an oracle.</summary>
     private static ulong RoundTiesToEvenLocal(BigInteger exact, int shift) {
-        var truncated = BigInteger.DivRem(dividend: exact, divisor: (BigInteger.One << shift), remainder: out var remainder);
+        var truncated = BigInteger.DivRem(
+            dividend: exact,
+            divisor: (BigInteger.One << shift),
+            remainder: out var remainder
+        );
         var half = (BigInteger.One << (shift - 1));
 
-        if ((remainder > half) || ((remainder == half) && !(truncated & BigInteger.One).IsZero)) { truncated += BigInteger.One; }
+        if (
+            (remainder > half) ||
+            ((remainder == half) && !(truncated & BigInteger.One).IsZero)
+        ) { truncated += BigInteger.One; }
 
         return ((ulong)truncated);
     }
@@ -187,12 +123,132 @@ internal static class PresentedZetaClaims {
                 if (exact > winningExact) { winningExact = exact; }
             }
 
-            var fused = material.FusedChargedSum(charges: charges, lane: ChargeLane.General, left: left, right: right);
-            var expected = RoundTiesToEvenLocal(exact: winningExact, shift: 64);
+            var fused = material.FusedChargedSum(
+                charges: charges,
+                lane: ChargeLane.General,
+                left: left,
+                right: right
+            );
+            var expected = RoundTiesToEvenLocal(
+                exact: winningExact,
+                shift: 64
+            );
 
             if (fused.Value != expected) {
                 return $"draw {draw}: the three-term fused competing fold reads {fused.Value}, where rounding the winning exact term {winningExact} once at shift 64 gives {expected}";
             }
+        }
+
+        return null;
+    }
+    /// <summary>Proves the power-of-two twin's ENVELOPE far side, which no case in the suite measures: past the
+    /// carrier's 2⁻³² grid the log-domain isomorphism between <see cref="MostLikelyPathMaterial"/>'s likelihood and
+    /// <see cref="TropicalMaterial"/>'s cost stops holding, because the likelihood underflows to the impossible
+    /// outcome while the cost stays an ordinary finite integer.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    /// <remarks>
+    /// <para>
+    /// A five-object simple path 0→1→2→3→4, every arc at exponent nine. Three hops cost 27, inside the carrier's
+    /// 2⁻³² grid; four hops cost 36, past it. <see cref="MostLikelyPathMaterial"/> is not a certified exact
+    /// semiring, so its guarded sum is read through the explicit finite <c>TruncatedSum</c> schedule (bound =
+    /// order − 1, the most hops a simple path over five objects can take) rather than
+    /// <c>TrySumOverAllLengths</c>; <see cref="TropicalMaterial"/> IS exact and idempotent, so its guarded sum is
+    /// read through <c>TrySumOverAllLengths</c> directly. One fixed instance rather than a swept domain, because the
+    /// claim names one specific boundary rather than a family.
+    /// </para>
+    /// <para>
+    /// This closes the gap <c>presented.unit-interval-power-of-two-twin</c> names in its own ENVELOPE leg: that case
+    /// is silent about its own far boundary, where the isomorphism becomes false past 32 fraction bits, and defers
+    /// here for it.
+    /// </para>
+    /// </remarks>
+    public static string? UnitIntervalPowerOfTwoEnvelopeBoundary() {
+        const int Order = 5;
+        const int Exponent = 9;
+
+        var likelyAlgebra = PresentedAlgebra<UnitInterval32, MostLikelyPathMaterial>.Create(presentation: CodiscreteQuiver<UnitInterval32, MostLikelyPathMaterial>(
+            material: default,
+            order: Order
+        ));
+        var tropicalAlgebra = PresentedAlgebra<FixedQ4816, TropicalMaterial>.Create(presentation: CodiscreteQuiver<FixedQ4816, TropicalMaterial>(
+            material: default,
+            order: Order
+        ));
+        var keys = ((long[])[Key(
+                order: Order,
+                source: 0,
+                target: 1
+            ), Key(
+                order: Order,
+                source: 1,
+                target: 2
+            ), Key(
+                order: Order,
+                source: 2,
+                target: 3
+            ), Key(
+                order: Order,
+                source: 3,
+                target: 4
+            )]);
+        var likelyCoefficients = ((UnitInterval32[])[
+            UnitInterval32.Create(value: (UnitOneRaw >> Exponent)), UnitInterval32.Create(value: (UnitOneRaw >> Exponent)),
+            UnitInterval32.Create(value: (UnitOneRaw >> Exponent)), UnitInterval32.Create(value: (UnitOneRaw >> Exponent)),
+        ]);
+        var tropicalCoefficients = ((FixedQ4816[])[
+            FixedQ4816.FromInteger(value: Exponent), FixedQ4816.FromInteger(value: Exponent),
+            FixedQ4816.FromInteger(value: Exponent), FixedQ4816.FromInteger(value: Exponent),
+        ]);
+        var likelyElement = likelyAlgebra.FromSupport(
+            coefficients: likelyCoefficients,
+            keys: keys
+        );
+        var tropicalElement = tropicalAlgebra.FromSupport(
+            coefficients: tropicalCoefficients,
+            keys: keys
+        );
+        var likelyTotal = likelyAlgebra.TruncatedSum(
+            bound: (Order - 1),
+            value: likelyElement
+        );
+
+        if (!tropicalAlgebra.TrySumOverAllLengths(
+            obstruction: out var tropicalObstruction,
+            total: out var tropicalTotal,
+            value: tropicalElement
+        )) {
+            return $"the tropical star was refused on the five-object chain, attempting {tropicalObstruction.Attempted}, where the exact idempotent material carries no such obstruction";
+        }
+
+        var threeHopKey = Key(
+            order: Order,
+            source: 0,
+            target: 3
+        );
+        var fourHopKey = Key(
+            order: Order,
+            source: 0,
+            target: 4
+        );
+        var threeHopCost = tropicalTotal[key: threeHopKey];
+        var fourHopCost = tropicalTotal[key: fourHopKey];
+        var threeHopLikelihood = likelyTotal[key: threeHopKey];
+        var fourHopLikelihood = likelyTotal[key: fourHopKey];
+
+        if (threeHopCost != FixedQ4816.FromInteger(value: (3 * Exponent))) {
+            return $"the three-hop tropical cost is {threeHopCost.Value}, expected exactly {(3 * Exponent)} at Q16";
+        }
+
+        if (fourHopCost != FixedQ4816.FromInteger(value: (4 * Exponent))) {
+            return $"the four-hop tropical cost is {fourHopCost.Value}, expected exactly {(4 * Exponent)} at Q16, where the tropical material names it exactly and never underflows";
+        }
+
+        if (UnitInterval32.Zero == threeHopLikelihood) {
+            return "the three-hop likelihood underflowed to the impossible outcome, where a cost of 27 sits inside the 2⁻³² grid and should read 2⁻²⁷ exactly";
+        }
+
+        if (UnitInterval32.Zero != fourHopLikelihood) {
+            return $"the four-hop likelihood read {fourHopLikelihood.Value} rather than underflowing, where a cost of 36 sits past the 2⁻³² grid the carrier holds";
         }
 
         return null;

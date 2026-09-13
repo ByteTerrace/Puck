@@ -15,156 +15,35 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class CameraCaptureStage : IPostStage<PostContext> {
     private const ushort CameraBlockSelect = 0x4000; // WriteControl: bit 4 maps the camera registers over the RAM window
-    private const ushort RamEnable = 0x0000;         // WriteControl: 0x0A enables the RAM window
     private const int DitherByteCount = 48;
+    private const ushort RamEnable = 0x0000;         // WriteControl: 0x0A enables the RAM window
 
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
     /// <inheritdoc/>
     public string Name =>
         "camera-capture";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        if (CheckUniformShades() is { } uniformFailure) {
-            return PostStageOutcome.Fail(detail: uniformFailure);
-        }
+    private static MachineInstance BuildCamera(ICameraSensor sensor) {
+        // Header type 0xFC = camera cartridge; RAM-size 0x04 = 128 KiB (16 banks), as the real cart carries.
+        var machine = PostMachine.Build(
+            model: ConsoleModel.DmgC,
+            rom: SyntheticRom.Create(
+                cartridgeType: 0xFC,
+                ramSize: 0x04
+            )
+        );
 
-        if (CheckExposureResponds() is { } exposureFailure) {
-            return PostStageOutcome.Fail(detail: exposureFailure);
-        }
+        ((CameraCartridge)machine.GetRequiredService<ICartridge>()).Sensor = sensor;
 
-        if (CheckDitherMatrix() is { } ditherFailure) {
-            return PostStageOutcome.Fail(detail: ditherFailure);
-        }
-
-        if (CheckBusyTiming() is { } busyFailure) {
-            return PostStageOutcome.Fail(detail: busyFailure);
-        }
-
-        if (CheckEdgeEnhancement() is { } edgeFailure) {
-            return PostStageOutcome.Fail(detail: edgeFailure);
-        }
-
-        if (CheckSnapshotMidCapture() is { } snapshotFailure) {
-            return PostStageOutcome.Fail(detail: snapshotFailure);
-        }
-
-        return PostStageOutcome.Pass(detail: $"M64282FP capture: uniform shades pack exactly to 2bpp tiles at 0xA100, exposure and the 4×4 dither matrix drive the output, the busy window is exposure-dependent, edge enhancement responds, and a mid-busy snapshot resumes to a byte-identical {SensorImage.TiledByteCount}-byte image");
+        return machine;
     }
-
-    // Each shade a flat sensor + uniform dither matrix can produce must pack to the exact bitplane bytes: shade 0 -> both
-    // planes 0x00, shade 1 -> low 0xFF/high 0x00, shade 2 -> low 0x00/high 0xFF, shade 3 -> both 0xFF. Gain index 4 is
-    // exactly 1.0 and exposure 0x1000 divides out, so the processed colour equals the raw sensor value.
-    private static string? CheckUniformShades() {
-        // (sensor value, expected shade) with the uniform thresholds {50,150,200}: 25<50 -> 3, 100<150 -> 2, 175<200 ->
-        // 1, 240 -> 0.
-        (byte Value, int Shade)[] cases = [(25, 3), (100, 2), (175, 1), (240, 0)];
-        var dither = UniformDither(
-            threshold0: 50,
-            threshold1: 150,
-            threshold2: 200
-        );
-
-        foreach (var (value, shade) in cases) {
-            using var machine = BuildCamera(sensor: new FlatSensor(value: value));
-            var cartridge = Cartridge(machine: machine);
-
-            Configure(
-                cartridge: cartridge,
-                dither: dither,
-                edge: false,
-                edgeRatio: 0x00,
-                exposure: 0x1000,
-                gain: 4
-            );
-            Trigger(
-                cartridge: cartridge,
-                machine: machine
-            );
-
-            var image = ReadImage(cartridge: cartridge);
-            var expectedLow = ((byte)(((shade & 0x01) != 0)
-                ? 0xFF
-                : 0x00));
-            var expectedHigh = ((byte)(((shade & 0x02) != 0)
-                ? 0xFF
-                : 0x00));
-
-            for (var index = 0; (index < image.Length); ++index) {
-                var expected = (((index & 1) == 0)
-                    ? expectedLow
-                    : expectedHigh);
-
-                if (image[index] != expected) {
-                    return $"flat sensor {value} (shade {shade}) packed byte {index} = 0x{image[index]:X2}, expected 0x{expected:X2}";
-                }
-            }
-        }
-
-        return null;
-    }
-    // Lowering the exposure register scales the processed colour down, dropping a mid-value pixel across a threshold into
-    // a darker shade — the auto-exposure feedback a real camera ROM relies on.
-    private static string? CheckExposureResponds() {
-        var dither = UniformDither(
-            threshold0: 50,
-            threshold1: 150,
-            threshold2: 200
-        );
-
-        // colour = 100 * exposure / 0x1000: at 0x1000 -> 100 (shade 2), at 0x0400 -> 25 (shade 3).
-        var bright = CaptureFlat(
-            dither: dither,
-            exposure: 0x1000,
-            gain: 4,
-            value: 100
-        );
-        var dark = CaptureFlat(
-            dither: dither,
-            exposure: 0x0400,
-            gain: 4,
-            value: 100
-        );
-
-        if (bright[1] != 0xFF) {
-            return $"bright capture: expected high-plane 0xFF (shade 2), got 0x{bright[1]:X2}";
-        }
-
-        if (
-            (dark[0] != 0xFF) ||
-            (dark[1] != 0xFF)
-        ) {
-            return $"dark capture: expected both planes 0xFF (shade 3), got low 0x{dark[0]:X2} high 0x{dark[1]:X2}";
-        }
-
-        return null;
-    }
-    // The dither matrix is indexed by (x&3, y&3). With cells whose x&3==0 forced to shade 3 and the rest to shade 0, each
-    // tile row must pack to 0x88 on both planes (bits set at columns 0 and 4) — proving the ((x&3)+(y&3)*4)*3 register
-    // mapping and the MSB-left 2bpp packing.
-    private static string? CheckDitherMatrix() {
-        var dither = new byte[DitherByteCount];
-
-        for (var cellY = 0; (cellY < 4); ++cellY) {
-            for (var cellX = 0; (cellX < 4); ++cellX) {
-                var cellBase = (((cellX + (cellY * 4)) * 3));
-                // colour is 100 everywhere; thresholds {200,200,200} -> shade 3, {50,50,50} -> shade 0.
-                var threshold = ((byte)((cellX == 0)
-                    ? 200
-                    : 50));
-
-                dither[cellBase] = threshold;
-                dither[(cellBase + 1)] = threshold;
-                dither[(cellBase + 2)] = threshold;
-            }
-        }
-
-        using var machine = BuildCamera(sensor: new FlatSensor(value: 100));
+    private static byte[] CaptureFlat(byte value, byte gain, int exposure, byte[] dither) {
+        using var machine = BuildCamera(sensor: new FlatSensor(value: value));
         var cartridge = Cartridge(machine: machine);
 
         Configure(
@@ -172,24 +51,18 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
             dither: dither,
             edge: false,
             edgeRatio: 0x00,
-            exposure: 0x1000,
-            gain: 4
+            exposure: exposure,
+            gain: gain
         );
         Trigger(
             cartridge: cartridge,
             machine: machine
         );
 
-        var image = ReadImage(cartridge: cartridge);
-
-        for (var index = 0; (index < image.Length); ++index) {
-            if (image[index] != 0x88) {
-                return $"dither-matrix capture: byte {index} = 0x{image[index]:X2}, expected 0x88 (columns 0 and 4 dark)";
-            }
-        }
-
-        return null;
+        return ReadImage(cartridge: cartridge);
     }
+    private static CameraCartridge Cartridge(MachineInstance machine) =>
+        ((CameraCartridge)machine.GetRequiredService<ICartridge>());
     // The busy bit (register 0, bit 0) reads set immediately after a trigger and stays set for the exposure-dependent
     // window (129792 + 2048 + exposure*64 dots at gain with 1-D off), then clears — the poll loop a ROM spins on.
     private static string? CheckBusyTiming() {
@@ -244,6 +117,52 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
 
         return null;
     }
+    // The dither matrix is indexed by (x&3, y&3). With cells whose x&3==0 forced to shade 3 and the rest to shade 0, each
+    // tile row must pack to 0x88 on both planes (bits set at columns 0 and 4) — proving the ((x&3)+(y&3)*4)*3 register
+    // mapping and the MSB-left 2bpp packing.
+    private static string? CheckDitherMatrix() {
+        var dither = new byte[DitherByteCount];
+
+        for (var cellY = 0; (cellY < 4); ++cellY) {
+            for (var cellX = 0; (cellX < 4); ++cellX) {
+                var cellBase = (((cellX + (cellY * 4)) * 3));
+                // colour is 100 everywhere; thresholds {200,200,200} -> shade 3, {50,50,50} -> shade 0.
+                var threshold = ((byte)((cellX == 0)
+                    ? 200
+                    : 50));
+
+                dither[cellBase] = threshold;
+                dither[(cellBase + 1)] = threshold;
+                dither[(cellBase + 2)] = threshold;
+            }
+        }
+
+        using var machine = BuildCamera(sensor: new FlatSensor(value: 100));
+        var cartridge = Cartridge(machine: machine);
+
+        Configure(
+            cartridge: cartridge,
+            dither: dither,
+            edge: false,
+            edgeRatio: 0x00,
+            exposure: 0x1000,
+            gain: 4
+        );
+        Trigger(
+            cartridge: cartridge,
+            machine: machine
+        );
+
+        var image = ReadImage(cartridge: cartridge);
+
+        for (var index = 0; (index < image.Length); ++index) {
+            if (image[index] != 0x88) {
+                return $"dither-matrix capture: byte {index} = 0x{image[index]:X2}, expected 0x88 (columns 0 and 4 dark)";
+            }
+        }
+
+        return null;
+    }
     // Edge enhancement combines each pixel with its four neighbours, so on a non-flat (gradient) sensor it must change
     // the captured image versus the same capture with enhancement disabled.
     private static string? CheckEdgeEnhancement() {
@@ -291,7 +210,44 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
 
         return (plainImage.AsSpan().SequenceEqual(other: sharpenedImage)
             ? "enabling edge enhancement did not change a gradient capture"
-            : null);
+            : null
+        );
+    }
+    // Lowering the exposure register scales the processed colour down, dropping a mid-value pixel across a threshold into
+    // a darker shade — the auto-exposure feedback a real camera ROM relies on.
+    private static string? CheckExposureResponds() {
+        var dither = UniformDither(
+            threshold0: 50,
+            threshold1: 150,
+            threshold2: 200
+        );
+
+        // colour = 100 * exposure / 0x1000: at 0x1000 -> 100 (shade 2), at 0x0400 -> 25 (shade 3).
+        var bright = CaptureFlat(
+            dither: dither,
+            exposure: 0x1000,
+            gain: 4,
+            value: 100
+        );
+        var dark = CaptureFlat(
+            dither: dither,
+            exposure: 0x0400,
+            gain: 4,
+            value: 100
+        );
+
+        if (bright[1] != 0xFF) {
+            return $"bright capture: expected high-plane 0xFF (shade 2), got 0x{bright[1]:X2}";
+        }
+
+        if (
+            (dark[0] != 0xFF) ||
+            (dark[1] != 0xFF)
+        ) {
+            return $"dark capture: expected both planes 0xFF (shade 3), got low 0x{dark[0]:X2} high 0x{dark[1]:X2}";
+        }
+
+        return null;
     }
     // A capture triggered and then snapshotted while still busy must, after restore, resume its countdown and produce a
     // byte-identical image — the deposited tiles and the busy countdown both survive the snapshot.
@@ -347,42 +303,60 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
 
         return (firstImage.AsSpan().SequenceEqual(other: secondImage)
             ? null
-            : "a capture snapshotted mid-busy produced a different image after restore");
+            : "a capture snapshotted mid-busy produced a different image after restore"
+        );
     }
-    private static MachineInstance BuildCamera(ICameraSensor sensor) {
-        // Header type 0xFC = camera cartridge; RAM-size 0x04 = 128 KiB (16 banks), as the real cart carries.
-        var machine = PostMachine.Build(
-            model: ConsoleModel.DmgC,
-            rom: SyntheticRom.Create(
-                cartridgeType: 0xFC,
-                ramSize: 0x04
-            )
+    // Each shade a flat sensor + uniform dither matrix can produce must pack to the exact bitplane bytes: shade 0 -> both
+    // planes 0x00, shade 1 -> low 0xFF/high 0x00, shade 2 -> low 0x00/high 0xFF, shade 3 -> both 0xFF. Gain index 4 is
+    // exactly 1.0 and exposure 0x1000 divides out, so the processed colour equals the raw sensor value.
+    private static string? CheckUniformShades() {
+        // (sensor value, expected shade) with the uniform thresholds {50,150,200}: 25<50 -> 3, 100<150 -> 2, 175<200 ->
+        // 1, 240 -> 0.
+        (byte Value, int Shade)[] cases = [(25, 3), (100, 2), (175, 1), (240, 0)];
+        var dither = UniformDither(
+            threshold0: 50,
+            threshold1: 150,
+            threshold2: 200
         );
 
-        ((CameraCartridge)machine.GetRequiredService<ICartridge>()).Sensor = sensor;
+        foreach (var (value, shade) in cases) {
+            using var machine = BuildCamera(sensor: new FlatSensor(value: value));
+            var cartridge = Cartridge(machine: machine);
 
-        return machine;
-    }
-    private static CameraCartridge Cartridge(MachineInstance machine) =>
-        ((CameraCartridge)machine.GetRequiredService<ICartridge>());
-    private static byte[] CaptureFlat(byte value, byte gain, int exposure, byte[] dither) {
-        using var machine = BuildCamera(sensor: new FlatSensor(value: value));
-        var cartridge = Cartridge(machine: machine);
+            Configure(
+                cartridge: cartridge,
+                dither: dither,
+                edge: false,
+                edgeRatio: 0x00,
+                exposure: 0x1000,
+                gain: 4
+            );
+            Trigger(
+                cartridge: cartridge,
+                machine: machine
+            );
 
-        Configure(
-            cartridge: cartridge,
-            dither: dither,
-            edge: false,
-            edgeRatio: 0x00,
-            exposure: exposure,
-            gain: gain
-        );
-        Trigger(
-            cartridge: cartridge,
-            machine: machine
-        );
+            var image = ReadImage(cartridge: cartridge);
+            var expectedLow = ((byte)(((shade & 0x01) != 0)
+                ? 0xFF
+                : 0x00));
+            var expectedHigh = ((byte)(((shade & 0x02) != 0)
+                ? 0xFF
+                : 0x00));
 
-        return ReadImage(cartridge: cartridge);
+            for (var index = 0; (index < image.Length); ++index) {
+                var expected = (((index & 1) == 0)
+                    ? expectedLow
+                    : expectedHigh
+                );
+
+                if (image[index] != expected) {
+                    return $"flat sensor {value} (shade {shade}) packed byte {index} = 0x{image[index]:X2}, expected 0x{expected:X2}";
+                }
+            }
+        }
+
+        return null;
     }
     // Selects the camera block and writes the M64282FP registers (gain/edge flag, 16-bit exposure, edge ratio, and the
     // 48-byte dither matrix) — everything except the shoot trigger.
@@ -417,24 +391,6 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
             );
         }
     }
-    private static void Trigger(MachineInstance machine, CameraCartridge cartridge) {
-        cartridge.WriteControl(
-            address: CameraBlockSelect,
-            value: 0x10
-        );
-        cartridge.WriteRam(
-            address: 0xA000,
-            value: 0x01
-        );
-    }
-    private static byte ReadShootRegister(CameraCartridge cartridge) {
-        cartridge.WriteControl(
-            address: CameraBlockSelect,
-            value: 0x10
-        );
-
-        return cartridge.ReadRam(address: 0xA000);
-    }
     // Reads the deposited image back through the RAM window (camera block deselected, RAM enabled, bank 0).
     private static byte[] ReadImage(CameraCartridge cartridge) {
         cartridge.WriteControl(
@@ -454,6 +410,24 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
 
         return image;
     }
+    private static byte ReadShootRegister(CameraCartridge cartridge) {
+        cartridge.WriteControl(
+            address: CameraBlockSelect,
+            value: 0x10
+        );
+
+        return cartridge.ReadRam(address: 0xA000);
+    }
+    private static void Trigger(MachineInstance machine, CameraCartridge cartridge) {
+        cartridge.WriteControl(
+            address: CameraBlockSelect,
+            value: 0x10
+        );
+        cartridge.WriteRam(
+            address: 0xA000,
+            value: 0x01
+        );
+    }
     private static byte[] UniformDither(byte threshold0, byte threshold1, byte threshold2) {
         var dither = new byte[DitherByteCount];
 
@@ -464,6 +438,35 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
         }
 
         return dither;
+    }
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        if (CheckUniformShades() is { } uniformFailure) {
+            return PostStageOutcome.Fail(detail: uniformFailure);
+        }
+
+        if (CheckExposureResponds() is { } exposureFailure) {
+            return PostStageOutcome.Fail(detail: exposureFailure);
+        }
+
+        if (CheckDitherMatrix() is { } ditherFailure) {
+            return PostStageOutcome.Fail(detail: ditherFailure);
+        }
+
+        if (CheckBusyTiming() is { } busyFailure) {
+            return PostStageOutcome.Fail(detail: busyFailure);
+        }
+
+        if (CheckEdgeEnhancement() is { } edgeFailure) {
+            return PostStageOutcome.Fail(detail: edgeFailure);
+        }
+
+        if (CheckSnapshotMidCapture() is { } snapshotFailure) {
+            return PostStageOutcome.Fail(detail: snapshotFailure);
+        }
+
+        return PostStageOutcome.Pass(detail: $"M64282FP capture: uniform shades pack exactly to 2bpp tiles at 0xA100, exposure and the 4×4 dither matrix drive the output, the busy window is exposure-dependent, edge enhancement responds, and a mid-busy snapshot resumes to a byte-identical {SensorImage.TiledByteCount}-byte image");
     }
 
     // A fixed sensor whose every photosite reads the same value — the flat field the arithmetic checks build on.

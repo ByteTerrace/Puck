@@ -16,15 +16,16 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbSaveModule {
-    /// <summary>The identifier a host scans the image for to recognize the static-RAM backup.</summary>
-    public const string SignatureText = "SRAM_V113";
-    /// <summary>The first magic byte.</summary>
-    private const byte MagicLow = 0x50;
-    /// <summary>The second magic byte.</summary>
-    private const byte MagicHigh = 0x46;
     /// <summary>Magic pair, version and checksum precede the payload.</summary>
     private const int HeaderByteCount = 4;
+    /// <summary>The second magic byte.</summary>
+    private const byte MagicHigh = 0x46;
+    /// <summary>The first magic byte.</summary>
+    private const byte MagicLow = 0x50;
     private const uint SaveWindowAddress = 0x0E000000u;
+
+    /// <summary>The identifier a host scans the image for to recognize the static-RAM backup.</summary>
+    public const string SignatureText = "SRAM_V113";
 
     private readonly uint m_defaultsAddress;
     private readonly ThumbEmitter m_emitter;
@@ -48,36 +49,6 @@ public sealed class AgbSaveModule {
         m_version = version;
     }
 
-    /// <summary>Emits a write of the mirror to the save window, with a fresh header and checksum.</summary>
-    public void EmitStore() {
-        var loop = m_emitter.NewLabel();
-        m_emitter.LoadConstant(destination: LowRegister.R4, value: SaveWindowAddress);
-        m_emitter.MoveImmediate(destination: LowRegister.R0, value: MagicLow);
-        m_emitter.StoreByte(source: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 0);
-        m_emitter.MoveImmediate(destination: LowRegister.R0, value: MagicHigh);
-        m_emitter.StoreByte(source: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 1);
-        m_emitter.MoveImmediate(destination: LowRegister.R0, value: m_version);
-        m_emitter.StoreByte(source: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 2);
-
-        // Copy the payload, accumulating the checksum as it goes.
-        m_emitter.LoadConstant(destination: LowRegister.R5, value: m_mirrorAddress);
-        m_emitter.LoadConstant(destination: LowRegister.R6, value: SaveWindowAddress + HeaderByteCount);
-        m_emitter.MoveImmediate(destination: LowRegister.R7, value: 0);
-        m_emitter.LoadConstant(destination: LowRegister.R3, value: (uint)m_payloadByteCount);
-        m_emitter.MarkLabel(label: loop);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R5, byteOffset: 0);
-        m_emitter.StoreByte(source: LowRegister.R0, baseRegister: LowRegister.R6, byteOffset: 0);
-        m_emitter.AddRegister(destination: LowRegister.R7, source: LowRegister.R7, operand: LowRegister.R0);
-        m_emitter.AddImmediate(register: LowRegister.R5, value: 1);
-        m_emitter.AddImmediate(register: LowRegister.R6, value: 1);
-        m_emitter.SubtractImmediate(register: LowRegister.R3, value: 1);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: loop);
-
-        m_emitter.MoveImmediate(destination: LowRegister.R1, value: 255);
-        m_emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R7, source: LowRegister.R1);
-        m_emitter.StoreByte(source: LowRegister.R7, baseRegister: LowRegister.R4, byteOffset: 3);
-    }
-
     /// <summary>Emits a read of the save window into the mirror, falling back to the authored defaults.</summary>
     public void EmitLoad() {
         var accept = m_emitter.NewLabel();
@@ -86,50 +57,261 @@ public sealed class AgbSaveModule {
         var restore = m_emitter.NewLabel();
         var sum = m_emitter.NewLabel();
 
-        m_emitter.LoadConstant(destination: LowRegister.R4, value: SaveWindowAddress);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 0);
-        m_emitter.CompareImmediate(register: LowRegister.R0, value: MagicLow);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: restore);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 1);
-        m_emitter.CompareImmediate(register: LowRegister.R0, value: MagicHigh);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: restore);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 2);
-        m_emitter.CompareImmediate(register: LowRegister.R0, value: m_version);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: restore);
+        m_emitter.LoadConstant(
+            destination: LowRegister.R4,
+            value: SaveWindowAddress
+        );
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 0,
+            destination: LowRegister.R0
+        );
+        m_emitter.CompareImmediate(
+            register: LowRegister.R0,
+            value: MagicLow
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: restore
+        );
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 1,
+            destination: LowRegister.R0
+        );
+        m_emitter.CompareImmediate(
+            register: LowRegister.R0,
+            value: MagicHigh
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: restore
+        );
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 2,
+            destination: LowRegister.R0
+        );
+        m_emitter.CompareImmediate(
+            register: LowRegister.R0,
+            value: m_version
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: restore
+        );
 
         // Sum the stored payload and compare against the recorded checksum.
-        m_emitter.LoadConstant(destination: LowRegister.R5, value: SaveWindowAddress + HeaderByteCount);
-        m_emitter.MoveImmediate(destination: LowRegister.R7, value: 0);
-        m_emitter.LoadConstant(destination: LowRegister.R3, value: (uint)m_payloadByteCount);
+        m_emitter.LoadConstant(
+            destination: LowRegister.R5,
+            value: (SaveWindowAddress + HeaderByteCount)
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R7,
+            value: 0
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R3,
+            value: ((uint)m_payloadByteCount)
+        );
         m_emitter.MarkLabel(label: sum);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R5, byteOffset: 0);
-        m_emitter.AddRegister(destination: LowRegister.R7, source: LowRegister.R7, operand: LowRegister.R0);
-        m_emitter.AddImmediate(register: LowRegister.R5, value: 1);
-        m_emitter.SubtractImmediate(register: LowRegister.R3, value: 1);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: sum);
-        m_emitter.MoveImmediate(destination: LowRegister.R1, value: 255);
-        m_emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R7, source: LowRegister.R1);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 3);
-        m_emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R7);
-        m_emitter.Branch(condition: ThumbCondition.Equal, label: accept);
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R5,
+            byteOffset: 0,
+            destination: LowRegister.R0
+        );
+        m_emitter.AddRegister(
+            destination: LowRegister.R7,
+            operand: LowRegister.R0,
+            source: LowRegister.R7
+        );
+        m_emitter.AddImmediate(
+            register: LowRegister.R5,
+            value: 1
+        );
+        m_emitter.SubtractImmediate(
+            register: LowRegister.R3,
+            value: 1
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: sum
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: 255
+        );
+        m_emitter.Alu(
+            destination: LowRegister.R7,
+            op: ThumbAlu.And,
+            source: LowRegister.R1
+        );
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 3,
+            destination: LowRegister.R0
+        );
+        m_emitter.Alu(
+            destination: LowRegister.R0,
+            op: ThumbAlu.Compare,
+            source: LowRegister.R7
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.Equal,
+            label: accept
+        );
 
         m_emitter.MarkLabel(label: restore);
-        m_emitter.LoadConstant(destination: LowRegister.R5, value: m_defaultsAddress);
+        m_emitter.LoadConstant(
+            destination: LowRegister.R5,
+            value: m_defaultsAddress
+        );
         m_emitter.Branch(label: copy);
         m_emitter.MarkLabel(label: accept);
-        m_emitter.LoadConstant(destination: LowRegister.R5, value: SaveWindowAddress + HeaderByteCount);
+        m_emitter.LoadConstant(
+            destination: LowRegister.R5,
+            value: (SaveWindowAddress + HeaderByteCount)
+        );
 
         m_emitter.MarkLabel(label: copy);
-        m_emitter.LoadConstant(destination: LowRegister.R6, value: m_mirrorAddress);
-        m_emitter.LoadConstant(destination: LowRegister.R3, value: (uint)m_payloadByteCount);
+        m_emitter.LoadConstant(
+            destination: LowRegister.R6,
+            value: m_mirrorAddress
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R3,
+            value: ((uint)m_payloadByteCount)
+        );
         var move = m_emitter.NewLabel();
+
         m_emitter.MarkLabel(label: move);
-        m_emitter.LoadByte(destination: LowRegister.R0, baseRegister: LowRegister.R5, byteOffset: 0);
-        m_emitter.StoreByte(source: LowRegister.R0, baseRegister: LowRegister.R6, byteOffset: 0);
-        m_emitter.AddImmediate(register: LowRegister.R5, value: 1);
-        m_emitter.AddImmediate(register: LowRegister.R6, value: 1);
-        m_emitter.SubtractImmediate(register: LowRegister.R3, value: 1);
-        m_emitter.Branch(condition: ThumbCondition.NotEqual, label: move);
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R5,
+            byteOffset: 0,
+            destination: LowRegister.R0
+        );
+        m_emitter.StoreByte(
+            baseRegister: LowRegister.R6,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
+        m_emitter.AddImmediate(
+            register: LowRegister.R5,
+            value: 1
+        );
+        m_emitter.AddImmediate(
+            register: LowRegister.R6,
+            value: 1
+        );
+        m_emitter.SubtractImmediate(
+            register: LowRegister.R3,
+            value: 1
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: move
+        );
         m_emitter.MarkLabel(label: done);
+    }
+    /// <summary>Emits a write of the mirror to the save window, with a fresh header and checksum.</summary>
+    public void EmitStore() {
+        var loop = m_emitter.NewLabel();
+
+        m_emitter.LoadConstant(
+            destination: LowRegister.R4,
+            value: SaveWindowAddress
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R0,
+            value: MagicLow
+        );
+        m_emitter.StoreByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R0,
+            value: MagicHigh
+        );
+        m_emitter.StoreByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 1,
+            source: LowRegister.R0
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R0,
+            value: m_version
+        );
+        m_emitter.StoreByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 2,
+            source: LowRegister.R0
+        );
+
+        // Copy the payload, accumulating the checksum as it goes.
+        m_emitter.LoadConstant(
+            destination: LowRegister.R5,
+            value: m_mirrorAddress
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R6,
+            value: (SaveWindowAddress + HeaderByteCount)
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R7,
+            value: 0
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R3,
+            value: ((uint)m_payloadByteCount)
+        );
+        m_emitter.MarkLabel(label: loop);
+        m_emitter.LoadByte(
+            baseRegister: LowRegister.R5,
+            byteOffset: 0,
+            destination: LowRegister.R0
+        );
+        m_emitter.StoreByte(
+            baseRegister: LowRegister.R6,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
+        m_emitter.AddRegister(
+            destination: LowRegister.R7,
+            operand: LowRegister.R0,
+            source: LowRegister.R7
+        );
+        m_emitter.AddImmediate(
+            register: LowRegister.R5,
+            value: 1
+        );
+        m_emitter.AddImmediate(
+            register: LowRegister.R6,
+            value: 1
+        );
+        m_emitter.SubtractImmediate(
+            register: LowRegister.R3,
+            value: 1
+        );
+        m_emitter.Branch(
+            condition: ThumbCondition.NotEqual,
+            label: loop
+        );
+
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: 255
+        );
+        m_emitter.Alu(
+            destination: LowRegister.R7,
+            op: ThumbAlu.And,
+            source: LowRegister.R1
+        );
+        m_emitter.StoreByte(
+            baseRegister: LowRegister.R4,
+            byteOffset: 3,
+            source: LowRegister.R7
+        );
     }
 }

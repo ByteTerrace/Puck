@@ -10,150 +10,187 @@ namespace Puck.Cli.Bench;
 [CategoriesColumn]
 public class EncodedOperations {
     private const int Count = 1024;
+
     private HexagonalIndex[] m_hex = [];
     private ulong[] m_square = [];
 
     [GlobalSetup]
     public void Setup() {
-        var random = new Random(Operands.Seed);
+        var random = new Random(Seed: Operands.Seed);
+
         m_hex = new HexagonalIndex[Count];
         m_square = new ulong[Count];
-        for (var i = 0; i < Count; ++i) {
-            var bound = (i & 1) == 0 ? 64 : 100_000_000;
-            m_hex[i] = HexagonalIndex.FromCoordinate(new(Q: random.Next(-bound, bound), R: random.Next(-bound, bound)));
-            m_square[i] = ((uint)random.Next(bound)).ElegantPair<uint, ulong>((uint)random.Next(bound));
+        for (var i = 0; (i < Count); ++i) {
+            var bound = (((i & 1) == 0)
+                ? 64
+                : 100_000_000
+            );
+
+            m_hex[i] = HexagonalIndex.FromCoordinate(coordinate: new(
+                Q: random.Next(
+                    maxValue: bound,
+                    minValue: -bound
+                ),
+                R: random.Next(
+                    maxValue: bound,
+                    minValue: -bound
+                )
+            ));
+            m_square[i] = ((uint)random.Next(maxValue: bound)).ElegantPair<uint, ulong>(other: ((uint)random.Next(maxValue: bound)));
         }
-        if (HexRadiusGeneral() != HexRadiusDirect() || HexNormDecoded() != HexNormDirect() || HexSwapDecoded() != HexSwapDirect()
-            || HexScaleDecoded() != HexScaleDirect() || HexTranslateDecoded() != HexTranslateDirect()
-            || SquareSwapDecoded() != SquareSwapDirect() || SquareScaleDecoded() != SquareScaleDirect()
-            || SquareTranslateDecoded() != SquareTranslateDirect() || SquareSumDecoded() != SquareSumDirect()) {
-            throw new InvalidOperationException("Encoded-operation benchmark baselines disagree.");
+        if (
+            (HexRadiusGeneral() != HexRadiusDirect()) ||
+            (HexNormDecoded() != HexNormDirect()) ||
+            (HexSwapDecoded() != HexSwapDirect()) ||
+            (HexScaleDecoded() != HexScaleDirect()) ||
+            (HexTranslateDecoded() != HexTranslateDirect()) ||
+            (SquareSwapDecoded() != SquareSwapDirect()) ||
+            (SquareScaleDecoded() != SquareScaleDirect()) ||
+            (SquareTranslateDecoded() != SquareTranslateDirect()) ||
+            (SquareSumDecoded() != SquareSumDirect())
+        ) {
+            throw new InvalidOperationException(message: "Encoded-operation benchmark baselines disagree.");
         }
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("HexRadius")]
     public long HexRadiusGeneral() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= LayerSequence.CenteredHexagonal.LayerOf(m_hex[i].Value); }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= LayerSequence.CenteredHexagonal.LayerOf(index: m_hex[i].Value); }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("HexRadius")]
     public long HexRadiusDirect() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= m_hex[i].Radius; }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_hex[i].Radius; }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("HexNorm")]
     public long HexNormDecoded() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { var c = m_hex[i].ToCoordinate(); var q = (long)c.Q; var r = (long)c.R; sink ^= (q * q) - (q * r) + (r * r); }
+
+        for (var i = 0; (i < Count); ++i) { var c = m_hex[i].ToCoordinate(); var q = ((long)c.Q); var r = ((long)c.R); sink ^= (((q * q) - (q * r)) + (r * r)); }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("HexNorm")]
     public long HexNormDirect() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= m_hex[i].Norm; }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_hex[i].Norm; }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("HexSwap")]
     public long HexSwapDecoded() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { var c = m_hex[i].ToCoordinate(); sink ^= HexagonalIndex.FromCoordinate(new(Q: c.R, R: c.Q)).Value; }
+
+        for (var i = 0; (i < Count); ++i) {
+            var c = m_hex[i].ToCoordinate(); sink ^= HexagonalIndex.FromCoordinate(coordinate: new(
+                Q: c.R,
+                R: c.Q
+            )).Value;
+        }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("HexSwap")]
     public long HexSwapDirect() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= m_hex[i].Swap().Value; }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_hex[i].Swap().Value; }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("HexScale")]
     public long HexScaleDecoded() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= HexagonalIndex.FromCoordinate(m_hex[i].ToCoordinate() * 3).Value; }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= HexagonalIndex.FromCoordinate(coordinate: (m_hex[i].ToCoordinate() * 3)).Value; }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("HexScale")]
     public long HexScaleDirect() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= m_hex[i].Scale(3).Value; }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_hex[i].Scale(factor: 3).Value; }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("HexTranslate")]
     public long HexTranslateDecoded() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= HexagonalIndex.FromCoordinate(m_hex[i].ToCoordinate() + new HexagonalCoordinate(3, 3)).Value; }
+
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= HexagonalIndex.FromCoordinate(coordinate: (m_hex[i].ToCoordinate() + new HexagonalCoordinate(
+                Q: 3,
+                R: 3
+            ))).Value;
+        }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("HexTranslate")]
     public long HexTranslateDirect() {
         var sink = 0L;
-        for (var i = 0; i < Count; ++i) { sink ^= m_hex[i].Translate(new(3, 3)).Value; }
+
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= m_hex[i].Translate(displacement: new(
+                Q: 3,
+                R: 3
+            )).Value;
+        }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("SquareSwap")]
     public ulong SquareSwapDecoded() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= y.ElegantPair<uint, ulong>(x); }
+
+        for (var i = 0; (i < Count); ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= y.ElegantPair<uint, ulong>(other: x); }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("SquareSwap")]
     public ulong SquareSwapDirect() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { sink ^= m_square[i].ElegantSwap(); }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_square[i].ElegantSwap(); }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("SquareScale")]
     public ulong SquareScaleDecoded() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= checked(x * 3).ElegantPair<uint, ulong>(checked(y * 3)); }
+
+        for (var i = 0; (i < Count); ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= checked((x * 3)).ElegantPair<uint, ulong>(other: checked((y * 3))); }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("SquareScale")]
     public ulong SquareScaleDirect() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { sink ^= m_square[i].ElegantScale(3UL); }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_square[i].ElegantScale(factor: 3UL); }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("SquareTranslate")]
     public ulong SquareTranslateDecoded() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= checked(x + 3).ElegantPair<uint, ulong>(checked(y + 3)); }
+
+        for (var i = 0; (i < Count); ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= checked((x + 3)).ElegantPair<uint, ulong>(other: checked((y + 3))); }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("SquareTranslate")]
     public ulong SquareTranslateDirect() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { sink ^= m_square[i].ElegantTranslate(3UL); }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_square[i].ElegantTranslate(amount: 3UL); }
         return sink;
     }
-
     [Benchmark(Baseline = true, OperationsPerInvoke = Count), BenchmarkCategory("SquareSum")]
     public ulong SquareSumDecoded() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= (ulong)x + y; }
+
+        for (var i = 0; (i < Count); ++i) { var (x, y) = m_square[i].ElegantUnpair<ulong, uint>(); sink ^= (((ulong)x) + y); }
         return sink;
     }
-
     [Benchmark(OperationsPerInvoke = Count), BenchmarkCategory("SquareSum")]
     public ulong SquareSumDirect() {
         var sink = 0UL;
-        for (var i = 0; i < Count; ++i) { sink ^= m_square[i].ElegantSum(); }
+
+        for (var i = 0; (i < Count); ++i) { sink ^= m_square[i].ElegantSum(); }
         return sink;
     }
 }

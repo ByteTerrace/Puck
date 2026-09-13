@@ -16,7 +16,10 @@ internal sealed partial class OperatorMcpJson : JsonSerializerContext {
     internal static void ValidateParameters(JsonRpcMessage message) {
         if (message is not JsonRpcRequest { Params: { } parameters }) { return; }
         try { _ = parameters.ToJsonString(); } catch (Exception error) when ((error is InvalidOperationException or JsonException)) {
-            throw new McpProtocolException(errorCode: McpErrorCode.InvalidParams, message: "Request parameters contain invalid JSON strings.");
+            throw new McpProtocolException(
+                errorCode: McpErrorCode.InvalidParams,
+                message: "Request parameters contain invalid JSON strings."
+            );
         }
     }
 }

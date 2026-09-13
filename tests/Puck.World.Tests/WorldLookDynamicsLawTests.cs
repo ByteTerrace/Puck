@@ -11,14 +11,23 @@ namespace Puck.World.Tests;
 /// resolved part, an empty part id), a root and a part dynamics reference coexisting, and
 /// <see cref="WorldLookMotion.Default"/>'s literal shape.</summary>
 public sealed class WorldLookDynamicsLawTests {
-    private static DynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
+    private static DynamicsRow Chase => new(
+        Damping: 1f,
+        Frequency: 1f,
+        Name: "chase",
+        Response: 0f
+    );
 
     private static WorldPrototype BuildPartedCreation() {
         var shape = new ShapeDocument(
             Id: 1,
             Name: "head",
             Type: SdfSolidPrimitive.Sphere,
-            Position: new Vector3(x: 0f, y: 1.7f, z: 0f),
+            Position: new Vector3(
+                x: 0f,
+                y: 1.7f,
+                z: 0f
+            ),
             Rotation: Quaternion.Identity,
             Scale: new Vector3(value: 0.25f),
             Material: 0,
@@ -32,18 +41,50 @@ public sealed class WorldLookDynamicsLawTests {
             Palette: null,
             Shapes: [shape],
             Frames: null,
-            Parts: [new CreationPartDocument(Id: "head", ShapeId: 1)]
+            Parts: [new CreationPartDocument(
+                    Id: "head",
+                    ShapeId: 1
+                )]
         );
-        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "parted");
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: document,
+            source: "parted"
+        );
 
-        return new WorldPrototype(Id: "parted", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(
+            Id: "parted",
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
     }
     private static WorldDefinition WithPartedCreation(WorldLookMotion motion) => Fixtures.BuildDocument() with {
         DynamicsRaw = [Chase],
         CreationsRaw = [BuildPartedCreation()],
-        LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Creation(PrototypeId: "parted"), Scale: 1f, Motion: motion)],
+        LookRowsRaw = [new WorldLook(
+            Name: "avatar",
+            Source: new WorldLookSource.Creation(PrototypeId: "parted"),
+            Scale: 1f,
+            Motion: motion
+        )],
     };
 
+    [Fact]
+    public void DefaultMotionCarriesNoDynamics() {
+        var motion = WorldLookMotion.Default;
+
+        Assert.Equal(
+            expected: 1f,
+            actual: motion.GaitAmplitude
+        );
+        Assert.False(condition: motion.ReplayFrames);
+        Assert.Equal(
+            expected: 0f,
+            actual: motion.SecondsPerFrame
+        );
+        Assert.Null(@object: motion.Cues);
+        Assert.Null(@object: motion.Dynamics);
+        Assert.Null(@object: motion.PartDynamics);
+    }
     [Fact]
     public void PartDynamicsDanglingPartIdRefusesWhileResolvingPasses() {
         var denied = WithPartedCreation(motion: WorldLookMotion.Default with {
@@ -53,9 +94,24 @@ public sealed class WorldLookDynamicsLawTests {
             PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
         });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "looks[0].motion.partDynamics['missing-part'] names no part of creation 'parted'.");
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(
+            definition: denied,
+            neighbours: null,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "looks[0].motion.partDynamics['missing-part'] names no part of creation 'parted'."
+        );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: admitted,
+                neighbours: null,
+                reason: out var controlReason
+            ),
+            userMessage: controlReason
+        );
     }
     [Fact]
     public void PartDynamicsDanglingRowRefusesWhileResolvingPasses() {
@@ -66,9 +122,24 @@ public sealed class WorldLookDynamicsLawTests {
             PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
         });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "looks[0].motion.partDynamics['head'] 'missing' names no dynamics row.");
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(
+            definition: denied,
+            neighbours: null,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "looks[0].motion.partDynamics['head'] 'missing' names no dynamics row."
+        );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: admitted,
+                neighbours: null,
+                reason: out var controlReason
+            ),
+            userMessage: controlReason
+        );
     }
     [Fact]
     public void PartDynamicsEmptyPartIdRefusesWhileNonEmptyPasses() {
@@ -79,9 +150,24 @@ public sealed class WorldLookDynamicsLawTests {
             PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
         });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "looks[0].motion.partDynamics has an empty part id.");
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(
+            definition: denied,
+            neighbours: null,
+            reason: out var deniedReason
+        ));
+        Assert.Contains(
+            actualString: deniedReason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "looks[0].motion.partDynamics has an empty part id."
+        );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: admitted,
+                neighbours: null,
+                reason: out var controlReason
+            ),
+            userMessage: controlReason
+        );
     }
     [Fact]
     public void RootAndPartDynamicsTogetherPass() {
@@ -90,17 +176,13 @@ public sealed class WorldLookDynamicsLawTests {
             PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
         });
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var reason), userMessage: reason);
-    }
-    [Fact]
-    public void DefaultMotionCarriesNoDynamics() {
-        var motion = WorldLookMotion.Default;
-
-        Assert.Equal(expected: 1f, actual: motion.GaitAmplitude);
-        Assert.False(condition: motion.ReplayFrames);
-        Assert.Equal(expected: 0f, actual: motion.SecondsPerFrame);
-        Assert.Null(@object: motion.Cues);
-        Assert.Null(@object: motion.Dynamics);
-        Assert.Null(@object: motion.PartDynamics);
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: admitted,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
     }
 }

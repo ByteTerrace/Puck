@@ -35,16 +35,16 @@ public sealed class ReadWriteHazardLawTests {
         ));
     }
     [Fact]
-    public void AFieldWriteAfterAnEarlierFieldWriteIsAHazard() {
+    public void AFieldWriteAfterAnEarlierFieldReadIsAHazard() {
         Assert.True(condition: Conflicts(
-            earlierFieldWrites: [7],
+            earlierFieldReads: [7],
             laterFieldWrites: [7]
         ));
     }
     [Fact]
-    public void AFieldWriteAfterAnEarlierFieldReadIsAHazard() {
+    public void AFieldWriteAfterAnEarlierFieldWriteIsAHazard() {
         Assert.True(condition: Conflicts(
-            earlierFieldReads: [7],
+            earlierFieldWrites: [7],
             laterFieldWrites: [7]
         ));
     }
@@ -56,13 +56,6 @@ public sealed class ReadWriteHazardLawTests {
         ));
     }
     [Fact]
-    public void AStateWriteAfterAnEarlierStateWriteIsAHazard() {
-        Assert.True(condition: Conflicts(
-            earlierStateWrites: [7L],
-            laterStateWrites: [7L]
-        ));
-    }
-    [Fact]
     public void AStateWriteAfterAnEarlierStateReadIsAHazard() {
         Assert.True(condition: Conflicts(
             earlierStateReads: [7L],
@@ -70,13 +63,15 @@ public sealed class ReadWriteHazardLawTests {
         ));
     }
     [Fact]
-    public void TwoNodesReadingTheSameFieldAndStateCarryNoHazard() {
-        Assert.False(condition: Conflicts(
-            earlierFieldReads: [7, 8],
-            earlierStateReads: [7L, 8L],
-            laterFieldReads: [7, 8],
-            laterStateReads: [7L, 8L]
+    public void AStateWriteAfterAnEarlierStateWriteIsAHazard() {
+        Assert.True(condition: Conflicts(
+            earlierStateWrites: [7L],
+            laterStateWrites: [7L]
         ));
+    }
+    [Fact]
+    public void EmptySetsCarryNoHazard() {
+        Assert.False(condition: Conflicts());
     }
     [Fact]
     public void FullyDisjointSetsCarryNoHazard() {
@@ -92,7 +87,12 @@ public sealed class ReadWriteHazardLawTests {
         ));
     }
     [Fact]
-    public void EmptySetsCarryNoHazard() {
-        Assert.False(condition: Conflicts());
+    public void TwoNodesReadingTheSameFieldAndStateCarryNoHazard() {
+        Assert.False(condition: Conflicts(
+            earlierFieldReads: [7, 8],
+            earlierStateReads: [7L, 8L],
+            laterFieldReads: [7, 8],
+            laterStateReads: [7L, 8L]
+        ));
     }
 }

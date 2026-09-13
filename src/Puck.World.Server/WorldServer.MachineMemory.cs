@@ -26,7 +26,7 @@ public sealed partial class WorldServer {
     private readonly Dictionary<(int Screen, int Address), long> m_machineMemoryWriteObserved = [];
 
     private void SyncMachineMemory(ulong tick) {
-        SyncNamedMachineMemory(tick);
+        SyncNamedMachineMemory(tick: tick);
         var screens = m_definition.Screens;
 
         for (var index = 0; (index < screens.Count); index++) {
@@ -40,16 +40,32 @@ public sealed partial class WorldServer {
                 var binding = bindings[bindingIndex];
 
                 if (binding.Direction == WorldScreenMemoryDirection.Write) {
-                    SyncMachineMemoryWrite(screen: screen.Index, binding: binding, tick: tick);
+                    SyncMachineMemoryWrite(
+                        screen: screen.Index,
+                        binding: binding,
+                        tick: tick
+                    );
                 } else {
-                    SyncMachineMemoryRead(screen: screen.Index, binding: binding, tick: tick);
+                    SyncMachineMemoryRead(
+                        screen: screen.Index,
+                        binding: binding,
+                        tick: tick
+                    );
                 }
             }
         }
     }
     private void SyncMachineMemoryWrite(int screen, WorldScreenMemory binding, ulong tick) {
         if (
-            !WorldStateReader.TryRead(definition: m_definition, rowName: binding.Row, key: binding.Key, tick: tick, row: out _, rawValue: out var raw, text: out _) ||
+            !WorldStateReader.TryRead(
+            definition: m_definition,
+            rowName: binding.Row,
+            key: binding.Key,
+            tick: tick,
+            row: out _,
+            rawValue: out var raw,
+            text: out _
+        ) ||
             (raw is not { } value)
         ) {
             return;
@@ -57,23 +73,44 @@ public sealed partial class WorldServer {
 
         var key = (Screen: screen, binding.Address);
 
-        if (m_machineMemoryWriteObserved.TryGetValue(key: key, value: out var last) && (last == value)) {
+        if (
+            m_machineMemoryWriteObserved.TryGetValue(
+            key: key,
+            value: out var last
+        ) &&
+            (last == value)
+        ) {
             return;
         }
 
-        var (lowOk, _) = m_machines.TryPokeMessage(index: screen, address: binding.Address, value: unchecked((byte)value));
+        var (lowOk, _) = m_machines.TryPokeMessage(
+            index: screen,
+            address: binding.Address,
+            value: unchecked((byte)value)
+        );
         var highOk = true;
 
         if (binding.Width == 2) {
-            (highOk, _) = m_machines.TryPokeMessage(index: screen, address: (binding.Address + 1), value: unchecked((byte)(value >> 8)));
+            (highOk, _) = m_machines.TryPokeMessage(
+                index: screen,
+                address: (binding.Address + 1),
+                value: unchecked((byte)(value >> 8))
+            );
         }
 
-        if (lowOk && highOk) {
+        if (
+            lowOk &&
+            highOk
+        ) {
             m_machineMemoryWriteObserved[key] = value;
         }
     }
     private void SyncMachineMemoryRead(int screen, WorldScreenMemory binding, ulong tick) {
-        var (lowOk, _) = m_machines.TryPeekMessage(index: screen, address: binding.Address, value: out var low);
+        var (lowOk, _) = m_machines.TryPeekMessage(
+            index: screen,
+            address: binding.Address,
+            value: out var low
+        );
 
         if (!lowOk) {
             return;
@@ -82,7 +119,11 @@ public sealed partial class WorldServer {
         var value = ((long)low);
 
         if (binding.Width == 2) {
-            var (highOk, _) = m_machines.TryPeekMessage(index: screen, address: (binding.Address + 1), value: out var high);
+            var (highOk, _) = m_machines.TryPeekMessage(
+                index: screen,
+                address: (binding.Address + 1),
+                value: out var high
+            );
 
             if (!highOk) {
                 return;
@@ -93,7 +134,13 @@ public sealed partial class WorldServer {
 
         var key = (Screen: screen, binding.Address);
 
-        if (m_machineMemoryReadObserved.TryGetValue(key: key, value: out var last) && (last == value)) {
+        if (
+            m_machineMemoryReadObserved.TryGetValue(
+            key: key,
+            value: out var last
+        ) &&
+            (last == value)
+        ) {
             return;
         }
 
@@ -118,6 +165,7 @@ public sealed partial class WorldServer {
         m_machineMemoryReadObserved[key] = value;
         m_output.DeliverState(definition: m_definition);
     }
+
     /// <summary>Returns the last value a <c>screens[].memory</c> binding at <paramref name="address"/> observed in
     /// <paramref name="direction"/> — the byte(s) last mirrored into its cell (<see cref="WorldScreenMemoryDirection.Read"/>)
     /// or last poked into the machine (<see cref="WorldScreenMemoryDirection.Write"/>) — the <c>screen.state</c>
@@ -131,8 +179,14 @@ public sealed partial class WorldServer {
         var key = (Screen: screen, Address: address);
 
         return ((direction == WorldScreenMemoryDirection.Write)
-            ? m_machineMemoryWriteObserved.TryGetValue(key: key, value: out value)
-            : m_machineMemoryReadObserved.TryGetValue(key: key, value: out value)
+            ? m_machineMemoryWriteObserved.TryGetValue(
+                key: key,
+                value: out value
+            )
+            : m_machineMemoryReadObserved.TryGetValue(
+                key: key,
+                value: out value
+            )
         );
     }
 }

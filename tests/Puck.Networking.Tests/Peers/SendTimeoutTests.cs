@@ -58,12 +58,15 @@ public sealed class SendTimeoutTests {
             ct: deadline.Token,
             payload: "behind the stalled send"u8.ToArray()
         );
-        Assert.False(stalled.IsCompleted);
-        Assert.False(queued.IsCompleted);
-        await clock.ExpireAsync(PeerWireProtocol.SendTimeout, deadline.Token);
+
+        Assert.False(condition: stalled.IsCompleted);
+        Assert.False(condition: queued.IsCompleted);
+        await clock.ExpireAsync(
+            PeerWireProtocol.SendTimeout,
+            deadline.Token
+        );
         var stalledRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => stalled.WaitAsync(cancellationToken: deadline.Token));
         var queuedRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => queued.WaitAsync(cancellationToken: deadline.Token));
-
 
         Assert.Equal(
             expected: PeerRefusal.ConnectionClosed,

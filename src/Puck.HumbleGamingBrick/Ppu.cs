@@ -15,7 +15,6 @@ public interface IPpuTraceSink {
     /// <summary>Fires once per popped pixel, carrying the column and the mixer's final packed <c>0x00RRGGBB</c> color.</summary>
     void OnPixelPop(byte ly, int x, uint color);
 }
-
 /// <summary>
 /// The picture processing unit, the machine's first LCD-domain clocked component: it ticks once per dot regardless of
 /// CPU speed. It owns the LCD registers — control/status, scroll, the DMG palettes and the CGB color-palette RAM, and
@@ -142,7 +141,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // scan reads one row every four dots (one M-cycle) — row 0 (the first two objects) is the scan's initial state and
     // is never the corrupted row. Row 16 is the one absolute row whose corrected contents also spill into row 0.
     private const int OamBugRowByteCount = 8;
-    private const int OamBugRowCount = (OamEntryCount * OamEntryStride / OamBugRowByteCount);
+    private const int OamBugRowCount = ((OamEntryCount * OamEntryStride) / OamBugRowByteCount);
     private const int OamBugSpilloverRow = 16;
     private const byte ObjectEnable = 0x02;
     private const byte ObjectSize = 0x04;
@@ -196,7 +195,6 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // Whether an object-enable bit going low reaches the object path within its own settling T-cycle at the start of a
     // column (see ConsoleModelExtensions.DropsObjectEnableAtColumnStart).
     private bool m_dropsObjectEnableAtColumnStart;
-
     // The write the CPU currently has on the display's register lines: which register, the value it holds, and the
     // value arriving. A register does not take a write at an instant — it drives its held value while the arriving one
     // lands — so a consumer that samples inside that transition reads a mixture of the two, and which mixture depends
@@ -227,8 +225,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // last polled STAT mode reported, and is written only inside that guard, so it stays inert (and unread) whenever
     // no sink is armed.
     private IPpuTraceSink? m_traceSink;
-    private int m_traceLastMode = -1;
 
+    private int m_traceLastMode = -1;
 
     private byte m_backgroundColorPaletteIndex;
     private byte m_backgroundFifoCount;
@@ -363,10 +361,12 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
                 // the LY register, the LY comparison, and the vertical-blank interrupt source are all settled.
                 m_ly = (header.SupportsColor
                     ? (byte)0x90
-                    : (byte)0x94);
+                    : (byte)0x94
+                );
                 m_dot = (header.SupportsColor
                     ? 163
-                    : 351);
+                    : 351
+                );
                 m_mode = 1;
                 m_statMode = 1;
                 m_lyRegister = m_ly;
@@ -452,6 +452,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     /// plain fields, so the display has to be told when the latch moves.</summary>
     public void RefreshCompatibilityMode() =>
         RefreshCompatibilityMode(wasDmgCompatibility: m_dmgCompatibility);
+
     private void RefreshCompatibilityMode(bool wasDmgCompatibility) {
         m_dmgCompatibility = m_dmgCompatibilityState.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
@@ -475,8 +476,10 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     /// <summary>Gets how many further dots a tick would only advance the counter on; unbounded with the LCD off.</summary>
     public int QuietDots =>
         (((m_lcdc & LcdEnable) == 0)
-        ? int.MaxValue
-        : m_quietDots);
+            ? int.MaxValue
+            : m_quietDots
+        );
+
     /// <summary>Absorbs <paramref name="dots"/> dots that <see cref="QuietDots"/> allowed.</summary>
     /// <param name="dots">The dots to absorb.</param>
     public void Skip(int dots) {
@@ -498,6 +501,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         m_dot += dots;
         m_quietDots -= dots;
     }
+
     /// <inheritdoc/>
     public bool BlocksOamReads =>
         ((m_mode == 2) || (m_mode == 3) || (m_oamReadUnlockCountdown > 0));
@@ -643,7 +647,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         // period is tested rather than inside it.
         var mode3Dot = (m_firstLineAfterEnable
             ? FirstLineMode3Dot
-            : OamScanDots);
+            : OamScanDots
+        );
 
         if (m_ly >= VisibleScanlines) {
             m_mode = 1;
@@ -652,7 +657,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             // and no sprites are collected.
             m_mode = (m_firstLineAfterEnable
                 ? 0
-                : 2);
+                : 2
+            );
         } else {
             // Arm the pipeline for the line on the crossing dot.
             if (m_dot == mode3Dot) {
@@ -713,12 +719,14 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             if (address is (MemoryMap.BackgroundPalette or MemoryMap.ObjectPalette0 or MemoryMap.ObjectPalette1)) {
                 return (m_samplesPaletteEarly
                     ? -2
-                    : -1);
+                    : -1
+                );
             }
 
             return (((address == MemoryMap.ScrollX) && m_key1.IsDoubleSpeed)
                 ? -2
-                : 0);
+                : 0
+            );
         }
 
         switch (address) {
@@ -769,8 +777,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             // The coincidence bit reads the latched comparison (which freezes while the LCD is off), and the mode bits
             // read the polled mode, which trails the internal transitions on its own schedule (disable parks it at 0).
             MemoryMap.LcdStatus => ((byte)(0x80 | m_statSelect | (m_lycCoincidence
-        ? 0x04
-        : 0x00) | m_statMode)),
+            ? 0x04
+            : 0x00) | m_statMode)),
             MemoryMap.ScrollY => m_scrollY,
             MemoryMap.ScrollX => m_scrollX,
             MemoryMap.LcdY => m_lyRegister,
@@ -786,12 +794,12 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             // fact (Pan Docs "Power-Up Sequence"). The index port above stays live either way — see the constructor's
             // compatibility-mode boot-handoff seed.
             MemoryMap.BackgroundColorPaletteData => ((IsColorRamAccessible && !m_dmgCompatibility)
-        ? m_backgroundColorRam[m_backgroundColorPaletteIndex & PaletteIndexMask]
-        : (byte)0xFF),
+            ? m_backgroundColorRam[m_backgroundColorPaletteIndex & PaletteIndexMask]
+            : (byte)0xFF),
             MemoryMap.ObjectColorPaletteIndex => ((byte)(m_objectColorPaletteIndex | 0x40)),
             MemoryMap.ObjectColorPaletteData => ((IsColorRamAccessible && !m_dmgCompatibility)
-        ? m_objectColorRam[m_objectColorPaletteIndex & PaletteIndexMask]
-        : (byte)0xFF),
+            ? m_objectColorRam[m_objectColorPaletteIndex & PaletteIndexMask]
+            : (byte)0xFF),
             _ => 0xFF,
         };
     /// <inheritdoc/>
@@ -1086,37 +1094,43 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // The monochrome palettes as the mixer resolves a pixel through them.
     private byte MixerBackgroundPalette() =>
         ((m_settlingRegister == MemoryMap.BackgroundPalette)
-        ? SettlingBlend()
-        : m_backgroundPalette);
+            ? SettlingBlend()
+            : m_backgroundPalette
+        );
     private byte MixerObjectPalette0() =>
         ((m_settlingRegister == MemoryMap.ObjectPalette0)
-        ? SettlingBlend()
-        : m_objectPalette0);
+            ? SettlingBlend()
+            : m_objectPalette0
+        );
     private byte MixerObjectPalette1() =>
         ((m_settlingRegister == MemoryMap.ObjectPalette1)
-        ? SettlingBlend()
-        : m_objectPalette1);
+            ? SettlingBlend()
+            : m_objectPalette1
+        );
     // The status register's source-select bits as the interrupt logic reads them. A monochrome status write releases
     // the register's select lines before the arriving value lands, so every source reads enabled for the settling
     // T-cycle; Color silicon switches them cleanly and opens no window at all.
     private byte InterruptStatSelect() =>
         ((m_settlingRegister == MemoryMap.LcdStatus)
-        ? StatSelectMask
-        : m_statSelect);
+            ? StatSelectMask
+            : m_statSelect
+        );
     // The window-position register as the window comparison reads it. The arriving value is already on the line for
     // the settling T-cycle, but the line is still moving, so monochrome silicon's one-pixel-early comparison does not
     // resolve across it.
     private byte WindowComparisonX() =>
         ((m_settlingRegister == MemoryMap.WindowX)
-        ? m_writeArriving
-        : m_windowX);
+            ? m_writeArriving
+            : m_windowX
+        );
     // The control register as the mixer reads it. Only the background-enable bit reaches the color resolver within the
     // settling T-cycle; every other bit is still the held one there, which is why the fetcher and the window
     // comparisons read the register field directly.
     private byte MixerControl() =>
         ((m_settlingRegister == MemoryMap.LcdControl)
-        ? ((byte)(m_writeHeld | (m_writeArriving & BackgroundEnable)))
-        : m_lcdc);
+            ? ((byte)(m_writeHeld | (m_writeArriving & BackgroundEnable)))
+            : m_lcdc
+        );
     // The control register as the object path reads it. An object-enable bit going low reaches the object fetcher and
     // the pop-time gate within the settling T-cycle whenever a fetch is already running, and at the start of a column
     // on every package but the compact monochrome one.
@@ -1164,7 +1178,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         // tables). The shortened latency also closes the object-memory write window a full latency would open.
         m_mode3Delay = (m_firstLineAfterEnable
             ? FirstLineMode3Delay
-            : Mode3EntryLatency);
+            : Mode3EntryLatency
+        );
         m_objectFetchPhase = 0;
         m_lcdColumn = 0;
         m_positionInLine = -(FifoSize + (m_scrollX & 0x07));
@@ -1189,7 +1204,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
 
         var height = (((m_lcdc & ObjectSize) != 0)
             ? 16
-            : 8);
+            : 8
+        );
 
         for (var entry = 0; ((entry < OamEntryCount) && (m_spriteCount < MaxSpritesPerLine)); ++entry) {
             var oam = ((ushort)(MemoryMap.ObjectAttributeMemoryStart + (entry * OamEntryStride)));
@@ -1208,6 +1224,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             }
         }
     }
+
     /// <inheritdoc/>
     // The register-bump trigger: always the plain write-corruption formula, regardless of what (if anything) the
     // surrounding instruction reads or writes — real hardware ties the increment/decrement unit's output to the
@@ -1242,6 +1259,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             ApplyOamWriteCorruption(rowIndex: row);
         }
     }
+
     // The row the OAM scan is currently reading (1 through OamBugRowCount - 1), or -1 when the bug cannot fire: off a
     // revision without it, outside the $FE00-$FEFF page (the whole page shares one decode, including the unusable
     // $FEA0-$FEFF tail), outside the scan (mode 2) itself, on row 0 (the first two objects, never corrupted), or past
@@ -1260,11 +1278,12 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             return -1;
         }
 
-        var row = ((m_dot + dotBias + 2) / 4);
+        var row = (((m_dot + dotBias) + 2) / 4);
 
         return (((row >= 1) && (row < OamBugRowCount))
             ? row
-            : -1);
+            : -1
+        );
     }
     // The write-corruption formula: the row's first word becomes ((a^c)&(b^c))^c, where a is that word's own value, b
     // is the preceding row's first word, and c is the preceding row's third word; the row's last three words are then
@@ -1328,8 +1347,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
                 break;
             case 0:
                 ApplyOamRowSpecificReadCorruption(
-                    rowOffset: rowOffset,
-                    precedingOffset: precedingOffset
+                    precedingOffset: precedingOffset,
+                    rowOffset: rowOffset
                 );
 
                 break;
@@ -1434,7 +1453,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // OAM is a 16-bit-wide store for this bug's purposes; every formula operates on whole little-endian words.
     private ushort ReadOamBugWord(int byteOffset) {
         var low = m_memory.ReadObjectAttributeMemory(address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset)));
-        var high = m_memory.ReadObjectAttributeMemory(address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset + 1)));
+        var high = m_memory.ReadObjectAttributeMemory(address: ((ushort)((MemoryMap.ObjectAttributeMemoryStart + byteOffset) + 1)));
 
         return ((ushort)(low | (high << 8)));
     }
@@ -1444,7 +1463,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             value: ((byte)value)
         );
         m_memory.WriteObjectAttributeMemory(
-            address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset + 1)),
+            address: ((ushort)((MemoryMap.ObjectAttributeMemoryStart + byteOffset) + 1)),
             value: ((byte)(value >> 8))
         );
     }
@@ -1475,7 +1494,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
                 !m_windowFetching &&
                 m_windowYTriggered &&
                 ((m_lcdc & WindowEnable) != 0) &&
-                WindowTriggerMatches(out var desynced)
+                WindowTriggerMatches(desynced: out var desynced)
             ) {
                 ++m_windowLineCounter;
 
@@ -1560,12 +1579,13 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
                 backgroundColor: color,
                 objectAttribute: objectAttribute,
                 objectColor: objectColor
-            ));
+            )
+        );
 
         m_framebuffer.SetPixel(
+            color: mixedColor,
             x: m_lcdColumn,
-            y: m_ly,
-            color: mixedColor
+            y: m_ly
         );
 
         if (m_traceSink is not null) {
@@ -1615,7 +1635,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             // one dot longer; everything else releases with the polled STAT flip on the edge dot).
             m_oamReadUnlockCountdown = (m_supportsColor
                 ? OamReadUnlockLagColor
-                : OamReadUnlockLag);
+                : OamReadUnlockLag
+            );
             m_oamWriteUnlockCountdown = OamWriteUnlockLag;
             m_videoRamReadUnlockCountdown = VideoRamReadUnlockLag;
             m_videoRamWriteUnlockCountdown = VideoRamWriteUnlockLag;
@@ -1742,8 +1763,9 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // The VRAM bank an object fetch reads from: the flags' bank bit on Color-native machines, bank 0 otherwise.
     private int ObjectFetchBank() =>
         ((m_cgbNative && ((m_objectFetchFlags & AttributeTileBank) != 0))
-        ? 1
-        : 0);
+            ? 1
+            : 0
+        );
     // The tile-row address for the in-flight object fetch, derived from the scan-latched Y, the mid-fetch tile and flags,
     // and the object-size bit as it reads at this dot — recomputed for each data byte, matching the oracle.
     private ushort ObjectFetchAddress() {
@@ -1760,7 +1782,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             ? (((row & 0x08) == 0)
                 ? m_objectFetchTile & 0xFE
                 : m_objectFetchTile | 0x01)
-            : m_objectFetchTile);
+            : m_objectFetchTile
+        );
 
         return ((ushort)((0x8000 + (tile * 16)) + ((row & 0x07) * 2)));
     }
@@ -1778,7 +1801,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         for (var pixel = 0; (pixel < 8); ++pixel) {
             var bit = (flipX
                 ? pixel
-                : (7 - pixel));
+                : (7 - pixel)
+            );
             var color = ((byte)((((high >> bit) & 0x01) << 1) | ((m_objectFetchLow >> bit) & 0x01)));
 
             if (color == 0) {
@@ -1862,9 +1886,9 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // The DMG grayscale shade a 2-bit pixel selects through a DMG palette register.
     private static uint DmgShade(byte palette, byte color) =>
         DmgShades[ShadeIndex(
-        color: color,
-        palette: palette
-    )];
+            color: color,
+            palette: palette
+        )];
     // Resolve an object pixel to its final display color: through the selected CGB object palette in color RAM, or the DMG
     // object palette (OBP0/OBP1 chosen by the attribute) grayscale shade.
     private uint ResolveObjectColor(byte color, byte attribute) {
@@ -1878,13 +1902,15 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
 
         var palette = (((attribute & AttributeDmgPalette) != 0)
             ? MixerObjectPalette1()
-            : MixerObjectPalette0());
+            : MixerObjectPalette0()
+        );
 
         if (m_dmgCompatibility) {
             // Compatibility mode keeps the DMG palette-register indirection but lands in the boot-assigned colors.
             var compat = (((attribute & AttributeDmgPalette) != 0)
                 ? m_compatObject1
-                : m_compatObject0);
+                : m_compatObject0
+            );
 
             return compat[ShadeIndex(
                 color: color,
@@ -1946,11 +1972,11 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         while (m_lcdColumn < ScreenWidth) {
             m_framebuffer.SetPixel(
                 color: ((m_lcdColumn == 0)
-                    ? ResolveBackgroundColor(
+                ? ResolveBackgroundColor(
                         attribute: 0,
                         color: 0
                     )
-                    : m_framebuffer.Pixels[(((m_ly * ScreenWidth) + m_lcdColumn) - 1)]),
+                : m_framebuffer.Pixels[(((m_ly * ScreenWidth) + m_lcdColumn) - 1)]),
                 x: m_lcdColumn,
                 y: m_ly
             );
@@ -2003,10 +2029,11 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     // monochrome by three relative to the Color single-speed alignment.
     private int WindowYCheckPhase() =>
         (m_supportsColor
-        ? (m_key1.IsDoubleSpeed
-            ? (WindowYCheckGridPhase + 1) & 3
-            : WindowYCheckGridPhase)
-        : (WindowYCheckGridPhase + 3) & 3);
+            ? (m_key1.IsDoubleSpeed
+                ? (WindowYCheckGridPhase + 1) & 3
+                : WindowYCheckGridPhase)
+            : (WindowYCheckGridPhase + 3) & 3
+        );
     // Rewind the background fetcher and empty its FIFO — shared by the start of a scanline and the mid-line hand-off to
     // the window, so the two entry points cannot drift apart.
     private void ResetBackgroundFetcher() {
@@ -2065,10 +2092,11 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
                 );
                 m_fetchAttribute = (m_cgbNative
                     ? m_memory.ReadVideoRamBank(
-                    address: m_fetchMapAddress,
-                    bank: 1
-                )
-                    : (byte)0x00);
+                        address: m_fetchMapAddress,
+                        bank: 1
+                    )
+                    : (byte)0x00
+                );
                 m_fetchStep = 1;
 
                 break;
@@ -2114,13 +2142,15 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         if (m_windowFetching) {
             mapBase = (((m_lcdc & WindowTileMap) != 0)
                 ? 0x9C00
-                : 0x9800);
+                : 0x9800
+            );
             fetchY = m_windowLineCounter;
             tileColumn = m_fetchTileX & (TilesPerMapRow - 1);
         } else {
             mapBase = (((m_lcdc & BackgroundTileMap) != 0)
                 ? 0x9C00
-                : 0x9800);
+                : 0x9800
+            );
             fetchY = (m_ly + m_scrollY) & 0xFF;
 
             if (m_firstFetchOfLine) {
@@ -2129,7 +2159,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
                 var positionInLine = ((byte)(m_positionInLine + CoarseColumnPhase));
                 var colorBias = ((m_supportsColor && !m_duringObjectFetch)
                     ? 1
-                    : 0);
+                    : 0
+                );
 
                 tileColumn = ((((m_scrollX + positionInLine) + 8) - colorBias) >> 3) & (TilesPerMapRow - 1);
             }
@@ -2149,7 +2180,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             ? m_fetcherY
             : (byte)(m_windowFetching
                 ? m_windowLineCounter
-                : (m_ly + m_scrollY) & 0xFF));
+                : (m_ly + m_scrollY) & 0xFF)
+        );
         var rowInTile = fetchY & 0x07;
 
         if ((m_fetchAttribute & AttributeYFlip) != 0) {
@@ -2158,10 +2190,12 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
 
         m_fetchTileBank = (((m_fetchAttribute & AttributeTileBank) != 0)
             ? 1
-            : 0);
+            : 0
+        );
         m_fetchDataAddress = (((m_lcdc & TileDataUnsigned) != 0)
             ? (ushort)((0x8000 + (m_fetchTileId * 16)) + (rowInTile * 2))
-            : (ushort)((0x9000 + (((sbyte)m_fetchTileId) * 16)) + (rowInTile * 2)));
+            : (ushort)((0x9000 + (((sbyte)m_fetchTileId) * 16)) + (rowInTile * 2))
+        );
     }
     // Unpack the fetched tile row into eight FIFO entries, leftmost pixel first, applying the CGB X-flip and carrying the
     // attribute (palette + BG-to-OBJ priority) alongside each 2-bit color.
@@ -2173,7 +2207,8 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         for (var pixel = 0; (pixel < FifoSize); ++pixel) {
             var bit = (flipX
                 ? pixel
-                : (7 - pixel));
+                : (7 - pixel)
+            );
             var color = ((byte)((((m_fetchDataHigh >> bit) & 0x01) << 1) | ((m_fetchDataLow >> bit) & 0x01)));
             var slot = (head + pixel) & (FifoSize - 1);
 
@@ -2198,17 +2233,19 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
             // A disabled background reads as shade index zero, not through BGP — the DMG rule through the compat colors.
             return (((MixerControl() & BackgroundEnable) != 0)
                 ? m_compatBackground[ShadeIndex(
-                color: color,
-                palette: MixerBackgroundPalette()
-            )]
-                : m_compatBackground[0]);
+                    color: color,
+                    palette: MixerBackgroundPalette()
+                )]
+                : m_compatBackground[0]
+            );
         }
 
         return (((MixerControl() & BackgroundEnable) != 0)
             ? DmgShade(
-            color: color,
-            palette: MixerBackgroundPalette()
-        )
-            : DmgShades[0]);
+                color: color,
+                palette: MixerBackgroundPalette()
+            )
+            : DmgShades[0]
+        );
     }
 }

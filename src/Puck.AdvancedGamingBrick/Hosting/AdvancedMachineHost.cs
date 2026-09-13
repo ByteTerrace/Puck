@@ -52,7 +52,7 @@ public sealed partial class AdvancedMachineHost : QueuedMachineHost {
         }
 
         m_bios = biosImage.ToArray();
-        m_options = options ?? new AgbMachineOptions();
+        m_options = (options ?? new AgbMachineOptions());
         m_bootMode = bootMode;
 
         if (cartridgeRom is not null) {
@@ -66,7 +66,12 @@ public sealed partial class AdvancedMachineHost : QueuedMachineHost {
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
         new AdvancedGamingBrickCore(
-        configuration: new AgbMachineConfiguration(bios: m_bios, rom: data, options: m_options, bootMode: m_bootMode),
-        savePath: savePath
-    );
+            configuration: new AgbMachineConfiguration(
+                bios: m_bios,
+                bootMode: m_bootMode,
+                options: m_options,
+                rom: data
+            ),
+            savePath: savePath
+        );
 }

@@ -17,9 +17,9 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
     /// <summary>The <c>dmgspeed</c> option token — the fairness speed pin (a fixed per-tick cycle budget regardless of the
     /// KEY1 double-speed latch).</summary>
     internal const string DmgSpeedToken = "dmgspeed";
+
     // The serial port carries exactly one peer, so a cable link is a pair.
     private const int CableSeats = 2;
-
     // The revision a bare family token selects: the two steppings the accuracy work targets, plus the Advanced console.
     private const ConsoleModel ColorFamilyDefault = ConsoleModel.CgbE;
     private const ConsoleModel DefaultModel = DmgFamilyDefault;
@@ -151,7 +151,11 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
     internal static (ConsoleModel Model, bool DmgSpeed, MachineBootOptions Boot) ParseOptions(string? options, MachineBootOptions? bootDefaults = null) {
         var model = DefaultModel;
         var dmgSpeed = false;
-        var boot = MachineBootOptions.Parse(options: options, machineTokens: out var machineTokens, defaults: bootDefaults);
+        var boot = MachineBootOptions.Parse(
+            defaults: bootDefaults,
+            machineTokens: out var machineTokens,
+            options: options
+        );
 
         foreach (var token in machineTokens) {
             if (token.Equals(
@@ -188,9 +192,9 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
             _ => model.ToString().ToLowerInvariant(),
         };
 
-        return (dmgSpeed
+        return ((dmgSpeed
             ? $"{modelToken} {DmgSpeedToken}"
-            : modelToken) + $" {boot.Format()}";
+            : modelToken) + $" {boot.Format()}");
     }
 
     private static bool TryParseModelToken(string token, out ConsoleModel model) =>

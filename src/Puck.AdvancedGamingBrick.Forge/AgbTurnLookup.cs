@@ -9,15 +9,44 @@ internal static class AgbTurnLookup {
     /// <param name="quarterTurns">The byte-space turn offset to add before lookup.</param>
     public static void Emit(ThumbEmitter emitter, uint tableAddress, LowRegister destination, int quarterTurns) {
         if (quarterTurns != 0) {
-            emitter.AddImmediate(register: LowRegister.R0, value: (byte)quarterTurns);
+            emitter.AddImmediate(
+                register: LowRegister.R0,
+                value: ((byte)quarterTurns)
+            );
         }
 
-        emitter.MoveImmediate(destination: LowRegister.R1, value: 255);
-        emitter.Alu(op: ThumbAlu.And, destination: LowRegister.R0, source: LowRegister.R1);
-        emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R0, source: LowRegister.R0, amount: 1);
-        emitter.LoadConstant(destination: LowRegister.R1, value: tableAddress);
-        emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1);
-        emitter.MoveImmediate(destination: LowRegister.R2, value: 0);
-        emitter.LoadSignedHalfRegister(destination: destination, baseRegister: LowRegister.R0, offsetRegister: LowRegister.R2);
+        emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: 255
+        );
+        emitter.Alu(
+            destination: LowRegister.R0,
+            op: ThumbAlu.And,
+            source: LowRegister.R1
+        );
+        emitter.ShiftImmediate(
+            amount: 1,
+            destination: LowRegister.R0,
+            op: ThumbShift.LogicalLeft,
+            source: LowRegister.R0
+        );
+        emitter.LoadConstant(
+            destination: LowRegister.R1,
+            value: tableAddress
+        );
+        emitter.AddRegister(
+            destination: LowRegister.R0,
+            operand: LowRegister.R1,
+            source: LowRegister.R0
+        );
+        emitter.MoveImmediate(
+            destination: LowRegister.R2,
+            value: 0
+        );
+        emitter.LoadSignedHalfRegister(
+            baseRegister: LowRegister.R0,
+            destination: destination,
+            offsetRegister: LowRegister.R2
+        );
     }
 }

@@ -30,9 +30,185 @@ internal static class MtsdfGlyphField {
 
     internal readonly record struct ColoredSegment(FontOutlineSegment Segment, byte Color);
     internal sealed record PreparedCell(FontGlyphGeometry Geometry, IReadOnlyList<ColoredSegment> Edges);
+
     // Orthogonality breaks |distance| ties at shared endpoints: the edge whose direction is more perpendicular to
     // the query offset owns the texel.
     private readonly record struct SegmentDistance(float Distance, float Orthogonality, float Parameter);
+
+    internal static void EvaluateCell(PreparedCell prepared, byte[] atlasRgba, int atlasWidth,
+        int cellHeight, int cellWidth, int cellX, int cellY, float distanceRange,
+        float offsetX, float offsetY, FontGenerationBudget? budget) {
+        var geometry = prepared.Geometry;
+        var colored = prepared.Edges;
+
+        if (colored.Count == 0) { return; }
+        for (var y = 0; (y < cellHeight); y++) {
+            budget?.CancellationToken.ThrowIfCancellationRequested();
+            for (var x = 0; (x < cellWidth); x++) {
+                var point = new Vector2(
+                    x: ((x + 0.5f) - offsetX),
+                    y: ((y + 0.5f) - offsetY)
+                );
+                var bestTrue = new SegmentDistance(
+                    Distance: float.MaxValue,
+                    Orthogonality: 0f,
+                    Parameter: 0f
+                );
+                var bestRed = bestTrue;
+                var bestGreen = bestTrue;
+                var bestBlue = bestTrue;
+                FontOutlineSegment redSegment = default;
+                FontOutlineSegment greenSegment = default;
+                FontOutlineSegment blueSegment = default;
+
+                foreach (var entry in colored) {
+                    var candidate = TrueDistance(
+                        segment: entry.Segment,
+                        point: point
+                    );
+
+                    if (IsCloser(
+                        best: bestTrue,
+                        candidate: candidate
+                    )) {
+                        bestTrue = candidate;
+                    }
+
+                    if (
+                        ((entry.Color & ColorRed) != 0) &&
+                        IsCloser(
+                        best: bestRed,
+                        candidate: candidate
+                    )
+                    ) {
+                        bestRed = candidate;
+                        redSegment = entry.Segment;
+                    }
+
+                    if (
+                        ((entry.Color & ColorGreen) != 0) &&
+                        IsCloser(
+                        best: bestGreen,
+                        candidate: candidate
+                    )
+                    ) {
+                        bestGreen = candidate;
+                        greenSegment = entry.Segment;
+                    }
+
+                    if (
+                        ((entry.Color & ColorBlue) != 0) &&
+                        IsCloser(
+                        best: bestBlue,
+                        candidate: candidate
+                    )
+                    ) {
+                        bestBlue = candidate;
+                        blueSegment = entry.Segment;
+                    }
+                }
+
+                var fillSign = ((WindingAt(
+                    point: point,
+                    segments: colored
+                ) != 0)
+                    ? 1f
+                    : -1f
+                );
+                var alpha = (fillSign * MathF.Abs(x: bestTrue.Distance));
+                var red = PseudoDistance(
+                    point: point,
+                    segment: redSegment,
+                    trueDistance: bestRed
+                );
+                var green = PseudoDistance(
+                    point: point,
+                    segment: greenSegment,
+                    trueDistance: bestGreen
+                );
+                var blue = PseudoDistance(
+                    point: point,
+                    segment: blueSegment,
+                    trueDistance: bestBlue
+                );
+                var median = MtsdfSampling.Median(
+                    first: red,
+                    second: green,
+                    third: blue
+                );
+
+                if ((median < 0f) != (alpha < 0f)) {
+                    red = -red;
+                    green = -green;
+                    blue = -blue;
+                    median = MtsdfSampling.Median(
+                        first: red,
+                        second: green,
+                        third: blue
+                    );
+                }
+
+                if (
+                    ((median < 0f) != (alpha < 0f)) ||
+                    (MathF.Abs(x: (median - alpha)) > (ClashThresholdRangeFraction * distanceRange))
+                ) {
+                    red = alpha;
+                    green = alpha;
+                    blue = alpha;
+                }
+
+                var atlasOffset = ((((cellY + y) * atlasWidth) + (cellX + x)) * 4);
+
+                atlasRgba[atlasOffset] = Encode(
+                    distance: red,
+                    distanceRange: distanceRange
+                );
+                atlasRgba[(atlasOffset + 1)] = Encode(
+                    distance: green,
+                    distanceRange: distanceRange
+                );
+                atlasRgba[(atlasOffset + 2)] = Encode(
+                    distance: blue,
+                    distanceRange: distanceRange
+                );
+                atlasRgba[(atlasOffset + 3)] = Encode(
+                    distance: alpha,
+                    distanceRange: distanceRange
+                );
+            }
+        }
+    }
+    // Resolve geometry and reserve raster work before allocating the full atlas image.
+    internal static PreparedCell PrepareCell(FontGlyphGeometry geometry, int cellWidth, int cellHeight, FontGenerationBudget? budget) {
+        geometry = GlyphBoundaryNormalizer.Normalize(
+            budget: budget,
+            geometry: geometry
+        );
+        if (geometry.IsEmpty) {
+            return new(
+                Edges: [],
+                Geometry: geometry
+            );
+        }
+
+        var colored = new List<ColoredSegment>();
+
+        foreach (var contour in geometry.Contours) {
+            ColorContour(
+                output: colored,
+                segments: contour
+            );
+        }
+
+        if (((((long)cellWidth) * cellHeight) * colored.Count) > 100_000_000) {
+            throw new InvalidDataException(message: "A glyph exceeds the 100-million edge-sample rasterization limit.");
+        }
+        budget?.Work(amount: checked((((2L * cellWidth) * cellHeight) * colored.Count)));
+        return new(
+            Edges: colored,
+            Geometry: geometry
+        );
+    }
 
     private static void AppendRun(List<ColoredSegment> output, IReadOnlyList<FontOutlineSegment> segments, int start, int count, byte color) {
         for (var index = 0; (index < count); index++) {
@@ -234,31 +410,65 @@ internal static class MtsdfGlyphField {
     }
     // Boundary normalization has already reduced curves and discarded interior contour edges.
     private static SegmentDistance TrueDistance(in FontOutlineSegment segment, Vector2 point) {
-        var direction = segment.End - segment.Start;
+        var direction = (segment.End - segment.Start);
         var lengthSquared = direction.LengthSquared();
-        var parameter = lengthSquared > 0f
-            ? Math.Clamp(Vector2.Dot(point - segment.Start, direction) / lengthSquared, 0f, 1f)
-            : 0f;
-        var offset = point - (segment.Start + parameter * direction);
+        var parameter = ((lengthSquared > 0f)
+            ? Math.Clamp(
+                (Vector2.Dot(
+                    value1: (point - segment.Start),
+                    value2: direction
+                ) / lengthSquared),
+                0f,
+                1f
+            )
+            : 0f
+        );
+        var offset = (point - (segment.Start + (parameter * direction)));
         var magnitude = offset.Length();
-        var sign = Cross(direction, offset) >= 0f ? 1f : -1f;
-        var orthogonality = magnitude > 0f && lengthSquared > 0f
-            ? MathF.Abs(Vector2.Dot(Vector2.Normalize(direction), offset / magnitude))
-            : 0f;
-        return new(sign * magnitude, orthogonality, parameter);
+        var sign = ((Cross(
+            a: direction,
+            b: offset
+        ) >= 0f)
+            ? 1f
+            : -1f
+        );
+        var orthogonality = (((magnitude > 0f) && (lengthSquared > 0f))
+            ? MathF.Abs(x: Vector2.Dot(
+                value1: Vector2.Normalize(value: direction),
+                value2: (offset / magnitude)
+            ))
+            : 0f
+        );
+
+        return new(
+            Distance: (sign * magnitude),
+            Orthogonality: orthogonality,
+            Parameter: parameter
+        );
     }
     // Half-open Y intervals (not half-open curve parameters) count shared vertices exactly once.
     private static int WindingAt(IReadOnlyList<ColoredSegment> segments, Vector2 point) {
         var winding = 0;
+
         foreach (var colored in segments) {
             var start = colored.Segment.Start;
             var end = colored.Segment.End;
-            var side = Cross(end - start, point - start);
+            var side = Cross(
+                a: (end - start),
+                b: (point - start)
+            );
+
             if (start.Y <= point.Y) {
-                if (end.Y > point.Y && side > 0f) {
+                if (
+                    (end.Y > point.Y) &&
+                    (side > 0f)
+                ) {
                     winding++;
                 }
-            } else if (end.Y <= point.Y && side < 0f) {
+            } else if (
+                (end.Y <= point.Y) &&
+                (side < 0f)
+            ) {
                 winding--;
             }
         }
@@ -290,173 +500,23 @@ internal static class MtsdfGlyphField {
         float offsetY,
         FontGenerationBudget? budget = null
     ) {
-        EvaluateCell(PrepareCell(geometry, cellWidth, cellHeight, budget), atlasRgba, atlasWidth,
-            cellHeight, cellWidth, cellX, cellY, distanceRange, offsetX, offsetY, budget);
-    }
-
-    // Resolve geometry and reserve raster work before allocating the full atlas image.
-    internal static PreparedCell PrepareCell(FontGlyphGeometry geometry, int cellWidth, int cellHeight, FontGenerationBudget? budget) {
-        geometry = GlyphBoundaryNormalizer.Normalize(geometry, budget);
-        if (geometry.IsEmpty) {
-            return new(geometry, []);
-        }
-
-        var colored = new List<ColoredSegment>();
-
-        foreach (var contour in geometry.Contours) {
-            ColorContour(
-                output: colored,
-                segments: contour
-            );
-        }
-
-        if (((long)cellWidth * cellHeight * colored.Count) > 100_000_000) {
-            throw new InvalidDataException("A glyph exceeds the 100-million edge-sample rasterization limit.");
-        }
-        budget?.Work(checked(2L * cellWidth * cellHeight * colored.Count));
-        return new(geometry, colored);
-    }
-
-    internal static void EvaluateCell(PreparedCell prepared, byte[] atlasRgba, int atlasWidth,
-        int cellHeight, int cellWidth, int cellX, int cellY, float distanceRange,
-        float offsetX, float offsetY, FontGenerationBudget? budget) {
-        var geometry = prepared.Geometry;
-        var colored = prepared.Edges;
-        if (colored.Count == 0) { return; }
-        for (var y = 0; (y < cellHeight); y++) {
-            budget?.CancellationToken.ThrowIfCancellationRequested();
-            for (var x = 0; (x < cellWidth); x++) {
-                var point = new Vector2(
-                    x: ((x + 0.5f) - offsetX),
-                    y: ((y + 0.5f) - offsetY)
-                );
-                var bestTrue = new SegmentDistance(
-                    Distance: float.MaxValue,
-                    Orthogonality: 0f,
-                    Parameter: 0f
-                );
-                var bestRed = bestTrue;
-                var bestGreen = bestTrue;
-                var bestBlue = bestTrue;
-                FontOutlineSegment redSegment = default;
-                FontOutlineSegment greenSegment = default;
-                FontOutlineSegment blueSegment = default;
-
-                foreach (var entry in colored) {
-                    var candidate = TrueDistance(
-                        segment: entry.Segment,
-                        point: point
-                    );
-
-                    if (IsCloser(
-                        best: bestTrue,
-                        candidate: candidate
-                    )) {
-                        bestTrue = candidate;
-                    }
-
-                    if (
-                        ((entry.Color & ColorRed) != 0) &&
-                        IsCloser(
-                        best: bestRed,
-                        candidate: candidate
-                    )
-                    ) {
-                        bestRed = candidate;
-                        redSegment = entry.Segment;
-                    }
-
-                    if (
-                        ((entry.Color & ColorGreen) != 0) &&
-                        IsCloser(
-                        best: bestGreen,
-                        candidate: candidate
-                    )
-                    ) {
-                        bestGreen = candidate;
-                        greenSegment = entry.Segment;
-                    }
-
-                    if (
-                        ((entry.Color & ColorBlue) != 0) &&
-                        IsCloser(
-                        best: bestBlue,
-                        candidate: candidate
-                    )
-                    ) {
-                        bestBlue = candidate;
-                        blueSegment = entry.Segment;
-                    }
-                }
-
-                var fillSign = ((WindingAt(
-                    point: point,
-                    segments: colored
-                ) != 0)
-                    ? 1f
-                    : -1f
-                );
-                var alpha = (fillSign * MathF.Abs(x: bestTrue.Distance));
-                var red = PseudoDistance(
-                    point: point,
-                    segment: redSegment,
-                    trueDistance: bestRed
-                );
-                var green = PseudoDistance(
-                    point: point,
-                    segment: greenSegment,
-                    trueDistance: bestGreen
-                );
-                var blue = PseudoDistance(
-                    point: point,
-                    segment: blueSegment,
-                    trueDistance: bestBlue
-                );
-                var median = MtsdfSampling.Median(
-                    first: red,
-                    second: green,
-                    third: blue
-                );
-
-                if ((median < 0f) != (alpha < 0f)) {
-                    red = -red;
-                    green = -green;
-                    blue = -blue;
-                    median = MtsdfSampling.Median(
-                        first: red,
-                        second: green,
-                        third: blue
-                    );
-                }
-
-                if (
-                    ((median < 0f) != (alpha < 0f)) ||
-                    (MathF.Abs(x: (median - alpha)) > (ClashThresholdRangeFraction * distanceRange))
-                ) {
-                    red = alpha;
-                    green = alpha;
-                    blue = alpha;
-                }
-
-                var atlasOffset = ((((cellY + y) * atlasWidth) + (cellX + x)) * 4);
-
-                atlasRgba[atlasOffset] = Encode(
-                    distance: red,
-                    distanceRange: distanceRange
-                );
-                atlasRgba[(atlasOffset + 1)] = Encode(
-                    distance: green,
-                    distanceRange: distanceRange
-                );
-                atlasRgba[(atlasOffset + 2)] = Encode(
-                    distance: blue,
-                    distanceRange: distanceRange
-                );
-                atlasRgba[(atlasOffset + 3)] = Encode(
-                    distance: alpha,
-                    distanceRange: distanceRange
-                );
-            }
-        }
+        EvaluateCell(
+            PrepareCell(
+                budget: budget,
+                cellHeight: cellHeight,
+                cellWidth: cellWidth,
+                geometry: geometry
+            ),
+            atlasRgba,
+            atlasWidth,
+            cellHeight,
+            cellWidth,
+            cellX,
+            cellY,
+            distanceRange,
+            offsetX,
+            offsetY,
+            budget
+        );
     }
 }

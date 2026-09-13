@@ -9,9 +9,9 @@ namespace Puck.AdvancedGamingBrick;
 /// returns the fork to the core's bounded instance pool.
 /// </summary>
 internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<MachinePadState> {
+    private readonly AgbCartridge m_cartridge;
     private readonly AgbMachineFork m_instance;
     private readonly AdvancedGamingBrickMachine m_machine;
-    private readonly AgbCartridge m_cartridge;
 
     public AdvancedGamingBrickLookahead(AgbMachineFork instance) {
         m_instance = instance;
@@ -20,19 +20,12 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
     }
 
     /// <inheritdoc/>
-    public long NativeFrameIndex =>
-        (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
-    /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_machine.Framebuffer;
-
     /// <inheritdoc/>
-    public void RestoreState(byte[] buffer, int length) =>
-        m_machine.RestoreState(reader: new StateReader(
-        buffer: buffer,
-        length: length,
-        start: 0
-    ));
+    public long NativeFrameIndex =>
+        (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
+
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) =>
         AdvancedPad.Apply(
@@ -41,9 +34,16 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
             pad: in input
         );
     /// <inheritdoc/>
-    public void RunFrame() =>
-        _ = m_machine.RunFrame();
-    /// <inheritdoc/>
     public void Dispose() =>
         m_instance.Dispose();
+    /// <inheritdoc/>
+    public void RestoreState(byte[] buffer, int length) =>
+        m_machine.RestoreState(reader: new StateReader(
+            buffer: buffer,
+            length: length,
+            start: 0
+        ));
+    /// <inheritdoc/>
+    public void RunFrame() =>
+        _ = m_machine.RunFrame();
 }

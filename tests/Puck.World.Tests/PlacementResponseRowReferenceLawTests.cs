@@ -51,6 +51,33 @@ public sealed class PlacementResponseRowReferenceLawTests {
             HashRaw: canonical.Hash
         );
     }
+    private static WorldDefinition Document(WorldLatticeScalar threshold) {
+        var document = Fixtures.BuildDocument();
+
+        return (document with {
+            StateRaw = FieldsSection(),
+            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation)],
+            PlacementRowsRaw = [
+                new WorldPlacement(
+                Id: PlacementId,
+                PrototypeId: BaseCreation,
+                Position: new DocumentVector3(value: Vector3.Zero),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Respond: [
+                        new WorldPlacementResponse(
+                        When: new WorldPlacementResponseCondition.FieldCondition(
+                            Comparison: ActionStateComparison.GreaterOrEqual,
+                            Field: FieldName,
+                            Value: threshold
+                        ),
+                        PrototypeId: TargetCreation
+                    ),
+                    ]
+            ),
+            ],
+        });
+    }
     // One 1x1x1 lattice cell over a field named "char", climbing 0.1/tick unconditionally, plus a plain scalar row
     // holding the threshold both documents compare against — one by literal, one by name.
     private static WorldStateSection FieldsSection() => new(
@@ -58,12 +85,20 @@ public sealed class PlacementResponseRowReferenceLawTests {
             new WorldStateRow(
                 Name: CellName.Parse(candidate: FieldName),
                 Kind: CellKind.Fixed,
-                Domain: new StateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Initial: 0f, Min: 0f, Max: 1f)
+                Domain: new StateDomain.CellsOf(Topology: "world"),
+                Field: new WorldStateFieldTrait(
+                    Initial: 0f,
+                    Min: 0f,
+                    Max: 1f
+                )
             ),
             new WorldStateRow(
                 Name: CellName.Parse(candidate: ThresholdRow),
                 Kind: CellKind.Fixed,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: FixedQ4816.FromDouble(value: ThresholdValue).Value)]
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: FixedQ4816.FromDouble(value: ThresholdValue).Value
+                    )]
             ),
         ],
         Lattices: [
@@ -78,35 +113,16 @@ public sealed class PlacementResponseRowReferenceLawTests {
                 Reactions: [
                     new WorldReaction.Transform(
                         When: [],
-                        Then: [new WorldFieldWrite(Field: FieldName, Op: WorldFieldWriteOp.Add, Value: 0.1f)]
+                        Then: [new WorldFieldWrite(
+                                Field: FieldName,
+                                Op: WorldFieldWriteOp.Add,
+                                Value: 0.1f
+                            )]
                     ),
                 ]
             ),
         ]
     );
-    private static WorldDefinition Document(WorldLatticeScalar threshold) {
-        var document = Fixtures.BuildDocument();
-
-        return (document with {
-            StateRaw = FieldsSection(),
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation)],
-            PlacementRowsRaw = [
-                new WorldPlacement(
-                    Id: PlacementId,
-                    PrototypeId: BaseCreation,
-                    Position: new DocumentVector3(value: Vector3.Zero),
-                    YawDegrees: 0f,
-                    Scale: 1f,
-                    Respond: [
-                        new WorldPlacementResponse(
-                            When: new WorldPlacementResponseCondition.FieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: FieldName, Value: threshold),
-                            PrototypeId: TargetCreation
-                        ),
-                    ]
-                ),
-            ],
-        });
-    }
     private static string PrototypeOf(WorldFixture fixture) => WorldDefinitionRows.FindPlacement(
         id: PlacementId,
         placements: fixture.Server.Definition.Placements

@@ -3,9 +3,9 @@ namespace Puck.State;
 /// <summary>A loaded table: keys sorted ascending, one value column per declared column (a single-value table has
 /// one unnamed column), values in the row's raw cell encoding, read by binary search.</summary>
 public sealed class CompiledTable {
-    private readonly long[] m_keys;
-    private readonly long[][] m_columns;
     private readonly string[] m_columnNames;
+    private readonly long[][] m_columns;
+    private readonly long[] m_keys;
 
     private CompiledTable(string name, CellKind kind, long[] keys, long[][] columns, string[] columnNames) {
         Name = name;
@@ -17,34 +17,20 @@ public sealed class CompiledTable {
 
     /// <summary>Gets the declared column names; empty for a single-value table.</summary>
     public IReadOnlyList<string> ColumnNames => m_columnNames;
+    /// <summary>Gets the entry count.</summary>
+    public int Count => m_keys.Length;
+    /// <summary>Gets the kind every value is encoded in.</summary>
+    public CellKind Kind { get; }
+    /// <summary>Gets the table's authored name.</summary>
+    public string Name { get; }
 
     /// <summary>Finds a declared column.</summary>
     /// <param name="name">The column name.</param>
     /// <returns>The column index, or -1.</returns>
-    public int Column(string name) => Array.IndexOf(array: m_columnNames, value: name);
-
-    /// <summary>Gets the table's authored name.</summary>
-    public string Name { get; }
-    /// <summary>Gets the kind every value is encoded in.</summary>
-    public CellKind Kind { get; }
-    /// <summary>Gets the entry count.</summary>
-    public int Count => m_keys.Length;
-
-    /// <summary>Looks a key up in one column.</summary>
-    /// <param name="key">The integer key.</param>
-    /// <param name="column">The column index; 0 for a single-value table.</param>
-    /// <param name="raw">The value in the table's raw encoding, when found.</param>
-    /// <returns>Whether the key is present.</returns>
-    public bool TryLookup(long key, int column, out long raw) {
-        var index = Array.BinarySearch(array: m_keys, value: key);
-        if (index < 0) {
-            raw = 0L;
-            return false;
-        }
-        raw = m_columns[column][index];
-        return true;
-    }
-
+    public int Column(string name) => Array.IndexOf(
+        array: m_columnNames,
+        value: name
+    );
     /// <summary>Compiles a loaded table document under the name a rule reads it by.</summary>
     /// <param name="name">The table's authored name.</param>
     /// <param name="document">The loaded table document.</param>
@@ -54,37 +40,80 @@ public sealed class CompiledTable {
         ArgumentNullException.ThrowIfNull(argument: document);
         table = null;
         var violations = TableCanonicalizer.Validate(document: document);
+
         if (violations.Count > 0) {
             error = $"{violations[0].Path}: {violations[0].Message}";
             return false;
         }
         var normalized = TableCanonicalizer.Normalize(document: document);
-        var isFixed = string.Equals(a: normalized.Kind, b: TableDocument.FixedKind, comparisonType: StringComparison.Ordinal);
+        var isFixed = string.Equals(
+            a: normalized.Kind,
+            b: TableDocument.FixedKind,
+            comparisonType: StringComparison.Ordinal
+        );
         var columnNames = (normalized.Columns ?? []).ToArray();
-        var columnCount = Math.Max(columnNames.Length, 1);
+        var columnCount = Math.Max(
+            val1: columnNames.Length,
+            val2: 1
+        );
         var keys = new long[normalized.Entries.Count];
         var columns = new long[columnCount][];
-        for (var column = 0; column < columnCount; column++) {
+
+        for (var column = 0; (column < columnCount); column++) {
             columns[column] = new long[keys.Length];
         }
-        for (var index = 0; index < keys.Length; index++) {
+        for (var index = 0; (index < keys.Length); index++) {
             var entry = normalized.Entries[index];
+
             keys[index] = entry.Key;
-            for (var column = 0; column < columnCount; column++) {
-                var value = ((columnNames.Length == 0) ? entry.Value!.Value : entry.Values![column]);
+            for (var column = 0; (column < columnCount); column++) {
+                var value = ((columnNames.Length == 0)
+                    ? entry.Value!.Value
+                    : entry.Values![column]
+                );
+
                 if (isFixed) {
-                    if (!NumericLiteral.TryToFixed(value: value, result: out var fixedValue)) {
+                    if (!NumericLiteral.TryToFixed(
+                        result: out var fixedValue,
+                        value: value
+                    )) {
                         error = $"entries[{index}] value {value} is not representable in Q48.16.";
                         return false;
                     }
                     columns[column][index] = fixedValue.Value;
                 } else {
-                    columns[column][index] = (long)value;
+                    columns[column][index] = ((long)value);
                 }
             }
         }
-        table = new CompiledTable(name: name, kind: isFixed ? CellKind.Fixed : CellKind.Int, keys: keys, columns: columns, columnNames: columnNames);
+        table = new CompiledTable(
+            columnNames: columnNames,
+            columns: columns,
+            keys: keys,
+            kind: (isFixed
+            ? CellKind.Fixed
+            : CellKind.Int),
+            name: name
+        );
         error = null;
+        return true;
+    }
+    /// <summary>Looks a key up in one column.</summary>
+    /// <param name="key">The integer key.</param>
+    /// <param name="column">The column index; 0 for a single-value table.</param>
+    /// <param name="raw">The value in the table's raw encoding, when found.</param>
+    /// <returns>Whether the key is present.</returns>
+    public bool TryLookup(long key, int column, out long raw) {
+        var index = Array.BinarySearch(
+            array: m_keys,
+            value: key
+        );
+
+        if (index < 0) {
+            raw = 0L;
+            return false;
+        }
+        raw = m_columns[column][index];
         return true;
     }
 }

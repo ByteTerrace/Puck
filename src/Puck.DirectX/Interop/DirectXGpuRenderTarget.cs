@@ -36,7 +36,12 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
-        CreateRenderTarget(device: device, format: format, height: height, width: width);
+        CreateRenderTarget(
+            device: device,
+            format: format,
+            height: height,
+            width: width
+        );
 
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
@@ -143,7 +148,10 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
             riidResource: in resourceIid
         );
         m_renderTarget = ((nint)renderTarget);
-        DirectXResourceStates.Register(m_renderTarget, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET);
+        DirectXResourceStates.Register(
+            m_renderTarget,
+            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET
+        );
 
         var rtvHeapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             NumDescriptors = 1,
@@ -171,7 +179,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         }
 
         m_disposed = true;
-        DirectXResourceStates.Forget(m_renderTarget);
+        DirectXResourceStates.Forget(resource: m_renderTarget);
 
         if (m_commandBufferToken.IsAllocated) {
             var state = ((DirectXCommandBufferState)m_commandBufferToken.Target!);

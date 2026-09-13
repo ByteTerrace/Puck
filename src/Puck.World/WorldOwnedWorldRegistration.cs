@@ -43,14 +43,18 @@ internal static class WorldOwnedWorldRegistration {
         services.AddSingleton(implementationFactory: static serviceProvider => {
             var definition = serviceProvider.GetRequiredService<WorldDefinitionSource>().Definition;
             var catalog = serviceProvider.GetRequiredService<WorldMachineCatalog>();
-            var catalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(catalog);
+            var catalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog: catalog);
             var root = WorldStateRoot.Resolve();
             var directory = Path.Combine(
                 path1: root,
                 path2: "owned-worlds"
             );
             var machineId = ResolveMachineId(root: root);
-            var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory, catalogFingerprint: catalogFingerprint, catalog: catalog);
+            var neighbours = new WorldFileNeighbourResolver(
+                baseDirectory: () => directory,
+                catalog: catalog,
+                catalogFingerprint: catalogFingerprint
+            );
             var worlds = new WorldOwnedWorlds(
                 directory: directory,
                 machineId: machineId,

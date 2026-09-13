@@ -11,7 +11,6 @@ public interface IMachineEngine {
     /// <summary>Gets the engine's stable identifier — a short kebab-case token (e.g. <c>gaming-brick</c>) a world document
     /// or an insert verb names, and the key the host registry looks the engine up by.</summary>
     string Id { get; }
-
     /// <summary>Gets the provider-owned configuration, ports, hardware spaces, and operation vocabulary.</summary>
     MachineEngineDescriptor Descriptor { get; }
 
@@ -19,7 +18,6 @@ public interface IMachineEngine {
     /// <param name="request">The configuration and complete pinned asset set.</param>
     /// <returns>A runtime whose optional capabilities agree with the descriptor.</returns>
     IMachineRuntime CreateMachine(MachineCreationRequest request);
-
     /// <summary>Creates a machine from content and an options string this engine owns the vocabulary of. A null
     /// <paramref name="contentBytes"/> selects the provider's empty or built-in program state; a
     /// null or empty <paramref name="options"/> selects the engine's defaults.</summary>

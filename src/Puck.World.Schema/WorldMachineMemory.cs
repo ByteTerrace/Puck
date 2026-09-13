@@ -11,7 +11,6 @@ public enum WorldMachineMemoryDirection : byte {
     /// <summary>Send world state into machine hardware.</summary>
     Write,
 }
-
 /// <summary>An ordered scalar binding between a named device and an Int world-state cell.</summary>
 /// <param name="Name">The binding identity within its machine.</param>
 /// <param name="Direction">Whether values enter or leave world state.</param>
@@ -33,9 +32,31 @@ public sealed record WorldMachineMemory(string Name, WorldMachineMemoryDirection
     /// <summary>Gets the scalar's byte width, or zero for an unsupported format.</summary>
     [JsonIgnore]
     public int Width => Format switch {
-        "i8" or "u8" => 1, "i16" or "u16" => 2, "i32" or "u32" => 4, "i64" or "u64" => 8, _ => 0,
+        "i8" or "u8" => 1,
+        "i16" or "u16" => 2,
+        "i32" or "u32" => 4,
+        "i64" or "u64" => 8,
+        _ => 0,
     };
 
+    /// <summary>Interprets hardware bits as a world-state Int64 value.</summary>
+    /// <param name="value">The provider's scalar bit pattern.</param>
+    /// <returns>The decoded value.</returns>
+    /// <exception cref="OverflowException">An unsigned 64-bit value cannot fit the checked world value.</exception>
+    /// <exception cref="InvalidOperationException">The format is unsupported.</exception>
+    public long Decode(ulong value) => Format switch {
+        "u8" => checked((byte)value),
+        "u16" => checked((ushort)value),
+        "u32" => checked((uint)value),
+        "u64" => ((Conversion == "truncate")
+        ? unchecked((long)value)
+        : checked((long)value)),
+        "i8" => unchecked((sbyte)checked((byte)value)),
+        "i16" => unchecked((short)checked((ushort)value)),
+        "i32" => unchecked((int)checked((uint)value)),
+        "i64" => unchecked((long)value),
+        _ => throw new InvalidOperationException(message: $"Unsupported format '{Format}'."),
+    };
     /// <summary>Converts a world value into hardware bits under the authored narrowing policy.</summary>
     /// <param name="value">The world's signed Int64 value.</param>
     /// <returns>The scalar bit pattern.</returns>
@@ -44,30 +65,23 @@ public sealed record WorldMachineMemory(string Name, WorldMachineMemoryDirection
     public ulong Encode(long value) {
         if (Conversion == "truncate") {
             return Width switch {
-                1 => unchecked((byte)value), 2 => unchecked((ushort)value),
-                4 => unchecked((uint)value), 8 => unchecked((ulong)value),
-                _ => throw new InvalidOperationException($"Unsupported format '{Format}'."),
+                1 => unchecked((byte)value),
+                2 => unchecked((ushort)value),
+                4 => unchecked((uint)value),
+                8 => unchecked((ulong)value),
+                _ => throw new InvalidOperationException(message: $"Unsupported format '{Format}'."),
             };
         }
         return Format switch {
-            "u8" => checked((byte)value), "u16" => checked((ushort)value),
-            "u32" => checked((uint)value), "u64" => checked((ulong)value),
-            "i8" => unchecked((byte)checked((sbyte)value)), "i16" => unchecked((ushort)checked((short)value)),
-            "i32" => unchecked((uint)checked((int)value)), "i64" => unchecked((ulong)value),
-            _ => throw new InvalidOperationException($"Unsupported format '{Format}'."),
+            "u8" => checked((byte)value),
+            "u16" => checked((ushort)value),
+            "u32" => checked((uint)value),
+            "u64" => checked((ulong)value),
+            "i8" => unchecked((byte)checked((sbyte)value)),
+            "i16" => unchecked((ushort)checked((short)value)),
+            "i32" => unchecked((uint)checked((int)value)),
+            "i64" => unchecked((ulong)value),
+            _ => throw new InvalidOperationException(message: $"Unsupported format '{Format}'."),
         };
     }
-
-    /// <summary>Interprets hardware bits as a world-state Int64 value.</summary>
-    /// <param name="value">The provider's scalar bit pattern.</param>
-    /// <returns>The decoded value.</returns>
-    /// <exception cref="OverflowException">An unsigned 64-bit value cannot fit the checked world value.</exception>
-    /// <exception cref="InvalidOperationException">The format is unsupported.</exception>
-    public long Decode(ulong value) => Format switch {
-        "u8" => checked((byte)value), "u16" => checked((ushort)value), "u32" => checked((uint)value),
-        "u64" => Conversion == "truncate" ? unchecked((long)value) : checked((long)value),
-        "i8" => unchecked((sbyte)checked((byte)value)), "i16" => unchecked((short)checked((ushort)value)),
-        "i32" => unchecked((int)checked((uint)value)), "i64" => unchecked((long)value),
-        _ => throw new InvalidOperationException($"Unsupported format '{Format}'."),
-    };
 }

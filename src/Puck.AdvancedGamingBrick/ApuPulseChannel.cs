@@ -43,7 +43,8 @@ public sealed partial class ApuPulseChannel {
 
             return ((((DutyPatterns[m_dutyPattern] >> m_dutyStep) & 1) != 0)
                 ? m_envelope.Volume
-                : 0);
+                : 0
+            );
         }
     }
 
@@ -123,7 +124,8 @@ public sealed partial class ApuPulseChannel {
 
         m_sweepTimer = ((m_sweepPeriod == 0)
             ? 8
-            : m_sweepPeriod);
+            : m_sweepPeriod
+        );
 
         if (m_sweepPeriod == 0) {
             return;
@@ -152,7 +154,8 @@ public sealed partial class ApuPulseChannel {
 
         return (m_sweepDecrease
             ? (m_sweepShadow - delta)
-            : (m_sweepShadow + delta));
+            : (m_sweepShadow + delta)
+        );
     }
     private void Trigger() {
         m_enabled = m_dacEnabled;
@@ -168,7 +171,8 @@ public sealed partial class ApuPulseChannel {
             m_sweepShadow = m_frequency;
             m_sweepTimer = ((m_sweepPeriod == 0)
                 ? 8
-                : m_sweepPeriod);
+                : m_sweepPeriod
+            );
             m_sweepActive = ((m_sweepPeriod > 0) || (m_sweepShift > 0));
 
             if (

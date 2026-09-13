@@ -7,9 +7,9 @@ namespace Puck.Vulkan.Interop;
 /// descriptor set layout, and destroys all three when disposed.
 /// </summary>
 public sealed class VulkanGraphicsPipeline : IGpuPipeline {
-    private bool m_disposed;
-
     private readonly IVulkanGraphicsPipelineApi m_graphicsPipelineApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the native <c>VkDescriptorSetLayout</c> handle, or zero once disposed.</summary>
     public nint DescriptorSetLayoutHandle { get; private set; }

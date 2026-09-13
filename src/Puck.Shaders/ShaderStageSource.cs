@@ -9,8 +9,13 @@ public sealed record ShaderStageSource(
     string EntryPoint = "main",
     uint GroupSizeX = 8,
     uint GroupSizeY = 8,
-    uint GroupSizeZ = 1)
-{
+    uint GroupSizeZ = 1) {
     public ShaderStageSource(ShaderStage stage, string path, string source, string entryPoint)
-        : this(stage, path, source, ShaderSourceLanguage.Hlsl, entryPoint) { }
+        : this(
+        stage,
+        path,
+        source,
+        ShaderSourceLanguage.Hlsl,
+        entryPoint
+    ) { }
 }

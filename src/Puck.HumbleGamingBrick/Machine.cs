@@ -23,8 +23,8 @@ public sealed class Machine : ISnapshotableMachine {
     private readonly SystemMemory m_memory;
     private readonly IModeSwitchable[] m_modeSwitchables;
     private readonly ModelState m_modelState;
-    private readonly ISnapshotable[] m_snapshotables;
     private readonly string[] m_snapshotableNames;
+    private readonly ISnapshotable[] m_snapshotables;
     private readonly StateWriter m_stateWriter = new();
 
     private ulong m_runTargetCycles;
@@ -96,9 +96,6 @@ public sealed class Machine : ISnapshotableMachine {
     /// <summary>Gets the machine's master clock.</summary>
     public MasterClock Clock =>
         m_componentClock.Clock;
-    /// <summary>Gets the current instant on the master timeline.</summary>
-    public Tick Now =>
-        m_componentClock.Clock.Now;
     /// <summary>Gets whether a bus master (CPU) drives this machine.</summary>
     public bool HasBusMaster =>
         (m_busMaster is not null);
@@ -106,6 +103,9 @@ public sealed class Machine : ISnapshotableMachine {
     /// <see cref="SwitchModel"/> retargets it.</summary>
     public ConsoleModel Model =>
         m_modelState.Model;
+    /// <summary>Gets the current instant on the master timeline.</summary>
+    public Tick Now =>
+        m_componentClock.Clock.Now;
 
     /// <summary>Re-pushes a model's capability gates into every switchable component (idempotent) — the fan-out a
     /// restore uses to re-derive gates from the snapshotted model, and the render/hardware half of a live swap.</summary>
@@ -115,63 +115,57 @@ public sealed class Machine : ISnapshotableMachine {
             component.ApplyModel(model: model);
         }
     }
-    /// <summary>The LIVE device swap (the boot shim): retargets the running machine to <paramref name="model"/> WITHOUT
-    /// a reboot. It re-gates every color-path component, and on a Color→monochrome demote repages the switchable RAM to
-    /// its DMG-equivalent banks and drops double speed so the game's now-monochrome code addresses shared state and
-    /// times correctly (the Color banks 2–7 / VRAM bank 1 survive un-paged, cartridge-move style). Finally it applies
-    /// the per-ROM <paramref name="pokes"/> — the small set of cached hardware-detection bytes that flip an SM83-compatible
-    /// game onto the target model's own code path, so it re-renders natively. Progress in shared RAM is untouched. Call
-    /// only between frames (the machine idle at an instruction boundary), never mid-step.</summary>
-    /// <param name="model">The model to switch to.</param>
-    /// <param name="pokes">The per-ROM detection-flag pokes for the target model (empty falls back to a bare capability
-    /// flip — the game keeps its old code path, so the host should present a re-interpretation rather than expect
-    /// native art).</param>
-    public void SwitchModel(ConsoleModel model, ReadOnlySpan<ModePoke> pokes) {
-        var demotesToMonochrome = (m_modelState.Model.SupportsColor() && !model.SupportsColor());
+    /// <summary>Replaces this machine's entire state with a snapshot's, repositioning the clock and every component.
+    /// Rejects a snapshot whose machine identity (format version / model / boot+cartridge ROM) does not match this
+    /// machine, refusing to load a mismatched image rather than silently corrupting state.</summary>
+    /// <param name="snapshot">The snapshot to restore.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="snapshot"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The snapshot's identity does not match this machine, or the restore
+    /// consumed a different number of bytes than the snapshot holds.</exception>
+    public void Restore(MachineSnapshot snapshot) {
+        ArgumentNullException.ThrowIfNull(argument: snapshot);
 
-        m_modelState.Set(model: model);
-        ApplyModel(model: model);
-
-        if (demotesToMonochrome) {
-            // Keep the game's shared state addressable and its timing sane after the color hardware seals off: repage to
-            // the DMG-equivalent banks and force normal speed (KEY1 flag + the component clock's own derived copy, which
-            // this unit re-syncs exactly as a snapshot restore does).
-            m_memory.ForceDmgBanks();
-            m_key1.ForceNormalSpeed();
-            m_componentClock.IsDoubleSpeed = false;
+        if (snapshot.Identity != m_identity) {
+            throw new InvalidOperationException(message: "Snapshot identity (format version / model / boot+cartridge ROM) does not match this machine; refusing to restore a mismatched image.");
         }
 
-        foreach (var poke in pokes) {
-            m_memory.PokeCpuByte(
-                address: poke.Address,
-                value: poke.Value
-            );
+        var reader = snapshot.OpenReader();
+
+        RestoreState(reader: reader);
+
+        // A correctly-ordered snapshot leaves the reader exactly at the end; a shortfall or overrun means a SaveState /
+        // LoadState field-order drift that would otherwise be read as silently-wrong state — fault deterministically so a
+        // byte difference stays a genuine divergence, never a misread.
+        if (reader.Position != snapshot.Size) {
+            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
         }
     }
-    /// <summary>Advances the machine by exactly one CPU T-cycle (one dot at normal speed), ticking every component in
-    /// domain-aware lockstep. This is the finest step for a component-driven machine; a machine with a bus master is
-    /// instruction-atomic, so advance it with <see cref="StepInstruction"/> or <see cref="Run(ulong)"/> instead.</summary>
-    public void StepTick() =>
-        m_componentClock.AdvanceCpuTCycle();
-    /// <summary>Executes exactly one instruction on the bus master, which drives the per-dot component ticks itself as
-    /// it runs.</summary>
-    /// <exception cref="InvalidOperationException">The machine has no bus master.</exception>
-    public void StepInstruction() {
+    /// <summary>Reads the machine's entire mutable state back from a reader positioned at the start of a serialized
+    /// image, repositioning the clock and every component and re-deriving model gates — the shared body of both
+    /// <see cref="Restore"/> and a pooled fork. It performs no identity check (callers that need one check before
+    /// calling) and does not validate exact consumption (the snapshot restore path does).</summary>
+    /// <param name="reader">The source to read state from.</param>
+    public void RestoreState(StateReader reader) {
+        m_componentClock.Invalidate();
+        m_componentClock.Clock.ResetTo(instant: Tick.FromRawBits(rawBits: reader.ReadUInt64()));
+        m_runTargetCycles = reader.ReadUInt64();
+        if (m_runTargetCycles > m_componentClock.Clock.CycleCount) {
+            throw new InvalidOperationException(message: "Snapshot pacing target exceeds the completed machine clock.");
+        }
         m_componentClock.Invalidate();
 
-        if (m_busMaster is null) {
-            throw new InvalidOperationException(message: "The machine has no bus master to step.");
+        foreach (var snapshotable in m_snapshotables) {
+            snapshotable.LoadState(reader: reader);
         }
 
-        m_busMaster.StepInstruction();
+        // The model is snapshot state (ModelState loaded above), but each component caches its capability gate in a fast
+        // field that is NOT in its own bytes; re-derive them all from the restored model so a restored live-swapped
+        // machine resumes as the model it was running, not the model it booted from. Idempotent, and it also re-syncs
+        // the component-clock speed no differently than the CPU's own KEY1 re-derive.
+        ApplyModel(model: m_modelState.Model);
 
-        // Keep the pacing target from lagging behind a directly stepped instruction, so a later Run does not replay an
-        // already-elapsed budget.
-        var elapsed = m_componentClock.Clock.CycleCount;
-
-        if (m_runTargetCycles < elapsed) {
-            m_runTargetCycles = elapsed;
-        }
+        // Preserve the captured pacing target. Reanchoring to the completed instruction's clock would forgive its
+        // overshoot and buy extra cycles on the next Run, diverging from an uninterrupted machine.
     }
     /// <summary>Advances the machine forward by a budget of T-cycles (dots) — the seam a host engine drives, handing in
     /// the exact integer T-cycle count its frame elapsed so pacing carries no floating-point drift.</summary>
@@ -196,6 +190,19 @@ public sealed class Machine : ISnapshotableMachine {
         }
 
         m_componentClock.Settle();
+    }
+    /// <summary>Serializes the machine's entire mutable state into a writer, in the same clock-first, then-each-component
+    /// order <see cref="Snapshot"/> uses — but without the section table or a materialized snapshot image. The
+    /// zero-copy producer half of a pooled fork: the sibling reads it straight back through <see cref="RestoreState"/>.</summary>
+    /// <param name="writer">The sink to serialize into.</param>
+    public void SerializeState(StateWriter writer) {
+        m_componentClock.Settle();
+        writer.WriteUInt64(value: Now.RawBits);
+        writer.WriteUInt64(value: m_runTargetCycles);
+
+        foreach (var snapshotable in m_snapshotables) {
+            snapshotable.SaveState(writer: writer);
+        }
     }
     /// <summary>Captures the machine's entire mutable state at the current instant into a self-contained snapshot that
     /// aliases nothing live. Restore it into this machine to rewind, or into a fresh machine to fork a divergent run.</summary>
@@ -242,69 +249,62 @@ public sealed class Machine : ISnapshotableMachine {
             )
         );
     }
-    /// <summary>Serializes the machine's entire mutable state into a writer, in the same clock-first, then-each-component
-    /// order <see cref="Snapshot"/> uses — but without the section table or a materialized snapshot image. The
-    /// zero-copy producer half of a pooled fork: the sibling reads it straight back through <see cref="RestoreState"/>.</summary>
-    /// <param name="writer">The sink to serialize into.</param>
-    public void SerializeState(StateWriter writer) {
-        m_componentClock.Settle();
-        writer.WriteUInt64(value: Now.RawBits);
-        writer.WriteUInt64(value: m_runTargetCycles);
-
-        foreach (var snapshotable in m_snapshotables) {
-            snapshotable.SaveState(writer: writer);
-        }
-    }
-    /// <summary>Reads the machine's entire mutable state back from a reader positioned at the start of a serialized
-    /// image, repositioning the clock and every component and re-deriving model gates — the shared body of both
-    /// <see cref="Restore"/> and a pooled fork. It performs no identity check (callers that need one check before
-    /// calling) and does not validate exact consumption (the snapshot restore path does).</summary>
-    /// <param name="reader">The source to read state from.</param>
-    public void RestoreState(StateReader reader) {
-        m_componentClock.Invalidate();
-        m_componentClock.Clock.ResetTo(instant: Tick.FromRawBits(rawBits: reader.ReadUInt64()));
-        m_runTargetCycles = reader.ReadUInt64();
-        if (m_runTargetCycles > m_componentClock.Clock.CycleCount) {
-            throw new InvalidOperationException("Snapshot pacing target exceeds the completed machine clock.");
-        }
+    /// <summary>Executes exactly one instruction on the bus master, which drives the per-dot component ticks itself as
+    /// it runs.</summary>
+    /// <exception cref="InvalidOperationException">The machine has no bus master.</exception>
+    public void StepInstruction() {
         m_componentClock.Invalidate();
 
-        foreach (var snapshotable in m_snapshotables) {
-            snapshotable.LoadState(reader: reader);
+        if (m_busMaster is null) {
+            throw new InvalidOperationException(message: "The machine has no bus master to step.");
         }
 
-        // The model is snapshot state (ModelState loaded above), but each component caches its capability gate in a fast
-        // field that is NOT in its own bytes; re-derive them all from the restored model so a restored live-swapped
-        // machine resumes as the model it was running, not the model it booted from. Idempotent, and it also re-syncs
-        // the component-clock speed no differently than the CPU's own KEY1 re-derive.
-        ApplyModel(model: m_modelState.Model);
+        m_busMaster.StepInstruction();
 
-        // Preserve the captured pacing target. Reanchoring to the completed instruction's clock would forgive its
-        // overshoot and buy extra cycles on the next Run, diverging from an uninterrupted machine.
+        // Keep the pacing target from lagging behind a directly stepped instruction, so a later Run does not replay an
+        // already-elapsed budget.
+        var elapsed = m_componentClock.Clock.CycleCount;
+
+        if (m_runTargetCycles < elapsed) {
+            m_runTargetCycles = elapsed;
+        }
     }
-    /// <summary>Replaces this machine's entire state with a snapshot's, repositioning the clock and every component.
-    /// Rejects a snapshot whose machine identity (format version / model / boot+cartridge ROM) does not match this
-    /// machine, refusing to load a mismatched image rather than silently corrupting state.</summary>
-    /// <param name="snapshot">The snapshot to restore.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="snapshot"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The snapshot's identity does not match this machine, or the restore
-    /// consumed a different number of bytes than the snapshot holds.</exception>
-    public void Restore(MachineSnapshot snapshot) {
-        ArgumentNullException.ThrowIfNull(argument: snapshot);
+    /// <summary>Advances the machine by exactly one CPU T-cycle (one dot at normal speed), ticking every component in
+    /// domain-aware lockstep. This is the finest step for a component-driven machine; a machine with a bus master is
+    /// instruction-atomic, so advance it with <see cref="StepInstruction"/> or <see cref="Run(ulong)"/> instead.</summary>
+    public void StepTick() =>
+        m_componentClock.AdvanceCpuTCycle();
+    /// <summary>The LIVE device swap (the boot shim): retargets the running machine to <paramref name="model"/> WITHOUT
+    /// a reboot. It re-gates every color-path component, and on a Color→monochrome demote repages the switchable RAM to
+    /// its DMG-equivalent banks and drops double speed so the game's now-monochrome code addresses shared state and
+    /// times correctly (the Color banks 2–7 / VRAM bank 1 survive un-paged, cartridge-move style). Finally it applies
+    /// the per-ROM <paramref name="pokes"/> — the small set of cached hardware-detection bytes that flip an SM83-compatible
+    /// game onto the target model's own code path, so it re-renders natively. Progress in shared RAM is untouched. Call
+    /// only between frames (the machine idle at an instruction boundary), never mid-step.</summary>
+    /// <param name="model">The model to switch to.</param>
+    /// <param name="pokes">The per-ROM detection-flag pokes for the target model (empty falls back to a bare capability
+    /// flip — the game keeps its old code path, so the host should present a re-interpretation rather than expect
+    /// native art).</param>
+    public void SwitchModel(ConsoleModel model, ReadOnlySpan<ModePoke> pokes) {
+        var demotesToMonochrome = (m_modelState.Model.SupportsColor() && !model.SupportsColor());
 
-        if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(message: "Snapshot identity (format version / model / boot+cartridge ROM) does not match this machine; refusing to restore a mismatched image.");
+        m_modelState.Set(model: model);
+        ApplyModel(model: model);
+
+        if (demotesToMonochrome) {
+            // Keep the game's shared state addressable and its timing sane after the color hardware seals off: repage to
+            // the DMG-equivalent banks and force normal speed (KEY1 flag + the component clock's own derived copy, which
+            // this unit re-syncs exactly as a snapshot restore does).
+            m_memory.ForceDmgBanks();
+            m_key1.ForceNormalSpeed();
+            m_componentClock.IsDoubleSpeed = false;
         }
 
-        var reader = snapshot.OpenReader();
-
-        RestoreState(reader: reader);
-
-        // A correctly-ordered snapshot leaves the reader exactly at the end; a shortfall or overrun means a SaveState /
-        // LoadState field-order drift that would otherwise be read as silently-wrong state — fault deterministically so a
-        // byte difference stays a genuine divergence, never a misread.
-        if (reader.Position != snapshot.Size) {
-            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
+        foreach (var poke in pokes) {
+            m_memory.PokeCpuByte(
+                address: poke.Address,
+                value: poke.Value
+            );
         }
     }
 }

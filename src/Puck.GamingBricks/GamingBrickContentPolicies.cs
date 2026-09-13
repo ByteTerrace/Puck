@@ -11,5 +11,9 @@ public static class GamingBrickContentPolicies {
     /// <param name="assetAdmission">The independent disposition of auxiliary firmware and other asset paths.</param>
     /// <returns>The immutable Puck cartridge policy.</returns>
     public static MachineContentAdmissionPolicy Puck(MachineAssetAdmission assetAdmission = MachineAssetAdmission.Deny) =>
-        new(MachineContentAdmissionMode.AuthoredFormatsOnly, [PuckCartridgeFormat], assetAdmission: assetAdmission);
+        new(
+            MachineContentAdmissionMode.AuthoredFormatsOnly,
+            [PuckCartridgeFormat],
+            assetAdmission: assetAdmission
+        );
 }

@@ -16,14 +16,13 @@ namespace Puck.GamingBricks.Post;
 /// </summary>
 public sealed partial class CorpusManifest {
     private sealed class CorpusDto {
-        public required string Name { get; init; }
-        public required string Version { get; init; }
         public required string Archive { get; init; }
-        public required string Sha256 { get; init; }
+        public required string Name { get; init; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Root { get; init; }
+        public required string Sha256 { get; init; }
+        public required string Version { get; init; }
     }
-
     [JsonSerializable(typeof(CorpusDto[]))]
     private sealed partial class CorpusJsonContext : JsonSerializerContext;
 
@@ -39,23 +38,21 @@ public sealed partial class CorpusManifest {
 
     private CorpusManifest(IReadOnlyList<Corpus> corpora, string? cacheRoot) {
         m_corpora = corpora;
-        EffectiveCacheRoot = cacheRoot ?? CacheRoot;
+        EffectiveCacheRoot = (cacheRoot ?? CacheRoot);
     }
 
     /// <summary>Gets this manifest's explicitly configured cache root, or the OS default.</summary>
     public string EffectiveCacheRoot { get; }
-
     /// <summary>Gets the declared corpora.</summary>
     public IReadOnlyList<Corpus> Corpora =>
         m_corpora;
-
     /// <summary>Gets the directory the corpora are cached under.</summary>
     public static string CacheRoot =>
         Path.Combine(
-        path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
-        path2: "Puck",
-        path3: "corpora"
-    );
+            path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
+            path2: "Puck",
+            path3: "corpora"
+        );
 
     /// <summary>Resolves a battery's committed <c>corpora.json</c> in the running checkout, independently of
     /// compiler source-path mapping.</summary>
@@ -63,7 +60,11 @@ public sealed partial class CorpusManifest {
     /// <returns>The manifest's path.</returns>
     /// <exception cref="DirectoryNotFoundException">No checkout is found above the executable or working directory.</exception>
     public static string InRepository(string projectName) =>
-        RepositoryPaths.Resolve(relativePath: Path.Combine(path1: "src", path2: projectName, path3: "corpora.json"));
+        RepositoryPaths.Resolve(relativePath: Path.Combine(
+            path1: "src",
+            path2: projectName,
+            path3: "corpora.json"
+        ));
     /// <summary>Loads a manifest.</summary>
     /// <param name="path">The manifest file's path.</param>
     /// <param name="cacheRoot">Cache directory; null uses the OS local application-data directory.</param>
@@ -74,7 +75,8 @@ public sealed partial class CorpusManifest {
             jsonTypeInfo: CorpusJsonContext.Default.CorpusDtoArray
         ) ?? []);
 
-        return new CorpusManifest(corpora: dtos
+        return new CorpusManifest(
+            corpora: dtos
             .Select(selector: static dto => new Corpus(
                 Archive: dto.Archive,
                 Name: dto.Name,
@@ -82,16 +84,17 @@ public sealed partial class CorpusManifest {
                 Sha256: dto.Sha256,
                 Version: dto.Version
             ))
-            .ToArray(), cacheRoot: cacheRoot);
+            .ToArray(),
+            cacheRoot: cacheRoot
+        );
     }
-
     /// <summary>Returns the cached root directory a corpus resolves to, whether or not it exists yet.</summary>
     /// <param name="corpus">The corpus.</param>
     /// <param name="cacheRoot">Cache directory; null uses the OS default.</param>
     /// <returns>The directory.</returns>
     public static string CachedRoot(Corpus corpus, string? cacheRoot = null) {
         var version = Path.Combine(
-            path1: cacheRoot ?? CacheRoot,
+            path1: (cacheRoot ?? CacheRoot),
             path2: corpus.Name,
             path3: corpus.Version
         );
@@ -101,7 +104,8 @@ public sealed partial class CorpusManifest {
             : Path.Combine(
                 path1: version,
                 path2: corpus.Root
-            ));
+            )
+        );
     }
     /// <summary>Downloads and unpacks every corpus not already in the cache.</summary>
     /// <returns>The number of corpora fetched.</returns>
@@ -112,7 +116,10 @@ public sealed partial class CorpusManifest {
         using var client = new HttpClient();
 
         foreach (var corpus in m_corpora) {
-            var root = CachedRoot(corpus: corpus, cacheRoot: EffectiveCacheRoot);
+            var root = CachedRoot(
+                corpus: corpus,
+                cacheRoot: EffectiveCacheRoot
+            );
 
             if (Directory.Exists(path: root)) {
                 Console.Out.WriteLine(value: $"{corpus.Name} {corpus.Version}: cached at {root}");
@@ -186,10 +193,14 @@ public sealed partial class CorpusManifest {
             b: name,
             comparisonType: StringComparison.Ordinal
         )) ?? throw new ArgumentException(message: $"corpora.json declares no corpus named '{name}'."));
-        var root = CachedRoot(corpus: corpus, cacheRoot: EffectiveCacheRoot);
+        var root = CachedRoot(
+            corpus: corpus,
+            cacheRoot: EffectiveCacheRoot
+        );
 
         return (Directory.Exists(path: root)
             ? root
-            : null);
+            : null
+        );
     }
 }

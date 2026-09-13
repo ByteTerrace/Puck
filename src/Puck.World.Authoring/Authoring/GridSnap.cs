@@ -49,16 +49,30 @@ public readonly record struct SnapConfig(
     /// reference — the neutral starting point every session begins from (snapping is opt-in).</summary>
     public static SnapConfig Disabled => default;
 
-    /// <summary>Creates a disabled config pre-loaded with a uniform lattice pitch on all three axes (X/Y/Z alike) —
-    /// the shape a caller enables verbatim for full 3D placement (e.g. a free-floating workbench object).</summary>
-    /// <param name="pitch">The per-axis lattice spacing, world units.</param>
-    public static SnapConfig Uniform(float pitch) =>
-        new(Enabled: false, Pitch: new Vector3(value: pitch), Rotation: RotationSnap.Off, Reference: null);
     /// <summary>Creates a disabled config pre-loaded with a lattice pitch on X/Z only (Y left free) — the shape a
     /// caller enables verbatim for floor-rest placement, where vertical position is never snapped.</summary>
     /// <param name="pitch">The X/Z lattice spacing, world units.</param>
     public static SnapConfig Planar(float pitch) =>
-        new(Enabled: false, Pitch: new Vector3(x: pitch, y: 0f, z: pitch), Rotation: RotationSnap.Off, Reference: null);
+        new(
+            Enabled: false,
+            Pitch: new Vector3(
+                x: pitch,
+                y: 0f,
+                z: pitch
+            ),
+            Rotation: RotationSnap.Off,
+            Reference: null
+        );
+    /// <summary>Creates a disabled config pre-loaded with a uniform lattice pitch on all three axes (X/Y/Z alike) —
+    /// the shape a caller enables verbatim for full 3D placement (e.g. a free-floating workbench object).</summary>
+    /// <param name="pitch">The per-axis lattice spacing, world units.</param>
+    public static SnapConfig Uniform(float pitch) =>
+        new(
+            Enabled: false,
+            Pitch: new Vector3(value: pitch),
+            Rotation: RotationSnap.Off,
+            Reference: null
+        );
 }
 /// <summary>
 /// Grid-locking's pure snap math — the authoring-side float core shared by every editing surface. Every function
@@ -67,119 +81,53 @@ public readonly record struct SnapConfig(
 /// changes the distribution of the plain <c>Position</c>/<c>YawDegrees</c> floats already written).
 /// </summary>
 public static class GridSnap {
-    // The fraction a node must be departed before the magnetize band releases to the next node.
-    private const float ReleaseBandFraction = 0.6f;
     // How near a value must be to a lattice multiple to count as "resting on a node" for the release band.
     private const float OnNodeEpsilon = 1.0e-4f;
     // The near-quaternion-equality threshold used to dedupe the coarse-orientation candidate sets.
     private const float OrientationDedupeDot = 0.9999f;
+    // The fraction a node must be departed before the magnetize band releases to the next node.
+    private const float ReleaseBandFraction = 0.6f;
 
-    /// <summary>Snaps a world-space position to the world lattice (origin at world 0), per axis: a pitch component
-    /// &lt;= 0 leaves that axis free.</summary>
-    /// <param name="p">The candidate position.</param>
-    /// <param name="pitch">The per-axis lattice pitch.</param>
-    /// <returns>The snapped position.</returns>
-    public static Vector3 SnapToWorldLattice(Vector3 p, Vector3 pitch) =>
-        new(
-            x: ((pitch.X > 0f) ? (MathF.Round(x: (p.X / pitch.X)) * pitch.X) : p.X),
-            y: ((pitch.Y > 0f) ? (MathF.Round(x: (p.Y / pitch.Y)) * pitch.Y) : p.Y),
-            z: ((pitch.Z > 0f) ? (MathF.Round(x: (p.Z / pitch.Z)) * pitch.Z) : p.Z)
-        );
-    /// <summary>The full position snap. With no reference it is the pure world-lattice snap with the magnetize
-    /// release band; with a reference it works in reference-local space, competing the object lattice against the
-    /// true face-to-face / inner-flush / center candidates per axis, face-priority winning inside the capture
-    /// radius. Returns the intent untouched when snapping is off.</summary>
-    /// <param name="intent">The un-snapped integrated cursor (the retained pre-snap intent — the
-    /// magnetize-while-dragging source of truth).</param>
-    /// <param name="config">The snap configuration.</param>
-    /// <param name="candidateLocalHalfExtents">The moved shape's half-extents along the reference frame's axes (for
-    /// true face-to-face butt-join); unused when there is no reference. Pass <see cref="Vector3.Zero"/> for
-    /// center-on-face.</param>
-    /// <param name="previousSnapped">The last committed (snapped) value, for the release-band hysteresis; pass
-    /// <paramref name="intent"/> to seed (first frame).</param>
-    /// <returns>The snapped position.</returns>
-    public static Vector3 Apply(Vector3 intent, in SnapConfig config, Vector3 candidateLocalHalfExtents, Vector3 previousSnapped) {
-        if (!config.Enabled) {
-            return intent;
-        }
+    private static Quaternion[] BuildOrientationSet(float stepDegrees) {
+        var stepCount = ((int)MathF.Round(x: (360f / stepDegrees)));
+        var unique = new List<Quaternion>();
 
-        if (config.Reference is { } reference) {
-            var inverse = Quaternion.Inverse(value: reference.Frame);
-            var local = Vector3.Transform(value: (intent - reference.Origin), rotation: inverse);
-            var previousLocal = Vector3.Transform(value: (previousSnapped - reference.Origin), rotation: inverse);
-            var snappedLocal = new Vector3(
-                x: SnapAxisCombined(value: local.X, previousValue: previousLocal.X, pitch: reference.Pitch.X, halfExtent: reference.LocalHalfExtents.X, candidateHalfExtent: candidateLocalHalfExtents.X, faceRadius: reference.FaceRadius),
-                y: SnapAxisCombined(value: local.Y, previousValue: previousLocal.Y, pitch: reference.Pitch.Y, halfExtent: reference.LocalHalfExtents.Y, candidateHalfExtent: candidateLocalHalfExtents.Y, faceRadius: reference.FaceRadius),
-                z: SnapAxisCombined(value: local.Z, previousValue: previousLocal.Z, pitch: reference.Pitch.Z, halfExtent: reference.LocalHalfExtents.Z, candidateHalfExtent: candidateLocalHalfExtents.Z, faceRadius: reference.FaceRadius)
-            );
+        for (var xi = 0; (xi < stepCount); xi++) {
+            for (var yi = 0; (yi < stepCount); yi++) {
+                for (var zi = 0; (zi < stepCount); zi++) {
+                    var candidate = Quaternion.Normalize(value: Quaternion.CreateFromYawPitchRoll(
+                        pitch: float.DegreesToRadians(degrees: (xi * stepDegrees)),
+                        roll: float.DegreesToRadians(degrees: (zi * stepDegrees)),
+                        yaw: float.DegreesToRadians(degrees: (yi * stepDegrees))
+                    ));
+                    var duplicate = false;
 
-            return (reference.Origin + Vector3.Transform(value: snappedLocal, rotation: reference.Frame));
-        }
+                    foreach (var existing in unique) {
+                        if (MathF.Abs(x: Quaternion.Dot(
+                            quaternion1: candidate,
+                            quaternion2: existing
+                        )) > OrientationDedupeDot) {
+                            duplicate = true;
 
-        return new Vector3(
-            x: SnapAxisBand(value: intent.X, previousValue: previousSnapped.X, pitch: config.Pitch.X),
-            y: SnapAxisBand(value: intent.Y, previousValue: previousSnapped.Y, pitch: config.Pitch.Y),
-            z: SnapAxisBand(value: intent.Z, previousValue: previousSnapped.Z, pitch: config.Pitch.Z)
-        );
-    }
-    /// <summary>Snaps a scalar yaw (degrees) to the rotation increment — world-sculpt's yaw-only path. Off
-    /// returns the input.</summary>
-    /// <param name="yawDegrees">The yaw, degrees.</param>
-    /// <param name="mode">The rotation increment.</param>
-    /// <returns>The snapped yaw, degrees.</returns>
-    public static float SnapYawDegrees(float yawDegrees, RotationSnap mode) {
-        var step = IncrementDegrees(mode: mode);
+                            break;
+                        }
+                    }
 
-        return ((step > 0f) ? (MathF.Round(x: (yawDegrees / step)) * step) : yawDegrees);
-    }
-    /// <summary>Snaps a full orientation to the nearest coarse-orientation candidate: the nearest element of the
-    /// 24-element octahedral group (Deg90) or the richer 45°-granular set (Deg45) by geodesic distance —
-    /// argmax |dot(q, candidate)|, robust against quaternion double-cover. Off returns the input.</summary>
-    /// <param name="orientation">The orientation to snap.</param>
-    /// <param name="mode">The rotation increment.</param>
-    /// <returns>The snapped orientation (normalized).</returns>
-    public static Quaternion SnapRotation(Quaternion orientation, RotationSnap mode) {
-        var candidates = mode switch {
-            RotationSnap.Deg90 => OctahedralGroup,
-            RotationSnap.Deg45 => Deg45Set,
-            _ => null,
-        };
-
-        if (candidates is null) {
-            return orientation;
-        }
-
-        var normalized = Quaternion.Normalize(value: orientation);
-        var best = candidates[0];
-        var bestDot = -1f;
-
-        foreach (var candidate in candidates) {
-            var dot = MathF.Abs(x: Quaternion.Dot(quaternion1: normalized, quaternion2: candidate));
-
-            if (dot > bestDot) {
-                bestDot = dot;
-                best = candidate;
+                    if (!duplicate) {
+                        unique.Add(item: candidate);
+                    }
+                }
             }
         }
 
-        return best;
+        return [.. unique];
     }
-
-    // One axis of the reference-space combined pick: the face/center candidates compete with the object lattice;
-    // face priority inside the capture radius, else the nearest lattice node, else free.
-    private static float SnapAxisCombined(float value, float previousValue, float pitch, float halfExtent, float candidateHalfExtent, float faceRadius) {
-        var faceCandidate = NearestFaceCandidate(candidateHalfExtent: candidateHalfExtent, halfExtent: halfExtent, value: value);
-
-        if (MathF.Abs(x: (value - faceCandidate)) <= faceRadius) {
-            return faceCandidate;
-        }
-
-        if (pitch > 0f) {
-            return SnapAxisBand(pitch: pitch, previousValue: previousValue, value: value);
-        }
-
-        return value;
-    }
+    private static float IncrementDegrees(RotationSnap mode) =>
+        mode switch {
+            RotationSnap.Deg90 => 90f,
+            RotationSnap.Deg45 => 45f,
+            _ => 0f,
+        };
     // The nearest of the true face-to-face / inner-flush / center candidate set. The moved shape's
     // CENTER lands so its near FACE meets the reference face: outer butt-join at ±(h + candH), inner-flush at
     // ±(h - candH), center-align at 0. candH == 0 collapses to the center-on-face set {-h, 0, +h}.
@@ -222,18 +170,183 @@ public static class GridSnap {
 
         var previousOnNode = (MathF.Abs(x: ((previousValue / pitch) - MathF.Round(x: (previousValue / pitch)))) < OnNodeEpsilon);
 
-        if (previousOnNode && (MathF.Abs(x: (value - previousValue)) <= (ReleaseBandFraction * pitch))) {
+        if (
+            previousOnNode &&
+            (MathF.Abs(x: (value - previousValue)) <= (ReleaseBandFraction * pitch))
+        ) {
             return previousValue;
         }
 
         return nearest;
     }
-    private static float IncrementDegrees(RotationSnap mode) =>
-        mode switch {
-            RotationSnap.Deg90 => 90f,
-            RotationSnap.Deg45 => 45f,
-            _ => 0f,
+    // One axis of the reference-space combined pick: the face/center candidates compete with the object lattice;
+    // face priority inside the capture radius, else the nearest lattice node, else free.
+    private static float SnapAxisCombined(float value, float previousValue, float pitch, float halfExtent, float candidateHalfExtent, float faceRadius) {
+        var faceCandidate = NearestFaceCandidate(
+            candidateHalfExtent: candidateHalfExtent,
+            halfExtent: halfExtent,
+            value: value
+        );
+
+        if (MathF.Abs(x: (value - faceCandidate)) <= faceRadius) {
+            return faceCandidate;
+        }
+
+        if (pitch > 0f) {
+            return SnapAxisBand(
+                pitch: pitch,
+                previousValue: previousValue,
+                value: value
+            );
+        }
+
+        return value;
+    }
+
+    /// <summary>The full position snap. With no reference it is the pure world-lattice snap with the magnetize
+    /// release band; with a reference it works in reference-local space, competing the object lattice against the
+    /// true face-to-face / inner-flush / center candidates per axis, face-priority winning inside the capture
+    /// radius. Returns the intent untouched when snapping is off.</summary>
+    /// <param name="intent">The un-snapped integrated cursor (the retained pre-snap intent — the
+    /// magnetize-while-dragging source of truth).</param>
+    /// <param name="config">The snap configuration.</param>
+    /// <param name="candidateLocalHalfExtents">The moved shape's half-extents along the reference frame's axes (for
+    /// true face-to-face butt-join); unused when there is no reference. Pass <see cref="Vector3.Zero"/> for
+    /// center-on-face.</param>
+    /// <param name="previousSnapped">The last committed (snapped) value, for the release-band hysteresis; pass
+    /// <paramref name="intent"/> to seed (first frame).</param>
+    /// <returns>The snapped position.</returns>
+    public static Vector3 Apply(Vector3 intent, in SnapConfig config, Vector3 candidateLocalHalfExtents, Vector3 previousSnapped) {
+        if (!config.Enabled) {
+            return intent;
+        }
+
+        if (config.Reference is { } reference) {
+            var inverse = Quaternion.Inverse(value: reference.Frame);
+            var local = Vector3.Transform(
+                value: (intent - reference.Origin),
+                rotation: inverse
+            );
+            var previousLocal = Vector3.Transform(
+                value: (previousSnapped - reference.Origin),
+                rotation: inverse
+            );
+            var snappedLocal = new Vector3(
+                x: SnapAxisCombined(
+                    value: local.X,
+                    previousValue: previousLocal.X,
+                    pitch: reference.Pitch.X,
+                    halfExtent: reference.LocalHalfExtents.X,
+                    candidateHalfExtent: candidateLocalHalfExtents.X,
+                    faceRadius: reference.FaceRadius
+                ),
+                y: SnapAxisCombined(
+                    value: local.Y,
+                    previousValue: previousLocal.Y,
+                    pitch: reference.Pitch.Y,
+                    halfExtent: reference.LocalHalfExtents.Y,
+                    candidateHalfExtent: candidateLocalHalfExtents.Y,
+                    faceRadius: reference.FaceRadius
+                ),
+                z: SnapAxisCombined(
+                    value: local.Z,
+                    previousValue: previousLocal.Z,
+                    pitch: reference.Pitch.Z,
+                    halfExtent: reference.LocalHalfExtents.Z,
+                    candidateHalfExtent: candidateLocalHalfExtents.Z,
+                    faceRadius: reference.FaceRadius
+                )
+            );
+
+            return (reference.Origin + Vector3.Transform(
+                value: snappedLocal,
+                rotation: reference.Frame
+            ));
+        }
+
+        return new Vector3(
+            x: SnapAxisBand(
+                value: intent.X,
+                previousValue: previousSnapped.X,
+                pitch: config.Pitch.X
+            ),
+            y: SnapAxisBand(
+                value: intent.Y,
+                previousValue: previousSnapped.Y,
+                pitch: config.Pitch.Y
+            ),
+            z: SnapAxisBand(
+                value: intent.Z,
+                previousValue: previousSnapped.Z,
+                pitch: config.Pitch.Z
+            )
+        );
+    }
+    /// <summary>Snaps a full orientation to the nearest coarse-orientation candidate: the nearest element of the
+    /// 24-element octahedral group (Deg90) or the richer 45°-granular set (Deg45) by geodesic distance —
+    /// argmax |dot(q, candidate)|, robust against quaternion double-cover. Off returns the input.</summary>
+    /// <param name="orientation">The orientation to snap.</param>
+    /// <param name="mode">The rotation increment.</param>
+    /// <returns>The snapped orientation (normalized).</returns>
+    public static Quaternion SnapRotation(Quaternion orientation, RotationSnap mode) {
+        var candidates = mode switch {
+            RotationSnap.Deg90 => OctahedralGroup,
+            RotationSnap.Deg45 => Deg45Set,
+            _ => null,
         };
+
+        if (candidates is null) {
+            return orientation;
+        }
+
+        var normalized = Quaternion.Normalize(value: orientation);
+        var best = candidates[0];
+        var bestDot = -1f;
+
+        foreach (var candidate in candidates) {
+            var dot = MathF.Abs(x: Quaternion.Dot(
+                quaternion1: normalized,
+                quaternion2: candidate
+            ));
+
+            if (dot > bestDot) {
+                bestDot = dot;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+    /// <summary>Snaps a world-space position to the world lattice (origin at world 0), per axis: a pitch component
+    /// &lt;= 0 leaves that axis free.</summary>
+    /// <param name="p">The candidate position.</param>
+    /// <param name="pitch">The per-axis lattice pitch.</param>
+    /// <returns>The snapped position.</returns>
+    public static Vector3 SnapToWorldLattice(Vector3 p, Vector3 pitch) =>
+        new(
+            x: ((pitch.X > 0f)
+            ? (MathF.Round(x: (p.X / pitch.X)) * pitch.X)
+            : p.X),
+            y: ((pitch.Y > 0f)
+            ? (MathF.Round(x: (p.Y / pitch.Y)) * pitch.Y)
+            : p.Y),
+            z: ((pitch.Z > 0f)
+            ? (MathF.Round(x: (p.Z / pitch.Z)) * pitch.Z)
+            : p.Z)
+        );
+    /// <summary>Snaps a scalar yaw (degrees) to the rotation increment — world-sculpt's yaw-only path. Off
+    /// returns the input.</summary>
+    /// <param name="yawDegrees">The yaw, degrees.</param>
+    /// <param name="mode">The rotation increment.</param>
+    /// <returns>The snapped yaw, degrees.</returns>
+    public static float SnapYawDegrees(float yawDegrees, RotationSnap mode) {
+        var step = IncrementDegrees(mode: mode);
+
+        return ((step > 0f)
+            ? (MathF.Round(x: (yawDegrees / step)) * step)
+            : yawDegrees
+        );
+    }
 
     // The 24-element proper octahedral (cube) rotation group and the richer 45°-granular candidate set, precomputed
     // once. Both are generated by composing coordinate-axis rotations at the increment and deduplicating by
@@ -241,36 +354,4 @@ public static class GridSnap {
     // gimbal ambiguity into the result.
     private static readonly Quaternion[] OctahedralGroup = BuildOrientationSet(stepDegrees: 90f);
     private static readonly Quaternion[] Deg45Set = BuildOrientationSet(stepDegrees: 45f);
-
-    private static Quaternion[] BuildOrientationSet(float stepDegrees) {
-        var stepCount = ((int)MathF.Round(x: (360f / stepDegrees)));
-        var unique = new List<Quaternion>();
-
-        for (var xi = 0; (xi < stepCount); xi++) {
-            for (var yi = 0; (yi < stepCount); yi++) {
-                for (var zi = 0; (zi < stepCount); zi++) {
-                    var candidate = Quaternion.Normalize(value: Quaternion.CreateFromYawPitchRoll(
-                        pitch: float.DegreesToRadians(degrees: (xi * stepDegrees)),
-                        roll: float.DegreesToRadians(degrees: (zi * stepDegrees)),
-                        yaw: float.DegreesToRadians(degrees: (yi * stepDegrees))
-                    ));
-                    var duplicate = false;
-
-                    foreach (var existing in unique) {
-                        if (MathF.Abs(x: Quaternion.Dot(quaternion1: candidate, quaternion2: existing)) > OrientationDedupeDot) {
-                            duplicate = true;
-
-                            break;
-                        }
-                    }
-
-                    if (!duplicate) {
-                        unique.Add(item: candidate);
-                    }
-                }
-            }
-        }
-
-        return [.. unique];
-    }
 }

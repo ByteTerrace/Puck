@@ -9,9 +9,10 @@ public sealed partial class WorldServer {
     /// together with this world. It cannot be replaced during an activation.</summary>
     public void ConstrainTransferAuthorities(Func<string, bool> allowed) {
         ArgumentNullException.ThrowIfNull(allowed);
-        if (m_transferAuthorityAllowed is not null) { throw new InvalidOperationException("transfer boundary is already installed"); }
+        if (m_transferAuthorityAllowed is not null) { throw new InvalidOperationException(message: "transfer boundary is already installed"); }
         m_transferAuthorityAllowed = allowed;
     }
+
     // Re-materializes every live federation stream's latest device state into this authority tick. A row is
     // accepted only while the same peer principal still occupies its slot; an onward transfer leaves the old row
     // inert, and slot reuse can never inherit it. ApplyIntentSubmission remains the one Drive/grant/input-hold door.
@@ -66,7 +67,10 @@ public sealed partial class WorldServer {
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns>Whether the commit is authoritative at this destination.</returns>
     public bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
-        if (m_transferAuthorityAllowed is not null && !m_transferAuthorityAllowed(sourceAuthority)) {
+        if (
+            (m_transferAuthorityAllowed is not null) &&
+            !m_transferAuthorityAllowed(sourceAuthority)
+        ) {
             reason = "closed rewind group refuses an external transfer"; return false;
         }
         var resolvedReason = string.Empty;
@@ -129,9 +133,9 @@ public sealed partial class WorldServer {
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
     /// <returns>The destination's verdict and assigned body indices.</returns>
     public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) =>
-        ExecuteAuthorityOperation(operation: () => m_transferAuthorityAllowed is not null && !m_transferAuthorityAllowed(request.SourceAuthority)
-            ? WorldTransferReservationReply.Refused("closed rewind group refuses an external transfer")
-            : m_transferEscrow.Reserve(request: request));
+        ExecuteAuthorityOperation(operation: () => (((m_transferAuthorityAllowed is not null) && !m_transferAuthorityAllowed(request.SourceAuthority))
+            ? WorldTransferReservationReply.Refused(reason: "closed rewind group refuses an external transfer")
+            : m_transferEscrow.Reserve(request: request)));
     /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
         var credential = mobility;

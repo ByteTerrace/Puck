@@ -59,23 +59,45 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
 
         if (
             (RateNumerator != 0) &&
-            (currentTick > ((ulong)Math.Max(val1: EpochTick, val2: 0L)))
+            (currentTick > ((ulong)Math.Max(
+            val1: EpochTick,
+            val2: 0L
+        )))
         ) {
             var scale = ((row.Kind == CellKind.Fixed)
                 ? (1L << FixedQ4816.FractionBitCount)
                 : 1L
             );
-            var elapsed = (currentTick - ((ulong)Math.Max(val1: EpochTick, val2: 0L)));
+            var elapsed = (currentTick - ((ulong)Math.Max(
+                val1: EpochTick,
+                val2: 0L
+            )));
 
-            if (TryAccumulate(elapsed: elapsed, scale: scale, magnitude: out var magnitude)) {
-                delta = ((RateNumerator < 0) ? -magnitude : magnitude);
+            if (TryAccumulate(
+                elapsed: elapsed,
+                magnitude: out var magnitude,
+                scale: scale
+            )) {
+                delta = ((RateNumerator < 0)
+                    ? -magnitude
+                    : magnitude
+                );
             } else {
                 // A magnitude past long.MaxValue can still land inside long once the base is added (a drain from a
                 // positive base), so the sum is formed exactly and saturated as a whole rather than the magnitude alone.
-                var wide = AccumulatedMagnitude(elapsed: elapsed, scale: scale);
-                var exact = (baseValue + ((RateNumerator < 0) ? -wide : wide));
+                var wide = AccumulatedMagnitude(
+                    elapsed: elapsed,
+                    scale: scale
+                );
+                var exact = (baseValue + ((RateNumerator < 0)
+                    ? -wide
+                    : wide));
 
-                return row.ClampToEnvelope(value: ((exact > long.MaxValue) ? long.MaxValue : ((exact < long.MinValue) ? long.MinValue : ((long)exact))));
+                return row.ClampToEnvelope(value: ((exact > long.MaxValue)
+                    ? long.MaxValue
+                    : ((exact < long.MinValue)
+                        ? long.MinValue
+                        : ((long)exact))));
             }
         }
 
@@ -84,8 +106,13 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
         // moves it to the same side. Stating the envelope once (StateRow.ClampToEnvelope) is what keeps this read
         // clamp and the rule-effect write's "could this move the cell" test from drifting apart.
         var raw = ((delta >= 0L)
-            ? ((baseValue > (long.MaxValue - delta)) ? long.MaxValue : (baseValue + delta))
-            : ((baseValue < (long.MinValue - delta)) ? long.MinValue : (baseValue + delta)));
+            ? ((baseValue > (long.MaxValue - delta))
+                ? long.MaxValue
+                : (baseValue + delta))
+            : ((baseValue < (long.MinValue - delta))
+                ? long.MinValue
+                : (baseValue + delta)
+        ));
 
         return row.ClampToEnvelope(value: raw);
     }
@@ -101,10 +128,10 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
             compiled.IsValid &&
             (elapsed <= long.MaxValue) &&
             compiled.TryAmountBetween(
-                amount: out magnitude,
-                end: ((long)elapsed),
-                start: 0L
-            )
+            amount: out magnitude,
+            end: ((long)elapsed),
+            start: 0L
+        )
         ) {
             return true;
         }
@@ -114,24 +141,39 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
         return false;
     }
     private BigInteger AccumulatedMagnitude(ulong elapsed, long scale) =>
-        (TryAccumulate(elapsed: elapsed, scale: scale, magnitude: out var magnitude)
+        (TryAccumulate(
+            elapsed: elapsed,
+            magnitude: out var magnitude,
+            scale: scale
+        )
             ? magnitude
             : ExactMeasure(scale: scale).AmountBetween(
                 end: elapsed,
                 start: BigInteger.Zero
-            ));
+            )
+        );
     private CompiledDiscreteMeasure64 CompiledFor(long scale) {
         var cache = m_compiled;
 
         // The rate fields are the cache key, so a `with` copy that changes the rate recompiles on its first read
         // rather than answering from the copied cache; the holder is one immutable reference, so a concurrent reader
         // sees either the old cache or the new one. Each scale compiles on its first read only.
-        if ((cache is null) || (cache.RateNumerator != RateNumerator) || (cache.RateDenominator != RateDenominator)) {
-            cache = new CompiledMeasureCache(RateNumerator: RateNumerator, RateDenominator: RateDenominator);
+        if (
+            (cache is null) ||
+            (cache.RateNumerator != RateNumerator) ||
+            (cache.RateDenominator != RateDenominator)
+        ) {
+            cache = new CompiledMeasureCache(
+                RateNumerator: RateNumerator,
+                RateDenominator: RateDenominator
+            );
             m_compiled = cache;
         }
 
-        return cache.For(advance: this, scale: scale);
+        return cache.For(
+            advance: this,
+            scale: scale
+        );
     }
     private DiscreteMeasure ExactMeasure(long scale) =>
         DiscreteMeasure.Rational(
@@ -144,7 +186,11 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
     public bool Equals(StateAdvance? other) =>
         ((other is not null) && (RateNumerator == other.RateNumerator) && (RateDenominator == other.RateDenominator) && (EpochTick == other.EpochTick));
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(value1: RateNumerator, value2: RateDenominator, value3: EpochTick);
+    public override int GetHashCode() => HashCode.Combine(
+        value1: RateNumerator,
+        value2: RateDenominator,
+        value3: EpochTick
+    );
 
     // Runtime acceleration beside the immutable record, excluded from its equality above. Invalid compiled values are
     // cached too, so an exact-only rate does not retry compilation on every read.
@@ -157,17 +203,24 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
         public long RateNumerator { get; } = RateNumerator;
         public long RateDenominator { get; } = RateDenominator;
 
-        public CompiledDiscreteMeasure64 For(StateAdvance advance, long scale) {
-            if (scale == FixedQ4816.One.Value) {
-                return (m_fixed ??= Compile(advance: advance, scale: scale));
-            }
-
-            return (m_integer ??= Compile(advance: advance, scale: scale));
-        }
         private static CompiledDiscreteMeasure64 Compile(StateAdvance advance, long scale) {
             _ = advance.ExactMeasure(scale: scale).TryCompileInt64(compiled: out var compiled);
 
             return compiled;
+        }
+
+        public CompiledDiscreteMeasure64 For(StateAdvance advance, long scale) {
+            if (scale == FixedQ4816.One.Value) {
+                return (m_fixed ??= Compile(
+                    advance: advance,
+                    scale: scale
+                ));
+            }
+
+            return (m_integer ??= Compile(
+                advance: advance,
+                scale: scale
+            ));
         }
     }
 }

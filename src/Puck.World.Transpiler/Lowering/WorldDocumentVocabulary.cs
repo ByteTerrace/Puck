@@ -1,4 +1,4 @@
-﻿using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 
 namespace Puck.World.Transpiler.Lowering;
@@ -11,12 +11,15 @@ public sealed class WorldDocumentVocabulary : IDocumentVocabulary {
 
     /// <inheritdoc />
     public UnitDimension ClassifyField(string fieldKey) => WorldDocumentEmitterUnits.Classify(fieldKey: fieldKey);
-
     /// <inheritdoc />
     /// <remarks>Only the camera-program ops take positional arguments; everything else is written by name and falls
     /// through to the generic <c>arg&lt;n&gt;</c> spelling.</remarks>
     public string? NameCallArgument(string callName, int positionalIndex) {
-        if (string.Equals(a: callName, b: "orbit", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(
+            a: callName,
+            b: "orbit",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             return positionalIndex switch {
                 0 => "distance",
                 1 => "pitch",
@@ -25,7 +28,11 @@ public sealed class WorldDocumentVocabulary : IDocumentVocabulary {
             };
         }
 
-        if (string.Equals(a: callName, b: "fieldOfView", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(
+            a: callName,
+            b: "fieldOfView",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             return "fieldOfViewRadians";
         }
 

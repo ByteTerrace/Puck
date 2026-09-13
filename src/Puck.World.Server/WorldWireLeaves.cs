@@ -12,18 +12,23 @@ namespace Puck.World.Server;
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
 /// discipline everywhere.</summary>
 internal static class WorldWireLeaves {
-    /// <summary>Writes a <see cref="WorldEntityAddress"/>.</summary>
-    public static void WriteEntityAddress(WireWriter writer, WorldEntityAddress address) {
-        writer.WriteString(value: address.Authority);
-        writer.WriteInt32(value: address.Index);
-        writer.WriteInt32(value: address.Generation);
-    }
     /// <summary>Reads a <see cref="WorldEntityAddress"/>, refusing a blank authority.</summary>
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
         Authority: reader.ReadRequiredString(field: "entity address authority"),
         Index: reader.ReadInt32(),
         Generation: reader.ReadInt32()
     );
+    /// <summary>Reads a <see cref="WorldMobilityIdentity"/>.</summary>
+    public static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
+        Incarnation: ReadEntityAddress(reader: ref reader),
+        Epoch: reader.ReadUInt64()
+    );
+    /// <summary>Writes a <see cref="WorldEntityAddress"/>.</summary>
+    public static void WriteEntityAddress(WireWriter writer, WorldEntityAddress address) {
+        writer.WriteString(value: address.Authority);
+        writer.WriteInt32(value: address.Index);
+        writer.WriteInt32(value: address.Generation);
+    }
     /// <summary>Writes a <see cref="WorldMobilityIdentity"/>. Kept <c>Action&lt;WireWriter, WorldMobilityIdentity&gt;</c>-shaped
     /// (no <see langword="in"/> parameter) so it keeps serving as a bare method-group argument to the checkpoint
     /// codec's generic <c>WriteOptional</c>/<c>WriteArray</c> helpers.</summary>
@@ -34,9 +39,4 @@ internal static class WorldWireLeaves {
         );
         writer.WriteUInt64(value: mobility.Epoch);
     }
-    /// <summary>Reads a <see cref="WorldMobilityIdentity"/>.</summary>
-    public static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
-        Incarnation: ReadEntityAddress(reader: ref reader),
-        Epoch: reader.ReadUInt64()
-    );
 }

@@ -19,10 +19,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// </summary>
 internal static class HashDivergenceProbe {
-    // One dot-accurate frame is 154 scanlines of 456 CPU T-cycles at normal speed (PostMachine.TCyclesPerFrame = their
-    // product). The fine mode compares at each scanline boundary; the coarse mode at each frame boundary.
-    private const int ScanlineCycles = 456;
-    private const int ScanlinesPerFrame = 154;
     // SystemMemory's fixed save order (SystemMemory.SaveState): the two 4-byte bank selects, then video RAM
     // (2 * 0x2000), then work RAM (8 * 0x1000), then OAM, then high RAM. The deliberate perturbation targets a work-RAM
     // byte in a high bank the synthetic ROM's WRAM-fill loop (which touches only bank 0, 0xC000-0xC0FF) never rewrites,
@@ -30,7 +26,93 @@ internal static class HashDivergenceProbe {
     // section: 8 (bank selects) + 0x4000 (video RAM) + 0x4000 (into work-RAM bank 4). Annotation only for the report.
     private const string PerturbSectionName = "SystemMemory";
     private const int PerturbSectionOffset = ((8 + 0x4000) + 0x4000);
+    // One dot-accurate frame is 154 scanlines of 456 CPU T-cycles at normal speed (PostMachine.TCyclesPerFrame = their
+    // product). The fine mode compares at each scanline boundary; the coarse mode at each frame boundary.
+    private const int ScanlineCycles = 456;
+    private const int ScanlinesPerFrame = 154;
 
+    private static ConsoleModel ModelFromHeader(byte[] rom) =>
+        (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
+            ? ConsoleModel.CgbE
+            : ConsoleModel.DmgC
+        );
+    // Corrupts one work-RAM byte in `machine` without spending any bus cycle: snapshot it, flip a byte inside the
+    // SystemMemory section's high work-RAM banks (which the synthetic ROM never touches), then restore the poked
+    // snapshot into the same machine. Restore repositions every component to exactly this instant, so the only
+    // observable change is the one flipped byte — a surgical, deterministic divergence for testing the localizer.
+    private static void Perturb(Machine machine) {
+        var snapshot = machine.Snapshot();
+        var section = SnapshotDivergence.FindSectionByName(
+            sections: snapshot.Sections,
+            name: PerturbSectionName
+        );
+        var absoluteOffset = (section.Offset + PerturbSectionOffset);
+        var current = snapshot.Data[absoluteOffset];
+        var poked = snapshot.WithPokedByte(
+            offset: absoluteOffset,
+            value: ((byte)(current ^ 0xFF))
+        );
+
+        machine.Restore(snapshot: poked);
+    }
+    // Advances a machine until its master clock reaches an absolute cumulative cycle target (a no-op when already past
+    // it). It steps atomic instructions (or bare T-cycles with no bus master) rather than Machine.Run, because Run's
+    // pacing accumulator is reanchored by a snapshot restore — so an absolute target reached through Run would desync a
+    // perturbed machine's clock by the last instruction's overshoot. Stepping to the absolute cycle keeps two machines
+    // bit-for-bit cycle-aligned even after one is perturbed via snapshot/restore.
+    private static void RunTo(Machine machine, long target) {
+        if (machine.HasBusMaster) {
+            while (machine.Clock.CycleCount < ((ulong)target)) {
+                machine.StepInstruction();
+            }
+        } else {
+            while (machine.Clock.CycleCount < ((ulong)target)) {
+                machine.StepTick();
+            }
+        }
+    }
+    // Snapshot-hashes both machines and, on a mismatch, prints the full localization report. Returns false (and has
+    // already printed the report) on divergence, so the caller can stop the lockstep immediately.
+    private static bool TryCompare(Machine machineA, Machine machineB, int frame, int? scanline) {
+        var where = ((scanline is not null)
+            ? $"frame {frame} scanline {scanline}"
+            : $"frame {frame}"
+        );
+
+        return HashDivergenceReport.TryCompare<MachineSnapshot, MachineIdentity, Tick>(
+            snapshotA: machineA.Snapshot(),
+            snapshotB: machineB.Snapshot(),
+            where: where,
+            describeDivergence: DescribeDivergence
+        );
+    }
+
+    /// <summary>
+    /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
+    /// "component 'SystemMemory', byte offset 32776 within component (absolute 32784)" rather than a bare "mismatch".
+    /// Shared by the CLI report and by a POST stage's failure detail (a plain string, no console output).
+    /// </summary>
+    /// <param name="a">The first snapshot.</param>
+    /// <param name="b">The second snapshot.</param>
+    /// <returns>The one-line localization detail.</returns>
+    public static string DescribeDivergence(MachineSnapshot a, MachineSnapshot b) {
+        var diff = SnapshotDivergence.FindFirstDifference(
+            a: a.Data,
+            b: b.Data,
+            sections: a.Sections
+        );
+
+        if (diff is null) {
+            return ((a.Identity != b.Identity)
+                ? $"snapshots hold no byte difference, but their machine identity differs (format version / model / ROM) — {a.Identity} vs {b.Identity}"
+                : $"snapshots hold no byte difference, but their captured instant differs — takenAt {a.TakenAt} vs {b.TakenAt}"
+            );
+        }
+
+        var (section, offsetInSection, absoluteOffset) = diff.Value;
+
+        return $"component '{section}', byte offset {offsetInSection} within component (absolute {absoluteOffset})";
+    }
     /// <summary>
     /// Runs the lockstep self-check (or, with <paramref name="romBPath"/> / <paramref name="perturbAtFrame"/>, the
     /// deliberate-divergence proof). Prints progress and the divergence report to stdout. A
@@ -118,7 +200,8 @@ internal static class HashDivergenceProbe {
             ? $"romA={romALabel} romB={romBLabel}"
             : ((perturbAtFrame is not null)
                 ? $"rom={romALabel} (self-check + deliberate perturbation @frame {perturbAtFrame})"
-                : $"rom={romALabel} (self-check)"));
+                : $"rom={romALabel} (self-check)"
+        ));
 
         Console.WriteLine(value: $"== hash-divergence localizer: {mode} ({model}), {frames} frames{(fine
             ? ", --fine (per-scanline)"
@@ -188,83 +271,4 @@ internal static class HashDivergenceProbe {
 
         return 0;
     }
-    /// <summary>
-    /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
-    /// "component 'SystemMemory', byte offset 32776 within component (absolute 32784)" rather than a bare "mismatch".
-    /// Shared by the CLI report and by a POST stage's failure detail (a plain string, no console output).
-    /// </summary>
-    /// <param name="a">The first snapshot.</param>
-    /// <param name="b">The second snapshot.</param>
-    /// <returns>The one-line localization detail.</returns>
-    public static string DescribeDivergence(MachineSnapshot a, MachineSnapshot b) {
-        var diff = SnapshotDivergence.FindFirstDifference(
-            a: a.Data,
-            b: b.Data,
-            sections: a.Sections
-        );
-
-        if (diff is null) {
-            return ((a.Identity != b.Identity)
-                ? $"snapshots hold no byte difference, but their machine identity differs (format version / model / ROM) — {a.Identity} vs {b.Identity}"
-                : $"snapshots hold no byte difference, but their captured instant differs — takenAt {a.TakenAt} vs {b.TakenAt}");
-        }
-
-        var (section, offsetInSection, absoluteOffset) = diff.Value;
-
-        return $"component '{section}', byte offset {offsetInSection} within component (absolute {absoluteOffset})";
-    }
-
-    // Snapshot-hashes both machines and, on a mismatch, prints the full localization report. Returns false (and has
-    // already printed the report) on divergence, so the caller can stop the lockstep immediately.
-    private static bool TryCompare(Machine machineA, Machine machineB, int frame, int? scanline) {
-        var where = ((scanline is not null)
-            ? $"frame {frame} scanline {scanline}"
-            : $"frame {frame}");
-
-        return HashDivergenceReport.TryCompare<MachineSnapshot, MachineIdentity, Tick>(
-            snapshotA: machineA.Snapshot(),
-            snapshotB: machineB.Snapshot(),
-            where: where,
-            describeDivergence: DescribeDivergence
-        );
-    }
-    // Corrupts one work-RAM byte in `machine` without spending any bus cycle: snapshot it, flip a byte inside the
-    // SystemMemory section's high work-RAM banks (which the synthetic ROM never touches), then restore the poked
-    // snapshot into the same machine. Restore repositions every component to exactly this instant, so the only
-    // observable change is the one flipped byte — a surgical, deterministic divergence for testing the localizer.
-    private static void Perturb(Machine machine) {
-        var snapshot = machine.Snapshot();
-        var section = SnapshotDivergence.FindSectionByName(
-            sections: snapshot.Sections,
-            name: PerturbSectionName
-        );
-        var absoluteOffset = (section.Offset + PerturbSectionOffset);
-        var current = snapshot.Data[absoluteOffset];
-        var poked = snapshot.WithPokedByte(
-            offset: absoluteOffset,
-            value: ((byte)(current ^ 0xFF))
-        );
-
-        machine.Restore(snapshot: poked);
-    }
-    // Advances a machine until its master clock reaches an absolute cumulative cycle target (a no-op when already past
-    // it). It steps atomic instructions (or bare T-cycles with no bus master) rather than Machine.Run, because Run's
-    // pacing accumulator is reanchored by a snapshot restore — so an absolute target reached through Run would desync a
-    // perturbed machine's clock by the last instruction's overshoot. Stepping to the absolute cycle keeps two machines
-    // bit-for-bit cycle-aligned even after one is perturbed via snapshot/restore.
-    private static void RunTo(Machine machine, long target) {
-        if (machine.HasBusMaster) {
-            while (machine.Clock.CycleCount < ((ulong)target)) {
-                machine.StepInstruction();
-            }
-        } else {
-            while (machine.Clock.CycleCount < ((ulong)target)) {
-                machine.StepTick();
-            }
-        }
-    }
-    private static ConsoleModel ModelFromHeader(byte[] rom) =>
-        (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-        ? ConsoleModel.CgbE
-        : ConsoleModel.DmgC);
 }

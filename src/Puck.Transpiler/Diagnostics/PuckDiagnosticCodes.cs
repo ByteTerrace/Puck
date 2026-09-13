@@ -4,182 +4,127 @@ namespace Puck.Transpiler.Diagnostics;
 /// constant here rather than a literal, so a code cannot be minted twice for two different meanings. A retired code
 /// stays declared and unused rather than being recycled.</summary>
 public static class PuckDiagnosticCodes {
-    /// <summary>A syntax error with no more specific code.</summary>
-    public const string Syntax = "PUCK001";
-
-    /// <summary>Operand text that <c>ExpressionSpelling</c> refused.</summary>
-    public const string OperandParse = "PUCK002";
-
-    /// <summary>A row reference that resolved to something other than exactly one state-row read.</summary>
-    public const string RowReferenceExpected = "PUCK003";
-
-    /// <summary>A chained comparison in one <c>when</c> clause.</summary>
-    public const string ChainedComparison = "PUCK004";
-
-    /// <summary>A kind annotation naming something other than an admitted cell kind.</summary>
-    public const string UnknownKindAnnotation = "PUCK005";
-
-    /// <summary>A <c>bind</c> missing its required kind annotation.</summary>
-    public const string BindKindMissing = "PUCK006";
-
-    /// <summary>A <c>bind</c> missing or carrying an unparsable initializer.</summary>
-    public const string BindInitializerMissing = "PUCK007";
-
-    /// <summary>An effect statement outside an effects-accumulating body.</summary>
-    public const string EffectOutsideEffectsBody = "PUCK008";
-
-    /// <summary>A right-hand side whose shape the destination effect's own fields cannot carry.</summary>
-    public const string EffectRhsShape = "PUCK009";
-
-    /// <summary>A <c>schedule ... in</c> delay missing a unit the seconds dimension admits.</summary>
-    public const string ScheduleDelayUnit = "PUCK010";
-
-    /// <summary>A <c>rule</c> block missing its quoted name.</summary>
-    public const string RuleNameMissing = "PUCK011";
-
-    /// <summary>More than one <c>when</c> clause in one rule or option body.</summary>
-    public const string DuplicateWhen = "PUCK012";
-
-    /// <summary>A decision construct outside its required enclosing block, or an <c>option</c> missing its score.</summary>
-    public const string DecisionStructure = "PUCK013";
-
-    /// <summary>An <c>onFailure</c> outside a <c>transaction</c>, or a second one inside the same transaction.</summary>
-    public const string OnFailureStructure = "PUCK014";
-
-    /// <summary>An unresolved <c>let</c> reference.</summary>
-    public const string UnresolvedLet = "PUCK015";
-
-    /// <summary>An import target that does not exist.</summary>
-    public const string ImportTargetMissing = "PUCK016";
-
-    /// <summary>An import graph defect (cycle, duplicate alias).</summary>
-    public const string ImportGraph = "PUCK017";
-
-    /// <summary>A reserved word used where a name was expected.</summary>
-    public const string ReservedWordAsName = "PUCK018";
-
-    /// <summary>A nested <c>transaction</c>.</summary>
-    public const string NestedTransaction = "PUCK019";
-
-    /// <summary>A template defect (unknown template, arity mismatch).</summary>
-    public const string Template = "PUCK020";
-
-    /// <summary>An addon payload defect.</summary>
-    public const string AddonPayload = "PUCK021";
-
     /// <summary>An addon hash defect.</summary>
     public const string AddonHash = "PUCK023";
-
-    /// <summary>A unit suffix on a field the dimension table does not cover.</summary>
-    public const string UnitOnUnknownField = "PUCK024";
-
-    /// <summary>A unit suffix the field's own dimension does not admit.</summary>
-    public const string UnitNotAdmitted = "PUCK025";
-
-    /// <summary>A <c>rule</c> block carrying no effect statements.</summary>
-    public const string RuleWithoutEffects = "PUCK026";
-
-    /// <summary>A <c>shape</c> naming an unrecognized primitive type.</summary>
-    public const string UnknownShapeType = "PUCK027";
-
-    /// <summary>A placement authoring both the bare <c>solid</c> flag and an explicit override.</summary>
-    public const string SolidSpelledTwice = "PUCK028";
-
-    /// <summary>A <c>decision</c> missing its required <c>periodSeconds</c>.</summary>
-    public const string DecisionPeriodMissing = "PUCK029";
-
-    /// <summary>An engine semantic-validation refusal.</summary>
-    public const string SemanticValidation = "PUCK030";
-
-    /// <summary>A document the engine schema rejected outright.</summary>
-    public const string SchemaRejected = "PUCK031";
-
-    /// <summary>A lowered document that would not deserialize for validation.</summary>
-    public const string DeserializeForValidation = "PUCK032";
-
-    /// <summary>A <c>shape</c> or <c>placement</c> row reusing an id already used in the same collection.</summary>
-    public const string DuplicateRowId = "PUCK033";
-
-    /// <summary>A shape or placement parent that resolves to no sibling row in the same collection.</summary>
-    public const string UnresolvedParent = "PUCK034";
-
-    /// <summary>A basis or import graph the composer refused.</summary>
-    public const string CompositionRefused = "PUCK035";
-
-    /// <summary>A statement inside a section block that the section's own grammar cannot carry.</summary>
-    public const string UnrecognizedSectionStatement = "PUCK036";
-
-    /// <summary>PUCK037: a control-flow statement (<c>if</c>, <c>repeat</c>, <c>break</c>) in a document whose rule
-    /// shape is straight-line. The language parses control flow for every vocabulary; whether one can CARRY a branch
-    /// is the vocabulary's own answer.</summary>
-    public const string UnsupportedControlFlow = "PUCK037";
-
-    /// <summary>PUCK038: a call-form gate (<c>key(left, held)</c>) in a document whose gates are comparisons
-    /// only.</summary>
-    public const string UnsupportedCallGate = "PUCK038";
-
-    /// <summary>PUCK039: a compound assignment (<c>-=</c>, <c>*=</c>, <c>&gt;&gt;=</c>, …) in a document whose
-    /// effects carry no such operator.</summary>
-    public const string UnsupportedAssignmentOperator = "PUCK039";
-
+    /// <summary>An addon payload defect.</summary>
+    public const string AddonPayload = "PUCK021";
+    /// <summary>A <c>bind</c> missing or carrying an unparsable initializer.</summary>
+    public const string BindInitializerMissing = "PUCK007";
+    /// <summary>A <c>bind</c> missing its required kind annotation.</summary>
+    public const string BindKindMissing = "PUCK006";
+    /// <summary>PUCK041: an array builtin (<c>map</c>, <c>filter</c>, <c>reduce</c>, <c>range</c>, <c>length</c>,
+    /// <c>concat</c>) called with arguments it cannot evaluate at compile time.</summary>
+    public const string BuiltinRefused = "PUCK041";
+    /// <summary>A chained comparison in one <c>when</c> clause.</summary>
+    public const string ChainedComparison = "PUCK004";
     /// <summary>PUCK040: a colon in front of a container value. A block or an array is written as a block
     /// (<c>host { }</c>, <c>cameras [ ]</c>); the colon is what marks a scalar leaf, so there is exactly one
     /// spelling for each.</summary>
     public const string ColonBeforeContainer = "PUCK040";
-
-    /// <summary>PUCK041: an array builtin (<c>map</c>, <c>filter</c>, <c>reduce</c>, <c>range</c>, <c>length</c>,
-    /// <c>concat</c>) called with arguments it cannot evaluate at compile time.</summary>
-    public const string BuiltinRefused = "PUCK041";
-
-    /// <summary>PUCK042: a lambda written where no builtin takes one. A lambda is an argument to an array builtin
-    /// and nothing else.</summary>
-    public const string LambdaOutsideBuiltin = "PUCK042";
-
-    /// <summary>PUCK043: an index read that cannot be resolved at compile time — a non-array, a fractional or
-    /// unknown ordinal, or one outside the array.</summary>
-    public const string IndexRefused = "PUCK043";
-
-    /// <summary>PUCK044: a <c>for</c> whose sequence is not an array known at compile time.</summary>
-    public const string ForSequenceRefused = "PUCK044";
-
-    /// <summary>PUCK045: a template or <c>for</c> nested past the expansion ceiling — what a template that invokes
-    /// itself looks like from inside the expander.</summary>
-    public const string TemplateExpansionTooDeep = "PUCK045";
-
+    /// <summary>A basis or import graph the composer refused.</summary>
+    public const string CompositionRefused = "PUCK035";
+    /// <summary>A <c>decision</c> missing its required <c>periodSeconds</c>.</summary>
+    public const string DecisionPeriodMissing = "PUCK029";
+    /// <summary>A decision construct outside its required enclosing block, or an <c>option</c> missing its score.</summary>
+    public const string DecisionStructure = "PUCK013";
+    /// <summary>A lowered document that would not deserialize for validation.</summary>
+    public const string DeserializeForValidation = "PUCK032";
+    /// <summary>A <c>shape</c> or <c>placement</c> row reusing an id already used in the same collection.</summary>
+    public const string DuplicateRowId = "PUCK033";
+    /// <summary>More than one <c>when</c> clause in one rule or option body.</summary>
+    public const string DuplicateWhen = "PUCK012";
+    /// <summary>An effect statement outside an effects-accumulating body.</summary>
+    public const string EffectOutsideEffectsBody = "PUCK008";
+    /// <summary>A right-hand side whose shape the destination effect's own fields cannot carry.</summary>
+    public const string EffectRhsShape = "PUCK009";
+    /// <summary>Compilation work, source size, collection size or recursive depth exceeds its limit.</summary>
+    public const string EvaluationLimit = "PUCK047";
     /// <summary>PUCK046: a <c>for</c> body assigning a field rather than emitting a row. Building a value from a
     /// sequence is <c>map</c>'s job, in value position.</summary>
     public const string ForAssignsAField = "PUCK046";
-
-    /// <summary>Compilation work, source size, collection size or recursive depth exceeds its limit.</summary>
-    public const string EvaluationLimit = "PUCK047";
-
+    /// <summary>PUCK044: a <c>for</c> whose sequence is not an array known at compile time.</summary>
+    public const string ForSequenceRefused = "PUCK044";
+    /// <summary>An import graph defect (cycle, duplicate alias).</summary>
+    public const string ImportGraph = "PUCK017";
+    /// <summary>An import target that does not exist.</summary>
+    public const string ImportTargetMissing = "PUCK016";
+    /// <summary>PUCK043: an index read that cannot be resolved at compile time — a non-array, a fractional or
+    /// unknown ordinal, or one outside the array.</summary>
+    public const string IndexRefused = "PUCK043";
     /// <summary>A compile-time value is cyclic, invalid or outside its numeric representation.</summary>
     public const string InvalidValue = "PUCK048";
-
-    /// <summary>An unused <c>let</c> binding.</summary>
-    public const string LintUnusedLet = "PUCK_LINT_001";
-
+    /// <summary>PUCK042: a lambda written where no builtin takes one. A lambda is an argument to an array builtin
+    /// and nothing else.</summary>
+    public const string LambdaOutsideBuiltin = "PUCK042";
     /// <summary>A duplicate key in one block.</summary>
     public const string LintDuplicateKey = "PUCK_LINT_002";
-
-    /// <summary>A shadowed declaration.</summary>
-    public const string LintShadowedDeclaration = "PUCK_LINT_003";
-
     /// <summary>An empty block.</summary>
     public const string LintEmptyBlock = "PUCK_LINT_004";
-
-    /// <summary>An unresolved state-row reference, or the note that resolution was skipped for a basis.</summary>
-    public const string LintUnresolvedState = "PUCK_LINT_005";
-
-    /// <summary>An unresolved <c>prototypeId</c>.</summary>
-    public const string LintUnresolvedPrototype = "PUCK_LINT_006";
-
-    /// <summary>An unresolved placement parent.</summary>
-    public const string LintUnresolvedPlacementParent = "PUCK_LINT_007";
-
-    /// <summary>An unresolved camera, view, or spawn-point reference.</summary>
-    public const string LintUnresolvedView = "PUCK_LINT_008";
-
+    /// <summary>A shadowed declaration.</summary>
+    public const string LintShadowedDeclaration = "PUCK_LINT_003";
     /// <summary>A reserved-channel prefix matching no known channel.</summary>
     public const string LintUnknownChannelPrefix = "PUCK_LINT_009";
+    /// <summary>An unresolved placement parent.</summary>
+    public const string LintUnresolvedPlacementParent = "PUCK_LINT_007";
+    /// <summary>An unresolved <c>prototypeId</c>.</summary>
+    public const string LintUnresolvedPrototype = "PUCK_LINT_006";
+    /// <summary>An unresolved state-row reference, or the note that resolution was skipped for a basis.</summary>
+    public const string LintUnresolvedState = "PUCK_LINT_005";
+    /// <summary>An unresolved camera, view, or spawn-point reference.</summary>
+    public const string LintUnresolvedView = "PUCK_LINT_008";
+    /// <summary>An unused <c>let</c> binding.</summary>
+    public const string LintUnusedLet = "PUCK_LINT_001";
+    /// <summary>A nested <c>transaction</c>.</summary>
+    public const string NestedTransaction = "PUCK019";
+    /// <summary>An <c>onFailure</c> outside a <c>transaction</c>, or a second one inside the same transaction.</summary>
+    public const string OnFailureStructure = "PUCK014";
+    /// <summary>Operand text that <c>ExpressionSpelling</c> refused.</summary>
+    public const string OperandParse = "PUCK002";
+    /// <summary>A reserved word used where a name was expected.</summary>
+    public const string ReservedWordAsName = "PUCK018";
+    /// <summary>A row reference that resolved to something other than exactly one state-row read.</summary>
+    public const string RowReferenceExpected = "PUCK003";
+    /// <summary>A <c>rule</c> block missing its quoted name.</summary>
+    public const string RuleNameMissing = "PUCK011";
+    /// <summary>A <c>rule</c> block carrying no effect statements.</summary>
+    public const string RuleWithoutEffects = "PUCK026";
+    /// <summary>A <c>schedule ... in</c> delay missing a unit the seconds dimension admits.</summary>
+    public const string ScheduleDelayUnit = "PUCK010";
+    /// <summary>A document the engine schema rejected outright.</summary>
+    public const string SchemaRejected = "PUCK031";
+    /// <summary>An engine semantic-validation refusal.</summary>
+    public const string SemanticValidation = "PUCK030";
+    /// <summary>A placement authoring both the bare <c>solid</c> flag and an explicit override.</summary>
+    public const string SolidSpelledTwice = "PUCK028";
+    /// <summary>A syntax error with no more specific code.</summary>
+    public const string Syntax = "PUCK001";
+    /// <summary>A template defect (unknown template, arity mismatch).</summary>
+    public const string Template = "PUCK020";
+    /// <summary>PUCK045: a template or <c>for</c> nested past the expansion ceiling — what a template that invokes
+    /// itself looks like from inside the expander.</summary>
+    public const string TemplateExpansionTooDeep = "PUCK045";
+    /// <summary>A unit suffix the field's own dimension does not admit.</summary>
+    public const string UnitNotAdmitted = "PUCK025";
+    /// <summary>A unit suffix on a field the dimension table does not cover.</summary>
+    public const string UnitOnUnknownField = "PUCK024";
+    /// <summary>A kind annotation naming something other than an admitted cell kind.</summary>
+    public const string UnknownKindAnnotation = "PUCK005";
+    /// <summary>A <c>shape</c> naming an unrecognized primitive type.</summary>
+    public const string UnknownShapeType = "PUCK027";
+    /// <summary>A statement inside a section block that the section's own grammar cannot carry.</summary>
+    public const string UnrecognizedSectionStatement = "PUCK036";
+    /// <summary>An unresolved <c>let</c> reference.</summary>
+    public const string UnresolvedLet = "PUCK015";
+    /// <summary>A shape or placement parent that resolves to no sibling row in the same collection.</summary>
+    public const string UnresolvedParent = "PUCK034";
+    /// <summary>PUCK039: a compound assignment (<c>-=</c>, <c>*=</c>, <c>&gt;&gt;=</c>, …) in a document whose
+    /// effects carry no such operator.</summary>
+    public const string UnsupportedAssignmentOperator = "PUCK039";
+    /// <summary>PUCK038: a call-form gate (<c>key(left, held)</c>) in a document whose gates are comparisons
+    /// only.</summary>
+    public const string UnsupportedCallGate = "PUCK038";
+    /// <summary>PUCK037: a control-flow statement (<c>if</c>, <c>repeat</c>, <c>break</c>) in a document whose rule
+    /// shape is straight-line. The language parses control flow for every vocabulary; whether one can CARRY a branch
+    /// is the vocabulary's own answer.</summary>
+    public const string UnsupportedControlFlow = "PUCK037";
 }

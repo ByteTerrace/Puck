@@ -70,12 +70,13 @@ public abstract record WorldQuery {
     public sealed record ReflowCancel : WorldQuery;
     /// <summary>Returns only the state observations admitted for the submission stamp; no caller-selected recipient.</summary>
     public sealed record StateObservations(string? Row = null) : WorldQuery;
+
     /// <summary>Returns the capability subject a submitted query must hold <see cref="WorldCapability.Observe"/>
     /// over. Body/screen read-backs narrow to their concrete target; world-wide read-backs require <c>all</c>. Kept
     /// with the closed query union so a transport/server does not need access to its intentionally internal leaves.</summary>
     /// <returns>The query's observation subject.</returns>
     public GrantSubject ObservationSubject() => this switch {
-        StateObservations { Row: { } row } => GrantSubject.State(row),
+        StateObservations { Row: { } row } => GrantSubject.State(name: row),
         PlayerWhere where => GrantSubject.Body(index: where.Index),
         PlayerChannels channels => GrantSubject.Body(index: channels.Index),
         PlayerState state => GrantSubject.Body(index: state.Index),

@@ -35,30 +35,30 @@ public sealed class PeerLink : IAsyncDisposable {
     /// <summary>The number of events <see cref="Events"/> holds before the read loop waits for the consumer.</summary>
     public const int EventsCapacity = 32;
 
+    private readonly IPeerConnection m_connection;
+    private readonly PeerIdentity m_local;
+    private readonly Func<DateTimeOffset> m_now;
+    private readonly Action<PeerLink>? m_onClosed;
+    private readonly TrustList m_remoteTrust;
+    private readonly Stream m_stream;
+    private readonly TimeProvider m_timeProvider;
+
+    private int m_closed;
+    private Task? m_readLoop;
+
     // Never disposed: SendAsync reads its token outside any lock, and a disposed source throws on that read.
     private readonly CancellationTokenSource m_closeSource = new();
-
-    private readonly IPeerConnection m_connection;
-
     private readonly Channel<PeerEvent> m_events = Channel.CreateBounded<PeerEvent>(options: new BoundedChannelOptions(capacity: EventsCapacity) {
         FullMode = BoundedChannelFullMode.Wait,
         SingleReader = true,
         SingleWriter = false,
     });
-
-    private readonly PeerIdentity m_local;
-    private readonly Func<DateTimeOffset> m_now;
-    private readonly TimeProvider m_timeProvider;
-    private readonly Action<PeerLink>? m_onClosed;
-    private readonly TrustList m_remoteTrust;
-    private readonly Stream m_stream;
-
     // Never disposed: a SemaphoreSlim holds no unmanaged resource until its wait handle is touched, and disposing
     // it under a pending WaitAsync leaves that waiter pending forever.
-    private readonly SemaphoreSlim m_writeGate = new(initialCount: 1, maxCount: 1);
-
-    private int m_closed;
-    private Task? m_readLoop;
+    private readonly SemaphoreSlim m_writeGate = new(
+        initialCount: 1,
+        maxCount: 1
+    );
 
     internal PeerLink(IPeerConnection connection, Stream stream, PeerIdentity local, KeyId remoteId, byte[] remoteSubjectPublicKeyInfo, Action<PeerLink>? onClosed, Func<DateTimeOffset>? now, TimeProvider timeProvider) {
         m_timeProvider = timeProvider;
@@ -95,6 +95,59 @@ public sealed class PeerLink : IAsyncDisposable {
     /// <summary>Gets the identity the remote side proved at handshake.</summary>
     public KeyId RemoteId { get; }
 
+    /// <summary>Starts the link's background read loop. Called once, after the caller has finished wiring up
+    /// whatever consumes <see cref="Events"/>.</summary>
+    internal void Start() => m_readLoop = Task.Run(function: ReadLoopAsync);
+
+    private async ValueTask CloseAsync(PeerFailure failure) {
+        if (Interlocked.Exchange(
+            location1: ref m_closed,
+            value: 1
+        ) != 0) {
+            return;
+        }
+
+        CloseFailure = failure;
+        m_closeSource.Cancel();
+        m_events.Writer.TryWrite(item: new PeerEvent.Closed(Failure: failure));
+        m_events.Writer.TryComplete();
+
+        // The connection goes first: a stream's graceful shutdown completes only once the peer acknowledges it or
+        // the connection beneath it dies, so disposing the stream first would park every close — and every peer
+        // dispose above it — on a vanished remote until the transport's own disconnect timeout. Closing the
+        // connection is bounded by the transport's close handshake alone, after which the stream's dispose is
+        // immediate.
+        try {
+            await m_connection.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+            await m_stream.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
+        }
+
+        m_onClosed?.Invoke(obj: this);
+    }
+    private PeerEvent DecodeMessageFrame(ReadOnlySpan<byte> body) {
+        var reader = new WireReader(bytes: body);
+        var attestationBytes = reader.ReadBlock(
+            field: "attestation",
+            maxBytes: PeerWireProtocol.MaxFrameBytes
+        );
+
+        if (!reader.TryFinish(failure: out var wireFailure)) {
+            return new PeerEvent.Refused(Failure: new PeerFailure(
+                Detail: wireFailure.ToString(),
+                Refusal: PeerRefusal.MessageMalformed
+            ));
+        }
+
+        return (TryVerifyMessage(
+            failure: out var failure,
+            payload: out var payload,
+            wire: attestationBytes
+        )
+            ? new PeerEvent.Received(Payload: payload)
+            : new PeerEvent.Refused(Failure: failure)
+        );
+    }
     private ValueTask PublishAsync(PeerEvent @event) => m_events.Writer.WriteAsync(
         cancellationToken: m_closeSource.Token,
         item: @event
@@ -170,29 +223,6 @@ public sealed class PeerLink : IAsyncDisposable {
 
         await CloseAsync(failure: failure).ConfigureAwait(continueOnCapturedContext: false);
     }
-    private PeerEvent DecodeMessageFrame(ReadOnlySpan<byte> body) {
-        var reader = new WireReader(bytes: body);
-        var attestationBytes = reader.ReadBlock(
-            field: "attestation",
-            maxBytes: PeerWireProtocol.MaxFrameBytes
-        );
-
-        if (!reader.TryFinish(failure: out var wireFailure)) {
-            return new PeerEvent.Refused(Failure: new PeerFailure(
-                Detail: wireFailure.ToString(),
-                Refusal: PeerRefusal.MessageMalformed
-            ));
-        }
-
-        return (TryVerifyMessage(
-            failure: out var failure,
-            payload: out var payload,
-            wire: attestationBytes
-        )
-            ? new PeerEvent.Received(Payload: payload)
-            : new PeerEvent.Refused(Failure: failure)
-        );
-    }
     private bool TryVerifyMessage(byte[] wire, out ReadOnlyMemory<byte> payload, out PeerFailure failure) {
         payload = default;
 
@@ -256,36 +286,6 @@ public sealed class PeerLink : IAsyncDisposable {
 
         return true;
     }
-    private async ValueTask CloseAsync(PeerFailure failure) {
-        if (Interlocked.Exchange(
-            location1: ref m_closed,
-            value: 1
-        ) != 0) {
-            return;
-        }
-
-        CloseFailure = failure;
-        m_closeSource.Cancel();
-        m_events.Writer.TryWrite(item: new PeerEvent.Closed(Failure: failure));
-        m_events.Writer.TryComplete();
-
-        // The connection goes first: a stream's graceful shutdown completes only once the peer acknowledges it or
-        // the connection beneath it dies, so disposing the stream first would park every close — and every peer
-        // dispose above it — on a vanished remote until the transport's own disconnect timeout. Closing the
-        // connection is bounded by the transport's close handshake alone, after which the stream's dispose is
-        // immediate.
-        try {
-            await m_connection.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
-            await m_stream.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
-        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
-        }
-
-        m_onClosed?.Invoke(obj: this);
-    }
-
-    /// <summary>Starts the link's background read loop. Called once, after the caller has finished wiring up
-    /// whatever consumes <see cref="Events"/>.</summary>
-    internal void Start() => m_readLoop = Task.Run(function: ReadLoopAsync);
 
     /// <summary>Closes the link as <see cref="PeerRefusal.Disposed"/> — cancelling any pending send or publish,
     /// completing <see cref="Events"/>, and disposing the connection and then the stream — then waits for the read
@@ -362,7 +362,11 @@ public sealed class PeerLink : IAsyncDisposable {
         try {
             // The deadline is the link's, not the caller's: its expiry closes the link, so the stream is only ever
             // aborted mid-frame by a close, never by a send that merely gave up waiting.
-            using var sendDeadline = new PeerDeadline(m_closeSource.Token, PeerWireProtocol.SendTimeout, m_timeProvider);
+            using var sendDeadline = new PeerDeadline(
+                m_closeSource.Token,
+                PeerWireProtocol.SendTimeout,
+                m_timeProvider
+            );
 
             await WireFrame.WriteAsync(
                 body: writer.WrittenMemory,

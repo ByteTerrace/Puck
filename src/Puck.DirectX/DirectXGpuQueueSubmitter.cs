@@ -20,17 +20,26 @@ namespace Puck.DirectX;
 public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) =>
-        Execute(commandBufferHandles: commandBufferHandles, deviceContext: deviceContext);
+        Execute(
+            commandBufferHandles: commandBufferHandles,
+            deviceContext: deviceContext
+        );
     /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         var dxContext = ((IDirectXDeviceContext)deviceContext);
 
-        Execute(commandBufferHandles: commandBufferHandles, deviceContext: deviceContext);
+        Execute(
+            commandBufferHandles: commandBufferHandles,
+            deviceContext: deviceContext
+        );
         ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: ((ID3D12CommandQueue*)dxContext.CommandQueueHandle));
     }
     /// <inheritdoc/>
     public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        Execute(commandBufferHandles: commandBufferHandles, deviceContext: deviceContext);
+        Execute(
+            commandBufferHandles: commandBufferHandles,
+            deviceContext: deviceContext
+        );
         deviceContext.WaitIdle();
     }
     /// <inheritdoc/>
@@ -48,7 +57,10 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
             lists[i] = ((ID3D12CommandList*)state.CommandList);
         }
 
-        queue->ExecuteCommandLists(NumCommandLists: ((uint)commandBufferHandles.Length), ppCommandLists: lists);
+        queue->ExecuteCommandLists(
+            NumCommandLists: ((uint)commandBufferHandles.Length),
+            ppCommandLists: lists
+        );
     }
 }
 
@@ -96,7 +108,10 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
 
         m_pendingValue = m_nextValue++;
-        commandQueue->Signal(Value: m_pendingValue, pFence: ((ID3D12Fence*)m_fence));
+        commandQueue->Signal(
+            Value: m_pendingValue,
+            pFence: ((ID3D12Fence*)m_fence)
+        );
     }
 
     /// <inheritdoc/>
@@ -108,8 +123,14 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         var fence = ((ID3D12Fence*)m_fence);
 
         if (fence->GetCompletedValue() < m_pendingValue) {
-            fence->SetEventOnCompletion(Value: m_pendingValue, hEvent: m_fenceEvent);
-            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_fenceEvent);
+            fence->SetEventOnCompletion(
+                Value: m_pendingValue,
+                hEvent: m_fenceEvent
+            );
+            _ = PInvoke.WaitForSingleObject(
+                dwMilliseconds: uint.MaxValue,
+                hHandle: m_fenceEvent
+            );
         }
 
         m_pendingValue = 0UL;

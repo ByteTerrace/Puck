@@ -24,34 +24,34 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
         m_model = model;
     }
 
-    public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node) {
-        var visited = ((InvocationExpressionSyntax)base.VisitInvocationExpression(node: node)!);
-
-        return ((Rebuild(originalCall: node, visitedList: visited.ArgumentList) is { } rebuilt) ? visited.WithArgumentList(argumentList: rebuilt) : visited);
-    }
-    public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node) {
-        var visited = ((ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node: node)!);
-
-        return (((visited.ArgumentList is { } list) && (Rebuild(originalCall: node, visitedList: list) is { } rebuilt))
-            ? visited.WithArgumentList(argumentList: rebuilt)
-            : visited);
-    }
-    public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node) {
-        var visited = ((ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node: node)!);
-
-        return ((Rebuild(originalCall: node, visitedList: visited.ArgumentList) is { } rebuilt) ? visited.WithArgumentList(argumentList: rebuilt) : visited);
-    }
-
+    // True when the parameter carries System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembersAttribute
+    // — the trim/AOT dataflow annotation that pins its argument to the declared position.
+    private static bool HasTrimAnnotation(IParameterSymbol parameter) => parameter.GetAttributes().Any(predicate: static attribute =>
+        ((attribute.AttributeClass is { Name: "DynamicallyAccessedMembersAttribute" } attributeClass)
+        && (attributeClass.ContainingNamespace.ToDisplayString() == "System.Diagnostics.CodeAnalysis")));
+    // SemanticModel only accepts nodes from its own syntax tree. Child visits may have rebuilt the
+    // argument list already, so evaluation-safety is always inspected on the original bound call.
+    private static SeparatedSyntaxList<ArgumentSyntax> OriginalArguments(SyntaxNode call) => call switch {
+        InvocationExpressionSyntax invocation => invocation.ArgumentList.Arguments,
+        ObjectCreationExpressionSyntax creation => creation.ArgumentList!.Arguments,
+        ImplicitObjectCreationExpressionSyntax creation => creation.ArgumentList.Arguments,
+        _ => default,
+    };
     // The ORIGINAL node carries the symbol (the rewritten copy is detached from the model); the VISITED
     // list supplies the already-child-rewritten argument expressions. Returns the reordered+named list,
     // or null to leave the call alone.
     private ArgumentListSyntax? Rebuild(SyntaxNode originalCall, ArgumentListSyntax? visitedList) {
-        if ((visitedList is null) || (visitedList.Arguments.Count == 0)) {
+        if (
+            (visitedList is null) ||
+            (visitedList.Arguments.Count == 0)
+        ) {
             return null;
         }
 
-        if ((m_model.GetSymbolInfo(node: originalCall).Symbol is not IMethodSymbol method)
-            || (method.MethodKind is MethodKind.FunctionPointerSignature or MethodKind.DelegateInvoke)) {
+        if (
+            (m_model.GetSymbolInfo(node: originalCall).Symbol is not IMethodSymbol method) ||
+            (method.MethodKind is MethodKind.FunctionPointerSignature or MethodKind.DelegateInvoke)
+        ) {
             return null;
         }
 
@@ -62,9 +62,11 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
 
         // A partly named call is declined: naming its positional remainder needs the argument-to-
         // parameter mapping the mix obscures. A FULLY named call is only sorted, never renamed.
-        if ((arguments.Count != parameters.Length)
-            || parameters.Any(predicate: static parameter => parameter.IsParams)
-            || ((namedCount != 0) && (namedCount != arguments.Count))) {
+        if (
+            (arguments.Count != parameters.Length) ||
+            parameters.Any(predicate: static parameter => parameter.IsParams) ||
+            ((namedCount != 0) && (namedCount != arguments.Count))
+        ) {
             return null;
         }
 
@@ -88,9 +90,17 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
         // already sit in any order), else the parameter at its position.
         var writtenNames = arguments.Select(selector: (argument, index) => (argument.NameColon?.Name.Identifier.ValueText ?? parameters[index].Name)).ToArray();
 
-        if (sortable
-            && !writtenNames.SequenceEqual(second: writtenNames.OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal))
-            && originalArguments.Any(predicate: argument => ExpressionSafety.HasSideEffect(expression: argument.Expression, model: m_model))) {
+        if (
+            sortable &&
+            !writtenNames.SequenceEqual(second: writtenNames.OrderBy(
+            keySelector: static name => name,
+            comparer: StringComparer.Ordinal
+        )) &&
+            originalArguments.Any(predicate: argument => ExpressionSafety.HasSideEffect(
+            expression: argument.Expression,
+            model: m_model
+        ))
+        ) {
             return null;
         }
 
@@ -114,38 +124,77 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
             // A parameter declared as a verbatim identifier (`object? @object`) has the bare keyword as its
             // symbol name; written back without the `@` it is a keyword again, not an argument name.
             var parameterName = parameters[index].Name;
-            var identifier = ((SyntaxFacts.GetKeywordKind(text: parameterName) != SyntaxKind.None) ? $"@{parameterName}" : parameterName);
+            var identifier = ((SyntaxFacts.GetKeywordKind(text: parameterName) != SyntaxKind.None)
+                ? $"@{parameterName}"
+                : parameterName
+            );
             var nameColon = SyntaxFactory
                 .NameColon(name: SyntaxFactory.IdentifierName(name: identifier))
                 .WithColonToken(colonToken: SyntaxFactory.Token(kind: SyntaxKind.ColonToken).WithTrailingTrivia(trivia: SyntaxFactory.Space));
             var refKind = (argument.RefKindKeyword.IsKind(kind: SyntaxKind.None)
                 ? default
-                : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space));
+                : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space)
+            );
             var bareExpression = argument.Expression.WithoutLeadingTrivia().WithoutTrailingTrivia();
 
-            entries[index] = (parameters[index].Name, SyntaxFactory.Argument(expression: bareExpression, nameColon: nameColon, refKindKeyword: refKind));
+            entries[index] = (parameters[index].Name, SyntaxFactory.Argument(
+                expression: bareExpression,
+                nameColon: nameColon,
+                refKindKeyword: refKind
+            ));
         }
 
         var ordered = (sortable
             ? entries
-                .OrderBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal)
+                .OrderBy(
+                keySelector: static entry => entry.Name,
+                comparer: StringComparer.Ordinal
+            )
                 .Select(selector: static entry => entry.Argument)
                 .ToArray()
-            : Array.ConvertAll(array: entries, converter: static entry => entry.Argument));
+            : Array.ConvertAll(
+                array: entries,
+                converter: static entry => entry.Argument
+            )
+        );
 
-        return visitedList.WithArguments(arguments: RewriteShaping.ReorderInPlace(ordered: ordered, original: arguments));
+        return visitedList.WithArguments(arguments: RewriteShaping.ReorderInPlace(
+            ordered: ordered,
+            original: arguments
+        ));
     }
-    // SemanticModel only accepts nodes from its own syntax tree. Child visits may have rebuilt the
-    // argument list already, so evaluation-safety is always inspected on the original bound call.
-    private static SeparatedSyntaxList<ArgumentSyntax> OriginalArguments(SyntaxNode call) => call switch {
-        InvocationExpressionSyntax invocation => invocation.ArgumentList.Arguments,
-        ObjectCreationExpressionSyntax creation => creation.ArgumentList!.Arguments,
-        ImplicitObjectCreationExpressionSyntax creation => creation.ArgumentList.Arguments,
-        _ => default,
-    };
-    // True when the parameter carries System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembersAttribute
-    // — the trim/AOT dataflow annotation that pins its argument to the declared position.
-    private static bool HasTrimAnnotation(IParameterSymbol parameter) => parameter.GetAttributes().Any(predicate: static attribute =>
-        ((attribute.AttributeClass is { Name: "DynamicallyAccessedMembersAttribute" } attributeClass)
-        && (attributeClass.ContainingNamespace.ToDisplayString() == "System.Diagnostics.CodeAnalysis")));
+
+    public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node) {
+        var visited = ((ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node: node)!);
+
+        return ((Rebuild(
+            originalCall: node,
+            visitedList: visited.ArgumentList
+        ) is { } rebuilt)
+            ? visited.WithArgumentList(argumentList: rebuilt)
+            : visited
+        );
+    }
+    public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node) {
+        var visited = ((InvocationExpressionSyntax)base.VisitInvocationExpression(node: node)!);
+
+        return ((Rebuild(
+            originalCall: node,
+            visitedList: visited.ArgumentList
+        ) is { } rebuilt)
+            ? visited.WithArgumentList(argumentList: rebuilt)
+            : visited
+        );
+    }
+    public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node) {
+        var visited = ((ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node: node)!);
+
+        return (((visited.ArgumentList is { } list) && (Rebuild(
+            originalCall: node,
+            visitedList: list
+        ) is { } rebuilt))
+            ? visited.WithArgumentList(argumentList: rebuilt)
+            : visited
+        );
+    }
 }

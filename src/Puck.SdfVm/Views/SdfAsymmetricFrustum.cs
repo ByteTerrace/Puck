@@ -44,6 +44,21 @@ public readonly record struct SdfAsymmetricFrustum(
     /// far side of the aperture plane. A presentation guard, not a document-authored bound.</summary>
     public const float MinEyeDepth = 0.05f;
 
+    /// <summary>Packs this fit into a <see cref="CameraSnapshot"/> apexed at <paramref name="eye"/> — reusing
+    /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> for the symmetric
+    /// half-extent (<see cref="HalfHeightTangent"/> and <see cref="HalfWidthTangent"/>/<see cref="HalfHeightTangent"/>
+    /// respectively — the aperture's own physical aspect ratio, independent of the render target's pixel dimensions)
+    /// and returning <see cref="CenterOffset"/> separately for the caller to set on
+    /// <see cref="Puck.SdfVm.SdfViewSnapshot.AsymmetricFrustumOffset"/>.</summary>
+    /// <param name="eye">The frustum's apex (the same eye <see cref="TryFit"/> was fitted against).</param>
+    public CameraSnapshot ToCameraSnapshot(Vector3 eye) => new(
+        Position: eye,
+        Right: Right,
+        Up: Up,
+        Forward: Forward,
+        TanHalfFieldOfView: HalfHeightTangent,
+        AspectRatio: (HalfWidthTangent / HalfHeightTangent)
+    );
     /// <summary>Fits an off-axis frustum whose near-plane rectangle is exactly the aperture as seen from
     /// <paramref name="eye"/>.</summary>
     /// <param name="eye">The camera's eye position, in the same space as the aperture (already mapped through any
@@ -73,7 +88,10 @@ public readonly record struct SdfAsymmetricFrustum(
         // world units out along the outward Normal, delta = d*Normal, so dot(delta, Normal) = d > 0 — the sign this
         // depth guard and every tangent term below depends on.
         var delta = (eye - apertureOrigin);
-        var depth = Vector3.Dot(vector1: delta, vector2: apertureNormal);
+        var depth = Vector3.Dot(
+            vector1: delta,
+            vector2: apertureNormal
+        );
 
         if (depth < MinEyeDepth) {
             frustum = default;
@@ -81,8 +99,14 @@ public readonly record struct SdfAsymmetricFrustum(
             return false;
         }
 
-        var offsetRight = Vector3.Dot(vector1: delta, vector2: apertureRight);
-        var offsetUp = Vector3.Dot(vector1: delta, vector2: apertureUp);
+        var offsetRight = Vector3.Dot(
+            vector1: delta,
+            vector2: apertureRight
+        );
+        var offsetUp = Vector3.Dot(
+            vector1: delta,
+            vector2: apertureUp
+        );
 
         frustum = new SdfAsymmetricFrustum(
             Right: apertureRight,
@@ -90,24 +114,12 @@ public readonly record struct SdfAsymmetricFrustum(
             Forward: -apertureNormal,
             HalfWidthTangent: (apertureHalfWidth / depth),
             HalfHeightTangent: (apertureHalfHeight / depth),
-            CenterOffset: new Vector2(x: (-offsetRight / depth), y: (-offsetUp / depth))
+            CenterOffset: new Vector2(
+                x: (-offsetRight / depth),
+                y: (-offsetUp / depth)
+            )
         );
 
         return true;
     }
-    /// <summary>Packs this fit into a <see cref="CameraSnapshot"/> apexed at <paramref name="eye"/> — reusing
-    /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> for the symmetric
-    /// half-extent (<see cref="HalfHeightTangent"/> and <see cref="HalfWidthTangent"/>/<see cref="HalfHeightTangent"/>
-    /// respectively — the aperture's own physical aspect ratio, independent of the render target's pixel dimensions)
-    /// and returning <see cref="CenterOffset"/> separately for the caller to set on
-    /// <see cref="Puck.SdfVm.SdfViewSnapshot.AsymmetricFrustumOffset"/>.</summary>
-    /// <param name="eye">The frustum's apex (the same eye <see cref="TryFit"/> was fitted against).</param>
-    public CameraSnapshot ToCameraSnapshot(Vector3 eye) => new(
-        Position: eye,
-        Right: Right,
-        Up: Up,
-        Forward: Forward,
-        TanHalfFieldOfView: HalfHeightTangent,
-        AspectRatio: (HalfWidthTangent / HalfHeightTangent)
-    );
 }

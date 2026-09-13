@@ -73,7 +73,10 @@ public static class WorldSiloDefinitionValidator {
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(value: definition.Store.Type) || (definition.Store.Settings.ValueKind != JsonValueKind.Object)) {
+        if (
+            string.IsNullOrWhiteSpace(value: definition.Store.Type) ||
+            (definition.Store.Settings.ValueKind != JsonValueKind.Object)
+        ) {
             reason = "store requires an extension type and object settings";
             return false;
         }
@@ -82,29 +85,60 @@ public static class WorldSiloDefinitionValidator {
             return false;
         }
         if (definition.Release is { } release) {
-            if (string.IsNullOrWhiteSpace(release.Group) || release.Group.Any(char.IsWhiteSpace) || release.Group.Contains("..", StringComparison.Ordinal) || release.Group.Contains('/')) {
+            if (
+                string.IsNullOrWhiteSpace(value: release.Group) ||
+                release.Group.Any(predicate: char.IsWhiteSpace) ||
+                release.Group.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: ".."
+            ) ||
+                release.Group.Contains(value: '/')
+            ) {
                 reason = "release.group must be one safe deployment-group name";
                 return false;
             }
-            if (release.Owner == Guid.Empty || string.IsNullOrWhiteSpace(release.ExpectedRelease)) {
+            if (
+                (release.Owner == Guid.Empty) ||
+                string.IsNullOrWhiteSpace(value: release.ExpectedRelease)
+            ) {
                 reason = "release requires a non-empty owner and expectedRelease";
                 return false;
             }
         }
-        if ((clusteringKinds is not null) && !clusteringKinds.Contains(definition.Clustering.Kind, StringComparer.Ordinal)) {
-            reason = $"clustering.kind '{definition.Clustering.Kind}' is not installed; name one of: {string.Join(separator: ", ", values: clusteringKinds)}";
+        if (
+            (clusteringKinds is not null) &&
+            !clusteringKinds.Contains(
+            definition.Clustering.Kind,
+            StringComparer.Ordinal
+        )
+        ) {
+            reason = $"clustering.kind '{definition.Clustering.Kind}' is not installed; name one of: {string.Join(
+                separator: ", ",
+                values: clusteringKinds
+            )}";
             return false;
         }
         if (definition.Lifecycle is { } lifecycle) {
-            if ((lifecycle.ProgressTimeoutSeconds < 1) || (lifecycle.CheckpointTimeoutSeconds < 1) || (lifecycle.JournalTimeoutSeconds < 1) || (lifecycle.JournalBacklogLimit < 1)) {
+            if (
+                (lifecycle.ProgressTimeoutSeconds < 1) ||
+                (lifecycle.CheckpointTimeoutSeconds < 1) ||
+                (lifecycle.JournalTimeoutSeconds < 1) ||
+                (lifecycle.JournalBacklogLimit < 1)
+            ) {
                 reason = "lifecycle health deadlines and journalBacklogLimit must be positive";
                 return false;
             }
-            if ((lifecycle.ShutdownSeconds < 1) || (lifecycle.HealthPort is < 1 or > 65535)) {
+            if (
+                (lifecycle.ShutdownSeconds < 1) ||
+                (lifecycle.HealthPort is < 1 or > 65535)
+            ) {
                 reason = "lifecycle requires a positive shutdownSeconds and valid healthPort";
                 return false;
             }
-            if ((lifecycle.Observer is { } observer) && (string.IsNullOrWhiteSpace(value: observer.Type) || (observer.Settings.ValueKind != JsonValueKind.Object))) {
+            if (
+                (lifecycle.Observer is { } observer) &&
+                (string.IsNullOrWhiteSpace(value: observer.Type) || (observer.Settings.ValueKind != JsonValueKind.Object))
+            ) {
                 reason = "lifecycle.observer requires an extension type and object settings";
                 return false;
             }
@@ -125,8 +159,10 @@ public static class WorldSiloDefinitionValidator {
 
                 return false;
             }
-            if (world.Federation.Authentication is { } authentication &&
-                (string.IsNullOrWhiteSpace(authentication.Type) || authentication.Settings.ValueKind != JsonValueKind.Object)) {
+            if (
+                (world.Federation.Authentication is { } authentication) &&
+                (string.IsNullOrWhiteSpace(value: authentication.Type) || (authentication.Settings.ValueKind != JsonValueKind.Object))
+            ) {
                 reason = $"world '{world.World}' authentication requires an extension type and object settings";
                 return false;
             }

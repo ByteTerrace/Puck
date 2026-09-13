@@ -15,10 +15,11 @@ public sealed record WorldMachineOperation {
         OperationId = operationId;
         Payload = payload.Clone();
     }
-    /// <summary>Gets the authored machine instance name.</summary>
-    public string Instance { get; }
+
     /// <summary>Gets the expected live incarnation.</summary>
     public ulong ExpectedGeneration { get; }
+    /// <summary>Gets the authored machine instance name.</summary>
+    public string Instance { get; }
     /// <summary>Gets the provider operation identifier.</summary>
     public string OperationId { get; }
     /// <summary>Gets the detached provider payload.</summary>

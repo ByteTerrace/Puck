@@ -109,7 +109,10 @@ internal static class MfEncoder {
     /// <summary>Throws if a Media Foundation HRESULT indicates failure.</summary>
     public static void Check(int hr) {
         if (hr < 0) {
-            throw new COMException(errorCode: hr, message: "a Media Foundation encoder call failed");
+            throw new COMException(
+                errorCode: hr,
+                message: "a Media Foundation encoder call failed"
+            );
         }
     }
 }

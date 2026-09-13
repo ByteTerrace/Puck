@@ -46,13 +46,18 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // phase has been carried to.
     private static string DescribeCycle(StateCycle? cycle) =>
         ((cycle is { } c)
-            ? $" cycle={DescribeWord(word: c.Word)}^{c.Power}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}{((c.SubstepTicks != 0L) ? $"+{c.SubstepTicks}" : string.Empty)} order={c.Order}"
+            ? $" cycle={DescribeWord(word: c.Word)}^{c.Power}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}{((c.SubstepTicks != 0L)
+                ? $"+{c.SubstepTicks}"
+                : string.Empty)} order={c.Order}"
             : string.Empty
         );
     private static string DescribeWord(IReadOnlyList<int>? word) =>
         ((word is null)
             ? "coxeter"
-            : $"[{string.Join(separator: ',', values: word)}]"
+            : $"[{string.Join(
+                separator: ',',
+                values: word
+            )}]"
         );
     // Formats an Advance trait — shared by DescribeRow's row line (against row.Advance) and DescribeCell's cell
     // line (against a keyed cell's own Advance): what the trait IS (rate) and where its clock sits (epoch), the
@@ -123,7 +128,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             return string.Empty;
         }
 
-        return $" extended k={extended.K} scripted={extended.Script?.Count ?? 0} skip={skip}";
+        return $" extended k={extended.K} scripted={(extended.Script?.Count ?? 0)} skip={skip}";
     }
     // A DRAW SITE reads back as WHAT IT IS and WHERE IT IS — which source it draws from (named or inline), when it
     // may draw, and its own live position. That position is the whole of a site's draw state (nothing lives outside
@@ -137,12 +142,23 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     ? $"source={namedFill}"
                     : $"source=<inline:{DescribeSourceShape(generator: fill.Generator)}>"
                 );
-                var fillResolved = (GeneratorEngine.TryResolveSource(generators: generators, draw: new Draw(Source: fill.Source, Generator: fill.Generator), generator: out var fillGenerator, reason: out _)
+                var fillResolved = (GeneratorEngine.TryResolveSource(
+                    generators: generators,
+                    draw: new Draw(
+                        Source: fill.Source,
+                        Generator: fill.Generator
+                    ),
+                    generator: out var fillGenerator,
+                    reason: out _
+                )
                     ? fillGenerator
                     : null
                 );
 
-                return $" draw {fillSource} fill=lattice cursor={row.DrawCursor} masks={DescribeMasks(row: row)}{DescribeExtended(generator: fillResolved, skip: 0L)}";
+                return $" draw {fillSource} fill=lattice cursor={row.DrawCursor} masks={DescribeMasks(row: row)}{DescribeExtended(
+                    generator: fillResolved,
+                    skip: 0L
+                )}";
             }
 
             return string.Empty;
@@ -152,12 +168,20 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             ? $"source={named}"
             : $"source=<inline:{DescribeSourceShape(generator: draw.Generator)}>"
         );
-        var resolved = (GeneratorEngine.TryResolveSource(generators: generators, draw: draw, generator: out var resolvedGenerator, reason: out _)
+        var resolved = (GeneratorEngine.TryResolveSource(
+            draw: draw,
+            generator: out var resolvedGenerator,
+            generators: generators,
+            reason: out _
+        )
             ? resolvedGenerator
             : null
         );
 
-        return $" draw {source} timing={draw.Timing.ToString().ToLowerInvariant()} cursor={row.DrawCursor} masks={DescribeMasks(row: row)}{DescribeExtended(generator: resolved, skip: draw.Skip)}";
+        return $" draw {source} timing={draw.Timing.ToString().ToLowerInvariant()} cursor={row.DrawCursor} masks={DescribeMasks(row: row)}{DescribeExtended(
+            generator: resolved,
+            skip: draw.Skip
+        )}";
     }
     private static string DescribeEvicts(WorldStateRow row) => (row.Evicts
         ? " evicts=true"
@@ -220,9 +244,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         var cells = (row.Cells ?? []);
         var lines = new List<string>(capacity: (1 + cells.Count)) {
             DescribeRow(
-                row: row,
-                server: server
-            ),
+            row: row,
+            server: server
+        ),
         };
 
         // Each cell line re-reads through the shared reader by its own key rather than formatting the stored record,
@@ -284,7 +308,13 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             key: WorldStateRow.SlotKey.Value,
             row: row,
             server: server
-        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(row: row, generators: server.Definition.Generators)}{DescribeDiscrete(server, row)}]";
+        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(
+            row: row,
+            generators: server.Definition.Generators
+        )}{DescribeDiscrete(
+            row: row,
+            server: server
+        )}]";
 
         if (!row.IsSlot) {
             var capacity = Math.Clamp(
@@ -320,29 +350,68 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             : (char.ToLowerInvariant(c: generator.Source.ToString()[0]) + generator.Source.ToString()[1..])
         );
     private static CommandResult DescribeWhy(WorldDefinition definition, string name) {
-        var rule = Array.Find(array: WorldRuleCompiler.CompileAll(definition: definition), match: candidate => string.Equals(a: candidate.Name, b: name, comparisonType: StringComparison.Ordinal));
-        var interaction = Array.Find(array: WorldRuleCompiler.CompileAllInteractions(definition: definition), match: candidate => string.Equals(a: candidate.Name, b: name, comparisonType: StringComparison.Ordinal));
+        var rule = Array.Find(
+            array: WorldRuleCompiler.CompileAll(definition: definition),
+            match: candidate => string.Equals(
+                a: candidate.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+        );
+        var interaction = Array.Find(
+            array: WorldRuleCompiler.CompileAllInteractions(definition: definition),
+            match: candidate => string.Equals(
+                a: candidate.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+        );
 
-        if ((rule is null) && (interaction is null)) {
+        if (
+            (rule is null) &&
+            (interaction is null)
+        ) {
             return CommandResult.Error(output: $"[world.budget.rules --why: '{name}' names no declared rule or interaction]");
         }
 
         var lines = new List<string>(capacity: 2);
 
-        if (rule is not null) { lines.Add(item: DescribeWhyLine(rule: rule, definition: definition, isInteraction: false)); }
-        if (interaction is not null) { lines.Add(item: DescribeWhyLine(rule: interaction, definition: definition, isInteraction: true)); }
+        if (rule is not null) { lines.Add(item: DescribeWhyLine(
+            definition: definition,
+            isInteraction: false,
+            rule: rule
+        )); }
+        if (interaction is not null) { lines.Add(item: DescribeWhyLine(
+            definition: definition,
+            isInteraction: true,
+            rule: interaction
+        )); }
 
-        return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: lines));
+        return new CommandResult(Output: string.Join(
+            separator: Environment.NewLine,
+            values: lines
+        ));
     }
     private static string DescribeWhyLine(CompiledWorldRule rule, WorldDefinition definition, bool isInteraction) {
         var context = WorldRuleCompiler.Context(definition: definition);
         var effects = new List<string>(capacity: rule.Effects.Length);
 
         foreach (var effect in rule.Effects) {
-            effects.Add(item: $"{effect.Describe}={effect.Cost(context)}");
+            effects.Add(item: $"{effect.Describe}={effect.Cost(context: context)}");
         }
 
-        return $"[world.budget.rules --why {rule.Name}{(isInteraction ? " interaction" : string.Empty)}: multiplier {WorldRuleWorkBudget.DescribeMultiplier(definition: definition, rule: rule)}; gate cost={RuleWorkBudget.GateCost(tokens: rule.Gate, context: context)}; effects [{string.Join(separator: ", ", values: effects)}]]";
+        return $"[world.budget.rules --why {rule.Name}{(isInteraction
+            ? " interaction"
+            : string.Empty)}: multiplier {WorldRuleWorkBudget.DescribeMultiplier(
+            definition: definition,
+            rule: rule
+        )}; gate cost={RuleWorkBudget.GateCost(
+            tokens: rule.Gate,
+            context: context
+        )}; effects [{string.Join(
+            separator: ", ",
+            values: effects
+        )}]]";
     }
     private static string DescribeState(WorldServer server) {
         var rows = server.Definition.State;
@@ -410,9 +479,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         if (
             (FindRow(
-                name: rowName,
-                server: server
-            ) is { Kind: CellKind.Text }) &&
+            name: rowName,
+            server: server
+        ) is { Kind: CellKind.Text }) &&
             (args.Count >= 3)
         ) {
             var text = WorldCommandArguments.RawAfter(
@@ -477,10 +546,18 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.rule.failures",
             description: "Prints bounded runtime rule-effect refusal counters (Immediate): category, total occurrences, latest tick/rule/effect, and the latest concrete reason. Level-triggered failures log only their category's first occurrence; this read-back keeps the exact count without stderr spam.",
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.rule.failures") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.rule.failures"
+                ) is { } refusal) {
                     return refusal;
                 }
-                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.failures")) {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.rule.failures"
+                )) {
                     return error;
                 }
                 return new CommandResult(Output: server.DescribeRuleRuntimeDiagnostics());
@@ -491,23 +568,52 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.rule.trace",
             description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): world.rule.trace <rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); world.rule.trace alone prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; world.rule.trace off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.trace")) {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.rule.trace"
+                )) {
                     return error;
                 }
                 if (args.Count == 0) {
                     return new CommandResult(Output: server.DescribeRuleTrace());
                 }
-                if ((args.Count == 1) && args[0].Equals(other: "off", comparisonType: StringComparison.Ordinal)) {
-                    return new CommandResult(Output: (server.DisarmRuleTrace() ? "[world.rule.trace: disarmed]" : "[world.rule.trace: none armed]"));
+                if (
+                    (args.Count == 1) &&
+                    args[0].Equals(
+                    comparisonType: StringComparison.Ordinal,
+                    other: "off"
+                )
+                ) {
+                    return new CommandResult(Output: (server.DisarmRuleTrace()
+                        ? "[world.rule.trace: disarmed]"
+                        : "[world.rule.trace: none armed]"));
                 }
                 var evaluations = DefaultRuleTraceEvaluations;
-                if ((args.Count > 2) || ((args.Count == 2) && !args.TryInt(index: 1, value: out evaluations))) {
-                    return CommandResult.Usage(form: $"[<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] | off]", verb: "world.rule.trace");
+
+                if (
+                    (args.Count > 2) ||
+                    ((args.Count == 2) && !args.TryInt(
+                    index: 1,
+                    value: out evaluations
+                ))
+                ) {
+                    return CommandResult.Usage(
+                        form: $"[<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] | off]",
+                        verb: "world.rule.trace"
+                    );
                 }
                 var rule = args[0].ToString();
-                return (server.TryArmRuleTrace(rule: rule, evaluations: evaluations, refusal: out var refusal)
+
+                return (server.TryArmRuleTrace(
+                    evaluations: evaluations,
+                    refusal: out var refusal,
+                    rule: rule
+                )
                     ? new CommandResult(Output: $"[world.rule.trace {rule}: armed for {evaluations} evaluation(s) — world.wait, then world.rule.trace reads them back]")
-                    : new CommandResult(Output: refusal) { IsError = true });
+                    : new CommandResult(Output: refusal) { IsError = true }
+                );
             },
             routing: CommandRouting.Immediate
         );
@@ -516,27 +622,70 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.budget.rules",
             description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top] | --why <rule>. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.budget.rules")) {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.budget.rules"
+                )) {
                     return error;
                 }
-                if ((args.Count >= 1) && args[0].Equals(other: "--why", comparisonType: StringComparison.Ordinal)) {
+                if (
+                    (args.Count >= 1) &&
+                    args[0].Equals(
+                    comparisonType: StringComparison.Ordinal,
+                    other: "--why"
+                )
+                ) {
                     return ((args.Count == 2)
-                        ? DescribeWhy(definition: server.Definition, name: args[1].ToString())
-                        : CommandResult.Usage(form: "--why <rule>", verb: "world.budget.rules"));
+                        ? DescribeWhy(
+                            definition: server.Definition,
+                            name: args[1].ToString()
+                        )
+                        : CommandResult.Usage(
+                            form: "--why <rule>",
+                            verb: "world.budget.rules"
+                        )
+                    );
                 }
                 var top = int.MaxValue;
-                if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out top) || (top < 1)))) {
-                    return CommandResult.Usage(form: "[top] | --why <rule>", verb: "world.budget.rules");
+
+                if (
+                    (args.Count > 1) ||
+                    ((args.Count == 1) && (!args.TryInt(
+                    index: 0,
+                    value: out top
+                ) || (top < 1)))
+                ) {
+                    return CommandResult.Usage(
+                        form: "[top] | --why <rule>",
+                        verb: "world.budget.rules"
+                    );
                 }
                 var lines = WorldRuleWorkBudget.Contributors(definition: server.Definition);
-                var shown = Math.Min(top, lines.Count);
+                var shown = Math.Min(
+                    val1: top,
+                    val2: lines.Count
+                );
                 var output = new List<string>(capacity: (shown + 2)) { $"[world.budget.rules: {lines.Count} line(s), showing {shown}]" };
-                for (var index = 0; index < shown; index++) {
+
+                for (var index = 0; (index < shown); index++) {
                     var line = lines[index];
-                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0) ? $" exclusive {string.Join(separator: ",", values: line.Discriminators.Select(selector: static pinned => pinned.Describe()))}" : string.Empty)}]");
+
+                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction
+                        ? " interaction"
+                        : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0)
+                        ? $" exclusive {string.Join(
+                            separator: ",",
+                            values: line.Discriminators.Select(selector: static pinned => pinned.Describe())
+                        )}"
+                        : string.Empty)}]");
                 }
                 output.Add(item: $"[world.budget.rules total: work={WorldRuleWorkBudget.Measure(definition: server.Definition).WorkUnitsPerTick} of {RuleCapacity.MaxWorkUnitsPerTick}]");
-                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
+                return new CommandResult(Output: string.Join(
+                    separator: Environment.NewLine,
+                    values: output
+                ));
             },
             routing: CommandRouting.Immediate
         );
@@ -545,19 +694,41 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.search",
             description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, and how many rules the frame evaluates; a job authoring a depth past one and a score also carries the depth it is iterative-deepening through and the negamax answer (token, target cell, score) the deepest completed pass found. A job restarts whenever a framed cell other than its own outputs changes.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.search")) {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.search"
+                )) {
                     return error;
                 }
                 if (args.Count != 0) {
-                    return CommandResult.Usage(form: string.Empty, verb: "world.search");
+                    return CommandResult.Usage(
+                        form: string.Empty,
+                        verb: "world.search"
+                    );
                 }
                 var jobs = server.SearchStatus();
-                var output = new List<string>(capacity: jobs.Count + 1) { $"[world.search: {jobs.Count} job(s)]" };
+                var output = new List<string>(capacity: (jobs.Count + 1)) { $"[world.search: {jobs.Count} job(s)]" };
+
                 foreach (var job in jobs) {
-                    var depth = (job.HasScore ? $" depth={job.PassDepth}/{job.Depth} best=(token={job.BestToken} to={job.BestTarget} score={job.BestScore})" : (job.HasOutcome ? $" iteration={job.Iteration}/{job.Iterations} best=(token={job.BestToken} to={job.BestTarget} mean={job.BestScore})" : string.Empty));
-                    output.Add(item: $"[world.search {job.Name} {(job.Done ? "done" : (job.Running ? "running" : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
+                    var depth = (job.HasScore
+                        ? $" depth={job.PassDepth}/{job.Depth} best=(token={job.BestToken} to={job.BestTarget} score={job.BestScore})"
+                        : (job.HasOutcome
+                            ? $" iteration={job.Iteration}/{job.Iterations} best=(token={job.BestToken} to={job.BestTarget} mean={job.BestScore})"
+                            : string.Empty
+                    ));
+
+                    output.Add(item: $"[world.search {job.Name} {(job.Done
+                        ? "done"
+                        : (job.Running
+                            ? "running"
+                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
                 }
-                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
+                return new CommandResult(Output: string.Join(
+                    separator: Environment.NewLine,
+                    values: output
+                ));
             },
             routing: CommandRouting.Immediate
         );
@@ -566,21 +737,46 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.rule.hazards",
             description: "Lists what the rules' document order decides silently (Immediate): world.rule.hazards [top]. A write-after-read hazard is an earlier rule reading a cell a later rule writes, so the reader sees the previous tick's value; a write-after-write hazard is two rules writing one cell in a tick with at least one setting it, so the later wins (or a set discards an earlier add). A pair whose gates pin one literal cell to disjoint ranges never fires on one tick and is not listed. Rules run once per tick in document order with effects applying immediately, so reorder the rules to change the answer.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.hazards")) {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.rule.hazards"
+                )) {
                     return error;
                 }
                 var top = int.MaxValue;
-                if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out top) || (top < 1)))) {
-                    return CommandResult.Usage(form: "[top]", verb: "world.rule.hazards");
+
+                if (
+                    (args.Count > 1) ||
+                    ((args.Count == 1) && (!args.TryInt(
+                    index: 0,
+                    value: out top
+                ) || (top < 1)))
+                ) {
+                    return CommandResult.Usage(
+                        form: "[top]",
+                        verb: "world.rule.hazards"
+                    );
                 }
                 var hazards = WorldRuleHazards.Analyze(definition: server.Definition);
-                var shown = Math.Min(top, hazards.Count);
-                var output = new List<string>(capacity: shown + 1) { $"[world.rule.hazards: {hazards.Count} hazard(s), showing {shown}]" };
-                for (var index = 0; index < shown; index++) {
+                var shown = Math.Min(
+                    val1: top,
+                    val2: hazards.Count
+                );
+                var output = new List<string>(capacity: (shown + 1)) { $"[world.rule.hazards: {hazards.Count} hazard(s), showing {shown}]" };
+
+                for (var index = 0; (index < shown); index++) {
                     var hazard = hazards[index];
-                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == RuleHazardKind.WriteAfterRead) ? "write-after-read" : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
+
+                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == RuleHazardKind.WriteAfterRead)
+                        ? "write-after-read"
+                        : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
                 }
-                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
+                return new CommandResult(Output: string.Join(
+                    separator: Environment.NewLine,
+                    values: output
+                ));
             },
             routing: CommandRouting.Immediate
         );
@@ -641,7 +837,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     (node >= SymmetryLattice.NodeCount)
                 ) {
                     return CommandResult.Usage(
-                        form: $"<node 0..{SymmetryLattice.NodeCount - 1}> [other 0..{SymmetryLattice.NodeCount - 1}]",
+                        form: $"<node 0..{(SymmetryLattice.NodeCount - 1)}> [other 0..{(SymmetryLattice.NodeCount - 1)}]",
                         verb: "world.symmetry"
                     );
                 }
@@ -669,12 +865,23 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         (other >= SymmetryLattice.NodeCount)
                     ) {
                         return CommandResult.Usage(
-                            form: $"<node 0..{SymmetryLattice.NodeCount - 1}> [other 0..{SymmetryLattice.NodeCount - 1}]",
+                            form: $"<node 0..{(SymmetryLattice.NodeCount - 1)}> [other 0..{(SymmetryLattice.NodeCount - 1)}]",
                             verb: "world.symmetry"
                         );
                     }
 
-                    line += $"{Environment.NewLine}[world.symmetry node={node} other={other} reflect={SymmetryLattice.Reflect(mirror: other, node: node)} orthogonal={(SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1 : 0)} innerProduct={SymmetryLattice.InnerProduct(first: node, second: other)}]";
+                    line += $"{Environment.NewLine}[world.symmetry node={node} other={other} reflect={SymmetryLattice.Reflect(
+                        mirror: other,
+                        node: node
+                    )} orthogonal={(SymmetryLattice.AreOrthogonal(
+                        first: node,
+                        second: other
+                    )
+                        ? 1
+                        : 0)} innerProduct={SymmetryLattice.InnerProduct(
+                        first: node,
+                        second: other
+                    )}]";
                 }
 
                 return new CommandResult(Output: line);
@@ -686,34 +893,65 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.symmetry.word",
             description: "Reads a word of reflections back (Immediate): world.symmetry.word <mirror>... [node:<n>]. Bakes the word a cycle trait would author as its generator (one to eight mirror nodes, applied first to last) and prints its derived order — the period a cycle carrying it loops in — and, given a node, that node's orbit under the word in step order, so an author can see the dial a word makes before authoring it.",
             handler: (context, args) => {
-                var usage = $"<mirror 0..{SymmetryLattice.NodeCount - 1}>... [node:<0..{SymmetryLattice.NodeCount - 1}>]";
+                var usage = $"<mirror 0..{(SymmetryLattice.NodeCount - 1)}>... [node:<0..{(SymmetryLattice.NodeCount - 1)}>]";
                 var mirrors = new List<int>(capacity: SymmetryWord.MaximumLength);
                 var seed = -1;
 
                 for (var index = 0; (index < args.Count); index++) {
                     var token = args[index].ToString();
 
-                    if (token.StartsWith(value: "node:", comparisonType: StringComparison.Ordinal)) {
-                        if ((index != (args.Count - 1)) || !int.TryParse(s: token["node:".Length..], style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out seed) || (seed >= SymmetryLattice.NodeCount)) {
-                            return CommandResult.Usage(form: usage, verb: "world.symmetry.word");
+                    if (token.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "node:"
+                    )) {
+                        if (
+                            (index != (args.Count - 1)) ||
+                            !int.TryParse(
+                            s: token["node:".Length..],
+                            style: System.Globalization.NumberStyles.None,
+                            provider: System.Globalization.CultureInfo.InvariantCulture,
+                            result: out seed
+                        ) ||
+                            (seed >= SymmetryLattice.NodeCount)
+                        ) {
+                            return CommandResult.Usage(
+                                form: usage,
+                                verb: "world.symmetry.word"
+                            );
                         }
 
                         continue;
                     }
 
-                    if (!args.TryInt(index: index, value: out var mirror) || (mirror < 0) || (mirror >= SymmetryLattice.NodeCount) || (mirrors.Count == SymmetryWord.MaximumLength)) {
-                        return CommandResult.Usage(form: usage, verb: "world.symmetry.word");
+                    if (
+                        !args.TryInt(
+                        index: index,
+                        value: out var mirror
+                    ) ||
+                        (mirror < 0) ||
+                        (mirror >= SymmetryLattice.NodeCount) ||
+                        (mirrors.Count == SymmetryWord.MaximumLength)
+                    ) {
+                        return CommandResult.Usage(
+                            form: usage,
+                            verb: "world.symmetry.word"
+                        );
                     }
 
                     mirrors.Add(item: mirror);
                 }
 
                 if (mirrors.Count == 0) {
-                    return CommandResult.Usage(form: usage, verb: "world.symmetry.word");
+                    return CommandResult.Usage(
+                        form: usage,
+                        verb: "world.symmetry.word"
+                    );
                 }
 
                 var word = SymmetryWord.Create(mirrors: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: mirrors));
-                var line = $"[world.symmetry.word mirrors={DescribeWord(word: mirrors)} order={word.Order} identity={(word.IsIdentity ? 1 : 0)}]";
+                var line = $"[world.symmetry.word mirrors={DescribeWord(word: mirrors)} order={word.Order} identity={(word.IsIdentity
+                    ? 1
+                    : 0)}]";
 
                 if (seed >= 0) {
                     var orbit = new System.Text.StringBuilder();
@@ -748,10 +986,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 string[]? keys = null;
 
                 if (args.Count > 1) {
-                    keys = new string[args.Count - 1];
+                    keys = new string[(args.Count - 1)];
 
-                    for (var index = 1; index < args.Count; index++) {
-                        keys[index - 1] = args[index].ToString();
+                    for (var index = 1; (index < args.Count); index++) {
+                        keys[(index - 1)] = args[index].ToString();
                     }
                 }
 

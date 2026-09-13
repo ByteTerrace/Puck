@@ -29,13 +29,13 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
     /// <returns>The identity stamp.</returns>
     public static AgbMachineIdentity Compute(ReadOnlySpan<byte> bios, ReadOnlySpan<byte> rom, bool prefetchDisabled = false, bool hasRtc = false) =>
         new(
-        Version: CurrentVersion,
-        BiosHash: Fnv1aHash.Compute(values: bios),
-        RomHash: Fnv1aHash.Compute(values: rom),
-        RomLength: rom.Length,
-        PrefetchDisabled: prefetchDisabled,
-        HasRtc: hasRtc
-    );
+            Version: CurrentVersion,
+            BiosHash: Fnv1aHash.Compute(values: bios),
+            RomHash: Fnv1aHash.Compute(values: rom),
+            RomLength: rom.Length,
+            PrefetchDisabled: prefetchDisabled,
+            HasRtc: hasRtc
+        );
 }
 /// <summary>
 /// A self-contained, deterministic byte image of an Advanced GamingBrick's entire mutable state at one instant. It owns
@@ -55,8 +55,8 @@ public sealed class AgbMachineSnapshot : MachineSnapshot<AgbMachineSnapshot, Agb
     /// <inheritdoc/>
     protected override AgbMachineSnapshot Create(AgbMachineIdentity identity, long takenAt, SnapshotImage image) =>
         new(
-        identity: identity,
-        image: image,
-        takenAt: takenAt
-    );
+            identity: identity,
+            image: image,
+            takenAt: takenAt
+        );
 }

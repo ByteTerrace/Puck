@@ -34,7 +34,8 @@ public sealed record SdfWorldRender(
     /// <exception cref="InvalidOperationException">The render chain already has a pending capture.</exception>
     /// <exception cref="ObjectDisposedException">The serving target has been disposed.</exception>
     public FrameCaptureRequest RequestCapture(string path) {
-        var request = new FrameCaptureRequest(path);
+        var request = new FrameCaptureRequest(path: path);
+
         if (CaptureTarget is { } target) {
             target.RequestCapture(request: request);
         } else {
@@ -51,10 +52,6 @@ public sealed record SdfWorldRender(
 /// backend (decorators are backend-neutral; the caller hands them backend-selected bytecode).
 /// </summary>
 public static class SdfWorldRenderBuilder {
-    /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child
-    /// <c>directX</c> flag (the GamingBrick child node), kept beside it so the two can never drift.</summary>
-    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
-    public static string BytecodeExtension(bool hostsOnDirectX) => ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX);
     /// <summary>Assembles the SDF world render host a spec describes.</summary>
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) forwarded
     /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root; this factory
@@ -70,7 +67,10 @@ public static class SdfWorldRenderBuilder {
         // source here (e.g. the overworld's diegetic-UI director, which emits its own SDF geometry into the program)
         // before the engine node is built. Identity when the spec supplies none — most callers (the document-driven
         // world path) never set it.
-        var frameSource = ((spec.DecorateFrameSource is { } decorateFrameSource) ? decorateFrameSource(spec.FrameSource) : spec.FrameSource);
+        var frameSource = ((spec.DecorateFrameSource is { } decorateFrameSource)
+            ? decorateFrameSource(spec.FrameSource)
+            : spec.FrameSource
+        );
 
         var producer = new SdfEngineNode(
             brickPoolVoxelCapacity: spec.BrickPoolVoxelCapacity,
@@ -104,10 +104,20 @@ public static class SdfWorldRenderBuilder {
         // Captured BEFORE root is wrapped in SdfWorldRenderRoot below: `root` here is the actual decorated chain
         // (the console overlay wrapping the binding bar wrapping the producer, or a subset/none of that), so this
         // is the true outermost node — the debug-view wrapper adds no capture capability of its own.
-        return new SdfWorldRender(Producer: producer, Root: new SdfWorldRenderRoot(inner: root, producer: producer)) {
+        return new SdfWorldRender(
+            Producer: producer,
+            Root: new SdfWorldRenderRoot(
+                inner: root,
+                producer: producer
+            )
+        ) {
             CaptureTarget = (root as ICaptureRequestTarget),
         };
     }
+    /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child
+    /// <c>directX</c> flag (the GamingBrick child node), kept beside it so the two can never drift.</summary>
+    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
+    public static string BytecodeExtension(bool hostsOnDirectX) => ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX);
 
     private sealed class SdfWorldRenderRoot(SdfEngineNode producer, IRenderNode inner) : IRenderNode, IDebugViewTarget {
         public int DebugMode {
@@ -116,8 +126,8 @@ public static class SdfWorldRenderBuilder {
         }
         public NodeDescriptor Descriptor => inner.Descriptor;
 
-        public Surface ProduceFrame(in FrameContext context) => inner.ProduceFrame(context: in context);
         public void Dispose() => inner.Dispose();
         public void OnDeviceLost() => inner.OnDeviceLost();
+        public Surface ProduceFrame(in FrameContext context) => inner.ProduceFrame(context: in context);
     }
 }

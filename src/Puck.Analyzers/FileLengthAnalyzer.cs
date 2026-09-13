@@ -77,18 +77,29 @@ public sealed class FileLengthAnalyzer : DiagnosticAnalyzer {
     private static void AnalyzeCompilationStart(CompilationStartAnalysisContext context) {
         var candidates = context.Options.AdditionalFiles
             .Where(predicate: file => string.Equals(
-                a: Path.GetFileName(path: file.Path),
-                b: LedgerFileName,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ))
+            a: Path.GetFileName(path: file.Path),
+            b: LedgerFileName,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ))
             .ToArray();
 
         if (candidates.Length != 1) {
             var message = ((candidates.Length == 0)
                 ? $"No {LedgerFileName} was supplied to this compilation as an AdditionalFile, so no file length can be checked; restore the ledger to the build."
-                : $"More than one {LedgerFileName} was supplied to this compilation ({string.Join(separator: ", ", values: candidates.Select(selector: file => file.Path).OrderBy(keySelector: path => path, comparer: StringComparer.Ordinal))}); exactly one ledger is expected.");
+                : $"More than one {LedgerFileName} was supplied to this compilation ({string.Join(
+                    separator: ", ",
+                    values: candidates.Select(selector: file => file.Path).OrderBy(
+                        keySelector: path => path,
+                        comparer: StringComparer.Ordinal
+                    )
+                )}); exactly one ledger is expected."
+            );
 
-            context.RegisterCompilationEndAction(action: end => end.ReportDiagnostic(diagnostic: Diagnostic.Create(descriptor: Len004LedgerUnusable, location: Location.None, message)));
+            context.RegisterCompilationEndAction(action: end => end.ReportDiagnostic(diagnostic: Diagnostic.Create(
+                descriptor: Len004LedgerUnusable,
+                location: Location.None,
+                message
+            )));
 
             return;
         }
@@ -96,10 +107,22 @@ public sealed class FileLengthAnalyzer : DiagnosticAnalyzer {
         var ledgerFile = candidates[0];
         var text = ledgerFile.GetText(cancellationToken: context.CancellationToken)?.ToString();
 
-        if (!FileLengthLedger.TryParse(error: out var error, json: text, ledger: out var ledger)) {
-            var location = Location.Create(filePath: ledgerFile.Path, textSpan: default, lineSpan: default);
+        if (!FileLengthLedger.TryParse(
+            error: out var error,
+            json: text,
+            ledger: out var ledger
+        )) {
+            var location = Location.Create(
+                filePath: ledgerFile.Path,
+                textSpan: default,
+                lineSpan: default
+            );
 
-            context.RegisterCompilationEndAction(action: end => end.ReportDiagnostic(diagnostic: Diagnostic.Create(descriptor: Len004LedgerUnusable, location: location, $"{LedgerFileName} at '{ledgerFile.Path}' is unusable: {error}")));
+            context.RegisterCompilationEndAction(action: end => end.ReportDiagnostic(diagnostic: Diagnostic.Create(
+                descriptor: Len004LedgerUnusable,
+                location: location,
+                $"{LedgerFileName} at '{ledgerFile.Path}' is unusable: {error}"
+            )));
 
             return;
         }
@@ -107,7 +130,11 @@ public sealed class FileLengthAnalyzer : DiagnosticAnalyzer {
         var ledgerDirectory = (Path.GetDirectoryName(path: ledgerFile.Path) ?? "");
         var parsed = ledger!;
 
-        context.RegisterSyntaxTreeAction(action: treeContext => AnalyzeTree(context: treeContext, ledger: parsed, ledgerDirectory: ledgerDirectory));
+        context.RegisterSyntaxTreeAction(action: treeContext => AnalyzeTree(
+            context: treeContext,
+            ledger: parsed,
+            ledgerDirectory: ledgerDirectory
+        ));
     }
     private static void AnalyzeTree(SyntaxTreeAnalysisContext context, FileLengthLedger ledger, string ledgerDirectory) {
         var tree = context.Tree;
@@ -117,22 +144,47 @@ public sealed class FileLengthAnalyzer : DiagnosticAnalyzer {
         }
 
         var lines = tree.GetText(cancellationToken: context.CancellationToken).Lines.Count;
-        var key = FileLengthLedger.KeyFor(filePath: tree.FilePath, ledgerDirectory: ledgerDirectory);
+        var key = FileLengthLedger.KeyFor(
+            filePath: tree.FilePath,
+            ledgerDirectory: ledgerDirectory
+        );
         var recorded = ledger.TryGetRecordedLength(key: key);
-        var location = Location.Create(syntaxTree: tree, textSpan: default);
+        var location = Location.Create(
+            syntaxTree: tree,
+            textSpan: default
+        );
 
         if (recorded is null) {
             if (lines > ledger.Ceiling) {
-                context.ReportDiagnostic(diagnostic: Diagnostic.Create(descriptor: Len001OverCeiling, location: location, key, Format(value: lines), Format(value: ledger.Ceiling)));
+                context.ReportDiagnostic(diagnostic: Diagnostic.Create(
+                    descriptor: Len001OverCeiling,
+                    location: location,
+                    key,
+                    Format(value: lines),
+                    Format(value: ledger.Ceiling)
+                ));
             }
 
             return;
         }
 
         if (lines <= ledger.Ceiling) {
-            context.ReportDiagnostic(diagnostic: Diagnostic.Create(descriptor: Len003StaleEntry, location: location, key, Format(value: lines), Format(value: ledger.Ceiling), Format(value: recorded.Value)));
+            context.ReportDiagnostic(diagnostic: Diagnostic.Create(
+                descriptor: Len003StaleEntry,
+                location: location,
+                key,
+                Format(value: lines),
+                Format(value: ledger.Ceiling),
+                Format(value: recorded.Value)
+            ));
         } else if (lines > recorded.Value) {
-            context.ReportDiagnostic(diagnostic: Diagnostic.Create(descriptor: Len002OverRecordedLength, location: location, key, Format(value: lines), Format(value: recorded.Value)));
+            context.ReportDiagnostic(diagnostic: Diagnostic.Create(
+                descriptor: Len002OverRecordedLength,
+                location: location,
+                key,
+                Format(value: lines),
+                Format(value: recorded.Value)
+            ));
         }
     }
     private static string Format(int value) =>

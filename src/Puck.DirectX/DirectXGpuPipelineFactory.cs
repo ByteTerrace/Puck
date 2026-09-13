@@ -87,7 +87,11 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
     private static DXGI_FORMAT ToDxgiFormat(GpuVertexFormat format) {
         return format switch {
             GpuVertexFormat.R32G32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT,
-            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The vertex attribute format is not defined."),
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(format),
+            format,
+            "The vertex attribute format is not defined."
+        ),
         };
     }
     private static DirectXPipelineLayout BuildLayout(
@@ -107,7 +111,9 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         // the slot span is just their count (lets AllocateSet sub-allocate one pool across multiple sets). Each binding
         // maps to the identically-numbered slot: the texture array starts at binding 0 and the storage-buffer SRV sits
         // at binding textureSamplerCount, both inside this contiguous range, so the map is the identity.
-        var slotCount = (textureSamplerCount + (enableStorageBuffer ? 1u : 0u));
+        var slotCount = (textureSamplerCount + (enableStorageBuffer
+            ? 1u
+            : 0u));
 
         layout.DescriptorSlotCount = slotCount;
         layout.SlotByBinding = new uint[slotCount];
@@ -135,8 +141,16 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         bool hasRootConstants,
         uint rootConstantsCount
     ) {
-        var rangeCount = (((textureSamplerCount > 0) ? 1 : 0) + (enableStorageBuffer ? 1 : 0));
-        var paramCount = ((hasDescriptorTable ? 1 : 0) + (hasRootConstants ? 1 : 0));
+        var rangeCount = (((textureSamplerCount > 0)
+            ? 1
+            : 0) + (enableStorageBuffer
+            ? 1
+            : 0));
+        var paramCount = ((hasDescriptorTable
+            ? 1
+            : 0) + (hasRootConstants
+            ? 1
+            : 0));
         var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[2];
         var parameters = stackalloc D3D12_ROOT_PARAMETER[2];
         var rangeIndex = 0;
@@ -199,7 +213,10 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         // a register bound at each one it uses (mirrors DirectXGpuComputePipelineFactory's per-SampledImage-binding
         // static sampler). Every entry carries the SAME fixed linear-clamp description, so this is one sampler
         // configuration replicated across registers, not several distinct ones.
-        var staticSamplerCount = ((textureSamplerCount > 0) ? textureSamplerCount : 1u);
+        var staticSamplerCount = ((textureSamplerCount > 0)
+            ? textureSamplerCount
+            : 1u
+        );
         var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((int)staticSamplerCount)];
 
         for (var register = 0u; (register < textureSamplerCount); register++) {
@@ -214,11 +231,18 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
             NumParameters = ((uint)paramCount),
             NumStaticSamplers = textureSamplerCount,
-            pParameters = ((0 < paramCount) ? parameters : null),
-            pStaticSamplers = ((textureSamplerCount > 0) ? staticSamplers : null),
+            pParameters = ((0 < paramCount)
+            ? parameters
+            : null),
+            pStaticSamplers = ((textureSamplerCount > 0)
+            ? staticSamplers
+            : null),
         };
 
-        return DirectXRootSignatures.Create(description: in desc, device: device);
+        return DirectXRootSignatures.Create(
+            description: in desc,
+            device: device
+        );
     }
     private static nint BuildPso(
         ID3D12Device* device,
@@ -289,7 +313,11 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;
 
-        device->CreateGraphicsPipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
+        device->CreateGraphicsPipelineState(
+            pDesc: in psoDesc,
+            ppPipelineState: out pso,
+            riid: in psoIid
+        );
 
         return ((nint)pso);
     }

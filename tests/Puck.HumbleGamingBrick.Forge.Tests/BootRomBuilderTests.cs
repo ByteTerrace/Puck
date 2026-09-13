@@ -32,19 +32,28 @@ public sealed class BootRomBuilderTests {
             { ConsoleModel.Ags, "FDB1F3064B6A82B9D4AA0FAD847ADFFC8C15A32FF3AB665FB61F853EC3FAFE3F" },
         };
 
+    [MemberData(memberName: nameof(Images))]
+    [Theory]
+    public void Build_MatchesTheRecordedImage(ConsoleModel model, string expected) {
+        var image = BootRomBuilder.Build(model: model);
+
+        Assert.Equal(
+            expected: (model.SupportsColor()
+            ? BootRomBuilder.ColorLength
+            : BootRomBuilder.MonochromeLength),
+            actual: image.Length
+        );
+        var actual = Convert.ToHexString(inArray: SHA256.HashData(source: image));
+
+        Assert.True(
+            condition: (actual == expected),
+            userMessage: $"{model} image SHA-256: {actual}; expected: {expected}"
+        );
+    }
     [Fact]
     public void Images_CoverEveryRevision() =>
         Assert.Equal(
             actual: Images.Count,
             expected: Enum.GetValues<ConsoleModel>().Length
         );
-    [Theory]
-    [MemberData(memberName: nameof(Images))]
-    public void Build_MatchesTheRecordedImage(ConsoleModel model, string expected) {
-        var image = BootRomBuilder.Build(model: model);
-        Assert.Equal(expected: model.SupportsColor() ? BootRomBuilder.ColorLength : BootRomBuilder.MonochromeLength,
-            actual: image.Length);
-        var actual = Convert.ToHexString(inArray: SHA256.HashData(source: image));
-        Assert.True(condition: actual == expected, userMessage: $"{model} image SHA-256: {actual}; expected: {expected}");
-    }
 }

@@ -31,32 +31,42 @@ public sealed class StrictEnumAnalyzerTests {
 
     private static AnalysisResult Run(string source) =>
         Harness.Analyze(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: new SourceFile(Name: "Subject.cs", Text: source.Replace(newValue: (("JsonSerializerContext {" + ContextBoilerplate) + "}"), oldValue: "JsonSerializerContext { }"))),
-            analyzer: new StrictEnumAnalyzer());
+            compilation: Harness.Compile(
+                assemblyName: Harness.DefaultAssemblyName,
+                sources: new SourceFile(
+                    Name: "Subject.cs",
+                    Text: source.Replace(
+                        newValue: (("JsonSerializerContext {" + ContextBoilerplate) + "}"),
+                        oldValue: "JsonSerializerContext { }"
+                    )
+                )
+            ),
+            analyzer: new StrictEnumAnalyzer()
+        );
 
     [Fact]
-    public void EnumWithNoConverterAnywhereIsReported() {
+    public void ACompilationWithNoJsonSerializerContextIsNotAnalyzedAtAll() {
         var result = Run(source: """
-            using System.Text.Json.Serialization;
-
             namespace Subject.Assembly;
 
-            public enum PlainEnum { A, B }
+            public enum UnrelatedEnum { A, B }
 
-            public sealed record Root(PlainEnum Plain);
-
-            [JsonSerializable(typeof(Root))]
-            internal partial class TestContext : JsonSerializerContext { }
+            public sealed record NotADocument(UnrelatedEnum Value);
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "PlainEnum", actualString: result.Single(id: "ENUM001").GetMessage());
-        Assert.Contains(expectedSubstring: "Root", actualString: result.Single(id: "ENUM001").GetMessage());
-        Assert.Contains(expectedSubstring: "Plain", actualString: result.Single(id: "ENUM001").GetMessage());
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Empty(collection: result.Ids);
     }
     [Fact]
-    public void EnumConvertedAtItsOwnDeclarationIsNotReported() {
+    public void ARecordsSynthesizedEqualityContractNeverTriggersAReflectionWalk() {
+        // Regression coverage for the bug this gate's own falsification pass caught: every C# record synthesizes a
+        // `protected virtual System.Type EqualityContract` property. Left unfiltered, walking it follows straight
+        // into System.Type's own enormous reflection surface (System.Reflection.MemberInfo/MethodBase/Assembly and
+        // their many unconverted enums), reporting dozens of unrelated ENUM001s for a compilation with none of its
+        // own. A plain record with only covered members must produce zero diagnostics.
         var result = Run(source: """
             using System.Text.Json.Serialization;
 
@@ -65,65 +75,49 @@ public sealed class StrictEnumAnalyzerTests {
             [JsonConverter(typeof(JsonStringEnumConverter<CoveredEnum>))]
             public enum CoveredEnum { A, B }
 
-            public sealed record Root(CoveredEnum Covered);
+            public sealed record Leaf(CoveredEnum Kind, int Count);
+
+            public sealed record Root(Leaf Leaf, string Name);
 
             [JsonSerializable(typeof(Root))]
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
         Assert.Empty(collection: result.Ids);
     }
     [Fact]
-    public void EnumRegisteredAsAClosedJsonStringEnumConverterFactoryOnTheContextIsNotReported() {
-        // The CommandPhase shape: an enum that cannot carry [JsonConverter] at its own declaration is
-        // instead registered as a closed instance in the context's Converters array. JsonStringEnumConverter<TEnum>
-        // is a JsonConverterFactory in its class hierarchy (confirmed against the real BCL type, not assumed), so
-        // this proves the factory-recognizing half of ConvertedType.
+    public void EnumBehindAConditionallyIgnoredPropertyIsStillReached() {
+        // JsonIgnoreCondition.WhenWritingNull still lets the member reach the wire when non-null, so the walk must
+        // NOT treat it the same as an unconditional [JsonIgnore].
         var result = Run(source: """
             using System.Text.Json.Serialization;
 
             namespace Subject.Assembly;
 
-            public enum FactoryRegisteredEnum { A, B }
+            public enum ConditionallyReachedEnum { A, B }
 
-            public sealed record Root(FactoryRegisteredEnum Factory);
+            public sealed record Root([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConditionallyReachedEnum? Maybe = null);
 
             [JsonSerializable(typeof(Root))]
-            [JsonSourceGenerationOptions(Converters = new[] { typeof(JsonStringEnumConverter<FactoryRegisteredEnum>) })]
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Empty(collection: result.Ids);
-    }
-    [Fact]
-    public void EnumRegisteredAsAClosedBespokeJsonConverterOnTheContextIsNotReported() {
-        // The SurfaceFormat/WorldBackendPreference shape: a hand-written JsonConverter<TEnum> (not
-        // JsonStringEnumConverter) registered on the context rather than the enum's own declaration.
-        var result = Run(source: """
-            using System;
-            using System.Text.Json;
-            using System.Text.Json.Serialization;
-
-            namespace Subject.Assembly;
-
-            public enum BespokeEnum { A, B }
-
-            public sealed class BespokeEnumConverter : JsonConverter<BespokeEnum> {
-                public override BespokeEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => BespokeEnum.A;
-                public override void Write(Utf8JsonWriter writer, BespokeEnum value, JsonSerializerOptions options) { }
-            }
-
-            public sealed record Root(BespokeEnum Bespoke);
-
-            [JsonSerializable(typeof(Root))]
-            [JsonSourceGenerationOptions(Converters = new[] { typeof(BespokeEnumConverter) })]
-            internal partial class TestContext : JsonSerializerContext { }
-            """);
-
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Empty(collection: result.Ids);
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM001" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "ConditionallyReachedEnum",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
     }
     [Fact]
     public void EnumBehindAWholeTypeConverterIsNeverReached() {
@@ -152,7 +146,10 @@ public sealed class StrictEnumAnalyzerTests {
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
         Assert.Empty(collection: result.Ids);
     }
     [Fact]
@@ -171,48 +168,33 @@ public sealed class StrictEnumAnalyzerTests {
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
         Assert.Empty(collection: result.Ids);
     }
     [Fact]
-    public void EnumBehindAConditionallyIgnoredPropertyIsStillReached() {
-        // JsonIgnoreCondition.WhenWritingNull still lets the member reach the wire when non-null, so the walk must
-        // NOT treat it the same as an unconditional [JsonIgnore].
+    public void EnumConvertedAtItsOwnDeclarationIsNotReported() {
         var result = Run(source: """
             using System.Text.Json.Serialization;
 
             namespace Subject.Assembly;
 
-            public enum ConditionallyReachedEnum { A, B }
+            [JsonConverter(typeof(JsonStringEnumConverter<CoveredEnum>))]
+            public enum CoveredEnum { A, B }
 
-            public sealed record Root([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConditionallyReachedEnum? Maybe = null);
-
-            [JsonSerializable(typeof(Root))]
-            internal partial class TestContext : JsonSerializerContext { }
-            """);
-
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "ConditionallyReachedEnum", actualString: result.Single(id: "ENUM001").GetMessage());
-    }
-    [Fact]
-    public void EnumInsideANullableWrapperIsUnwrappedAndReached() {
-        var result = Run(source: """
-            using System.Text.Json.Serialization;
-
-            namespace Subject.Assembly;
-
-            public enum NullableEnum { A, B }
-
-            public sealed record Root(NullableEnum? Maybe);
+            public sealed record Root(CoveredEnum Covered);
 
             [JsonSerializable(typeof(Root))]
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "NullableEnum", actualString: result.Single(id: "ENUM001").GetMessage());
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Empty(collection: result.Ids);
     }
     [Fact]
     public void EnumInsideACollectionElementIsReached() {
@@ -232,9 +214,46 @@ public sealed class StrictEnumAnalyzerTests {
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "ElementEnum", actualString: result.Single(id: "ENUM001").GetMessage());
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM001" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "ElementEnum",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
+    }
+    [Fact]
+    public void EnumInsideANullableWrapperIsUnwrappedAndReached() {
+        var result = Run(source: """
+            using System.Text.Json.Serialization;
+
+            namespace Subject.Assembly;
+
+            public enum NullableEnum { A, B }
+
+            public sealed record Root(NullableEnum? Maybe);
+
+            [JsonSerializable(typeof(Root))]
+            internal partial class TestContext : JsonSerializerContext { }
+            """);
+
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM001" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "NullableEnum",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
     }
     [Fact]
     public void EnumOnOnePolymorphicDerivedTypeIsReached() {
@@ -259,27 +278,111 @@ public sealed class StrictEnumAnalyzerTests {
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "DerivedEnum", actualString: result.Single(id: "ENUM001").GetMessage());
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM001" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "DerivedEnum",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
     }
     [Fact]
-    public void ObjectTypedMemberIsRefusedAsUnclassifiable() {
+    public void EnumRegisteredAsAClosedBespokeJsonConverterOnTheContextIsNotReported() {
+        // The SurfaceFormat/WorldBackendPreference shape: a hand-written JsonConverter<TEnum> (not
+        // JsonStringEnumConverter) registered on the context rather than the enum's own declaration.
+        var result = Run(source: """
+            using System;
+            using System.Text.Json;
+            using System.Text.Json.Serialization;
+
+            namespace Subject.Assembly;
+
+            public enum BespokeEnum { A, B }
+
+            public sealed class BespokeEnumConverter : JsonConverter<BespokeEnum> {
+                public override BespokeEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => BespokeEnum.A;
+                public override void Write(Utf8JsonWriter writer, BespokeEnum value, JsonSerializerOptions options) { }
+            }
+
+            public sealed record Root(BespokeEnum Bespoke);
+
+            [JsonSerializable(typeof(Root))]
+            [JsonSourceGenerationOptions(Converters = new[] { typeof(BespokeEnumConverter) })]
+            internal partial class TestContext : JsonSerializerContext { }
+            """);
+
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Empty(collection: result.Ids);
+    }
+    [Fact]
+    public void EnumRegisteredAsAClosedJsonStringEnumConverterFactoryOnTheContextIsNotReported() {
+        // The CommandPhase shape: an enum that cannot carry [JsonConverter] at its own declaration is
+        // instead registered as a closed instance in the context's Converters array. JsonStringEnumConverter<TEnum>
+        // is a JsonConverterFactory in its class hierarchy (confirmed against the real BCL type, not assumed), so
+        // this proves the factory-recognizing half of ConvertedType.
         var result = Run(source: """
             using System.Text.Json.Serialization;
 
             namespace Subject.Assembly;
 
-            public sealed record Root(object Anything);
+            public enum FactoryRegisteredEnum { A, B }
+
+            public sealed record Root(FactoryRegisteredEnum Factory);
+
+            [JsonSerializable(typeof(Root))]
+            [JsonSourceGenerationOptions(Converters = new[] { typeof(JsonStringEnumConverter<FactoryRegisteredEnum>) })]
+            internal partial class TestContext : JsonSerializerContext { }
+            """);
+
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Empty(collection: result.Ids);
+    }
+    [Fact]
+    public void EnumWithNoConverterAnywhereIsReported() {
+        var result = Run(source: """
+            using System.Text.Json.Serialization;
+
+            namespace Subject.Assembly;
+
+            public enum PlainEnum { A, B }
+
+            public sealed record Root(PlainEnum Plain);
 
             [JsonSerializable(typeof(Root))]
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM002" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "Anything", actualString: result.Single(id: "ENUM002").GetMessage());
-        Assert.Contains(expectedSubstring: "System.Object", actualString: result.Single(id: "ENUM002").GetMessage());
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM001" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "PlainEnum",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
+        Assert.Contains(
+            expectedSubstring: "Root",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
+        Assert.Contains(
+            expectedSubstring: "Plain",
+            actualString: result.Single(id: "ENUM001").GetMessage()
+        );
     }
     [Fact]
     public void InterfaceWithNoPolymorphicFamilyIsRefusedAsUnclassifiable() {
@@ -296,35 +399,48 @@ public sealed class StrictEnumAnalyzerTests {
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM002" }, actual: result.Ids);
-        Assert.Contains(expectedSubstring: "IUnconstrained", actualString: result.Single(id: "ENUM002").GetMessage());
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM002" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "IUnconstrained",
+            actualString: result.Single(id: "ENUM002").GetMessage()
+        );
     }
     [Fact]
-    public void ARecordsSynthesizedEqualityContractNeverTriggersAReflectionWalk() {
-        // Regression coverage for the bug this gate's own falsification pass caught: every C# record synthesizes a
-        // `protected virtual System.Type EqualityContract` property. Left unfiltered, walking it follows straight
-        // into System.Type's own enormous reflection surface (System.Reflection.MemberInfo/MethodBase/Assembly and
-        // their many unconverted enums), reporting dozens of unrelated ENUM001s for a compilation with none of its
-        // own. A plain record with only covered members must produce zero diagnostics.
+    public void ObjectTypedMemberIsRefusedAsUnclassifiable() {
         var result = Run(source: """
             using System.Text.Json.Serialization;
 
             namespace Subject.Assembly;
 
-            [JsonConverter(typeof(JsonStringEnumConverter<CoveredEnum>))]
-            public enum CoveredEnum { A, B }
-
-            public sealed record Leaf(CoveredEnum Kind, int Count);
-
-            public sealed record Root(Leaf Leaf, string Name);
+            public sealed record Root(object Anything);
 
             [JsonSerializable(typeof(Root))]
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Empty(collection: result.Ids);
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM002" },
+            actual: result.Ids
+        );
+        Assert.Contains(
+            expectedSubstring: "Anything",
+            actualString: result.Single(id: "ENUM002").GetMessage()
+        );
+        Assert.Contains(
+            expectedSubstring: "System.Object",
+            actualString: result.Single(id: "ENUM002").GetMessage()
+        );
     }
     [Fact]
     public void TheSameEnumReachedFromTwoPropertiesIsReportedOnlyOnce() {
@@ -341,20 +457,13 @@ public sealed class StrictEnumAnalyzerTests {
             internal partial class TestContext : JsonSerializerContext { }
             """);
 
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
-    }
-    [Fact]
-    public void ACompilationWithNoJsonSerializerContextIsNotAnalyzedAtAll() {
-        var result = Run(source: """
-            namespace Subject.Assembly;
-
-            public enum UnrelatedEnum { A, B }
-
-            public sealed record NotADocument(UnrelatedEnum Value);
-            """);
-
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Empty(collection: result.Ids);
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: new[] { "ENUM001" },
+            actual: result.Ids
+        );
     }
 }

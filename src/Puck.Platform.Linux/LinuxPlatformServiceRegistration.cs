@@ -14,6 +14,18 @@ namespace Puck.Platform.Linux;
 /// treats an unresolved factory as "no render backend").
 /// </summary>
 public static class LinuxPlatformServiceRegistration {
+    /// <summary>Registers the null camera and desktop-capture services.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+    public static IServiceCollection AddLinuxCameraCapture(this IServiceCollection services) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICameraCaptureService, NullCameraCaptureService>();
+        services.TryAddSingleton<INativeImageCaptureService, NullNativeImageCaptureService>();
+
+        return services;
+    }
     /// <summary>Registers the null clipboard service and the Wayland/Xcb native-window backends.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
@@ -24,18 +36,6 @@ public static class LinuxPlatformServiceRegistration {
         services.TryAddSingleton<IClipboardService, NullClipboardService>();
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<INativeWindowBackend, WaylandNativeWindowBackend>());
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<INativeWindowBackend, XcbNativeWindowBackend>());
-
-        return services;
-    }
-    /// <summary>Registers the null camera and desktop-capture services.</summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The same service collection, for chaining.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
-    public static IServiceCollection AddLinuxCameraCapture(this IServiceCollection services) {
-        ArgumentNullException.ThrowIfNull(services);
-
-        services.TryAddSingleton<ICameraCaptureService, NullCameraCaptureService>();
-        services.TryAddSingleton<INativeImageCaptureService, NullNativeImageCaptureService>();
 
         return services;
     }

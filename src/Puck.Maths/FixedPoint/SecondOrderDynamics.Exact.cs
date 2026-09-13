@@ -10,19 +10,18 @@ namespace Puck.Maths;
 /// fraction bits — far past what the one Q32 rounding each caller performs at the end can see.
 /// </summary>
 internal static class SecondOrderExactMath {
-    /// <summary>The fraction bit count internal transcendental evaluation is carried at, well past the sixteen guard
-    /// bits <see cref="SecondOrderDynamics.CoefficientFractionBitCount"/> itself carries over <see cref="FixedQ4816"/>.</summary>
-    internal const int GuardFractionBitCount = 128;
     // Past this exponent, exp(-x) sits far below any Q32 rounding threshold; the series is skipped entirely rather
     // than range-reduced for nothing. Internal (rather than private) so the test suite's guard-scale tie-discipline
     // search can replicate ExpNegative's own early exit and reduction exactly, from the live constant rather than a
     // transcribed copy that could silently drift.
     internal const int ExpUnderflowExponent = 48;
+    /// <summary>The fraction bit count internal transcendental evaluation is carried at, well past the sixteen guard
+    /// bits <see cref="SecondOrderDynamics.CoefficientFractionBitCount"/> itself carries over <see cref="FixedQ4816"/>.</summary>
+    internal const int GuardFractionBitCount = 128;
+    internal const int ResidualShift = 10; // range-reduce exp's argument below 2^-10 before the Taylor series runs.
 
     private const int AngleSeriesTermBudget = 160;
     private const int ExpSeriesTermBudget = 40;
-
-    internal const int ResidualShift = 10; // range-reduce exp's argument below 2^-10 before the Taylor series runs.
 
     private static readonly BigInteger GuardOne = (BigInteger.One << GuardFractionBitCount);
 
@@ -39,16 +38,28 @@ internal static class SecondOrderExactMath {
     ) {
         var stepDenominator = (((BigInteger)ticksPerSecond) << SecondOrderDynamics.CoefficientFractionBitCount);
         var decayTimeNumerator = (((BigInteger)decayRateRaw) * stepTicks); // ζω·T (= ω·T at critical)
-        var stiffness = FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: stiffnessRaw);
+        var stiffness = FromRaw(
+            fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+            raw: stiffnessRaw
+        );
 
         switch (branch) {
             case SecondOrderDynamicsBranch.CriticallyDamped: {
                     var e = FromRaw(
-                        raw: ExpNegative(denominator: stepDenominator, numerator: decayTimeNumerator),
+                        raw: ExpNegative(
+                            denominator: stepDenominator,
+                            numerator: decayTimeNumerator
+                        ),
                         fractionBitCount: GuardFractionBitCount
                     );
-                    var omegaT = new Rational(Denominator: stepDenominator, Numerator: decayTimeNumerator);
-                    var omega = FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: decayRateRaw);
+                    var omegaT = new Rational(
+                        Denominator: stepDenominator,
+                        Numerator: decayTimeNumerator
+                    );
+                    var omega = FromRaw(
+                        fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+                        raw: decayRateRaw
+                    );
 
                     var phi11 = (e * (Rational.One + omegaT));
                     var phi12 = ((e * omegaT) / omega);
@@ -59,16 +70,34 @@ internal static class SecondOrderExactMath {
                 }
             case SecondOrderDynamicsBranch.Underdamped: {
                     var e = FromRaw(
-                        raw: ExpNegative(denominator: stepDenominator, numerator: decayTimeNumerator),
+                        raw: ExpNegative(
+                            denominator: stepDenominator,
+                            numerator: decayTimeNumerator
+                        ),
                         fractionBitCount: GuardFractionBitCount
                     );
                     var angleNumerator = (((BigInteger)oscillationRateRaw) * stepTicks);
 
-                    var (sinRaw, cosRaw) = SinCosExact(denominator: stepDenominator, numerator: angleNumerator);
-                    var sin = FromRaw(fractionBitCount: GuardFractionBitCount, raw: sinRaw);
-                    var cos = FromRaw(fractionBitCount: GuardFractionBitCount, raw: cosRaw);
-                    var ratio = FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: dampingOverOscillationRaw);
-                    var omegaD = FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: oscillationRateRaw);
+                    var (sinRaw, cosRaw) = SinCosExact(
+                        denominator: stepDenominator,
+                        numerator: angleNumerator
+                    );
+                    var sin = FromRaw(
+                        fractionBitCount: GuardFractionBitCount,
+                        raw: sinRaw
+                    );
+                    var cos = FromRaw(
+                        fractionBitCount: GuardFractionBitCount,
+                        raw: cosRaw
+                    );
+                    var ratio = FromRaw(
+                        fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+                        raw: dampingOverOscillationRaw
+                    );
+                    var omegaD = FromRaw(
+                        fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+                        raw: oscillationRateRaw
+                    );
 
                     var ratioSin = (ratio * sin);
                     var phi11 = (e * (cos + ratioSin));
@@ -82,17 +111,32 @@ internal static class SecondOrderExactMath {
                     var p1Numerator = (((BigInteger)(decayRateRaw - oscillationRateRaw)) * stepTicks);
                     var p2Numerator = (((BigInteger)(decayRateRaw + oscillationRateRaw)) * stepTicks);
                     var lambda1 = FromRaw(
-                        raw: ExpNegative(denominator: stepDenominator, numerator: p1Numerator),
+                        raw: ExpNegative(
+                            denominator: stepDenominator,
+                            numerator: p1Numerator
+                        ),
                         fractionBitCount: GuardFractionBitCount
                     );
                     var lambda2 = FromRaw(
-                        raw: ExpNegative(denominator: stepDenominator, numerator: p2Numerator),
+                        raw: ExpNegative(
+                            denominator: stepDenominator,
+                            numerator: p2Numerator
+                        ),
                         fractionBitCount: GuardFractionBitCount
                     );
                     // p1 = ζω − σ, p2 = ζω + σ (both positive); the poles proper are −p1 and −p2.
-                    var p1 = FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: (decayRateRaw - oscillationRateRaw));
-                    var p2 = FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: (decayRateRaw + oscillationRateRaw));
-                    var twoSigma = (FromRaw(fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount, raw: oscillationRateRaw) * Rational.Two);
+                    var p1 = FromRaw(
+                        fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+                        raw: (decayRateRaw - oscillationRateRaw)
+                    );
+                    var p2 = FromRaw(
+                        fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+                        raw: (decayRateRaw + oscillationRateRaw)
+                    );
+                    var twoSigma = (FromRaw(
+                        fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+                        raw: oscillationRateRaw
+                    ) * Rational.Two);
 
                     var phi11 = (((p2 * lambda1) - (p1 * lambda2)) / twoSigma);
                     var phi12 = ((lambda1 - lambda2) / twoSigma);
@@ -102,6 +146,47 @@ internal static class SecondOrderExactMath {
                     return (RoundQ32(value: phi11), RoundQ32(value: phi12), RoundQ32(value: phi21), RoundQ32(value: phi22));
                 }
         }
+    }
+    /// <summary>Returns <c>(sin, cos)</c> of <c>numerator/denominator</c> radians (any non-negative magnitude), each
+    /// as a raw at <see cref="GuardFractionBitCount"/>, reduced modulo <c>2π</c> using
+    /// <see cref="FixedQ4816.PiQ61"/> as the value of π (consistent with every other exact-π chain in this
+    /// library) and evaluated by the standard even/odd Taylor series over the reduced angle. Internal (rather than
+    /// private) so <c>CurvatureSplineExactMath</c> (<c>CurvatureSpline.Exact.cs</c>) can derive an authored tangent
+    /// yaw's exact unit direction from the same series rather than a transcribed copy that could silently drift; not
+    /// named in any <c>VerifiedCode.json</c> entry (checked at widening time).</summary>
+    internal static (BigInteger Sin, BigInteger Cos) SinCosExact(BigInteger numerator, BigInteger denominator) {
+        var twoPiNumerator = (2 * ((BigInteger)FixedQ4816.PiQ61));
+        var twoPiDenominator = (BigInteger.One << FixedQ4816.PiQ61FractionBitCount);
+
+        var reducedNumerator = ((numerator * twoPiDenominator) - ((((numerator * twoPiDenominator) / (denominator * twoPiNumerator)) * denominator) * twoPiNumerator));
+        var reducedDenominator = (denominator * twoPiDenominator);
+
+        var thetaRaw = RoundToGuardScale(
+            denominator: reducedDenominator,
+            numerator: reducedNumerator
+        );
+        var thetaSquaredRaw = ((thetaRaw * thetaRaw) / GuardOne);
+
+        var cosSum = GuardOne;
+        var cosTerm = GuardOne;
+        var sinSum = thetaRaw;
+        var sinTerm = thetaRaw;
+
+        for (var k = 1; (k <= AngleSeriesTermBudget); ++k) {
+            cosTerm = (-(cosTerm * thetaSquaredRaw) / ((GuardOne * ((2L * k) - 1)) * (2L * k)));
+            cosSum += cosTerm;
+            sinTerm = (-(sinTerm * thetaSquaredRaw) / ((GuardOne * (2L * k)) * ((2L * k) + 1)));
+            sinSum += sinTerm;
+
+            if (
+                cosTerm.IsZero &&
+                sinTerm.IsZero
+            ) {
+                break;
+            }
+        }
+
+        return (sinSum, cosSum);
     }
 
     /// <summary>Returns <c>round(exp(−numerator/denominator) · 2^GuardFractionBitCount)</c> for a non-negative
@@ -123,7 +208,10 @@ internal static class SecondOrderExactMath {
             ++halvings;
         }
 
-        var residualRaw = RoundToGuardScale(denominator: reducedDenominator, numerator: numerator);
+        var residualRaw = RoundToGuardScale(
+            denominator: reducedDenominator,
+            numerator: numerator
+        );
         var sum = GuardOne;
         var term = GuardOne;
 
@@ -136,45 +224,28 @@ internal static class SecondOrderExactMath {
             sum = ((sum * sum) / GuardOne);
         }
 
-        return ((sum.Sign < 0) ? BigInteger.Zero : sum);
+        return ((sum.Sign < 0)
+            ? BigInteger.Zero
+            : sum
+        );
     }
-
-    /// <summary>Returns <c>(sin, cos)</c> of <c>numerator/denominator</c> radians (any non-negative magnitude), each
-    /// as a raw at <see cref="GuardFractionBitCount"/>, reduced modulo <c>2π</c> using
-    /// <see cref="FixedQ4816.PiQ61"/> as the value of π (consistent with every other exact-π chain in this
-    /// library) and evaluated by the standard even/odd Taylor series over the reduced angle. Internal (rather than
-    /// private) so <c>CurvatureSplineExactMath</c> (<c>CurvatureSpline.Exact.cs</c>) can derive an authored tangent
-    /// yaw's exact unit direction from the same series rather than a transcribed copy that could silently drift; not
-    /// named in any <c>VerifiedCode.json</c> entry (checked at widening time).</summary>
-    internal static (BigInteger Sin, BigInteger Cos) SinCosExact(BigInteger numerator, BigInteger denominator) {
-        var twoPiNumerator = (2 * ((BigInteger)FixedQ4816.PiQ61));
-        var twoPiDenominator = (BigInteger.One << FixedQ4816.PiQ61FractionBitCount);
-
-        var reducedNumerator = ((numerator * twoPiDenominator) - ((((numerator * twoPiDenominator) / (denominator * twoPiNumerator)) * denominator) * twoPiNumerator));
-        var reducedDenominator = (denominator * twoPiDenominator);
-
-        var thetaRaw = RoundToGuardScale(denominator: reducedDenominator, numerator: reducedNumerator);
-        var thetaSquaredRaw = ((thetaRaw * thetaRaw) / GuardOne);
-
-        var cosSum = GuardOne;
-        var cosTerm = GuardOne;
-        var sinSum = thetaRaw;
-        var sinTerm = thetaRaw;
-
-        for (var k = 1; (k <= AngleSeriesTermBudget); ++k) {
-            cosTerm = (-(cosTerm * thetaSquaredRaw) / ((GuardOne * ((2L * k) - 1)) * (2L * k)));
-            cosSum += cosTerm;
-            sinTerm = (-(sinTerm * thetaSquaredRaw) / ((GuardOne * (2L * k)) * ((2L * k) + 1)));
-            sinSum += sinTerm;
-
-            if (cosTerm.IsZero && sinTerm.IsZero) {
-                break;
-            }
+    private static Rational FromRaw(BigInteger raw, int fractionBitCount) =>
+        new(
+            Numerator: raw,
+            Denominator: (BigInteger.One << fractionBitCount)
+        );
+    private static long RoundQ32(Rational value) {
+        if (!FixedPointRounding.TryRoundRational(
+            numerator: value.Numerator,
+            denominator: value.Denominator,
+            fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
+            result: out var raw
+        )) {
+            throw new OverflowException(message: "A compiled propagator entry overflowed the Q32 raw carrier.");
         }
 
-        return (sinSum, cosSum);
+        return raw;
     }
-
     // round(numerator / denominator · 2^GuardFractionBitCount) for a non-negative rational, ties to even. This once
     // rounded ties up instead (matching every other tie in the library only by coincidence of never landing on one);
     // dynamics.guard-scale-ties-vs-half-up proves the two disciplines are REQUIRED to differ at an even-truncated
@@ -189,18 +260,4 @@ internal static class SecondOrderExactMath {
             fractionBitCount: GuardFractionBitCount,
             numerator: numerator
         );
-    private static long RoundQ32(Rational value) {
-        if (!FixedPointRounding.TryRoundRational(
-            numerator: value.Numerator,
-            denominator: value.Denominator,
-            fractionBitCount: SecondOrderDynamics.CoefficientFractionBitCount,
-            result: out var raw
-        )) {
-            throw new OverflowException(message: "A compiled propagator entry overflowed the Q32 raw carrier.");
-        }
-
-        return raw;
-    }
-    private static Rational FromRaw(BigInteger raw, int fractionBitCount) =>
-        new(Numerator: raw, Denominator: (BigInteger.One << fractionBitCount));
 }

@@ -7,7 +7,6 @@ namespace Puck.World.Authoring.Sculpting;
 /// <param name="SelectorField">The selector's field name, or null for a plain object member.</param>
 /// <param name="SelectorValue">The selector's value, or null.</param>
 public readonly record struct PatchPathSegment(string Name, string? SelectorField, string? SelectorValue);
-
 /// <summary>Parses and renders the small path grammar <see cref="SculptPatch"/>'s member operations share:
 /// <c>segment ("." segment)*</c>, <c>segment := name ("[" field "=" value "]")?</c>.</summary>
 public static class PatchPath {
@@ -56,5 +55,6 @@ public static class PatchPath {
     /// <summary>Renders one segment back to its authored spelling.</summary>
     public static string Render(PatchPathSegment segment) => ((segment.SelectorField is { } field)
         ? $"{segment.Name}[{field}={segment.SelectorValue}]"
-        : segment.Name);
+        : segment.Name
+    );
 }

@@ -34,6 +34,7 @@ internal static class ConformanceRomProbe {
 
         return ((verdict == 0u)
             ? (true, "all tests passed")
-            : (false, $"first failing test = {verdict}"));
+            : (false, $"first failing test = {verdict}")
+        );
     }
 }

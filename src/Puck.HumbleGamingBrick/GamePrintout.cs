@@ -38,21 +38,21 @@ public sealed class GamePrintout {
         Width = width;
     }
 
-    /// <summary>Gets the image width in pixels (160).</summary>
-    public int Width { get; }
-    /// <summary>Gets the image height in pixels.</summary>
-    public int Height { get; }
-    /// <summary>Gets the feed-before margin (8-pixel units).</summary>
-    public byte TopMargin { get; }
     /// <summary>Gets the feed-after margin (8-pixel units).</summary>
     public byte BottomMargin { get; }
-    /// <summary>Gets the palette byte the print was rendered with.</summary>
-    public byte Palette { get; }
     /// <summary>Gets the exposure/density byte (7 bits).</summary>
     public byte Exposure { get; }
+    /// <summary>Gets the image height in pixels.</summary>
+    public int Height { get; }
+    /// <summary>Gets the palette byte the print was rendered with.</summary>
+    public byte Palette { get; }
     /// <summary>Gets the palette-applied shade buffer (one 0-3 byte per pixel, row-major).</summary>
     public ReadOnlySpan<byte> Pixels =>
         m_pixels;
+    /// <summary>Gets the feed-before margin (8-pixel units).</summary>
+    public byte TopMargin { get; }
+    /// <summary>Gets the image width in pixels (160).</summary>
+    public int Width { get; }
 
     /// <summary>Computes a stable 64-bit FNV-1a fingerprint over the dimensions, margins, palette, exposure, and every
     /// pixel — the deterministic identity a gate compares across two runs to prove the print is reproducible.</summary>

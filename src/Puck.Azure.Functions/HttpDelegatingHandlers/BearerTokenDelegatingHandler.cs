@@ -22,6 +22,9 @@ public sealed class BearerTokenDelegatingHandler(
             )).Token
         );
 
-        return await base.SendAsync(cancellationToken: cancellationToken, request: request);
+        return await base.SendAsync(
+            cancellationToken: cancellationToken,
+            request: request
+        );
     }
 }

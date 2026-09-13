@@ -770,9 +770,9 @@ internal static partial class Subjects {
             right: b
         ).Value != product) {
             return $"{name}: the product of {rawA} and {rawB} is {material.Multiply(
-            left: a,
-            right: b
-        ).Value}, expected {product}";
+                left: a,
+                right: b
+            ).Value}, expected {product}";
         }
         if (material.IsZero(value: a) != (0UL == rawA)) { return $"{name}: the zero test disagrees at raw {rawA}"; }
         if (material.Add(

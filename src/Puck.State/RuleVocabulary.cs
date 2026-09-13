@@ -12,7 +12,6 @@ namespace Puck.State;
 /// <param name="KeyFieldLabel">The field its key was spelled in.</param>
 /// <param name="AllowText">Whether a <see cref="CellKind.Text"/> row is admissible here.</param>
 public readonly record struct OperandSite(string RuleName, string Verb, string FieldLabel, string KeyFieldLabel, bool AllowText = false);
-
 /// <summary>One family of reserved operand spellings — a document project registers one per prefix it answers
 /// (a participant's distance, a screen's memory, a region's occupancy), and the compiler consults the registered
 /// families before its own.</summary>
@@ -31,7 +30,6 @@ public abstract class OperandFamily {
     /// <param name="fact">The compiled operand, when claimed.</param>
     public abstract bool TryCompile(string name, string? key, in OperandSite site, RuleCompileContext context, out OperandFact? fact);
 }
-
 /// <summary>One dynamic cell-key spelling a document project answers beside the library's <c>$cell:</c> and bound
 /// tokens.</summary>
 public abstract class KeyFamily {
@@ -45,44 +43,56 @@ public abstract class KeyFamily {
     /// <param name="cell">The compiled indirection, when claimed.</param>
     public abstract bool TryCompile(string key, string ruleName, string verb, string keyFieldLabel, RuleCompileContext context, out CompiledCellRef cell);
 }
-
 /// <summary>One authored effect arm a document project owns: the record type and its <c>$type</c> discriminator
 /// (registered onto <see cref="ActionEffect"/>'s polymorphism at serializer resolution), its transaction admission, and its compile.</summary>
 public abstract class EffectFamily {
-    /// <summary>Gets the <see cref="ActionEffect"/>-derived record type.</summary>
-    public abstract Type EffectType { get; }
-    /// <summary>Gets the <c>$type</c> discriminator the record is spelled under.</summary>
-    public abstract string Discriminator { get; }
     /// <summary>Whether this effect has a bounded rollback representation and may appear in a transaction.
     /// Families opt in explicitly; effects with irreversible external work must remain excluded.</summary>
     public virtual bool AllowsTransaction => false;
+    /// <summary>Gets the <c>$type</c> discriminator the record is spelled under.</summary>
+    public abstract string Discriminator { get; }
+    /// <summary>Gets the <see cref="ActionEffect"/>-derived record type.</summary>
+    public abstract Type EffectType { get; }
+
     /// <summary>Compiles an authored effect of <see cref="EffectType"/>.</summary>
     /// <param name="effect">The effect.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     public abstract EffectFact Compile(ActionEffect effect, string ruleName, RuleCompileContext context);
 }
-
 /// <summary>One authored predicate arm a document project owns: the record type and its discriminator, and its
 /// compile — which may refuse, for an arm that is authorable only inside another program the same JSON shape serves.</summary>
 public abstract class PredicateFamily {
-    /// <summary>Gets the <see cref="ActionPredicate"/>-derived record type.</summary>
-    public abstract Type PredicateType { get; }
     /// <summary>Gets the <c>$type</c> discriminator the record is spelled under.</summary>
     public abstract string Discriminator { get; }
+    /// <summary>Gets the <see cref="ActionPredicate"/>-derived record type.</summary>
+    public abstract Type PredicateType { get; }
+
     /// <summary>Compiles an authored predicate of <see cref="PredicateType"/> to one gate token.</summary>
     /// <param name="predicate">The predicate.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     public abstract GateToken Compile(ActionPredicate predicate, string ruleName, RuleCompileContext context);
 }
-
 /// <summary>The families a rule's names resolve through: the registered families a document project supplies,
 /// consulted first, then the library's own. One instance is built per document project and shared by every context
 /// it compiles with.</summary>
 public sealed class RuleVocabulary {
     /// <summary>The library's own vocabulary with nothing registered.</summary>
-    public static RuleVocabulary Core { get; } = new(operands: [], effects: [], predicates: [], keys: []);
+    public static RuleVocabulary Core { get; } = new(
+        effects: [],
+        keys: [],
+        operands: [],
+        predicates: []
+    );
+    /// <summary>Gets the registered effect arms.</summary>
+    public IReadOnlyList<EffectFamily> Effects { get; }
+    /// <summary>Gets the registered key families, in consultation order.</summary>
+    public IReadOnlyList<KeyFamily> Keys { get; }
+    /// <summary>Gets the registered operand families, in consultation order.</summary>
+    public IReadOnlyList<OperandFamily> Operands { get; }
+    /// <summary>Gets the registered predicate arms.</summary>
+    public IReadOnlyList<PredicateFamily> Predicates { get; }
 
     /// <summary>Initializes a vocabulary over the registered families.</summary>
     /// <param name="operands">The operand families, in the order they are consulted.</param>
@@ -101,15 +111,6 @@ public sealed class RuleVocabulary {
         Keys = keys;
     }
 
-    /// <summary>Gets the registered operand families, in consultation order.</summary>
-    public IReadOnlyList<OperandFamily> Operands { get; }
-    /// <summary>Gets the registered effect arms.</summary>
-    public IReadOnlyList<EffectFamily> Effects { get; }
-    /// <summary>Gets the registered predicate arms.</summary>
-    public IReadOnlyList<PredicateFamily> Predicates { get; }
-    /// <summary>Gets the registered key families, in consultation order.</summary>
-    public IReadOnlyList<KeyFamily> Keys { get; }
-
     /// <summary>Finds the effect family owning an authored effect's type, or <see langword="null"/>.</summary>
     /// <param name="effect">The effect.</param>
     public EffectFamily? EffectOf(ActionEffect effect) {
@@ -123,21 +124,6 @@ public sealed class RuleVocabulary {
 
         return null;
     }
-
-    /// <summary>Finds the predicate family owning an authored predicate's type, or <see langword="null"/>.</summary>
-    /// <param name="predicate">The predicate.</param>
-    public PredicateFamily? PredicateOf(ActionPredicate predicate) {
-        var type = predicate.GetType();
-
-        foreach (var family in Predicates) {
-            if (family.PredicateType == type) {
-                return family;
-            }
-        }
-
-        return null;
-    }
-
     /// <summary>Appends the registered arms to a resolved polymorphic base's derived-type list — the
     /// <see cref="JsonTypeInfo"/> modifier a document project's serializer options install so
     /// <see cref="ActionEffect"/> and <see cref="ActionPredicate"/> read and write
@@ -151,12 +137,31 @@ public sealed class RuleVocabulary {
         }
         if (typeInfo.Type == typeof(ActionEffect)) {
             foreach (var family in Effects) {
-                polymorphism.DerivedTypes.Add(item: new JsonDerivedType(derivedType: family.EffectType, typeDiscriminator: family.Discriminator));
+                polymorphism.DerivedTypes.Add(item: new JsonDerivedType(
+                    derivedType: family.EffectType,
+                    typeDiscriminator: family.Discriminator
+                ));
             }
         } else if (typeInfo.Type == typeof(ActionPredicate)) {
             foreach (var family in Predicates) {
-                polymorphism.DerivedTypes.Add(item: new JsonDerivedType(derivedType: family.PredicateType, typeDiscriminator: family.Discriminator));
+                polymorphism.DerivedTypes.Add(item: new JsonDerivedType(
+                    derivedType: family.PredicateType,
+                    typeDiscriminator: family.Discriminator
+                ));
             }
         }
+    }
+    /// <summary>Finds the predicate family owning an authored predicate's type, or <see langword="null"/>.</summary>
+    /// <param name="predicate">The predicate.</param>
+    public PredicateFamily? PredicateOf(ActionPredicate predicate) {
+        var type = predicate.GetType();
+
+        foreach (var family in Predicates) {
+            if (family.PredicateType == type) {
+                return family;
+            }
+        }
+
+        return null;
     }
 }

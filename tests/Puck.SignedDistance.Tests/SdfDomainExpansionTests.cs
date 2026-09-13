@@ -30,82 +30,13 @@ public sealed class SdfDomainExpansionTests {
         ))
     ));
 
-    // The folded program: the domain ops as point ops, then the shape's own local pose.
-    private static SdfProgram Folded(IReadOnlyList<SdfDomainOp> domain, Vector3 position) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = SdfDomainOps.Apply(
-            chain: builder.ResetPoint(),
-            domain: domain
-        )
-            .Translate(offset: position)
-            .Rotate(rotation: ShapeRotation)
-            .Box(
-                halfExtents: BoxHalfExtents,
-                material: material,
-                round: 0f
-            );
-
-        return builder.Build();
-    }
-    // The same content as one segment per expanded copy, with no domain op anywhere.
-    private static SdfProgram Expanded(IReadOnlyList<SdfDomainOp> domain, Vector3 position) {
-        Assert.True(
-            condition: SdfDomainExpansion.TryExpand(
-                domain: domain,
-                frames: out var frames,
-                refusal: out var refusal
-            ),
-            userMessage: refusal
-        );
-
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-        var local = new SdfRigidFrame(
-            Mirrored: false,
-            Position: FixedVector3.FromVector3(value: position),
-            Rotation: FixedQuaternion.FromQuaternion(value: ShapeRotation).Normalize()
-        );
-
-        foreach (var frame in frames) {
-            var placed = frame.Compose(inner: local);
-
-            _ = builder.ResetPoint()
-                .Translate(offset: placed.Position.ToVector3())
-                .Rotate(rotation: placed.Rotation.ToQuaternion())
-                .Box(
-                    halfExtents: BoxHalfExtents,
-                    material: material,
-                    round: 0f
-                );
-        }
-
-        return builder.Build();
-    }
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
-    // Every copy the expansion reports, as the world point the authored shape origin lands on.
-    private static List<Vector3> CopyOrigins(IReadOnlyList<SdfDomainOp> domain, Vector3 position) {
-        Assert.True(
-            condition: SdfDomainExpansion.TryExpand(
-                domain: domain,
-                frames: out var frames,
-                refusal: out var refusal
-            ),
-            userMessage: refusal
-        );
-
-        return [.. frames.Select(selector: frame => frame.TransformPoint(point: FixedVector3.FromVector3(value: position)).ToVector3())];
-    }
     private static void AssertContains(List<Vector3> origins, Vector3 expected) {
         Assert.True(
             condition: origins.Any(predicate: origin => ((origin - expected).Length() < 0.001f)),
-            userMessage: $"expected a copy near {expected}; got [{string.Join(separator: ", ", values: origins)}]"
+            userMessage: $"expected a copy near {expected}; got [{string.Join(
+                separator: ", ",
+                values: origins
+            )}]"
         );
     }
     // The expansion is the true union of the copies, so it can only refine the fold: a fold evaluates the copy whose
@@ -167,18 +98,136 @@ public sealed class SdfDomainExpansionTests {
             userMessage: $"the expansion refined the fold by {worst}, further than a wrong-neighbour gap explains"
         );
     }
+    // Every copy the expansion reports, as the world point the authored shape origin lands on.
+    private static List<Vector3> CopyOrigins(IReadOnlyList<SdfDomainOp> domain, Vector3 position) {
+        Assert.True(
+            condition: SdfDomainExpansion.TryExpand(
+                domain: domain,
+                frames: out var frames,
+                refusal: out var refusal
+            ),
+            userMessage: refusal
+        );
+
+        return [.. frames.Select(selector: frame => frame.TransformPoint(point: FixedVector3.FromVector3(value: position)).ToVector3())];
+    }
+    // The same content as one segment per expanded copy, with no domain op anywhere.
+    private static SdfProgram Expanded(IReadOnlyList<SdfDomainOp> domain, Vector3 position) {
+        Assert.True(
+            condition: SdfDomainExpansion.TryExpand(
+                domain: domain,
+                frames: out var frames,
+                refusal: out var refusal
+            ),
+            userMessage: refusal
+        );
+
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var local = new SdfRigidFrame(
+            Mirrored: false,
+            Position: FixedVector3.FromVector3(value: position),
+            Rotation: FixedQuaternion.FromQuaternion(value: ShapeRotation).Normalize()
+        );
+
+        foreach (var frame in frames) {
+            var placed = frame.Compose(inner: local);
+
+            _ = builder.ResetPoint()
+                .Translate(offset: placed.Position.ToVector3())
+                .Rotate(rotation: placed.Rotation.ToQuaternion())
+                .Box(
+                halfExtents: BoxHalfExtents,
+                material: material,
+                round: 0f
+            );
+        }
+
+        return builder.Build();
+    }
+    // The folded program: the domain ops as point ops, then the shape's own local pose.
+    private static SdfProgram Folded(IReadOnlyList<SdfDomainOp> domain, Vector3 position) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = SdfDomainOps.Apply(
+            chain: builder.ResetPoint(),
+            domain: domain
+        )
+            .Translate(offset: position)
+            .Rotate(rotation: ShapeRotation)
+            .Box(
+            halfExtents: BoxHalfExtents,
+            material: material,
+            round: 0f
+        );
+
+        return builder.Build();
+    }
+    private static FixedPosition Position(double x, double y, double z) =>
+        FixedPosition.FromLocal(local: new FixedVector3(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
+        ));
 
     [Fact]
-    public void EmptyDomainExpandsToTheIdentityCopy() {
+    public void AZeroOriginPolarExpandsToTheSameFramesAsNoOrigin() {
         Assert.True(condition: SdfDomainExpansion.TryExpand(
-            domain: null,
-            frames: out var frames,
+            domain: [new SdfDomainOp.Polar(
+                    Count: 5,
+                    Mirror: true
+                )],
+            frames: out var withoutOrigin,
             refusal: out _
         ));
-        Assert.Single(collection: frames);
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Polar(
+                    Count: 5,
+                    Mirror: true,
+                    Origin: Vector3.Zero
+                )],
+            frames: out var withZeroOrigin,
+            refusal: out _
+        ));
         Assert.Equal(
-            actual: frames[0],
-            expected: SdfRigidFrame.Identity
+            actual: withZeroOrigin,
+            expected: withoutOrigin
+        );
+    }
+    [Fact]
+    public void AZeroOriginRepeatExpandsToTheSameFramesAsNoOrigin() {
+        Vector3 limit = new(
+            x: 1f,
+            y: 0f,
+            z: 1f
+        );
+        Vector3 spacing = new(
+            x: 6f,
+            y: 12f,
+            z: 6f
+        );
+
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Repeat(
+                    Limit: limit,
+                    Spacing: spacing
+                )],
+            frames: out var withoutOrigin,
+            refusal: out _
+        ));
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Repeat(
+                    Limit: limit,
+                    Origin: Vector3.Zero,
+                    Spacing: spacing
+                )],
+            frames: out var withZeroOrigin,
+            refusal: out _
+        ));
+        Assert.Equal(
+            actual: withZeroOrigin,
+            expected: withoutOrigin
         );
     }
     [Fact]
@@ -210,6 +259,19 @@ public sealed class SdfDomainExpansionTests {
         );
     }
     [Fact]
+    public void EmptyDomainExpandsToTheIdentityCopy() {
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: null,
+            frames: out var frames,
+            refusal: out _
+        ));
+        Assert.Single(collection: frames);
+        Assert.Equal(
+            actual: frames[0],
+            expected: SdfRigidFrame.Identity
+        );
+    }
+    [Fact]
 
     public void ExpansionIsBitIdenticalAcrossCalls() {
         List<SdfDomainOp> domain = [
@@ -233,6 +295,65 @@ public sealed class SdfDomainExpansionTests {
         Assert.Equal(
             actual: second,
             expected: first
+        );
+    }
+    [Fact]
+    public void PolarSectorsRingAPivotAwayFromTheCreationOrigin() {
+        // A shape offset (0,0,6) from a pivot at (10,0,0), not the creation root: the copies ring the PIVOT, each one
+        // that same offset rotated — the control is PolarSectorsRingTheAxis, the identical fold with no origin (a
+        // pivot at the creation root).
+        var pivot = new Vector3(
+            x: 10f,
+            y: 0f,
+            z: 0f
+        );
+        var origins = CopyOrigins(
+            domain: [new SdfDomainOp.Polar(
+                    Count: 4,
+                    Origin: pivot
+                )],
+            position: (pivot + new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 6f
+            ))
+        );
+
+        Assert.Equal(
+            actual: origins.Count,
+            expected: 4
+        );
+        AssertContains(
+            expected: new Vector3(
+                x: 10f,
+                y: 0f,
+                z: 6f
+            ),
+            origins: origins
+        );
+        AssertContains(
+            expected: new Vector3(
+                x: 4f,
+                y: 0f,
+                z: 0f
+            ),
+            origins: origins
+        );
+        AssertContains(
+            expected: new Vector3(
+                x: 10f,
+                y: 0f,
+                z: -6f
+            ),
+            origins: origins
+        );
+        AssertContains(
+            expected: new Vector3(
+                x: 16f,
+                y: 0f,
+                z: 0f
+            ),
+            origins: origins
         );
     }
     [Fact]
@@ -284,6 +405,32 @@ public sealed class SdfDomainExpansionTests {
         );
     }
     [Fact]
+    public void RepeatExpansionMatchesTheFoldedField() {
+        // The prototype sits at the centre cell's middle: a repeat fold is exact only for an on-centre prototype
+        // within half a spacing per axis, and one parked on a cell wall is clipped by the fold but whole here.
+        AssertExpansionRefinesTheFold(
+            domain: [
+                new SdfDomainOp.Repeat(
+                    Limit: new Vector3(
+                        x: 1f,
+                        y: 0f,
+                        z: 1f
+                    ),
+                    Spacing: new Vector3(
+                        x: 6f,
+                        y: 12f,
+                        z: 6f
+                    )
+                ),
+            ],
+            position: new Vector3(
+                x: 0f,
+                y: 3f,
+                z: 0f
+            )
+        );
+    }
+    [Fact]
     public void RepeatExpansionMatchesTheFoldedFieldWhenTheOriginIsOffTheCreationRoot() {
         // Mirrors the moth wing-band defect: the shape sits off the creation root and the fold's origin recentres
         // cell selection on it, moving the fundamental domain's boundaries — the fold and the expansion (which
@@ -317,86 +464,13 @@ public sealed class SdfDomainExpansionTests {
         );
     }
     [Fact]
-    public void AZeroOriginRepeatExpandsToTheSameFramesAsNoOrigin() {
-        Vector3 limit = new(x: 1f, y: 0f, z: 1f);
-        Vector3 spacing = new(x: 6f, y: 12f, z: 6f);
-
-        Assert.True(condition: SdfDomainExpansion.TryExpand(
-            domain: [new SdfDomainOp.Repeat(Limit: limit, Spacing: spacing)],
-            frames: out var withoutOrigin,
-            refusal: out _
-        ));
-        Assert.True(condition: SdfDomainExpansion.TryExpand(
-            domain: [new SdfDomainOp.Repeat(Limit: limit, Origin: Vector3.Zero, Spacing: spacing)],
-            frames: out var withZeroOrigin,
-            refusal: out _
-        ));
-        Assert.Equal(
-            actual: withZeroOrigin,
-            expected: withoutOrigin
-        );
-    }
-    [Fact]
-    public void AZeroOriginPolarExpandsToTheSameFramesAsNoOrigin() {
-        Assert.True(condition: SdfDomainExpansion.TryExpand(
-            domain: [new SdfDomainOp.Polar(Count: 5, Mirror: true)],
-            frames: out var withoutOrigin,
-            refusal: out _
-        ));
-        Assert.True(condition: SdfDomainExpansion.TryExpand(
-            domain: [new SdfDomainOp.Polar(Count: 5, Mirror: true, Origin: Vector3.Zero)],
-            frames: out var withZeroOrigin,
-            refusal: out _
-        ));
-        Assert.Equal(
-            actual: withZeroOrigin,
-            expected: withoutOrigin
-        );
-    }
-    [Fact]
-    public void PolarSectorsRingAPivotAwayFromTheCreationOrigin() {
-        // A shape offset (0,0,6) from a pivot at (10,0,0), not the creation root: the copies ring the PIVOT, each one
-        // that same offset rotated — the control is PolarSectorsRingTheAxis, the identical fold with no origin (a
-        // pivot at the creation root).
-        var pivot = new Vector3(x: 10f, y: 0f, z: 0f);
-        var origins = CopyOrigins(
-            domain: [new SdfDomainOp.Polar(Count: 4, Origin: pivot)],
-            position: (pivot + new Vector3(x: 0f, y: 0f, z: 6f))
-        );
-
-        Assert.Equal(
-            actual: origins.Count,
-            expected: 4
-        );
-        AssertContains(expected: new Vector3(x: 10f, y: 0f, z: 6f), origins: origins);
-        AssertContains(expected: new Vector3(x: 4f, y: 0f, z: 0f), origins: origins);
-        AssertContains(expected: new Vector3(x: 10f, y: 0f, z: -6f), origins: origins);
-        AssertContains(expected: new Vector3(x: 16f, y: 0f, z: 0f), origins: origins);
-    }
-    [Fact]
-    public void RepeatExpansionMatchesTheFoldedField() {
-        // The prototype sits at the centre cell's middle: a repeat fold is exact only for an on-centre prototype
-        // within half a spacing per axis, and one parked on a cell wall is clipped by the fold but whole here.
+    public void SymmetryExpansionMatchesTheFoldedField() {
         AssertExpansionRefinesTheFold(
             domain: [
-                new SdfDomainOp.Repeat(
-                    Limit: new Vector3(
-                        x: 1f,
-                        y: 0f,
-                        z: 1f
-                    ),
-                    Spacing: new Vector3(
-                        x: 6f,
-                        y: 12f,
-                        z: 6f
-                    )
-                ),
+                new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),
+                new SdfDomainOp.Symmetry(Normal: Vector3.UnitZ),
             ],
-            position: new Vector3(
-                x: 0f,
-                y: 3f,
-                z: 0f
-            )
+            position: ShapePosition
         );
     }
     [Fact]
@@ -426,16 +500,6 @@ public sealed class SdfDomainExpansionTests {
                 );
             }
         }
-    }
-    [Fact]
-    public void SymmetryExpansionMatchesTheFoldedField() {
-        AssertExpansionRefinesTheFold(
-            domain: [
-                new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),
-                new SdfDomainOp.Symmetry(Normal: Vector3.UnitZ),
-            ],
-            position: ShapePosition
-        );
     }
     [Fact]
     public void UnboundedRepeatLimitRefusesByName() {

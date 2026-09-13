@@ -32,11 +32,19 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             resource: backBuffer
         );
 
-        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toRenderTarget);
+        commandList->ResourceBarrier(
+            NumBarriers: 1,
+            pBarriers: &toRenderTarget
+        );
 
         var rtv = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = ((nuint)rtvCpuHandle), };
 
-        commandList->OMSetRenderTargets(NumRenderTargetDescriptors: 1, RTsSingleHandleToDescriptorRange: false, pDepthStencilDescriptor: null, pRenderTargetDescriptors: &rtv);
+        commandList->OMSetRenderTargets(
+            NumRenderTargetDescriptors: 1,
+            RTsSingleHandleToDescriptorRange: false,
+            pDepthStencilDescriptor: null,
+            pRenderTargetDescriptors: &rtv
+        );
 
         var viewport = new D3D12_VIEWPORT {
             Height = viewportHeight,
@@ -53,8 +61,14 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             top = 0,
         };
 
-        commandList->RSSetViewports(NumViewports: 1, pViewports: &viewport);
-        commandList->RSSetScissorRects(NumRects: 1, pRects: &scissor);
+        commandList->RSSetViewports(
+            NumViewports: 1,
+            pViewports: &viewport
+        );
+        commandList->RSSetScissorRects(
+            NumRects: 1,
+            pRects: &scissor
+        );
         commandList->IASetPrimitiveTopology(PrimitiveTopology: D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         nint currentPso = 0;
@@ -83,7 +97,10 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             if (command.DescriptorHeapHandle != 0) {
                 var heap = ((ID3D12DescriptorHeap*)command.DescriptorHeapHandle);
 
-                commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &heap);
+                commandList->SetDescriptorHeaps(
+                    NumDescriptorHeaps: 1,
+                    ppDescriptorHeaps: &heap
+                );
             }
 
             if (
@@ -107,7 +124,11 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
                     StrideInBytes = view.StrideBytes,
                 };
 
-                commandList->IASetVertexBuffers(NumViews: 1, StartSlot: 0, pViews: &vbView);
+                commandList->IASetVertexBuffers(
+                    NumViews: 1,
+                    StartSlot: 0,
+                    pViews: &vbView
+                );
             }
 
             var rootConstants = command.RootConstants;
@@ -144,7 +165,10 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             resource: backBuffer
         );
 
-        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toPresent);
+        commandList->ResourceBarrier(
+            NumBarriers: 1,
+            pBarriers: &toPresent
+        );
     }
 
     private static D3D12_RESOURCE_BARRIER CreateTransition(

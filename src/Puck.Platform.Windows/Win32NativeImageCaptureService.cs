@@ -14,67 +14,11 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
     /// <inheritdoc/>
     [SupportedOSPlatformGuard("windows10.0.19041")]
     public bool IsSupported =>
-        (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: MinimumWindowsBuild) && IsGraphicsCaptureSupported());
-
-    /// <inheritdoc/>
-    public bool TryCreateWindowCapture(string windowTitleFragment, int width, int height, double refreshRateHz, [NotNullWhen(true)] out INativeImageCaptureFeed? feed, long? adapterLuid = null) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: windowTitleFragment);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: width);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
-
-        if (!double.IsFinite(d: refreshRateHz)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
-        }
-
-        feed = null;
-        if (!IsSupported || !TryFindWindow(titleFragment: windowTitleFragment, windowHandle: out var windowHandle)) {
-            return false;
-        }
-
-        if (!Win32GraphicsCaptureFeed.TryCreate(
-            adapterLuid: adapterLuid,
-            feed: out var windowsFeed,
-            height: height,
-            refreshRateHz: refreshRateHz,
-            width: width,
-            windowHandle: windowHandle
-        )) {
-            return false;
-        }
-
-        feed = windowsFeed;
-        return true;
-    }
-    /// <inheritdoc/>
-    public bool TryCreateMonitorCapture(int monitorIndex, int width, int height, double refreshRateHz, [NotNullWhen(true)] out INativeImageCaptureFeed? feed, long? adapterLuid = null) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: width);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
-
-        if (!double.IsFinite(d: refreshRateHz)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(refreshRateHz), actualValue: refreshRateHz, message: "The refresh rate must be finite.");
-        }
-
-        feed = null;
-        if (!IsSupported || !TryResolveMonitor(monitorHandle: out var monitorHandle, monitorIndex: monitorIndex)) {
-            return false;
-        }
-
-        if (!Win32GraphicsCaptureFeed.TryCreateForMonitor(
-            adapterLuid: adapterLuid,
-            feed: out var monitorFeed,
-            height: height,
-            monitorHandle: monitorHandle,
-            refreshRateHz: refreshRateHz,
-            width: width
-        )) {
-            return false;
-        }
-
-        feed = monitorFeed;
-        return true;
-    }
+        (OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: MinimumWindowsBuild
+        ) && IsGraphicsCaptureSupported());
 
     [SupportedOSPlatform("windows10.0.19041")]
     private static bool IsGraphicsCaptureSupported() {
@@ -107,9 +51,22 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
                     buffer = new char[required];
                 }
 
-                var copied = User32.GetWindowText(windowHandle: candidate, text: buffer, maxLength: buffer.Length);
+                var copied = User32.GetWindowText(
+                    windowHandle: candidate,
+                    text: buffer,
+                    maxLength: buffer.Length
+                );
 
-                if ((copied <= 0) || !buffer.AsSpan(length: copied, start: 0).Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: titleFragment)) {
+                if (
+                    (copied <= 0) ||
+                    !buffer.AsSpan(
+                    length: copied,
+                    start: 0
+                ).Contains(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: titleFragment
+                )
+                ) {
                     return true;
                 }
 
@@ -142,7 +99,10 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
                     Size = ((uint)Marshal.SizeOf<MonitorInfo>()),
                 };
 
-                if (User32.GetMonitorInfo(monitorHandle: candidate, monitorInfo: ref info)) {
+                if (User32.GetMonitorInfo(
+                    monitorHandle: candidate,
+                    monitorInfo: ref info
+                )) {
                     if ((info.Flags & MonitorInfoPrimary) != 0) {
                         primaryOrdinal = handles.Count;
                     }
@@ -181,5 +141,85 @@ public sealed class Win32NativeImageCaptureService : INativeImageCaptureService 
         }
 
         return false;
+    }
+
+    /// <inheritdoc/>
+    public bool TryCreateMonitorCapture(int monitorIndex, int width, int height, double refreshRateHz, [NotNullWhen(true)] out INativeImageCaptureFeed? feed, long? adapterLuid = null) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
+
+        if (!double.IsFinite(d: refreshRateHz)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(refreshRateHz),
+                actualValue: refreshRateHz,
+                message: "The refresh rate must be finite."
+            );
+        }
+
+        feed = null;
+        if (
+            !IsSupported ||
+            !TryResolveMonitor(
+            monitorHandle: out var monitorHandle,
+            monitorIndex: monitorIndex
+        )
+        ) {
+            return false;
+        }
+
+        if (!Win32GraphicsCaptureFeed.TryCreateForMonitor(
+            adapterLuid: adapterLuid,
+            feed: out var monitorFeed,
+            height: height,
+            monitorHandle: monitorHandle,
+            refreshRateHz: refreshRateHz,
+            width: width
+        )) {
+            return false;
+        }
+
+        feed = monitorFeed;
+        return true;
+    }
+    /// <inheritdoc/>
+    public bool TryCreateWindowCapture(string windowTitleFragment, int width, int height, double refreshRateHz, [NotNullWhen(true)] out INativeImageCaptureFeed? feed, long? adapterLuid = null) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: windowTitleFragment);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: height);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: refreshRateHz);
+
+        if (!double.IsFinite(d: refreshRateHz)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(refreshRateHz),
+                actualValue: refreshRateHz,
+                message: "The refresh rate must be finite."
+            );
+        }
+
+        feed = null;
+        if (
+            !IsSupported ||
+            !TryFindWindow(
+            titleFragment: windowTitleFragment,
+            windowHandle: out var windowHandle
+        )
+        ) {
+            return false;
+        }
+
+        if (!Win32GraphicsCaptureFeed.TryCreate(
+            adapterLuid: adapterLuid,
+            feed: out var windowsFeed,
+            height: height,
+            refreshRateHz: refreshRateHz,
+            width: width,
+            windowHandle: windowHandle
+        )) {
+            return false;
+        }
+
+        feed = windowsFeed;
+        return true;
     }
 }

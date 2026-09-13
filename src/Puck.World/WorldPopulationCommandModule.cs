@@ -17,6 +17,108 @@ namespace Puck.World;
 /// while headless composition still reports every authoritative cost and names the absent renderer.
 /// </summary>
 internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null) : ICommandModule {
+    private static string DescribeAssignment(WorldRowAssignment assignment) =>
+        $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
+            ? "all"
+            : string.Join(
+                separator: ",",
+                values: assignment.Rows
+            ))}]";
+    private string DescribeBudget() {
+        var render = ((renderProbe?.Node is { } node)
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(
+                format: "G6",
+                provider: CultureInfo.InvariantCulture
+            )}{((node.LiveProgramStepScale is > 0f and < 1f)
+                ? $" (global field bound {(1f / node.LiveProgramStepScale).ToString(
+                    format: "0.#",
+                    provider: CultureInfo.InvariantCulture
+                )}x)"
+                : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder)
+                ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(
+                    format: "0.###",
+                    provider: CultureInfo.InvariantCulture
+                )} at instruction {binder.InstructionIndex}, unscoped)"
+                : string.Empty)}"
+            : "renderer not built yet"
+        );
+
+        if (renderProbe?.Node is { } rendered) {
+            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldEngine.MaxVolumes}";
+            var clamps = rendered.LiveProgramFieldScopeClamps;
+
+            render += $", scoped clamps {clamps.Count} ({clamps.Count(predicate: static clamp => (clamp.ShapeCount > 1))} shared)";
+            if (clamps.Count > 0) {
+                var worst = clamps.MinBy(keySelector: static clamp => clamp.StepScale);
+
+                render += string.Create(
+                    CultureInfo.InvariantCulture,
+                    $", worst scope stepScale {worst.StepScale:G6} (field bound {(1f / worst.StepScale):G6}x, instance {worst.InstanceIndex}, instructions {worst.PushInstructionIndex}..{worst.PopInstructionIndex}, {worst.ShapeCount} shape(s))"
+                );
+            }
+        }
+        var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
+        var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
+        var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
+        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
+        var far = string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
+        );
+        var lattice = ((population.Fields is { } fields)
+            ? fields.DescribeCost(
+                activeBodyCount: population.ActiveCount(),
+                bodyCapacity: population.Capacity
+            )
+            : "lattice none"
+        );
+        var gravityCompiled = population.CompiledGravity;
+        var gravityStatistics = population.GravityStatistics;
+        var gravityAreaStatistics = population.GravityAreaStatistics;
+        var gravity = $"gravity {gravityCompiled.Attractors.Length} static source(s), {gravityCompiled.Areas.Length} local area(s) / target declared, last global targets {Math.Max(
+            val1: 0,
+            val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length)
+        )}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}, area targets {gravityAreaStatistics.TargetCount}, active {gravityAreaStatistics.ActiveAreaCount}, evaluations {gravityAreaStatistics.EvaluationCount}, matches {gravityAreaStatistics.MatchCount}";
+        var placementInstances = WorldPlacementStamper.StaticStampInstances(
+            creations: server.Definition.Creations,
+            placements: server.Definition.Placements,
+            worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+        );
+        var dealtTemplates = 0;
+        var dealtInstances = 0;
+
+        foreach (var row in server.Definition.Placements) {
+            if (row.Deal is not null) {
+                dealtTemplates++;
+                dealtInstances += WorldPlacementDeal.InstanceCount(
+                    template: row,
+                    worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+                );
+            }
+        }
+
+        var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s), {dealtInstances} dealt offset(s) over {dealtTemplates} template(s))";
+        var curves = $"curves {population.CountCurveFollowers()} follower(s)";
+        var navigationWork = population.NavigationWork();
+        var navigation = $"navigation {population.NavigationCellCount} compiled cell(s), {population.NavigationWorkspaceBytes} workspace byte(s), declared search {population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
+        var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
+        var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
+
+        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
+    }
+    private static string DescribeDistribution(WorldDistribution distribution) {
+        var region = distribution.Region switch {
+            WorldDistributionRegion.Disc disc => $"disc(radius={disc.Radius:0.###},samples={(disc.SampleCount?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "requested")})",
+            WorldDistributionRegion.Points points => $"points(names={string.Join(
+            separator: ",",
+            values: points.Names
+        )},halfExtent={points.HalfExtent:0.###})",
+            WorldDistributionRegion.Lattice lattice => $"lattice({lattice.CountA}x{lattice.CountB})",
+            _ => "unknown",
+        };
+
+        return $"{region}+{DescribeSequence(sequence: distribution.Fill)}";
+    }
     private static string DescribeFixed(FixedQ4816 value) => ((double)value).ToString(
         format: "0.#####",
         provider: CultureInfo.InvariantCulture
@@ -88,33 +190,16 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         }
         var areaDescription = ((areaRows.Count == 0)
             ? "none"
-            : string.Join(separator: ",", values: areaRows)
+            : string.Join(
+                separator: ",",
+                values: areaRows
+            )
         );
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | areas {areaDescription} | compiled={compiled.Attractors.Length} static source(s), {compiled.Areas.Length} area(s) last globalTargets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations} areaTargets={areaStatistics.TargetCount} areaActive={areaStatistics.ActiveAreaCount} areaEvaluations={areaStatistics.EvaluationCount} areaMatches={areaStatistics.MatchCount}]"
         );
-    }
-    private static string DescribeAssignment(WorldRowAssignment assignment) =>
-        $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
-            ? "all"
-            : string.Join(
-                separator: ",",
-                values: assignment.Rows
-            ))}]";
-    private static string DescribeDistribution(WorldDistribution distribution) {
-        var region = distribution.Region switch {
-            WorldDistributionRegion.Disc disc => $"disc(radius={disc.Radius:0.###},samples={(disc.SampleCount?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "requested")})",
-            WorldDistributionRegion.Points points => $"points(names={string.Join(
-            separator: ",",
-            values: points.Names
-        )},halfExtent={points.HalfExtent:0.###})",
-            WorldDistributionRegion.Lattice lattice => $"lattice({lattice.CountA}x{lattice.CountB})",
-            _ => "unknown",
-        };
-
-        return $"{region}+{DescribeSequence(sequence: distribution.Fill)}";
     }
     // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its
     // remaining grace and absolute deadline tick, and — when the retained body carries one — its profile name, so a
@@ -179,7 +264,13 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var workload = WorldRigCatalog.ActiveWorkload(
             isActive: population.IsActive,
             capacity: population.Capacity,
-            rigFor: index => WorldRigCatalog.RigFor(WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index)), population.CatalogRig(index))
+            rigFor: index => WorldRigCatalog.RigFor(
+                WorldDefinitionRows.ResolveLook(
+                    looks,
+                    population.LookIndex(index: index)
+                ),
+                population.CatalogRig(index: index)
+            )
         );
         // The per-kit census derives its names and counts from the definition rows, in row order.
         var counts = population.ActiveKitCounts();
@@ -193,64 +284,6 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
         return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
     }
-    private string DescribeBudget() {
-        var render = ((renderProbe?.Node is { } node)
-            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(format: "G6", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (global field bound {(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x)" : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder) ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} at instruction {binder.InstructionIndex}, unscoped)" : string.Empty)}"
-            : "renderer not built yet"
-        );
-        if (renderProbe?.Node is { } rendered) {
-            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldEngine.MaxVolumes}";
-            var clamps = rendered.LiveProgramFieldScopeClamps;
-            render += $", scoped clamps {clamps.Count} ({clamps.Count(static clamp => clamp.ShapeCount > 1)} shared)";
-            if (clamps.Count > 0) {
-                var worst = clamps.MinBy(static clamp => clamp.StepScale);
-                render += string.Create(CultureInfo.InvariantCulture,
-                    $", worst scope stepScale {worst.StepScale:G6} (field bound {1f / worst.StepScale:G6}x, instance {worst.InstanceIndex}, instructions {worst.PushInstructionIndex}..{worst.PopInstructionIndex}, {worst.ShapeCount} shape(s))");
-            }
-        }
-        var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
-        var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
-        var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
-        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
-        var far = string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
-        );
-        var lattice = ((population.Fields is { } fields)
-            ? fields.DescribeCost(activeBodyCount: population.ActiveCount(), bodyCapacity: population.Capacity)
-            : "lattice none"
-        );
-        var gravityCompiled = population.CompiledGravity;
-        var gravityStatistics = population.GravityStatistics;
-        var gravityAreaStatistics = population.GravityAreaStatistics;
-        var gravity = $"gravity {gravityCompiled.Attractors.Length} static source(s), {gravityCompiled.Areas.Length} local area(s) / target declared, last global targets {Math.Max(val1: 0, val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length))}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}, area targets {gravityAreaStatistics.TargetCount}, active {gravityAreaStatistics.ActiveAreaCount}, evaluations {gravityAreaStatistics.EvaluationCount}, matches {gravityAreaStatistics.MatchCount}";
-        var placementInstances = WorldPlacementStamper.StaticStampInstances(
-            creations: server.Definition.Creations,
-            placements: server.Definition.Placements,
-            worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
-        );
-        var dealtTemplates = 0;
-        var dealtInstances = 0;
-
-        foreach (var row in server.Definition.Placements) {
-            if (row.Deal is not null) {
-                dealtTemplates++;
-                dealtInstances += WorldPlacementDeal.InstanceCount(
-                    template: row,
-                    worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
-                );
-            }
-        }
-
-        var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s), {dealtInstances} dealt offset(s) over {dealtTemplates} template(s))";
-        var curves = $"curves {population.CountCurveFollowers()} follower(s)";
-        var navigationWork = population.NavigationWork();
-        var navigation = $"navigation {population.NavigationCellCount} compiled cell(s), {population.NavigationWorkspaceBytes} workspace byte(s), declared search {population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
-        var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
-        var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
-
-        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
-    }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
     private static string DescribeVariation(WorldPopulationVariation variation) =>
@@ -262,44 +295,60 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             bindability: CommandBindability.Unbindable,
             name: "world.decisions",
             description: "Echoes authored choice policies and active bindings: selected option, last score, commitment, reconsideration cadence, and local random draw count.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.decisions") is { } refusal)
-                ? refusal : new CommandResult(Output: server.DescribeDecisions())),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.decisions"
+            ) is { } refusal)
+            ? refusal
+            : new CommandResult(Output: server.DescribeDecisions())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.flock",
             description: "Echoes each kit's authored local flock steering: space, perception range/cone/cadence, candidate and neighbor budgets, sight requirement, steering weights, and last-step work. Available headless; does not change behavior.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.flock") is { } refusal)
-                ? refusal
-                : new CommandResult(Output: population.DescribeFlocks())),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.flock"
+            ) is { } refusal)
+            ? refusal
+            : new CommandResult(Output: population.DescribeFlocks())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.navigation",
             description: "Echoes every authored deterministic navigation domain: surface, free-volume, or medium-constrained; compiled dimensions and clear cells; volume connectivity; medium binding; and hard route search/path limits.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.navigation") is { } refusal)
-                ? refusal
-                : new CommandResult(Output: population.DescribeNavigation())),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.navigation"
+            ) is { } refusal)
+            ? refusal
+            : new CommandResult(Output: population.DescribeNavigation())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
             description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal)
-                ? refusal
-                : new CommandResult(Output: DescribeBudget())),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.budget"
+            ) is { } refusal)
+            ? refusal
+            : new CommandResult(Output: DescribeBudget())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.gravity",
             description: "Reads the authored and compiled gravity field back (Immediate): solver, uniform acceleration, shared G/softening, explicit mass sources, point/planet surface-gravity presets with their derived masses, and the last deterministic solve's work counters.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.gravity") is { } refusal)
-                ? refusal
-                : new CommandResult(Output: DescribeGravity())),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.gravity"
+            ) is { } refusal)
+            ? refusal
+            : new CommandResult(Output: DescribeGravity())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
@@ -313,9 +362,12 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             bindability: CommandBindability.Unbindable,
             name: "world.responses",
             description: "Reads every placement carrying a response trait back (Immediate): its current prototype and which authored when-condition (if any) currently holds at its coupled lattice cell.",
-            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.responses") is { } refusal)
-                ? refusal
-                : new CommandResult(Output: server.DescribeResponses())),
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.responses"
+            ) is { } refusal)
+            ? refusal
+            : new CommandResult(Output: server.DescribeResponses())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

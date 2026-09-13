@@ -30,13 +30,6 @@ public sealed class QueryCellDivisionLawTests {
 
         return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
     }
-    private static FixedQ4816 Fixed(double value) => FixedQ4816.FromDouble(value: value);
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: Fixed(value: x),
-            Y: Fixed(value: y),
-            Z: Fixed(value: z)
-        );
     // Every dividend within two divisors of zero on both sides, plus the raw spans the two call sites actually feed:
     // a cell edge either side of the origin and a fractional offset that no exact division can hide.
     private static IEnumerable<long> Dividends(long divisor) {
@@ -51,7 +44,53 @@ public sealed class QueryCellDivisionLawTests {
         yield return CellSizeRaw;
         yield return (CellSizeRaw + 1L);
     }
+    private static FixedQ4816 Fixed(double value) => FixedQ4816.FromDouble(value: value);
+    private static FixedVector3 Vector(double x, double y, double z) =>
+        new(
+            X: Fixed(value: x),
+            Y: Fixed(value: y),
+            Z: Fixed(value: z)
+        );
 
+    [Fact]
+    public void ABakedGridSpansTheCeilingOfItsRequestedExtentAcrossTheOrigin() {
+        var artifact = WorldQueryBaker.Bake(
+            blockers: [new WorldQueryBlockerInput(
+                    MaxX: -0.5f,
+                    MaxZ: -0.75f,
+                    MinX: -1f,
+                    MinZ: -1f
+                ),],
+            maxX: 1f,
+            maxZ: 0.6f,
+            minX: -1f,
+            minZ: -1f,
+            terrain: []
+        );
+
+        // 2 world units of x at the 0.25 cell edge is 8 cells; 1.6 units of z is 6.4, which the ceiling rounds to 7.
+        Assert.Equal(
+            actual: artifact.Width,
+            expected: 8
+        );
+        Assert.Equal(
+            actual: artifact.Height,
+            expected: 7
+        );
+        Assert.Equal(
+            actual: artifact.OriginXRaw,
+            expected: Fixed(value: -1.0).Value
+        );
+
+        for (var row = 0; (row < artifact.Height); row++) {
+            for (var column = 0; (column < artifact.Width); column++) {
+                Assert.Equal(
+                    actual: artifact.IsBlockedCell(cellIndex: ((row * artifact.Width) + column)),
+                    expected: ((row == 0) && (column < 2))
+                );
+            }
+        }
+    }
     [Fact]
     public void ACeilingDivideIsTheLeastQuotientAtOrAboveTheExactOne() {
         foreach (var divisor in Divisors) {
@@ -165,44 +204,5 @@ public sealed class QueryCellDivisionLawTests {
             material: out _,
             world: grid.Origin
         ));
-    }
-    [Fact]
-    public void ABakedGridSpansTheCeilingOfItsRequestedExtentAcrossTheOrigin() {
-        var artifact = WorldQueryBaker.Bake(
-            blockers: [new WorldQueryBlockerInput(
-                MaxX: -0.5f,
-                MaxZ: -0.75f,
-                MinX: -1f,
-                MinZ: -1f
-            ),],
-            maxX: 1f,
-            maxZ: 0.6f,
-            minX: -1f,
-            minZ: -1f,
-            terrain: []
-        );
-
-        // 2 world units of x at the 0.25 cell edge is 8 cells; 1.6 units of z is 6.4, which the ceiling rounds to 7.
-        Assert.Equal(
-            actual: artifact.Width,
-            expected: 8
-        );
-        Assert.Equal(
-            actual: artifact.Height,
-            expected: 7
-        );
-        Assert.Equal(
-            actual: artifact.OriginXRaw,
-            expected: Fixed(value: -1.0).Value
-        );
-
-        for (var row = 0; (row < artifact.Height); row++) {
-            for (var column = 0; (column < artifact.Width); column++) {
-                Assert.Equal(
-                    actual: artifact.IsBlockedCell(cellIndex: ((row * artifact.Width) + column)),
-                    expected: ((row == 0) && (column < 2))
-                );
-            }
-        }
     }
 }

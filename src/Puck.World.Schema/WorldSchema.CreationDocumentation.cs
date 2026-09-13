@@ -10,24 +10,42 @@ public static partial class WorldSchema {
         var unconstrained = ((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive);
         var obj = AsObjectNode(node: ref node);
 
-        if (unconstrained && (obj is not null)) {
+        if (
+            unconstrained &&
+            (obj is not null)
+        ) {
             obj["$comment"] = "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.";
         }
 
-        if ((obj is null) || (index is null)) {
+        if (
+            (obj is null) ||
+            (index is null)
+        ) {
             return node;
         }
-        if (ResolveDescription(context: context, index: index) is { } description) {
+        if (ResolveDescription(
+            context: context,
+            index: index
+        ) is { } description) {
             obj["description"] = description;
         }
         if (obj["properties"] is JsonObject properties) {
             foreach (var property in context.TypeInfo.Properties) {
-                if ((properties[property.Name] is not { } child) || (property.AttributeProvider is not System.Reflection.MemberInfo member)) {
+                if (
+                    (properties[property.Name] is not { } child) ||
+                    (property.AttributeProvider is not System.Reflection.MemberInfo member)
+                ) {
                     continue;
                 }
                 var childObject = AsObjectNode(node: ref child);
 
-                if ((childObject is not null) && (ResolveDescriptionForMember(index: index, member: member) is { } propertyDescription)) {
+                if (
+                    (childObject is not null) &&
+                    (ResolveDescriptionForMember(
+                    index: index,
+                    member: member
+                ) is { } propertyDescription)
+                ) {
                     childObject["description"] = propertyDescription;
                     if (childObject.Parent is null) {
                         properties[property.Name] = childObject;
@@ -41,7 +59,11 @@ public static partial class WorldSchema {
             var descriptions = new JsonObject();
 
             foreach (var name in Enum.GetNames(enumType: enumType)) {
-                if (TryGetSummary(index: index, memberDocId: $"F:{FormatDeclaringType(type: enumType)}.{name}", text: out var summary)) {
+                if (TryGetSummary(
+                    index: index,
+                    memberDocId: $"F:{FormatDeclaringType(type: enumType)}.{name}",
+                    text: out var summary
+                )) {
                     descriptions[name] = summary;
                 }
             }

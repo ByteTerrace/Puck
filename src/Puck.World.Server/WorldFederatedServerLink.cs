@@ -33,8 +33,8 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
         if (!WorldFrameCodec.TryEncode(
             failure: out var failure,
             frame: out var canonical,
-            payload: payload,
-            operationId: operationId
+            operationId: operationId,
+            payload: payload
         )) {
             NoteUnavailable(
                 bodyIndex: bodyIndex,
@@ -78,8 +78,8 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     }
     private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload, Guid operationId = default) => Submit(
         bodyIndex: -1,
-        payload: payload,
-        operationId: operationId
+        operationId: operationId,
+        payload: payload
     );
 
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
@@ -130,25 +130,35 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     // committed body ("any"). principal is unused here — it never rode this transport; the interface parameter
     // exists for the loopback side, which routes on it for real. Returns 0: the remote authority mints the envelope,
     // so no local correlation exists for a deferred verdict to address.
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(payload, principal, Guid.Empty);
-
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(
+        operationId: Guid.Empty,
+        payload: payload,
+        principal: principal
+    );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(payload, principal, operationId, null);
-
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(
+        completion: null,
+        operationId: operationId,
+        payload: payload,
+        principal: principal
+    );
     /// <inheritdoc/>
     public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
         var reply = (payload switch {
             WorldSubmissionPayload.Command command => Submit(
-                bodyIndex: command.Value.EntityIndex,
-                payload: payload,
-                operationId: operationId
-            ),
+            bodyIndex: command.Value.EntityIndex,
+            payload: payload,
+            operationId: operationId
+        ),
             WorldSubmissionPayload.Designation designation => Submit(
-                bodyIndex: designation.Value.EntityIndex,
-                payload: payload,
-                operationId: operationId
-            ),
-            _ => SubmitAny(payload: payload, operationId: operationId),
+            bodyIndex: designation.Value.EntityIndex,
+            payload: payload,
+            operationId: operationId
+        ),
+            _ => SubmitAny(
+            operationId: operationId,
+            payload: payload
+        ),
         });
 
         // Fire-and-forget submissions retain their historical return shape. A typed caller can use the additive
@@ -158,12 +168,13 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             var completionReason = "remote authority did not return a completion";
             WorldSubmissionResult? result = null;
             var reason = string.Empty;
-            var decoded = reply is { } completed && WorldPeerWireFormat.TryReadResult(
+            var decoded = ((reply is { } completed) && WorldPeerWireFormat.TryReadResult(
                 body: completed.Body.Span,
                 kind: completed.Kind,
                 result: out result,
                 reason: out reason
-            );
+            ));
+
             if (decoded) {
                 completion(result!);
             } else {

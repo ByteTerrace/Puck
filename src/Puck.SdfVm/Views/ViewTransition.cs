@@ -45,11 +45,11 @@ public readonly record struct ViewLayout(IReadOnlyList<ViewBinding> Bindings) {
 /// </para>
 /// </remarks>
 public sealed class ViewTransition {
-    private readonly ViewLayout m_from;
-    private readonly ViewLayout m_to;
     private readonly float m_durationSeconds;
     private readonly Func<float, float> m_easing;
+    private readonly ViewLayout m_from;
     private readonly ViewBinding[] m_scratch;
+    private readonly ViewLayout m_to;
 
     /// <summary>Initializes a transition between two layouts.</summary>
     /// <param name="from">The starting layout shown at elapsed time 0; see <see cref="Sample"/>.</param>
@@ -61,10 +61,24 @@ public sealed class ViewTransition {
     public ViewTransition(ViewLayout from, ViewLayout to, float durationSeconds, Func<float, float>? easing = null) {
         m_from = from;
         m_to = to;
-        m_durationSeconds = MathF.Max(x: durationSeconds, y: 0.001f);
+        m_durationSeconds = MathF.Max(
+            x: durationSeconds,
+            y: 0.001f
+        );
         m_easing = (easing ?? (static t => t));
-        m_scratch = new ViewBinding[Math.Max(val1: from.Bindings.Count, val2: to.Bindings.Count)];
+        m_scratch = new ViewBinding[Math.Max(
+            val1: from.Bindings.Count,
+            val2: to.Bindings.Count
+        )];
     }
+
+    private static NormalizedRect CenterOf(NormalizedRect rect) =>
+        new(
+            X: (rect.X + (0.5f * rect.Width)),
+            Y: (rect.Y + (0.5f * rect.Height)),
+            Width: 0f,
+            Height: 0f
+        );
 
     /// <summary>Samples this transition at <paramref name="elapsedSeconds"/> since it started.</summary>
     /// <param name="elapsedSeconds">Seconds since the transition began (the render clock, not wall time — a caller
@@ -74,31 +88,54 @@ public sealed class ViewTransition {
     /// <returns>The eased layout at this instant — a REUSED buffer, valid only until the next <see cref="Sample"/>
     /// call.</returns>
     public ViewLayout Sample(float elapsedSeconds, out bool complete) {
-        var t = Math.Clamp(max: 1f, min: 0f, value: (elapsedSeconds / m_durationSeconds));
+        var t = Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: (elapsedSeconds / m_durationSeconds)
+        );
 
         complete = (t >= 1f);
 
-        var eased = Math.Clamp(value: m_easing(t), min: 0f, max: 1f);
+        var eased = Math.Clamp(
+            value: m_easing(t),
+            min: 0f,
+            max: 1f
+        );
         var cutToDestination = (eased >= 0.5f);
 
         for (var index = 0; (index < m_scratch.Length); index++) {
             var fromBinding = ((index < m_from.Bindings.Count)
                 ? m_from.Bindings[index]
-                : new ViewBinding(View: m_to.Bindings[index].View, Region: CenterOf(rect: m_to.Bindings[index].Region), Child: m_to.Bindings[index].Child));
+                : new ViewBinding(
+                    View: m_to.Bindings[index].View,
+                    Region: CenterOf(rect: m_to.Bindings[index].Region),
+                    Child: m_to.Bindings[index].Child
+                )
+            );
             var toBinding = ((index < m_to.Bindings.Count)
                 ? m_to.Bindings[index]
-                : new ViewBinding(View: m_from.Bindings[index].View, Region: CenterOf(rect: m_from.Bindings[index].Region), Child: m_from.Bindings[index].Child));
+                : new ViewBinding(
+                    View: m_from.Bindings[index].View,
+                    Region: CenterOf(rect: m_from.Bindings[index].Region),
+                    Child: m_from.Bindings[index].Child
+                )
+            );
 
             m_scratch[index] = new ViewBinding(
-                Region: NormalizedRect.Lerp(from: fromBinding.Region, to: toBinding.Region, t: eased),
-                View: (cutToDestination ? toBinding.View : fromBinding.View),
-                Child: (cutToDestination ? toBinding.Child : fromBinding.Child)
+                Region: NormalizedRect.Lerp(
+                    from: fromBinding.Region,
+                    to: toBinding.Region,
+                    t: eased
+                ),
+                View: (cutToDestination
+                ? toBinding.View
+                : fromBinding.View),
+                Child: (cutToDestination
+                ? toBinding.Child
+                : fromBinding.Child)
             );
         }
 
         return new ViewLayout(Bindings: m_scratch);
     }
-
-    private static NormalizedRect CenterOf(NormalizedRect rect) =>
-        new(X: (rect.X + (0.5f * rect.Width)), Y: (rect.Y + (0.5f * rect.Height)), Width: 0f, Height: 0f);
 }

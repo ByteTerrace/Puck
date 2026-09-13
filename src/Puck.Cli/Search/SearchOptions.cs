@@ -20,28 +20,28 @@ internal sealed class SearchOptions {
     public int After { get; private set; }
     public int Before { get; private set; }
     public bool Counts { get; private set; }
-
-    public List<CliGlob> Exclude { get; } = [];
-
-    public bool FilesOnly { get; private set; }
-    public bool FilesWithMatches { get; private set; }
-    public bool IgnoreCase { get; private set; }
-
-    public List<CliGlob> Include { get; } = [];
-    public bool LineNumbers { get; private set; } = true;
-
-    public bool Literal { get; private set; }
-
-    public int MaxResults { get; private set; } = DefaultMaxResults;
-    public List<string> Paths { get; } = [];
-
-    public string? Pattern { get; private set; }
-    public bool Quiet { get; private set; }
-    public bool Span { get; private set; }
     // The mode precedence, in one place: -q silences everything, then -l wins over -c, then the line-block modes. It
     // is what SearchEmitter applies and what the scanner reads to skip work whose result is never printed.
     public SearchDetail Detail =>
-        ((Quiet || FilesWithMatches) ? SearchDetail.Existence : (Counts ? SearchDetail.Count : SearchDetail.Locations));
+        ((Quiet || FilesWithMatches)
+            ? SearchDetail.Existence
+            : (Counts
+                ? SearchDetail.Count
+                : SearchDetail.Locations
+        ));
+    public bool FilesOnly { get; private set; }
+    public bool FilesWithMatches { get; private set; }
+    public bool IgnoreCase { get; private set; }
+    public bool Literal { get; private set; }
+    public string? Pattern { get; private set; }
+    public bool Quiet { get; private set; }
+    public bool Span { get; private set; }
+
+    public List<CliGlob> Exclude { get; } = [];
+    public List<CliGlob> Include { get; } = [];
+    public bool LineNumbers { get; private set; } = true;
+    public int MaxResults { get; private set; } = DefaultMaxResults;
+    public List<string> Paths { get; } = [];
 
     // Builds the options from the parsed command line. `after`/`before`/`context` are null when their flag is absent,
     // so -C supplies whichever side -A/-B did not name. `operands` is the positional run: the pattern followed by the
@@ -73,7 +73,9 @@ internal sealed class SearchOptions {
             LineNumbers = !noLineNumbers,
             Literal = literal,
             MaxResults = maxResults,
-            Pattern = ((filesOnly || (operands.Length == 0)) ? null : operands[0]),
+            Pattern = ((filesOnly || (operands.Length == 0))
+            ? null
+            : operands[0]),
             Quiet = quiet,
             Span = span,
         };
@@ -87,7 +89,10 @@ internal sealed class SearchOptions {
         }
 
         // --files consumes no pattern, so every operand is a path; otherwise the paths start after it.
-        for (var index = (filesOnly ? 0 : 1); (index < operands.Length); index++) {
+        for (var index = (filesOnly
+            ? 0
+            : 1
+        ); (index < operands.Length); index++) {
             options.Paths.Add(item: operands[index]);
         }
 

@@ -63,7 +63,9 @@ public static partial class CreationCanonicalizer {
                 !float.IsFinite(f: rotation.X) ||
                 !float.IsFinite(f: rotation.Y) ||
                 !float.IsFinite(f: rotation.Z) ||
-                !float.IsFinite(f: rotation.W) || !float.IsFinite(rotation.LengthSquared()) || rotation.LengthSquared() < 1e-12f
+                !float.IsFinite(f: rotation.W) ||
+                !float.IsFinite(f: rotation.LengthSquared()) ||
+                (rotation.LengthSquared() < 1e-12f)
             ) {
                 errors.Add(item: new(
                     Message: "rotation must contain finite components.",
@@ -85,24 +87,77 @@ public static partial class CreationCanonicalizer {
                 ));
             }
 
-            ValidatePositive(value: volume.Axis, name: "axis", errors: errors, path: path);
-            ValidatePositive(value: volume.Width, name: "width", errors: errors, path: path);
-            ValidateUnitRange(volume.Coverage, "coverage", errors, path + ".coverage");
-            ValidateUnitRange(volume.Softness, "softness", errors, path + ".softness");
+            ValidatePositive(
+                value: volume.Axis,
+                name: "axis",
+                errors: errors,
+                path: path
+            );
+            ValidatePositive(
+                value: volume.Width,
+                name: "width",
+                errors: errors,
+                path: path
+            );
+            ValidateUnitRange(
+                volume.Coverage,
+                "coverage",
+                errors,
+                (path + ".coverage")
+            );
+            ValidateUnitRange(
+                volume.Softness,
+                "softness",
+                errors,
+                (path + ".softness")
+            );
             if (volume.Softness is 0f) {
-                errors.Add(new(Path: path + ".softness", Message: "softness must be positive."));
+                errors.Add(item: new(
+                    Message: "softness must be positive.",
+                    Path: (path + ".softness")
+                ));
             }
-            if (volume.Kind != VolumeDocument.CloudKind && (volume.Coverage is not null || volume.Softness is not null)) {
-                errors.Add(new(Path: path + (volume.Coverage is not null ? ".coverage" : ".softness"), Message: "coverage and softness are cloud-only controls."));
+            if (
+                (volume.Kind != VolumeDocument.CloudKind) &&
+                ((volume.Coverage is not null) || (volume.Softness is not null))
+            ) {
+                errors.Add(item: new(
+                    Path: (path + ((volume.Coverage is not null)
+                    ? ".coverage"
+                    : ".softness")),
+                    Message: "coverage and softness are cloud-only controls."
+                ));
             }
-            if (volume.Kind == VolumeDocument.CloudKind && volume.Axis is not null) {
-                errors.Add(new(Path: path + ".axis", Message: "axis is a flow-only control; a cloud uses halfExtent."));
+            if (
+                (volume.Kind == VolumeDocument.CloudKind) &&
+                (volume.Axis is not null)
+            ) {
+                errors.Add(item: new(
+                    Message: "axis is a flow-only control; a cloud uses halfExtent.",
+                    Path: (path + ".axis")
+                ));
             }
-            if (volume.Speed is { } speed && !float.IsFinite(speed)) {
-                errors.Add(new(Path: path + ".speed", Message: "speed must be finite."));
+            if (
+                (volume.Speed is { } speed) &&
+                !float.IsFinite(f: speed)
+            ) {
+                errors.Add(item: new(
+                    Message: "speed must be finite.",
+                    Path: (path + ".speed")
+                ));
             }
-            ValidateNonNegative(value: volume.Intensity, name: "intensity", errors: errors, path: path);
-            ValidateNonNegative(value: volume.Extinction, name: "extinction", errors: errors, path: path);
+            ValidateNonNegative(
+                value: volume.Intensity,
+                name: "intensity",
+                errors: errors,
+                path: path
+            );
+            ValidateNonNegative(
+                value: volume.Extinction,
+                name: "extinction",
+                errors: errors,
+                path: path
+            );
 
             if (
                 (volume.Steps is { } steps) &&
@@ -115,22 +170,56 @@ public static partial class CreationCanonicalizer {
             }
 
             if (volume.Ramp is not { Count: >= 1 and <= 4 }) {
-                errors.Add(new(Path: path + ".ramp", Message: "A volume ramp requires one to four density stops."));
+                errors.Add(item: new(
+                    Message: "A volume ramp requires one to four density stops.",
+                    Path: (path + ".ramp")
+                ));
             } else {
                 var previous = -1f;
+
                 foreach (var stop in volume.Ramp) {
-                    if (stop is null || !float.IsFinite(stop.Density) || stop.Density <= previous || stop.Density > 1f || stop.Density < 0f) {
-                        errors.Add(new(Path: path + ".ramp", Message: "Density stops must increase in [0, 1]."));
+                    if (
+                        (stop is null) ||
+                        !float.IsFinite(f: stop.Density) ||
+                        (stop.Density <= previous) ||
+                        (stop.Density > 1f) ||
+                        (stop.Density < 0f)
+                    ) {
+                        errors.Add(item: new(
+                            Message: "Density stops must increase in [0, 1].",
+                            Path: (path + ".ramp")
+                        ));
                         continue;
                     }
-                    ValidateHexColor(stop.Color, "ramp.color", errors, path);
+                    ValidateHexColor(
+                        stop.Color,
+                        "ramp.color",
+                        errors,
+                        path
+                    );
                     previous = stop.Density;
                 }
             }
-            ValidateUnitRange(volume.PulseAmplitude, "pulseAmplitude", errors, path + ".pulseAmplitude");
-            ValidateNonNegative(volume.PulseFrequency, "pulseFrequency", errors, path);
-            if (volume.IntensityLane is { } lane && (uint)lane > 3u) {
-                errors.Add(new(Path: path + ".intensityLane", Message: "Intensity lane must be in [0, 3]."));
+            ValidateUnitRange(
+                volume.PulseAmplitude,
+                "pulseAmplitude",
+                errors,
+                (path + ".pulseAmplitude")
+            );
+            ValidateNonNegative(
+                volume.PulseFrequency,
+                "pulseFrequency",
+                errors,
+                path
+            );
+            if (
+                (volume.IntensityLane is { } lane) &&
+                (((uint)lane) > 3u)
+            ) {
+                errors.Add(item: new(
+                    Message: "Intensity lane must be in [0, 3].",
+                    Path: (path + ".intensityLane")
+                ));
             }
         }
 
@@ -139,7 +228,10 @@ public static partial class CreationCanonicalizer {
         static void ValidateHexColor(string? value, string name, List<DocumentValidationError> errors, string path) {
             if (
                 (value is not null) &&
-                !HexColor.TryParse(rgb: out _, value: value)
+                !HexColor.TryParse(
+                rgb: out _,
+                value: value
+            )
             ) {
                 errors.Add(item: new(
                     Message: $"{name} must be #RRGGBB.",

@@ -424,7 +424,10 @@ public static partial class WorldDefinitionValidator {
             if (value is not { } constant) {
                 errors.Add(item: $"{path}.value is required at body scope — a live copy source ('fromState') is legitimate only in a world rule.");
             } else {
-                if (!NumericLiteral.TryToFixed(value: constant, result: out _)) {
+                if (!NumericLiteral.TryToFixed(
+                    result: out _,
+                    value: constant
+                )) {
                     errors.Add(item: $"{path}.value is outside the Q48.16 action-state range.");
                 }
             }
@@ -607,7 +610,10 @@ public static partial class WorldDefinitionValidator {
                 if (compare.Value is not { } compareValue) {
                     errors.Add(item: $"{path}.value is required at body scope — a per-body predicate names an authored constant (a comparand row reference is legitimate only in a world rule).");
                 } else {
-                    if (!NumericLiteral.TryToFixed(value: compareValue, result: out _)) {
+                    if (!NumericLiteral.TryToFixed(
+                        result: out _,
+                        value: compareValue
+                    )) {
                         errors.Add(item: $"{path}.value is outside the Q48.16 action-state range.");
                     }
                 }

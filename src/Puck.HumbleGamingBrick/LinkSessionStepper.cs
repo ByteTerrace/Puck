@@ -70,20 +70,24 @@ internal static class LinkSessionStepper {
         public long GetRemaining(int index) {
             var machine = ((index == 0)
                 ? first
-                : second);
+                : second
+            );
             var target = ((index == 0)
                 ? firstTarget
-                : secondTarget);
+                : secondTarget
+            );
             var elapsed = machine.Clock.CycleCount;
 
             return ((elapsed < target)
                 ? ((long)(target - elapsed))
-                : 0L);
+                : 0L
+            );
         }
         public void StepOnce(int index) {
             var machine = ((index == 0)
                 ? first
-                : second);
+                : second
+            );
 
             if (machine.HasBusMaster) {
                 machine.StepInstruction();

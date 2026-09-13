@@ -57,16 +57,16 @@ internal static class IdentifierRules {
 /// argument, or this document's own JSON parse), and every downstream consumer inherits the proof for free.
 /// </summary>
 public readonly record struct SafeName {
-    /// <summary>The longest suffix a minting site may append to a validated name before it reaches a file system —
-    /// a world document's <c>.world.json</c>, eleven characters. Every such suffix is proven no longer than this where
-    /// it is declared, so <see cref="MaxLength"/> stays the one ceiling.</summary>
-    public const int MaxSuffixLength = 11;
     /// <summary>The longest a validated name may be: Windows' 255-character path-segment ceiling (the tightest of the
     /// platforms this repository targets, so a value safe here is safe everywhere) minus
     /// <see cref="MaxSuffixLength"/>. One ceiling covers every minting site — identity seeds, group ids, instance
     /// names, composed instance names — because every one of them mints through <see cref="TryParse"/>, never around
     /// it; a bare directory-segment use appends nothing and is covered conservatively.</summary>
     public const int MaxLength = (255 - MaxSuffixLength);
+    /// <summary>The longest suffix a minting site may append to a validated name before it reaches a file system —
+    /// a world document's <c>.world.json</c>, eleven characters. Every such suffix is proven no longer than this where
+    /// it is declared, so <see cref="MaxLength"/> stays the one ceiling.</summary>
+    public const int MaxSuffixLength = 11;
 
     private SafeName(string value) => Value = value;
 
@@ -195,29 +195,28 @@ public readonly record struct CellName {
     /// <summary>Reads as its validated string wherever a plain string is expected.</summary>
     public static implicit operator string(CellName name) => name.Value;
 }
-
 /// <summary>Reads/writes <see cref="SafeName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="SafeName.TryParse"/>, so a document holding one can never carry an unsafe id.</summary>
 public sealed class SafeNameJsonConverter : TryParseStringJsonConverter<SafeName> {
+    /// <inheritdoc/>
+    protected override string ToValue(SafeName value) => value.Value;
     /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out SafeName value, out string reason) => SafeName.TryParse(
         candidate: candidate,
         name: out value,
         reason: out reason
     );
-    /// <inheritdoc/>
-    protected override string ToValue(SafeName value) => value.Value;
 }
 /// <summary>Reads/writes <see cref="CellName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="CellName.TryParse"/>, so a document holding one can never carry a dotted or unsafe row/cell
 /// name.</summary>
 public sealed class CellNameJsonConverter : TryParseStringJsonConverter<CellName> {
     /// <inheritdoc/>
+    protected override string ToValue(CellName value) => value.Value;
+    /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out CellName value, out string reason) => CellName.TryParse(
         candidate: candidate,
         name: out value,
         reason: out reason
     );
-    /// <inheritdoc/>
-    protected override string ToValue(CellName value) => value.Value;
 }

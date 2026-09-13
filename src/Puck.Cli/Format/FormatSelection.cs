@@ -16,12 +16,27 @@ internal static class FormatSelection {
         foreach (var entry in document.RootElement.EnumerateArray()) {
             var relative = (entry.GetString() ?? throw new ArgumentException(message: "A format path cannot be null."));
 
-            if (Path.IsPathRooted(path: relative) || relative.Split('/', '\\').Any(predicate: static segment => (segment is ".." or "." or ""))) {
+            if (
+                Path.IsPathRooted(path: relative) ||
+                relative.Split(
+                '/',
+                '\\'
+            ).Any(predicate: static segment => (segment is ".." or "." or ""))
+            ) {
                 throw new ArgumentException(message: $"Expected a contained relative source path: {relative}");
             }
-            var path = Path.GetFullPath(basePath: root, path: relative);
+            var path = Path.GetFullPath(
+                basePath: root,
+                path: relative
+            );
 
-            if (!path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs") || !File.Exists(path: path)) {
+            if (
+                !path.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".cs"
+            ) ||
+                !File.Exists(path: path)
+            ) {
                 throw new ArgumentException(message: $"C# source not found: {relative}");
             }
             for (var current = path; (current != root); current = Path.GetDirectoryName(path: current)!) {
@@ -34,22 +49,50 @@ internal static class FormatSelection {
         return [.. paths];
     }
     internal static int Run(string root, string manifest, HashSet<string> selected, bool whatIf, bool verify) {
-        var targets = Read(manifest: manifest, root: root);
+        var targets = Read(
+            manifest: manifest,
+            root: root
+        );
         var ordinary = new List<string>();
         var standalone = new List<string>();
 
         foreach (var target in targets) {
-            if (File.ReadLines(path: target).Any(predicate: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "#!") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "#:")))
-                || (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: target)!) is null)) {
+            if (
+                File.ReadLines(path: target).Any(predicate: static line => (line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "#!"
+            ) || line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "#:"
+            ))) ||
+                (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: target)!) is null)
+            ) {
                 standalone.Add(item: target);
             } else {
                 ordinary.Add(item: target);
             }
         }
-        var result = ((ordinary.Count == 0) ? 0 : FormatCommand.RunPhases(root: root, selected: selected, targets: [.. ordinary], verify: verify, whatIf: whatIf));
+        var result = ((ordinary.Count == 0)
+            ? 0
+            : FormatCommand.RunPhases(
+                root: root,
+                selected: selected,
+                targets: [.. ordinary],
+                verify: verify,
+                whatIf: whatIf
+            )
+        );
 
         foreach (var target in standalone) {
-            result = Math.Max(val1: result, val2: FormatFileProject.Run(file: target, selected: selected, verify: verify, whatIf: whatIf));
+            result = Math.Max(
+                val1: result,
+                val2: FormatFileProject.Run(
+                    file: target,
+                    selected: selected,
+                    verify: verify,
+                    whatIf: whatIf
+                )
+            );
         }
         return result;
     }

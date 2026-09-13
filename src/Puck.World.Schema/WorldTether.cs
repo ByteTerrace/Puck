@@ -104,14 +104,12 @@ public readonly record struct FixedWorldTether(
             AimHalfAngle: FixedQ4816.FromDouble(value: (facet.AimHalfAngleDegrees * (Math.PI / 180.0))),
             AttachChannelOrdinal: attachOrdinal,
             AttachThreshold: ((attachOrdinal >= 0)
-                ? channels.Threshold(ordinal: attachOrdinal)
-                : FixedQ4816.Zero
-            ),
+            ? channels.Threshold(ordinal: attachOrdinal)
+            : FixedQ4816.Zero),
             DetachChannelOrdinal: detachOrdinal,
             DetachThreshold: ((detachOrdinal >= 0)
-                ? channels.Threshold(ordinal: detachOrdinal)
-                : FixedQ4816.Zero
-            ),
+            ? channels.Threshold(ordinal: detachOrdinal)
+            : FixedQ4816.Zero),
             LengthRate: FixedQ4816.FromDouble(value: facet.LengthRate),
             MaxAnchorDistance: FixedQ4816.FromDouble(value: facet.MaxAnchorDistance),
             MinLength: FixedQ4816.FromDouble(value: facet.MinLength),

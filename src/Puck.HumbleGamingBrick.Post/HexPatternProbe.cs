@@ -18,30 +18,45 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal static class HexPatternProbe {
     private const uint ChannelMask = 0xF8F8F8;
-    private const uint SetPixel = 0x000000;
     private const uint ClearPixel = 0xF8F8F8;
     private const int GlyphSize = 8;
+    private const uint SetPixel = 0x000000;
 
     // 16 hex-digit glyphs (0-9, A-F), 8x8 monochrome pixels each, row-major, '#' set / '.' clear — ported verbatim
     // from testrunner.cpp's tileFromChar table.
-    private static readonly bool[][] s_glyphs = [
-        Glyph("........" + ".#######" + ".#.....#" + ".#.....#" + ".#.....#" + ".#.....#" + ".#.....#" + ".#######"),
-        Glyph("........" + "....#..." + "....#..." + "....#..." + "....#..." + "....#..." + "....#..." + "....#..."),
-        Glyph("........" + ".#######" + ".......#" + ".......#" + ".#######" + ".#......" + ".#......" + ".#######"),
-        Glyph("........" + ".#######" + ".......#" + ".......#" + "..######" + ".......#" + ".......#" + ".#######"),
-        Glyph("........" + ".#.....#" + ".#.....#" + ".#.....#" + ".#######" + ".......#" + ".......#" + ".......#"),
-        Glyph("........" + ".#######" + ".#......" + ".#......" + ".######." + ".......#" + ".......#" + ".######."),
-        Glyph("........" + ".#######" + ".#......" + ".#......" + ".#######" + ".#.....#" + ".#.....#" + ".#######"),
-        Glyph("........" + ".#######" + ".......#" + "......#." + ".....#.." + "....#..." + "...#...." + "...#...."),
-        Glyph("........" + "..#####." + ".#.....#" + ".#.....#" + "..#####." + ".#.....#" + ".#.....#" + "..#####."),
-        Glyph("........" + ".#######" + ".#.....#" + ".#.....#" + ".#######" + ".......#" + ".......#" + ".#######"),
-        Glyph("........" + "....#..." + "..#...#." + ".#.....#" + ".#######" + ".#.....#" + ".#.....#" + ".#.....#"),
-        Glyph("........" + ".######." + ".#.....#" + ".#.....#" + ".######." + ".#.....#" + ".#.....#" + ".######."),
-        Glyph("........" + "..#####." + ".#.....#" + ".#......" + ".#......" + ".#......" + ".#.....#" + "..#####."),
-        Glyph("........" + ".######." + ".#.....#" + ".#.....#" + ".#.....#" + ".#.....#" + ".#.....#" + ".######."),
-        Glyph("........" + ".#######" + ".#......" + ".#......" + ".#######" + ".#......" + ".#......" + ".#######"),
-        Glyph("........" + ".#######" + ".#......" + ".#......" + ".#######" + ".#......" + ".#......" + ".#......"),
+    private static readonly bool[][] Glyphs = [
+        Glyph(pixels: ".........#######.#.....#.#.....#.#.....#.#.....#.#.....#.#######"),
+        Glyph(pixels: "............#.......#.......#.......#.......#.......#.......#..."),
+        Glyph(pixels: ".........#######.......#.......#.#######.#.......#.......#######"),
+        Glyph(pixels: ".........#######.......#.......#..######.......#.......#.#######"),
+        Glyph(pixels: ".........#.....#.#.....#.#.....#.#######.......#.......#.......#"),
+        Glyph(pixels: ".........#######.#.......#.......######........#.......#.######."),
+        Glyph(pixels: ".........#######.#.......#.......#######.#.....#.#.....#.#######"),
+        Glyph(pixels: ".........#######.......#......#......#......#......#.......#...."),
+        Glyph(pixels: "..........#####..#.....#.#.....#..#####..#.....#.#.....#..#####."),
+        Glyph(pixels: ".........#######.#.....#.#.....#.#######.......#.......#.#######"),
+        Glyph(pixels: "............#.....#...#..#.....#.#######.#.....#.#.....#.#.....#"),
+        Glyph(pixels: ".........######..#.....#.#.....#.######..#.....#.#.....#.######."),
+        Glyph(pixels: "..........#####..#.....#.#.......#.......#.......#.....#..#####."),
+        Glyph(pixels: ".........######..#.....#.#.....#.#.....#.#.....#.#.....#.######."),
+        Glyph(pixels: ".........#######.#.......#.......#######.#.......#.......#######"),
+        Glyph(pixels: ".........#######.#.......#.......#######.#.......#.......#......"),
     ];
+
+    private static bool[] Glyph(string pixels) =>
+        [.. pixels.Select(selector: static c => (c == '#'))];
+    private static bool[]? GlyphFor(char character) {
+        if (character is (>= '0' and <= '9')) {
+            return Glyphs[(character - '0')];
+        }
+
+        var upper = char.ToUpperInvariant(c: character);
+
+        return ((upper is (>= 'A' and <= 'F'))
+            ? Glyphs[((upper - 'A') + 0xA)]
+            : null
+        );
+    }
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedHexPattern"/> must be non-empty.</param>
@@ -88,7 +103,7 @@ internal static class HexPatternProbe {
 
             for (var row = 0; (row < GlyphSize); ++row) {
                 for (var column = 0; (column < GlyphSize); ++column) {
-                    var index = (baseOffset + (row * width) + column);
+                    var index = ((baseOffset + (row * width)) + column);
 
                     if (index >= pixels.Length) {
                         return new ProbeOutcome(
@@ -99,7 +114,8 @@ internal static class HexPatternProbe {
 
                     var expected = (glyph[((row * GlyphSize) + column)]
                         ? SetPixel
-                        : ClearPixel);
+                        : ClearPixel
+                    );
 
                     if ((pixels[index] & ChannelMask) != expected) {
                         return new ProbeOutcome(
@@ -116,18 +132,4 @@ internal static class HexPatternProbe {
             Verdict: ProbeVerdict.Pass
         );
     }
-
-    private static bool[]? GlyphFor(char character) {
-        if (character is (>= '0' and <= '9')) {
-            return s_glyphs[(character - '0')];
-        }
-
-        var upper = char.ToUpperInvariant(c: character);
-
-        return ((upper is (>= 'A' and <= 'F'))
-            ? s_glyphs[((upper - 'A') + 0xA)]
-            : null);
-    }
-    private static bool[] Glyph(string pixels) =>
-        [.. pixels.Select(selector: static c => (c == '#'))];
 }

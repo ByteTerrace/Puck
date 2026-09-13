@@ -16,33 +16,232 @@ namespace Puck.World.Tests;
 /// values across an unrelated section.
 /// </summary>
 public sealed class AddonPrepareGateLawTests {
+    private static bool ApplyAndObserveChange(WorldFixture fixture, string name) {
+        var before = fixture.DefinitionBytes();
+
+        Submit(
+            fixture: fixture,
+            name: name
+        );
+
+        var after = fixture.DefinitionBytes();
+
+        return !before.AsSpan().SequenceEqual(other: after);
+    }
+    private static bool ApplyRebuildAndObserveChange(WorldFixture fixture, WorldAddonRow row) {
+        var before = fixture.DefinitionBytes();
+        var candidate = fixture.Server.Definition with {
+            AddonsRaw = [row],
+        };
+        var contentHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate));
+
+        fixture.Server.EnqueueRebuild(
+            request: new WorldRebuildRequest(
+                ContentHash: contentHash,
+                Definition: candidate,
+                Force: true,
+                Kind: WorldRebuildKind.Load,
+                PathHint: "addon-no-host-rebuild-probe.world.json"
+            ),
+            principal: WorldPrincipal.Console
+        );
+        fixture.Step();
+
+        var after = fixture.DefinitionBytes();
+
+        return !before.AsSpan().SequenceEqual(other: after);
+    }
+    // The ONE predicate this law needs to script RecordingAddonHost.RefuseWhen against — a plain name lookup, kept
+    // private here rather than reused from production code, whose own reuse-eligibility rule
+    // (WorldAddonRuntime.RowsStructurallyEqual) compares every field, not just the name.
+    private static bool HasAddonNamed(WorldDefinition definition, string name) {
+        foreach (var row in definition.Addons) {
+            if (string.Equals(
+                a: row.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static void Submit(WorldFixture fixture, string name) {
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
+            Addon: new WorldAddonRow(
+                Name: name,
+                ModulePath: "unreachable.wasm",
+                Hash: "sha256-64/0000000000000000",
+                Fuel: 1000UL,
+                Enabled: true
+            ),
+            Principal: WorldPrincipal.Console
+        ));
+        fixture.Step();
+    }
+
+    // The plan-ownership guard now covers contention-array staging, not only Commit — see WorldServer.
+    // MutationApply.cs's TryApplyMutation (and its ApplyRebuild/ApplyUndo siblings): the whole sequence from a
+    // successful TryPrepare through Commit runs under ONE try/finally. A MountedCount this large forces
+    // StageAddonContentionArrays' own capacity arithmetic (Population.LocalSeatCount + mountedCount*2) to wrap, in
+    // unchecked int32 arithmetic, into a deeply negative array length, throwing OverflowException from INSIDE that
+    // guarded region — proving the plan a successful TryPrepare returned is still disposed when something after it,
+    // but before Commit, throws.
     [Fact]
-    public void UnpreparableAddonRowRefusesTheWholeMutation_PreparableRowApplies() {
+    public void AddonPlanIsDisposedWhenContentionArrayStagingThrows() {
+        using var fixture = Fixtures.FreshServer();
+        var host = new RecordingAddonHost {
+            NextPlanMountedCount = 1_500_000_000,
+        };
+
+        fixture.Server.AttachAddons(runtime: host);
+
+        var thrown = Record.Exception(testCode: () => Submit(
+            fixture: fixture,
+            name: "overflow-probe"
+        ));
+
+        Assert.IsType<OverflowException>(@object: thrown);
+
+        var plan = Assert.Single(collection: host.LivePlans);
+
+        Assert.True(
+            condition: plan.Disposed,
+            userMessage: "an exception between a successful TryPrepare and Commit must still dispose the plan — the ownership guard now covers contention-array staging too"
+        );
+        Assert.False(
+            condition: plan.Committed,
+            userMessage: "a plan that never reached Commit must not read as committed"
+        );
+    }
+    // Proves the WorldServer.Step half of stable completion routing: the instance token a caller submits on
+    // EnqueueMutation travels unchanged to CompleteMutation, per pending op, even when an ordinary addon-affecting
+    // mutation drains between two addon-sourced completions carrying different tokens. The other half — that
+    // CompleteMutation resolves a token against a mounted guest's identity rather than its position, so a queued
+    // removal/reorder can never deliver one guest's completion to another — lives inside
+    // Puck.World.Addons.WorldAddonRuntime, which this project cannot reference.
+    [Fact]
+    public void AddonSourcedCompletionCarriesItsOwnSubmittedTokenAcrossAnInterveningAddonMutation() {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
 
         fixture.Server.AttachAddons(runtime: host);
 
-        Laws.RefusalWithControl(
-            lawId: "addon.prepare-gate-all-or-nothing",
-            deniedOutcome: () => {
-                host.RefuseWhen = static candidate => HasAddonNamed(
-                    definition: candidate,
-                    name: "boom"
-                );
+        fixture.Server.EnqueueMutation(
+            mutation: new WorldMutation.UpsertStateRow(
+                Principal: WorldPrincipal.Console,
+                Row: new WorldStateRow(
+                    Name: CellName.Parse(candidate: "completion-token-probe-a"),
+                    Kind: CellKind.Int
+                )
+            ),
+            sourceAddonInstanceId: 111L,
+            actOrdinal: 7
+        );
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
+            Addon: new WorldAddonRow(
+                Name: "intervening",
+                ModulePath: "unreachable.wasm",
+                Hash: "sha256-64/0000000000000000",
+                Fuel: 1000UL,
+                Enabled: true
+            ),
+            Principal: WorldPrincipal.Console
+        ));
+        fixture.Server.EnqueueMutation(
+            mutation: new WorldMutation.UpsertStateRow(
+                Principal: WorldPrincipal.Console,
+                Row: new WorldStateRow(
+                    Name: CellName.Parse(candidate: "completion-token-probe-b"),
+                    Kind: CellKind.Int
+                )
+            ),
+            sourceAddonInstanceId: 222L,
+            actOrdinal: 9
+        );
+        fixture.Step();
 
-                return ApplyAndObserveChange(
-                    fixture: fixture,
-                    name: "boom"
-                );
+        Assert.Equal(
+            expected: [(111L, ((ushort)7), true), (222L, ((ushort)9), true)],
+            actual: host.CompletedMutations
+        );
+    }
+    // ApplyRebuild's own null-host gate (finding 3): with no addon host attached at all, a candidate whose only
+    // addon row is ENABLED must refuse — installing it would leave the document claiming a mounted guest no host
+    // can ever run. A candidate whose only addon row is DISABLED stays vacuous, exactly like an addon-free one.
+    [Fact]
+    public void ApplyRebuildRefusesAnEnabledAddonRowWithNoHostAttached_AllDisabledCandidateInstalls() {
+        using var fixture = Fixtures.FreshServer();
+
+        // No AttachAddons call at all — m_addons stays null, exactly like a server built but never wired to a host.
+        Laws.RefusalWithControl(
+            lawId: "addon.rebuild-no-host-refuses-enabled-row",
+            deniedOutcome: () => ApplyRebuildAndObserveChange(
+                fixture: fixture,
+                row: new WorldAddonRow(
+                    Name: "no-host-enabled",
+                    ModulePath: "unreachable.wasm",
+                    Hash: "sha256-64/0000000000000000",
+                    Fuel: 1000UL,
+                    Enabled: true
+                )
+            ),
+            controlOutcome: () => ApplyRebuildAndObserveChange(
+                fixture: fixture,
+                row: new WorldAddonRow(
+                    Name: "no-host-disabled",
+                    ModulePath: "unreachable.wasm",
+                    Hash: "sha256-64/0000000000000000",
+                    Fuel: 1000UL,
+                    Enabled: false
+                )
+            )
+        );
+    }
+    [Fact]
+    public void NoAddonHostAttachedRefusesAnAddonAffectingMutation_UnrelatedMutationStillApplies() {
+        using var fixture = Fixtures.FreshServer();
+
+        // No AttachAddons call at all — m_addons stays null, exactly like a server built but never wired to a host.
+        Laws.RefusalWithControl(
+            lawId: "addon.no-host-refuses",
+            deniedOutcome: () => {
+                var before = fixture.DefinitionBytes();
+
+                fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
+                    Addon: new WorldAddonRow(
+                        Name: "no-host",
+                        ModulePath: "unreachable.wasm",
+                        Hash: "sha256-64/0000000000000000",
+                        Fuel: 1000UL,
+                        Enabled: true
+                    ),
+                    Principal: WorldPrincipal.Console
+                ));
+                fixture.Step();
+
+                var after = fixture.DefinitionBytes();
+
+                // A hostless server must refuse the addon-affecting mutation by name, never silently accept it
+                // with no effect — "did it change" must read false.
+                return !before.AsSpan().SequenceEqual(other: after);
             },
             controlOutcome: () => {
-                host.RefuseWhen = null;
+                var before = fixture.DefinitionBytes();
 
-                return ApplyAndObserveChange(
-                    fixture: fixture,
-                    name: "ok"
-                );
+                fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
+                    Principal: WorldPrincipal.Console,
+                    Row: new WorldStateRow(
+                        Name: CellName.Parse(candidate: "no-host-control-probe"),
+                        Kind: CellKind.Int
+                    )
+                ));
+                fixture.Step();
+
+                var after = fixture.DefinitionBytes();
+
+                return !before.AsSpan().SequenceEqual(other: after);
             }
         );
     }
@@ -81,45 +280,17 @@ public sealed class AddonPrepareGateLawTests {
             expected: 1,
             actual: host.FinishCallCount
         );
-        Assert.True(condition: plan.Committed, userMessage: "the accepted mutation's plan was never committed");
-        Assert.False(condition: plan.Disposed, userMessage: "a committed plan must never be disposed — WorldServer's own linear-ownership floor only disposes an UNcommitted plan");
-        Assert.True(condition: plan.Finished, userMessage: "the committed plan's deferred narration/retire step (Finish) never ran");
-    }
-    [Fact]
-    public void NoAddonHostAttachedRefusesAnAddonAffectingMutation_UnrelatedMutationStillApplies() {
-        using var fixture = Fixtures.FreshServer();
-
-        // No AttachAddons call at all — m_addons stays null, exactly like a server built but never wired to a host.
-        Laws.RefusalWithControl(
-            lawId: "addon.no-host-refuses",
-            deniedOutcome: () => {
-                var before = fixture.DefinitionBytes();
-
-                fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
-                    Addon: new WorldAddonRow(Name: "no-host", ModulePath: "unreachable.wasm", Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: true),
-                    Principal: WorldPrincipal.Console
-                ));
-                fixture.Step();
-
-                var after = fixture.DefinitionBytes();
-
-                // A hostless server must refuse the addon-affecting mutation by name, never silently accept it
-                // with no effect — "did it change" must read false.
-                return !before.AsSpan().SequenceEqual(other: after);
-            },
-            controlOutcome: () => {
-                var before = fixture.DefinitionBytes();
-
-                fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-                    Principal: WorldPrincipal.Console,
-                    Row: new WorldStateRow(Name: CellName.Parse(candidate: "no-host-control-probe"), Kind: CellKind.Int)
-                ));
-                fixture.Step();
-
-                var after = fixture.DefinitionBytes();
-
-                return !before.AsSpan().SequenceEqual(other: after);
-            }
+        Assert.True(
+            condition: plan.Committed,
+            userMessage: "the accepted mutation's plan was never committed"
+        );
+        Assert.False(
+            condition: plan.Disposed,
+            userMessage: "a committed plan must never be disposed — WorldServer's own linear-ownership floor only disposes an UNcommitted plan"
+        );
+        Assert.True(
+            condition: plan.Finished,
+            userMessage: "the committed plan's deferred narration/retire step (Finish) never ran"
         );
     }
     [Fact]
@@ -155,10 +326,52 @@ public sealed class AddonPrepareGateLawTests {
         var probe = host.LivePlans[0];
         var final = host.LivePlans[1];
 
-        Assert.True(condition: probe.Disposed, userMessage: "the intermediate undo probe was never disposed");
-        Assert.False(condition: probe.Committed, userMessage: "the intermediate undo probe must never commit");
-        Assert.False(condition: final.Disposed, userMessage: "the final undo reconcile plan must not be disposed after it commits");
-        Assert.True(condition: final.Committed, userMessage: "the final undo reconcile plan was never committed");
+        Assert.True(
+            condition: probe.Disposed,
+            userMessage: "the intermediate undo probe was never disposed"
+        );
+        Assert.False(
+            condition: probe.Committed,
+            userMessage: "the intermediate undo probe must never commit"
+        );
+        Assert.False(
+            condition: final.Disposed,
+            userMessage: "the final undo reconcile plan must not be disposed after it commits"
+        );
+        Assert.True(
+            condition: final.Committed,
+            userMessage: "the final undo reconcile plan was never committed"
+        );
+    }
+    [Fact]
+    public void UnpreparableAddonRowRefusesTheWholeMutation_PreparableRowApplies() {
+        using var fixture = Fixtures.FreshServer();
+        var host = new RecordingAddonHost();
+
+        fixture.Server.AttachAddons(runtime: host);
+
+        Laws.RefusalWithControl(
+            lawId: "addon.prepare-gate-all-or-nothing",
+            deniedOutcome: () => {
+                host.RefuseWhen = static candidate => HasAddonNamed(
+                    definition: candidate,
+                    name: "boom"
+                );
+
+                return ApplyAndObserveChange(
+                    fixture: fixture,
+                    name: "boom"
+                );
+            },
+            controlOutcome: () => {
+                host.RefuseWhen = null;
+
+                return ApplyAndObserveChange(
+                    fixture: fixture,
+                    name: "ok"
+                );
+            }
+        );
     }
     [Fact]
     public void UnrelatedSectionMutationNeverTouchesThePrepareGate() {
@@ -173,158 +386,23 @@ public sealed class AddonPrepareGateLawTests {
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: WorldPrincipal.Console,
-            Row: new WorldStateRow(Name: CellName.Parse(candidate: "addon-gate-probe"), Kind: CellKind.Int)
+            Row: new WorldStateRow(
+                Name: CellName.Parse(candidate: "addon-gate-probe"),
+                Kind: CellKind.Int
+            )
         ));
         fixture.Step();
 
         var after = fixture.DefinitionBytes();
 
-        Assert.False(condition: before.AsSpan().SequenceEqual(other: after), userMessage: "the control mutation itself did not apply — the fixture is broken, not the law");
+        Assert.False(
+            condition: before.AsSpan().SequenceEqual(other: after),
+            userMessage: "the control mutation itself did not apply — the fixture is broken, not the law"
+        );
         Assert.Equal(
             expected: 0,
             actual: host.TryPrepareCallCount
         );
-    }
-    // Proves the WorldServer.Step half of stable completion routing: the instance token a caller submits on
-    // EnqueueMutation travels unchanged to CompleteMutation, per pending op, even when an ordinary addon-affecting
-    // mutation drains between two addon-sourced completions carrying different tokens. The other half — that
-    // CompleteMutation resolves a token against a mounted guest's identity rather than its position, so a queued
-    // removal/reorder can never deliver one guest's completion to another — lives inside
-    // Puck.World.Addons.WorldAddonRuntime, which this project cannot reference.
-    [Fact]
-    public void AddonSourcedCompletionCarriesItsOwnSubmittedTokenAcrossAnInterveningAddonMutation() {
-        using var fixture = Fixtures.FreshServer();
-        var host = new RecordingAddonHost();
-
-        fixture.Server.AttachAddons(runtime: host);
-
-        fixture.Server.EnqueueMutation(
-            mutation: new WorldMutation.UpsertStateRow(
-                Principal: WorldPrincipal.Console,
-                Row: new WorldStateRow(Name: CellName.Parse(candidate: "completion-token-probe-a"), Kind: CellKind.Int)
-            ),
-            sourceAddonInstanceId: 111L,
-            actOrdinal: 7
-        );
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
-            Addon: new WorldAddonRow(Name: "intervening", ModulePath: "unreachable.wasm", Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: true),
-            Principal: WorldPrincipal.Console
-        ));
-        fixture.Server.EnqueueMutation(
-            mutation: new WorldMutation.UpsertStateRow(
-                Principal: WorldPrincipal.Console,
-                Row: new WorldStateRow(Name: CellName.Parse(candidate: "completion-token-probe-b"), Kind: CellKind.Int)
-            ),
-            sourceAddonInstanceId: 222L,
-            actOrdinal: 9
-        );
-        fixture.Step();
-
-        Assert.Equal(
-            expected: [(111L, ((ushort)7), true), (222L, ((ushort)9), true)],
-            actual: host.CompletedMutations
-        );
-    }
-    // The plan-ownership guard now covers contention-array staging, not only Commit — see WorldServer.
-    // MutationApply.cs's TryApplyMutation (and its ApplyRebuild/ApplyUndo siblings): the whole sequence from a
-    // successful TryPrepare through Commit runs under ONE try/finally. A MountedCount this large forces
-    // StageAddonContentionArrays' own capacity arithmetic (Population.LocalSeatCount + mountedCount*2) to wrap, in
-    // unchecked int32 arithmetic, into a deeply negative array length, throwing OverflowException from INSIDE that
-    // guarded region — proving the plan a successful TryPrepare returned is still disposed when something after it,
-    // but before Commit, throws.
-    [Fact]
-    public void AddonPlanIsDisposedWhenContentionArrayStagingThrows() {
-        using var fixture = Fixtures.FreshServer();
-        var host = new RecordingAddonHost {
-            NextPlanMountedCount = 1_500_000_000,
-        };
-
-        fixture.Server.AttachAddons(runtime: host);
-
-        var thrown = Record.Exception(testCode: () => Submit(
-            fixture: fixture,
-            name: "overflow-probe"
-        ));
-
-        Assert.IsType<OverflowException>(@object: thrown);
-
-        var plan = Assert.Single(collection: host.LivePlans);
-
-        Assert.True(condition: plan.Disposed, userMessage: "an exception between a successful TryPrepare and Commit must still dispose the plan — the ownership guard now covers contention-array staging too");
-        Assert.False(condition: plan.Committed, userMessage: "a plan that never reached Commit must not read as committed");
-    }
-    // ApplyRebuild's own null-host gate (finding 3): with no addon host attached at all, a candidate whose only
-    // addon row is ENABLED must refuse — installing it would leave the document claiming a mounted guest no host
-    // can ever run. A candidate whose only addon row is DISABLED stays vacuous, exactly like an addon-free one.
-    [Fact]
-    public void ApplyRebuildRefusesAnEnabledAddonRowWithNoHostAttached_AllDisabledCandidateInstalls() {
-        using var fixture = Fixtures.FreshServer();
-
-        // No AttachAddons call at all — m_addons stays null, exactly like a server built but never wired to a host.
-        Laws.RefusalWithControl(
-            lawId: "addon.rebuild-no-host-refuses-enabled-row",
-            deniedOutcome: () => ApplyRebuildAndObserveChange(
-                fixture: fixture,
-                row: new WorldAddonRow(Name: "no-host-enabled", ModulePath: "unreachable.wasm", Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: true)
-            ),
-            controlOutcome: () => ApplyRebuildAndObserveChange(
-                fixture: fixture,
-                row: new WorldAddonRow(Name: "no-host-disabled", ModulePath: "unreachable.wasm", Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: false)
-            )
-        );
-    }
-
-    private static bool ApplyRebuildAndObserveChange(WorldFixture fixture, WorldAddonRow row) {
-        var before = fixture.DefinitionBytes();
-        var candidate = fixture.Server.Definition with {
-            AddonsRaw = [row],
-        };
-        var contentHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate));
-
-        fixture.Server.EnqueueRebuild(
-            request: new WorldRebuildRequest(ContentHash: contentHash, Definition: candidate, Force: true, Kind: WorldRebuildKind.Load, PathHint: "addon-no-host-rebuild-probe.world.json"),
-            principal: WorldPrincipal.Console
-        );
-        fixture.Step();
-
-        var after = fixture.DefinitionBytes();
-
-        return !before.AsSpan().SequenceEqual(other: after);
-    }
-    private static bool ApplyAndObserveChange(WorldFixture fixture, string name) {
-        var before = fixture.DefinitionBytes();
-
-        Submit(
-            fixture: fixture,
-            name: name
-        );
-
-        var after = fixture.DefinitionBytes();
-
-        return !before.AsSpan().SequenceEqual(other: after);
-    }
-    // The ONE predicate this law needs to script RecordingAddonHost.RefuseWhen against — a plain name lookup, kept
-    // private here rather than reused from production code, whose own reuse-eligibility rule
-    // (WorldAddonRuntime.RowsStructurallyEqual) compares every field, not just the name.
-    private static bool HasAddonNamed(WorldDefinition definition, string name) {
-        foreach (var row in definition.Addons) {
-            if (string.Equals(
-                a: row.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    private static void Submit(WorldFixture fixture, string name) {
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
-            Addon: new WorldAddonRow(Name: name, ModulePath: "unreachable.wasm", Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: true),
-            Principal: WorldPrincipal.Console
-        ));
-        fixture.Step();
     }
 }
 

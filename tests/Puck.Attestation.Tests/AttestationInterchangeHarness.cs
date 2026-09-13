@@ -53,9 +53,22 @@ internal static class AttestationInterchangeHarness {
     private const string RootKeyFileName = "root.spki";
     private const string SealedFileName = "sealed.attestation";
 
-    private static readonly AttestationProfile InterchangeProfile = AttestationProfile.Base.WithExtensions(
-        extensions: AttestationExtensions.SealedAttestationV1
-    );
+    /// <summary>The audience both fixture attestations are directed at. The sealed attestation uses the claim's audience, so the manifest carries one value for both.</summary>
+    public const string InterchangeAudience = "world:interchange";
+    /// <summary>The purpose the interchange claim is minted with, so both sides expect the same one without negotiating.</summary>
+    public const string InterchangePurpose = "attestation.cross-check";
+    /// <summary>The verifier-wide horizon the fixture uses to derive and cross-check its replay requirement.</summary>
+    public const long InterchangeReplayHorizonSeconds = (((31L * 24) * 60) * 60);
+    /// <summary>The plaintext the interchange sealed payload carries, so the verifying side knows what a correct unseal must produce.</summary>
+    public const string InterchangeSealedPlaintext = "sealed by Puck.Attestation under puck.attestation.sealed.v1";
+    /// <summary>The purpose the interchange sealed claim is minted with.</summary>
+    public const string InterchangeSealedPurpose = "attestation.cross-check.sealed";
+    /// <summary>The sequence the interchange claim carries. The fixture verifier inspects the returned commit requirement but deliberately does not mutate production replay state.</summary>
+    public const ulong InterchangeSequence = 1UL;
+    /// <summary>The subject the interchange chain is minted for.</summary>
+    public const string InterchangeSubject = "puck:interchange-subject";
+
+    private static readonly AttestationProfile InterchangeProfile = AttestationProfile.Base.WithExtensions(extensions: AttestationExtensions.SealedAttestationV1);
     /// <summary>The manifest keys this fixture requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
     private static readonly string[] RequiredManifestKeys = [
         "algorithm",
@@ -74,34 +87,132 @@ internal static class AttestationInterchangeHarness {
         throwOnInvalidBytes: true
     );
 
-    /// <summary>The purpose the interchange claim is minted with, so both sides expect the same one without negotiating.</summary>
-    public const string InterchangePurpose = "attestation.cross-check";
-    /// <summary>The purpose the interchange sealed claim is minted with.</summary>
-    public const string InterchangeSealedPurpose = "attestation.cross-check.sealed";
-    /// <summary>The audience both fixture attestations are directed at. The sealed attestation uses the claim's audience, so the manifest carries one value for both.</summary>
-    public const string InterchangeAudience = "world:interchange";
-    /// <summary>The sequence the interchange claim carries. The fixture verifier inspects the returned commit requirement but deliberately does not mutate production replay state.</summary>
-    public const ulong InterchangeSequence = 1UL;
-    /// <summary>The verifier-wide horizon the fixture uses to derive and cross-check its replay requirement.</summary>
-    public const long InterchangeReplayHorizonSeconds = (((31L * 24) * 60) * 60);
-    /// <summary>The subject the interchange chain is minted for.</summary>
-    public const string InterchangeSubject = "puck:interchange-subject";
-    /// <summary>The plaintext the interchange sealed payload carries, so the verifying side knows what a correct unseal must produce.</summary>
-    public const string InterchangeSealedPlaintext = "sealed by Puck.Attestation under puck.attestation.sealed.v1";
+    /// <summary>
+    /// Checks the imported claim's own header against what the manifest says it carries. The manifest is not
+    /// signed, so this is not a security check — it is the fixture's self-consistency check, and it is what
+    /// catches an exporter whose manifest and bytes disagree before the other side spends a day on it.
+    /// </summary>
+    /// <param name="codec">The serialisation to decode with.</param>
+    /// <param name="claimBytes">The wire bytes of the attestation carrying the claim.</param>
+    /// <param name="manifest">The parsed manifest.</param>
+    /// <returns>The number of failures.</returns>
+    private static int CheckClaimHeader(IAttestationCodec codec, byte[] claimBytes, Dictionary<string, string> manifest) {
+        if (!TryStep(
+            check: $"cross-verify manifest agreement: decoding {ClaimFileName}",
+            body: () => InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: claimBytes
+            ),
+            value: out var claim
+        )) {
+            return 1;
+        }
 
-    /// <summary>Mints a root, an issuing key, a subject key, both bindings, one claim, and one sealed claim, and writes them all to <paramref name="directory"/>.</summary>
-    /// <param name="directory">The interchange directory to write. Created if absent.</param>
-    /// <returns>0 when the fixture was written; 1 when it could not be.</returns>
-    public static int Export(string directory) {
-        try {
-            return ExportCore(directory: directory);
-        } catch (Exception exception) {
-            Console.WriteLine(value: $"[FAIL] interchange export: the fixture could not be written to {directory} — {Describe(exception: exception)}");
+        var expectedSequence = manifest["sequence"];
+        var disagreements = new List<string>();
+
+        if (!string.Equals(
+            a: claim.Header.Subject,
+            b: manifest["subject"],
+            comparisonType: StringComparison.Ordinal
+        )) {
+            disagreements.Add(item: $"subject '{(claim.Header.Subject ?? "(none)")}' against the manifest's '{manifest["subject"]}'");
+        }
+
+        if (!string.Equals(
+            a: claim.Header.Algorithm,
+            b: manifest["algorithm"],
+            comparisonType: StringComparison.Ordinal
+        )) {
+            disagreements.Add(item: $"algorithm '{claim.Header.Algorithm}' against the manifest's '{manifest["algorithm"]}'");
+        }
+
+        if (!string.Equals(
+            a: claim.Header.Purpose,
+            b: manifest["purpose"],
+            comparisonType: StringComparison.Ordinal
+        )) {
+            disagreements.Add(item: $"purpose '{claim.Header.Purpose}' against the manifest's '{manifest["purpose"]}'");
+        }
+
+        if (!string.Equals(
+            a: claim.Header.Audience,
+            b: manifest["audience"],
+            comparisonType: StringComparison.Ordinal
+        )) {
+            disagreements.Add(item: $"audience '{(claim.Header.Audience ?? "(none)")}' against the manifest's '{manifest["audience"]}'");
+        }
+
+        if (!string.Equals(
+            a: claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+            b: expectedSequence,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            disagreements.Add(item: $"sequence '{(claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}' against the manifest's '{expectedSequence}'");
+        }
+
+        if (disagreements.Count != 0) {
+            Console.WriteLine(value: $"[FAIL] cross-verify manifest agreement: {ClaimFileName} disagrees with {ManifestFileName} on {string.Join(
+                separator: "; ",
+                values: disagreements
+            )}");
 
             return 1;
         }
-    }
 
+        Console.WriteLine(value: $"[PASS] cross-verify manifest agreement: {ClaimFileName}'s header carries exactly what {ManifestFileName} names, sequence included");
+
+        return 0;
+    }
+    private static string Describe(Exception exception) => $"{exception.GetType().Name}: {exception.Message}";
+    /// <summary>Applies the fixture's three value escapes: a backslash, a line feed, and a carriage return. Nothing else is escaped — <c>=</c> needs no escape, because only the first one on a line splits.</summary>
+    /// <param name="value">The raw value.</param>
+    private static string EscapeManifestValue(string value) {
+        var builder = new StringBuilder(capacity: value.Length);
+
+        foreach (var character in value) {
+            _ = character switch {
+                '\\' => builder.Append(value: @"\\"),
+                '\n' => builder.Append(value: @"\n"),
+                '\r' => builder.Append(value: @"\r"),
+                _ => builder.Append(value: character),
+            };
+        }
+
+        return builder.ToString();
+    }
+    /// <summary>
+    /// Runs a control that must refuse. A refusal reported as a verdict and a refusal raised as an exception
+    /// are the same outcome here — §0's "refuse" is a negative verdict, and throw-or-return is a language
+    /// choice — so both pass and only an acceptance fails.
+    /// </summary>
+    /// <param name="check">The check's name.</param>
+    /// <param name="detail">What was done to the input, for the report line.</param>
+    /// <param name="body">The control. Returning a <see cref="AttestationVerifyResult"/> that verified is an acceptance; returning anything else is too.</param>
+    /// <returns>The number of failures — 0 when the control refused.</returns>
+    private static int ExpectRefusal(string check, string detail, Func<object?> body) {
+        try {
+            if (body() is not AttestationVerifyResult result) {
+                Console.WriteLine(value: $"[FAIL] {check}: {detail} was ACCEPTED");
+
+                return 1;
+            }
+
+            if (result.Verified) {
+                Console.WriteLine(value: $"[FAIL] {check}: {detail} was ACCEPTED");
+
+                return 1;
+            }
+
+            Console.WriteLine(value: $"[PASS] {check}: {detail} refused — {result.RefusalReason}");
+
+            return 0;
+        } catch (Exception exception) {
+            Console.WriteLine(value: $"[PASS] {check}: {detail} refused — {Describe(exception: exception)}");
+
+            return 0;
+        }
+    }
     private static int ExportCore(string directory) {
         var codec = new CborAttestationCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -272,31 +383,143 @@ internal static class AttestationInterchangeHarness {
 
         return 0;
     }
+    private static TimeSpan ParseReplayHorizon(string value) {
+        if (
+            !long.TryParse(
+            s: value,
+            style: System.Globalization.NumberStyles.None,
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            result: out var seconds
+        ) ||
+            (seconds <= 0)
+        ) {
+            throw new FormatException(message: $"manifest.txt's replay-horizon-seconds must be a positive whole-second integer, but '{value}' arrived.");
+        }
 
-    /// <summary>
-    /// Pins the exported root and verifies the imported chain, then tampers one byte of the claim and
-    /// requires a refusal. Two checks at minimum, because an accepting verifier proves nothing on its own —
-    /// one that accepts everything would pass the first.
-    /// </summary>
-    /// <param name="directory">The interchange directory to read.</param>
-    /// <returns>0 when every check held, 1 when at least one failed.</returns>
-    /// <remarks>
-    /// This method never propagates an exception, whatever is in <paramref name="directory"/>. A corrupt
-    /// <c>claim.attestation</c> is reported as a failed check rather than escaping as an unhandled
-    /// <see cref="FormatException"/>, because a crash is indistinguishable from the harness itself being broken.
-    /// </remarks>
-    public static int Verify(string directory) {
         try {
-            return VerifyCore(directory: directory);
-        } catch (Exception exception) {
-            // The backstop. Nothing should reach here — every step below is guarded — but "should" is not a
-            // verdict, and an escaping exception would be the exact defect this method exists to not have.
-            Console.WriteLine(value: $"[FAIL] cross-verify: an unguarded failure while reading the fixture at {directory} — {Describe(exception: exception)}");
-
-            return 1;
+            return TimeSpan.FromSeconds(value: seconds);
+        } catch (OverflowException exception) {
+            throw new FormatException(
+                innerException: exception,
+                message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range."
+            );
         }
     }
+    /// <summary>
+    /// Reads the fixture manifest. Empty lines are ignored; every other line must hold a
+    /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
+    /// order. Silently skipping a line that does not parse is what makes a typo'd key read as an absent one,
+    /// which is a fixture that quietly checks less than it claims.
+    /// </summary>
+    /// <param name="path">The manifest path.</param>
+    /// <returns>The parsed keys, values already unescaped.</returns>
+    /// <exception cref="FormatException">A line does not parse, a key repeats, or a value carries an escape the format does not define.</exception>
+    private static Dictionary<string, string> ReadManifest(string path) {
+        var manifest = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var text = File.ReadAllText(
+            encoding: ManifestEncoding,
+            path: path
+        );
+        var lineNumber = 0;
 
+        foreach (var rawLine in text.Split(separator: '\n')) {
+            // A CR immediately before the LF is tolerated and discarded, so a manifest written by a CRLF
+            // platform still reads. Nothing else about the line is trimmed — whitespace inside a value is
+            // part of the value.
+            var line = (rawLine.EndsWith(value: '\r')
+                ? rawLine[..^1]
+                : rawLine
+            );
+
+            lineNumber += 1;
+
+            if (line.Length == 0) {
+                continue;
+            }
+
+            var separator = line.IndexOf(value: '=');
+
+            if (separator < 1) {
+                throw new FormatException(message: $"{ManifestFileName} line {lineNumber} is neither empty nor a 'key=value' pair: '{line}'.");
+            }
+
+            var key = line[..separator];
+
+            if (!manifest.TryAdd(
+                key: key,
+                value: UnescapeManifestValue(
+                    value: line[(separator + 1)..],
+                    key: key
+                )
+            )) {
+                throw new FormatException(message: $"{ManifestFileName} names the key '{key}' more than once (line {lineNumber}); which one governs is undefined, so the manifest is refused rather than resolved by order.");
+            }
+        }
+
+        return manifest;
+    }
+    /// <summary>
+    /// Runs one fixture step and turns every way it can fail into a named <c>[FAIL]</c> line rather than an
+    /// escaping exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes
+    /// that arrived from somewhere else, so there is no exception type it could raise that is a better
+    /// outcome than a reported failure. The harness contract distinguishes a crash from a refusal — they are
+    /// different verdicts, and a cross-checking implementer cannot tell them apart from a stack trace.
+    /// </summary>
+    /// <typeparam name="T">What the step produces.</typeparam>
+    /// <param name="check">The check's name, printed with the failure.</param>
+    /// <param name="body">The step.</param>
+    /// <param name="value">What the step produced, or <see langword="default"/> when it failed.</param>
+    /// <param name="note">An optional sentence appended to the failure line, telling the reader what to suspect.</param>
+    /// <returns><see langword="true"/> when the step completed.</returns>
+    private static bool TryStep<T>(string check, Func<T> body, out T value, string? note = null) {
+        try {
+            value = body();
+
+            return true;
+        } catch (Exception exception) {
+            Console.WriteLine(value: $"[FAIL] {check}: {Describe(exception: exception)}{((note is null)
+                ? string.Empty
+                : $" {note}")}");
+
+            value = default!;
+
+            return false;
+        }
+    }
+    /// <summary>Reverses <see cref="EscapeManifestValue"/>, refusing an escape the format does not define rather than passing the backslash through — one escaped value must have exactly one unescaped reading.</summary>
+    /// <param name="value">The escaped value.</param>
+    /// <param name="key">The key it belongs to, for the refusal message.</param>
+    /// <exception cref="FormatException">The value ends in a lone backslash, or names an escape outside the three.</exception>
+    private static string UnescapeManifestValue(string value, string key) {
+        if (!value.Contains(value: '\\')) {
+            return value;
+        }
+
+        var builder = new StringBuilder(capacity: value.Length);
+
+        for (var index = 0; (index < value.Length); index += 1) {
+            if (value[index] != '\\') {
+                _ = builder.Append(value: value[index]);
+
+                continue;
+            }
+
+            index += 1;
+
+            if (index == value.Length) {
+                throw new FormatException(message: $"{ManifestFileName}'s '{key}' value ends with a lone backslash; the format defines exactly three escapes (\\\\, \\n, \\r).");
+            }
+
+            _ = value[index] switch {
+                '\\' => builder.Append(value: '\\'),
+                'n' => builder.Append(value: '\n'),
+                'r' => builder.Append(value: '\r'),
+                var other => throw new FormatException(message: $"{ManifestFileName}'s '{key}' value carries the escape '\\{other}', which is not one of the three the format defines (\\\\, \\n, \\r)."),
+            };
+        }
+
+        return builder.ToString();
+    }
     private static int VerifyCore(string directory) {
         var codec = new CborAttestationCodec();
         var failures = 0;
@@ -401,12 +624,12 @@ internal static class AttestationInterchangeHarness {
             body: () => new TrustList(
                 entries: [
                     new TrustListEntry(
-                    PinnedId: rootId,
-                    PublicKeySubjectPublicKeyInfo: rootSpki,
-                    Mode: AttestationTrustMode.Vouches,
-                    Reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:interchange" },
-                    MaximumAge: null
-                ),
+                        PinnedId: rootId,
+                        PublicKeySubjectPublicKeyInfo: rootSpki,
+                        Mode: AttestationTrustMode.Vouches,
+                        Reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:interchange" },
+                        MaximumAge: null
+                    ),
                 ],
                 defaultMaximumAge: null,
                 defaultRootBindingMaximumAge: null,
@@ -421,14 +644,20 @@ internal static class AttestationInterchangeHarness {
         if (!TryStep(
             check: $"cross-verify chain: decoding {BindingOneFileName} and {BindingTwoFileName}",
             body: () => new[] {
-                InterchangeProfile.DecodeAttestation(codec: codec, wire: File.ReadAllBytes(path: Path.Combine(
-                path1: directory,
-                path2: BindingOneFileName
-            ))),
-                InterchangeProfile.DecodeAttestation(codec: codec, wire: File.ReadAllBytes(path: Path.Combine(
-                path1: directory,
-                path2: BindingTwoFileName
-            ))),
+                InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: File.ReadAllBytes(path: Path.Combine(
+                    path1: directory,
+                    path2: BindingOneFileName
+                ))
+            ),
+                InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: File.ReadAllBytes(path: Path.Combine(
+                    path1: directory,
+                    path2: BindingTwoFileName
+                ))
+            ),
             },
             value: out var chain
         )) {
@@ -441,14 +670,17 @@ internal static class AttestationInterchangeHarness {
         // rather than committing it to production state.
         AttestationVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>
             InterchangeProfile.VerifyChain(
-            codec: codec,
-            claim: InterchangeProfile.DecodeAttestation(codec: codec, wire: wire),
-            chain: chain,
-            trustList: trustList,
-            now: DateTimeOffset.UtcNow,
-            expectedPurpose: expected,
-            expectedAudience: manifest["audience"]
-        );
+                codec: codec,
+                claim: InterchangeProfile.DecodeAttestation(
+                    codec: codec,
+                    wire: wire
+                ),
+                chain: chain,
+                trustList: trustList,
+                now: DateTimeOffset.UtcNow,
+                expectedPurpose: expected,
+                expectedAudience: manifest["audience"]
+            );
 
         if (TryStep(
             check: "cross-verify",
@@ -464,7 +696,10 @@ internal static class AttestationInterchangeHarness {
                     values: result.Reach!
                 )}]");
 
-                var claim = InterchangeProfile.DecodeAttestation(codec: codec, wire: claimBytes);
+                var claim = InterchangeProfile.DecodeAttestation(
+                    codec: codec,
+                    wire: claimBytes
+                );
                 var replay = result.ReplayCommit;
                 var horizonSeconds = checked((long)trustList.ReplayAcceptanceHorizon!.Value.TotalSeconds);
                 var expectedEpoch = Math.DivRem(
@@ -481,8 +716,16 @@ internal static class AttestationInterchangeHarness {
 
                 if (
                     (replay is null) ||
-                    !string.Equals(a: replay.Domain, b: claim.Header.Domain, comparisonType: StringComparison.Ordinal) ||
-                    !string.Equals(a: replay.Subject, b: claim.Header.Subject, comparisonType: StringComparison.Ordinal) ||
+                    !string.Equals(
+                    a: replay.Domain,
+                    b: claim.Header.Domain,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                    !string.Equals(
+                    a: replay.Subject,
+                    b: claim.Header.Subject,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
                     (replay.Sequence != claim.Header.Sequence) ||
                     (replay.EpochStartUnixSeconds != expectedEpoch) ||
                     (replay.RetainThroughUnixSeconds != checked(((expectedEpoch + (2 * horizonSeconds)) - 1)))
@@ -532,81 +775,8 @@ internal static class AttestationInterchangeHarness {
 
         return ((failures == 0)
             ? 0
-            : 1);
-    }
-    /// <summary>
-    /// Checks the imported claim's own header against what the manifest says it carries. The manifest is not
-    /// signed, so this is not a security check — it is the fixture's self-consistency check, and it is what
-    /// catches an exporter whose manifest and bytes disagree before the other side spends a day on it.
-    /// </summary>
-    /// <param name="codec">The serialisation to decode with.</param>
-    /// <param name="claimBytes">The wire bytes of the attestation carrying the claim.</param>
-    /// <param name="manifest">The parsed manifest.</param>
-    /// <returns>The number of failures.</returns>
-    private static int CheckClaimHeader(IAttestationCodec codec, byte[] claimBytes, Dictionary<string, string> manifest) {
-        if (!TryStep(
-            check: $"cross-verify manifest agreement: decoding {ClaimFileName}",
-            body: () => InterchangeProfile.DecodeAttestation(codec: codec, wire: claimBytes),
-            value: out var claim
-        )) {
-            return 1;
-        }
-
-        var expectedSequence = manifest["sequence"];
-        var disagreements = new List<string>();
-
-        if (!string.Equals(
-            a: claim.Header.Subject,
-            b: manifest["subject"],
-            comparisonType: StringComparison.Ordinal
-        )) {
-            disagreements.Add(item: $"subject '{(claim.Header.Subject ?? "(none)")}' against the manifest's '{manifest["subject"]}'");
-        }
-
-        if (!string.Equals(
-            a: claim.Header.Algorithm,
-            b: manifest["algorithm"],
-            comparisonType: StringComparison.Ordinal
-        )) {
-            disagreements.Add(item: $"algorithm '{claim.Header.Algorithm}' against the manifest's '{manifest["algorithm"]}'");
-        }
-
-        if (!string.Equals(
-            a: claim.Header.Purpose,
-            b: manifest["purpose"],
-            comparisonType: StringComparison.Ordinal
-        )) {
-            disagreements.Add(item: $"purpose '{claim.Header.Purpose}' against the manifest's '{manifest["purpose"]}'");
-        }
-
-        if (!string.Equals(
-            a: claim.Header.Audience,
-            b: manifest["audience"],
-            comparisonType: StringComparison.Ordinal
-        )) {
-            disagreements.Add(item: $"audience '{(claim.Header.Audience ?? "(none)")}' against the manifest's '{manifest["audience"]}'");
-        }
-
-        if (!string.Equals(
-            a: claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-            b: expectedSequence,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            disagreements.Add(item: $"sequence '{(claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}' against the manifest's '{expectedSequence}'");
-        }
-
-        if (disagreements.Count != 0) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest agreement: {ClaimFileName} disagrees with {ManifestFileName} on {string.Join(
-                separator: "; ",
-                values: disagreements
-            )}");
-
-            return 1;
-        }
-
-        Console.WriteLine(value: $"[PASS] cross-verify manifest agreement: {ClaimFileName}'s header carries exactly what {ManifestFileName} names, sequence included");
-
-        return 0;
+            : 1
+        );
     }
     /// <summary>
     /// Verifies the sealed artifact: the attestation's signature by the ordinary chain walk, then the AEAD
@@ -648,7 +818,10 @@ internal static class AttestationInterchangeHarness {
 
         if (!TryStep(
             check: $"cross-verify sealed: decoding {SealedFileName}",
-            body: () => InterchangeProfile.DecodeAttestation(codec: codec, wire: File.ReadAllBytes(path: sealedPath)),
+            body: () => InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: File.ReadAllBytes(path: sealedPath)
+            ),
             value: out var sealedClaim
         )) {
             return 1;
@@ -775,86 +948,6 @@ internal static class AttestationInterchangeHarness {
         }
     }
     /// <summary>
-    /// Runs one fixture step and turns every way it can fail into a named <c>[FAIL]</c> line rather than an
-    /// escaping exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes
-    /// that arrived from somewhere else, so there is no exception type it could raise that is a better
-    /// outcome than a reported failure. The harness contract distinguishes a crash from a refusal — they are
-    /// different verdicts, and a cross-checking implementer cannot tell them apart from a stack trace.
-    /// </summary>
-    /// <typeparam name="T">What the step produces.</typeparam>
-    /// <param name="check">The check's name, printed with the failure.</param>
-    /// <param name="body">The step.</param>
-    /// <param name="value">What the step produced, or <see langword="default"/> when it failed.</param>
-    /// <param name="note">An optional sentence appended to the failure line, telling the reader what to suspect.</param>
-    /// <returns><see langword="true"/> when the step completed.</returns>
-    private static bool TryStep<T>(string check, Func<T> body, out T value, string? note = null) {
-        try {
-            value = body();
-
-            return true;
-        } catch (Exception exception) {
-            Console.WriteLine(value: $"[FAIL] {check}: {Describe(exception: exception)}{((note is null)
-                ? string.Empty
-                : $" {note}")}");
-
-            value = default!;
-
-            return false;
-        }
-    }
-    private static TimeSpan ParseReplayHorizon(string value) {
-        if (
-            !long.TryParse(
-                s: value,
-                style: System.Globalization.NumberStyles.None,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out var seconds
-            ) ||
-            (seconds <= 0)
-        ) {
-            throw new FormatException(message: $"manifest.txt's replay-horizon-seconds must be a positive whole-second integer, but '{value}' arrived.");
-        }
-
-        try {
-            return TimeSpan.FromSeconds(value: seconds);
-        } catch (OverflowException exception) {
-            throw new FormatException(innerException: exception, message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range.");
-        }
-    }
-    /// <summary>
-    /// Runs a control that must refuse. A refusal reported as a verdict and a refusal raised as an exception
-    /// are the same outcome here — §0's "refuse" is a negative verdict, and throw-or-return is a language
-    /// choice — so both pass and only an acceptance fails.
-    /// </summary>
-    /// <param name="check">The check's name.</param>
-    /// <param name="detail">What was done to the input, for the report line.</param>
-    /// <param name="body">The control. Returning a <see cref="AttestationVerifyResult"/> that verified is an acceptance; returning anything else is too.</param>
-    /// <returns>The number of failures — 0 when the control refused.</returns>
-    private static int ExpectRefusal(string check, string detail, Func<object?> body) {
-        try {
-            if (body() is not AttestationVerifyResult result) {
-                Console.WriteLine(value: $"[FAIL] {check}: {detail} was ACCEPTED");
-
-                return 1;
-            }
-
-            if (result.Verified) {
-                Console.WriteLine(value: $"[FAIL] {check}: {detail} was ACCEPTED");
-
-                return 1;
-            }
-
-            Console.WriteLine(value: $"[PASS] {check}: {detail} refused — {result.RefusalReason}");
-
-            return 0;
-        } catch (Exception exception) {
-            Console.WriteLine(value: $"[PASS] {check}: {detail} refused — {Describe(exception: exception)}");
-
-            return 0;
-        }
-    }
-    private static string Describe(Exception exception) => $"{exception.GetType().Name}: {exception.Message}";
-    /// <summary>
     /// Writes the fixture manifest as UTF-8 with no byte-order mark, one <c>key=value</c> per
     /// line, LF line terminators including a final one, and the three backslash escapes applied to values.
     /// LF rather than the platform's newline, because a fixture crossing between implementations is bytes
@@ -875,106 +968,40 @@ internal static class AttestationInterchangeHarness {
             encoding: ManifestEncoding
         );
     }
+
+    /// <summary>Mints a root, an issuing key, a subject key, both bindings, one claim, and one sealed claim, and writes them all to <paramref name="directory"/>.</summary>
+    /// <param name="directory">The interchange directory to write. Created if absent.</param>
+    /// <returns>0 when the fixture was written; 1 when it could not be.</returns>
+    public static int Export(string directory) {
+        try {
+            return ExportCore(directory: directory);
+        } catch (Exception exception) {
+            Console.WriteLine(value: $"[FAIL] interchange export: the fixture could not be written to {directory} — {Describe(exception: exception)}");
+
+            return 1;
+        }
+    }
     /// <summary>
-    /// Reads the fixture manifest. Empty lines are ignored; every other line must hold a
-    /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
-    /// order. Silently skipping a line that does not parse is what makes a typo'd key read as an absent one,
-    /// which is a fixture that quietly checks less than it claims.
+    /// Pins the exported root and verifies the imported chain, then tampers one byte of the claim and
+    /// requires a refusal. Two checks at minimum, because an accepting verifier proves nothing on its own —
+    /// one that accepts everything would pass the first.
     /// </summary>
-    /// <param name="path">The manifest path.</param>
-    /// <returns>The parsed keys, values already unescaped.</returns>
-    /// <exception cref="FormatException">A line does not parse, a key repeats, or a value carries an escape the format does not define.</exception>
-    private static Dictionary<string, string> ReadManifest(string path) {
-        var manifest = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        var text = File.ReadAllText(
-            encoding: ManifestEncoding,
-            path: path
-        );
-        var lineNumber = 0;
+    /// <param name="directory">The interchange directory to read.</param>
+    /// <returns>0 when every check held, 1 when at least one failed.</returns>
+    /// <remarks>
+    /// This method never propagates an exception, whatever is in <paramref name="directory"/>. A corrupt
+    /// <c>claim.attestation</c> is reported as a failed check rather than escaping as an unhandled
+    /// <see cref="FormatException"/>, because a crash is indistinguishable from the harness itself being broken.
+    /// </remarks>
+    public static int Verify(string directory) {
+        try {
+            return VerifyCore(directory: directory);
+        } catch (Exception exception) {
+            // The backstop. Nothing should reach here — every step below is guarded — but "should" is not a
+            // verdict, and an escaping exception would be the exact defect this method exists to not have.
+            Console.WriteLine(value: $"[FAIL] cross-verify: an unguarded failure while reading the fixture at {directory} — {Describe(exception: exception)}");
 
-        foreach (var rawLine in text.Split(separator: '\n')) {
-            // A CR immediately before the LF is tolerated and discarded, so a manifest written by a CRLF
-            // platform still reads. Nothing else about the line is trimmed — whitespace inside a value is
-            // part of the value.
-            var line = (rawLine.EndsWith(value: '\r')
-                ? rawLine[..^1]
-                : rawLine);
-
-            lineNumber += 1;
-
-            if (line.Length == 0) {
-                continue;
-            }
-
-            var separator = line.IndexOf(value: '=');
-
-            if (separator < 1) {
-                throw new FormatException(message: $"{ManifestFileName} line {lineNumber} is neither empty nor a 'key=value' pair: '{line}'.");
-            }
-
-            var key = line[..separator];
-
-            if (!manifest.TryAdd(
-                key: key,
-                value: UnescapeManifestValue(
-                    value: line[(separator + 1)..],
-                    key: key
-                )
-            )) {
-                throw new FormatException(message: $"{ManifestFileName} names the key '{key}' more than once (line {lineNumber}); which one governs is undefined, so the manifest is refused rather than resolved by order.");
-            }
+            return 1;
         }
-
-        return manifest;
-    }
-    /// <summary>Applies the fixture's three value escapes: a backslash, a line feed, and a carriage return. Nothing else is escaped — <c>=</c> needs no escape, because only the first one on a line splits.</summary>
-    /// <param name="value">The raw value.</param>
-    private static string EscapeManifestValue(string value) {
-        var builder = new StringBuilder(capacity: value.Length);
-
-        foreach (var character in value) {
-            _ = character switch {
-                '\\' => builder.Append(value: @"\\"),
-                '\n' => builder.Append(value: @"\n"),
-                '\r' => builder.Append(value: @"\r"),
-                _ => builder.Append(value: character),
-            };
-        }
-
-        return builder.ToString();
-    }
-    /// <summary>Reverses <see cref="EscapeManifestValue"/>, refusing an escape the format does not define rather than passing the backslash through — one escaped value must have exactly one unescaped reading.</summary>
-    /// <param name="value">The escaped value.</param>
-    /// <param name="key">The key it belongs to, for the refusal message.</param>
-    /// <exception cref="FormatException">The value ends in a lone backslash, or names an escape outside the three.</exception>
-    private static string UnescapeManifestValue(string value, string key) {
-        if (!value.Contains(value: '\\')) {
-            return value;
-        }
-
-        var builder = new StringBuilder(capacity: value.Length);
-
-        for (var index = 0; (index < value.Length); index += 1) {
-            if (value[index] != '\\') {
-                _ = builder.Append(value: value[index]);
-
-                continue;
-            }
-
-            index += 1;
-
-            if (index == value.Length) {
-                throw new FormatException(message: $"{ManifestFileName}'s '{key}' value ends with a lone backslash; the format defines exactly three escapes (\\\\, \\n, \\r).");
-            }
-
-            _ = value[index] switch {
-                '\\' => builder.Append(value: '\\'),
-                'n' => builder.Append(value: '\n'),
-                'r' => builder.Append(value: '\r'),
-                var other => throw new FormatException(message: $"{ManifestFileName}'s '{key}' value carries the escape '\\{other}', which is not one of the three the format defines (\\\\, \\n, \\r)."),
-            };
-        }
-
-        return builder.ToString();
     }
 }

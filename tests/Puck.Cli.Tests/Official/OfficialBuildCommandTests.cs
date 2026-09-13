@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 using Puck.Cli.Official;
 
@@ -13,39 +13,40 @@ public sealed class OfficialBuildFixture : IDisposable {
     // Build the browser in this checkout before running the official-content integration tests.
     public static string AppBundlePath {
         get {
-            Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root), userMessage: "Cannot locate this checkout's Puck.slnx.");
+            Assert.True(
+                condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root),
+                userMessage: "Cannot locate this checkout's Puck.slnx."
+            );
 
-            return Path.Combine(path1: root!, path2: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
+            return Path.Combine(
+                path1: root!,
+                path2: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle"
+            );
         }
     }
-
-    public const string Channel = "dev";
-
     public int ExitCode { get; }
     public string OutRoot { get; }
     public string StdErr { get; }
     public string StdOut { get; }
 
-    public OfficialBuildFixture() {
-        Assert.True(condition: Directory.Exists(path: AppBundlePath), userMessage: $"the read-only AppBundle at {AppBundlePath} does not exist — build the browser first.");
+    public const string Channel = "dev";
 
-        OutRoot = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-official-tests-{Guid.NewGuid():n}");
+    public OfficialBuildFixture() {
+        Assert.True(
+            condition: Directory.Exists(path: AppBundlePath),
+            userMessage: $"the read-only AppBundle at {AppBundlePath} does not exist — build the browser first."
+        );
+
+        OutRoot = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-official-tests-{Guid.NewGuid():n}"
+        );
         (ExitCode, StdOut, StdErr) = RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
             "--out", OutRoot,
             "--channel", Channel,
             "--engine", AppBundlePath,
             "--allow-dirty",
         ]).Invoke());
-    }
-
-    public void Dispose() {
-        try {
-            if (Directory.Exists(path: OutRoot)) {
-                Directory.Delete(path: OutRoot, recursive: true);
-            }
-        } catch (IOException) {
-            // Best-effort cleanup — a locked file from a still-draining stream never fails the suite.
-        }
     }
 
     internal static (int ExitCode, string StdOut, string StdErr) RunCapturingConsole(Func<int> run) {
@@ -66,6 +67,19 @@ public sealed class OfficialBuildFixture : IDisposable {
             Console.SetError(newError: originalError);
         }
     }
+
+    public void Dispose() {
+        try {
+            if (Directory.Exists(path: OutRoot)) {
+                Directory.Delete(
+                    path: OutRoot,
+                    recursive: true
+                );
+            }
+        } catch (IOException) {
+            // Best-effort cleanup — a locked file from a still-draining stream never fails the suite.
+        }
+    }
 }
 /// <summary>Exercises <c>puck official build</c> and <c>puck official verify</c> end to end against a real tree, and
 /// <see cref="OfficialBuildCommand.IsDirtyPorcelainOutput"/> as a pure unit in isolation (a dirty-tree refusal
@@ -74,50 +88,90 @@ public sealed class OfficialBuildFixture : IDisposable {
 public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IClassFixture<OfficialBuildFixture> {
     [Fact]
     public void Build_Succeeds() {
-        Assert.True(condition: (fixture.ExitCode == 0), userMessage: $"official build exited {fixture.ExitCode}:\nSTDOUT:\n{fixture.StdOut}\nSTDERR:\n{fixture.StdErr}");
+        Assert.True(
+            condition: (fixture.ExitCode == 0),
+            userMessage: $"official build exited {fixture.ExitCode}:\nSTDOUT:\n{fixture.StdOut}\nSTDERR:\n{fixture.StdErr}"
+        );
     }
     [Fact]
     public void Build_WritesChannelAndBuildsManifests() {
-        var channelManifestPath = Path.Combine(path1: fixture.OutRoot, path2: OfficialBuildFixture.Channel, path3: "manifest.json");
+        var channelManifestPath = Path.Combine(
+            path1: fixture.OutRoot,
+            path2: OfficialBuildFixture.Channel,
+            path3: "manifest.json"
+        );
 
         Assert.True(condition: File.Exists(path: channelManifestPath));
 
         using var document = JsonDocument.Parse(json: File.ReadAllText(path: channelManifestPath));
         var root = document.RootElement;
 
-        Assert.Equal(expected: "puck.official.manifest.v1", actual: root.GetProperty(propertyName: "schema").GetString());
-        Assert.Equal(expected: "dev", actual: root.GetProperty(propertyName: "channel").GetString());
+        Assert.Equal(
+            expected: "puck.official.manifest.v1",
+            actual: root.GetProperty(propertyName: "schema").GetString()
+        );
+        Assert.Equal(
+            expected: "dev",
+            actual: root.GetProperty(propertyName: "channel").GetString()
+        );
 
         var commit = root.GetProperty(propertyName: "build").GetProperty(propertyName: "commit").GetString()!;
-        var buildsManifestPath = Path.Combine(path1: fixture.OutRoot, path2: "builds", path3: commit, path4: "manifest.json");
+        var buildsManifestPath = Path.Combine(
+            path1: fixture.OutRoot,
+            path2: "builds",
+            path3: commit,
+            path4: "manifest.json"
+        );
 
         Assert.True(condition: File.Exists(path: buildsManifestPath));
-        Assert.Equal(expected: File.ReadAllBytes(path: channelManifestPath), actual: File.ReadAllBytes(path: buildsManifestPath));
+        Assert.Equal(
+            expected: File.ReadAllBytes(path: channelManifestPath),
+            actual: File.ReadAllBytes(path: buildsManifestPath)
+        );
 
         var composed = root.GetProperty(propertyName: "composed");
 
         Assert.True(condition: (composed.GetArrayLength() > 0));
-        Assert.Equal(expected: "puck", actual: composed[0].GetProperty(propertyName: "documentId").GetString());
+        Assert.Equal(
+            expected: "puck",
+            actual: composed[0].GetProperty(propertyName: "documentId").GetString()
+        );
         Assert.NotNull(@object: composed[0].GetProperty(propertyName: "identity").GetString());
 
         var engineFiles = root.GetProperty(propertyName: "engine").GetProperty(propertyName: "files");
 
         Assert.True(condition: (engineFiles.GetArrayLength() > 0));
     }
-    [Fact]
-    public void Verify_PassesOnTheFreshTree() {
-        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
-            "--base", fixture.OutRoot,
-            "--channel", OfficialBuildFixture.Channel,
-        ]).Invoke());
-
-        Assert.True(condition: (exitCode == 0), userMessage: $"official verify exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
+    [InlineData("", false)]
+    [InlineData("   \n  ", false)]
+    [InlineData(" M src/Puck.Cli/Program.cs\n", true)]
+    [InlineData("?? new-file.txt\n", true)]
+    [Theory]
+    public void IsDirtyPorcelainOutput_ReadsGitPorcelainCorrectly(string porcelain, bool expectedDirty) {
+        Assert.Equal(
+            expected: expectedDirty,
+            actual: OfficialBuildCommand.IsDirtyPorcelainOutput(porcelainStdout: porcelain)
+        );
     }
     [Fact]
     public void SecondBuild_RewritesNoObjectsAndReproducesTheSameManifestBytes() {
-        var objectPaths = Directory.EnumerateFiles(path: Path.Combine(path1: fixture.OutRoot, path2: "objects"), searchOption: SearchOption.AllDirectories, searchPattern: "*").ToList();
-        var mtimesBefore = objectPaths.ToDictionary(elementSelector: File.GetLastWriteTimeUtc, keySelector: path => path);
-        var channelManifestPath = Path.Combine(path1: fixture.OutRoot, path2: OfficialBuildFixture.Channel, path3: "manifest.json");
+        var objectPaths = Directory.EnumerateFiles(
+            path: Path.Combine(
+                path1: fixture.OutRoot,
+                path2: "objects"
+            ),
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*"
+        ).ToList();
+        var mtimesBefore = objectPaths.ToDictionary(
+            elementSelector: File.GetLastWriteTimeUtc,
+            keySelector: path => path
+        );
+        var channelManifestPath = Path.Combine(
+            path1: fixture.OutRoot,
+            path2: OfficialBuildFixture.Channel,
+            path3: "manifest.json"
+        );
         var bytesBefore = File.ReadAllBytes(path: channelManifestPath);
 
         var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
@@ -127,17 +181,69 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             "--allow-dirty",
         ]).Invoke());
 
-        Assert.True(condition: (exitCode == 0), userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
+        Assert.True(
+            condition: (exitCode == 0),
+            userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
+        );
 
         foreach (var path in objectPaths) {
-            Assert.Equal(expected: mtimesBefore[path], actual: File.GetLastWriteTimeUtc(path: path));
+            Assert.Equal(
+                expected: mtimesBefore[path],
+                actual: File.GetLastWriteTimeUtc(path: path)
+            );
         }
 
-        Assert.Equal(expected: bytesBefore, actual: File.ReadAllBytes(path: channelManifestPath));
+        Assert.Equal(
+            expected: bytesBefore,
+            actual: File.ReadAllBytes(path: channelManifestPath)
+        );
+    }
+    [Fact]
+    public void TamperedObject_MakesVerifyFailNamingIt() {
+        using var manifestDocument = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
+            path1: fixture.OutRoot,
+            path2: OfficialBuildFixture.Channel,
+            path3: "manifest.json"
+        )));
+        var relativeObjectPath = manifestDocument.RootElement.GetProperty(propertyName: "worldSchemaBundle").GetProperty(propertyName: "path").GetString()!;
+        var fullObjectPath = Path.Combine(
+            path1: fixture.OutRoot,
+            path2: relativeObjectPath
+        );
+        var original = File.ReadAllBytes(path: fullObjectPath);
+
+        try {
+            File.WriteAllBytes(
+                bytes: [.. original, ((byte)'!')],
+                path: fullObjectPath
+            );
+
+            var (exitCode, _, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
+                "--base", fixture.OutRoot,
+                "--channel", OfficialBuildFixture.Channel,
+            ]).Invoke());
+
+            Assert.Equal(
+                actual: exitCode,
+                expected: 1
+            );
+            Assert.Contains(
+                actualString: stdErr,
+                expectedSubstring: relativeObjectPath
+            );
+        } finally {
+            File.WriteAllBytes(
+                bytes: original,
+                path: fullObjectPath
+            );
+        }
     }
     [Fact]
     public void TwoIndependentBuilds_ProduceByteIdenticalCommitManifest() {
-        var secondRoot = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-official-tests-{Guid.NewGuid():n}");
+        var secondRoot = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-official-tests-{Guid.NewGuid():n}"
+        );
 
         try {
             var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
@@ -147,47 +253,53 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
                 "--allow-dirty",
             ]).Invoke());
 
-            Assert.True(condition: (exitCode == 0), userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
+            Assert.True(
+                condition: (exitCode == 0),
+                userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
+            );
 
-            using var firstManifest = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(path1: fixture.OutRoot, path2: OfficialBuildFixture.Channel, path3: "manifest.json")));
+            using var firstManifest = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
+                path1: fixture.OutRoot,
+                path2: OfficialBuildFixture.Channel,
+                path3: "manifest.json"
+            )));
             var commit = firstManifest.RootElement.GetProperty(propertyName: "build").GetProperty(propertyName: "commit").GetString()!;
-            var firstBuildsManifest = Path.Combine(path1: fixture.OutRoot, path2: "builds", path3: commit, path4: "manifest.json");
-            var secondBuildsManifest = Path.Combine(path1: secondRoot, path2: "builds", path3: commit, path4: "manifest.json");
+            var firstBuildsManifest = Path.Combine(
+                path1: fixture.OutRoot,
+                path2: "builds",
+                path3: commit,
+                path4: "manifest.json"
+            );
+            var secondBuildsManifest = Path.Combine(
+                path1: secondRoot,
+                path2: "builds",
+                path3: commit,
+                path4: "manifest.json"
+            );
 
-            Assert.Equal(expected: File.ReadAllBytes(path: firstBuildsManifest), actual: File.ReadAllBytes(path: secondBuildsManifest));
+            Assert.Equal(
+                expected: File.ReadAllBytes(path: firstBuildsManifest),
+                actual: File.ReadAllBytes(path: secondBuildsManifest)
+            );
         } finally {
             if (Directory.Exists(path: secondRoot)) {
-                Directory.Delete(path: secondRoot, recursive: true);
+                Directory.Delete(
+                    path: secondRoot,
+                    recursive: true
+                );
             }
         }
     }
     [Fact]
-    public void TamperedObject_MakesVerifyFailNamingIt() {
-        using var manifestDocument = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(path1: fixture.OutRoot, path2: OfficialBuildFixture.Channel, path3: "manifest.json")));
-        var relativeObjectPath = manifestDocument.RootElement.GetProperty(propertyName: "worldSchemaBundle").GetProperty(propertyName: "path").GetString()!;
-        var fullObjectPath = Path.Combine(path1: fixture.OutRoot, path2: relativeObjectPath);
-        var original = File.ReadAllBytes(path: fullObjectPath);
+    public void Verify_PassesOnTheFreshTree() {
+        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
+            "--base", fixture.OutRoot,
+            "--channel", OfficialBuildFixture.Channel,
+        ]).Invoke());
 
-        try {
-            File.WriteAllBytes(bytes: [.. original, ((byte)'!')], path: fullObjectPath);
-
-            var (exitCode, _, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
-                "--base", fixture.OutRoot,
-                "--channel", OfficialBuildFixture.Channel,
-            ]).Invoke());
-
-            Assert.Equal(actual: exitCode, expected: 1);
-            Assert.Contains(actualString: stdErr, expectedSubstring: relativeObjectPath);
-        } finally {
-            File.WriteAllBytes(bytes: original, path: fullObjectPath);
-        }
-    }
-    [InlineData("", false)]
-    [InlineData("   \n  ", false)]
-    [InlineData(" M src/Puck.Cli/Program.cs\n", true)]
-    [InlineData("?? new-file.txt\n", true)]
-    [Theory]
-    public void IsDirtyPorcelainOutput_ReadsGitPorcelainCorrectly(string porcelain, bool expectedDirty) {
-        Assert.Equal(expected: expectedDirty, actual: OfficialBuildCommand.IsDirtyPorcelainOutput(porcelainStdout: porcelain));
+        Assert.True(
+            condition: (exitCode == 0),
+            userMessage: $"official verify exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
+        );
     }
 }

@@ -13,6 +13,24 @@ namespace Puck.Vulkan;
 public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi {
     private const uint StructureTypeShaderModuleCreateInfo = 16;
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateShaderModule = ((delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateShaderModule"u8
+            )),
+                DestroyShaderModule = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyShaderModule"u8
+            )),
+            }
+        );
+    }
+
     /// <inheritdoc/>
     public VkResult CreateShaderModule(VulkanShaderModuleCreateRequest request, out nint moduleHandle) {
         VulkanArgument.RequireHandle(
@@ -67,17 +85,5 @@ public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi 
     private unsafe struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult> CreateShaderModule;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyShaderModule;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateShaderModule = ((delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateShaderModule"u8)),
-                DestroyShaderModule = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyShaderModule"u8)),
-            }
-        );
     }
 }

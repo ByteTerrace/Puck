@@ -15,19 +15,35 @@ internal sealed class OfficialObjectWriter(string root) {
 
     public (string Path, string Hash, long Size) Put(byte[] bytes) {
         var hash = ContentAddressedStore.ComputeHash(content: bytes);
-        var objectPath = ContentAddressedLayout.ObjectPath(root: m_root, hash: hash);
+        var objectPath = ContentAddressedLayout.ObjectPath(
+            hash: hash,
+            root: m_root
+        );
 
         if (File.Exists(path: objectPath)) {
             var existingHash = ContentAddressedStore.ComputeHash(content: File.ReadAllBytes(path: objectPath));
 
-            if (!string.Equals(a: existingHash, b: hash, comparisonType: StringComparison.Ordinal)) {
-                throw new InvalidDataException(message: $"object at '{CliPaths.ToDisplay(relativeTo: m_root, fullPath: objectPath)}' does not hash to its own path — the tree is corrupted or tampered; refusing to overwrite it.");
+            if (!string.Equals(
+                a: existingHash,
+                b: hash,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                throw new InvalidDataException(message: $"object at '{CliPaths.ToDisplay(
+                    fullPath: objectPath,
+                    relativeTo: m_root
+                )}' does not hash to its own path — the tree is corrupted or tampered; refusing to overwrite it.");
             }
         } else {
             _ = m_store.Put(content: bytes);
         }
 
-        var relativePath = Path.GetRelativePath(path: objectPath, relativeTo: m_root).Replace(oldChar: '\\', newChar: '/');
+        var relativePath = Path.GetRelativePath(
+            path: objectPath,
+            relativeTo: m_root
+        ).Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
 
         return (relativePath, $"sha256/{hash}", bytes.LongLength);
     }

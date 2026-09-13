@@ -11,71 +11,139 @@ public sealed class CartridgeTrackerTests {
     private const uint BufferAddress = 0x02000160u;
     private const int RowFrames = 4;
     private const int SamplesPerFrame = 288;
-    private const uint VoiceAddress = BufferAddress + (SamplesPerFrame * 2) + 4;
+    private const uint VoiceAddress = ((BufferAddress + (SamplesPerFrame * 2)) + 4);
 
-    [Fact]
-    public void ADocumentAuthoredSequenceStartsEachRowsNoteAtItsOwnPitch() {
-        var result = new AgbCartridgeCompiler().Compile(document: Document());
-        using var machine = new AgbVerifyMachineDriver(rom: result.Rom, label: "tracker");
+    // A pattern in an array, a frame clock, and a play whose rate is read from that array: no sequencer primitive.
+    private static CartridgeDocument Document() {
+        var sample = new int[128];
 
-        // Each row holds for RowFrames, so sampling inside successive rows reads successive steps.
-        var steps = new List<uint>();
-        for (var row = 0; row < 4; ++row) {
-            machine.RunFrames(keys: AgbKeys.None, frames: RowFrames);
-            steps.Add(item: Step(machine: machine));
+        for (var index = 0; (index < sample.Length); ++index) {
+            sample[index] = (((index * 200) / sample.Length) - 100);
         }
 
-        // The authored rates rise, so the steps the voices carry rise with them and no two rows sound alike.
-        Assert.Equal(expected: steps.Count, actual: steps.Distinct().Count());
-        Assert.All(collection: steps, action: static step => Assert.NotEqual(expected: 0u, actual: step));
+        return CartridgeDocuments.Create(
+            target: "agb",
+            title: "TRACKER"
+        ) with {
+            Variables = [
+                new CartridgeVariable(
+                Name: "tick",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "row",
+                Initial: 0
+            ),
+            ],
+            Arrays = [new CartridgeArray(
+                Initial: [48, 64, 96, 128],
+                Name: "rates"
+            )],
+            Sounds = [new CartridgeSound(
+                Name: "instrument",
+                Sample: sample
+            )],
+            Rules = [
+                new CartridgeRule(
+                Name: "clock",
+                Body: [
+                    new CartridgeStatement(
+                        Kind: "set",
+                        Target: new CartridgeTarget(State: "tick"),
+                        Operation: ExpressionOp.Add,
+                        Value: CartridgeExpressions.Of(constant: 1)
+                    ),
+                    new CartridgeStatement(
+                        Kind: "if",
+                        When: CartridgeExpressions.Gate(
+                            left: CartridgeExpressions.Of(state: "tick"),
+                            comparison: ActionStateComparison.GreaterOrEqual,
+                            right: CartridgeExpressions.Of(constant: RowFrames)
+                        ),
+                        Then: [
+                            new CartridgeStatement(
+                                Kind: "set",
+                                Target: new CartridgeTarget(State: "tick"),
+                                Operation: null,
+                                Value: CartridgeExpressions.Of(constant: 0)
+                            ),
+                            new CartridgeStatement(
+                                Kind: "play",
+                                Sound: "instrument",
+                                Rate: CartridgeExpressions.Of(
+                                    state: "rates",
+                                    key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "row"))
+                                )
+                            ),
+                            new CartridgeStatement(
+                                Kind: "set",
+                                Target: new CartridgeTarget(State: "row"),
+                                Operation: ExpressionOp.Add,
+                                Value: CartridgeExpressions.Of(constant: 1)
+                            ),
+                            new CartridgeStatement(
+                                Kind: "set",
+                                Target: new CartridgeTarget(State: "row"),
+                                Operation: ExpressionOp.Modulo,
+                                Value: CartridgeExpressions.Of(constant: 4)
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            ],
+        };
     }
-
     // The step of whichever voice was started most recently; voices are claimed in order and retire in order.
     private static uint Step(AgbVerifyMachineDriver machine) {
         var latest = 0u;
-        for (var voice = 0u; voice < CartridgeLimits.SampleVoiceCount; ++voice) {
+
+        for (var voice = 0u; (voice < CartridgeLimits.SampleVoiceCount); ++voice) {
             var word = 0u;
-            for (var index = 0u; index < 4u; ++index) {
-                word |= (uint)machine.ReadByte(address: VoiceAddress + (voice * 16u) + 12u + index) << (int)(index * 8);
+
+            for (var index = 0u; (index < 4u); ++index) {
+                word |= (((uint)machine.ReadByte(address: (((VoiceAddress + (voice * 16u)) + 12u) + index))) << ((int)(index * 8)));
             }
 
-            latest = Math.Max(val1: latest, val2: word);
+            latest = Math.Max(
+                val1: latest,
+                val2: word
+            );
         }
 
         return latest;
     }
 
-    // A pattern in an array, a frame clock, and a play whose rate is read from that array: no sequencer primitive.
-    private static CartridgeDocument Document() {
-        var sample = new int[128];
-        for (var index = 0; index < sample.Length; ++index) {
-            sample[index] = ((index * 200) / sample.Length) - 100;
+    [Fact]
+    public void ADocumentAuthoredSequenceStartsEachRowsNoteAtItsOwnPitch() {
+        var result = new AgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new AgbVerifyMachineDriver(
+            rom: result.Rom,
+            label: "tracker"
+        );
+
+        // Each row holds for RowFrames, so sampling inside successive rows reads successive steps.
+        var steps = new List<uint>();
+
+        for (var row = 0; (row < 4); ++row) {
+            machine.RunFrames(
+                frames: RowFrames,
+                keys: AgbKeys.None
+            );
+            steps.Add(item: Step(machine: machine));
         }
 
-        return CartridgeDocuments.Create(target: "agb", title: "TRACKER") with {
-            Variables = [
-                new CartridgeVariable(Name: "tick", Initial: 0),
-                new CartridgeVariable(Name: "row", Initial: 0),
-            ],
-            Arrays = [new CartridgeArray(Name: "rates", Initial: [48, 64, 96, 128])],
-            Sounds = [new CartridgeSound(Name: "instrument", Sample: sample)],
-            Rules = [
-                new CartridgeRule(Name: "clock", Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "tick"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
-                    new CartridgeStatement(
-                        Kind: "if",
-                        When: CartridgeExpressions.Gate(left: CartridgeExpressions.Of(state: "tick"), comparison: ActionStateComparison.GreaterOrEqual, right: CartridgeExpressions.Of(constant: RowFrames)),
-                        Then: [
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "tick"), Operation: null, Value: CartridgeExpressions.Of(constant: 0)),
-                            new CartridgeStatement(
-                                Kind: "play",
-                                Sound: "instrument",
-                                Rate: CartridgeExpressions.Of(state: "rates", key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "row")))),
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "row"), Operation: ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "row"), Operation: ExpressionOp.Modulo, Value: CartridgeExpressions.Of(constant: 4)),
-                        ]),
-                ]),
-            ],
-        };
+        // The authored rates rise, so the steps the voices carry rise with them and no two rows sound alike.
+        Assert.Equal(
+            expected: steps.Count,
+            actual: steps.Distinct().Count()
+        );
+        Assert.All(
+            collection: steps,
+            action: static step => Assert.NotEqual(
+                actual: step,
+                expected: 0u
+            )
+        );
     }
 }

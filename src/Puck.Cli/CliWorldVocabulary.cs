@@ -12,12 +12,15 @@ public static class CliWorldVocabulary {
     /// <returns>The immutable catalog selected for this invocation.</returns>
     public static WorldMachineCatalog EnsureInstalled() {
         var registry = new WorldMachineExtensionRegistry();
-        new HumbleGamingBrickExtension().Initialize(registry);
-        new AdvancedGamingBrickExtension().Initialize(registry);
+
+        new HumbleGamingBrickExtension().Initialize(registry: registry);
+        new AdvancedGamingBrickExtension().Initialize(registry: registry);
         var catalog = registry.Build();
+
         WorldSchemaVocabularyHooks.Install(
             postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-            probeKindCheck: WorldProbeKinds.IsShipped);
+            probeKindCheck: WorldProbeKinds.IsShipped
+        );
         return catalog;
     }
     /// <summary>Computes the stable metadata fingerprint for the selected invocation catalog.</summary>

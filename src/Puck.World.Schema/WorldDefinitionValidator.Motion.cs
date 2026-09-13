@@ -60,7 +60,11 @@ public static partial class WorldDefinitionValidator {
     // A positive authored value that rounds to zero in Q48.16 would silently disable what it tunes; the sign check
     // is the caller's, this is only the quantization door both fixed-valued requirements share.
     private static void RequireQuantizesNonZero(float value, string name, List<string> errors) {
-        if (float.IsFinite(f: value) && (value > 0f) && (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)) {
+        if (
+            float.IsFinite(f: value) &&
+            (value > 0f) &&
+            (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)
+        ) {
             errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
         }
     }
@@ -87,13 +91,14 @@ public static partial class WorldDefinitionValidator {
     }
     // What a kit's motion row supplies. Speed/Turn are always supplied (structurally mandatory record fields); the
     // two OPTIONAL rows — Holds and Shaping — each refuse their own program by facet name when the kit authors none.
-    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion motion) => (MotionTuningFacet.Speed
+    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion motion) => MotionTuningFacet.Speed
         | ((motion.Holds is { Count: > 0 })
         ? MotionTuningFacet.Holds
         : MotionTuningFacet.None)
         | ((motion.Shaping is { Count: > 0 })
         ? MotionTuningFacet.Shaping
-        : MotionTuningFacet.None));
+        : MotionTuningFacet.None
+    );
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
         key: name,
         value: out value
@@ -142,8 +147,12 @@ public static partial class WorldDefinitionValidator {
                 if (compiledProgram.Kind == BodyProgramKind.Producer) {
                     var senses = compiledProgram.Contains(operation: BodyMotionOp.SenseNearestInCone);
                     var flocks = compiledProgram.Contains(operation: BodyMotionOp.ProduceFlockIntent);
-                    if (flocks && (compiledProgram.Contains(BodyMotionOp.ProduceSteeringIntent) || compiledProgram.Contains(BodyMotionOp.FaceSensorTarget))) {
-                        errors.Add($"{path} ProduceFlockIntent owns the movement preference and cannot combine with another intent or facing producer.");
+
+                    if (
+                        flocks &&
+                        (compiledProgram.Contains(operation: BodyMotionOp.ProduceSteeringIntent) || compiledProgram.Contains(operation: BodyMotionOp.FaceSensorTarget))
+                    ) {
+                        errors.Add(item: $"{path} ProduceFlockIntent owns the movement preference and cannot combine with another intent or facing producer.");
                     }
 
                     // ProduceSteeringIntent's own runtime shape is roam-only unless this program also senses a
@@ -173,7 +182,7 @@ public static partial class WorldDefinitionValidator {
                             }
                             RequireRange(
                                 value: sensed.Range,
-                                min: 1f / 65536f,
+                                min: (1f / 65536f),
                                 max: 1_000_000f,
                                 name: $"{path}.target.range",
                                 errors: errors
@@ -213,10 +222,16 @@ public static partial class WorldDefinitionValidator {
 
                             break;
                         case BodyTargetSource.Navigated navigated:
-                            if (string.IsNullOrWhiteSpace(value: navigated.Domain) || !navigationDomainNames.Contains(item: navigated.Domain)) {
+                            if (
+                                string.IsNullOrWhiteSpace(value: navigated.Domain) ||
+                                !navigationDomainNames.Contains(item: navigated.Domain)
+                            ) {
                                 errors.Add(item: $"{path}.target.domain '{navigated.Domain}' names no navigation domain.");
                             }
-                            if (string.IsNullOrWhiteSpace(value: navigated.Register) || !targetRegisterNames.Contains(item: navigated.Register)) {
+                            if (
+                                string.IsNullOrWhiteSpace(value: navigated.Register) ||
+                                !targetRegisterNames.Contains(item: navigated.Register)
+                            ) {
                                 errors.Add(item: $"{path}.target.register '{navigated.Register}' names no target register.");
                             }
                             break;
@@ -374,9 +389,9 @@ public static partial class WorldDefinitionValidator {
 
         if (turn.ReferenceSpeed is { } referenceSpeed) {
             RequirePositiveFixed(
-                value: referenceSpeed,
+                errors: errors,
                 name: $"{path}.referenceSpeed",
-                errors: errors
+                value: referenceSpeed
             );
         }
 
@@ -394,7 +409,7 @@ public static partial class WorldDefinitionValidator {
         if (
             !float.IsFinite(f: turn.MaxPitch) ||
             (turn.MaxPitch <= 0f) ||
-            (turn.MaxPitch >= (float)(Math.PI / 2.0))
+            (turn.MaxPitch >= ((float)(Math.PI / 2.0)))
         ) {
             errors.Add(item: $"{path}.maxPitch {turn.MaxPitch} must be within (0, pi/2).");
         } else if (FixedQ4816.FromDouble(value: turn.MaxPitch) <= FixedQ4816.Zero) {
@@ -426,15 +441,22 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.idleThreshold",
             errors: errors
         );
-        if (obstruction.Displacement > 0f && float.IsFinite(f: obstruction.Displacement) && FixedQ4816.FromDouble(value: ((double)obstruction.Displacement * obstruction.Displacement)) <= FixedQ4816.Zero) {
+        if (
+            (obstruction.Displacement > 0f) &&
+            float.IsFinite(f: obstruction.Displacement) &&
+            (FixedQ4816.FromDouble(value: (((double)obstruction.Displacement) * obstruction.Displacement)) <= FixedQ4816.Zero)
+        ) {
             errors.Add(item: $"{path}.displacement {obstruction.Displacement} is positive but its squared Q48.16 comparison threshold quantizes to zero.");
         }
         if (obstruction.GraceSeconds <= 0m) {
             errors.Add(item: $"{path}.graceSeconds {obstruction.GraceSeconds} must be positive.");
-        } else if (!FixedTickConversion.TryDurationEngineTicksExact(
+        } else if (
+            !FixedTickConversion.TryDurationEngineTicksExact(
             seconds: obstruction.GraceSeconds,
             ticks: out var graceTicks
-        ) || (graceTicks == 0UL)) {
+        ) ||
+            (graceTicks == 0UL)
+        ) {
             errors.Add(item: $"{path}.graceSeconds {obstruction.GraceSeconds} does not convert to a positive exact whole tick across the {FixedTickConversion.TicksPerSecond} engine-tick bridge.");
         }
     }
@@ -572,8 +594,7 @@ public static partial class WorldDefinitionValidator {
                 if (hold.Gravity is not { } gravity) {
                     errors.Add(item: (fullLift
                         ? $"{rowPath}.gravity is required for a full-lift hold — its Rise is the bleed rate the channel decays at."
-                        : $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise and fall are its whole vertical arc."
-                    ));
+                        : $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise and fall are its whole vertical arc."));
                 } else {
                     RequirePositiveFixed(
                         errors: errors,
@@ -598,7 +619,9 @@ public static partial class WorldDefinitionValidator {
 
             if (needsEnvelope) {
                 if (hold.Envelope is not { } envelope) {
-                    errors.Add(item: $"{rowPath}.envelope is required for a {((hold.Bond == BodyHoldBond.Medium) ? "medium" : hold.Hold.ToString())} hold — the terminal speed(s) it is bounded by.");
+                    errors.Add(item: $"{rowPath}.envelope is required for a {((hold.Bond == BodyHoldBond.Medium)
+                        ? "medium"
+                        : hold.Hold.ToString())} hold — the terminal speed(s) it is bounded by.");
                 } else {
                     RequirePositiveFixed(
                         errors: errors,
@@ -748,9 +771,9 @@ public static partial class WorldDefinitionValidator {
             channelNames: channelNames,
             dynamicsNames: dynamicsNames,
             errors: errors,
-            path: path,
             hasMedium: hasMedium,
             hasMoveUpChannel: hasMoveUpChannel,
+            path: path,
             simulationRateHz: simulationRateHz,
             stateSlots: stateSlots,
             tuning: motion
@@ -791,7 +814,12 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            ValidateFlockProfile(parameters.Flock, program, itemPath, errors);
+            ValidateFlockProfile(
+                parameters.Flock,
+                program,
+                itemPath,
+                errors
+            );
 
             var target = (programRows.TryGetValue(
                 key: name,
@@ -806,9 +834,9 @@ public static partial class WorldDefinitionValidator {
             // and the compiler can never disagree about which scalars a program's selected operations and authored
             // arguments require.
             var requiredParameters = CompiledBodyProducer.ResolveRequiredScalars(
+                parameters: parameters,
                 program: program,
-                target: target,
-                parameters: parameters
+                target: target
             );
             var required = new HashSet<string>(
                 collection: requiredParameters.Select(selector: BodyProducerParameterVocabulary.Name),
@@ -929,7 +957,10 @@ public static partial class WorldDefinitionValidator {
             // The approach shape is reachable only once a target can be sensed — the presence check above already
             // requires standoffRadius/approach/orbit exactly when senses holds, so a bare roam producer authors
             // none of them; these value checks run under the same condition.
-            if (senses && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
+            if (
+                senses &&
+                program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)
+            ) {
                 RequirePositiveScalar(
                     errors: errors,
                     name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.StandoffRadius),
@@ -964,57 +995,100 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateNavigatedProducerMobility(WorldDefinition definition, WorldKit kit, CompiledBodyMotionProgram? motionProgram, IReadOnlyDictionary<string, BodyMotionProgram> programRows, string path, List<string> errors) {
         foreach (var (name, parameters) in kit.Producers) {
             if (
-                parameters is null ||
-                parameters.Scalars is null ||
-                !programRows.TryGetValue(key: name, value: out var producerProgram) ||
-                producerProgram.Target is not BodyTargetSource.Navigated navigated ||
-                definition.Navigation.Rows.FirstOrDefault(predicate: domain => string.Equals(a: domain.Name, b: navigated.Domain, comparisonType: StringComparison.Ordinal)) is not { } domain
+                (parameters is null) ||
+                (parameters.Scalars is null) ||
+                !programRows.TryGetValue(
+                key: name,
+                value: out var producerProgram
+            ) ||
+                (producerProgram.Target is not BodyTargetSource.Navigated navigated) ||
+                (definition.Navigation.Rows.FirstOrDefault(predicate: domain => string.Equals(
+                a: domain.Name,
+                b: navigated.Domain,
+                comparisonType: StringComparison.Ordinal
+            )) is not { } domain)
             ) {
                 continue;
             }
 
             var producerPath = $"{path}[{name}]";
-            if (domain.Shared is not null && domain.Kind != WorldNavigationKind.Surface && errors.Count == 0 && !FlockColliderFitsDomain(kit, definition, domain)) {
-                errors.Add($"{producerPath} shared navigation domain '{domain.Name}' agentRadius must enclose every collider volume about the body root, including its local offsets.");
+
+            if (
+                (domain.Shared is not null) &&
+                (domain.Kind != WorldNavigationKind.Surface) &&
+                (errors.Count == 0) &&
+                !FlockColliderFitsDomain(
+                definition: definition,
+                domain: domain,
+                kit: kit
+            )
+            ) {
+                errors.Add(item: $"{producerPath} shared navigation domain '{domain.Name}' agentRadius must enclose every collider volume about the body root, including its local offsets.");
             }
             if (parameters.Flock is { } flock) {
                 if (flock.ArrivalDistance > domain.ArrivalDistance) {
-                    errors.Add($"{producerPath}.flock.arrivalDistance exceeds navigation arrivalDistance.");
+                    errors.Add(item: $"{producerPath}.flock.arrivalDistance exceeds navigation arrivalDistance.");
                 }
                 if ((flock.Space == WorldFlockSpace.Tangent) != (domain.Kind == WorldNavigationKind.Surface)) {
-                    errors.Add($"{producerPath}.flock.space disagrees with navigation domain '{domain.Name}'.");
+                    errors.Add(item: $"{producerPath}.flock.space disagrees with navigation domain '{domain.Name}'.");
                 }
             } else {
-                RequirePositiveScalar(errors: errors, name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.Approach), parameters: parameters, path: producerPath);
-                RequirePositiveScalar(errors: errors, name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.StandoffRadius), parameters: parameters, path: producerPath);
+                RequirePositiveScalar(
+                    errors: errors,
+                    name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.Approach),
+                    parameters: parameters,
+                    path: producerPath
+                );
+                RequirePositiveScalar(
+                    errors: errors,
+                    name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.StandoffRadius),
+                    parameters: parameters,
+                    path: producerPath
+                );
             }
             if (
-                TryScalar(name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.StandoffRadius), parameters: parameters, value: out var standoff) &&
+                TryScalar(
+                name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.StandoffRadius),
+                parameters: parameters,
+                value: out var standoff
+            ) &&
                 float.IsFinite(f: standoff) &&
-                standoff > domain.ArrivalDistance
+                (standoff > domain.ArrivalDistance)
             ) {
                 errors.Add(item: $"{producerPath}.scalars[{BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.StandoffRadius)}] ({standoff}) cannot exceed navigation domain '{domain.Name}' arrivalDistance ({domain.ArrivalDistance}); otherwise the producer stops before advancing its waypoint.");
             }
 
             if (domain.Kind == WorldNavigationKind.Surface) {
-                if (motionProgram is not null && !motionProgram.RequiresRole(role: ChannelRole.MoveAdvance)) {
+                if (
+                    (motionProgram is not null) &&
+                    !motionProgram.RequiresRole(role: ChannelRole.MoveAdvance)
+                ) {
                     errors.Add(item: $"{producerPath} targets surface navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram consumes no MoveAdvance role.");
                 }
                 continue;
             }
 
             if (parameters.Flock is null) {
-                RequirePositiveScalar(errors: errors, name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.AltitudeGain), parameters: parameters, path: producerPath);
+                RequirePositiveScalar(
+                    errors: errors,
+                    name: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.AltitudeGain),
+                    parameters: parameters,
+                    path: producerPath
+                );
             }
-            var directVertical = motionProgram is not null && (
+            var directVertical = ((motionProgram is not null) && (
                 motionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity) ||
-                (motionProgram.Contains(operation: BodyMotionOp.ApplyHold) && (kit.Motion.Holds?.Any(predicate: hold => hold.Thrust > 0f) ?? false))
-            );
-            var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && (kit.Motion.Holds?.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium) ?? false);
-            if (!directVertical && !mediumVertical) {
+                (motionProgram.Contains(operation: BodyMotionOp.ApplyHold) && (kit.Motion.Holds?.Any(predicate: hold => (hold.Thrust > 0f)) ?? false))
+            ));
+            var mediumVertical = ((domain.Kind == WorldNavigationKind.Medium) && (motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true) && (kit.Motion.Holds?.Any(predicate: hold => (hold.Bond == BodyHoldBond.Medium)) ?? false));
+
+            if (
+                !directVertical &&
+                !mediumVertical
+            ) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, an ApplyHold row's own thrust, or a medium ApplyHold).");
             }
-            if (!definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp)) {
+            if (!definition.Channels.Any(predicate: channel => (channel.Role == ChannelRole.MoveUp))) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but the world declares no MoveUp channel.");
             }
         }
@@ -1061,9 +1135,15 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{rowPath}.dynamics is empty — name a dynamics row or omit it.");
             }
 
-            if (hasAlong && hasDynamics) {
+            if (
+                hasAlong &&
+                hasDynamics
+            ) {
                 errors.Add(item: $"{rowPath} authors both along and dynamics '{row.Dynamics}' — a shaping row selects exactly one.");
-            } else if (!hasAlong && !hasDynamics) {
+            } else if (
+                !hasAlong &&
+                !hasDynamics
+            ) {
                 errors.Add(item: $"{rowPath} requires exactly one of along or dynamics (neither is authored).");
             }
 
@@ -1074,9 +1154,9 @@ public static partial class WorldDefinitionValidator {
 
                 if (row.Across.Lateral is { } lateral) {
                     RequirePositiveFixed(
-                        value: lateral,
+                        errors: errors,
                         name: $"{rowPath}.across.lateral",
-                        errors: errors
+                        value: lateral
                     );
                 }
             }
@@ -1084,32 +1164,32 @@ public static partial class WorldDefinitionValidator {
             if (row.Along is { } along) {
                 if (along.Engage is { } engage) {
                     RequirePositiveFixed(
-                        value: engage,
+                        errors: errors,
                         name: $"{rowPath}.along.engage",
-                        errors: errors
+                        value: engage
                     );
                 }
                 if (along.Release is { } release) {
                     RequirePositiveFixed(
-                        value: release,
+                        errors: errors,
                         name: $"{rowPath}.along.release",
-                        errors: errors
+                        value: release
                     );
                 }
 
                 if (row.Across is not null) {
                     if (along.ReversalRate is { } reversalRate) {
                         RequirePositiveFixed(
-                            value: reversalRate,
+                            errors: errors,
                             name: $"{rowPath}.along.reversalRate",
-                            errors: errors
+                            value: reversalRate
                         );
                     }
                     if (along.BackwardSpeed is { } backwardSpeed) {
                         RequireNonNegative(
-                            value: backwardSpeed,
+                            errors: errors,
                             name: $"{rowPath}.along.backwardSpeed",
-                            errors: errors
+                            value: backwardSpeed
                         );
                     }
                 } else {
@@ -1165,6 +1245,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} [{envelope.Min}, {envelope.Max}] does not contain the kit's own {ownValueName} ({ownValue}).");
         }
     }
+
     /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
     /// <see cref="WorldMotion"/> row — the validator's own mapping (never convention; see
     /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation must

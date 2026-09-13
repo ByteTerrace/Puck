@@ -12,19 +12,26 @@ namespace Puck.World.Azure;
 /// <param name="RequestId">Azure's service request id for diagnostics; not an idempotency guarantee.</param>
 public sealed record AzureResourceOperationReceipt(int Version, int HttpStatus, string? PollUri,
     string? PollKind, string? RetryAfter, string? RequestId) {
+    internal string Encode() => JsonSerializer.Serialize(
+        this,
+        AzureResourceJsonContext.Default.AzureResourceOperationReceipt
+    );
+
     /// <summary>Decodes a durable result for host read-back and scheduling.</summary>
     /// <param name="result">The provider result string from the external operation journal.</param>
     /// <returns>The version-checked receipt.</returns>
     /// <exception cref="JsonException">The result is not a supported receipt.</exception>
     public static AzureResourceOperationReceipt Parse(string result) {
-        var receipt = JsonSerializer.Deserialize(result, AzureResourceJsonContext.Default.AzureResourceOperationReceipt);
-        if (receipt is not { Version: 1 }) { throw new JsonException("Unsupported Azure resource receipt."); }
+        var receipt = JsonSerializer.Deserialize(
+            result,
+            AzureResourceJsonContext.Default.AzureResourceOperationReceipt
+        );
+
+        if (receipt is not { Version: 1 }) { throw new JsonException(message: "Unsupported Azure resource receipt."); }
         return receipt;
     }
-
-    internal string Encode() => JsonSerializer.Serialize(this, AzureResourceJsonContext.Default.AzureResourceOperationReceipt);
 }
 
-[JsonSourceGenerationOptions(UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(AzureResourceOperationReceipt))]
+[JsonSourceGenerationOptions(UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true)]
 internal sealed partial class AzureResourceJsonContext : JsonSerializerContext;

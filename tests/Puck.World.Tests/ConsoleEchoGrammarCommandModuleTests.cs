@@ -32,113 +32,91 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
     }
 
     [Fact]
-    public async Task WorldWaitHoldsOnlyItsIssuerAndUsesIndependentDeadlines() {
-        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
+    public async Task ClockResetCannotReviveAnExpiredWaitThatThePumpHasNotObserved() {
         var gate = new WorldConsoleWaitGate();
-        var registry = new CommandRegistry(modules: [
-            new WorldWaitCommandModule(authority: new FakeConsoleAuthority(row.Instance), gates: new FakeWaitGateResolver(gate)),
-        ]);
-        var source = new TextCommandSource(registry);
-        using var first = source.CreateSession(CommandPrincipal.Console);
-        using var second = source.CreateSession(CommandPrincipal.Console);
-        first.Enqueue("world.wait 3");
-        var afterFirst = first.InvokeAsync(() => gate.Tick, cancellationToken: TestContext.Current.CancellationToken);
-        second.Enqueue("world.wait 1");
-        var afterSecond = second.InvokeAsync(() => gate.Tick, cancellationToken: TestContext.Current.CancellationToken);
-        source.Collect();
-        Assert.False(afterFirst.IsCompleted);
-        Assert.False(afterSecond.IsCompleted);
-        gate.PublishTick(1);
-        source.Collect();
-        Assert.Equal(1UL, await afterSecond);
-        Assert.False(afterFirst.IsCompleted);
-        gate.PublishTick(3);
-        source.Collect();
-        Assert.Equal(3UL, await afterFirst);
-        Assert.False(gate.ReleaseStalled());
-        Assert.True(registry.Submit("world.wait 1").IsError);
-    }
+        var source = new TextCommandSource(new CommandRegistry(modules: []));
+        using var session = source.CreateSession(CommandPrincipal.Console);
 
+        _ = gate.Arm(
+            session: session,
+            ticks: 2
+        );
+        var pending = session.InvokeAsync(
+            () => true,
+            TestContext.Current.CancellationToken
+        );
+
+        gate.PublishTick(tick: 2);
+        // No Collect between expiry and reset: the session still holds the old predicate.
+        gate.PublishTick(tick: 0);
+        source.Collect();
+        Assert.True(condition: pending.IsCompleted);
+        Assert.True(condition: await pending);
+        _ = gate.Arm(
+            session: session,
+            ticks: 1
+        );
+        var next = session.InvokeAsync(
+            () => true,
+            TestContext.Current.CancellationToken
+        );
+
+        source.Collect();
+        Assert.False(condition: next.IsCompleted);
+        gate.PublishTick(tick: 1);
+        source.Collect();
+        Assert.True(condition: await next);
+    }
     [Fact]
     public async Task StalledReleaseAndClockResetReleaseEveryWaitingSession() {
         var gate = new WorldConsoleWaitGate();
         var source = new TextCommandSource(new CommandRegistry(modules: []));
         using var first = source.CreateSession(CommandPrincipal.Console);
         using var second = source.CreateSession(CommandPrincipal.Console);
-        gate.PublishTick(10);
-        _ = gate.Arm(first, 2);
-        _ = gate.Arm(second, 3);
-        var a = first.InvokeAsync(() => true, cancellationToken: TestContext.Current.CancellationToken);
-        var b = second.InvokeAsync(() => true, cancellationToken: TestContext.Current.CancellationToken);
+
+        gate.PublishTick(tick: 10);
+        _ = gate.Arm(
+            session: first,
+            ticks: 2
+        );
+        _ = gate.Arm(
+            session: second,
+            ticks: 3
+        );
+        var a = first.InvokeAsync(
+            () => true,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var b = second.InvokeAsync(
+            () => true,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
         source.Collect();
-        Assert.False(a.IsCompleted);
-        Assert.False(b.IsCompleted);
-        Assert.True(gate.ReleaseStalled());
+        Assert.False(condition: a.IsCompleted);
+        Assert.False(condition: b.IsCompleted);
+        Assert.True(condition: gate.ReleaseStalled());
         source.Collect();
-        Assert.True(await a);
-        Assert.True(await b);
-        _ = gate.Arm(first, 2);
-        var reset = first.InvokeAsync(() => true, cancellationToken: TestContext.Current.CancellationToken);
-        gate.PublishTick(0);
+        Assert.True(condition: await a);
+        Assert.True(condition: await b);
+        _ = gate.Arm(
+            session: first,
+            ticks: 2
+        );
+        var reset = first.InvokeAsync(
+            () => true,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        gate.PublishTick(tick: 0);
         source.Collect();
-        Assert.True(await reset);
-        _ = gate.Arm(first, 1);
-        gate.PublishTick(1);
-        Assert.False(gate.ReleaseStalled());
-    }
-
-    [Fact]
-    public async Task ClockResetCannotReviveAnExpiredWaitThatThePumpHasNotObserved() {
-        var gate = new WorldConsoleWaitGate();
-        var source = new TextCommandSource(new CommandRegistry(modules: []));
-        using var session = source.CreateSession(CommandPrincipal.Console);
-        _ = gate.Arm(session, 2);
-        var pending = session.InvokeAsync(() => true, TestContext.Current.CancellationToken);
-        gate.PublishTick(2);
-        // No Collect between expiry and reset: the session still holds the old predicate.
-        gate.PublishTick(0);
-        source.Collect();
-        Assert.True(pending.IsCompleted);
-        Assert.True(await pending);
-        _ = gate.Arm(session, 1);
-        var next = session.InvokeAsync(() => true, TestContext.Current.CancellationToken);
-        source.Collect();
-        Assert.False(next.IsCompleted);
-        gate.PublishTick(1);
-        source.Collect();
-        Assert.True(await next);
-    }
-
-    [Fact]
-    public void WorldUpdate_NoSectionAuthored_EchoesNone() {
-        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
-        var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);
-
-        var result = registry.Submit(line: "world.update");
-
-        Assert.Equal(expected: "[world.update: none]", actual: result.Output);
-    }
-    [Fact]
-    public void WorldUpdate_AuthoredSection_EchoesKeyValueFields() {
-        var document = (Fixtures.BuildDocument() with {
-            Update = new WorldUpdateDefaults(CacheRoot: "cache", Channel: "stable", CheckIntervalSeconds: 3600, KeepVersions: 2),
-        });
-        using var row = HostRow.Build(definition: document, name: "boot");
-        var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);
-
-        var result = registry.Submit(line: "world.update");
-
-        // The staged key=value migration (was whitespace-separated "channel stable ...") — intentional, pinned here.
-        Assert.Equal(expected: "[world.update: channel=stable cacheRoot=cache checkIntervalSeconds=3600 keepVersions=2]", actual: result.Output);
-    }
-    [Fact]
-    public void WorldGroups_NoSectionAuthored_EchoesNoGroupsSection() {
-        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
-        var registry = new CommandRegistry(modules: [new WorldGroupCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), link: row.Instance.Link)]);
-
-        var result = registry.Submit(line: "world.groups");
-
-        Assert.Equal(expected: "[world.groups: (no groups section)]", actual: result.Output);
+        Assert.True(condition: await reset);
+        _ = gate.Arm(
+            session: first,
+            ticks: 1
+        );
+        gate.PublishTick(tick: 1);
+        Assert.False(condition: gate.ReleaseStalled());
     }
     [Fact]
     public void WorldGroups_AuthoredKindGroupAndOwnership_EchoesHeadFieldSegments() {
@@ -146,24 +124,47 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             Kinds: [
                 new WorldGroupKind(
                     Name: "party",
-                    Roles: [new WorldGroupRole(Capabilities: [WorldCapability.Drive], Name: "leader")],
+                    Roles: [new WorldGroupRole(
+                            Capabilities: [WorldCapability.Drive],
+                            Name: "leader"
+                        )],
                     Lifetime: WorldGroupLifetime.Ephemeral,
                     EvictionPolicy: WorldGroupEvictionPolicy.Remove,
                     Capacity: 4
                 ),
             ],
             Groups: [
-                new WorldGroup(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [new WorldGroupMember(WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)), null, 0)]),
+                new WorldGroup(
+                    Id: SafeName.Parse(candidate: "alpha"),
+                    KindName: "party",
+                    Members: [new WorldGroupMember(
+                            WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)),
+                            null,
+                            0
+                        )]
+                ),
             ],
             Ownership: [
                 new WorldOwnership(
-                    Subject: new OwnershipSubject(Id: "alpha", Kind: OwnershipSubjectKind.Group),
-                    Owner: new OwnershipOwner(Kind: OwnershipOwnerKind.Principal, Principal: WorldPrincipal.Seat(slot: 1))
+                    Subject: new OwnershipSubject(
+                        Id: "alpha",
+                        Kind: OwnershipSubjectKind.Group
+                    ),
+                    Owner: new OwnershipOwner(
+                        Kind: OwnershipOwnerKind.Principal,
+                        Principal: WorldPrincipal.Seat(slot: 1)
+                    )
                 ),
             ]
         );
-        using var row = HostRow.Build(name: "boot", definition: (Fixtures.BuildDocument() with { Groups = groups }));
-        var registry = new CommandRegistry(modules: [new WorldGroupCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), link: row.Instance.Link)]);
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: (Fixtures.BuildDocument() with { Groups = groups })
+        );
+        var registry = new CommandRegistry(modules: [new WorldGroupCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                link: row.Instance.Link
+            )]);
 
         var result = registry.Submit(line: "world.groups");
 
@@ -179,45 +180,179 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         // The id-filtered form is the singleton case: one segment, still no trailing separator.
         var filtered = registry.Submit(line: "world.groups alpha");
 
-        Assert.Equal(expected: "[world.groups: group id=alpha kind=party members=\"[seat1]\"]", actual: filtered.Output);
+        Assert.Equal(
+            expected: "[world.groups: group id=alpha kind=party members=\"[seat1]\"]",
+            actual: filtered.Output
+        );
+    }
+    [Fact]
+    public void WorldGroups_NoSectionAuthored_EchoesNoGroupsSection() {
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
+        var registry = new CommandRegistry(modules: [new WorldGroupCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                link: row.Instance.Link
+            )]);
+
+        var result = registry.Submit(line: "world.groups");
+
+        Assert.Equal(
+            expected: "[world.groups: (no groups section)]",
+            actual: result.Output
+        );
+    }
+    [Fact]
+    public void WorldPopulationSpawn_NonFiniteRadius_RefusesByName() {
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
+        var registry = new CommandRegistry(modules: [new WorldLookCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                link: row.Instance.Link
+            )]);
+
+        var result = registry.Submit(line: "world.population.spawn disc NaN 5");
+
+        Assert.True(condition: result.IsError);
+        Assert.Equal(
+            expected: "[world.population.spawn: disc needs a <radius> number and <sampleCount> integer]",
+            actual: result.Output
+        );
+
+        // Control: the identical grammar with a finite radius succeeds.
+        var control = registry.Submit(line: "world.population.spawn disc 40 5");
+
+        Assert.False(condition: control.IsError);
+    }
+    [Fact]
+    public void WorldUpdate_AuthoredSection_EchoesKeyValueFields() {
+        var document = (Fixtures.BuildDocument() with {
+            Update = new WorldUpdateDefaults(
+            CacheRoot: "cache",
+            Channel: "stable",
+            CheckIntervalSeconds: 3600,
+            KeepVersions: 2
+        ),
+        });
+        using var row = HostRow.Build(
+            definition: document,
+            name: "boot"
+        );
+        var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);
+
+        var result = registry.Submit(line: "world.update");
+
+        // The staged key=value migration (was whitespace-separated "channel stable ...") — intentional, pinned here.
+        Assert.Equal(
+            expected: "[world.update: channel=stable cacheRoot=cache checkIntervalSeconds=3600 keepVersions=2]",
+            actual: result.Output
+        );
+    }
+    [Fact]
+    public void WorldUpdate_NoSectionAuthored_EchoesNone() {
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
+        var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);
+
+        var result = registry.Submit(line: "world.update");
+
+        Assert.Equal(
+            expected: "[world.update: none]",
+            actual: result.Output
+        );
+    }
+    [Fact]
+    public async Task WorldWaitHoldsOnlyItsIssuerAndUsesIndependentDeadlines() {
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
+        var gate = new WorldConsoleWaitGate();
+        var registry = new CommandRegistry(modules: [
+            new WorldWaitCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                gates: new FakeWaitGateResolver(gate: gate)
+            ),
+        ]);
+        var source = new TextCommandSource(registry);
+        using var first = source.CreateSession(CommandPrincipal.Console);
+        using var second = source.CreateSession(CommandPrincipal.Console);
+
+        first.Enqueue(line: "world.wait 3");
+        var afterFirst = first.InvokeAsync(
+            () => gate.Tick,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        second.Enqueue(line: "world.wait 1");
+        var afterSecond = second.InvokeAsync(
+            () => gate.Tick,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        source.Collect();
+        Assert.False(condition: afterFirst.IsCompleted);
+        Assert.False(condition: afterSecond.IsCompleted);
+        gate.PublishTick(tick: 1);
+        source.Collect();
+        Assert.Equal(
+            1UL,
+            await afterSecond
+        );
+        Assert.False(condition: afterFirst.IsCompleted);
+        gate.PublishTick(tick: 3);
+        source.Collect();
+        Assert.Equal(
+            3UL,
+            await afterFirst
+        );
+        Assert.False(condition: gate.ReleaseStalled());
+        Assert.True(condition: registry.Submit(line: "world.wait 1").IsError);
     }
     [Theory]
     [InlineData("1", true, 1UL)]
     [InlineData("+1", false, 0UL)]
     [InlineData("18446744073709551616", false, 0UL)] // one past ulong.MaxValue
     public void WorldWait_DigitsOnlyTickGrammar_RefusesPlusSignAndOverflow(string token, bool accepted, ulong ticksIfAccepted) {
-        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
         var registry = new CommandRegistry(modules: [
-            new WorldWaitCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), gates: new FakeWaitGateResolver(gate: new WorldConsoleWaitGate())),
+            new WorldWaitCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                gates: new FakeWaitGateResolver(gate: new WorldConsoleWaitGate())
+            ),
         ]);
 
         CommandResult result = default;
         var source = new TextCommandSource(registry);
-        using var session = source.CreateSession(principal: CommandPrincipal.Console, onResult: (_, value) => result = value);
+        using var session = source.CreateSession(
+            principal: CommandPrincipal.Console,
+            onResult: (_, value) => result = value
+        );
+
         session.Enqueue(line: $"world.wait {token}");
         source.Collect();
 
         if (accepted) {
             Assert.False(condition: result.IsError);
-            Assert.Contains(actualString: result.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: $"{ticksIfAccepted} ticks from");
+            Assert.Contains(
+                actualString: result.Output,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: $"{ticksIfAccepted} ticks from"
+            );
         } else {
             Assert.True(condition: result.IsError);
-            Assert.Equal(expected: $"[world.wait: '{token}' is not a whole number of ticks]", actual: result.Output);
+            Assert.Equal(
+                expected: $"[world.wait: '{token}' is not a whole number of ticks]",
+                actual: result.Output
+            );
         }
-    }
-    [Fact]
-    public void WorldPopulationSpawn_NonFiniteRadius_RefusesByName() {
-        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
-        var registry = new CommandRegistry(modules: [new WorldLookCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), link: row.Instance.Link)]);
-
-        var result = registry.Submit(line: "world.population.spawn disc NaN 5");
-
-        Assert.True(condition: result.IsError);
-        Assert.Equal(expected: "[world.population.spawn: disc needs a <radius> number and <sampleCount> integer]", actual: result.Output);
-
-        // Control: the identical grammar with a finite radius succeeds.
-        var control = registry.Submit(line: "world.population.spawn disc 40 5");
-
-        Assert.False(condition: control.IsError);
     }
 }

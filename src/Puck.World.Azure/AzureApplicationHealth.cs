@@ -6,7 +6,8 @@ public static class AzureApplicationHealth {
     /// <param name="live">Whether the host is making simulation progress and is not retiring.</param>
     /// <returns>A JSON object with Azure's case-sensitive ApplicationHealthState field.</returns>
     /// <remarks>Serve both states with HTTP 200 and application/json. A non-success status or absent body means Unknown to Azure.</remarks>
-    public static string Response(bool live) => live
+    public static string Response(bool live) => (live
         ? "{\"ApplicationHealthState\":\"Healthy\"}"
-        : "{\"ApplicationHealthState\":\"Unhealthy\"}";
+        : "{\"ApplicationHealthState\":\"Unhealthy\"}"
+    );
 }

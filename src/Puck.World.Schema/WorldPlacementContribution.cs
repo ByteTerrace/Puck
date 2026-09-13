@@ -67,8 +67,7 @@ public sealed record WorldPlacementContribution(
     public CompiledTickDuration CompiledGrace(int simulationRateHz) => WorldSimulationTickConversion.CompiledDuration(
         ratePerSecond: ((uint)((simulationRateHz > 0)
         ? simulationRateHz
-        : 0
-    )),
+        : 0)),
         seconds: GraceSeconds
     );
 

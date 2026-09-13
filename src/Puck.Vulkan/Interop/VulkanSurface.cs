@@ -6,9 +6,9 @@ namespace Puck.Vulkan.Interop;
 /// Owns a native presentation surface (<c>VkSurfaceKHR</c>) handle and destroys it when disposed.
 /// </summary>
 public sealed class VulkanSurface : IDisposable {
-    private bool m_disposed;
-
     private readonly IVulkanSurfaceApi m_surfaceApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the native display kind the surface was created for.</summary>
     public NativeDisplayKind DisplayKind { get; }

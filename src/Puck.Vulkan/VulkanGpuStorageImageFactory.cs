@@ -29,7 +29,11 @@ public sealed class VulkanGpuStorageImageFactory(IVulkanOffscreenImageApi offscr
 
         framebufferSetApi.CreateImageView(
             imageViewHandle: out var imageViewHandle,
-            request: new VulkanImageViewCreateRequest(DeviceHandle: deviceHandle, Format: vkFormat, ImageHandle: image.ImageHandle)
+            request: new VulkanImageViewCreateRequest(
+                DeviceHandle: deviceHandle,
+                Format: vkFormat,
+                ImageHandle: image.ImageHandle
+            )
         ).ThrowIfFailed(operation: "vkCreateImageView");
 
         return new VulkanGpuStorageImage(

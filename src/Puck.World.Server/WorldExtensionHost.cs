@@ -59,11 +59,21 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(m_options.MaximumConcurrentOperations);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(m_options.MaximumConcurrentSubmissions);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(m_options.MaximumInputBytes);
-        if ((m_options.PollInterval <= TimeSpan.Zero) || (m_options.OperationTimeout <= TimeSpan.Zero) ||
-            (m_options.OperationTimeout.TotalMilliseconds > (uint.MaxValue - 1)) || (m_options.PollInterval.TotalMilliseconds > (uint.MaxValue - 1))) {
-            throw new ArgumentOutOfRangeException(nameof(options), "Worker intervals must be positive and fit the timer range.");
+        if (
+            (m_options.PollInterval <= TimeSpan.Zero) ||
+            (m_options.OperationTimeout <= TimeSpan.Zero) ||
+            (m_options.OperationTimeout.TotalMilliseconds > (uint.MaxValue - 1)) ||
+            (m_options.PollInterval.TotalMilliseconds > (uint.MaxValue - 1))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "Worker intervals must be positive and fit the timer range."
+            );
         }
-        m_operations = operations.ToFrozenDictionary(operation => operation.Description.Name, StringComparer.Ordinal);
+        m_operations = operations.ToFrozenDictionary(
+            operation => operation.Description.Name,
+            StringComparer.Ordinal
+        );
         foreach (var operation in m_operations.Values) {
             ArgumentException.ThrowIfNullOrWhiteSpace(operation.Description.Name);
             ArgumentNullException.ThrowIfNull(operation.Description.Description);
@@ -71,7 +81,10 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
             ArgumentNullException.ThrowIfNull(operation.CreateRequest);
             using var schema = JsonDocument.Parse(operation.Description.InputSchema);
 
-            if (schema.RootElement.ValueKind != JsonValueKind.Object) { throw new ArgumentException(message: "Operation schema must be an object.", paramName: nameof(operations)); }
+            if (schema.RootElement.ValueKind != JsonValueKind.Object) { throw new ArgumentException(
+                message: "Operation schema must be an object.",
+                paramName: nameof(operations)
+            ); }
         }
         m_submissions = new(initialCount: m_options.MaximumConcurrentSubmissions);
     }
@@ -94,25 +107,71 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
         IEnumerable<WorldCapabilityRequest> worldRequests, int maximumPendingContributions = 32, ObjectBlobNamespace? storage = null) {
         ArgumentNullException.ThrowIfNull(allowedOperations);
         ArgumentNullException.ThrowIfNull(worldRequests);
-        if ((principal.Kind is not (PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer)) ||
-            !principal.IsCanonical()) {
-            throw new ArgumentException(message: "A canonical ingress principal is required.", paramName: nameof(principal));
+        if (
+            (principal.Kind is not (PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer)) ||
+            !principal.IsCanonical()
+        ) {
+            throw new ArgumentException(
+                message: "A canonical ingress principal is required.",
+                paramName: nameof(principal)
+            );
         }
-        var selected = allowedOperations.Distinct(comparer: StringComparer.Ordinal).ToFrozenDictionary(name => name,
-            name => (m_operations.TryGetValue(key: name, value: out var operation) ? operation : throw new ArgumentException(message: "Unknown operation grant.", paramName: nameof(allowedOperations))),
-            StringComparer.Ordinal);
-        var prefix = (("puck-extension/" + Hash(m_lineage, principal.Describe())) + "/");
+        var selected = allowedOperations.Distinct(comparer: StringComparer.Ordinal).ToFrozenDictionary(
+            name => name,
+            name => (m_operations.TryGetValue(
+                key: name,
+                value: out var operation
+            )
+            ? operation
+            : throw new ArgumentException(
+                    message: "Unknown operation grant.",
+                    paramName: nameof(allowedOperations)
+                )),
+            StringComparer.Ordinal
+        );
+        var prefix = (("puck-extension/" + Hash(
+            m_lineage,
+            principal.Describe()
+        )) + "/");
 
         lock (m_gate) {
-            ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-            var replacing = m_clients.TryGetValue(key: prefix, value: out var previous);
+            ObjectDisposedException.ThrowIf(
+                condition: m_disposed,
+                instance: this
+            );
+            var replacing = m_clients.TryGetValue(
+                key: prefix,
+                value: out var previous
+            );
 
             if (previous?.Runtime.IsActive == true) { throw new InvalidOperationException(message: "Revoke this principal's existing client before replacing its policy."); }
-            if (!replacing && (m_clients.Count >= m_options.MaximumClients)) { throw new InvalidOperationException(message: "Extension client capacity is exhausted."); }
-            var runtime = new WorldRecordedExtension(maximumPendingContributions: maximumPendingContributions, principal: principal, requests: worldRequests, server: m_server);
-            var dispatcher = new WorldExternalOperationDispatcher(runtime, m_journal,
-                selected.ToDictionary(pair => pair.Key, pair => pair.Value.Provider, StringComparer.Ordinal));
-            var client = new WorldExtensionClient(dispatcher: dispatcher, host: this, operations: selected, prefix: prefix, runtime: runtime, storage: storage);
+            if (
+                !replacing &&
+                (m_clients.Count >= m_options.MaximumClients)
+            ) { throw new InvalidOperationException(message: "Extension client capacity is exhausted."); }
+            var runtime = new WorldRecordedExtension(
+                maximumPendingContributions: maximumPendingContributions,
+                principal: principal,
+                requests: worldRequests,
+                server: m_server
+            );
+            var dispatcher = new WorldExternalOperationDispatcher(
+                runtime,
+                m_journal,
+                selected.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value.Provider,
+                    StringComparer.Ordinal
+                )
+            );
+            var client = new WorldExtensionClient(
+                dispatcher: dispatcher,
+                host: this,
+                operations: selected,
+                prefix: prefix,
+                runtime: runtime,
+                storage: storage
+            );
 
             m_clients[prefix] = client;
             return client;
@@ -123,22 +182,51 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
         client.CheckActive();
         if (!client.Operations.ContainsKey(key: name)) { throw new UnauthorizedAccessException(message: "This client cannot invoke that operation."); }
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
-        if (Encoding.UTF8.GetByteCount(s: requestKey) > 1024) { throw new ArgumentException(message: "Request key exceeds its byte budget.", paramName: nameof(requestKey)); }
-        return new(this, client, (client.Prefix + Hash(name, requestKey)), name);
+        if (Encoding.UTF8.GetByteCount(s: requestKey) > 1024) { throw new ArgumentException(
+            message: "Request key exceeds its byte budget.",
+            paramName: nameof(requestKey)
+        ); }
+        return new(
+            this,
+            client,
+            (client.Prefix + Hash(
+                name,
+                requestKey
+            )),
+            name
+        );
     }
     internal async ValueTask<WorldExtensionOperationHandle> InvokeAsync(WorldExtensionClient client, string name, string requestKey,
         string input, CancellationToken cancellationToken, Func<string>? captureCause = null) {
-        var handle = GetOperation(client: client, name: name, requestKey: requestKey);
+        var handle = GetOperation(
+            client: client,
+            name: name,
+            requestKey: requestKey
+        );
 
         ArgumentNullException.ThrowIfNull(input);
-        if (Encoding.UTF8.GetByteCount(s: input) > m_options.MaximumInputBytes) { throw new ArgumentException(message: "Operation input exceeds its byte budget.", paramName: nameof(input)); }
-        if (!await m_submissions.WaitAsync(cancellationToken: cancellationToken, millisecondsTimeout: 0).ConfigureAwait(continueOnCapturedContext: false)) { throw new InvalidOperationException(message: "Extension submission capacity is exhausted."); }
+        if (Encoding.UTF8.GetByteCount(s: input) > m_options.MaximumInputBytes) { throw new ArgumentException(
+            message: "Operation input exceeds its byte budget.",
+            paramName: nameof(input)
+        ); }
+        if (!await m_submissions.WaitAsync(
+            cancellationToken: cancellationToken,
+            millisecondsTimeout: 0
+        ).ConfigureAwait(continueOnCapturedContext: false)) { throw new InvalidOperationException(message: "Extension submission capacity is exhausted."); }
         try {
             using var admission = client.Runtime.BeginDispatch();
             var registration = client.Operations[name];
-            var request = registration.CreateRequest(handle.Id, input);
+            var request = registration.CreateRequest(
+                handle.Id,
+                input
+            );
 
-            if ((request.Id != handle.Id) || (request.Binding != name) || (request.BindingIdentity != registration.Provider.Identity) || (request.Payload != input)) {
+            if (
+                (request.Id != handle.Id) ||
+                (request.Binding != name) ||
+                (request.BindingIdentity != registration.Provider.Identity) ||
+                (request.Payload != input)
+            ) {
                 throw new InvalidOperationException(message: "The operation factory changed its host-bound identity or input.");
             }
             var existing = (await m_journal.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).FirstOrDefault(predicate: entry => (entry.Operation.Id == handle.Id));
@@ -147,13 +235,20 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
                 if (existing.Operation != request) { throw new InvalidOperationException(message: "A request key was reused with different input or binding identity."); }
                 return handle;
             }
-            await client.Dispatcher.CommitAsync(request, (captureCause ?? m_captureCause)(), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            await client.Dispatcher.CommitAsync(
+                request,
+                (captureCause ?? m_captureCause)(),
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
             return handle;
         } finally { m_submissions.Release(); }
     }
     internal async ValueTask<WorldExtensionOperationSnapshot?> ReadAsync(WorldExtensionClient client, string id, CancellationToken cancellationToken) {
         client.CheckActive();
-        if (!id.StartsWith(client.Prefix, StringComparison.Ordinal)) { throw new UnauthorizedAccessException(message: "This operation belongs to another client."); }
+        if (!id.StartsWith(
+            client.Prefix,
+            StringComparison.Ordinal
+        )) { throw new UnauthorizedAccessException(message: "This operation belongs to another client."); }
         var entries = await m_journal.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         client.CheckActive();
@@ -161,13 +256,25 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
 
         if (entry is null) { return null; }
         if (!client.Operations.ContainsKey(key: entry.Operation.Binding)) { throw new UnauthorizedAccessException(message: "This operation is no longer granted."); }
-        return new(entry.Operation.Id, entry.Operation.Binding, entry.Status, entry.Result);
+        return new(
+            entry.Operation.Id,
+            entry.Operation.Binding,
+            entry.Status,
+            entry.Result
+        );
     }
 
     private static string Hash(params string[] fields) {
         using var bytes = new MemoryStream();
 
-        using (var writer = new BinaryWriter(bytes, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true), leaveOpen: true)) { foreach (var field in fields) { writer.Write(value: field); } }
+        using (var writer = new BinaryWriter(
+            bytes,
+            new UTF8Encoding(
+                encoderShouldEmitUTF8Identifier: false,
+                throwOnInvalidBytes: true
+            ),
+            leaveOpen: true
+        )) { foreach (var field in fields) { writer.Write(value: field); } }
         return Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes.ToArray()));
     }
 }

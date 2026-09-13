@@ -88,15 +88,18 @@ public sealed partial class PlayerRoster {
                 (m_slots[slot] is null) ||
                 IsClaimed(slot: slot) ||
                 TryGetSeatDevice(
-                    device: out _,
-                    kind: InputDeviceKind.Camera,
-                    slot: slot
-                )
+                device: out _,
+                kind: InputDeviceKind.Camera,
+                slot: slot
+            )
             ) {
                 continue;
             }
 
-            MapDevice(device: device, slot: slot);
+            MapDevice(
+                device: device,
+                slot: slot
+            );
 
             return;
         }
@@ -209,7 +212,9 @@ public sealed partial class PlayerRoster {
                 (resolved == device)
             );
 
-            segments.Add(item: $"{label}={owner}{(isResolved ? "*" : string.Empty)}");
+            segments.Add(item: $"{label}={owner}{(isResolved
+                ? "*"
+                : string.Empty)}");
         }
 
         return $"[world.devices: {string.Join(

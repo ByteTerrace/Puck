@@ -224,6 +224,12 @@ public static class GeneratorCapacity {
     public const int MaxDeclaredSources = 64;
     /// <summary>The declared <see cref="StateGenerator.Bound"/> ceiling.</summary>
     public const int MaxEmissionBound = 64;
+    /// <summary>The most units one drawn set may hold — a context's alternatives or a weighted source's outcomes,
+    /// each counted <c>Multiplicity</c> times — since a drawn mask is one 256-bit set with one bit per unit.</summary>
+    public const int MaxEntriesPerSet = 256;
+    /// <summary>The greatest <see cref="GeneratorExtended.K"/> a source may declare — <c>Pcg32Extended</c>'s own
+    /// ceiling.</summary>
+    public const int MaxExtendedTableSize = 1024;
     /// <summary>The greatest value a <see cref="GeneratorSource.UniformRange"/> bound may hold. The draw is a
     /// single fixed-cost multiply-high map whose span must fit a <c>uint</c> without truncation; this bound is what
     /// keeps it there.</summary>
@@ -234,16 +240,10 @@ public static class GeneratorCapacity {
     /// <summary>A <see cref="GeneratorSource.WeightedNumeric"/> source's outcome-count ceiling — matches
     /// <see cref="MaxAlternativesPerContext"/> since both build an alias table over an authored entry list.</summary>
     public const int MaxWeightedOutcomes = 256;
-    /// <summary>The most units one drawn set may hold — a context's alternatives or a weighted source's outcomes,
-    /// each counted <c>Multiplicity</c> times — since a drawn mask is one 256-bit set with one bit per unit.</summary>
-    public const int MaxEntriesPerSet = 256;
-    /// <summary>The least value a <see cref="GeneratorSource.UniformRange"/> bound may hold — see
-    /// <see cref="MaxRangeBound"/>.</summary>
-    public const long MinRangeBound = int.MinValue;
-    /// <summary>The greatest <see cref="GeneratorExtended.K"/> a source may declare — <c>Pcg32Extended</c>'s own
-    /// ceiling.</summary>
-    public const int MaxExtendedTableSize = 1024;
     /// <summary>The least <see cref="GeneratorExtended.K"/> a source may declare — <c>Pcg32Extended</c>'s own
     /// floor.</summary>
     public const int MinExtendedTableSize = 2;
+    /// <summary>The least value a <see cref="GeneratorSource.UniformRange"/> bound may hold — see
+    /// <see cref="MaxRangeBound"/>.</summary>
+    public const long MinRangeBound = int.MinValue;
 }

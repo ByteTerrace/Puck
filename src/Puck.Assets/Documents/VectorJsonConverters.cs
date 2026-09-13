@@ -16,7 +16,6 @@ public static class FixedArityNumberArraySchema {
         ["maxItems"] = arity,
     };
 }
-
 /// <summary>The one array-element reader every fixed-arity numeric-array converter in the document graph shares.</summary>
 public static class JsonComponentReader {
     /// <summary>Reads one array element as a float — a JSON number token, or a hard parse failure by
@@ -67,8 +66,14 @@ public sealed class Vector2JsonConverter : JsonConverter<Vector2>, IJsonSchemaNo
             throw new JsonException(message: "a Vector2 must be a two-element [x, y] array (the object form is no longer accepted).");
         }
 
-        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector2 element must be a finite number.");
-        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector2 element must be a finite number.");
+        var x = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Vector2 element must be a finite number."
+        );
+        var y = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Vector2 element must be a finite number."
+        );
 
         if (
             !reader.Read() ||
@@ -105,9 +110,18 @@ public sealed class Vector3JsonConverter : JsonConverter<Vector3>, IJsonSchemaNo
             throw new JsonException(message: "a Vector3 must be a three-element [x, y, z] array (the object form is no longer accepted).");
         }
 
-        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector3 element must be a finite number.");
-        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector3 element must be a finite number.");
-        var z = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector3 element must be a finite number.");
+        var x = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Vector3 element must be a finite number."
+        );
+        var y = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Vector3 element must be a finite number."
+        );
+        var z = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Vector3 element must be a finite number."
+        );
 
         if (
             !reader.Read() ||
@@ -148,10 +162,22 @@ public sealed class QuaternionJsonConverter : JsonConverter<Quaternion>, IJsonSc
             throw new JsonException(message: "a Quaternion must be a four-element [x, y, z, w] array (the object form with 'isIdentity' is no longer accepted).");
         }
 
-        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
-        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
-        var z = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
-        var w = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
+        var x = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Quaternion element must be a finite number."
+        );
+        var y = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Quaternion element must be a finite number."
+        );
+        var z = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Quaternion element must be a finite number."
+        );
+        var w = JsonComponentReader.ReadFloat(
+            reader: ref reader,
+            notNumberMessage: "a Quaternion element must be a finite number."
+        );
 
         if (
             !reader.Read() ||

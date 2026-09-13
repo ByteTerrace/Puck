@@ -116,14 +116,43 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         : $"{m_worlds.Discarded.Count}:{string.Join(
             separator: ",",
             values: m_worlds.Discarded.Select(selector: entry => entry.FileName)
-        )}"
-    )} refused={((m_worlds.Refused.Count == 0)
+        )}")} refused={((m_worlds.Refused.Count == 0)
         ? "none"
         : $"{m_worlds.Refused.Count}:{string.Join(
             separator: ",",
             values: m_worlds.Refused.Select(selector: entry => entry.FileName)
-        )}"
-    )}]";
+        )}")}]";
+    // identity.facts [player]: the catalog's own row for the identity driving a seat, never the lane — the lane is
+    // world.state's to echo.
+    private CommandResult DescribeFacts(CommandContext context, WireArgs args) {
+        if (!TryPlayer(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 0,
+            player: out var player,
+            verb: "identity.facts"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+
+        var owned = (m_worlds.FindById(id: identity!.Id) ?? identity);
+        var definition = owned.FactsDefinition;
+        var cells = (owned.Facts?.Cells ?? []);
+        var facts = ((cells.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: cells.Select(selector: cell => string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{cell.Key}:{cell.Value}"
+                ))
+            )
+        );
+
+        return new CommandResult(Output: $"[identity.facts: p{player} world={owned.Id} row={definition.State} count={cells.Count}/{definition.Capacity} facts={facts}]");
+    }
     // identity.hud's read-back half: identity.show already reports every other identity-owned setting as one
     // space-delimited key=value line, so the panel state joins it in the SAME space-free-value shape (rather than a
     // separate no-arg identity.hud overload, which would collide with identity.hud's own required <panel-json>
@@ -175,6 +204,15 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
 
         return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} value={value}]");
     }
+    // An identity claiming no rate reads "kit": the seat integrates under the kit's own authored rate.
+    private static string DescribeRate(FixedQ4816? rate) =>
+        ((rate is { } value)
+            ? ((double)value).ToString(
+                format: "0.####",
+                provider: CultureInfo.InvariantCulture
+            )
+            : "kit"
+        );
     private string DescribeWriteback() {
         if (m_worlds.LastReceipt is not { } receipt) {
             return "[identity.writebacks: none]";
@@ -199,9 +237,69 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             context: context,
             leadingTokens: 1,
             trailingTokens: ((args.Count < 2)
-                ? 0
-                : 1)
+            ? 0
+            : 1)
         );
+    // identity.fact.set <key> <value> [player]: writes the catalog's row under the acting principal's own identity —
+    // a seat may name no seat but its own; the console names the seat it addresses. The lane follows on the next
+    // tick through the identity's facts revision.
+    private CommandResult SetFact(CommandContext context, WireArgs args) {
+        if (args.Count is not (2 or 3)) {
+            return CommandResult.Error(output: "[identity.fact.set: expected <key> <value> [player]]");
+        }
+        if (!TryPlayer(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 2,
+            player: out var player,
+            verb: "identity.fact.set"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+
+        var acting = context.ActingPrincipal();
+
+        if (
+            (acting.Kind == PrincipalKind.Seat) &&
+            (acting.Index != PlayerRoster.SlotFromDisplay(number: player))
+        ) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — {acting.Describe()} writes only its own identity's facts, not p{player}'s]");
+        }
+        if (m_worlds.FindById(id: identity!.Id) is not { } owned) {
+            return CommandResult.Error(output: $"[identity.fact.set: p{player} world:{identity.Id} is not an owned world here]");
+        }
+        if (!CellName.TryParse(
+            candidate: args[0].ToString(),
+            name: out var key,
+            reason: out var keyReason
+        )) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — key '{args[0]}' {keyReason}]");
+        }
+        if (!args.TryLong(
+            index: 1,
+            value: out var value
+        )) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — value '{args[1]}' is not an integer]");
+        }
+        if (!m_worlds.TrySetFact(
+            changed: out var changed,
+            identity: owned,
+            key: key,
+            reason: out var reason,
+            value: value
+        )) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — {reason}]");
+        }
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[identity.fact.set: p{player} {key}={value} in world:{owned.Id}{(changed
+            ? string.Empty
+            : " (unchanged)")}]"
+        ));
+    }
     // The identity-owned PRIVATE seat panel: identity.hud <panel-json> [player]. panel-json is required to be one
     // compact (whitespace-free) WorldHudPanel token — the same authoring convention world.row.set hud.panels and the
     // deleted profile.section door both used — so an optional trailing player index (like identity.motion's) can be
@@ -264,95 +362,6 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         m_worlds.Save();
 
         return new CommandResult(Output: $"[identity.hud: p{player} panel '{panel.Id}' updated in world:{identity.Id}]");
-    }
-    // identity.facts [player]: the catalog's own row for the identity driving a seat, never the lane — the lane is
-    // world.state's to echo.
-    private CommandResult DescribeFacts(CommandContext context, WireArgs args) {
-        if (!TryPlayer(
-            args: in args,
-            context: context,
-            error: out var error,
-            identity: out var identity,
-            optionalAt: 0,
-            player: out var player,
-            verb: "identity.facts"
-        )) {
-            return CommandResult.Error(output: error);
-        }
-
-        var owned = (m_worlds.FindById(id: identity!.Id) ?? identity);
-        var definition = owned.FactsDefinition;
-        var cells = (owned.Facts?.Cells ?? []);
-        var facts = ((cells.Count == 0)
-            ? "none"
-            : string.Join(
-                separator: ",",
-                values: cells.Select(selector: cell => string.Create(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"{cell.Key}:{cell.Value}"
-                ))
-            )
-        );
-
-        return new CommandResult(Output: $"[identity.facts: p{player} world={owned.Id} row={definition.State} count={cells.Count}/{definition.Capacity} facts={facts}]");
-    }
-    // identity.fact.set <key> <value> [player]: writes the catalog's row under the acting principal's own identity —
-    // a seat may name no seat but its own; the console names the seat it addresses. The lane follows on the next
-    // tick through the identity's facts revision.
-    private CommandResult SetFact(CommandContext context, WireArgs args) {
-        if (args.Count is not (2 or 3)) {
-            return CommandResult.Error(output: "[identity.fact.set: expected <key> <value> [player]]");
-        }
-        if (!TryPlayer(
-            args: in args,
-            context: context,
-            error: out var error,
-            identity: out var identity,
-            optionalAt: 2,
-            player: out var player,
-            verb: "identity.fact.set"
-        )) {
-            return CommandResult.Error(output: error);
-        }
-
-        var acting = context.ActingPrincipal();
-
-        if (
-            (acting.Kind == PrincipalKind.Seat) &&
-            (acting.Index != PlayerRoster.SlotFromDisplay(number: player))
-        ) {
-            return CommandResult.Error(output: $"[identity.fact.set: refused — {acting.Describe()} writes only its own identity's facts, not p{player}'s]");
-        }
-        if (m_worlds.FindById(id: identity!.Id) is not { } owned) {
-            return CommandResult.Error(output: $"[identity.fact.set: p{player} world:{identity.Id} is not an owned world here]");
-        }
-        if (!CellName.TryParse(
-            candidate: args[0].ToString(),
-            name: out var key,
-            reason: out var keyReason
-        )) {
-            return CommandResult.Error(output: $"[identity.fact.set: refused — key '{args[0]}' {keyReason}]");
-        }
-        if (!args.TryLong(
-            index: 1,
-            value: out var value
-        )) {
-            return CommandResult.Error(output: $"[identity.fact.set: refused — value '{args[1]}' is not an integer]");
-        }
-        if (!m_worlds.TrySetFact(
-            identity: owned,
-            key: key,
-            value: value,
-            changed: out var changed,
-            reason: out var reason
-        )) {
-            return CommandResult.Error(output: $"[identity.fact.set: refused — {reason}]");
-        }
-
-        return new CommandResult(Output: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[identity.fact.set: p{player} {key}={value} in world:{owned.Id}{(changed ? string.Empty : " (unchanged)")}]"
-        ));
     }
     private CommandResult SetMotion(CommandContext context, WireArgs args) {
         if (
@@ -437,15 +446,6 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={DescribeRate(rate: identity.FixedMoveSpeed)} moveEffective={effectiveMoveSpeed} turn={DescribeRate(rate: identity.FixedTurnSpeed)} hud={hud} path={m_worlds.FilePath}]"
         ));
     }
-    // An identity claiming no rate reads "kit": the seat integrates under the kit's own authored rate.
-    private static string DescribeRate(FixedQ4816? rate) =>
-        ((rate is { } value)
-            ? ((double)value).ToString(
-                format: "0.####",
-                provider: CultureInfo.InvariantCulture
-            )
-            : "kit"
-        );
     private static bool TryBool(ReadOnlySpan<char> token, out bool value) {
         value = (token.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,

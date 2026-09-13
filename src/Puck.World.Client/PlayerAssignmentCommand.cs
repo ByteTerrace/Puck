@@ -10,6 +10,45 @@ public static class PlayerAssignmentCommand {
     /// <summary>The help text shown for <c>player.assign</c>.</summary>
     public const string Description = "Moves a device between players: player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot> (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot a keyboard, mouse, or gamepad creates a pending player (a profile must be chosen), while a passive camera is refused because it cannot create a player; onto its own slot a no-op. See world.devices for the tokens.";
 
+    private static CommandResult Handle(PlayerRoster roster, CommandContext context, in WireArgs args) {
+        if (args.Count != 2) {
+            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot 1..4>]");
+        }
+
+        var deviceToken = args[0].ToString();
+
+        if (!roster.TryResolveDeviceToken(
+            device: out var device,
+            token: deviceToken
+        )) {
+            return CommandResult.Error(output: $"[player.assign: no device '{deviceToken}' — see world.devices]");
+        }
+
+        if (
+            !args.TryInt(
+            index: 1,
+            value: out var slot
+        ) ||
+            (slot < 1) ||
+            (slot > PlayerRoster.MaxSlots)
+        ) {
+            return CommandResult.Error(output: $"[player.assign: <slot> must be an integer 1..{PlayerRoster.MaxSlots}]");
+        }
+
+        var targetSlot = PlayerRoster.SlotFromDisplay(number: slot);
+
+        return Describe(
+            roster: roster,
+            verb: PlayerCommandNames.AssignCommand,
+            outcome: roster.AssignDevice(
+                device: device,
+                targetSlot: targetSlot,
+                actingPrincipal: context.ActingPrincipal()
+            ),
+            slot: targetSlot
+        );
+    }
+
     /// <summary>Creates the command definition backed by <paramref name="roster"/>.</summary>
     /// <param name="roster">The live local-player roster the command mutates.</param>
     /// <returns>The bindable <c>player.assign</c> definition.</returns>
@@ -46,41 +85,5 @@ public static class PlayerAssignmentCommand {
             AssignOutcome.Denied => CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} — actor denied, see wire.errors/world.why]"),
             _ => CommandResult.Error(output: $"[{verb}: the roster is full ({PlayerRoster.MaxSlots} players)]"),
         });
-    }
-
-    private static CommandResult Handle(PlayerRoster roster, CommandContext context, in WireArgs args) {
-        if (args.Count != 2) {
-            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot 1..4>]");
-        }
-
-        var deviceToken = args[0].ToString();
-
-        if (!roster.TryResolveDeviceToken(
-            device: out var device,
-            token: deviceToken
-        )) {
-            return CommandResult.Error(output: $"[player.assign: no device '{deviceToken}' — see world.devices]");
-        }
-
-        if (
-            !args.TryInt(index: 1, value: out var slot) ||
-            (slot < 1) ||
-            (slot > PlayerRoster.MaxSlots)
-        ) {
-            return CommandResult.Error(output: $"[player.assign: <slot> must be an integer 1..{PlayerRoster.MaxSlots}]");
-        }
-
-        var targetSlot = PlayerRoster.SlotFromDisplay(number: slot);
-
-        return Describe(
-            roster: roster,
-            verb: PlayerCommandNames.AssignCommand,
-            outcome: roster.AssignDevice(
-                device: device,
-                targetSlot: targetSlot,
-                actingPrincipal: context.ActingPrincipal()
-            ),
-            slot: targetSlot
-        );
     }
 }

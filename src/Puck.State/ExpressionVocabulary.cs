@@ -16,14 +16,12 @@ public enum ExpressionDomain : byte {
     /// <summary>Reads a condition and two arms, yields one of the arms.</summary>
     Select,
 }
-
 /// <summary>One named function of the expression language.</summary>
 /// <param name="Name">The spelling, identical in the rule language and the document language.</param>
 /// <param name="Arity">How many arguments it takes.</param>
 /// <param name="Domain">The value domain it is defined over.</param>
 /// <param name="Operation">The operation it denotes, for a caller reaching the rule evaluator directly.</param>
 public sealed record ExpressionFunction(string Name, int Arity, ExpressionDomain Domain, ExpressionOp Operation);
-
 /// <summary>
 /// The named functions of the expression language, and the ONE place either language may learn their spellings.
 /// <para>Puck has two evaluators over one vocabulary: the rule language, which runs in the simulation over
@@ -41,12 +39,12 @@ public static class ExpressionVocabulary {
     /// <summary>Every named function, keyed by spelling.</summary>
     public static IReadOnlyDictionary<string, ExpressionFunction> Functions { get; } =
         ExpressionOperators.Calls.ToDictionary(
-            keySelector: static entry => entry.Key,
-            elementSelector: static entry => new ExpressionFunction(
-                Name: entry.Key,
-                Arity: entry.Value.Arity,
-                Operation: entry.Value.Operation,
-                Domain: entry.Value.Signature switch {
+        keySelector: static entry => entry.Key,
+        elementSelector: static entry => new ExpressionFunction(
+            Name: entry.Key,
+            Arity: entry.Value.Arity,
+            Operation: entry.Value.Operation,
+            Domain: entry.Value.Signature switch {
                     ExpressionSignature.Int => ExpressionDomain.Integer,
                     ExpressionSignature.Fixed => ExpressionDomain.Fixed,
                     ExpressionSignature.Comparison => ExpressionDomain.Comparison,
@@ -54,16 +52,14 @@ public static class ExpressionVocabulary {
                     ExpressionSignature.Select => ExpressionDomain.Select,
                     _ => ExpressionDomain.Number,
                 }
-            ),
-            comparer: StringComparer.Ordinal);
+        ),
+        comparer: StringComparer.Ordinal
+    );
 
-    /// <summary>Looks up a spelling.</summary>
-    /// <param name="name">The function name.</param>
-    /// <param name="function">The function on success.</param>
-    /// <returns><see langword="true"/> when the vocabulary names <paramref name="name"/>.</returns>
-    public static bool TryFind(string name, out ExpressionFunction? function) =>
-        Functions.TryGetValue(key: name, value: out function);
-
+    /// <summary>Returns how many values an operation consumes from the stack.</summary>
+    /// <param name="operation">The operation.</param>
+    /// <returns>The count; zero for a payload operation.</returns>
+    public static int Arity(ExpressionOp operation) => ExpressionOperators.Arity(operation: operation);
     /// <summary>Returns the operation a token denotes.</summary>
     /// <param name="token">The token.</param>
     /// <returns>The operation, or <see langword="null"/> for a payload token — a constant or a state read — which
@@ -77,12 +73,6 @@ public static class ExpressionVocabulary {
 
         return ExpressionOperators.Find(token: token)?.Operation;
     }
-
-    /// <summary>Returns how many values an operation consumes from the stack.</summary>
-    /// <param name="operation">The operation.</param>
-    /// <returns>The count; zero for a payload operation.</returns>
-    public static int Arity(ExpressionOp operation) => ExpressionOperators.Arity(operation: operation);
-
     /// <summary>Returns the spelling an operation is named by, for a refusal that quotes what the author wrote.</summary>
     /// <param name="operation">The operation.</param>
     /// <returns>The function name, the operator symbol, or the operation's own name when it has neither.</returns>
@@ -91,4 +81,13 @@ public static class ExpressionVocabulary {
 
         return ((found?.Name ?? found?.Symbol) ?? operation.ToString());
     }
+    /// <summary>Looks up a spelling.</summary>
+    /// <param name="name">The function name.</param>
+    /// <param name="function">The function on success.</param>
+    /// <returns><see langword="true"/> when the vocabulary names <paramref name="name"/>.</returns>
+    public static bool TryFind(string name, out ExpressionFunction? function) =>
+        Functions.TryGetValue(
+            key: name,
+            value: out function
+        );
 }

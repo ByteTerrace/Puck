@@ -44,7 +44,7 @@ public static class BodyProducerParameterVocabulary {
     // authoring 18 neutered values to suppress it; a non-sensing producer requires them because roam is its only
     // reachable shape. InwardGain/TurnScale cannot be presence markers because FaceSensorTarget also
     // owns them; once a roam-exclusive scalar is present, all 18 are required (WorldDefinitionValidator.Motion.cs).
-    private static readonly BodyProducerParameter[] s_steeringScalars = [
+    private static readonly BodyProducerParameter[] SteeringScalarsValue = [
         BodyProducerParameter.Forward,
         BodyProducerParameter.SoftRadius,
         BodyProducerParameter.WeaveAmplitude,
@@ -69,20 +69,20 @@ public static class BodyProducerParameterVocabulary {
     // on a producer that can only ever roam. ApproachAltitudeGain is the approach shape's OWN altitude gain,
     // distinct from s_steeringScalars' AltitudeGain (the roam shape's) — the two terms are independently authorable
     // rather than sharing one scalar an author cannot zero for one shape without zeroing the other's tracking too.
-    private static readonly BodyProducerParameter[] s_steeringApproachScalars = [
+    private static readonly BodyProducerParameter[] SteeringApproachScalarsValue = [
         BodyProducerParameter.StandoffRadius,
         BodyProducerParameter.Approach,
         BodyProducerParameter.Orbit,
         BodyProducerParameter.ApproachAltitudeGain,
     ];
-    private static readonly BodyProducerParameter[] s_faceScalars = [
+    private static readonly BodyProducerParameter[] FaceScalarsValue = [
         BodyProducerParameter.InwardGain,
         BodyProducerParameter.TurnScale,
     ];
     // s_steeringScalars minus InwardGain/TurnScale — the two FaceSensorTarget also requires unconditionally
     // (s_faceScalars). Presence of an authored InwardGain/TurnScale is explained by FaceSensorTarget alone, so it
     // must never by itself read as "this producer wants roam"; this is the set IsRoamAuthored tests instead.
-    private static readonly BodyProducerParameter[] s_steeringExclusiveScalars = [
+    private static readonly BodyProducerParameter[] SteeringExclusiveScalars = [
         BodyProducerParameter.Forward,
         BodyProducerParameter.SoftRadius,
         BodyProducerParameter.WeaveAmplitude,
@@ -100,25 +100,32 @@ public static class BodyProducerParameterVocabulary {
         BodyProducerParameter.AltitudeBase,
         BodyProducerParameter.AltitudeRange,
     ];
-    private static readonly BodyProducerParameter[] s_none = [];
+    private static readonly BodyProducerParameter[] None = [];
 
+    /// <summary>Gets the scalar ordinals <see cref="BodyMotionOp.FaceSensorTarget"/> reads.</summary>
+    public static IReadOnlyList<BodyProducerParameter> FaceScalars => FaceScalarsValue;
+    /// <summary>Gets the scalar ordinals <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s approach shape reads —
+    /// required only of a producer whose program also selects <see cref="BodyMotionOp.SenseNearestInCone"/>, the
+    /// one way that shape becomes reachable.</summary>
+    public static IReadOnlyList<BodyProducerParameter> SteeringApproachScalars => SteeringApproachScalarsValue;
     /// <summary>Gets the scalar ordinals <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s roam shape reads —
     /// required by every non-sensing producer selecting the op, and by a sensing producer exactly when it authors a
     /// roam-exclusive member.</summary>
-    public static IReadOnlyList<BodyProducerParameter> SteeringScalars => s_steeringScalars;
+    public static IReadOnlyList<BodyProducerParameter> SteeringScalars => SteeringScalarsValue;
+
     /// <summary>Reports whether a producer's authored scalars name a roam scalar not also shared with
     /// <see cref="BodyMotionOp.FaceSensorTarget"/> — the one presence test both <c>CompiledBodyProducer.Compile</c>
     /// and the schema validator read to decide whether <see cref="SteeringScalars"/> is required and the roam shape
     /// runs, so an approach-only producer authoring InwardGain/TurnScale for FaceSensorTarget alone is never
     /// misread as wanting roam too.</summary>
-    public static bool IsRoamAuthored(IReadOnlyDictionary<string, float> scalars) => s_steeringExclusiveScalars.Any(predicate: parameter => scalars.ContainsKey(key: Name(parameter: parameter)));
-    /// <summary>Gets the scalar ordinals <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s approach shape reads —
-    /// required only of a producer whose program also selects <see cref="BodyMotionOp.SenseNearestInCone"/>, the
-    /// one way that shape becomes reachable.</summary>
-    public static IReadOnlyList<BodyProducerParameter> SteeringApproachScalars => s_steeringApproachScalars;
-    /// <summary>Gets the scalar ordinals <see cref="BodyMotionOp.FaceSensorTarget"/> reads.</summary>
-    public static IReadOnlyList<BodyProducerParameter> FaceScalars => s_faceScalars;
+    public static bool IsRoamAuthored(IReadOnlyDictionary<string, float> scalars) => SteeringExclusiveScalars.Any(predicate: parameter => scalars.ContainsKey(key: Name(parameter: parameter)));
+    /// <summary>Returns the authored key a parameter resolves from — its declared name with a lowercase first
+    /// character, the same casing every other document field on this wire uses.</summary>
+    public static string Name(BodyProducerParameter parameter) {
+        var declared = parameter.ToString();
 
+        return $"{char.ToLowerInvariant(c: declared[0])}{declared.AsSpan(start: 1)}";
+    }
     /// <summary>Returns the scalar ordinals a producer op's compiled behaviour reads unconditionally, or an empty
     /// list for an op reading none by name, or one whose requirement depends on more than the op alone.
     /// <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s own roam scalars (<see cref="SteeringScalars"/>, required
@@ -129,16 +136,9 @@ public static class BodyProducerParameterVocabulary {
     /// conditional rather than a fixed per-op set, and are not part of this table — see
     /// <c>CompiledBodyProducer.Compile</c>.</summary>
     public static IReadOnlyList<BodyProducerParameter> RequiredScalars(BodyMotionOp op) => op switch {
-        BodyMotionOp.FaceSensorTarget => s_faceScalars,
-        _ => s_none,
+        BodyMotionOp.FaceSensorTarget => FaceScalarsValue,
+        _ => None,
     };
-    /// <summary>Returns the authored key a parameter resolves from — its declared name with a lowercase first
-    /// character, the same casing every other document field on this wire uses.</summary>
-    public static string Name(BodyProducerParameter parameter) {
-        var declared = parameter.ToString();
-
-        return $"{char.ToLowerInvariant(c: declared[0])}{declared.AsSpan(start: 1)}";
-    }
     /// <summary>Resolves an authored key to its parameter ordinal.</summary>
     /// <returns><see langword="true"/> when <paramref name="name"/> names a declared parameter.</returns>
     public static bool TryParse(string name, out BodyProducerParameter parameter) {

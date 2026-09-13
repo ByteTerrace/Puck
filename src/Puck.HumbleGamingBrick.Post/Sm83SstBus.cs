@@ -19,21 +19,25 @@ internal sealed class Sm83SstBus : ISystemBus {
     public IReadOnlyList<(ushort Address, byte Value, bool IsWrite)> Accesses =>
         m_accesses;
 
-    /// <summary>Clears the backing memory and the access log, for the next vector.</summary>
-    public void Reset() {
-        Array.Clear(array: m_memory);
-        m_accesses.Clear();
-    }
-    /// <summary>Pokes a byte directly, without recording an access (vector setup).</summary>
-    /// <param name="address">The address to poke.</param>
-    /// <param name="value">The byte to store.</param>
-    public void Poke(ushort address, byte value) =>
-        m_memory[address] = value;
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no watchpoint machinery to witness.</remarks>
+    public void NoteInstructionStart(ushort pc) { }
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no PPU to corrupt.</remarks>
+    public void NoteRegisterAddressBus(ushort address) { }
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no display to settle.</remarks>
+    public void OpenDisplayWriteSettle() { }
     /// <summary>Reads a byte directly, without recording an access (vector verification).</summary>
     /// <param name="address">The address to read.</param>
     /// <returns>The stored byte.</returns>
     public byte Peek(ushort address) =>
         m_memory[address];
+    /// <summary>Pokes a byte directly, without recording an access (vector setup).</summary>
+    /// <param name="address">The address to poke.</param>
+    /// <param name="value">The byte to store.</param>
+    public void Poke(ushort address, byte value) =>
+        m_memory[address] = value;
     /// <inheritdoc/>
     public byte ReadByte(ushort address) {
         var value = m_memory[address];
@@ -43,12 +47,6 @@ internal sealed class Sm83SstBus : ISystemBus {
         return value;
     }
     /// <inheritdoc/>
-    public void WriteByte(ushort address, byte value) {
-        m_memory[address] = value;
-
-        m_accesses.Add(item: (address, value, true));
-    }
-    /// <inheritdoc/>
     /// <remarks>This flat vector bus has no display, so every write commits on the pins' own drive instant and
     /// nothing is ever in transition.</remarks>
     public int RecordDisplayWrite(ushort address, byte value, out bool settles) {
@@ -56,13 +54,15 @@ internal sealed class Sm83SstBus : ISystemBus {
 
         return 0;
     }
+    /// <summary>Clears the backing memory and the access log, for the next vector.</summary>
+    public void Reset() {
+        Array.Clear(array: m_memory);
+        m_accesses.Clear();
+    }
     /// <inheritdoc/>
-    /// <remarks>No-op: this flat vector bus has no display to settle.</remarks>
-    public void OpenDisplayWriteSettle() { }
-    /// <inheritdoc/>
-    /// <remarks>No-op: this flat vector bus has no watchpoint machinery to witness.</remarks>
-    public void NoteInstructionStart(ushort pc) { }
-    /// <inheritdoc/>
-    /// <remarks>No-op: this flat vector bus has no PPU to corrupt.</remarks>
-    public void NoteRegisterAddressBus(ushort address) { }
+    public void WriteByte(ushort address, byte value) {
+        m_memory[address] = value;
+
+        m_accesses.Add(item: (address, value, true));
+    }
 }

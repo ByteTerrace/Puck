@@ -15,7 +15,12 @@ internal static class CliRetry {
             try {
                 return await action();
             } catch (Exception error) when (((attempt < attempts) && ((retryable is null) || retryable(error)))) {
-                if (report is not null) { Console.Error.WriteLine(value: report(error, attempt)); }
+                if (report is not null) {
+                    Console.Error.WriteLine(value: report(
+                        error,
+                        attempt
+                    ));
+                }
                 await Task.Delay(delay: delay);
             }
         }

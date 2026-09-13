@@ -27,8 +27,15 @@ public sealed record WorldRule(
     [property: JsonPropertyOrder(5)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null,
     IReadOnlyList<RuleBinding>? Bindings = null,
     IReadOnlyList<string>? Zones = null
-) : Rule(Name: Name, Effects: Effects, Gate: Gate, Mode: Mode, ForEach: ForEach, Bindings: Bindings, Zones: Zones);
-
+) : Rule(
+    Name: Name,
+    Effects: Effects,
+    Gate: Gate,
+    Mode: Mode,
+    ForEach: ForEach,
+    Bindings: Bindings,
+    Zones: Zones
+);
 /// <summary>How a body reference token resolved at compile time.</summary>
 public enum CompiledBodyRefKind : byte {
     /// <summary>A literal <c>body:&lt;n&gt;</c> index.</summary>
@@ -44,7 +51,6 @@ public enum CompiledBodyRefKind : byte {
     /// <summary>The body inhabiting a declared placement, or the placement the enclosing <c>forEach</c> key names.</summary>
     Placement,
 }
-
 /// <summary>One compiled body reference.</summary>
 /// <param name="Kind">How the reference resolves.</param>
 /// <param name="Index">The literal index, the <see cref="BoundKey"/> for a binding, or the placement ordinal.</param>
@@ -53,7 +59,6 @@ public enum CompiledBodyRefKind : byte {
 /// <param name="Handle">The compiled handle of <paramref name="Row"/>.</param>
 /// <param name="PlacementOrdinals">For <c>placement:$each</c>, the placement ordinal per <c>forEach</c> cell, in cell order.</param>
 public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, StateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null);
-
 /// <summary>The co-occurrence an interaction evaluates.</summary>
 /// <param name="Left">The left property.</param>
 /// <param name="Right">The right property, or the region placement.</param>
@@ -61,7 +66,6 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// <param name="Range">The distance range.</param>
 /// <param name="Neighbours">At most this many right carriers per left carrier for a distance interaction, the nearest first; 0 for every carrier in range.</param>
 public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range, int Neighbours = 0);
-
 /// <summary>A compiled body motion effect.</summary>
 public readonly record struct CompiledWorldBodyEffect(
     BodyMotionOp Operation,
@@ -77,7 +81,6 @@ public readonly record struct CompiledWorldBodyEffect(
 public readonly record struct CompiledWorldFieldPaint(string Field, int X, int Y, int Z, FixedQ4816 Value, WorldFieldWriteOp Operation, int Radius);
 /// <summary>A compiled literal pose.</summary>
 public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ4816 YawRadians, FixedQ4816 PitchRadians, FixedQ4816 RollRadians);
-
 /// <summary>A compiled world rule or interaction: the library's <see cref="CompiledRule"/> plus the co-occurrence an
 /// interaction evaluates and the choice policy a decision rule carries.</summary>
 /// <param name="Name">The rule's name.</param>
@@ -101,32 +104,62 @@ public sealed record CompiledWorldRule(
     CompiledRuleBinding[]? Bindings = null,
     ZoneTable? Zones = null,
     StateHandle ForEachHandle = default
-) : CompiledRule(Name: Name, Mode: Mode, Gate: Gate, Effects: Effects, ForEach: ForEach, Bindings: Bindings, Zones: Zones, ForEachHandle: ForEachHandle) {
+) : CompiledRule(
+    Name: Name,
+    Mode: Mode,
+    Gate: Gate,
+    Effects: Effects,
+    ForEach: ForEach,
+    Bindings: Bindings,
+    Zones: Zones,
+    ForEachHandle: ForEachHandle
+) {
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         base.CollectReads(into: into);
         if (Decision is { } decision) {
-            RuleDataflow.CollectGate(gate: (decision.Interrupt ?? []), into: into);
-            RuleDataflow.CollectEffectReads(effects: decision.OnNoChoice, into: into);
+            RuleDataflow.CollectGate(
+                gate: (decision.Interrupt ?? []),
+                into: into
+            );
+            RuleDataflow.CollectEffectReads(
+                effects: decision.OnNoChoice,
+                into: into
+            );
             foreach (var option in decision.Options) {
-                RuleDataflow.CollectGate(gate: option.Gate, into: into);
-                RuleDataflow.CollectExpression(tokens: option.Score, into: into);
-                RuleDataflow.CollectEffectReads(effects: option.Effects, into: into);
+                RuleDataflow.CollectGate(
+                    gate: option.Gate,
+                    into: into
+                );
+                RuleDataflow.CollectExpression(
+                    tokens: option.Score,
+                    into: into
+                );
+                RuleDataflow.CollectEffectReads(
+                    effects: option.Effects,
+                    into: into
+                );
             }
         }
     }
-
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) {
         base.CollectWrites(into: into);
         if (Decision is { } decision) {
-            RuleDataflow.CollectEffectWrites(effects: decision.OnNoChoice, into: into);
+            RuleDataflow.CollectEffectWrites(
+                effects: decision.OnNoChoice,
+                into: into
+            );
             foreach (var option in decision.Options) {
-                RuleDataflow.CollectEffectWrites(effects: option.Effects, into: into);
+                RuleDataflow.CollectEffectWrites(
+                    effects: option.Effects,
+                    into: into
+                );
             }
         }
     }
-
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) => CostBreakdown(context: context).Total;
     /// <summary>Adds the decision's cost: every option's gate, the costliest branch, the score of every retained
     /// candidate, and the perception sampling a neighbours option inspects.</summary>
     /// <inheritdoc/>
@@ -139,54 +172,116 @@ public sealed record CompiledWorldRule(
 
         var check = baseBreakdown.Check;
         var currentGate = 0L;
-        var branch = RuleWorkBudget.EffectsCost(effects: decision.OnNoChoice, context: context);
+        var branch = RuleWorkBudget.EffectsCost(
+            effects: decision.OnNoChoice,
+            context: context
+        );
 
         foreach (var option in decision.Options) {
-            var gate = RuleWorkBudget.GateCost(tokens: option.Gate, context: context);
-            var score = RuleWorkBudget.ExpressionCost(tokens: option.Score, context: context);
+            var gate = RuleWorkBudget.GateCost(
+                tokens: option.Gate,
+                context: context
+            );
+            var score = RuleWorkBudget.ExpressionCost(
+                tokens: option.Score,
+                context: context
+            );
 
-            currentGate = Math.Max(val1: currentGate, val2: gate);
+            currentGate = Math.Max(
+                val1: currentGate,
+                val2: gate
+            );
             if (option.Neighbors is { } neighbors) {
                 // Physical sampling and eligibility inspect at most the candidate budget; only retained candidates score.
-                check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.SaturatingMultiply(left: neighbors.Source.CandidateBudget, right: RuleWorkBudget.SaturatingAdd(left: 1L, right: gate)));
-                check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.SaturatingMultiply(left: neighbors.Source.MaxCandidates, right: RuleWorkBudget.SaturatingAdd(left: 1L, right: score)));
-                check = RuleWorkBudget.SaturatingAdd(left: check, right: 27L); // Grid cell lookups, independent of crowd density.
+                check = RuleWorkBudget.SaturatingAdd(
+                    left: check,
+                    right: RuleWorkBudget.SaturatingMultiply(
+                        left: neighbors.Source.CandidateBudget,
+                        right: RuleWorkBudget.SaturatingAdd(
+                            left: 1L,
+                            right: gate
+                        )
+                    )
+                );
+                check = RuleWorkBudget.SaturatingAdd(
+                    left: check,
+                    right: RuleWorkBudget.SaturatingMultiply(
+                        left: neighbors.Source.MaxCandidates,
+                        right: RuleWorkBudget.SaturatingAdd(
+                            left: 1L,
+                            right: score
+                        )
+                    )
+                );
+                check = RuleWorkBudget.SaturatingAdd(
+                    left: check,
+                    right: 27L
+                ); // Grid cell lookups, independent of crowd density.
                 if (neighbors.Source.RequiresLineOfSight) {
-                    check = RuleWorkBudget.SaturatingAdd(left: check, right: neighbors.Source.CandidateBudget);
+                    check = RuleWorkBudget.SaturatingAdd(
+                        left: check,
+                        right: neighbors.Source.CandidateBudget
+                    );
                 }
             } else {
-                check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.SaturatingAdd(left: RuleWorkBudget.SaturatingAdd(left: 1L, right: gate), right: score));
+                check = RuleWorkBudget.SaturatingAdd(
+                    left: check,
+                    right: RuleWorkBudget.SaturatingAdd(
+                        left: RuleWorkBudget.SaturatingAdd(
+                            left: 1L,
+                            right: gate
+                        ),
+                        right: score
+                    )
+                );
             }
-            branch = Math.Max(val1: branch, val2: RuleWorkBudget.EffectsCost(effects: option.Effects, context: context));
+            branch = Math.Max(
+                val1: branch,
+                val2: RuleWorkBudget.EffectsCost(
+                    effects: option.Effects,
+                    context: context
+                )
+            );
         }
 
-        check = RuleWorkBudget.SaturatingAdd(left: check, right: currentGate);
-        check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.GateCost(tokens: (decision.Interrupt ?? []), context: context));
+        check = RuleWorkBudget.SaturatingAdd(
+            left: check,
+            right: currentGate
+        );
+        check = RuleWorkBudget.SaturatingAdd(
+            left: check,
+            right: RuleWorkBudget.GateCost(
+                tokens: (decision.Interrupt ?? []),
+                context: context
+            )
+        );
 
-        var effects = RuleWorkBudget.SaturatingAdd(left: baseBreakdown.Effects, right: branch);
+        var effects = RuleWorkBudget.SaturatingAdd(
+            left: baseBreakdown.Effects,
+            right: branch
+        );
 
-        return new RuleCost(Setup: baseBreakdown.Setup, Check: check, Effects: effects);
+        return new RuleCost(
+            Setup: baseBreakdown.Setup,
+            Check: check,
+            Effects: effects
+        );
     }
-
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => CostBreakdown(context: context).Total;
 }
-
 /// <summary>Hard bounds for the world's own rule arms; representation and per-tick work limits, never gameplay tuning.
 /// The library's bounds are <see cref="RuleCapacity"/>.</summary>
 public static class WorldRuleCapacity {
-    /// <summary>The maximum options considered by one decision.</summary>
-    public const int MaxDecisionOptions = 32;
-    /// <summary>The maximum individuals retained by one parameterized decision option.</summary>
-    public const int MaxDecisionCandidates = 32;
-    /// <summary>The largest cube radius a field paint covers.</summary>
-    public const int MaxFieldPaintRadius = 8;
-    /// <summary>The longest cue payload, in UTF-16 code units.</summary>
-    public const int MaxCuePayloadLength = 256;
     /// <summary>The longest cue name.</summary>
     public const int MaxCueNameLength = 64;
+    /// <summary>The longest cue payload, in UTF-16 code units.</summary>
+    public const int MaxCuePayloadLength = 256;
+    /// <summary>The maximum individuals retained by one parameterized decision option.</summary>
+    public const int MaxDecisionCandidates = 32;
+    /// <summary>The maximum options considered by one decision.</summary>
+    public const int MaxDecisionOptions = 32;
+    /// <summary>The largest cube radius a field paint covers.</summary>
+    public const int MaxFieldPaintRadius = 8;
 }
-
 /// <summary>The compile-time refusals only a world's own arms raise; the library's are <see cref="RuleRefusal"/>.
 /// Both travel in a <see cref="RuleException"/>.</summary>
 public enum WorldRuleRefusal : byte {
@@ -225,7 +320,6 @@ public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a 'pose' effect names a 'spawnPoint' the document's 'spawnPoints' section does not declare", kind: RefusalKind.Verdict)]
     SpawnPointUnknown,
 }
-
 /// <summary>The runtime refusals only a world-owned effect arm can draw; the state-neutral ones are
 /// <see cref="RuleEffectRefusal"/>'s, and both share the evaluator's ledger.</summary>
 public enum WorldRuleEffectRefusal : byte {

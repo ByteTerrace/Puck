@@ -19,27 +19,39 @@ public sealed class WorldNarrationLawTests {
         var sink = new RecordingNarrationSink();
         using var lease = fixture.Server.AttachNarrationSink(sink: sink);
 
-        var grant = new WorldGrant(Principal: WorldPrincipal.Seat(slot: 0), Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: 0), Exclusive: false);
+        var grant = new WorldGrant(
+            Principal: WorldPrincipal.Seat(slot: 0),
+            Capability: WorldCapability.Drive,
+            Subject: GrantSubject.Body(index: 0),
+            Exclusive: false
+        );
 
-        fixture.Server.Grant(grant: grant, actor: WorldPrincipal.Console);
+        fixture.Server.Grant(
+            grant: grant,
+            actor: WorldPrincipal.Console
+        );
 
         var narration = Assert.Single(collection: sink.Narrations);
 
-        Assert.Equal(expected: "world.grant", actual: narration.Channel);
-        Assert.StartsWith(expectedStartString: "[world.grant: ", actualString: narration.Text, comparisonType: StringComparison.Ordinal);
-        Assert.EndsWith(expectedEndString: "]", actualString: narration.Text, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "seat1 drive body:0", actualString: narration.Text, comparisonType: StringComparison.Ordinal);
-    }
-    [Fact]
-    public void NoSinkAttached_MutationsNarrationGoesUndelivered() {
-        using var fixture = Fixtures.FreshServer();
-        var sink = new RecordingNarrationSink();
-
-        var grant = new WorldGrant(Principal: WorldPrincipal.Seat(slot: 0), Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: 0), Exclusive: false);
-
-        fixture.Server.Grant(grant: grant, actor: WorldPrincipal.Console);
-
-        Assert.Empty(collection: sink.Narrations);
+        Assert.Equal(
+            expected: "world.grant",
+            actual: narration.Channel
+        );
+        Assert.StartsWith(
+            expectedStartString: "[world.grant: ",
+            actualString: narration.Text,
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.EndsWith(
+            expectedEndString: "]",
+            actualString: narration.Text,
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.Contains(
+            expectedSubstring: "seat1 drive body:0",
+            actualString: narration.Text,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void DetachedLease_StopsReceivingLaterNarration() {
@@ -47,19 +59,54 @@ public sealed class WorldNarrationLawTests {
         var sink = new RecordingNarrationSink();
         var lease = fixture.Server.AttachNarrationSink(sink: sink);
 
-        var first = new WorldGrant(Principal: WorldPrincipal.Seat(slot: 0), Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: 0), Exclusive: false);
+        var first = new WorldGrant(
+            Principal: WorldPrincipal.Seat(slot: 0),
+            Capability: WorldCapability.Drive,
+            Subject: GrantSubject.Body(index: 0),
+            Exclusive: false
+        );
 
-        fixture.Server.Grant(grant: first, actor: WorldPrincipal.Console);
+        fixture.Server.Grant(
+            grant: first,
+            actor: WorldPrincipal.Console
+        );
         Assert.Single(collection: sink.Narrations);
 
         lease.Dispose();
 
-        var second = new WorldGrant(Principal: WorldPrincipal.Seat(slot: 1), Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: 1), Exclusive: false);
+        var second = new WorldGrant(
+            Principal: WorldPrincipal.Seat(slot: 1),
+            Capability: WorldCapability.Drive,
+            Subject: GrantSubject.Body(index: 1),
+            Exclusive: false
+        );
 
-        fixture.Server.Grant(grant: second, actor: WorldPrincipal.Console);
+        fixture.Server.Grant(
+            grant: second,
+            actor: WorldPrincipal.Console
+        );
 
         // Still exactly one — the lease's own dispose stopped this sink from observing the second grant's line.
         Assert.Single(collection: sink.Narrations);
+    }
+    [Fact]
+    public void NoSinkAttached_MutationsNarrationGoesUndelivered() {
+        using var fixture = Fixtures.FreshServer();
+        var sink = new RecordingNarrationSink();
+
+        var grant = new WorldGrant(
+            Principal: WorldPrincipal.Seat(slot: 0),
+            Capability: WorldCapability.Drive,
+            Subject: GrantSubject.Body(index: 0),
+            Exclusive: false
+        );
+
+        fixture.Server.Grant(
+            grant: grant,
+            actor: WorldPrincipal.Console
+        );
+
+        Assert.Empty(collection: sink.Narrations);
     }
 }
 

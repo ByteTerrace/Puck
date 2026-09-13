@@ -9,7 +9,13 @@ namespace Puck.Shaders;
 public sealed class ProbeKindCatalog : ManifestCatalog<ProbeKindManifest> {
     private const string Description = "probe kind";
 
-    private ProbeKindCatalog(Dictionary<string, string> pathsById) : base(description: Description, pathsById: pathsById) { }
+    private ProbeKindCatalog(Dictionary<string, string> pathsById) : base(
+        description: Description,
+        pathsById: pathsById
+    ) { }
+
+    /// <inheritdoc/>
+    protected override ProbeKindManifest LoadManifest(string manifestPath) => ProbeKindManifest.Load(manifestPath: manifestPath);
 
     /// <summary>Scans a directory tree for probe-kind manifests. A missing root yields an empty catalog.</summary>
     /// <param name="rootDirectory">The root to scan.</param>
@@ -21,7 +27,4 @@ public sealed class ProbeKindCatalog : ManifestCatalog<ProbeKindManifest> {
             fileSuffix: ProbeKindManifest.FileSuffix,
             rootDirectory: rootDirectory
         ));
-
-    /// <inheritdoc/>
-    protected override ProbeKindManifest LoadManifest(string manifestPath) => ProbeKindManifest.Load(manifestPath: manifestPath);
 }

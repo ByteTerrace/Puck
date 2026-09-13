@@ -18,23 +18,46 @@ public sealed class TetrisExport {
         }
 
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
+
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
             directory = directory.Parent;
         }
 
         var json = File.ReadAllText(path: Path.Combine(
-            path1: directory!.FullName, path2: "src/Puck.World/Assets/cartridges", path3: "tetris.cgb.cartridge.json"));
-        var document = JsonSerializer.Deserialize<CartridgeDocument>(json: json, options: new JsonSerializerOptions {
+            path1: directory!.FullName,
+            path2: "src/Puck.World/Assets/cartridges",
+            path3: "tetris.cgb.cartridge.json"
+        ));
+        var document = JsonSerializer.Deserialize<CartridgeDocument>(
+            json: json,
+            options: new JsonSerializerOptions {
             PropertyNameCaseInsensitive = true,
-        })!;
+        }
+        )!;
 
         var result = new HgbCartridgeCompiler().Compile(document: document);
         var canonical = CartridgeDocuments.Canonicalize(document: document);
 
-        Assert.Equal(expected: canonical.Hash, actual: result.SourceHash);
-        File.WriteAllBytes(path: destination, bytes: result.Rom);
+        Assert.Equal(
+            expected: canonical.Hash,
+            actual: result.SourceHash
+        );
+        File.WriteAllBytes(
+            path: destination,
+            bytes: result.Rom
+        );
         File.WriteAllBytes(
             bytes: canonical.Bytes,
-            path: Path.ChangeExtension(path: destination, extension: null) + ".cartridge.json");
+            path: (Path.ChangeExtension(
+                extension: null,
+                path: destination
+            ) + ".cartridge.json")
+        );
     }
 }

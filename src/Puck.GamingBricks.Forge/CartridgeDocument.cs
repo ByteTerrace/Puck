@@ -8,6 +8,7 @@ namespace Puck.GamingBricks.Forge;
 public sealed record CartridgeDocument {
     /// <summary>The recognized document family.</summary>
     public const string SchemaId = "puck.cartridge.v1";
+
     /// <summary>Gets the declared schema; absence is invalid.</summary>
     public required string Schema { get; init; }
     /// <summary>Gets the target: cgb or agb.</summary>
@@ -67,7 +68,6 @@ public sealed record CartridgeDocument {
     /// <summary>Gets the vertical background scroll, in pixels modulo 256.</summary>
     public required ValueExpression ScrollY { get; init; }
 }
-
 /// <summary>
 /// A panel drawn over the background from its top-left corner down and right, out of its own tile map. Games use it
 /// for a status area that must not scroll with the world behind it.
@@ -84,7 +84,6 @@ public sealed record CartridgeWindow(
     ValueExpression X,
     ValueExpression Y,
     ValueExpression Visible);
-
 /// <summary>
 /// The cartridge's color. Each palette holds four colors on the humble machine and sixteen on the advanced one, and a
 /// tile's pixel digits index within whichever palette its map cell or sprite selects.
@@ -93,13 +92,11 @@ public sealed record CartridgeWindow(
 /// <param name="Object">The object palettes, in selection order. Color zero is transparent.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgePalettes(int[][] Background, int[][] Object);
-
 /// <summary>A named tile whose eight rows each contain eight hexadecimal palette indices.</summary>
 /// <param name="Name">The tile's author-facing name.</param>
 /// <param name="Pixels">Eight strings of eight hexadecimal digits.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeTile(string Name, string[] Pixels);
-
 /// <summary>A mutable unsigned slot of cartridge state. Its declared envelope, not its name, decides how many bytes
 /// the backend spends on it.</summary>
 /// <param name="Name">The case-sensitive state name.</param>
@@ -113,12 +110,13 @@ public sealed record CartridgeVariable(string Name, int Initial, int? Max = null
     /// <summary>Gets the declared ceiling, defaulting to one byte.</summary>
     [JsonIgnore]
     public int Ceiling => (Max ?? CartridgeLimits.NarrowMaximum);
-
     /// <summary>Gets how many bytes the slot occupies: one while its ceiling fits a byte, two otherwise.</summary>
     [JsonIgnore]
-    public int Width => ((Ceiling > CartridgeLimits.NarrowMaximum) ? 2 : 1);
+    public int Width => ((Ceiling > CartridgeLimits.NarrowMaximum)
+        ? 2
+        : 1
+    );
 }
-
 /// <summary>
 /// A named run of mutable unsigned bytes. The initial contents fix the length. Elements are addressed by a byte index,
 /// bounding an array at 256 entries; an index at or beyond the length reads zero and discards a write.
@@ -127,7 +125,6 @@ public sealed record CartridgeVariable(string Name, int Initial, int? Max = null
 /// <param name="Initial">The initial contents, 1 to 256 bytes, each 0 through 255.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeArray(string Name, int[] Initial);
-
 /// <summary>
 /// A per-pixel drawing surface covering the whole screen, which is what a cartridge draws on when its picture is not
 /// made of tiles at all.
@@ -152,7 +149,6 @@ public sealed record CartridgeBitmap(ValueExpression? Clear = null) {
     /// <summary>The surface's width in pixels.</summary>
     public const int Width = 240;
 }
-
 /// <summary>
 /// A scrolling background beside the document's own, which is what lets a sky drift at a different rate from the
 /// ground in front of it.
@@ -176,7 +172,6 @@ public sealed record CartridgeLayer(
     ValueExpression ScrollY,
     int Priority,
     ValueExpression Visible);
-
 /// <summary>
 /// A scroll change applied from one scanline down, which is how a picture gets a fixed panel over a scrolling world
 /// or layers that drift at different speeds.
@@ -190,7 +185,6 @@ public sealed record CartridgeLayer(
 /// <param name="ScrollY">The vertical scroll from that line down.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeRasterRow(int Line, ValueExpression ScrollX, ValueExpression ScrollY);
-
 /// <summary>
 /// A background that rotates and scales about a centre. Only the advanced machine has one; the humble machine's
 /// backgrounds only scroll, so a document declaring this is refused for that target.
@@ -219,7 +213,6 @@ public sealed record CartridgeAffine(
     ValueExpression CentreX,
     ValueExpression CentreY,
     ValueExpression Visible);
-
 /// <summary>
 /// The state slots a clock step fills from the cartridge's battery-backed real-time clock. Every field is optional;
 /// a slot left unnamed is simply not written.
@@ -246,7 +239,6 @@ public sealed record CartridgeClock(
     string? Day = null,
     string? Month = null,
     string? Year = null);
-
 /// <summary>
 /// One voice's part of a music track: the patterns it plays and the order it plays them in, on one of the machine's
 /// four sound channels.
@@ -273,7 +265,6 @@ public sealed record CartridgeMusicVoice(
     string Voice,
     Puck.Assets.Documents.AudioDocument Part,
     int[]? Waveform = null);
-
 /// <summary>
 /// A named sound a play step starts: exactly one of a looping music track or a one-shot effect. A track occupies as
 /// many voices as it has parts; an effect holds one voice no track claims, so an effect never interrupts the music
@@ -299,7 +290,6 @@ public sealed record CartridgeSound(
     int? Frames = null,
     int[]? Sample = null,
     int[]? Waveform = null);
-
 /// <summary>
 /// The state a save step writes to battery-backed memory and a load step restores. The payload is the named variables
 /// followed by the named arrays, in declaration order.
@@ -314,7 +304,6 @@ public sealed record CartridgeSound(
 /// <param name="Arrays">The persisted arrays, in payload order after the variables.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeSave(int Version, string[] Variables, string[] Arrays);
-
 /// <summary>
 /// A named rectangle of background tile indices, painted by a blit step. Rows are stored top to bottom, each of
 /// <paramref name="Width"/> indices, so <paramref name="Tiles"/> holds width times height entries.
@@ -325,7 +314,6 @@ public sealed record CartridgeSave(int Version, string[] Variables, string[] Arr
 /// <param name="Palettes">The background palette index of each tile, or null to paint the rectangle on palette zero.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeScreen(string Name, int Width, int[] Tiles, int[]? Palettes = null);
-
 /// <summary>A writable slot: a declared state name, or a declared array addressed by a computed index.</summary>
 /// <param name="State">The declared state or array name.</param>
 /// <param name="Key">The element index for an array, spelled as the expression language spells a cell key — a bare
@@ -333,7 +321,6 @@ public sealed record CartridgeScreen(string Name, int Width, int[] Tiles, int[]?
 /// Required for an array and refused for a state slot.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeTarget(string State, string? Key = null);
-
 /// <summary>
 /// One step of a rule body: a state write, a branch, a counted loop, or a loop exit. <paramref name="Kind"/> selects
 /// which of the remaining fields apply; validation refuses any field belonging to another kind.
@@ -388,7 +375,6 @@ public sealed record CartridgeStatement(
     string? Surface = null,
     ValueExpression? Weight = null,
     ValueExpression? Colour = null);
-
 /// <summary>An ordered, conditional group of state changes.</summary>
 /// <param name="Name">The diagnostic name.</param>
 /// <param name="Body">Steps executed in declaration order.</param>
@@ -398,7 +384,6 @@ public sealed record CartridgeStatement(
 /// input composes under any and not like every other operand.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeRule(string Name, CartridgeStatement[] Body, ActionPredicate? When = null);
-
 /// <summary>A native 8 by 8 sprite bound to cartridge state. Coordinates are screen pixels; zero visibility hides it.</summary>
 /// <param name="Name">The sprite's author-facing name.</param>
 /// <param name="Tile">Tile index; values outside the authored tile bank hide the sprite.</param>

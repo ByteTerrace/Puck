@@ -1037,11 +1037,16 @@ public readonly partial record struct FixedQ4816(long Value)
             paramName: nameof(maxDelta)
         );
 
-        var (separation, targetIsGreater) = FixedVectorMath.RawSeparation(currentRaw: current.Value, targetRaw: target.Value);
+        var (separation, targetIsGreater) = FixedVectorMath.RawSeparation(
+            currentRaw: current.Value,
+            targetRaw: target.Value
+        );
 
         return ((separation <= ((ulong)maxDelta.Value))
             ? target
-            : new(Value: unchecked((current.Value + (targetIsGreater ? maxDelta.Value : -maxDelta.Value))))
+            : new(Value: unchecked((current.Value + (targetIsGreater
+                ? maxDelta.Value
+                : -maxDelta.Value))))
         );
     }
     /// <summary>Returns the exact angular frequency <c>ω = 2π·frequencyHz</c> as a rational pair, unscaled — no
@@ -1197,6 +1202,7 @@ public readonly partial record struct FixedQ4816(long Value)
             ? -raw
             : raw));
     }
+
     // Rounds a wide product (a raw Q16 factor times a 2^fractionBitCount-scaled ratio) to raw Q16, ties to even.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProduct(Int128 product, int fractionBitCount) {
@@ -1258,6 +1264,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return (high << 2) | ((long)(((ulong)low) >> 62));
     }
+
     // Fractional base-2 log of a Q62 mantissa in [1, 2), at Q61: 128-interval inverse table plus a quartic in the
     // residual r = m/d_i − 1 ≤ 2^-7 (total error ≤ ~2^-36; inverse rounding can leave r, and therefore the result,
     // a few raw units negative). Shared by Log2 and the Gaussian sampler.
@@ -1289,6 +1296,7 @@ public readonly partial record struct FixedQ4816(long Value)
             y: acc
         ));
     }
+
     /// <summary>Returns the integral part of <paramref name="value"/>, discarding the fraction (rounding toward zero).</summary>
     /// <param name="value">The value to truncate.</param>
     /// <returns><paramref name="value"/> with its fractional part removed toward zero.</returns>

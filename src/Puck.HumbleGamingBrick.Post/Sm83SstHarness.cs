@@ -28,12 +28,11 @@ internal readonly record struct Sm83SstVectorResult(string Name, bool Passed, st
 /// </summary>
 internal sealed class Sm83SstHarness : IDisposable {
     private readonly Sm83SstBus m_bus = new();
+    private readonly byte[] m_stateBuffer = new byte[Sm83StateCodec.ByteCount];
+    private readonly StateWriter m_writer = new(capacity: Sm83StateCodec.ByteCount);
 
     private readonly Sm83 m_cpu;
     private readonly MachineInstance m_instance;
-
-    private readonly byte[] m_stateBuffer = new byte[Sm83StateCodec.ByteCount];
-    private readonly StateWriter m_writer = new(capacity: Sm83StateCodec.ByteCount);
 
     /// <summary>Builds the isolated machine once.</summary>
     public Sm83SstHarness() {
@@ -55,119 +54,6 @@ internal sealed class Sm83SstHarness : IDisposable {
         m_cpu = m_instance.GetRequiredService<Sm83>();
     }
 
-    /// <summary>Runs one vector: seeds the initial registers/IME/RAM, executes exactly one instruction, and compares
-    /// the resulting registers, RAM, and (best-effort) bus-pin trace against the vector's expectations.</summary>
-    /// <param name="vector">The vector to run.</param>
-    /// <returns>The verdict.</returns>
-    public Sm83SstVectorResult Run(Sm83SstVector vector) {
-        m_bus.Reset();
-
-        foreach (var (address, value) in vector.Initial.Ram) {
-            m_bus.Poke(
-                address: address,
-                value: value
-            );
-        }
-
-        SeedCpuState(state: vector.Initial);
-
-        m_cpu.StepInstruction();
-
-        var mismatches = new List<string>(capacity: 4);
-
-        CompareRegisters(
-            expected: vector.Final,
-            mismatches: mismatches
-        );
-        CompareRam(
-            expected: vector.Final.Ram,
-            mismatches: mismatches
-        );
-        CompareBusTrace(
-            expectedCycles: vector.Cycles,
-            mismatches: mismatches
-        );
-
-        return new Sm83SstVectorResult(
-            Name: vector.Name,
-            Passed: (mismatches.Count == 0),
-            Detail: string.Join(
-                separator: "; ",
-                values: mismatches
-            )
-        );
-    }
-    /// <inheritdoc/>
-    public void Dispose() =>
-        m_instance.Dispose();
-
-    private void SeedCpuState(Sm83SstState state) =>
-        // halted/haltBug/lockedUp always false: SST is single-instruction, so a vector never depends on entering the
-        // harness already halted (only observable across a HALT-then-fetch pair) or wedged (illegal opcodes are
-        // excluded from the corpus). interruptEnableCountdown is always 0: never nonzero in "initial" across the whole
-        // shipped v1 corpus (verified).
-        Sm83StateCodec.Load(
-        cpu: m_cpu,
-        scratch: m_writer,
-        a: state.A,
-        f: state.F,
-        b: state.B,
-        c: state.C,
-        d: state.D,
-        e: state.E,
-        h: state.H,
-        l: state.L,
-        sp: state.Sp,
-        pc: state.Pc,
-        halted: false,
-        haltBug: false,
-        lockedUp: false,
-        ime: (state.Ime != 0),
-        interruptEnableCountdown: 0
-    );
-    private void ReadCpuTail(out bool ime, out bool eiPending) =>
-        Sm83StateCodec.ReadTail(
-        buffer: m_stateBuffer,
-        cpu: m_cpu,
-        eiPending: out eiPending,
-        halted: out _,
-        ime: out ime,
-        lockedUp: out _,
-        scratch: m_writer
-    );
-    private void CompareRegisters(Sm83SstState expected, List<string> mismatches) {
-        if (m_cpu.A != expected.A) { mismatches.Add(item: $"A={m_cpu.A:X2} want {expected.A:X2}"); }
-        if (m_cpu.F != expected.F) { mismatches.Add(item: $"F={m_cpu.F:X2} want {expected.F:X2}"); }
-        if (m_cpu.B != expected.B) { mismatches.Add(item: $"B={m_cpu.B:X2} want {expected.B:X2}"); }
-        if (m_cpu.C != expected.C) { mismatches.Add(item: $"C={m_cpu.C:X2} want {expected.C:X2}"); }
-        if (m_cpu.D != expected.D) { mismatches.Add(item: $"D={m_cpu.D:X2} want {expected.D:X2}"); }
-        if (m_cpu.E != expected.E) { mismatches.Add(item: $"E={m_cpu.E:X2} want {expected.E:X2}"); }
-        if (m_cpu.H != expected.H) { mismatches.Add(item: $"H={m_cpu.H:X2} want {expected.H:X2}"); }
-        if (m_cpu.L != expected.L) { mismatches.Add(item: $"L={m_cpu.L:X2} want {expected.L:X2}"); }
-        if (m_cpu.StackPointer != expected.Sp) { mismatches.Add(item: $"SP={m_cpu.StackPointer:X4} want {expected.Sp:X4}"); }
-        if (m_cpu.ProgramCounter != expected.Pc) { mismatches.Add(item: $"PC={m_cpu.ProgramCounter:X4} want {expected.Pc:X4}"); }
-
-        ReadCpuTail(
-            ime: out var ime,
-            out var eiPending
-        );
-
-        if (ime != (expected.Ime != 0)) {
-            mismatches.Add(item: $"IME={(ime
-                ? 1
-                : 0)} want {expected.Ime}");
-        }
-        if (eiPending != expected.Ei) { mismatches.Add(item: $"EI-pending={eiPending} want {expected.Ei}"); }
-    }
-    private void CompareRam(IReadOnlyList<(ushort Address, byte Value)> expected, List<string> mismatches) {
-        foreach (var (address, value) in expected) {
-            var actual = m_bus.Peek(address: address);
-
-            if (actual != value) {
-                mismatches.Add(item: $"[{address:X4}]={actual:X2} want {value:X2}");
-            }
-        }
-    }
     // Filters the vector's cycle list to the entries that actually touch the bus (flags 'r' or 'w'; an internal-only
     // "---" cycle never produces a call), then compares that sequence 1:1 against the bus's own access log. This is
     // the bus-pin activity the task asked for "if our seam exposes it cheaply" — it comes for free from wrapping
@@ -212,5 +98,118 @@ internal sealed class Sm83SstHarness : IDisposable {
                 mismatches.Add(item: $"bus[{index}].write={isWrite} want {want.IsWrite}");
             }
         }
+    }
+    private void CompareRam(IReadOnlyList<(ushort Address, byte Value)> expected, List<string> mismatches) {
+        foreach (var (address, value) in expected) {
+            var actual = m_bus.Peek(address: address);
+
+            if (actual != value) {
+                mismatches.Add(item: $"[{address:X4}]={actual:X2} want {value:X2}");
+            }
+        }
+    }
+    private void CompareRegisters(Sm83SstState expected, List<string> mismatches) {
+        if (m_cpu.A != expected.A) { mismatches.Add(item: $"A={m_cpu.A:X2} want {expected.A:X2}"); }
+        if (m_cpu.F != expected.F) { mismatches.Add(item: $"F={m_cpu.F:X2} want {expected.F:X2}"); }
+        if (m_cpu.B != expected.B) { mismatches.Add(item: $"B={m_cpu.B:X2} want {expected.B:X2}"); }
+        if (m_cpu.C != expected.C) { mismatches.Add(item: $"C={m_cpu.C:X2} want {expected.C:X2}"); }
+        if (m_cpu.D != expected.D) { mismatches.Add(item: $"D={m_cpu.D:X2} want {expected.D:X2}"); }
+        if (m_cpu.E != expected.E) { mismatches.Add(item: $"E={m_cpu.E:X2} want {expected.E:X2}"); }
+        if (m_cpu.H != expected.H) { mismatches.Add(item: $"H={m_cpu.H:X2} want {expected.H:X2}"); }
+        if (m_cpu.L != expected.L) { mismatches.Add(item: $"L={m_cpu.L:X2} want {expected.L:X2}"); }
+        if (m_cpu.StackPointer != expected.Sp) { mismatches.Add(item: $"SP={m_cpu.StackPointer:X4} want {expected.Sp:X4}"); }
+        if (m_cpu.ProgramCounter != expected.Pc) { mismatches.Add(item: $"PC={m_cpu.ProgramCounter:X4} want {expected.Pc:X4}"); }
+
+        ReadCpuTail(
+            ime: out var ime,
+            out var eiPending
+        );
+
+        if (ime != (expected.Ime != 0)) {
+            mismatches.Add(item: $"IME={(ime
+                ? 1
+                : 0)} want {expected.Ime}");
+        }
+        if (eiPending != expected.Ei) { mismatches.Add(item: $"EI-pending={eiPending} want {expected.Ei}"); }
+    }
+    private void ReadCpuTail(out bool ime, out bool eiPending) =>
+        Sm83StateCodec.ReadTail(
+            buffer: m_stateBuffer,
+            cpu: m_cpu,
+            eiPending: out eiPending,
+            halted: out _,
+            ime: out ime,
+            lockedUp: out _,
+            scratch: m_writer
+        );
+    private void SeedCpuState(Sm83SstState state) =>
+        // halted/haltBug/lockedUp always false: SST is single-instruction, so a vector never depends on entering the
+        // harness already halted (only observable across a HALT-then-fetch pair) or wedged (illegal opcodes are
+        // excluded from the corpus). interruptEnableCountdown is always 0: never nonzero in "initial" across the whole
+        // shipped v1 corpus (verified).
+        Sm83StateCodec.Load(
+            cpu: m_cpu,
+            scratch: m_writer,
+            a: state.A,
+            f: state.F,
+            b: state.B,
+            c: state.C,
+            d: state.D,
+            e: state.E,
+            h: state.H,
+            l: state.L,
+            sp: state.Sp,
+            pc: state.Pc,
+            halted: false,
+            haltBug: false,
+            lockedUp: false,
+            ime: (state.Ime != 0),
+            interruptEnableCountdown: 0
+        );
+
+    /// <inheritdoc/>
+    public void Dispose() =>
+        m_instance.Dispose();
+    /// <summary>Runs one vector: seeds the initial registers/IME/RAM, executes exactly one instruction, and compares
+    /// the resulting registers, RAM, and (best-effort) bus-pin trace against the vector's expectations.</summary>
+    /// <param name="vector">The vector to run.</param>
+    /// <returns>The verdict.</returns>
+    public Sm83SstVectorResult Run(Sm83SstVector vector) {
+        m_bus.Reset();
+
+        foreach (var (address, value) in vector.Initial.Ram) {
+            m_bus.Poke(
+                address: address,
+                value: value
+            );
+        }
+
+        SeedCpuState(state: vector.Initial);
+
+        m_cpu.StepInstruction();
+
+        var mismatches = new List<string>(capacity: 4);
+
+        CompareRegisters(
+            expected: vector.Final,
+            mismatches: mismatches
+        );
+        CompareRam(
+            expected: vector.Final.Ram,
+            mismatches: mismatches
+        );
+        CompareBusTrace(
+            expectedCycles: vector.Cycles,
+            mismatches: mismatches
+        );
+
+        return new Sm83SstVectorResult(
+            Name: vector.Name,
+            Passed: (mismatches.Count == 0),
+            Detail: string.Join(
+                separator: "; ",
+                values: mismatches
+            )
+        );
     }
 }

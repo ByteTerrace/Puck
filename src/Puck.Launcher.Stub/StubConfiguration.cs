@@ -16,7 +16,10 @@ public static class StubConfigurationFile {
     /// <exception cref="IOException">The file could not be read.</exception>
     /// <exception cref="JsonException">The file did not parse as <see cref="StubConfiguration"/>.</exception>
     public static StubConfiguration Load(string installRoot) {
-        var path = Path.Combine(path1: installRoot, path2: StubInstall.StubConfigFileName);
+        var path = Path.Combine(
+            path1: installRoot,
+            path2: StubInstall.StubConfigFileName
+        );
         var json = File.ReadAllText(path: path);
 
         return (JsonSerializer.Deserialize<StubConfiguration>(json: json)

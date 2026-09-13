@@ -40,6 +40,59 @@ public struct Pcg32XshRr : IDrawGenerator {
         m_state = state;
     }
 
+    // O'Neill's logarithmic discrete-log over an affine LCG (state -> state*multiplier + increment), restricted to
+    // `mask`'s bits. Shared with Pcg32Extended, whose own table-tick bookkeeping runs this same search masked to
+    // its tick window rather than the full word.
+    internal static ulong Distance(ulong currentState, ulong newState, ulong multiplier, ulong increment, ulong mask) {
+        var theBit = 1UL;
+        var distance = 0UL;
+        var currentMultiplier = multiplier;
+        var currentIncrement = increment;
+
+        while ((currentState & mask) != (newState & mask)) {
+            if ((currentState & theBit) != (newState & theBit)) {
+                currentState = unchecked(((currentState * currentMultiplier) + currentIncrement));
+                distance |= theBit;
+            }
+
+            theBit <<= 1;
+            currentIncrement = unchecked(((currentMultiplier + 1UL) * currentIncrement));
+            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
+        }
+
+        return distance;
+    }
+
+    // Inverts NextUInt32's output function: given the desired output, recovers the sixty-four-bit state whose
+    // xorshift-and-rotate reaches it, filling the underdetermined bits from lowBits. See NextUInt32 for the forward
+    // direction this undoes.
+    private static ulong PreimageState(uint output, ulong lowBits) {
+        var rotation = ((int)(lowBits & 0x1FUL));
+        var stateLow27 = ((uint)((lowBits >> 5) & 0x7FFFFFFUL));
+
+        // Undo the rotation: the pre-rotation value is the xorshift stage's own output, y bits [27, 58].
+        var xored = uint.RotateLeft(
+            rotateAmount: rotation,
+            value: output
+        );
+
+        // y bits [46, 58] are state bits [14, 26] directly (the xorshift's shift-by-18 never reaches this far).
+        var stateBits14To26 = (xored >> 19) & 0x1FFFU;
+        var stateBits14To17 = stateBits14To26 & 0xFU;
+        var stateBits18To26 = (stateBits14To26 >> 4) & 0x1FFU;
+
+        // y bits [32, 45] = state bits [0, 13] XOR state bits [18, 31] (state bits [27, 31] being the rotation).
+        var stateBits0To13 = ((xored >> 5) & 0x3FFFU) ^ (stateBits18To26 | (((uint)rotation) << 9));
+
+        // y bits [27, 31] = state bits [27, 31] XOR state bits [13, 17].
+        var stateBits13To17 = ((stateBits0To13 >> 13) & 0x1U) | (stateBits14To17 << 1);
+        var stateBits27To31 = (xored & 0x1FU) ^ stateBits13To17;
+
+        var highWord = stateBits0To13 | (stateBits14To17 << 14) | (stateBits18To26 << 18) | (((uint)rotation) << 27);
+        var lowWord = stateLow27 | (stateBits27To31 << 27);
+
+        return (((ulong)highWord) << 32) | lowWord;
+    }
     // A nearly-divisionless bounded draw: take the high 32 bits of draw·bound, rejecting the small biased
     // window (threshold = 2^32 mod bound) so every value in [0, bound) is exactly equally likely.
     private uint Sample(uint exclusiveHigh) {
@@ -56,28 +109,6 @@ public struct Pcg32XshRr : IDrawGenerator {
         }
 
         return ((uint)(product >> 32));
-    }
-    // O'Neill's logarithmic discrete-log over an affine LCG (state -> state*multiplier + increment), restricted to
-    // `mask`'s bits. Shared with Pcg32Extended, whose own table-tick bookkeeping runs this same search masked to
-    // its tick window rather than the full word.
-    internal static ulong Distance(ulong currentState, ulong newState, ulong multiplier, ulong increment, ulong mask) {
-        var theBit = 1UL;
-        var distance = 0UL;
-        var currentMultiplier = multiplier;
-        var currentIncrement = increment;
-
-        while ((currentState & mask) != (newState & mask)) {
-            if ((currentState & theBit) != (newState & theBit)) {
-                currentState = unchecked((currentState * currentMultiplier) + currentIncrement);
-                distance |= theBit;
-            }
-
-            theBit <<= 1;
-            currentIncrement = unchecked((currentMultiplier + 1UL) * currentIncrement);
-            currentMultiplier = unchecked(currentMultiplier * currentMultiplier);
-        }
-
-        return distance;
     }
 
     /// <summary>Skips the generator forward by <paramref name="count"/> draws in logarithmic time.</summary>
@@ -165,7 +196,10 @@ public struct Pcg32XshRr : IDrawGenerator {
     /// far apart the two states are — the same structure <see cref="Advance"/> uses, run to recover the exponent
     /// rather than to apply it.</remarks>
     public readonly long Distance(in Pcg32XshRr other) {
-        if ((m_increment != other.m_increment) || (m_multiplier != other.m_multiplier)) {
+        if (
+            (m_increment != other.m_increment) ||
+            (m_multiplier != other.m_multiplier)
+        ) {
             throw new ArgumentException(
                 message: "the two generators must share the same stream (Increment) and Multiplier to compute a distance",
                 paramName: nameof(other)
@@ -336,7 +370,7 @@ public struct Pcg32XshRr : IDrawGenerator {
         }
 
         var generator = FromRawBits(
-            increment: ((stream << 1) | 1UL),
+            increment: (stream << 1) | 1UL,
             multiplier: DefaultMultiplier,
             state: PreimageState(
                 lowBits: lowBits,
@@ -344,36 +378,9 @@ public struct Pcg32XshRr : IDrawGenerator {
             )
         );
 
-        generator.Advance(count: unchecked(0UL - drawIndex));
+        generator.Advance(count: unchecked((0UL - drawIndex)));
 
         return generator;
-    }
-    // Inverts NextUInt32's output function: given the desired output, recovers the sixty-four-bit state whose
-    // xorshift-and-rotate reaches it, filling the underdetermined bits from lowBits. See NextUInt32 for the forward
-    // direction this undoes.
-    private static ulong PreimageState(uint output, ulong lowBits) {
-        var rotation = ((int)(lowBits & 0x1FUL));
-        var stateLow27 = ((uint)((lowBits >> 5) & 0x7FFFFFFUL));
-
-        // Undo the rotation: the pre-rotation value is the xorshift stage's own output, y bits [27, 58].
-        var xored = uint.RotateLeft(value: output, rotateAmount: rotation);
-
-        // y bits [46, 58] are state bits [14, 26] directly (the xorshift's shift-by-18 never reaches this far).
-        var stateBits14To26 = ((xored >> 19) & 0x1FFFU);
-        var stateBits14To17 = (stateBits14To26 & 0xFU);
-        var stateBits18To26 = ((stateBits14To26 >> 4) & 0x1FFU);
-
-        // y bits [32, 45] = state bits [0, 13] XOR state bits [18, 31] (state bits [27, 31] being the rotation).
-        var stateBits0To13 = (((xored >> 5) & 0x3FFFU) ^ (stateBits18To26 | (((uint)rotation) << 9)));
-
-        // y bits [27, 31] = state bits [27, 31] XOR state bits [13, 17].
-        var stateBits13To17 = (((stateBits0To13 >> 13) & 0x1U) | (stateBits14To17 << 1));
-        var stateBits27To31 = ((xored & 0x1FU) ^ stateBits13To17);
-
-        var highWord = (stateBits0To13 | (stateBits14To17 << 14) | (stateBits18To26 << 18) | (((uint)rotation) << 27));
-        var lowWord = (stateLow27 | (stateBits27To31 << 27));
-
-        return ((((ulong)highWord) << 32) | lowWord);
     }
     /// <summary>Shuffles <paramref name="values"/> in place into a uniformly random permutation.</summary>
     /// <typeparam name="TElement">The element type.</typeparam>

@@ -12,13 +12,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     // A viewport eased/shrunk to nothing has nowhere to draw a bar.
     private const float MinRegionExtent = 0.05f;
 
-    /// <summary>One full march of the latched-toggle border, seconds.</summary>
-    public const float TogglePeriodSeconds = 1.6f;
     /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
     /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
     public const int MaxHintLines = 8;
     /// <summary>The character clamp on every text run the bar writes (the page label and the hint lines alike).</summary>
     public const int MaxLineChars = 46;
+    /// <summary>One full march of the latched-toggle border, seconds.</summary>
+    public const float TogglePeriodSeconds = 1.6f;
 
     private readonly IBindingBarSource m_source;
     private readonly OverlayThemeStore m_theme;
@@ -94,7 +94,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         for (var index = 0; (index < slots.Length); index++) {
             var slot = slots[index];
 
-            if (!slot.Visible || (((uint)slot.Frame) >= ((uint)frames.Length))) {
+            if (
+                !slot.Visible ||
+                (((uint)slot.Frame) >= ((uint)frames.Length))
+            ) {
                 continue;
             }
 

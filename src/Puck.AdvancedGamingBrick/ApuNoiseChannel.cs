@@ -23,7 +23,8 @@ public sealed partial class ApuNoiseChannel {
     /// <summary>Gets the current output amplitude, 0–15.</summary>
     public int Output => ((Active && ((m_lfsr & 1) == 0))
         ? m_envelope.Volume
-        : 0);
+        : 0
+    );
 
     /// <summary>Advances the LFSR when the frequency timer expires.</summary>
     /// <param name="cycles">Master clock cycles to advance.</param>

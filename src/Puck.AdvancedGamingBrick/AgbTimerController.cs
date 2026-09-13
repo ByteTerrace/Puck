@@ -64,6 +64,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     // false = per-cycle window: RunCycle drives the latch/IRQ machinery. The bus flips this via EnsureScheduled /
     // EnsurePerCycle at each span boundary; a freshly constructed block is per-cycle until the bus schedules it.
     private bool m_scheduled;
+
     internal AgbClockState? ClockState { get; private set; }
 
     internal void ObserveClockState(AgbClockState state) {
@@ -71,7 +72,10 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         PublishClockState();
     }
 
-    private void PublishClockState() => ClockState?.SetTimers(scheduled: m_scheduled, pending: m_hasPendingLatch);
+    private void PublishClockState() => ClockState?.SetTimers(
+        pending: m_hasPendingLatch,
+        scheduled: m_scheduled
+    );
 
     /// <summary>Creates the timer block bound to the scheduler it queues overflows on, the interrupt controller it
     /// signals, and the APU it clocks for Direct Sound.</summary>

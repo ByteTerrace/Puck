@@ -12,19 +12,55 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="origin">The driver coordinate at zero angle.</param>
     public SdfProgramBuilder RotatePlane(int plane, int driver, float rate, float origin = 0f) {
         ArgumentOutOfRangeException.ThrowIfNegative(plane);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(plane, 2);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            plane,
+            2
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(driver);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(driver, 2);
-        RequireFinite(rate, nameof(rate), "A plane rotation rate");
-        RequireFinite(origin, nameof(origin), "A plane rotation origin");
-        return Transform(op: SdfOp.RotatePlane, data0: new Vector4(rate, origin, 0f, 0f), shape: (uint)plane, blend: (uint)driver);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            driver,
+            2
+        );
+        RequireFinite(
+            rate,
+            nameof(rate),
+            "A plane rotation rate"
+        );
+        RequireFinite(
+            origin,
+            nameof(origin),
+            "A plane rotation origin"
+        );
+        return Transform(
+            op: SdfOp.RotatePlane,
+            data0: new Vector4(
+                w: 0f,
+                x: rate,
+                y: origin,
+                z: 0f
+            ),
+            shape: ((uint)plane),
+            blend: ((uint)driver)
+        );
     }
     /// <summary>Rotates XY driven by X.</summary>
-    public SdfProgramBuilder BendX(float rate) => RotatePlane(0, 0, rate);
+    public SdfProgramBuilder BendX(float rate) => RotatePlane(
+        0,
+        0,
+        rate
+    );
     /// <summary>Rotates XY driven by Y.</summary>
-    public SdfProgramBuilder BendY(float rate) => RotatePlane(0, 1, rate);
+    public SdfProgramBuilder BendY(float rate) => RotatePlane(
+        0,
+        1,
+        rate
+    );
     /// <summary>Rotates YZ driven by Y.</summary>
-    public SdfProgramBuilder BendZ(float rate) => RotatePlane(1, 1, rate);
+    public SdfProgramBuilder BendZ(float rate) => RotatePlane(
+        1,
+        1,
+        rate
+    );
     /// <summary>Stochastic domain-repeat fold: tiles space into cells of <paramref name="spacing"/> like
     /// <see cref="Repeat"/>, then per cell displaces the point by a hashed offset, optionally tumbles (a hashed
     /// rotation), and optionally recolors by a hashed material variant — scattering the prototype that follows into a
@@ -188,8 +224,15 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="startScale">The positive cross-section scale at t=0.</param>
     public SdfProgramBuilder AxialProfile(float amount, float bulge, float top, float span, int axis = 1, float startScale = 1f) {
         ArgumentOutOfRangeException.ThrowIfNegative(axis);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(axis, 2);
-        RequireFinite(startScale, nameof(startScale), "An axial profile start scale");
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            axis,
+            2
+        );
+        RequireFinite(
+            startScale,
+            nameof(startScale),
+            "An axial profile start scale"
+        );
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(startScale);
         RequireFinite(
             value: amount,
@@ -232,7 +275,7 @@ public sealed partial class SdfProgramBuilder {
                 y: startScale,
                 z: 0f
             ),
-            shape: (uint)axis,
+            shape: ((uint)axis),
             op: SdfOp.AxialProfile
         );
     }
@@ -248,11 +291,21 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="driver">The distinct driving coordinate, 0..2.</param>
     public SdfProgramBuilder Shear(float linear, float quadratic, float cubic = 0f, int target = 0, int driver = 1) {
         ArgumentOutOfRangeException.ThrowIfNegative(target);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(target, 2);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            target,
+            2
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(driver);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(driver, 2);
-        if (target == driver) { throw new ArgumentException("A shear's target and driver must differ."); }
-        RequireFinite(cubic, nameof(cubic), "A shear cubic coefficient");
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            driver,
+            2
+        );
+        if (target == driver) { throw new ArgumentException(message: "A shear's target and driver must differ."); }
+        RequireFinite(
+            cubic,
+            nameof(cubic),
+            "A shear cubic coefficient"
+        );
         RequireFinite(
             value: linear,
             paramName: nameof(linear),
@@ -272,8 +325,8 @@ public sealed partial class SdfProgramBuilder {
                 z: cubic
             ),
             op: SdfOp.Shear,
-            shape: (uint)target,
-            blend: (uint)driver
+            shape: ((uint)target),
+            blend: ((uint)driver)
         );
     }
     /// <summary>Applies p -= push*exp(-|(p-center)/radii|²). Three independent radii preserve anisotropy.
@@ -303,15 +356,30 @@ public sealed partial class SdfProgramBuilder {
         );
 
         var clampedRadii = new Vector3(
-            x: MathF.Max(x: MathF.Abs(radii.X), y: GaussianPushMinRadius),
-            y: MathF.Max(x: MathF.Abs(radii.Y), y: GaussianPushMinRadius),
-            z: MathF.Max(x: MathF.Abs(radii.Z), y: GaussianPushMinRadius)
+            x: MathF.Max(
+                x: MathF.Abs(x: radii.X),
+                y: GaussianPushMinRadius
+            ),
+            y: MathF.Max(
+                x: MathF.Abs(x: radii.Y),
+                y: GaussianPushMinRadius
+            ),
+            z: MathF.Max(
+                x: MathF.Abs(x: radii.Z),
+                y: GaussianPushMinRadius
+            )
         );
 
         return Transform(
-            data0: new Vector4(center, push.X),
-            data1: new Vector4(clampedRadii, push.Y),
-            shape: BitConverter.SingleToUInt32Bits(push.Z),
+            data0: new Vector4(
+                value: center,
+                w: push.X
+            ),
+            data1: new Vector4(
+                value: clampedRadii,
+                w: push.Y
+            ),
+            shape: BitConverter.SingleToUInt32Bits(value: push.Z),
             op: SdfOp.GaussianPush
         );
     }
@@ -338,7 +406,10 @@ public sealed partial class SdfProgramBuilder {
     /// finite and non-negative.</exception>
     public SdfProgramBuilder LaneErode(int lane, float from, float to, float noiseScale, float reach) {
         ArgumentOutOfRangeException.ThrowIfNegative(lane);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(lane, 3);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            lane,
+            3
+        );
         RequireFinite(
             value: from,
             paramName: nameof(from),
@@ -371,7 +442,7 @@ public sealed partial class SdfProgramBuilder {
         return Transform(
             data0: new Vector4(
                 w: noiseScale,
-                x: ((float)(uint)lane),
+                x: ((float)((uint)lane)),
                 y: from,
                 z: to
             ),
@@ -804,7 +875,11 @@ public sealed partial class SdfProgramBuilder {
     /// Not an isometry — keep rates moderate so the march stays stable.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
-    public SdfProgramBuilder TwistY(float rate) => RotatePlane(2, 1, rate);
+    public SdfProgramBuilder TwistY(float rate) => RotatePlane(
+        2,
+        1,
+        rate
+    );
     /// <summary>Folds the point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry group — the
     /// shapes that follow repeat under the group's mirrors/rotations across the lattice. Every fold branch is an
     /// isometry, so distances are preserved; like <see cref="Repeat"/>, content must stay clear of cell boundaries

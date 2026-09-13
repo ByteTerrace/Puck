@@ -29,7 +29,10 @@ public sealed class DocumentValidationException : Exception {
     /// <param name="errors">The violations found (must be non-empty — an empty list never fails validation).</param>
     /// <param name="source">An optional source label (a file path or save handle) prefixed onto the message.</param>
     public DocumentValidationException(IReadOnlyList<DocumentValidationError> errors, string? source = null)
-        : base(message: DocumentCanonicalizer.FormatErrors(errors: errors, source: source)) => Errors = errors;
+        : base(message: DocumentCanonicalizer.FormatErrors(
+        errors: errors,
+        source: source
+    )) => Errors = errors;
 }
 /// <summary>
 /// The canonical bytes of a validated, normalized document and their identity hash — the exact payload a caller
@@ -68,9 +71,60 @@ public static class DocumentCanonicalizer {
     public static CanonicalDocument<TDocument> Canonicalize<TDocument>(TDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value: document, options: DocumentJsonOptions.Shared);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(
+            value: document,
+            options: DocumentJsonOptions.Shared
+        );
 
-        return new CanonicalDocument<TDocument>(Bytes: bytes, Document: document, Hash: Puck.Assets.ContentAddressedStore.ComputeHash(content: bytes));
+        return new CanonicalDocument<TDocument>(
+            Bytes: bytes,
+            Document: document,
+            Hash: Puck.Assets.ContentAddressedStore.ComputeHash(content: bytes)
+        );
+    }
+    /// <summary>Formats a validation error list into the one exception-message shape every family's validation
+    /// exception carries (<c>'source' failed validation: path: message; path: message</c>).</summary>
+    /// <typeparam name="TError">The error record type (its <see cref="object.ToString"/> renders one violation).</typeparam>
+    /// <param name="errors">The violations (never empty on a real failure).</param>
+    /// <param name="source">An optional source label (a file path or save handle) prefixed onto the message.</param>
+    /// <returns>The formatted message.</returns>
+    public static string FormatErrors<TError>(IReadOnlyList<TError> errors, string? source) {
+        ArgumentNullException.ThrowIfNull(errors);
+
+        var joined = string.Join(
+            separator: "; ",
+            values: errors
+        );
+
+        return ((source is { Length: > 0 })
+            ? $"'{source}' failed validation: {joined}"
+            : joined
+        );
+    }
+    /// <summary>The one strict-schema rule: an exact ordinal match against the family's recognized tag, or a
+    /// standard violation message (an absent schema reads <c>"(absent)"</c> — never silently relabeled). A family's
+    /// <c>Validate</c> short-circuits to this one violation, since no other check has a defined meaning against an
+    /// unrecognized document shape.</summary>
+    /// <param name="declared">The document's declared schema tag (null/empty = absent).</param>
+    /// <param name="recognized">The family's current schema tag.</param>
+    /// <returns>The violation message for the <c>"schema"</c> path, or null when the schema is recognized.</returns>
+    public static string? SchemaViolationMessage(string? declared, string recognized) {
+        ArgumentException.ThrowIfNullOrEmpty(recognized);
+
+        if (string.Equals(
+            a: declared,
+            b: recognized,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return null;
+        }
+
+        var schemaLabel = ((declared is { Length: > 0 } schema)
+            ? schema
+            : "(absent)"
+        );
+
+        return $"declares '{schemaLabel}', not the recognized '{recognized}'.";
     }
     /// <summary>The one raise rule: an empty violation list is a pass and never throws; anything else becomes the
     /// family's <see cref="DocumentValidationException"/>, carrying every violation found in that one pass. Every
@@ -83,26 +137,11 @@ public static class DocumentCanonicalizer {
         ArgumentNullException.ThrowIfNull(errors);
 
         if (errors.Count > 0) {
-            throw new DocumentValidationException(errors: errors, source: source);
+            throw new DocumentValidationException(
+                errors: errors,
+                source: source
+            );
         }
-    }
-    /// <summary>The one strict-schema rule: an exact ordinal match against the family's recognized tag, or a
-    /// standard violation message (an absent schema reads <c>"(absent)"</c> — never silently relabeled). A family's
-    /// <c>Validate</c> short-circuits to this one violation, since no other check has a defined meaning against an
-    /// unrecognized document shape.</summary>
-    /// <param name="declared">The document's declared schema tag (null/empty = absent).</param>
-    /// <param name="recognized">The family's current schema tag.</param>
-    /// <returns>The violation message for the <c>"schema"</c> path, or null when the schema is recognized.</returns>
-    public static string? SchemaViolationMessage(string? declared, string recognized) {
-        ArgumentException.ThrowIfNullOrEmpty(recognized);
-
-        if (string.Equals(a: declared, b: recognized, comparisonType: StringComparison.Ordinal)) {
-            return null;
-        }
-
-        var schemaLabel = ((declared is { Length: > 0 } schema) ? schema : "(absent)");
-
-        return $"declares '{schemaLabel}', not the recognized '{recognized}'.";
     }
     /// <summary>The one extensions rule: an unknown-member bag entry whose key shadows a known document member is not
     /// a real extension — it is a member the serializer failed to bind (a typo'd casing, a type mismatch) that would
@@ -121,21 +160,11 @@ public static class DocumentCanonicalizer {
 
         foreach (var key in extensions.Keys) {
             if (knownMemberNames.Contains(item: key)) {
-                addError(arg1: $"extensions.{key}", arg2: $"'{key}' shadows a known document member — not a real extension.");
+                addError(
+                    arg1: $"extensions.{key}",
+                    arg2: $"'{key}' shadows a known document member — not a real extension."
+                );
             }
         }
-    }
-    /// <summary>Formats a validation error list into the one exception-message shape every family's validation
-    /// exception carries (<c>'source' failed validation: path: message; path: message</c>).</summary>
-    /// <typeparam name="TError">The error record type (its <see cref="object.ToString"/> renders one violation).</typeparam>
-    /// <param name="errors">The violations (never empty on a real failure).</param>
-    /// <param name="source">An optional source label (a file path or save handle) prefixed onto the message.</param>
-    /// <returns>The formatted message.</returns>
-    public static string FormatErrors<TError>(IReadOnlyList<TError> errors, string? source) {
-        ArgumentNullException.ThrowIfNull(errors);
-
-        var joined = string.Join(separator: "; ", values: errors);
-
-        return ((source is { Length: > 0 }) ? $"'{source}' failed validation: {joined}" : joined);
     }
 }

@@ -32,6 +32,17 @@ public sealed class CommandRegistry {
     // names so the id↔name mapping is identical on every machine. This is the command's deterministic,
     // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
     private readonly Dictionary<string, ushort> m_idByName = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // The Digital impulse most wire-native verbs carry, hoisted so those contexts do not recompute it.
+    private static readonly CommandValue DigitalImpulse = CommandValue.Digital(active: true);
+    // The one parser configuration BOTH full-parse sites use. System.CommandLine enables RESPONSE FILES by default, so
+    // a default-configured parse of `chat.log 1 @everyone hello` reads `everyone` off the filesystem — a console line
+    // performing I/O, a parse result that depends on the working directory rather than on the line, and (for a
+    // simulation-routed line, parsed once at submit and again at apply) a replay that can diverge from its recording.
+    // Null-ing the replacer makes an '@'-prefixed token an ordinary token, which is the only thing a Puck verb ever
+    // means by one.
+    private static readonly ParserConfiguration WireParserConfiguration = new() {
+        ResponseFileTokenReplacer = null,
+    };
 
     // The attributed owner name for the registry's own built-in command names (help, wire.ack, wire.errors) in the
     // ClaimName ledger — so a colliding module's error message names the true owner rather than an empty module list.
@@ -54,18 +65,6 @@ public sealed class CommandRegistry {
     private const int MaxWireTokens = 64;
     private const string WireAckCommandName = "wire.ack";
     private const string WireErrorsCommandName = "wire.errors";
-
-    // The Digital impulse most wire-native verbs carry, hoisted so those contexts do not recompute it.
-    private static readonly CommandValue DigitalImpulse = CommandValue.Digital(active: true);
-    // The one parser configuration BOTH full-parse sites use. System.CommandLine enables RESPONSE FILES by default, so
-    // a default-configured parse of `chat.log 1 @everyone hello` reads `everyone` off the filesystem — a console line
-    // performing I/O, a parse result that depends on the working directory rather than on the line, and (for a
-    // simulation-routed line, parsed once at submit and again at apply) a replay that can diverge from its recording.
-    // Null-ing the replacer makes an '@'-prefixed token an ordinary token, which is the only thing a Puck verb ever
-    // means by one.
-    private static readonly ParserConfiguration WireParserConfiguration = new() {
-        ResponseFileTokenReplacer = null,
-    };
 
     // The span-keyed alternate view over m_byName, so RoutesToSimulation classifies a line's verb token without
     // materializing it. Built once at construction, after registration completes.
@@ -233,9 +232,9 @@ public sealed class CommandRegistry {
         m_metadata = [.. m_byTextCommand.Values
             .Select(selector: static definition => definition.Metadata)
             .OrderBy(
-            keySelector: static metadata => metadata.Name,
-            comparer: StringComparer.Ordinal
-        )];
+                keySelector: static metadata => metadata.Name,
+                comparer: StringComparer.Ordinal
+            )];
 
         // The one registration body, so the registry's own verbs cannot be registered on a slightly different set of
         // rules than a module's.
@@ -364,9 +363,14 @@ public sealed class CommandRegistry {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(session);
 
-        if (session.Authorize is { } authorize &&
-            (!m_byNameAlt.TryGetValue(LeadingVerb(line), out var definition) || !authorize(definition.Metadata))) {
-            return CommandResult.Error("This session is not authorized for that command.");
+        if (
+            (session.Authorize is { } authorize) &&
+            (!m_byNameAlt.TryGetValue(
+            key: LeadingVerb(line: line),
+            value: out var definition
+        ) || !authorize(definition.Metadata))
+        ) {
+            return CommandResult.Error(output: "This session is not authorized for that command.");
         }
 
         return SubmitStamped(
@@ -648,20 +652,57 @@ public sealed class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
     }
-    /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
-    /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
-    /// never disagree about where a command sits.</summary>
-    /// <param name="include">Optional host policy selecting which command metadata may be disclosed.</param>
-    /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null) {
-        return string.Join(
-            separator: '\n',
-            values: m_root.Subcommands.Where(command => include is null || include(m_byTextCommand[command].Metadata))
-                .OrderBy(
-                comparer: StringComparer.Ordinal,
-                keySelector: command => command.Name
+    // The canonical spelling a verb token must be rewritten to before the parser sees it, or null when it needs no
+    // rewrite (it already matches verbatim, or names nothing this registry knows and will be refused anyway). The
+    // registry's own built-ins need no special case here: they are ordinary registrations in m_byName, so
+    // `WIRE.ERRORS` resolves through the same lookup `Player.Move` does.
+    private string? CanonicalNameFor(ReadOnlySpan<char> verb) {
+        if (m_byNameAlt.TryGetValue(
+            key: verb,
+            value: out var definition
+        )) {
+            return (NamesCommandExactly(
+                definition: definition,
+                verb: verb
             )
-                .Select(selector: command => $"{command.Name} - {command.Description}")
+                ? null
+                : definition.Name
+            );
+        }
+
+        return null;
+    }
+    // Rewrites a line's leading verb to the canonical spelling of the command it names, when the two differ. Command
+    // identity is case-INSENSITIVE everywhere in Puck — m_byName, the interned ids, the binding vocabulary, the wire
+    // table — but System.CommandLine matches command names and aliases case-SENSITIVELY, so without this a line whose
+    // verb passed every vocabulary check ('Player.Move' authored in a binding row) would reach the parser and miss.
+    // Allocates only on the cold path, and only when the spelling actually differs.
+    private string CanonicalizeVerb(string line) {
+        var trimmed = line.AsSpan().TrimStart();
+        var verb = LeadingVerb(line: trimmed);
+
+        if (verb.IsEmpty) {
+            return line;
+        }
+
+        var canonical = CanonicalNameFor(verb: verb);
+
+        if (canonical is null) {
+            // A QUOTED verb (`"SUM" 2 3`) reaches the parser with its quotes already removed, so the identity that has
+            // to be canonicalised is the one INSIDE them — the raw token carries the quotes and matches nothing here.
+            // Rewriting it to the bare canonical name is what the parser would have accepted had the line been spelled
+            // that way, and it is exactly what the unquoted path does; without it `"SUM" 2 3` was the one spelling of a
+            // command that neither half of the routing decision could see, and it was refused as unknown.
+            canonical = CanonicalNameFor(verb: UnquotedVerb(verb: verb));
+        }
+
+        if (canonical is null) {
+            return line;
+        }
+
+        return string.Concat(
+            str0: canonical,
+            str1: trimmed[verb.Length..]
         );
     }
     // Fails loudly when a command name or alias is claimed by more than one owner — a module, or the registry's
@@ -816,17 +857,6 @@ public sealed class CommandRegistry {
     /// <returns>An <see cref="CommandResult.IsError"/> result naming the command, the exception type, and its message.</returns>
     private static CommandResult HandlerFault(CommandDefinition definition, Exception exception) =>
         CommandResult.Error(output: $"[{definition.Name}: handler threw {exception.GetType().Name}: {exception.Message}]");
-    // The one rule every dispatch boundary in this type filters on, written once so the three handler boundaries, the
-    // observer boundary and the per-entry boundary cannot drift apart.
-    //
-    // An OperationCanceledException is a HOST SIGNAL, not a verdict about a command: a handler raises it by observing
-    // the host's own shutdown/cancellation token, so it belongs to the pump that owns that token and must unwind to it
-    // — reporting it as `[verb: handler threw OperationCanceledException]` and a wire.errors bump would turn a
-    // requested shutdown into a line the host has to pattern-match its way back out of, and would let the tick carry on
-    // dispatching entries after the host asked it to stop. Everything else is CONTAINED: a module verb's own bug is a
-    // verdict about that verb alone, and must not decide whether the rest of the tick's entries run, whether the other
-    // observers hear about this dispatch, or whether a later submitted line's read-after-write barrier is released.
-    private static bool IsContainable(Exception exception) => (exception is not OperationCanceledException);
     /// <summary>Returns the default "fully active" value used for a text invocation that supplies no explicit value.</summary>
     /// <param name="kind">The value kind of the command being invoked.</param>
     /// <returns>An active value for digital and axis kinds; an inactive value for kinds that have no meaningful impulse.</returns>
@@ -838,6 +868,17 @@ public sealed class CommandRegistry {
             _ => CommandValue.Inactive(kind: kind),
         };
     }
+    // The one rule every dispatch boundary in this type filters on, written once so the three handler boundaries, the
+    // observer boundary and the per-entry boundary cannot drift apart.
+    //
+    // An OperationCanceledException is a HOST SIGNAL, not a verdict about a command: a handler raises it by observing
+    // the host's own shutdown/cancellation token, so it belongs to the pump that owns that token and must unwind to it
+    // — reporting it as `[verb: handler threw OperationCanceledException]` and a wire.errors bump would turn a
+    // requested shutdown into a line the host has to pattern-match its way back out of, and would let the tick carry on
+    // dispatching entries after the host asked it to stop. Everything else is CONTAINED: a module verb's own bug is a
+    // verdict about that verb alone, and must not decide whether the rest of the tick's entries run, whether the other
+    // observers hear about this dispatch, or whether a later submitted line's read-after-write barrier is released.
+    private static bool IsContainable(Exception exception) => (exception is not OperationCanceledException);
     /// <summary>Gets a command line's first token under the same <see cref="char.IsWhiteSpace(char)"/> rule the full
     /// wire-native tokenizer uses.</summary>
     /// <param name="line">The command line.</param>
@@ -852,76 +893,6 @@ public sealed class CommandRegistry {
         }
 
         return line;
-    }
-    // Rewrites a line's leading verb to the canonical spelling of the command it names, when the two differ. Command
-    // identity is case-INSENSITIVE everywhere in Puck — m_byName, the interned ids, the binding vocabulary, the wire
-    // table — but System.CommandLine matches command names and aliases case-SENSITIVELY, so without this a line whose
-    // verb passed every vocabulary check ('Player.Move' authored in a binding row) would reach the parser and miss.
-    // Allocates only on the cold path, and only when the spelling actually differs.
-    private string CanonicalizeVerb(string line) {
-        var trimmed = line.AsSpan().TrimStart();
-        var verb = LeadingVerb(line: trimmed);
-
-        if (verb.IsEmpty) {
-            return line;
-        }
-
-        var canonical = CanonicalNameFor(verb: verb);
-
-        if (canonical is null) {
-            // A QUOTED verb (`"SUM" 2 3`) reaches the parser with its quotes already removed, so the identity that has
-            // to be canonicalised is the one INSIDE them — the raw token carries the quotes and matches nothing here.
-            // Rewriting it to the bare canonical name is what the parser would have accepted had the line been spelled
-            // that way, and it is exactly what the unquoted path does; without it `"SUM" 2 3` was the one spelling of a
-            // command that neither half of the routing decision could see, and it was refused as unknown.
-            canonical = CanonicalNameFor(verb: UnquotedVerb(verb: verb));
-        }
-
-        if (canonical is null) {
-            return line;
-        }
-
-        return string.Concat(
-            str0: canonical,
-            str1: trimmed[verb.Length..]
-        );
-    }
-    // The content of a verb token that is one whole double-quoted run, or an empty span for anything else. A token
-    // carrying a further '"' inside it is not one run — the parser splices such a token together from several — and is
-    // left to the parse rather than being guessed at here.
-    private static ReadOnlySpan<char> UnquotedVerb(ReadOnlySpan<char> verb) {
-        if (
-            (verb.Length >= 2) &&
-            (verb[0] == '"') &&
-            (verb[^1] == '"')
-        ) {
-            var inner = verb[1..^1];
-
-            if (inner.IndexOf(value: '"') < 0) {
-                return inner;
-            }
-        }
-
-        return [];
-    }
-    // The canonical spelling a verb token must be rewritten to before the parser sees it, or null when it needs no
-    // rewrite (it already matches verbatim, or names nothing this registry knows and will be refused anyway). The
-    // registry's own built-ins need no special case here: they are ordinary registrations in m_byName, so
-    // `WIRE.ERRORS` resolves through the same lookup `Player.Move` does.
-    private string? CanonicalNameFor(ReadOnlySpan<char> verb) {
-        if (m_byNameAlt.TryGetValue(
-            key: verb,
-            value: out var definition
-        )) {
-            return (NamesCommandExactly(
-                definition: definition,
-                verb: verb
-            )
-                ? null
-                : definition.Name);
-        }
-
-        return null;
     }
     // Whether the verb token is one of the command's spellings VERBATIM — its name or one of its aliases. A verb that
     // already matches ordinally needs no substitution, and an alias must not be rewritten to the canonical name when
@@ -945,11 +916,6 @@ public sealed class CommandRegistry {
 
         return false;
     }
-    // The one refusal for a line whose leading token names nothing this registry registered, written once so both
-    // places that can reach that verdict — the parse that resolved no subcommand, and the resolved-but-unregistered
-    // fallback — say the same thing, and say it before any parser text.
-    private static CommandResult UnknownCommand(ReadOnlySpan<char> verb) =>
-        CommandResult.Error(output: $"[wire.reject: unknown command '{verb}' — run `help` for the registered verbs]");
     // Counts one swallowed observer notification, saturating like NoteRejection and for the same reason.
     private void NoteObserverFault() {
         if (m_observerFaults != int.MaxValue) {
@@ -1067,7 +1033,8 @@ public sealed class CommandRegistry {
 
             for (var entryIndex = ((laneIndex == fromLane)
                 ? fromEntry
-                : 0); (entryIndex < entries.Length); entryIndex++) {
+                : 0
+            ); (entryIndex < entries.Length); entryIndex++) {
                 entries[entryIndex].SubmissionBarrier?.Complete();
             }
         }
@@ -1274,32 +1241,6 @@ public sealed class CommandRegistry {
 
         return result;
     }
-    // Folds a Simulation-class line into the deterministic per-tick snapshot instead of running it inline, when the
-    // command defers and a sink is wired. The handler still runs — later, when the host applies that tick — so a
-    // recording reproduces it. Console impulses inject as a Started edge (the press the snapshot dispatch fires on) on
-    // the session's slot.
-    private bool TryQueueSimulation(CommandDefinition definition, string line, TextCommandSession? session) {
-        if (
-            (definition.Routing != CommandRouting.Simulation) ||
-            ((session?.SimulationSink ?? m_injectionSink) is not { } sink) ||
-            !TryGetId(
-            name: definition.Name,
-            id: out var commandId
-        )
-        ) {
-            return false;
-        }
-
-        QueueSimulation(
-            commandId: commandId,
-            line: line,
-            session: session,
-            sink: sink,
-            value: ImpulseValue(kind: definition.ValueKind)
-        );
-
-        return true;
-    }
     // The one definition of the wire.ack-quiet suppression rule, applied on every text dispatch path (fast, full
     // parse, snapshot re-dispatch): in quiet mode a successful acknowledgement-only result carries no answer, so drop
     // it to None. An error (IsError) and an answer-bearing verb's output are never suppressed.
@@ -1370,6 +1311,32 @@ public sealed class CommandRegistry {
 
         return count;
     }
+    // Folds a Simulation-class line into the deterministic per-tick snapshot instead of running it inline, when the
+    // command defers and a sink is wired. The handler still runs — later, when the host applies that tick — so a
+    // recording reproduces it. Console impulses inject as a Started edge (the press the snapshot dispatch fires on) on
+    // the session's slot.
+    private bool TryQueueSimulation(CommandDefinition definition, string line, TextCommandSession? session) {
+        if (
+            (definition.Routing != CommandRouting.Simulation) ||
+            ((session?.SimulationSink ?? m_injectionSink) is not { } sink) ||
+            !TryGetId(
+            name: definition.Name,
+            id: out var commandId
+        )
+        ) {
+            return false;
+        }
+
+        QueueSimulation(
+            commandId: commandId,
+            line: line,
+            session: session,
+            sink: sink,
+            value: ImpulseValue(kind: definition.ValueKind)
+        );
+
+        return true;
+    }
     // Resolves a plain `verb arg arg…` line to its wire-native definition and token ranges. Only a QUOTE sends a line
     // to the full parse: an '@'-prefixed token used to as well, because System.CommandLine would have expanded it from
     // a file on disk, but response files are off (WireParserConfiguration) so '@everyone' is an ordinary token on both
@@ -1394,6 +1361,29 @@ public sealed class CommandRegistry {
             value: out definition
         )
         );
+    }
+    // The one refusal for a line whose leading token names nothing this registry registered, written once so both
+    // places that can reach that verdict — the parse that resolved no subcommand, and the resolved-but-unregistered
+    // fallback — say the same thing, and say it before any parser text.
+    private static CommandResult UnknownCommand(ReadOnlySpan<char> verb) =>
+        CommandResult.Error(output: $"[wire.reject: unknown command '{verb}' — run `help` for the registered verbs]");
+    // The content of a verb token that is one whole double-quoted run, or an empty span for anything else. A token
+    // carrying a further '"' inside it is not one run — the parser splices such a token together from several — and is
+    // left to the parse rather than being guessed at here.
+    private static ReadOnlySpan<char> UnquotedVerb(ReadOnlySpan<char> verb) {
+        if (
+            (verb.Length >= 2) &&
+            (verb[0] == '"') &&
+            (verb[^1] == '"')
+        ) {
+            var inner = verb[1..^1];
+
+            if (inner.IndexOf(value: '"') < 0) {
+                return inner;
+            }
+        }
+
+        return [];
     }
 
     /// <summary>
@@ -1475,6 +1465,22 @@ public sealed class CommandRegistry {
                 }
             }
         }
+    }
+    /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
+    /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
+    /// never disagree about where a command sits.</summary>
+    /// <param name="include">Optional host policy selecting which command metadata may be disclosed.</param>
+    /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
+    public string BuildHelpText(Func<CommandMetadata, bool>? include = null) {
+        return string.Join(
+            separator: '\n',
+            values: m_root.Subcommands.Where(predicate: command => ((include is null) || include(m_byTextCommand[command].Metadata)))
+                .OrderBy(
+                comparer: StringComparer.Ordinal,
+                keySelector: command => command.Name
+            )
+                .Select(selector: command => $"{command.Name} - {command.Description}")
+        );
     }
     /// <summary>Gets the canonical name for an interned command id.</summary>
     /// <param name="id">The interned id, in <c>[0, <see cref="CommandCount"/>)</c>.</param>

@@ -19,14 +19,12 @@ public enum WorldExternalOperationStatus {
     /// <summary>The result is uncertain. This is not permission to repeat the operation.</summary>
     Unknown,
 }
-
 /// <summary>A host-bound operation. Binding names resolve to provider configuration outside world documents.</summary>
 /// <param name="Id">Stable, host-scoped id including the originating entity incarnation/request generation.</param>
 /// <param name="Binding">The explicitly configured provider/resource/operation binding.</param>
 /// <param name="BindingIdentity">Pins the concrete resource incarnation, operation, and provider input schema.</param>
 /// <param name="Payload">Provider input in the binding's versioned schema, containing no host credentials.</param>
 public sealed record WorldExternalOperation(string Id, string Binding, string BindingIdentity, string Payload);
-
 /// <summary>A durable operation and the causal authority image committed atomically with it.</summary>
 /// <param name="Operation">The immutable request.</param>
 /// <param name="Cause">Opaque, versioned recovery evidence supplied by the authority host: a checkpoint or replay prefix.</param>
@@ -37,12 +35,10 @@ public sealed record WorldExternalOperationEntry(
     [property: JsonRequired] string Cause,
     [property: JsonRequired] WorldExternalOperationStatus Status = WorldExternalOperationStatus.Pending,
     [property: JsonRequired] string Result = "");
-
 /// <summary>A provider's observation. Pending/Dispatching are journal-owned and cannot be returned by a provider.</summary>
 /// <param name="Status">Running, Succeeded, Failed, or Unknown.</param>
 /// <param name="Result">A versioned result payload, opaque to the delivery engine.</param>
 public sealed record WorldExternalOperationResult(WorldExternalOperationStatus Status, string Result);
-
 /// <summary>A trusted external service binding. Calls run outside the authority lock and never during replay.</summary>
 /// <remarks>The same durable id accompanies every call. Reconciliation must observe without repeating side effects.
 /// A provider unable to determine an outcome returns Unknown. Credentials and concrete resource selection belong
@@ -51,6 +47,7 @@ public interface IWorldExternalOperationProvider {
     /// <summary>Gets this binding's stable resource-incarnation, operation, and schema identity. Changing a target
     /// requires a different identity so recovery cannot silently redirect a pending operation.</summary>
     string Identity { get; }
+
     /// <summary>Executes a newly claimed request once. A lost response is reconciled rather than retried automatically.</summary>
     /// <param name="operation">The committed id, binding name, and provider input.</param>
     /// <param name="cancellationToken">Requests cancellation; this does not prove absence of side effects.</param>

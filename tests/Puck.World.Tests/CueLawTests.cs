@@ -35,12 +35,24 @@ public sealed class CueLawTests {
             Smooth: 0f,
             Group: 0
         );
-        var document = new CreationDocument(Schema: CreationDocument.CurrentSchema, Name: "cue-ball", Palette: null, Shapes: [shape], Frames: null);
-        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "cue-ball");
+        var document = new CreationDocument(
+            Schema: CreationDocument.CurrentSchema,
+            Name: "cue-ball",
+            Palette: null,
+            Shapes: [shape],
+            Frames: null
+        );
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: document,
+            source: "cue-ball"
+        );
 
-        return new WorldPrototype(Id: "cue-ball", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(
+            Id: "cue-ball",
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
     }
-
     // Fixtures.BuildDocument() plus one rigid "ball" kit (a second, distinct kit — the seat kit stays untouched),
     // one inhabited placement under it, a "strike" composition channel, and a keyed Fixed "cue" row seeding the
     // charge cell at zero. Every law below adds its own rule(s) on top.
@@ -51,51 +63,82 @@ public sealed class CueLawTests {
             Name = BallKitName,
             BodyContact = WorldBodyContactMode.Solid,
             Collider = new WorldCollider.Sphere(Radius: 0.15f),
-            Rigid = new WorldRigid(Mass: 1f, Restitution: 0f, Friction: 0f, RollingFriction: 0f, LinearDamping: 0f, AngularDamping: 0f),
+            Rigid = new WorldRigid(
+            AngularDamping: 0f,
+            Friction: 0f,
+            LinearDamping: 0f,
+            Mass: 1f,
+            Restitution: 0f,
+            RollingFriction: 0f
+        ),
         };
         var placement = new WorldPlacement(
             Id: BallPlacementId,
             PrototypeId: creation.Id,
-            Position: new DocumentVector3(value: new Vector3(x: 0f, y: 0f, z: 3f)),
+            Position: new DocumentVector3(value: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 3f
+            )),
             YawDegrees: 0f,
             Scale: 1f,
-            Inhabit: new WorldPlacementInhabit(Kit: BallKitName, Look: null, Source: IntentSource.Idle, Distribution: WorldDistribution.Default)
+            Inhabit: new WorldPlacementInhabit(
+                Kit: BallKitName,
+                Look: null,
+                Source: IntentSource.Idle,
+                Distribution: WorldDistribution.Default
+            )
         );
         var magnitudeRow = new WorldStateRow(
             Name: CellName.Parse(candidate: MagnitudeRow),
             Kind: CellKind.Fixed,
             Capacity: 4,
-            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: seedMagnitude.Value)]
+            Cells: [new StateCell(
+                    Key: CellName.Parse(candidate: "0"),
+                    Value: seedMagnitude.Value
+                )]
         );
 
         return source with {
             CreationsRaw = [.. source.Creations, creation],
             KitRowsRaw = [.. source.Kits, ballKit],
             PlacementRowsRaw = [.. source.Placements, placement],
-            ChannelsRaw = [.. source.Channels, new WorldChannel(Name: StrikeChannel, Shape: ChannelShape.Binary, Composition: true)],
+            ChannelsRaw = [.. source.Channels, new WorldChannel(
+                Name: StrikeChannel,
+                Shape: ChannelShape.Binary,
+                Composition: true
+            )],
             StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
                 World = [.. (source.StateRaw?.World ?? []), magnitudeRow],
             }),
             PopulationRaw = (source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
         };
     }
-
     private static WorldFixture JoinSeatAndBall(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
         var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            seat,
+            seat.Index,
+            null,
+            WorldProtocol.WireProtocolKey
+        )).Accepted);
         Assert.NotNull(@object: fixture.Server.Body(index: BallIndex));
 
         return fixture;
     }
-
     private static long MagnitudeCellRaw(WorldFixture fixture) {
-        var row = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: MagnitudeRow)!;
+        var row = WorldDefinitionRows.FindStateRow(
+            rows: fixture.Server.Definition.State,
+            name: MagnitudeRow
+        )!;
 
-        return StateRows.FindCell(cells: row.Cells, key: CellName.Parse(candidate: "0"))!.Value;
+        return StateRows.FindCell(
+            cells: row.Cells,
+            key: CellName.Parse(candidate: "0")
+        )!.Value;
     }
-
     // The release effect always addresses the same two live-resolved bodies: the struck target (a literal body
     // index) and the heading source (a different literal body index) — proving the effect strikes a body other
     // than the one supplying the direction, the shape a cue strike needs.
@@ -103,11 +146,11 @@ public sealed class CueLawTests {
         Name: CellName.Parse(candidate: "cue-release"),
         Mode: ActionTriggerMode.Edge,
         Effects: [new WorldEffect.ApplyRigidImpulse(
-            Key: $"body:{targetIndex}",
-            HeadingKey: "body:0",
-            MagnitudeState: MagnitudeRow,
-            MagnitudeKey: "0"
-        )]
+                HeadingKey: "body:0",
+                Key: $"body:{targetIndex}",
+                MagnitudeKey: "0",
+                MagnitudeState: MagnitudeRow
+            )]
     );
 
     [Fact]
@@ -120,23 +163,37 @@ public sealed class CueLawTests {
         using var fixture = JoinSeatAndBall(definition: definition);
         var ball = fixture.Server.Body(index: BallIndex)!;
 
-        Assert.Equal(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
+        Assert.Equal(
+            expected: FixedVector3.Zero,
+            actual: ball.RigidVelocity
+        );
 
         fixture.Step();
 
         // The seat's default facing (identity orientation) is -Z, so a positive cell magnitude strikes the ball
         // along -Z — exactly Δv = impulse / mass with mass 1.
-        Assert.Equal(expected: FixedQ4816.Zero, actual: ball.RigidVelocity.X);
-        Assert.Equal(expected: FixedQ4816.Zero, actual: ball.RigidVelocity.Y);
-        Assert.Equal(expected: -magnitude, actual: ball.RigidVelocity.Z);
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: ball.RigidVelocity.X
+        );
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: ball.RigidVelocity.Y
+        );
+        Assert.Equal(
+            expected: -magnitude,
+            actual: ball.RigidVelocity.Z
+        );
 
         var before = ball.FixedPosition;
 
         fixture.Step();
 
-        Assert.True(condition: (ball.FixedPosition.Z < before.Z), userMessage: $"the struck ball never moved along the seat's heading — before={before} after={ball.FixedPosition}");
+        Assert.True(
+            condition: (ball.FixedPosition.Z < before.Z),
+            userMessage: $"the struck ball never moved along the seat's heading — before={before} after={ball.FixedPosition}"
+        );
     }
-
     [Fact]
     public void AStrikeOnABodyTheSeatDoesNotTargetRefusesAndLeavesEveryRigidBodyAtRest() {
         // The seat's own body (index 0) carries the base locomotion kit, never the rigid "ball" kit — the "does not
@@ -150,35 +207,58 @@ public sealed class CueLawTests {
 
         fixture.Step();
 
-        var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics(), predicate: candidate => Equals(objA: candidate.Refusal, objB: WorldRuleEffectRefusal.RigidBodyRequired));
+        var diagnostic = Assert.Single(
+            collection: fixture.Server.RuleRuntimeDiagnostics(),
+            predicate: candidate => Equals(
+                objA: candidate.Refusal,
+                objB: WorldRuleEffectRefusal.RigidBodyRequired
+            )
+        );
 
-        Assert.Equal(expected: WorldRuleEffectRefusal.RigidBodyRequired, actual: diagnostic.Refusal);
-        Assert.Equal(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
+        Assert.Equal(
+            expected: WorldRuleEffectRefusal.RigidBodyRequired,
+            actual: diagnostic.Refusal
+        );
+        Assert.Equal(
+            expected: FixedVector3.Zero,
+            actual: ball.RigidVelocity
+        );
     }
-
     [Fact]
     public void AHeldChordChargesTheCueCellMonotonicallyUpToItsAuthoredMax() {
-        const double step = 0.05d;
-        const double max = 2.0d;
+        const double Step = 0.05d;
+        const double Max = 2.0d;
         var definition = BuildCueDocument(seedMagnitude: FixedQ4816.Zero) with {
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "cue-charge"),
                 Mode: ActionTriggerMode.Level,
-                Gate: new ActionPredicate.CompareState(State: $"$channel:1:{StrikeChannel}", Comparison: ActionStateComparison.GreaterOrEqual, Value: 1m),
+                Gate: new ActionPredicate.CompareState(
+                    State: $"$channel:1:{StrikeChannel}",
+                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Value: 1m
+                ),
                 Effects: [new ActionEffect.SetState(
-                    State: MagnitudeRow,
-                    Key: "0",
-                    Expression: ValueExpression.Parse(text: $"minimum({MagnitudeRow}[0] + {step.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, {max.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})")
-                )]
+                        State: MagnitudeRow,
+                        Key: "0",
+                        Expression: ValueExpression.Parse(text: $"minimum({MagnitudeRow}[0] + {Step.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, {Max.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})")
+                    )]
             )],
         };
 
         using var fixture = JoinSeatAndBall(definition: definition);
-        var strikeOrdinal = definition.Channels.Count - 1;
+        var strikeOrdinal = (definition.Channels.Count - 1);
 
-        Assert.Equal(expected: StrikeChannel, actual: definition.Channels[strikeOrdinal].Name);
+        Assert.Equal(
+            expected: StrikeChannel,
+            actual: definition.Channels[strikeOrdinal].Name
+        );
 
-        fixture.Server.Body(index: 0)!.PressChannel(ordinal: strikeOrdinal, value: FixedQ4816.One, holdSeconds: 5f, authoredMaximum: FixedQ4816.FromDouble(value: 60d));
+        fixture.Server.Body(index: 0)!.PressChannel(
+            ordinal: strikeOrdinal,
+            value: FixedQ4816.One,
+            holdSeconds: 5f,
+            authoredMaximum: FixedQ4816.FromDouble(value: 60d)
+        );
 
         var previous = 0L;
 
@@ -189,10 +269,16 @@ public sealed class CueLawTests {
 
             var current = MagnitudeCellRaw(fixture: fixture);
 
-            Assert.True(condition: (current >= previous), userMessage: $"tick {tick}: charge fell from {previous} to {current} — a held chord must charge MONOTONICALLY");
+            Assert.True(
+                condition: (current >= previous),
+                userMessage: $"tick {tick}: charge fell from {previous} to {current} — a held chord must charge MONOTONICALLY"
+            );
             previous = current;
         }
 
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: max).Value, actual: previous);
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: Max).Value,
+            actual: previous
+        );
     }
 }

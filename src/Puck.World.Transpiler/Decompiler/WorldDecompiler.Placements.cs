@@ -17,24 +17,50 @@ public static partial class WorldDecompiler {
             return false;
         }
         foreach (var item in rows) {
-            if (item is not JsonObject row || row["id"] is not JsonValue idVal || !idVal.TryGetValue<string>(out var id) || (id.Length == 0)) {
+            if (
+                (item is not JsonObject row) ||
+                (row["id"] is not JsonValue idVal) ||
+                !idVal.TryGetValue<string>(value: out var id) ||
+                (id.Length == 0)
+            ) {
                 return false;
             }
         }
         return true;
     }
-
     private static void DecompilePlacementsBlock(StringBuilder sb, JsonObject placements, int indentLevel) {
-        var indent = new string(' ', indentLevel * 4);
-        var inner = new string(' ', (indentLevel + 1) * 4);
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}placements {{");
+        var indent = new string(
+            c: ' ',
+            count: (indentLevel * 4)
+        );
+        var inner = new string(
+            c: ' ',
+            count: ((indentLevel + 1) * 4)
+        );
+
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}placements {{"
+        );
         var wroteAny = false;
 
         foreach (var (key, value) in placements) {
-            if (string.Equals(key, "rows", StringComparison.Ordinal) || value is null) {
+            if (
+                string.Equals(
+                a: key,
+                b: "rows",
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                (value is null)
+            ) {
                 continue;
             }
-            EmitField(sb, key, value, indentLevel + 1);
+            EmitField(
+                indentLevel: (indentLevel + 1),
+                key: key,
+                sb: sb,
+                value: value
+            );
             wroteAny = true;
         }
 
@@ -47,60 +73,119 @@ public static partial class WorldDecompiler {
                     sb.AppendLine();
                 }
                 wroteAny = true;
-                AppendPlacementRow(sb, rowObj, indentLevel + 1);
+                AppendPlacementRow(
+                    indentLevel: (indentLevel + 1),
+                    row: rowObj,
+                    sb: sb
+                );
             }
         }
 
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
     }
-
     private static void AppendPlacementRow(StringBuilder sb, JsonObject row, int indentLevel) {
-        var indent = new string(' ', indentLevel * 4);
-        var inner = new string(' ', (indentLevel + 1) * 4);
-        var id = row["id"]?.ToString() ?? "";
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}placement \"{EscapeString(id)}\" {{");
+        var indent = new string(
+            c: ' ',
+            count: (indentLevel * 4)
+        );
+        var inner = new string(
+            c: ' ',
+            count: ((indentLevel + 1) * 4)
+        );
+        var id = (row["id"]?.ToString() ?? "");
 
-        var elide = new HashSet<string>(StringComparer.Ordinal) { "id" };
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}placement \"{EscapeString(s: id)}\" {{"
+        );
+
+        var elide = new HashSet<string>(comparer: StringComparer.Ordinal) { "id" };
 
         // A row with no prototypeId of its own is a basis-merge directive or a partial row a basis completes; the
         // emitter fills no default there, so eliding one here would silently drop an authored value.
         if (row["prototypeId"] is { } prototypeId) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}prototype{FieldSeparator(prototypeId)}{FormatValue(prototypeId, indentLevel + 1)}");
-            elide.Add("prototypeId");
+            sb.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"{inner}prototype{FieldSeparator(value: prototypeId)}{FormatValue(
+                    indentLevel: (indentLevel + 1),
+                    node: prototypeId
+                )}"
+            );
+            elide.Add(item: "prototypeId");
             foreach (var key in WorldDocumentRowDefaults.PlacementKeys) {
-                if (WorldDocumentRowDefaults.IsDefaultValue(key, row[key], index: 0, shape: false)) {
-                    elide.Add(key);
+                if (WorldDocumentRowDefaults.IsDefaultValue(
+                    key,
+                    row[key],
+                    index: 0,
+                    shape: false
+                )) {
+                    elide.Add(item: key);
                 }
             }
         }
 
         var bareSolid = false;
+
         if (row["solid"] is JsonObject solidObj) {
-            elide.Add("solid");
-            bareSolid = WorldDocumentRowDefaults.IsBareSolid(solidObj);
+            elide.Add(item: "solid");
+            bareSolid = WorldDocumentRowDefaults.IsBareSolid(solid: solidObj);
         }
 
         foreach (var (k, v) in row) {
-            if (elide.Contains(k)) {
+            if (elide.Contains(item: k)) {
                 continue;
             }
             if (v is null) {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: null");
+                sb.AppendLine(
+                    CultureInfo.InvariantCulture,
+                    $"{inner}{k}: null"
+                );
                 continue;
             }
-            if (v is JsonValue numeric && UnitSuffixFor(k, numeric) is { } unit) {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(numeric, indentLevel + 1)}{unit}");
+            if (
+                (v is JsonValue numeric) &&
+                (UnitSuffixFor(
+                fieldKey: k,
+                value: numeric
+            ) is { } unit)
+            ) {
+                sb.AppendLine(
+                    CultureInfo.InvariantCulture,
+                    $"{inner}{k}: {FormatValue(
+                        indentLevel: (indentLevel + 1),
+                        node: numeric
+                    )}{unit}"
+                );
                 continue;
             }
-            EmitField(sb, k, v, indentLevel + 1);
+            EmitField(
+                indentLevel: (indentLevel + 1),
+                key: k,
+                sb: sb,
+                value: v
+            );
         }
 
         if (bareSolid) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}solid");
+            sb.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"{inner}solid"
+            );
         } else if (row["solid"] is JsonObject solidFull) {
-            EmitField(sb, "solid", solidFull, indentLevel + 1);
+            EmitField(
+                indentLevel: (indentLevel + 1),
+                key: "solid",
+                sb: sb,
+                value: solidFull
+            );
         }
 
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
     }
 }

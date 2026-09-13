@@ -100,20 +100,20 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // when m_hudWriter is null, so BeginFrame/RetirePending/WriteFrameSlotDescriptors stay unconditional every
     // ProduceFrame call; with no HudWriter to call Bind, it simply never binds anything.
     private readonly OverlayFrameSlots m_frameSlots;
-    private readonly MarkerWriter? m_markerWriter;
     private readonly uint m_height;
     // The authored world-scope HUD's banded writer, or null when the host wired no Hud/HudBindings source pair (see
     // UnifiedOverlaySources' remarks) — draws nothing rather than throwing.
     private readonly HudWriter? m_hudWriter;
     private readonly IRenderNode m_inner;
+    private readonly MarkerWriter? m_markerWriter;
     private readonly IGpuPipelineFactory m_pipelineFactory;
     private readonly IGpuQueueSubmitter m_queueSubmitter;
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
     private readonly UnifiedOverlaySources m_sources;
-    private readonly OverlayThemeStore m_theme;
     private readonly uint m_storageBufferBinding;
     private readonly IGpuStorageBufferFactory m_storageBufferFactory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
+    private readonly OverlayThemeStore m_theme;
     private readonly IGpuTimingPoolFactory? m_timingPoolFactory;
     private readonly IGpuTimingRecorder? m_timingRecorder;
     private readonly ToastWriter? m_toastWriter;
@@ -121,12 +121,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private readonly ReadOnlyMemory<byte> m_vertexBytecode;
     private readonly WheelWriter? m_wheelWriter;
     private readonly uint m_width;
-
-    // The per-frame submission fence (frame-ring discipline): this node's single command buffer / host-visible data
-    // buffer / descriptor set may only be rewritten once its PREVIOUS submission retired. This pass is queued ahead
-    // of the frame's heavy world submit, so by the next frame it has long retired and the wait is ~free.
-    private readonly CaptureRequestSlot m_capture = new();
-    private readonly CapturePngWriter m_capturePng = new();
 
     // This frame's continuous content clock, latched once per ProduceFrame — the Toast writer's channel-writer
     // delegate reads it (Emit needs renderTicks; the other writers don't) so the draw-order table's delegate shape
@@ -138,6 +132,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private bool m_disposed;
     private IGpuShaderModule? m_fragmentShader;
     private IGpuSubmissionFence? m_frameFence;
+    // The fixed frame-slot table's independent overflow episode. This can span world- and seat-scope HUD documents,
+    // so each document's authoring ceiling cannot by itself prove the composed frame fits.
+    private bool m_frameSlotOverflowEpisodeOpen;
     private nint m_lastImageViewHandle;
     // The previous drawn frame's overlay-pass GPU milliseconds (the IPassTimingSource readout).
     private double m_lastOverlayMilliseconds;
@@ -154,6 +151,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private IGpuVertexBuffer? m_vertexBuffer;
     private IGpuShaderModule? m_vertexShader;
 
+    // The per-frame submission fence (frame-ring discipline): this node's single command buffer / host-visible data
+    // buffer / descriptor set may only be rewritten once its PREVIOUS submission retired. This pass is queued ahead
+    // of the frame's heavy world submit, so by the next frame it has long retired and the wait is ~free.
+    private readonly CaptureRequestSlot m_capture = new();
+    private readonly CapturePngWriter m_capturePng = new();
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
     private static readonly string[] OverlayPassLabels = ["overlay"];
     // Rewritten in place each frame (the draw command holds one binding over this array for the node's lifetime).
@@ -165,10 +167,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // truncation narration (see OverlayFrameBuilder.Refused): a channel can open/close this episode with no
     // reservation overflow ever happening, so it cannot share state with m_overflowEpisodeOpen.
     private readonly bool[] m_refusalEpisodeOpen = new bool[OverlayChannelLeases.Count];
-
-    // The fixed frame-slot table's independent overflow episode. This can span world- and seat-scope HUD documents,
-    // so each document's authoring ceiling cannot by itself prove the composed frame fits.
-    private bool m_frameSlotOverflowEpisodeOpen;
 
     /// <summary>Initializes a new instance of the <see cref="UnifiedOverlayNode"/> class.</summary>
     /// <param name="inner">The producer whose render the overlay is drawn over (its surface must be sampleable here).</param>
@@ -212,20 +210,32 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             width: width
         );
         m_bindingBarWriter = ((sources.BindingBar is { } bindingBar)
-            ? new BindingBarWriter(source: bindingBar, theme: m_theme)
+            ? new BindingBarWriter(
+                source: bindingBar,
+                theme: m_theme
+            )
             : null
         );
         m_commandRecorder = services.CommandRecorder;
         m_consoleWriter = ((sources.Console is { } console)
-            ? new ConsolePanelWriter(source: console, theme: m_theme)
+            ? new ConsolePanelWriter(
+                source: console,
+                theme: m_theme
+            )
             : null
         );
         m_cursorWriter = ((sources.Cursor is { } cursor)
-            ? new CursorWriter(source: cursor, theme: m_theme)
+            ? new CursorWriter(
+                source: cursor,
+                theme: m_theme
+            )
             : null
         );
         m_wheelWriter = ((sources.Wheel is { } wheel)
-            ? new WheelWriter(source: wheel, theme: m_theme)
+            ? new WheelWriter(
+                source: wheel,
+                theme: m_theme
+            )
             : null
         );
         m_createRenderTarget = services.CreateRenderTarget;
@@ -265,7 +275,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_timingPoolFactory = services.TimingPoolFactory;
         m_timingRecorder = services.TimingRecorder;
         m_toastWriter = ((sources.Toast is { } toast)
-            ? new ToastWriter(source: toast, theme: m_theme)
+            ? new ToastWriter(
+                source: toast,
+                theme: m_theme
+            )
             : null
         );
         m_vertexBufferFactory = services.VertexBufferFactory;
@@ -314,32 +327,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             failureLabel: "[capture] failed",
             writer: WriteCapture
         );
-    private void WriteCapture(string path) {
-        m_capturePng.ThrowIfUnavailable(path: path);
-
-        m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
-
-        var pixels = m_readback.Read(
-            bytesPerPixel: 4,
-            deviceContext: m_deviceContext,
-            format: GpuPixelFormat.R8G8B8A8Unorm,
-            height: m_height,
-            sourceImageHandle: m_renderTarget!.ImageHandle,
-            sourceLayout: GpuImageLayout.ShaderReadOnly,
-            width: m_width
-        );
-
-        if (!m_capturePng.TryWrite(
-            height: ((int)m_height),
-            path: path,
-            rgba: pixels,
-            width: ((int)m_width)
-        )) {
-            throw new NotSupportedException(message: "PNG capture is unavailable.");
-        }
-
-        Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
-    }
     // The resources a channel actually lost this frame, each as {verb} ({written} of {reserved} written) — shared by
     // both narrations so a reservation-overflow "dropped" and an own-cap "refused" read in the same shape.
     private static string Describe(string verb, in OverlayChannelUsage counts, in OverlayChannelUsage written, in OverlayChannelReservation reservation) {
@@ -401,7 +388,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                 Name: "overlay-unified",
                 VertexInput: new GpuVertexInputLayout(
                     StrideBytes: VertexStrideBytes,
-                    Attributes: [new GpuVertexAttribute(Format: GpuVertexFormat.R32G32Float, Location: 0, OffsetBytes: 0)]
+                    Attributes: [new GpuVertexAttribute(
+                            Format: GpuVertexFormat.R32G32Float,
+                            Location: 0,
+                            OffsetBytes: 0
+                        )]
                 ),
                 TextureSamplerCount: TextureSamplerCount,
                 EnableStorageBuffer: true,
@@ -503,6 +494,23 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // the readback lands on whatever actually produced the shown frame. Keeping it armed when the inner cannot serve
     // it is what stops a request from vanishing silently — the request remains armed until a node serves it or disposal fails it, and a later frame this node does draw serves it here instead.
     private void ForwardPendingCapture() => m_capture.Forward(target: (m_inner as ICaptureRequestTarget));
+    // A schema-valid world HUD and one or more independently valid seat HUDs can compose to more live sources than
+    // the shader-backed frame-slot table holds. Keep that runtime-only aggregate failure loud and episode-latched.
+    private void NarrateFrameSlotOverflow() {
+        if (!m_frameSlots.CapacityExceeded) {
+            m_frameSlotOverflowEpisodeOpen = false;
+
+            return;
+        }
+
+        if (m_frameSlotOverflowEpisodeOpen) {
+            return;
+        }
+
+        m_frameSlotOverflowEpisodeOpen = true;
+
+        Console.Error.WriteLine(value: $"[unified-overlay] more than {OverlayFrameSlots.SlotCount} distinct HUD frame source bindings were requested this frame; the additional element was omitted because every shader-backed frame slot was occupied. Each HUD document is capped at {OverlayFrameSlots.SlotCount}, and a cross-fading element occupies two slots (its incoming and outgoing sources) until the fade completes; reduce the combined world-plus-seat source set.");
+    }
     // Loud once per EPISODE, PER CHANNEL, PER CAUSE: the two loss causes OverlayFrameBuilder tracks — a channel
     // exceeding its own hard RESERVATION (OverlayFrameBuilder.Dropped) vs a writer refusing its own excess at a
     // self-declared cap (OverlayFrameBuilder.Refused, fed by NoteRefused and WriteText's maxChars clamp) — are
@@ -541,23 +549,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                 written: in written
             );
         }
-    }
-    // A schema-valid world HUD and one or more independently valid seat HUDs can compose to more live sources than
-    // the shader-backed frame-slot table holds. Keep that runtime-only aggregate failure loud and episode-latched.
-    private void NarrateFrameSlotOverflow() {
-        if (!m_frameSlots.CapacityExceeded) {
-            m_frameSlotOverflowEpisodeOpen = false;
-
-            return;
-        }
-
-        if (m_frameSlotOverflowEpisodeOpen) {
-            return;
-        }
-
-        m_frameSlotOverflowEpisodeOpen = true;
-
-        Console.Error.WriteLine(value: $"[unified-overlay] more than {OverlayFrameSlots.SlotCount} distinct HUD frame source bindings were requested this frame; the additional element was omitted because every shader-backed frame slot was occupied. Each HUD document is capped at {OverlayFrameSlots.SlotCount}, and a cross-fading element occupies two slots (its incoming and outgoing sources) until the fade completes; reduce the combined world-plus-seat source set.");
     }
     // CAUSE 2: the writer itself refused content before ever offering it to the builder (NoteRefused), or a
     // WriteText run was truncated by its own caller's maxChars — a deliberate, pinned limit the writer authored,
@@ -793,6 +784,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_lastImageViewHandle = 0;
         m_resourcesReady = false;
     }
+    // Routes every early-exit retirement through OverlayFrameRetirementPolicy's table so this method and the two
+    // early returns in ProduceFrame below cannot drift out of step on which exit retires immediately.
+    private void RetireForExit(OverlayFrameExit exit) {
+        if (OverlayFrameRetirementPolicy.RetiresImmediately(exit: exit)) {
+            m_frameSlots.RetireAll();
+        } else {
+            m_frameSlots.RetireAllAfter(fence: m_frameFence);
+        }
+    }
     // Uploads only what THIS frame actually wrote, per region — never the capacity-sized region behind it. The
     // shader's loops are bounded by these same counts (delivered above as push constants), so a region's untouched
     // tail holds nothing it will ever read; uploading it would be pure waste. The four regions are NOT contiguous at
@@ -839,6 +839,32 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                 destinationOffsetBytes: ((ulong)(m_builder.ClipBaseWords * sizeof(uint)))
             );
         }
+    }
+    private void WriteCapture(string path) {
+        m_capturePng.ThrowIfUnavailable(path: path);
+
+        m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+
+        var pixels = m_readback.Read(
+            bytesPerPixel: 4,
+            deviceContext: m_deviceContext,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: m_height,
+            sourceImageHandle: m_renderTarget!.ImageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
+            width: m_width
+        );
+
+        if (!m_capturePng.TryWrite(
+            height: ((int)m_height),
+            path: path,
+            rgba: pixels,
+            width: ((int)m_width)
+        )) {
+            throw new NotSupportedException(message: "PNG capture is unavailable.");
+        }
+
+        Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
     }
     // Rewrites every one of the OverlayFrameSlots.SlotCount frame-slot descriptors, unconditionally, every produced
     // frame that draws: a bound slot's descriptor points at its lease's image view (bound content changes far more
@@ -892,17 +918,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         ReleaseGpuResources();
         m_inner.OnDeviceLost();
     }
-
-    // Routes every early-exit retirement through OverlayFrameRetirementPolicy's table so this method and the two
-    // early returns in ProduceFrame below cannot drift out of step on which exit retires immediately.
-    private void RetireForExit(OverlayFrameExit exit) {
-        if (OverlayFrameRetirementPolicy.RetiresImmediately(exit: exit)) {
-            m_frameSlots.RetireAll();
-        } else {
-            m_frameSlots.RetireAllAfter(fence: m_frameFence);
-        }
-    }
-
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {
@@ -1063,26 +1078,14 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
         m_capture.Arm(
             pendingPath: PendingCapturePath,
             request: request
         );
-    }
-    /// <summary>Republishes the live theme every CPU writer reads (<see cref="OverlayThemeStore"/>) and re-fills
-    /// the GPU token slab from it — the composition root's live-retheme call, at whatever cadence it resolves the
-    /// document's authored <c>theme</c> section against live state (matching the sky's own per-revision cadence).
-    /// A no-op on the CPU-writer side takes effect on the very next produced frame; the GPU token slab re-uploads
-    /// immediately when resources are already standing (a call before the first produced frame just updates the
-    /// value <see cref="EnsureResources"/> will upload on its own first pass).</summary>
-    /// <param name="theme">The newly resolved theme.</param>
-    public void UpdateTheme(in OverlayThemeValues theme) {
-        m_theme.Publish(theme: in theme);
-        m_builder.UpdateTokenBlock(theme: in theme);
-
-        if (m_resourcesReady) {
-            m_dataBuffer!.Write<uint>(data: m_builder.Scratch[..OverlayTokenBlock.WordCount]);
-        }
     }
     /// <inheritdoc/>
     public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frameMilliseconds) {
@@ -1101,5 +1104,20 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         frameMilliseconds = m_lastOverlayMilliseconds;
 
         return true;
+    }
+    /// <summary>Republishes the live theme every CPU writer reads (<see cref="OverlayThemeStore"/>) and re-fills
+    /// the GPU token slab from it — the composition root's live-retheme call, at whatever cadence it resolves the
+    /// document's authored <c>theme</c> section against live state (matching the sky's own per-revision cadence).
+    /// A no-op on the CPU-writer side takes effect on the very next produced frame; the GPU token slab re-uploads
+    /// immediately when resources are already standing (a call before the first produced frame just updates the
+    /// value <see cref="EnsureResources"/> will upload on its own first pass).</summary>
+    /// <param name="theme">The newly resolved theme.</param>
+    public void UpdateTheme(in OverlayThemeValues theme) {
+        m_theme.Publish(theme: in theme);
+        m_builder.UpdateTokenBlock(theme: in theme);
+
+        if (m_resourcesReady) {
+            m_dataBuffer!.Write<uint>(data: m_builder.Scratch[..OverlayTokenBlock.WordCount]);
+        }
     }
 }

@@ -22,38 +22,120 @@ public enum SecondOrderDynamicsBranch : byte {
 /// authoring/compile time, never on a per-tick or per-frame path).
 /// </summary>
 public readonly record struct SecondOrderDynamics {
+    private const long Log2EQ16Raw = 94548L; // round(log2(e) · 2^16)
+
     /// <summary>The fraction bit count every derived raw on this type is carried at (<c>32</c> — sixteen guard bits
     /// past <see cref="FixedQ4816"/>'s own Q16, so a follower's rest state is exact rather than dithering at the last
     /// Q16 bit).</summary>
     public const int CoefficientFractionBitCount = 32;
 
-    private const long Log2EQ16Raw = 94548L; // round(log2(e) · 2^16)
-
-    /// <summary>The authored natural frequency, in Hz.</summary>
-    public required FixedQ4816 Frequency { get; init; }
-    /// <summary>The authored damping ratio (dimensionless).</summary>
-    public required FixedQ4816 DampingRatio { get; init; }
-    /// <summary>The authored initial response (dimensionless).</summary>
-    public required FixedQ4816 InitialResponse { get; init; }
     /// <summary>The analytic branch <see cref="DampingRatio"/> selected.</summary>
     public required SecondOrderDynamicsBranch Branch { get; init; }
+    /// <summary>ζω/ρ (ρ = <see cref="OscillationRateRaw"/>), at <see cref="CoefficientFractionBitCount"/> — precomputed
+    /// so <see cref="Evaluate"/> never divides. Meaningful only away from <see cref="SecondOrderDynamicsBranch.CriticallyDamped"/>.</summary>
+    public required long DampingOverOscillationRaw { get; init; }
+    /// <summary>The authored damping ratio (dimensionless).</summary>
+    public required FixedQ4816 DampingRatio { get; init; }
     /// <summary>ζω, the exponential decay rate, in reciprocal seconds, at <see cref="CoefficientFractionBitCount"/>.</summary>
     public required long DecayRateRaw { get; init; }
+    /// <summary>The authored natural frequency, in Hz.</summary>
+    public required FixedQ4816 Frequency { get; init; }
+    /// <summary>The authored initial response (dimensionless).</summary>
+    public required FixedQ4816 InitialResponse { get; init; }
     /// <summary>The damped oscillation rate ω_d (underdamped) or the real half-difference σ (overdamped), in radians
     /// per second, at <see cref="CoefficientFractionBitCount"/>. Exactly zero at <see cref="SecondOrderDynamicsBranch.CriticallyDamped"/>.</summary>
     public required long OscillationRateRaw { get; init; }
+    /// <summary>rζω, the velocity impulse <see cref="Retarget"/> applies per unit of target jump, in reciprocal
+    /// seconds, at <see cref="CoefficientFractionBitCount"/> (signed with r).</summary>
+    public required long RetargetGainRaw { get; init; }
     /// <summary>ω², the system's stiffness, in reciprocal seconds squared, at <see cref="CoefficientFractionBitCount"/>.</summary>
     public required long StiffnessRaw { get; init; }
     /// <summary>k3 = rζ/ω, the target-velocity gain that shapes the initial response, in seconds, at
     /// <see cref="CoefficientFractionBitCount"/> (signed with r).</summary>
     public required long TargetVelocityGainRaw { get; init; }
-    /// <summary>rζω, the velocity impulse <see cref="Retarget"/> applies per unit of target jump, in reciprocal
-    /// seconds, at <see cref="CoefficientFractionBitCount"/> (signed with r).</summary>
-    public required long RetargetGainRaw { get; init; }
-    /// <summary>ζω/ρ (ρ = <see cref="OscillationRateRaw"/>), at <see cref="CoefficientFractionBitCount"/> — precomputed
-    /// so <see cref="Evaluate"/> never divides. Meaningful only away from <see cref="SecondOrderDynamicsBranch.CriticallyDamped"/>.</summary>
-    public required long DampingOverOscillationRaw { get; init; }
 
+    // Q32 → Q16 to nearest, ties to even — the same narrowing SecondOrderState's accessors use, never a truncating
+    // shift, whose downward bias reaches a whole Q16 unit on a rate that then serves as a divisor.
+    private static FixedQ4816 NarrowQ32(long raw) =>
+        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+            fractionBitCount: FixedQ4816.FractionBitCount,
+            product: raw
+        ));
+    // Multiplies a sign-magnitude Q32 product by a non-negative Q32 raw, exactly, for a divisor lifted by the same width.
+    private static (bool Negative, UInt128 Magnitude) ScaleSignedProduct((bool Negative, UInt128 Magnitude) product, long scale) =>
+        (product.Negative, (product.Magnitude * ((UInt128)((ulong)scale))));
+    private void ThrowIfUnbound() {
+        if (Frequency.Value <= 0L) {
+            throw new InvalidOperationException(message: "The dynamics are default-initialized; construct them with Create before evaluating them.");
+        }
+    }
+    // Forms e = exp(-decayNumeratorRaw/2^32 · t) and reports the raw ζω·t product alongside it; false when the
+    // exponent's own decay factor has already rounded to zero (the caller reports the settled state) or the
+    // intermediate product overflowed.
+    private static bool TryDecayFactor(long decayNumeratorRaw, FixedQ4816 t, FixedQ4816 log2e, out FixedQ4816 factor, out FixedQ4816 timeProduct) {
+        if (!FusedArithmetic.TryMixedScaleProduct(
+            a: decayNumeratorRaw,
+            b: t.Value,
+            fractionBitsA: CoefficientFractionBitCount,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var timeProductRaw
+        )) {
+            factor = FixedQ4816.Zero;
+            timeProduct = FixedQ4816.Zero;
+            return false;
+        }
+
+        timeProduct = FixedQ4816.FromRawBits(value: timeProductRaw);
+        factor = FixedQ4816.Exp2(value: -(timeProduct * log2e));
+
+        return (factor != FixedQ4816.Zero);
+    }
+
+    /// <summary>Compiles the exact pole-matched (matched Z-transform) state-transition matrix for one fixed step
+    /// width.</summary>
+    /// <param name="stepTicks">The step width, in simulation ticks; must be strictly positive.</param>
+    /// <param name="ticksPerSecond">The tick rate the step width is measured against; must be strictly positive.</param>
+    /// <returns>The compiled step.</returns>
+    /// <exception cref="InvalidOperationException">This instance is default-initialized (unbound).</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> or <paramref name="ticksPerSecond"/>
+    /// is zero.</exception>
+    public SecondOrderStep Compile(ulong stepTicks, ulong ticksPerSecond) {
+        ThrowIfUnbound();
+
+        if (stepTicks == 0UL) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(stepTicks),
+                message: "The step width must be strictly positive."
+            );
+        }
+        if (ticksPerSecond == 0UL) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(ticksPerSecond),
+                message: "The tick rate must be strictly positive."
+            );
+        }
+
+        var (a11, a12, a21, a22) = SecondOrderExactMath.CompilePropagator(
+            branch: Branch,
+            dampingOverOscillationRaw: DampingOverOscillationRaw,
+            decayRateRaw: DecayRateRaw,
+            oscillationRateRaw: OscillationRateRaw,
+            stepTicks: stepTicks,
+            stiffnessRaw: StiffnessRaw,
+            ticksPerSecond: ticksPerSecond
+        );
+
+        return new(
+            A11Raw: a11,
+            A12Raw: a12,
+            A21Raw: a21,
+            A22Raw: a22,
+            StepTicks: stepTicks,
+            TargetVelocityGainRaw: TargetVelocityGainRaw,
+            TicksPerSecond: ticksPerSecond
+        );
+    }
     /// <summary>Derives a follower's constants from its authored triple.</summary>
     /// <param name="frequencyHz">The natural frequency in Hz; must be finite and strictly positive.</param>
     /// <param name="dampingRatio">The damping ratio; must be finite and non-negative.</param>
@@ -110,7 +192,8 @@ public readonly record struct SecondOrderDynamics {
             ? SecondOrderDynamicsBranch.Underdamped
             : ((dampingRatio.Value == oneQ16)
                 ? SecondOrderDynamicsBranch.CriticallyDamped
-                : SecondOrderDynamicsBranch.Overdamped));
+                : SecondOrderDynamicsBranch.Overdamped
+        ));
 
         long oscillationRateRaw;
         long dampingOverOscillationRaw;
@@ -201,50 +284,6 @@ public readonly record struct SecondOrderDynamics {
             TargetVelocityGainRaw = targetVelocityGainRaw,
         };
     }
-    /// <summary>Compiles the exact pole-matched (matched Z-transform) state-transition matrix for one fixed step
-    /// width.</summary>
-    /// <param name="stepTicks">The step width, in simulation ticks; must be strictly positive.</param>
-    /// <param name="ticksPerSecond">The tick rate the step width is measured against; must be strictly positive.</param>
-    /// <returns>The compiled step.</returns>
-    /// <exception cref="InvalidOperationException">This instance is default-initialized (unbound).</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> or <paramref name="ticksPerSecond"/>
-    /// is zero.</exception>
-    public SecondOrderStep Compile(ulong stepTicks, ulong ticksPerSecond) {
-        ThrowIfUnbound();
-
-        if (stepTicks == 0UL) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(stepTicks),
-                message: "The step width must be strictly positive."
-            );
-        }
-        if (ticksPerSecond == 0UL) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(ticksPerSecond),
-                message: "The tick rate must be strictly positive."
-            );
-        }
-
-        var (a11, a12, a21, a22) = SecondOrderExactMath.CompilePropagator(
-            branch: Branch,
-            dampingOverOscillationRaw: DampingOverOscillationRaw,
-            decayRateRaw: DecayRateRaw,
-            oscillationRateRaw: OscillationRateRaw,
-            stepTicks: stepTicks,
-            stiffnessRaw: StiffnessRaw,
-            ticksPerSecond: ticksPerSecond
-        );
-
-        return new(
-            A11Raw: a11,
-            A12Raw: a12,
-            A21Raw: a21,
-            A22Raw: a22,
-            StepTicks: stepTicks,
-            TargetVelocityGainRaw: TargetVelocityGainRaw,
-            TicksPerSecond: ticksPerSecond
-        );
-    }
     /// <summary>Evaluates the closed-form response at an elapsed duration from stated initial conditions — the
     /// no-per-tick-work form <c>StateAdvance</c>-style epoch reads use.</summary>
     /// <param name="initialValue">The value at the epoch.</param>
@@ -269,18 +308,27 @@ public readonly record struct SecondOrderDynamics {
             );
         }
         if (elapsedTicks == 0UL) {
-            return new(Value: initialValue, Velocity: initialVelocity);
+            return new(
+                Value: initialValue,
+                Velocity: initialVelocity
+            );
         }
 
-        if (!FusedArithmetic.TryDivideMagnitudeRounded(
+        if (
+            !FusedArithmetic.TryDivideMagnitudeRounded(
             denominatorMagnitude: ticksPerSecond,
             fractionBitCount: FixedQ4816.FractionBitCount,
             numeratorMagnitude: elapsedTicks,
             quotient: out var tMagnitude
-        ) || (tMagnitude > ((UInt128)long.MaxValue))) {
+        ) ||
+            (tMagnitude > ((UInt128)long.MaxValue))
+        ) {
             // An elapsed duration too large to carry as a FixedQ4816 has, for every physically meaningful decay
             // rate, already settled — report the settled state rather than throwing on a read path.
-            return new(Value: target, Velocity: FixedQ4816.Zero);
+            return new(
+                Value: target,
+                Velocity: FixedQ4816.Zero
+            );
         }
 
         var t = FixedQ4816.FromRawBits(value: unchecked((long)tMagnitude));
@@ -293,8 +341,17 @@ public readonly record struct SecondOrderDynamics {
 
         switch (Branch) {
             case SecondOrderDynamicsBranch.CriticallyDamped: {
-                    if (!TryDecayFactor(decayNumeratorRaw: DecayRateRaw, t: t, log2e: log2e, factor: out var e, timeProduct: out var decayTime)) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
+                    if (!TryDecayFactor(
+                        decayNumeratorRaw: DecayRateRaw,
+                        t: t,
+                        log2e: log2e,
+                        factor: out var e,
+                        timeProduct: out var decayTime
+                    )) {
+                        return new(
+                            Value: target,
+                            Velocity: FixedQ4816.Zero
+                        );
                     }
 
                     var onePlus = (FixedQ4816.One + decayTime);
@@ -305,8 +362,17 @@ public readonly record struct SecondOrderDynamics {
                     break;
                 }
             case SecondOrderDynamicsBranch.Underdamped: {
-                    if (!TryDecayFactor(decayNumeratorRaw: DecayRateRaw, t: t, log2e: log2e, factor: out var e, timeProduct: out _)) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
+                    if (!TryDecayFactor(
+                        decayNumeratorRaw: DecayRateRaw,
+                        t: t,
+                        log2e: log2e,
+                        factor: out var e,
+                        timeProduct: out _
+                    )) {
+                        return new(
+                            Value: target,
+                            Velocity: FixedQ4816.Zero
+                        );
                     }
                     if (!FusedArithmetic.TryMixedScaleProduct(
                         a: OscillationRateRaw,
@@ -316,7 +382,10 @@ public readonly record struct SecondOrderDynamics {
                         fractionBitsOut: FixedQ4816.FractionBitCount,
                         result: out var angleRaw
                     )) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
+                        return new(
+                            Value: target,
+                            Velocity: FixedQ4816.Zero
+                        );
                     }
 
                     var (sin, cos) = FixedQ4816.SinCos(angle: FixedQ4816.FromRawBits(value: angleRaw));
@@ -348,8 +417,17 @@ public readonly record struct SecondOrderDynamics {
             default: { // Overdamped — settling tracks the SLOWER pole p1 = ζω−σ, never the bare ζω.
                     var sigma = NarrowQ32(raw: OscillationRateRaw);
 
-                    if (!TryDecayFactor(decayNumeratorRaw: (DecayRateRaw - OscillationRateRaw), t: t, log2e: log2e, factor: out var lambda1, timeProduct: out _)) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
+                    if (!TryDecayFactor(
+                        decayNumeratorRaw: (DecayRateRaw - OscillationRateRaw),
+                        t: t,
+                        log2e: log2e,
+                        factor: out var lambda1,
+                        timeProduct: out _
+                    )) {
+                        return new(
+                            Value: target,
+                            Velocity: FixedQ4816.Zero
+                        );
                     }
                     if (!FusedArithmetic.TryMixedScaleProduct(
                         a: (DecayRateRaw + OscillationRateRaw),
@@ -359,7 +437,10 @@ public readonly record struct SecondOrderDynamics {
                         fractionBitsOut: FixedQ4816.FractionBitCount,
                         result: out var p2TimeRaw
                     )) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
+                        return new(
+                            Value: target,
+                            Velocity: FixedQ4816.Zero
+                        );
                     }
 
                     // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2); p1·p2 =
@@ -389,32 +470,11 @@ public readonly record struct SecondOrderDynamics {
                 }
         }
 
-        return new(Value: (target + valueOffset), Velocity: velocity);
+        return new(
+            Value: (target + valueOffset),
+            Velocity: velocity
+        );
     }
-
-    // Forms e = exp(-decayNumeratorRaw/2^32 · t) and reports the raw ζω·t product alongside it; false when the
-    // exponent's own decay factor has already rounded to zero (the caller reports the settled state) or the
-    // intermediate product overflowed.
-    private static bool TryDecayFactor(long decayNumeratorRaw, FixedQ4816 t, FixedQ4816 log2e, out FixedQ4816 factor, out FixedQ4816 timeProduct) {
-        if (!FusedArithmetic.TryMixedScaleProduct(
-            a: decayNumeratorRaw,
-            b: t.Value,
-            fractionBitsA: CoefficientFractionBitCount,
-            fractionBitsB: FixedQ4816.FractionBitCount,
-            fractionBitsOut: FixedQ4816.FractionBitCount,
-            result: out var timeProductRaw
-        )) {
-            factor = FixedQ4816.Zero;
-            timeProduct = FixedQ4816.Zero;
-            return false;
-        }
-
-        timeProduct = FixedQ4816.FromRawBits(value: timeProductRaw);
-        factor = FixedQ4816.Exp2(value: -(timeProduct * log2e));
-
-        return (factor != FixedQ4816.Zero);
-    }
-
     /// <summary>Applies the velocity impulse a piecewise-constant target retarget carries: the closed-form sibling of
     /// re-seeding <see cref="TargetVelocityGainRaw"/>'s continuous term, for a target that jumps rather than
     /// moves.</summary>
@@ -440,23 +500,10 @@ public readonly record struct SecondOrderDynamics {
             return current;
         }
 
-        return new(Value: current.Value, Velocity: (current.Velocity + FixedQ4816.FromRawBits(value: kickRaw)));
-    }
-
-    // Q32 → Q16 to nearest, ties to even — the same narrowing SecondOrderState's accessors use, never a truncating
-    // shift, whose downward bias reaches a whole Q16 unit on a rate that then serves as a divisor.
-    private static FixedQ4816 NarrowQ32(long raw) =>
-        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-            fractionBitCount: FixedQ4816.FractionBitCount,
-            product: raw
-        ));
-    // Multiplies a sign-magnitude Q32 product by a non-negative Q32 raw, exactly, for a divisor lifted by the same width.
-    private static (bool Negative, UInt128 Magnitude) ScaleSignedProduct((bool Negative, UInt128 Magnitude) product, long scale) =>
-        (product.Negative, (product.Magnitude * ((UInt128)((ulong)scale))));
-    private void ThrowIfUnbound() {
-        if (Frequency.Value <= 0L) {
-            throw new InvalidOperationException(message: "The dynamics are default-initialized; construct them with Create before evaluating them.");
-        }
+        return new(
+            Value: current.Value,
+            Velocity: (current.Velocity + FixedQ4816.FromRawBits(value: kickRaw))
+        );
     }
 }
 /// <summary>The exact pole-matched propagator for one fixed step width, produced by
@@ -490,7 +537,10 @@ public readonly record struct SecondOrderStep(
     /// (magnitude ≥ 2⁴⁷ — <c>&lt;&lt;</c> is not covered by a <c>checked</c> context), or an intermediate product
     /// leaves the carrier; <paramref name="state"/> is left unread — the caller's own copy is untouched.</exception>
     public SecondOrderState Step(SecondOrderState state, FixedQ4816 target, FixedQ4816 targetVelocity) {
-        if ((target.Value >= (1L << 47)) || (target.Value < -(1L << 47))) {
+        if (
+            (target.Value >= (1L << 47)) ||
+            (target.Value < -(1L << 47))
+        ) {
             throw new OverflowException(message: "The target leaves the Q32 coefficient carrier's sixteen guard bits.");
         }
 
@@ -534,20 +584,36 @@ public readonly record struct SecondOrderStep(
         );
 
         if (
-            !FusedArithmetic.TryNarrowSignedMagnitude(magnitude: eScaled.Magnitude, negative: eSum.Negative, result: out var eNext) ||
-            !FusedArithmetic.TryNarrowSignedMagnitude(magnitude: vScaled.Magnitude, negative: vSum.Negative, result: out var vNext)
+            !FusedArithmetic.TryNarrowSignedMagnitude(
+            magnitude: eScaled.Magnitude,
+            negative: eSum.Negative,
+            result: out var eNext
+        ) ||
+            !FusedArithmetic.TryNarrowSignedMagnitude(
+            magnitude: vScaled.Magnitude,
+            negative: vSum.Negative,
+            result: out var vNext
+        )
         ) {
             throw new OverflowException(message: "The propagator step overflowed the Q32 raw carrier.");
         }
 
         if (
-            (eNext >= -SettleHalfUnitRaw) && (eNext <= SettleHalfUnitRaw) &&
-            (vNext >= -SettleHalfUnitRaw) && (vNext <= SettleHalfUnitRaw)
+            (eNext >= -SettleHalfUnitRaw) &&
+            (eNext <= SettleHalfUnitRaw) &&
+            (vNext >= -SettleHalfUnitRaw) &&
+            (vNext <= SettleHalfUnitRaw)
         ) {
-            return new(PositionRaw: xStar, VelocityRaw: 0L);
+            return new(
+                PositionRaw: xStar,
+                VelocityRaw: 0L
+            );
         }
 
-        return new(PositionRaw: checked((xStar + eNext)), VelocityRaw: vNext);
+        return new(
+            PositionRaw: checked((xStar + eNext)),
+            VelocityRaw: vNext
+        );
     }
     /// <summary>Advances a three-lane planar follower by one step — three independent scalar
     /// <see cref="Step(SecondOrderState,FixedQ4816,FixedQ4816)"/> calls, X then Y then Z.</summary>
@@ -588,32 +654,47 @@ public readonly record struct SecondOrderState(long PositionRaw, long VelocityRa
         fractionBitCount: 16
     ));
 
+    /// <summary>Constructs a state at rest at a position, with zero velocity.</summary>
+    /// <param name="position">The rest position.</param>
+    /// <returns>The Q32 state.</returns>
+    public static SecondOrderState AtRest(FixedQ4816 position) =>
+        FromValue(
+            position: position,
+            velocity: FixedQ4816.Zero
+        );
+    /// <summary>Restores a state from its raw Q32 bits — the snapshot/checkpoint round trip.</summary>
+    /// <param name="positionRaw">The position raw.</param>
+    /// <param name="velocityRaw">The velocity raw.</param>
+    /// <returns>The Q32 state.</returns>
+    public static SecondOrderState FromRawBits(long positionRaw, long velocityRaw) =>
+        new(
+            PositionRaw: positionRaw,
+            VelocityRaw: velocityRaw
+        );
     /// <summary>Constructs a state exactly from Q16 position and velocity (an exact left shift; no rounding).</summary>
     /// <param name="position">The position.</param>
     /// <param name="velocity">The velocity.</param>
     /// <returns>The Q32 state.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A raw would leave the sixteen guard bits available at Q32 (magnitude ≥ 2⁴⁷).</exception>
     public static SecondOrderState FromValue(FixedQ4816 position, FixedQ4816 velocity) {
-        if ((position.Value >= (1L << 47)) || (position.Value < -(1L << 47))) {
+        if (
+            (position.Value >= (1L << 47)) ||
+            (position.Value < -(1L << 47))
+        ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(position));
         }
-        if ((velocity.Value >= (1L << 47)) || (velocity.Value < -(1L << 47))) {
+        if (
+            (velocity.Value >= (1L << 47)) ||
+            (velocity.Value < -(1L << 47))
+        ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(velocity));
         }
 
-        return new(PositionRaw: (position.Value << 16), VelocityRaw: (velocity.Value << 16));
+        return new(
+            PositionRaw: (position.Value << 16),
+            VelocityRaw: (velocity.Value << 16)
+        );
     }
-    /// <summary>Constructs a state at rest at a position, with zero velocity.</summary>
-    /// <param name="position">The rest position.</param>
-    /// <returns>The Q32 state.</returns>
-    public static SecondOrderState AtRest(FixedQ4816 position) =>
-        FromValue(position: position, velocity: FixedQ4816.Zero);
-    /// <summary>Restores a state from its raw Q32 bits — the snapshot/checkpoint round trip.</summary>
-    /// <param name="positionRaw">The position raw.</param>
-    /// <param name="velocityRaw">The velocity raw.</param>
-    /// <returns>The Q32 state.</returns>
-    public static SecondOrderState FromRawBits(long positionRaw, long velocityRaw) =>
-        new(PositionRaw: positionRaw, VelocityRaw: velocityRaw);
 }
 /// <summary>Three independent <see cref="SecondOrderState"/> lanes — a planar (X, Y, Z) follower's authoritative
 /// state.</summary>
@@ -622,24 +703,44 @@ public readonly record struct SecondOrderState(long PositionRaw, long VelocityRa
 /// <param name="Z">The third lane.</param>
 public readonly record struct SecondOrderState3(SecondOrderState X, SecondOrderState Y, SecondOrderState Z) {
     /// <summary>The position vector.</summary>
-    public FixedVector3 Position => new(X: X.Position, Y: Y.Position, Z: Z.Position);
+    public FixedVector3 Position => new(
+        X: X.Position,
+        Y: Y.Position,
+        Z: Z.Position
+    );
     /// <summary>The velocity vector.</summary>
-    public FixedVector3 Velocity => new(X: X.Velocity, Y: Y.Velocity, Z: Z.Velocity);
+    public FixedVector3 Velocity => new(
+        X: X.Velocity,
+        Y: Y.Velocity,
+        Z: Z.Velocity
+    );
 
+    /// <summary>Constructs a state at rest at a position, with zero velocity.</summary>
+    /// <param name="position">The rest position.</param>
+    /// <returns>The Q32 state.</returns>
+    public static SecondOrderState3 AtRest(FixedVector3 position) =>
+        FromValue(
+            position: position,
+            velocity: FixedVector3.Zero
+        );
     /// <summary>Constructs a state exactly from Q16 position and velocity vectors.</summary>
     /// <param name="position">The position.</param>
     /// <param name="velocity">The velocity.</param>
     /// <returns>The Q32 state.</returns>
     public static SecondOrderState3 FromValue(FixedVector3 position, FixedVector3 velocity) => new(
-        X: SecondOrderState.FromValue(position: position.X, velocity: velocity.X),
-        Y: SecondOrderState.FromValue(position: position.Y, velocity: velocity.Y),
-        Z: SecondOrderState.FromValue(position: position.Z, velocity: velocity.Z)
+        X: SecondOrderState.FromValue(
+            position: position.X,
+            velocity: velocity.X
+        ),
+        Y: SecondOrderState.FromValue(
+            position: position.Y,
+            velocity: velocity.Y
+        ),
+        Z: SecondOrderState.FromValue(
+            position: position.Z,
+            velocity: velocity.Z
+        )
     );
-    /// <summary>Constructs a state at rest at a position, with zero velocity.</summary>
-    /// <param name="position">The rest position.</param>
-    /// <returns>The Q32 state.</returns>
-    public static SecondOrderState3 AtRest(FixedVector3 position) =>
-        FromValue(position: position, velocity: FixedVector3.Zero);
 }
 /// <summary>One evaluated sample of a <see cref="SecondOrderDynamics"/> follower.</summary>
 /// <param name="Value">The value at the sampled instant.</param>

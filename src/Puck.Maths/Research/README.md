@@ -42,7 +42,7 @@ someone who owns them writes the rows. `QuadraticNormEquation` and
 `QuadraticSurdRecurrence` are absent deliberately: both declare `internal` types
 only.
 
-The parent [`Puck.Maths` README](../README.md) is the library's entry point;
+[Deterministic numerics](../../../docs/reference/maths.md) is the library's entry point;
 this file is the contract for the folder.
 
 > **Provenance note (2026-07-27).** The three write-ups below were moved here
@@ -285,4 +285,4 @@ proofs in 32 residue classes.
 
 ## Documentation
 
-📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)
+📚 [Puck.Maths](../../../docs/reference/maths.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

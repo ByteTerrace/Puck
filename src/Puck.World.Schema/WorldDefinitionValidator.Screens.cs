@@ -302,7 +302,10 @@ public static partial class WorldDefinitionValidator {
                         scalar: orbit.Pitch
                     );
 
-                    if ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset)) {
+                    if (
+                        (orbit.PivotOffset is { } pivotOffset) &&
+                        !IsFinite(value: pivotOffset)
+                    ) {
                         errors.Add(item: $"{opPath} needs a finite pivotOffset.");
                     }
 
@@ -476,7 +479,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend'/'select' op resolving to programs that do) — every rig needs a rendered field of view.");
         }
 
-        if (seenAnchor && seenPath) {
+        if (
+            seenAnchor &&
+            seenPath
+        ) {
             errors.Add(item: $"{path}.operations authors both 'anchor' and 'path' — each establishes its own subject; author only one.");
         }
     }
@@ -491,9 +497,9 @@ public static partial class WorldDefinitionValidator {
             if (
                 settled.Contains(item: name) ||
                 !programs.TryGetValue(
-                    key: name,
-                    value: out var program
-                )
+                key: name,
+                value: out var program
+            )
             ) {
                 return;
             }
@@ -647,20 +653,32 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if ((binding.Width != 1) && (binding.Width != 2)) {
+            if (
+                (binding.Width != 1) &&
+                (binding.Width != 2)
+            ) {
                 errors.Add(item: $"{entryPath}.width must be 1 or 2, not {binding.Width}.");
             }
 
-            var span = Math.Max(val1: binding.Width, val2: 1);
+            var span = Math.Max(
+                val1: binding.Width,
+                val2: 1
+            );
 
             if (
                 (binding.Address < 0) ||
-                ((binding.Address + span - 1) > WorldScreenMemory.MaxAddress)
+                (((binding.Address + span) - 1) > WorldScreenMemory.MaxAddress)
             ) {
                 errors.Add(item: $"{entryPath}.address {binding.Address} (width {binding.Width}) is outside the engine's memory 0..{WorldScreenMemory.MaxAddress}.");
             }
 
-            ValidateMemoryRow(row: binding.Row, key: binding.Key, entryPath: entryPath, definition: definition, errors: errors);
+            ValidateMemoryRow(
+                row: binding.Row,
+                key: binding.Key,
+                entryPath: entryPath,
+                definition: definition,
+                errors: errors
+            );
 
             if (!Enum.IsDefined(value: binding.Direction)) {
                 errors.Add(item: $"{entryPath}.direction '{binding.Direction}' is unknown.");
@@ -671,7 +689,13 @@ public static partial class WorldDefinitionValidator {
     // text (kept separate from WorldDefinitionValidator.Response.cs's ValidateStateCell, which speaks of a response's
     // comparand rather than a binding's mirrored cell).
     private static void ValidateMemoryRow(string? row, string? key, string entryPath, WorldDefinition definition, List<string> errors) {
-        if ((row is null) || (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row) is not { } declared)) {
+        if (
+            (row is null) ||
+            (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: row
+        ) is not { } declared)
+        ) {
             errors.Add(item: $"{entryPath}.row '{row}' does not name a declared state.world row.");
 
             return;
@@ -681,11 +705,24 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath}.row '{row}' is kind={declared.Kind} — a machine-memory binding mirrors an Int cell only.");
         }
 
-        if (declared.IsKeyed && (key is null)) {
+        if (
+            declared.IsKeyed &&
+            (key is null)
+        ) {
             errors.Add(item: $"{entryPath} names keyed row '{row}' without a 'key' — a keyed row has no single cell, so name the one you mean.");
-        } else if (!declared.IsKeyed && (key is not null)) {
+        } else if (
+            !declared.IsKeyed &&
+            (key is not null)
+        ) {
             errors.Add(item: $"{entryPath} names row '{row}' with a 'key', but the row is not keyed — omit 'key' to read its slot cell.");
-        } else if ((key is not null) && !CellName.TryParse(candidate: key, name: out _, reason: out var reason)) {
+        } else if (
+            (key is not null) &&
+            !CellName.TryParse(
+            candidate: key,
+            name: out _,
+            reason: out var reason
+        )
+        ) {
             errors.Add(item: $"{entryPath} key '{key}' {reason}");
         }
     }
@@ -740,11 +777,17 @@ public static partial class WorldDefinitionValidator {
                             continue;
                         }
 
-                        if ((control.Id < byte.MinValue) || (control.Id > byte.MaxValue)) {
+                        if (
+                            (control.Id < byte.MinValue) ||
+                            (control.Id > byte.MaxValue)
+                        ) {
                             errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
                         }
 
-                        if ((control.Value < byte.MinValue) || (control.Value > byte.MaxValue)) {
+                        if (
+                            (control.Value < byte.MinValue) ||
+                            (control.Value > byte.MaxValue)
+                        ) {
                             errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
                         }
                     }
@@ -758,7 +801,10 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case WorldScreenSource.Probe probe:
-                if (!DeclaresProbe(definition: definition, id: probe.Id)) {
+                if (!DeclaresProbe(
+                    definition: definition,
+                    id: probe.Id
+                )) {
                     errors.Add(item: $"{path}.probe.id '{probe.Id}' names no declared probe.");
                 }
 
@@ -804,16 +850,36 @@ public static partial class WorldDefinitionValidator {
             case WorldScreenSource.Machine machine:
                 if (string.IsNullOrWhiteSpace(value: machine.Instance)) {
                     errors.Add(item: $"{path}.machine.instance is required.");
-                } else if (!definition.Machines.Any(candidate => candidate is not null && string.Equals(candidate.Name, machine.Instance, StringComparison.Ordinal))) {
+                } else if (!definition.Machines.Any(predicate: candidate => ((candidate is not null) && string.Equals(
+                    a: candidate.Name,
+                    b: machine.Instance,
+                    comparisonType: StringComparison.Ordinal
+                )))) {
                     errors.Add(item: $"{path}.machine.instance '{machine.Instance}' names no declared machine.");
                 }
 
                 if (string.IsNullOrWhiteSpace(value: machine.Output)) {
                     errors.Add(item: $"{path}.machine.output is required.");
-                } else if (scope.Machines is { } machines && definition.Machines.FirstOrDefault(candidate => candidate is not null && string.Equals(candidate.Name, machine.Instance, StringComparison.Ordinal)) is { } declaration && machines.TryDescriptor(declaration.Engine, out var descriptor) && !descriptor.VideoOutputs.Any(port => string.Equals(port.Name, machine.Output, StringComparison.Ordinal))) {
+                } else if (
+                    (scope.Machines is { } machines) &&
+                    (definition.Machines.FirstOrDefault(predicate: candidate => ((candidate is not null) && string.Equals(
+                    a: candidate.Name,
+                    b: machine.Instance,
+                    comparisonType: StringComparison.Ordinal
+                ))) is { } declaration) &&
+                    machines.TryDescriptor(
+                    declaration.Engine,
+                    out var descriptor
+                ) &&
+                    !descriptor.VideoOutputs.Any(predicate: port => string.Equals(
+                    a: port.Name,
+                    b: machine.Output,
+                    comparisonType: StringComparison.Ordinal
+                ))
+                ) {
                     errors.Add(item: $"{path}.machine.output '{machine.Output}' is not declared by machine '{machine.Instance}'.");
                 } else if (scope.Machines is null) {
-                    deferred?.Add($"{path}.machine.output: validation of output '{machine.Output}' is deferred because no machine catalog was supplied.");
+                    deferred?.Add(item: $"{path}.machine.output: validation of output '{machine.Output}' is deferred because no machine catalog was supplied.");
                 }
 
                 return false;
@@ -1175,7 +1241,11 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!SafeName.TryParse(candidate: pipeline.Name, name: out _, reason: out var nameReason)) {
+            if (!SafeName.TryParse(
+                candidate: pipeline.Name,
+                name: out _,
+                reason: out var nameReason
+            )) {
                 errors.Add(item: $"{path}.name {nameReason}");
             } else if (!pipelineNames.Add(item: pipeline.Name)) {
                 errors.Add(item: $"{path}.name '{pipeline.Name}' is duplicated.");
@@ -1192,7 +1262,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.camera '{pipelineCamera}' names no camera row.");
             }
 
-            if (!float.IsFinite(f: pipeline.TimeScale) || (pipeline.TimeScale < 0f)) {
+            if (
+                !float.IsFinite(f: pipeline.TimeScale) ||
+                (pipeline.TimeScale < 0f)
+            ) {
                 errors.Add(item: $"{path}.timeScale {pipeline.TimeScale} must be finite and non-negative.");
             }
         }

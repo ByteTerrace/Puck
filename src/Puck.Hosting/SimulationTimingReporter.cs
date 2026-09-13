@@ -12,6 +12,7 @@ namespace Puck.Hosting;
 /// </summary>
 public sealed class SimulationTimingReporter(ulong reportInterval = 60UL) {
     private readonly ulong m_reportInterval = reportInterval;
+
     private ulong m_samples;
     private Sample m_worst;
 

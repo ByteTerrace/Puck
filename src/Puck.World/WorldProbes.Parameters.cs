@@ -20,7 +20,10 @@ internal sealed partial class WorldProbes {
         );
 
         if (parameter.Target is WorldProbeParameterTarget.Probe target) {
-            if (!m_rowIndexById.TryGetValue(key: target.Id, value: out var targetIndex)) {
+            if (!m_rowIndexById.TryGetValue(
+                key: target.Id,
+                value: out var targetIndex
+            )) {
                 throw new InvalidOperationException(message: $"{path}.target.id '{target.Id}' names no declared probe.");
             }
 
@@ -28,16 +31,29 @@ internal sealed partial class WorldProbes {
             var targetManifest = targetRow.Manifest;
 
             if (
-                !targetManifest.TryGetConstantOffset(field: target.Field, offset: out var offset, type: out var type) ||
+                !targetManifest.TryGetConstantOffset(
+                field: target.Field,
+                offset: out var offset,
+                type: out var type
+            ) ||
                 (type != ShaderValueType.Float) ||
                 (targetManifest.Config is not { } targetConfig) ||
-                !targetConfig.TryGetValue(key: target.Field, value: out var targetField)
+                !targetConfig.TryGetValue(
+                key: target.Field,
+                value: out var targetField
+            )
             ) {
                 throw new InvalidOperationException(message: $"{path}.target.field '{target.Field}' names no float config field of probe kind '{targetManifest.Name}'.");
             }
             if (
-                !ShaderConfigBinding.InRange(field: targetField, value: parameter.Range.X) ||
-                !ShaderConfigBinding.InRange(field: targetField, value: parameter.Range.Y)
+                !ShaderConfigBinding.InRange(
+                field: targetField,
+                value: parameter.Range.X
+            ) ||
+                !ShaderConfigBinding.InRange(
+                field: targetField,
+                value: parameter.Range.Y
+            )
             ) {
                 throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{targetManifest.Name}.{target.Field}' [{targetField.Min}, {targetField.Max}].");
             }
@@ -60,19 +76,31 @@ internal sealed partial class WorldProbes {
         try {
             extensionManifest = WorldPostRenderExtensions.Shipped.Load(id: extension.Id);
         } catch (Exception exception) {
-            throw new InvalidOperationException(message: $"{path}.target.id '{extension.Id}' failed to load: {exception.Message}", innerException: exception);
+            throw new InvalidOperationException(
+                message: $"{path}.target.id '{extension.Id}' failed to load: {exception.Message}",
+                innerException: exception
+            );
         }
 
         if (
             (extensionManifest.Config is not { } config) ||
-            !config.TryGetValue(key: extension.Field, value: out var field) ||
+            !config.TryGetValue(
+            key: extension.Field,
+            value: out var field
+        ) ||
             (field.Type != ShaderValueType.Float)
         ) {
             throw new InvalidOperationException(message: $"{path}.target.field '{extension.Field}' names no float config field of extension '{extension.Id}'.");
         }
         if (
-            !ShaderConfigBinding.InRange(field: field, value: parameter.Range.X) ||
-            !ShaderConfigBinding.InRange(field: field, value: parameter.Range.Y)
+            !ShaderConfigBinding.InRange(
+            field: field,
+            value: parameter.Range.X
+        ) ||
+            !ShaderConfigBinding.InRange(
+            field: field,
+            value: parameter.Range.Y
+        )
         ) {
             throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{extension.Id}.{extension.Field}' [{field.Min}, {field.Max}].");
         }
@@ -130,20 +158,39 @@ internal sealed partial class WorldProbes {
                 var value = ((float)(range.X + (unitInterval * (range.Y - range.X))));
 
                 if (parameter.TargetRowInfo is { } targetRow) {
-                    if (ResolveInstance(target: targetRow, contextSeat: instance.Seat) is not { } targetInstance) {
+                    if (ResolveInstance(
+                        target: targetRow,
+                        contextSeat: instance.Seat
+                    ) is not { } targetInstance) {
                         continue;
                     }
 
-                    if (ReferenceEquals(objA: parameter.LastTarget, objB: targetInstance) && (value == parameter.LastValue)) {
+                    if (
+                        ReferenceEquals(
+                        objA: parameter.LastTarget,
+                        objB: targetInstance
+                    ) &&
+                        (value == parameter.LastValue)
+                    ) {
                         continue;
                     }
 
-                    WriteConstant(offset: parameter.ConstantOffset, target: targetInstance, value: value);
+                    WriteConstant(
+                        offset: parameter.ConstantOffset,
+                        target: targetInstance,
+                        value: value
+                    );
                     parameter.LastTarget = targetInstance;
                 } else if (
                     (value == parameter.LastValue) ||
-                    !m_passes.TryGet(id: parameter.ExtensionId!, pass: out var pass) ||
-                    !pass.TrySetConfig(field: parameter.ExtensionField!, value: value)
+                    !m_passes.TryGet(
+                    id: parameter.ExtensionId!,
+                    pass: out var pass
+                ) ||
+                    !pass.TrySetConfig(
+                    field: parameter.ExtensionField!,
+                    value: value
+                )
                 ) {
                     continue;
                 }
@@ -171,7 +218,11 @@ internal sealed partial class WorldProbes {
         ArgumentNullException.ThrowIfNull(argument: probeRef);
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        ParseInstanceRef(baseId: out var baseId, probeRef: probeRef, seat: out var seat);
+        ParseInstanceRef(
+            baseId: out var baseId,
+            probeRef: probeRef,
+            seat: out var seat
+        );
 
         if (!m_rowIndexById.TryGetValue(
             key: baseId,
@@ -186,29 +237,49 @@ internal sealed partial class WorldProbes {
         var manifest = rowInfo.Manifest;
 
         if (
-            !manifest.TryGetConstantOffset(field: field, offset: out var offset, type: out var type) ||
+            !manifest.TryGetConstantOffset(
+            field: field,
+            offset: out var offset,
+            type: out var type
+        ) ||
             (type != ShaderValueType.Float) ||
             (manifest.Config is not { } config) ||
-            !config.TryGetValue(key: field, value: out var configField)
+            !config.TryGetValue(
+            key: field,
+            value: out var configField
+        )
         ) {
             reason = $"'{field}' names no float config field of probe kind '{manifest.Name}'";
 
             return false;
         }
-        if (!ShaderConfigBinding.InRange(field: configField, value: value)) {
-            reason = $"{value.ToString(format: "0.0000", provider: CultureInfo.InvariantCulture)} is outside the declared range of '{manifest.Name}.{field}' [{configField.Min}, {configField.Max}]";
+        if (!ShaderConfigBinding.InRange(
+            field: configField,
+            value: value
+        )) {
+            reason = $"{value.ToString(
+                format: "0.0000",
+                provider: CultureInfo.InvariantCulture
+            )} is outside the declared range of '{manifest.Name}.{field}' [{configField.Min}, {configField.Max}]";
 
             return false;
         }
 
         if (seat is { } explicitSeat) {
-            if (ResolveInstance(contextSeat: explicitSeat, target: rowInfo) is not { } instance) {
+            if (ResolveInstance(
+                contextSeat: explicitSeat,
+                target: rowInfo
+            ) is not { } instance) {
                 reason = $"no live instance '{baseId}@{explicitSeat}'{DescribeKnownInstances(rowInfo: rowInfo)}";
 
                 return false;
             }
 
-            WriteConstant(offset: offset, target: instance, value: value);
+            WriteConstant(
+                offset: offset,
+                target: instance,
+                value: value
+            );
             reason = null;
 
             return true;
@@ -221,7 +292,11 @@ internal sealed partial class WorldProbes {
                 return false;
             }
 
-            WriteConstant(offset: offset, target: single, value: value);
+            WriteConstant(
+                offset: offset,
+                target: single,
+                value: value
+            );
             reason = null;
 
             return true;
@@ -230,7 +305,11 @@ internal sealed partial class WorldProbes {
         var wroteAny = false;
 
         foreach (var instance in rowInfo.InstancesBySeat!.Values) {
-            WriteConstant(offset: offset, target: instance, value: value);
+            WriteConstant(
+                offset: offset,
+                target: instance,
+                value: value
+            );
             wroteAny = true;
         }
 

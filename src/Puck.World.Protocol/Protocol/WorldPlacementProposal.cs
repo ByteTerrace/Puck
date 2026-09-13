@@ -14,5 +14,5 @@ public sealed record WorldPlacementProposal(WorldMutation.Batch Mutation, int Ca
     public IReadOnlyList<string> Constraints { get; init; } = [];
     /// <summary>The spatial reads carried by <see cref="Mutation"/>. This is a projection of the guarded batch so
     /// proposal metadata cannot drift from the commit artifact.</summary>
-    public IReadOnlyList<WorldSpatialReadDependency> SpatialReads => Mutation.ExpectedSpatialReads ?? [];
+    public IReadOnlyList<WorldSpatialReadDependency> SpatialReads => (Mutation.ExpectedSpatialReads ?? []);
 }

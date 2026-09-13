@@ -25,6 +25,7 @@ public sealed partial class WorldOutputHub {
     // own lock rather than leaning on that same discipline.
     private readonly Lock m_narrationLock = new();
     private readonly List<NarrationSubscription> m_narration = new();
+
     private int m_activeNarrationCount;
     // Nonzero on the thread currently running a Narrate fan-out, so a sink that itself calls AttachNarrationSink
     // from inside its own Narrate refuses rather than mutating the list Narrate is still enumerating.
@@ -60,7 +61,6 @@ public sealed partial class WorldOutputHub {
             return subscription;
         }
     }
-
     /// <summary>Formats and delivers one narration line to every attached sink, doing neither when
     /// <see cref="HasNarrationSink"/> is <see langword="false"/> — the deterministic core's replacement for an
     /// unconditional <c>Console.Error.WriteLine($"...")</c>. A faulting sink is detached without itself being
@@ -78,8 +78,8 @@ public sealed partial class WorldOutputHub {
 
         var narration = new WorldNarration(
             Channel: channel,
-            Text: text,
-            Stream: stream
+            Stream: stream,
+            Text: text
         );
 
         lock (m_narrationLock) {

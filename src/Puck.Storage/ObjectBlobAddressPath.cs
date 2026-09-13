@@ -2,50 +2,6 @@ namespace Puck.Storage;
 
 /// <summary>Validates portable relative storage paths before a host publishes or materializes content.</summary>
 public static class ObjectBlobAddressPath {
-    private static string[] GetSegments(string path, string description) {
-        if (path.Length > 4096) { throw new ArgumentException($"The {description} exceeds its length ceiling.", nameof(path)); }
-        if (
-            Path.IsPathRooted(path: path) ||
-            path.StartsWith(value: '/') ||
-            path.StartsWith(value: '\\')
-        ) {
-            throw new ArgumentException(
-                message: $"The {description} must be a relative path.",
-                paramName: nameof(path)
-            );
-        }
-
-        var segments = path.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: ['/', '\\']
-        );
-
-        if (segments.Length == 0 || segments.Length > 64) {
-            throw new ArgumentException(
-                message: $"The {description} must contain between one and 64 segments.",
-                paramName: nameof(path)
-            );
-        }
-
-        foreach (var segment in segments) {
-            var device = segment.Split('.')[0];
-            if (segment is "." or ".." || segment.EndsWith('.') || segment != segment.Trim() ||
-                segment.Any(c => char.IsControl(c) || c is ':' or '<' or '>' or '"' or '|' or '?' or '*') ||
-                segment.StartsWith(".puck-", StringComparison.OrdinalIgnoreCase) ||
-                device.Equals("CON", StringComparison.OrdinalIgnoreCase) || device.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
-                device.Equals("AUX", StringComparison.OrdinalIgnoreCase) || device.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
-                (device.Length == 4 && (device.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
-                    device.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && "123456789¹²³".Contains(device[3]))) {
-                throw new ArgumentException(
-                    message: $"The {description} contains an unsafe or reserved path segment.",
-                    paramName: nameof(path)
-                );
-            }
-        }
-
-        return segments;
-    }
-
     internal static string[] GetKeySegments(ObjectBlobAddress address) {
         if (string.IsNullOrWhiteSpace(value: address.Key)) {
             throw new ArgumentException(
@@ -57,14 +13,6 @@ public static class ObjectBlobAddressPath {
         return GetSegments(
             description: "storage key",
             path: address.Key
-        );
-    }
-    /// <summary>Validates a blob key's portable path segments and returns its forward-slash spelling.
-    /// Rejects rooted paths, dot segments, device names, alternate streams, and reserved storage metadata names.</summary>
-    public static string GetNormalizedKey(ObjectBlobAddress address) {
-        return string.Join(
-            '/',
-            GetKeySegments(address: address)
         );
     }
     /// <summary>Normalizes a list operation's key prefix: empty means "every key under the object"; a non-empty value
@@ -96,5 +44,92 @@ public static class ObjectBlobAddressPath {
         }
 
         return objectId.ToString();
+    }
+
+    private static string[] GetSegments(string path, string description) {
+        if (path.Length > 4096) { throw new ArgumentException(
+            message: $"The {description} exceeds its length ceiling.",
+            paramName: nameof(path)
+        ); }
+        if (
+            Path.IsPathRooted(path: path) ||
+            path.StartsWith(value: '/') ||
+            path.StartsWith(value: '\\')
+        ) {
+            throw new ArgumentException(
+                message: $"The {description} must be a relative path.",
+                paramName: nameof(path)
+            );
+        }
+
+        var segments = path.Split(
+            options: StringSplitOptions.RemoveEmptyEntries,
+            separator: ['/', '\\']
+        );
+
+        if (
+            (segments.Length == 0) ||
+            (segments.Length > 64)
+        ) {
+            throw new ArgumentException(
+                message: $"The {description} must contain between one and 64 segments.",
+                paramName: nameof(path)
+            );
+        }
+
+        foreach (var segment in segments) {
+            var device = segment.Split('.')[0];
+
+            if (
+                (segment is "." or "..") ||
+                segment.EndsWith(value: '.') ||
+                (segment != segment.Trim()) ||
+                segment.Any(predicate: c => (char.IsControl(c: c) || (c is ':' or '<' or '>' or '"' or '|' or '?' or '*'))) ||
+                segment.StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: ".puck-"
+            ) ||
+                device.Equals(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "CON"
+            ) ||
+                device.Equals(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "PRN"
+            ) ||
+                device.Equals(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "AUX"
+            ) ||
+                device.Equals(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "NUL"
+            ) ||
+                ((device.Length == 4) && (device.StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "COM"
+            ) ||
+                    device.StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "LPT"
+            )) && "123456789¹²³".Contains(value: device[3]))
+            ) {
+                throw new ArgumentException(
+                    message: $"The {description} contains an unsafe or reserved path segment.",
+                    paramName: nameof(path)
+                );
+            }
+        }
+
+        return segments;
+    }
+
+    /// <summary>Validates a blob key's portable path segments and returns its forward-slash spelling.
+    /// Rejects rooted paths, dot segments, device names, alternate streams, and reserved storage metadata names.</summary>
+    public static string GetNormalizedKey(ObjectBlobAddress address) {
+        return string.Join(
+            '/',
+            GetKeySegments(address: address)
+        );
     }
 }

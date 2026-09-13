@@ -20,7 +20,6 @@ namespace Puck.World;
 /// <param name="MaxReach">The greatest distance, in world units, between the carrier's and the target's positions
 /// <c>body.carry</c> admits. Must be strictly positive.</param>
 public sealed record WorldCarry(DocumentVector3 Offset, float MassEquivalent, float MaxCarryFraction = 1f, float MaxReach = 1.5f);
-
 /// <summary>The one-time fixed-point compilation of a kit's <see cref="WorldCarry"/> facet.</summary>
 /// <param name="Offset">The compiled full-scale carry point, in the carrier's own body-local axes.</param>
 /// <param name="MaxCarryMass">The compiled ceiling <see cref="WorldCarry.MassEquivalent"/> ×
@@ -35,13 +34,16 @@ public readonly record struct FixedWorldCarry(FixedVector3 Offset, FixedQ4816 Ma
     /// <exception cref="InvalidOperationException">The caller bypassed document validation and the facet is not
     /// representable.</exception>
     public static FixedWorldCarry Compile(WorldCarry carry) {
-        if (!TryCompile(carry: carry, compiled: out var compiled, reason: out var reason)) {
+        if (!TryCompile(
+            carry: carry,
+            compiled: out var compiled,
+            reason: out var reason
+        )) {
             throw new InvalidOperationException(message: reason);
         }
 
         return compiled;
     }
-
     /// <summary>Attempts the fixed-point derivation without throwing, for strict document-boundary validation.</summary>
     /// <param name="carry">The authored carry facet.</param>
     /// <param name="compiled">The compiled facet on success; otherwise the default value.</param>
@@ -49,7 +51,7 @@ public readonly record struct FixedWorldCarry(FixedVector3 Offset, FixedQ4816 Ma
     /// <returns><see langword="true"/> exactly when every authored and derived value is representable.</returns>
     public static bool TryCompile(WorldCarry carry, out FixedWorldCarry compiled, out string reason) {
         compiled = default;
-        var fixedMaximum = (double)FixedQ4816.MaxValue;
+        var fixedMaximum = ((double)FixedQ4816.MaxValue);
         var offset = carry.Offset.Value;
 
         if (

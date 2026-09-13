@@ -16,6 +16,12 @@ namespace Puck.World.Tests;
 public sealed class SessionLeverLawTests {
     private const string KnobName = "law-knob";
 
+    private static WorldSessionLever BarLever(double a, int seat) => new(
+        A: a,
+        Name: WorldSessionLevers.BindingBar,
+        Seat: seat,
+        Section: WorldSection.Bindings
+    );
     private static WorldSessionLeverSink ComposeShipped(WorldBindingBarVisibility visibility) =>
         WorldSessionLevers.Compose(
             audio: new RecordingAudioLever(),
@@ -23,34 +29,12 @@ public sealed class SessionLeverLawTests {
             pacing: new PresentPacingControl(initialTargetHertz: null),
             settings: new WorldRenderSettings(defaults: Fixtures.BuildDocument().Render)
         );
+    private static WorldSessionLever Lever(string name, double a) => new(
+        A: a,
+        Name: name,
+        Section: WorldSection.Render
+    );
 
-    // ---- The registry ----
-
-    [Fact]
-    public void ARegisteredNameApplies_AndAnUnregisteredOneIsRefusedRatherThanDropped() {
-        var sink = new WorldSessionLeverSink();
-        var seen = new List<double>();
-
-        sink.Register(
-            name: KnobName,
-            setter: lever => seen.Add(item: lever.A)
-        );
-
-        Assert.True(condition: sink.TryApply(lever: Lever(
-            a: 4.25,
-            name: KnobName
-        )));
-        Assert.Equal(actual: seen, expected: [4.25]);
-        // The discriminating half: a name nobody registered answers false, so the caller can say so out loud
-        // instead of a write silently going nowhere.
-        Assert.False(condition: sink.TryApply(lever: Lever(
-            a: 1.0,
-            name: "not-a-knob"
-        )));
-        Assert.Single(collection: seen);
-        Assert.True(condition: sink.IsRegistered(name: KnobName));
-        Assert.False(condition: sink.IsRegistered(name: "not-a-knob"));
-    }
     [Fact]
     public void ADuplicateRegistrationRefuses_RatherThanShadowingTheLiveKnob() {
         var sink = new WorldSessionLeverSink();
@@ -70,27 +54,93 @@ public sealed class SessionLeverLawTests {
             setter: static _ => { }
         );
     }
-    [Fact]
-    public void TheShippedCompositionRegistersExactlyTheTokensTheVerbsSpeak() {
-        var sink = ComposeShipped(visibility: new WorldBindingBarVisibility());
-        string[] expected = [
-            WorldSessionLevers.AmbientOcclusion,
-            WorldSessionLevers.AmbientOcclusionQuality,
-            WorldSessionLevers.BindingBar,
-            WorldSessionLevers.FarBound,
-            WorldSessionLevers.MasterVolume,
-            WorldSessionLevers.RenderScale,
-            WorldSessionLevers.ShadowMarch,
-            WorldSessionLevers.ShadowMask,
-            WorldSessionLevers.Shadows,
-            WorldSessionLevers.TargetHertz,
-            WorldSessionLevers.UpscaleSharpness,
-        ];
+    // ---- The registry ----
 
-        Assert.Equal(
-            actual: sink.Names.Order(comparer: StringComparer.Ordinal),
-            expected: expected.Order(comparer: StringComparer.Ordinal)
+    [Fact]
+    public void ARegisteredNameApplies_AndAnUnregisteredOneIsRefusedRatherThanDropped() {
+        var sink = new WorldSessionLeverSink();
+        var seen = new List<double>();
+
+        sink.Register(
+            name: KnobName,
+            setter: lever => seen.Add(item: lever.A)
         );
+
+        Assert.True(condition: sink.TryApply(lever: Lever(
+            a: 4.25,
+            name: KnobName
+        )));
+        Assert.Equal(
+            actual: seen,
+            expected: [4.25]
+        );
+        // The discriminating half: a name nobody registered answers false, so the caller can say so out loud
+        // instead of a write silently going nowhere.
+        Assert.False(condition: sink.TryApply(lever: Lever(
+            a: 1.0,
+            name: "not-a-knob"
+        )));
+        Assert.Single(collection: seen);
+        Assert.True(condition: sink.IsRegistered(name: KnobName));
+        Assert.False(condition: sink.IsRegistered(name: "not-a-knob"));
+    }
+    [Fact]
+    public void AnEmptyNameIsRefusedOnTheWire_BecauseItCanAddressNoRegistration() {
+        Assert.True(condition: WorldSubmissionCodec.TryEncodeLever(
+            bytes: out var bytes,
+            failure: out _,
+            lever: Lever(
+                a: 1.0,
+                name: string.Empty
+            )
+        ));
+        Assert.False(condition: WorldSubmissionCodec.TryDecodeLever(
+            bytes,
+            lever: out _,
+            failure: out var failure
+        ));
+        Assert.Equal(
+            expected: WorldCodecRefusal.PayloadMalformed,
+            actual: failure.Refusal
+        );
+        // The control: one character of name is enough to address a registration, so the refusal is about
+        // emptiness rather than about the leaf's shape.
+        Assert.True(condition: WorldSubmissionCodec.TryEncodeLever(
+            bytes: out var named,
+            failure: out _,
+            lever: Lever(
+                a: 1.0,
+                name: "x"
+            )
+        ));
+        Assert.True(condition: WorldSubmissionCodec.TryDecodeLever(
+            named,
+            lever: out _,
+            failure: out _
+        ));
+    }
+    [Fact]
+    public void AnOutOfRangeSeatDropsTheWriteRatherThanThrowingThroughTheDeliveryPath() {
+        var visibility = new WorldBindingBarVisibility();
+        var sink = ComposeShipped(visibility: visibility);
+
+        sink.Apply(lever: BarLever(
+            a: 1.0,
+            seat: PlayerRoster.MaxSlots
+        ));
+        sink.Apply(lever: BarLever(
+            a: 1.0,
+            seat: WorldSessionLever.NoSeat
+        ));
+
+        Assert.False(condition: visibility.Engaged);
+        // The control: an in-range seat on the same sink still lands, so the drops above are about the seat.
+        sink.Apply(lever: BarLever(
+            a: 1.0,
+            seat: 0
+        ));
+
+        Assert.True(condition: visibility.Override(slot: 0));
     }
     // ---- The per-seat dimension ----
 
@@ -126,85 +176,6 @@ public sealed class SessionLeverLawTests {
         Assert.Null(@object: visibility.Override(slot: 2));
         Assert.False(condition: visibility.Engaged);
     }
-    [Fact]
-    public void AnOutOfRangeSeatDropsTheWriteRatherThanThrowingThroughTheDeliveryPath() {
-        var visibility = new WorldBindingBarVisibility();
-        var sink = ComposeShipped(visibility: visibility);
-
-        sink.Apply(lever: BarLever(
-            a: 1.0,
-            seat: PlayerRoster.MaxSlots
-        ));
-        sink.Apply(lever: BarLever(
-            a: 1.0,
-            seat: WorldSessionLever.NoSeat
-        ));
-
-        Assert.False(condition: visibility.Engaged);
-        // The control: an in-range seat on the same sink still lands, so the drops above are about the seat.
-        sink.Apply(lever: BarLever(
-            a: 1.0,
-            seat: 0
-        ));
-
-        Assert.True(condition: visibility.Override(slot: 0));
-    }
-    // ---- The wire ----
-
-    [Fact]
-    public void TheLeafRoundTripsTheNameAndTheSeat() {
-        var lever = new WorldSessionLever(
-            A: 0.5,
-            B: 12.25,
-            Name: WorldSessionLevers.BindingBar,
-            Seat: 3,
-            Section: WorldSection.Bindings
-        );
-
-        Assert.True(condition: WorldSubmissionCodec.TryEncodeLever(
-            bytes: out var bytes,
-            failure: out var encodeFailure,
-            lever: lever
-        ), userMessage: encodeFailure.Detail);
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeLever(
-            bytes,
-            lever: out var decoded,
-            failure: out var decodeFailure
-        ), userMessage: decodeFailure.Detail);
-        Assert.Equal(actual: decoded, expected: lever);
-    }
-    [Fact]
-    public void AnEmptyNameIsRefusedOnTheWire_BecauseItCanAddressNoRegistration() {
-        Assert.True(condition: WorldSubmissionCodec.TryEncodeLever(
-            bytes: out var bytes,
-            failure: out _,
-            lever: Lever(
-            a: 1.0,
-            name: string.Empty
-        )
-        ));
-        Assert.False(condition: WorldSubmissionCodec.TryDecodeLever(
-            bytes,
-            lever: out _,
-            failure: out var failure
-        ));
-        Assert.Equal(expected: WorldCodecRefusal.PayloadMalformed, actual: failure.Refusal);
-        // The control: one character of name is enough to address a registration, so the refusal is about
-        // emptiness rather than about the leaf's shape.
-        Assert.True(condition: WorldSubmissionCodec.TryEncodeLever(
-            bytes: out var named,
-            failure: out _,
-            lever: Lever(
-            a: 1.0,
-            name: "x"
-        )
-        ));
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeLever(
-            named,
-            lever: out _,
-            failure: out _
-        ));
-    }
     // ---- The grant gate ----
 
     [Fact]
@@ -234,8 +205,14 @@ public sealed class SessionLeverLawTests {
 
         var accepted = Assert.Single(collection: sink.Levers);
 
-        Assert.Equal(expected: WorldSessionLevers.BindingBar, actual: accepted.Name);
-        Assert.Equal(expected: 1, actual: accepted.Seat);
+        Assert.Equal(
+            expected: WorldSessionLevers.BindingBar,
+            actual: accepted.Name
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: accepted.Seat
+        );
 
         // One grant different: revoking the section refuses the identical lever before any client sees it.
         fixture.Server.Revoke(
@@ -259,18 +236,61 @@ public sealed class SessionLeverLawTests {
 
         Assert.Single(collection: sink.Levers);
     }
+    // ---- The wire ----
 
-    private static WorldSessionLever BarLever(double a, int seat) => new(
-        A: a,
-        Name: WorldSessionLevers.BindingBar,
-        Seat: seat,
-        Section: WorldSection.Bindings
-    );
-    private static WorldSessionLever Lever(string name, double a) => new(
-        A: a,
-        Name: name,
-        Section: WorldSection.Render
-    );
+    [Fact]
+    public void TheLeafRoundTripsTheNameAndTheSeat() {
+        var lever = new WorldSessionLever(
+            A: 0.5,
+            B: 12.25,
+            Name: WorldSessionLevers.BindingBar,
+            Seat: 3,
+            Section: WorldSection.Bindings
+        );
+
+        Assert.True(
+            condition: WorldSubmissionCodec.TryEncodeLever(
+                bytes: out var bytes,
+                failure: out var encodeFailure,
+                lever: lever
+            ),
+            userMessage: encodeFailure.Detail
+        );
+        Assert.True(
+            condition: WorldSubmissionCodec.TryDecodeLever(
+                bytes,
+                lever: out var decoded,
+                failure: out var decodeFailure
+            ),
+            userMessage: decodeFailure.Detail
+        );
+        Assert.Equal(
+            actual: decoded,
+            expected: lever
+        );
+    }
+    [Fact]
+    public void TheShippedCompositionRegistersExactlyTheTokensTheVerbsSpeak() {
+        var sink = ComposeShipped(visibility: new WorldBindingBarVisibility());
+        string[] expected = [
+            WorldSessionLevers.AmbientOcclusion,
+            WorldSessionLevers.AmbientOcclusionQuality,
+            WorldSessionLevers.BindingBar,
+            WorldSessionLevers.FarBound,
+            WorldSessionLevers.MasterVolume,
+            WorldSessionLevers.RenderScale,
+            WorldSessionLevers.ShadowMarch,
+            WorldSessionLevers.ShadowMask,
+            WorldSessionLevers.Shadows,
+            WorldSessionLevers.TargetHertz,
+            WorldSessionLevers.UpscaleSharpness,
+        ];
+
+        Assert.Equal(
+            actual: sink.Names.Order(comparer: StringComparer.Ordinal),
+            expected: expected.Order(comparer: StringComparer.Ordinal)
+        );
+    }
 
     private sealed class RecordingAudioLever : IWorldAudioLever {
         public void SetMasterVolume(float value) {
@@ -285,10 +305,10 @@ public sealed class SessionLeverLawTests {
         }
         public void DeliverDefinition(WorldDefinition definition) {
         }
-        public void DeliverState(WorldDefinition definition) {
-        }
         public void DeliverSessionLever(WorldSessionLever lever) => Levers.Add(item: lever);
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        }
+        public void DeliverState(WorldDefinition definition) {
         }
     }
 }

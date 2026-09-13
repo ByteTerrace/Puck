@@ -18,30 +18,6 @@ internal static class PackagesCommand {
 
     private readonly record struct PackageEntry(string Description, string File, string Id, IReadOnlyList<string> Tags);
 
-    public static Command Create() {
-        var checkOption = new Option<string?>(name: "--check") { Description = "Compare this path's GENERATED package section against the current packable-project list; write nothing, exit 1 with a drift report on disagreement." };
-        var writeOption = new Option<string?>(name: "--write") { Description = "Regenerate the GENERATED package section in this path from the current packable-project list." };
-        var command = new Command(description: """
-            Report the published ByteTerrace.Puck.* NuGet packages.
-
-            With neither option, lists every project under src/ declaring <IsPackable>true</IsPackable> — package id,
-            description, and tags — sorted by package id.
-
-            The GENERATED section is delimited by a comment pair:
-              <!-- GENERATED: puck packages -->
-              ...
-              <!-- /GENERATED -->
-            --write replaces everything between and including that pair; the rest of the file is untouched.
-            docs/site/index.html carries the one checked-in instance today.
-
-            Exit codes: 0 listed/wrote/matched, 1 check found drift, 2 missing repository root.
-            """, name: "packages") { checkOption, writeOption };
-
-        command.SetAction(action: parseResult => Run(checkPath: parseResult.GetValue(option: checkOption), writePath: parseResult.GetValue(option: writeOption)));
-
-        return command;
-    }
-
     private static int Check(string repositoryRoot, string relativePath, IReadOnlyList<PackageEntry> packages) {
         var fullPath = Path.Combine(
             path1: repositoryRoot,
@@ -134,7 +110,10 @@ internal static class PackagesCommand {
         return packages;
     }
     private static string? Element(XDocument document, string name) =>
-        PackableProjects.Property(document: document, name: name);
+        PackableProjects.Property(
+            document: document,
+            name: name
+        );
     private static string Indent(string text) =>
         string.Join(
             separator: '\n',
@@ -172,6 +151,42 @@ internal static class PackagesCommand {
         _ = builder.Append(value: indent).Append(value: GeneratedEnd);
 
         return builder.ToString();
+    }
+    private static int Run(string? checkPath, string? writePath) {
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+            return 2;
+        }
+
+        var packages = Discover(repositoryRoot: repositoryRoot);
+
+        if (checkPath is not null) {
+            return Check(
+                packages: packages,
+                relativePath: checkPath,
+                repositoryRoot: repositoryRoot
+            );
+        }
+
+        if (writePath is not null) {
+            return Write(
+                packages: packages,
+                relativePath: writePath,
+                repositoryRoot: repositoryRoot
+            );
+        }
+
+        foreach (var package in packages) {
+            Console.Out.WriteLine(value: package.Id);
+            Console.Out.WriteLine(value: $"  {package.Description}");
+            Console.Out.WriteLine(value: $"  tags: {string.Join(
+                separator: ", ",
+                values: package.Tags
+            )}");
+        }
+
+        Console.Out.WriteLine(value: $"packages: {packages.Count} packable project(s).");
+
+        return 0;
     }
     private static bool TryLocateSection(string text, out int beginIndex, out int endIndex) {
         var begin = text.IndexOf(
@@ -261,40 +276,34 @@ internal static class PackagesCommand {
 
         return 0;
     }
-    private static int Run(string? checkPath, string? writePath) {
-        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
-        }
 
-        var packages = Discover(repositoryRoot: repositoryRoot);
+    public static Command Create() {
+        var checkOption = new Option<string?>(name: "--check") { Description = "Compare this path's GENERATED package section against the current packable-project list; write nothing, exit 1 with a drift report on disagreement." };
+        var writeOption = new Option<string?>(name: "--write") { Description = "Regenerate the GENERATED package section in this path from the current packable-project list." };
+        var command = new Command(
+            description: """
+            Report the published ByteTerrace.Puck.* NuGet packages.
 
-        if (checkPath is not null) {
-            return Check(
-                packages: packages,
-                relativePath: checkPath,
-                repositoryRoot: repositoryRoot
-            );
-        }
+            With neither option, lists every project under src/ declaring <IsPackable>true</IsPackable> — package id,
+            description, and tags — sorted by package id.
 
-        if (writePath is not null) {
-            return Write(
-                packages: packages,
-                relativePath: writePath,
-                repositoryRoot: repositoryRoot
-            );
-        }
+            The GENERATED section is delimited by a comment pair:
+              <!-- GENERATED: puck packages -->
+              ...
+              <!-- /GENERATED -->
+            --write replaces everything between and including that pair; the rest of the file is untouched.
+            docs/site/index.html carries the one checked-in instance today.
 
-        foreach (var package in packages) {
-            Console.Out.WriteLine(value: package.Id);
-            Console.Out.WriteLine(value: $"  {package.Description}");
-            Console.Out.WriteLine(value: $"  tags: {string.Join(
-                separator: ", ",
-                values: package.Tags
-            )}");
-        }
+            Exit codes: 0 listed/wrote/matched, 1 check found drift, 2 missing repository root.
+            """,
+            name: "packages"
+        ) { checkOption, writeOption };
 
-        Console.Out.WriteLine(value: $"packages: {packages.Count} packable project(s).");
+        command.SetAction(action: parseResult => Run(
+            checkPath: parseResult.GetValue(option: checkOption),
+            writePath: parseResult.GetValue(option: writeOption)
+        ));
 
-        return 0;
+        return command;
     }
 }

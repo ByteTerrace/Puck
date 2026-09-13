@@ -55,12 +55,28 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
     ) {
         m_model = model;
         m_dmgSpeed = dmgSpeed;
-        m_boot = new(Mode: bootMode, ImagePath: bootRomPath);
-        if (bootRomPath is not null && bootRomImage is not null) {
-            throw new ArgumentException("Supply a prepared boot image or a boot image path, not both.", nameof(bootRomImage));
+        m_boot = new(
+            ImagePath: bootRomPath,
+            Mode: bootMode
+        );
+        if (
+            (bootRomPath is not null) &&
+            (bootRomImage is not null)
+        ) {
+            throw new ArgumentException(
+                message: "Supply a prepared boot image or a boot image path, not both.",
+                paramName: nameof(bootRomImage)
+            );
         }
-        m_bootRom = bootRomImage?.ToArray() ?? (bootRomPath is null ? null : File.ReadAllBytes(path: bootRomPath));
-        _ = HgbFirmware.CreateConfiguration(model: model, cartridgeRom: [], bootMode: bootMode, bootRom: m_bootRom);
+        m_bootRom = (bootRomImage?.ToArray() ?? ((bootRomPath is null)
+            ? null
+            : File.ReadAllBytes(path: bootRomPath)));
+        _ = HgbFirmware.CreateConfiguration(
+            bootMode: bootMode,
+            bootRom: m_bootRom,
+            cartridgeRom: [],
+            model: model
+        );
 
         if (cartridgeRom is not null) {
             LoadContent(
@@ -76,23 +92,23 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
     /// <inheritdoc/>
     public void PeekBytes(int address, Span<byte> destination) =>
         Worker.PeekBytes(
-        address: address,
-        destination: destination
-    );
+            address: address,
+            destination: destination
+        );
     /// <inheritdoc/>
     public void PokeByte(int address, byte value) =>
         Worker.PokeByte(
-        address: address,
-        value: value
-    );
+            address: address,
+            value: value
+        );
 
     /// <inheritdoc/>
     public string Options =>
         GamingBrickEngine.FormatOptions(
-        dmgSpeed: m_dmgSpeed,
-        model: m_model,
-        boot: m_boot
-    );
+            boot: m_boot,
+            dmgSpeed: m_dmgSpeed,
+            model: m_model
+        );
 
     /// <inheritdoc/>
     public bool TryReconfigure(string? options, out string reason) {
@@ -102,7 +118,11 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
         ConsoleModel model;
 
         try {
-            var parsed = GamingBrickEngine.ParseOptions(options: options, bootDefaults: m_boot);
+            var parsed = GamingBrickEngine.ParseOptions(
+                bootDefaults: m_boot,
+                options: options
+            );
+
             if (parsed.Boot != m_boot) {
                 reason = "Firmware and startup mode are construction-fixed; create a new machine to change them.";
                 return false;
@@ -116,7 +136,13 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
 
         // Only hardware moves live. Image selection was checked above; the core never reloads a host path.
         var (ok, workerReason) = Worker.Reconfigure(options: GamingBrickEngine.FormatOptions(
-            model: model, dmgSpeed: m_dmgSpeed, boot: new MachineBootOptions(Mode: m_boot.Mode, ImagePath: null)));
+            model: model,
+            dmgSpeed: m_dmgSpeed,
+            boot: new MachineBootOptions(
+                Mode: m_boot.Mode,
+                ImagePath: null
+            )
+        ));
 
         if (ok) {
             m_model = model;
@@ -130,11 +156,11 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
         new HumbleGamingBrickCore(
-        cartridgeRom: data,
-        bootMode: m_boot.Mode,
-        bootRom: m_bootRom,
-        dmgSpeed: m_dmgSpeed,
-        model: m_model,
-        savePath: savePath
-    );
+            cartridgeRom: data,
+            bootMode: m_boot.Mode,
+            bootRom: m_bootRom,
+            dmgSpeed: m_dmgSpeed,
+            model: m_model,
+            savePath: savePath
+        );
 }

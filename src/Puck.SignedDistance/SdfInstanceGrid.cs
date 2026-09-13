@@ -70,15 +70,15 @@ public static class SdfInstanceGrid {
     /// middle). Derived from the median, never hand-picked per scene — the median is robust to a few outliers, and a
     /// too-fine derivation is coarsened by <see cref="CellCapacityFactor"/> / <see cref="MaxDimension"/>.</summary>
     private const float CellDiameterFactor = 3.0f;
-    // Separate exceptional scales before deriving either the grid extent or its query padding. This affects only
-    // where an instance is found: oversized instances still receive the same exact per-cone bound test once.
-    private const float MaxBinnedRadiusRatio = 8.0f;
     /// <summary>The float-safety epsilon folded into the packed <c>footprintPad</c>, in cell edges: the host bins a
     /// center by <c>floor((center − origin) · invCellSize)</c> and the beam rasterizes its query AABB through the same
     /// mapping — a center within a few ulps of a cell wall could land on either side, so the query is padded strictly
     /// past every rounding disagreement. 1e-3 of a cell edge dwarfs the ~1e-6 relative float error while staying
     /// cost-wise negligible and avoids a whole-cell over-cover ring that can multiply the walked cells by up to 27×.</summary>
     private const float FootprintEpsilonCells = 1.0e-3f;
+    // Separate exceptional scales before deriving either the grid extent or its query padding. This affects only
+    // where an instance is found: oversized instances still receive the same exact per-cone bound test once.
+    private const float MaxBinnedRadiusRatio = 8.0f;
     /// <summary>The per-axis cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
     /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
     /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. KEEP IN SYNC with the slab-budget reasoning at
@@ -112,12 +112,12 @@ public static class SdfInstanceGrid {
         var binnableIndices = new int[instances.Length];
         var diameters = new float[instances.Length];
         var binnableCount = SelectBinnable(
-            instances: instances,
-            indices: binnableIndices,
             diameters: diameters,
-            minBounds: out var minBounds,
-            maxBounds: out var maxBounds,
+            indices: binnableIndices,
+            instances: instances,
             maxBinnedRadius: out var maxBinnedRadius,
+            maxBounds: out var maxBounds,
+            minBounds: out var minBounds,
             radiusLimit: out var radiusLimit
         );
 
@@ -133,7 +133,10 @@ public static class SdfInstanceGrid {
             value2: Vector3.Zero
         );
         var cellSize = DeriveCellSize(
-            diameters: diameters.AsSpan(start: 0, length: binnableCount),
+            diameters: diameters.AsSpan(
+                length: binnableCount,
+                start: 0
+            ),
             dimensions: out var dimensions,
             extent: extent,
             maxInstances: maxInstances
@@ -249,58 +252,6 @@ public static class SdfInstanceGrid {
 
         return ((((z * dimensions.Y) + y) * dimensions.X) + x);
     }
-    // Derives the cell edge from the median binned-bound diameter, then coarsens until the resolution honors both the
-    // total-cell cap and the per-axis cap. Returns the cell size and (via out) the resulting per-axis cell counts.
-    // Both allocation paths use this partition. The median is taken over eligible active bounds; oversized bounds
-    // are removed before computing the fine grid's AABB and padding. They remain in the always-list. Sorting the
-    // diameters once also provides the retained population's sorted prefix for DeriveCellSize.
-    private static int SelectBinnable(ReadOnlySpan<SdfInstanceGridInput> instances, Span<int> indices, Span<float> diameters, out Vector3 minBounds, out Vector3 maxBounds, out float maxBinnedRadius, out float radiusLimit) {
-        minBounds = new Vector3(value: float.PositiveInfinity);
-        maxBounds = new Vector3(value: float.NegativeInfinity);
-        maxBinnedRadius = 0.0f;
-        radiusLimit = 0.0f;
-        var count = 0;
-
-        for (var index = 0; (index < instances.Length); index++) {
-            var input = instances[index];
-
-            if (!input.Binnable || (input.Radius < 0.0f)) {
-                continue;
-            }
-
-            indices[count] = index;
-            diameters[count++] = (2.0f * input.Radius);
-        }
-
-        if (count == 0) {
-            return 0;
-        }
-
-        diameters[..count].Sort();
-        radiusLimit = MathF.Max(
-            x: ((0.5f * MaxBinnedRadiusRatio) * diameters[(count / 2)]),
-            y: MinCellSize
-        );
-        var retained = 0;
-
-        for (var slot = 0; (slot < count); slot++) {
-            var index = indices[slot];
-            var input = instances[index];
-
-            if (input.Radius > radiusLimit) {
-                continue;
-            }
-
-            indices[retained++] = index;
-            maxBinnedRadius = MathF.Max(x: maxBinnedRadius, y: input.Radius);
-            var radius = new Vector3(value: input.Radius);
-            minBounds = Vector3.Min(value1: minBounds, value2: (input.Center - radius));
-            maxBounds = Vector3.Max(value1: maxBounds, value2: (input.Center + radius));
-        }
-
-        return retained;
-    }
-
     // SelectBinnable supplies sorted diameters, so deriving the retained median needs no second sort.
     private static float DeriveCellSize(Span<float> diameters, Vector3 extent, int maxInstances, out (int X, int Y, int Z) dimensions) {
         var medianDiameter = diameters[(diameters.Length / 2)];
@@ -391,6 +342,70 @@ public static class SdfInstanceGrid {
 
         return block;
     }
+    // Derives the cell edge from the median binned-bound diameter, then coarsens until the resolution honors both the
+    // total-cell cap and the per-axis cap. Returns the cell size and (via out) the resulting per-axis cell counts.
+    // Both allocation paths use this partition. The median is taken over eligible active bounds; oversized bounds
+    // are removed before computing the fine grid's AABB and padding. They remain in the always-list. Sorting the
+    // diameters once also provides the retained population's sorted prefix for DeriveCellSize.
+    private static int SelectBinnable(ReadOnlySpan<SdfInstanceGridInput> instances, Span<int> indices, Span<float> diameters, out Vector3 minBounds, out Vector3 maxBounds, out float maxBinnedRadius, out float radiusLimit) {
+        minBounds = new Vector3(value: float.PositiveInfinity);
+        maxBounds = new Vector3(value: float.NegativeInfinity);
+        maxBinnedRadius = 0.0f;
+        radiusLimit = 0.0f;
+        var count = 0;
+
+        for (var index = 0; (index < instances.Length); index++) {
+            var input = instances[index];
+
+            if (
+                !input.Binnable ||
+                (input.Radius < 0.0f)
+            ) {
+                continue;
+            }
+
+            indices[count] = index;
+            diameters[count++] = (2.0f * input.Radius);
+        }
+
+        if (count == 0) {
+            return 0;
+        }
+
+        diameters[..count].Sort();
+        radiusLimit = MathF.Max(
+            x: ((0.5f * MaxBinnedRadiusRatio) * diameters[(count / 2)]),
+            y: MinCellSize
+        );
+        var retained = 0;
+
+        for (var slot = 0; (slot < count); slot++) {
+            var index = indices[slot];
+            var input = instances[index];
+
+            if (input.Radius > radiusLimit) {
+                continue;
+            }
+
+            indices[retained++] = index;
+            maxBinnedRadius = MathF.Max(
+                x: maxBinnedRadius,
+                y: input.Radius
+            );
+            var radius = new Vector3(value: input.Radius);
+
+            minBounds = Vector3.Min(
+                value1: minBounds,
+                value2: (input.Center - radius)
+            );
+            maxBounds = Vector3.Max(
+                value1: maxBounds,
+                value2: (input.Center + radius)
+            );
+        }
+
+        return retained;
+    }
 
     /// <summary>Returns the largest packed block <see cref="Build"/> can produce for an instance envelope. The
     /// frame-local grid buffers use this exact ceiling: header + at most 4N cells' N+1 prefix entries + N binned
@@ -474,12 +489,12 @@ public static class SdfInstanceGrid {
             }
 
             var binnableCount = SelectBinnable(
-                instances: instances,
-                indices: m_binnableIndices,
                 diameters: m_diameters,
-                minBounds: out var minBounds,
-                maxBounds: out var maxBounds,
+                indices: m_binnableIndices,
+                instances: instances,
                 maxBinnedRadius: out var maxBinnedRadius,
+                maxBounds: out var maxBounds,
+                minBounds: out var minBounds,
                 radiusLimit: out var radiusLimit
             );
 

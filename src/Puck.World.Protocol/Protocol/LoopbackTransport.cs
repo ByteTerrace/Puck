@@ -41,13 +41,13 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         m_server = server;
     }
 
+    /// <summary>Gets an optional record tap invoked with every authority command before it applies — one kind of entry in
+    /// the captured per-tick authority stream. <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<WorldCommand>? CommandTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every window-composition submission before it reaches the
     /// server, carrying the composition and its actor. <see langword="null"/> (the default) is a free
     /// pass-through.</summary>
     public Action<WorldComposition, WorldPrincipal>? CompositionTap { get; set; }
-    /// <summary>Gets an optional record tap invoked with every authority command before it applies — one kind of entry in
-    /// the captured per-tick authority stream. <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldCommand>? CommandTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every designation before it applies.</summary>
     public Action<WorldDesignation, WorldPrincipal>? DesignationTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every grant acquisition before it applies, carrying the grant row
@@ -56,11 +56,6 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     /// hardest on the addon path, where the re-run guest is checked against the replayed world's own table.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldGrant, WorldPrincipal>? GrantTap { get; set; }
-    /// <summary>Gets an optional record tap invoked with every read-back query before it reaches the server, carrying
-    /// the query and the identity the envelope stamped. Captured because a query crosses the same Observe gate a
-    /// grant change moves, so a replay that skipped it would exercise a different admission history.
-    /// <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldQuery, WorldPrincipal>? QueryTap { get; set; }
     /// <summary>Gets or sets a value indicating whether the local connection's driving input — every
     /// <see cref="SubmitIntent"/> and every <see cref="WorldSubmissionPayload.Command"/> — is dropped before it
     /// reaches a tap or the server. A replay drive holds this while it feeds a tape's recorded intents and commands
@@ -71,6 +66,11 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     /// replay tape captures the live per-tick intent stream through. <see langword="null"/> (the default) is a free
     /// pass-through; set only while a recording is armed.</summary>
     public Action<IntentSubmission>? IntentTap { get; set; }
+    /// <summary>Gets an optional record tap invoked with every read-back query before it reaches the server, carrying
+    /// the query and the identity the envelope stamped. Captured because a query crosses the same Observe gate a
+    /// grant change moves, so a replay that skipped it would exercise a different admission history.
+    /// <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<WorldQuery, WorldPrincipal>? QueryTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every revocation before it applies — the mirror of
     /// <see cref="GrantTap"/>. <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldGrant, WorldPrincipal>? RevokeTap { get; set; }
@@ -84,60 +84,31 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     // Mints the next envelope for the LOCAL connection (id 0, generation 0) — Sequence/CorrelationId both simple
     // monotonic counters (see their own field remarks).
     private long Submit(WorldPrincipal principal, WorldSubmissionPayload payload, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) {
-        if (payload is WorldSubmissionPayload.Mutation && operationId == Guid.Empty) {
+        if (
+            (payload is WorldSubmissionPayload.Mutation) &&
+            (operationId == Guid.Empty)
+        ) {
             completion?.Invoke(new WorldSubmissionResult.Refusal(
-                "world.mutation.operation_id_missing",
-                "mutation operation id is required"
+                Code: "world.mutation.operation_id_missing",
+                Detail: "mutation operation id is required"
             ));
             return 0;
         }
         if (TryNextEnvelope(
             envelope: out var envelope,
+            operationId: operationId,
             payload: payload,
-            principal: principal,
-            operationId: operationId
+            principal: principal
         )) {
-            m_server.Submit(envelope: envelope, completion: completion);
+            m_server.Submit(
+                completion: completion,
+                envelope: envelope
+            );
 
             return envelope.CorrelationId;
         }
 
         return 0;
-    }
-    // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
-    // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
-    private bool TryNextEnvelope(WorldPrincipal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, Guid operationId = default) {
-        if (
-            !WorldFrameCodec.TryEncode(
-            failure: out var failure,
-            frame: out var frame,
-                payload: payload,
-                operationId: operationId
-            ) ||
-            !WorldFrameCodec.TryDecode(
-                failure: out failure,
-                frame: frame,
-                payload: out var decoded,
-                operationId: out var decodedOperationId
-        ) ||
-            (decoded is null)
-        ) {
-            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
-            envelope = default;
-            return false;
-        }
-
-        envelope = new SubmissionEnvelope(
-            ConnectionId: SubmissionEnvelope.LocalConnectionId,
-            SessionGeneration: 0,
-            Sequence: ++m_sequence,
-            CorrelationId: ++m_correlationId,
-            Principal: principal,
-            Payload: decoded
-            ,OperationId: decodedOperationId
-        );
-
-        return true;
     }
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
@@ -160,6 +131,41 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         }
 
         return 0;
+    }
+    // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
+    // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
+    private bool TryNextEnvelope(WorldPrincipal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, Guid operationId = default) {
+        if (
+            !WorldFrameCodec.TryEncode(
+            failure: out var failure,
+            frame: out var frame,
+            operationId: operationId,
+            payload: payload
+        ) ||
+            !WorldFrameCodec.TryDecode(
+            failure: out failure,
+            frame: frame,
+            operationId: out var decodedOperationId,
+            payload: out var decoded
+        ) ||
+            (decoded is null)
+        ) {
+            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
+            envelope = default;
+            return false;
+        }
+
+        envelope = new SubmissionEnvelope(
+            ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0,
+            Sequence: ++m_sequence,
+            CorrelationId: ++m_correlationId,
+            Principal: principal,
+            Payload: decoded,
+            OperationId: decodedOperationId
+        );
+
+        return true;
     }
 
     /// <summary>Binds the client sink the server delivers each tick's snapshot to.</summary>
@@ -217,11 +223,19 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     // (WorldServer.MutationTap), the one ingress the loopback, an admitted socket peer, and a forwarded traveller's
     // submission all share.
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(payload, principal, Guid.Empty, null);
-
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(
+        completion: null,
+        operationId: Guid.Empty,
+        payload: payload,
+        principal: principal
+    );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(payload, principal, operationId, null);
-
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(
+        completion: null,
+        operationId: operationId,
+        payload: payload,
+        principal: principal
+    );
     /// <inheritdoc/>
     public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
         switch (payload) {
@@ -235,9 +249,9 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 if (
                     TryNextEnvelope(
                     envelope: out var commandEnvelope,
+                    operationId: operationId,
                     payload: command,
-                    principal: principal,
-                    operationId: operationId
+                    principal: principal
                 ) &&
                     (commandEnvelope.Payload is WorldSubmissionPayload.Command canonicalCommand)
                 ) {
@@ -289,10 +303,10 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 );
             default:
                 return Submit(
-                    payload: payload,
-                    principal: principal,
+                    completion: completion,
                     operationId: operationId,
-                    completion: completion
+                    payload: payload,
+                    principal: principal
                 );
         }
     }

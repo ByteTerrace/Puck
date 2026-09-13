@@ -17,7 +17,6 @@ internal sealed partial class PlayerCommandModule {
         provider: CultureInfo.InvariantCulture
     );
     private static string Point(Vector3 value) => $"({Scalar(value: value.X)}, {Scalar(value: value.Y)}, {Scalar(value: value.Z)})";
-
     private CommandResult RigHandler(CommandContext context, WireArgs args) {
         if (!TryStripInstanceToken(
             args: in args,
@@ -47,10 +46,13 @@ internal sealed partial class PlayerCommandModule {
         )) {
             return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
-        if (!m_stamps.TryBodyRig(
+        if (
+            !m_stamps.TryBodyRig(
             bodyIndex: index,
             state: out var state
-        ) || (state is null)) {
+        ) ||
+            (state is null)
+        ) {
             return new CommandResult(Output: $"[body.rig: body:{index} no creation look — this body draws through the procedural catalog rig, which carries no drivers or effectors]");
         }
 
@@ -63,7 +65,9 @@ internal sealed partial class PlayerCommandModule {
         }
 
         foreach (var effector in state.Effectors) {
-            _ = line.Append(value: $" effector:{effector.Name} weight={Scalar(value: effector.Weight)} planted={(effector.Planted ? "yes" : "no")} target={((effector.Target is { } target)
+            _ = line.Append(value: $" effector:{effector.Name} weight={Scalar(value: effector.Weight)} planted={(effector.Planted
+                ? "yes"
+                : "no")} target={((effector.Target is { } target)
                 ? Point(value: target)
                 : "none")}");
 

@@ -31,25 +31,25 @@ public static partial class WorldAuthorityCheckpointCodec {
         var bestTarget = reader.ReadInt32();
         var baseTurn = reader.ReadInt64();
         var values = ReadLongArray(
-            reader: ref reader,
-            field: "search level values"
+            field: "search level values",
+            reader: ref reader
         );
         var key = reader.ReadUInt64();
         var alphaEntry = reader.ReadInt64();
 
         return new SearchLevelCheckpoint(
-            Shape: shape,
-            Token: token,
-            Target: target,
             Alpha: alpha,
-            Beta: beta,
-            Best: best,
-            BestToken: bestToken,
-            BestTarget: bestTarget,
+            AlphaEntry: alphaEntry,
             BaseTurn: baseTurn,
-            Values: values,
+            Best: best,
+            BestTarget: bestTarget,
+            BestToken: bestToken,
+            Beta: beta,
             Key: key,
-            AlphaEntry: alphaEntry
+            Shape: shape,
+            Target: target,
+            Token: token,
+            Values: values
         );
     }
     private static void WriteSearchJob(WireWriter writer, SearchJobCheckpoint job) {
@@ -117,8 +117,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
             foreach (var values in new[] { tree.Parent, tree.FirstChild, tree.ChildCount, tree.Visits, tree.Total, tree.Shape, tree.Token, tree.Target, tree.Expanded, tree.Path, tree.UctValues, tree.PlayValues }) {
                 WriteLongArray(
-                    writer: writer,
-                    values: values
+                    values: values,
+                    writer: writer
                 );
             }
         }
@@ -136,16 +136,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         var target = reader.ReadInt32();
         var count = reader.ReadInt64();
         var legal = ReadLongArray(
-            reader: ref reader,
-            field: "search job legal"
+            field: "search job legal",
+            reader: ref reader
         );
         var counts = ReadLongArray(
-            reader: ref reader,
-            field: "search job counts"
+            field: "search job counts",
+            reader: ref reader
         );
         var wide = ReadLongArray(
-            reader: ref reader,
-            field: "search job wide"
+            field: "search job wide",
+            reader: ref reader
         );
         var nodes = reader.ReadInt64();
         var baseTurn = reader.ReadInt64();
@@ -162,16 +162,16 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => ReadSearchLevel(reader: ref r)
         );
         var ttKey = ReadULongArray(
-            reader: ref reader,
-            field: "search job transposition keys"
+            field: "search job transposition keys",
+            reader: ref reader
         );
         var ttValue = ReadLongArray(
-            reader: ref reader,
-            field: "search job transposition values"
+            field: "search job transposition values",
+            reader: ref reader
         );
         var ttMeta = ReadLongArray(
-            reader: ref reader,
-            field: "search job transposition meta"
+            field: "search job transposition meta",
+            reader: ref reader
         );
         SearchTreeCheckpoint? tree = null;
 
@@ -190,46 +190,67 @@ public static partial class WorldAuthorityCheckpointCodec {
             var pathLength = reader.ReadInt32();
             var arrays = new long[12][];
 
-            for (var index = 0; index < arrays.Length; index++) {
+            for (var index = 0; (index < arrays.Length); index++) {
                 arrays[index] = ReadLongArray(
-                    reader: ref reader,
-                    field: "search job tree"
+                    field: "search job tree",
+                    reader: ref reader
                 );
             }
 
             tree = new SearchTreeCheckpoint(
-                Active: treeActive, Phase: phase, Count: treeCount, Iteration: iteration, Seed: seed, UShape: uShape, UToken: uToken, UTarget: uTarget, UScan: uScan, UStart: uStart, PlayoutPlies: playoutPlies,
-                Parent: arrays[0], FirstChild: arrays[1], ChildCount: arrays[2], Visits: arrays[3], Total: arrays[4], Shape: arrays[5], Token: arrays[6], Target: arrays[7], Expanded: arrays[8],
-                Path: arrays[9], PathLength: pathLength, UctValues: arrays[10], PlayValues: arrays[11]
+                Active: treeActive,
+                Phase: phase,
+                Count: treeCount,
+                Iteration: iteration,
+                Seed: seed,
+                UShape: uShape,
+                UToken: uToken,
+                UTarget: uTarget,
+                UScan: uScan,
+                UStart: uStart,
+                PlayoutPlies: playoutPlies,
+                Parent: arrays[0],
+                FirstChild: arrays[1],
+                ChildCount: arrays[2],
+                Visits: arrays[3],
+                Total: arrays[4],
+                Shape: arrays[5],
+                Token: arrays[6],
+                Target: arrays[7],
+                Expanded: arrays[8],
+                Path: arrays[9],
+                PathLength: pathLength,
+                UctValues: arrays[10],
+                PlayValues: arrays[11]
             );
         }
 
         return new SearchJobCheckpoint(
-            Name: name,
-            Stamp: stamp,
-            Running: running,
-            Done: done,
-            Shape: shape,
-            Token: token,
-            Target: target,
-            Count: count,
-            Legal: legal,
-            Counts: counts,
-            Wide: wide,
-            Nodes: nodes,
-            BaseTurn: baseTurn,
-            PassDepth: passDepth,
             Active: active,
-            Best: best,
-            BestToken: bestToken,
-            BestTarget: bestTarget,
             Alpha: alpha,
+            BaseTurn: baseTurn,
+            Best: best,
+            BestTarget: bestTarget,
+            BestToken: bestToken,
             Beta: beta,
+            Count: count,
+            Counts: counts,
+            Done: done,
+            Legal: legal,
             Levels: levels,
+            Name: name,
+            Nodes: nodes,
+            PassDepth: passDepth,
+            Running: running,
+            Shape: shape,
+            Stamp: stamp,
+            Target: target,
+            Token: token,
+            Tree: tree,
             TtKey: ttKey,
-            TtValue: ttValue,
             TtMeta: ttMeta,
-            Tree: tree
+            TtValue: ttValue,
+            Wide: wide
         );
     }
     private static byte[] EncodeSearch(SearchCheckpoint section) {

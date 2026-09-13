@@ -11,14 +11,22 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets the population index of the rigid body this body is currently carrying, or
     /// <see langword="null"/> when it is carrying nothing.</summary>
-    public int? Carrying => ((m_carryingIndex >= 0) ? m_carryingIndex : null);
+    public int? Carrying => ((m_carryingIndex >= 0)
+        ? m_carryingIndex
+        : null
+    );
+
     /// <summary>Gets whether the currently compiled kit still owns the carry facet an active relationship needs.</summary>
     internal bool HasCarryFacet => (m_carry is not null);
+
     /// <summary>Gets the population index of the body currently carrying this one, or <see langword="null"/> when
     /// this body is not carried. A carried body's own <see cref="Advance"/> call is a no-op — its pose and rigid
     /// velocity are DERIVED from the carrier every tick by <see cref="FollowCarrier"/> instead, called from
     /// <see cref="WorldPopulation"/> after movement and correction passes complete.</summary>
-    public int? CarriedBy => ((m_carriedByIndex >= 0) ? m_carriedByIndex : null);
+    public int? CarriedBy => ((m_carriedByIndex >= 0)
+        ? m_carriedByIndex
+        : null
+    );
 
     /// <summary>Attempts to begin carrying <paramref name="target"/>: this body's kit must author a carry facet,
     /// <paramref name="target"/> must carry a rigid kit facet neither body may already be a party to another carry
@@ -62,21 +70,33 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        var scaleSquared = SaturatingNonnegativeProduct(left: m_scale, right: m_scale);
-        var scaleCubed = SaturatingNonnegativeProduct(left: scaleSquared, right: m_scale);
-        var reach = SaturatingNonnegativeProduct(left: carry.MaxReach, right: m_scale);
+        var scaleSquared = SaturatingNonnegativeProduct(
+            left: m_scale,
+            right: m_scale
+        );
+        var scaleCubed = SaturatingNonnegativeProduct(
+            left: scaleSquared,
+            right: m_scale
+        );
+        var reach = SaturatingNonnegativeProduct(
+            left: carry.MaxReach,
+            right: m_scale
+        );
         var distance = (target.m_position - m_position).Length;
 
         if (distance > reach) {
-            reason = $"body:{targetIndex} is out of reach ({(double)distance:0.###} > {(double)reach:0.###})";
+            reason = $"body:{targetIndex} is out of reach ({((double)distance):0.###} > {((double)reach):0.###})";
             return false;
         }
 
-        var ceiling = SaturatingNonnegativeProduct(left: carry.MaxCarryMass, right: scaleCubed);
+        var ceiling = SaturatingNonnegativeProduct(
+            left: carry.MaxCarryMass,
+            right: scaleCubed
+        );
         var targetMass = target.RigidMass;
 
         if (targetMass > ceiling) {
-            reason = $"body:{targetIndex}'s mass {(double)targetMass:0.###} exceeds this body's carry ceiling {(double)ceiling:0.###}";
+            reason = $"body:{targetIndex}'s mass {((double)targetMass):0.###} exceeds this body's carry ceiling {((double)ceiling):0.###}";
             return false;
         }
 
@@ -89,7 +109,6 @@ public sealed partial class WorldBody {
         reason = "";
         return true;
     }
-
     /// <summary>Gets whether this body's own collider, at its CURRENT pose, overlaps the static contact field — a
     /// zero-displacement probe sweep (previous position equal to current) that still reports a correction exactly
     /// when the pose is already embedded. Used to refuse a carry release whose left-behind pose would penetrate a
@@ -137,7 +156,6 @@ public sealed partial class WorldBody {
         target.m_angularVelocity = FixedVector3.Zero;
         m_carryingIndex = -1;
     }
-
     /// <summary>Clears this body's own <see cref="Carrying"/> without touching any other body — the carrier-side
     /// half of an orphaned relationship's cleanup (its target went inactive, lost its rigid facet, or the mirror
     /// otherwise broke), applied by <see cref="WorldPopulation"/>'s per-tick sweep rather than
@@ -154,7 +172,6 @@ public sealed partial class WorldBody {
     internal void ForceRelease() {
         m_carriedByIndex = -1;
     }
-
     /// <summary>Derives this carried body's pose and rigid velocity from <paramref name="carrier"/>'s own frame for
     /// the tick that just completed — called once per tick after movement, dynamic contact, and tether correction,
     /// so it reads the carrier's final authoritative pose for that tick. The body-local carry point scales with the
@@ -174,9 +191,7 @@ public sealed partial class WorldBody {
         }
 
         var previousPosition = m_position;
-        var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(
-            vector: (carry.Offset * carrier.m_scale)
-        ));
+        var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(vector: (carry.Offset * carrier.m_scale)));
 
         m_orientation = carrier.m_orientation;
 

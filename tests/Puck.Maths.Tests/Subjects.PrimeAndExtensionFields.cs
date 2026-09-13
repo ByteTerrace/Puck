@@ -1003,15 +1003,15 @@ internal static partial class Subjects {
 
         if (!foundBaseTwo.SequenceEqual(second: baseTwo)) {
             return $"the base-two strong pseudoprime population below {bound} is [{string.Join(
-            separator: ",",
-            values: foundBaseTwo
-        )}]";
+                separator: ",",
+                values: foundBaseTwo
+            )}]";
         }
         if (!foundLucas.SequenceEqual(second: lucas)) {
             return $"the strong Lucas pseudoprime population below {bound} is [{string.Join(
-            separator: ",",
-            values: foundLucas
-        )}]";
+                separator: ",",
+                values: foundLucas
+            )}]";
         }
         if (foundBaseTwo.Intersect(second: foundLucas).Any()) { return "the two pseudoprime populations are not disjoint, which is the composition's whole thesis"; }
 
@@ -1898,9 +1898,9 @@ internal static partial class Subjects {
                     paramName: "nonSquare"
                 )) {
                     return $"Create(F_{modulus}, {unreduced}) admitted an unreduced generator, or refused naming {RefusedParameter(action: () => _ = QuadraticExtensionField64.Create(
-                    baseField: field,
-                    nonSquare: unreduced
-                ))}";
+                        baseField: field,
+                        nonSquare: unreduced
+                    ))}";
                 }
             }
 

@@ -13,12 +13,33 @@ namespace Puck.Cli.Bench;
 // string[] the switcher reads itself: puck neither validates nor rewrites a token of it. A token equal to `world`
 // anywhere on the line selects the lane, so it can never reach the switcher as an option value.
 internal static class BenchRunner {
+    // MemoryDiagnoser rides on every scenario: these kernels are meant to be zero-alloc, and its byte columns are
+    // the only thing that reports whether they are. DisassemblyDiagnoser is attached per-class, only on the
+    // fixed-point kernels, via attribute — the extension scenario is modular-ulong arithmetic, not a fixed-point
+    // kernel. No explicit job is added here so a command-line --job is the single job that runs (adding one here
+    // would run alongside it and double the output).
+    private static int Run(string[] benchmarkArguments) {
+        var config = ManualConfig
+            .Create(config: DefaultConfig.Instance)
+            .AddDiagnoser(newDiagnosers: MemoryDiagnoser.Default);
+
+        BenchmarkSwitcher
+            .FromAssembly(assembly: typeof(BenchRunner).Assembly)
+            .Run(
+            args: benchmarkArguments,
+            config: config
+        );
+
+        return 0;
+    }
+
     public static Command Create() {
         var benchmarkArguments = new Argument<string[]>(name: "benchmark-arguments") {
             Arity = ArgumentArity.ZeroOrMore,
             Description = "Forwarded to BenchmarkDotNet's switcher verbatim: --filter, --job, --list, --runtimes, --hide, and the rest of its grammar.",
         };
-        var worldCommand = new Command(description: """
+        var worldCommand = new Command(
+            description: """
             The Puck.World.Server tick-path lane: a plain stopwatch harness, not a BenchmarkDotNet job.
 
             Boots the shipped puck.world.json and the checked-in Klondike fixture document
@@ -27,8 +48,11 @@ internal static class BenchRunner {
             scripted Klondike deal's per-tick time and per-mutation allocation. A server construction against the
             shipped world costs hundreds of milliseconds, past what an iteration-based job can amortize honestly, which is
             why this lane sits beside the switcher rather than inside it.
-            """, name: "world");
-        var command = new Command(description: """
+            """,
+            name: "world"
+        );
+        var command = new Command(
+            description: """
             The Puck.Maths micro-benchmark microscope (BenchmarkDotNet).
 
               puck bench --filter '*Norm*'   the scenarios matching a glob
@@ -44,7 +68,9 @@ internal static class BenchRunner {
 
             puck's own help answers -h and --help here, so BenchmarkDotNet's (-h is its `hide` option) are reached
             past a `--` separator: `puck bench -- --help`.
-            """, name: "bench") { benchmarkArguments, worldCommand };
+            """,
+            name: "bench"
+        ) { benchmarkArguments, worldCommand };
 
         // Option-shaped tokens are the switcher's, not misspellings.
         command.TreatUnmatchedTokensAsErrors = false;
@@ -52,22 +78,5 @@ internal static class BenchRunner {
         command.SetAction(action: parseResult => Run(benchmarkArguments: (parseResult.GetValue(argument: benchmarkArguments) ?? [])));
 
         return command;
-    }
-
-    // MemoryDiagnoser rides on every scenario: these kernels are meant to be zero-alloc, and its byte columns are
-    // the only thing that reports whether they are. DisassemblyDiagnoser is attached per-class, only on the
-    // fixed-point kernels, via attribute — the extension scenario is modular-ulong arithmetic, not a fixed-point
-    // kernel. No explicit job is added here so a command-line --job is the single job that runs (adding one here
-    // would run alongside it and double the output).
-    private static int Run(string[] benchmarkArguments) {
-        var config = ManualConfig
-            .Create(config: DefaultConfig.Instance)
-            .AddDiagnoser(newDiagnosers: MemoryDiagnoser.Default);
-
-        BenchmarkSwitcher
-            .FromAssembly(assembly: typeof(BenchRunner).Assembly)
-            .Run(args: benchmarkArguments, config: config);
-
-        return 0;
     }
 }

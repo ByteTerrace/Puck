@@ -39,6 +39,61 @@ namespace Puck.Cli;
 /// in-process self-invocations both go through <see cref="InvokeAsync(string[])"/>.
 /// </summary>
 internal static class PuckRootCommand {
+    internal static int Invoke(string[] args, RootCommand root) => (Parse(
+        args: args,
+        root: root
+    )?.Invoke(configuration: Invocation()) ?? 2);
+    internal static async Task<int> InvokeAsync(string[] args, RootCommand root) => ((Parse(
+        args: args,
+        root: root
+    ) is { } result)
+        ? await result.InvokeAsync(configuration: Invocation())
+        : 2
+    );
+
+    // Ctrl+C and SIGTERM cancel the verb's token and the process waits for the verb: a host's own shutdown
+    // lifecycle (the silo allows ShutdownSeconds + 5) is the only deadline, never the parser's two-second default.
+    private static InvocationConfiguration Invocation() => new() { ProcessTerminationTimeout = Timeout.InfiniteTimeSpan };
+    // The parser hands a misspelled option to whichever value slot is still open, so a token that
+    // looks like an option is refused unless it follows "--", is a number, or reaches a command
+    // that forwards its unmatched tokens.
+    private static IEnumerable<string> OptionLikeValues(ParseResult result) {
+        if (!result.CommandResult.Command.TreatUnmatchedTokensAsErrors) { yield break; }
+        var escaped = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Select(selector: token => token.Value).ToList();
+        var values = result.CommandResult.Children.SelectMany(selector: child => child.Tokens).Select(selector: token => token.Value)
+            .Where(predicate: value => (value.StartsWith(value: '-') && (value.Length > 1) && !double.TryParse(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            result: out _,
+            s: value,
+            style: System.Globalization.NumberStyles.Float
+        )));
+
+        foreach (var value in values) {
+            if (!escaped.Remove(item: value)) { yield return value; }
+        }
+    }
+    // A usage error exits 2, so verbs keep 1 for a failed check and 0 for success.
+    private static ParseResult? Parse(string[] args, RootCommand root) {
+        var result = root.Parse(args: args);
+        var errors = result.Errors.Select(selector: error => error.Message).Concat(second: OptionLikeValues(result: result).Select(selector: token => $"Unrecognized option '{token}'.")).ToArray();
+
+        if (
+            (result.Action is not ParseErrorAction) &&
+            (errors.Length == 0)
+        ) { return result; }
+        foreach (var error in errors) { Console.Error.WriteLine(value: error); }
+        var path = new List<string>();
+
+        for (var command = result.CommandResult; (command.Parent is CommandResult parent); command = parent) {
+            path.Insert(
+                index: 0,
+                item: command.Command.Name
+            );
+        }
+        Console.Error.WriteLine(value: $"Run 'puck {string.Concat(values: path.Select(selector: name => (name + " ")))}--help' for usage.");
+        return null;
+    }
+
     public static RootCommand Create() =>
         new(description: "The Puck developer CLI.") {
             ArchitectureCommand.Create(),
@@ -80,39 +135,12 @@ internal static class PuckRootCommand {
             WorktreeBaseCommand.Create(),
             WorldCommand.Create(),
         };
-    public static int Invoke(string[] args) => Invoke(args: args, root: Create());
-    public static Task<int> InvokeAsync(string[] args) => InvokeAsync(args: args, root: Create());
-
-    internal static int Invoke(string[] args, RootCommand root) => (Parse(args: args, root: root)?.Invoke(configuration: Invocation()) ?? 2);
-    internal static async Task<int> InvokeAsync(string[] args, RootCommand root) => ((Parse(args: args, root: root) is { } result) ? await result.InvokeAsync(configuration: Invocation()) : 2);
-
-    // Ctrl+C and SIGTERM cancel the verb's token and the process waits for the verb: a host's own shutdown
-    // lifecycle (the silo allows ShutdownSeconds + 5) is the only deadline, never the parser's two-second default.
-    private static InvocationConfiguration Invocation() => new() { ProcessTerminationTimeout = Timeout.InfiniteTimeSpan };
-    // A usage error exits 2, so verbs keep 1 for a failed check and 0 for success.
-    private static ParseResult? Parse(string[] args, RootCommand root) {
-        var result = root.Parse(args: args);
-        var errors = result.Errors.Select(selector: error => error.Message).Concat(second: OptionLikeValues(result: result).Select(selector: token => $"Unrecognized option '{token}'.")).ToArray();
-
-        if ((result.Action is not ParseErrorAction) && (errors.Length == 0)) { return result; }
-        foreach (var error in errors) { Console.Error.WriteLine(value: error); }
-        var path = new List<string>();
-
-        for (var command = result.CommandResult; (command.Parent is CommandResult parent); command = parent) { path.Insert(index: 0, item: command.Command.Name); }
-        Console.Error.WriteLine(value: $"Run 'puck {string.Concat(values: path.Select(selector: name => (name + " ")))}--help' for usage.");
-        return null;
-    }
-    // The parser hands a misspelled option to whichever value slot is still open, so a token that
-    // looks like an option is refused unless it follows "--", is a number, or reaches a command
-    // that forwards its unmatched tokens.
-    private static IEnumerable<string> OptionLikeValues(ParseResult result) {
-        if (!result.CommandResult.Command.TreatUnmatchedTokensAsErrors) { yield break; }
-        var escaped = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Select(selector: token => token.Value).ToList();
-        var values = result.CommandResult.Children.SelectMany(selector: child => child.Tokens).Select(selector: token => token.Value)
-            .Where(predicate: value => (value.StartsWith(value: '-') && (value.Length > 1) && !double.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out _, s: value, style: System.Globalization.NumberStyles.Float)));
-
-        foreach (var value in values) {
-            if (!escaped.Remove(item: value)) { yield return value; }
-        }
-    }
+    public static int Invoke(string[] args) => Invoke(
+        args: args,
+        root: Create()
+    );
+    public static Task<int> InvokeAsync(string[] args) => InvokeAsync(
+        args: args,
+        root: Create()
+    );
 }

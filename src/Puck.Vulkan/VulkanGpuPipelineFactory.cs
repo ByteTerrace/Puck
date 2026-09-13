@@ -23,12 +23,14 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
         var vertexShader = ((VulkanShaderModule)vertexShaderModule);
         var fragmentShader = ((VulkanShaderModule)fragmentShaderModule);
         var pushConstantBinding = description.PushConstantBinding;
-        var vkPushConstant = ((pushConstantBinding is null) ? null
+        var vkPushConstant = ((pushConstantBinding is null)
+            ? null
             : new VulkanPushConstantBinding(
                 data: pushConstantBinding.Data,
                 offset: pushConstantBinding.Offset,
                 stageFlags: ((uint)pushConstantBinding.StageFlags)
-            ));
+            )
+        );
 
         // The vertex input layout is not forwarded: IVulkanGraphicsPipelineFactory hardcodes the same fixed
         // POSITION-only shape one layer down (the counterpart to Direct3D's now-data-driven input layout), and

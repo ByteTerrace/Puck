@@ -9,7 +9,6 @@ public static class ShaderPipelineSchemas {
     /// <summary>The current shader-pipeline document schema.</summary>
     public const string Pipeline = "puck.shader.pipeline.v1";
 }
-
 /// <summary>Whether an image's dimensions are tied to the output extent or fixed.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineDimensionMode>))]
 public enum ShaderPipelineDimensionMode {
@@ -18,7 +17,6 @@ public enum ShaderPipelineDimensionMode {
     /// <summary>Dimensions are absolute pixels.</summary>
     Absolute,
 }
-
 /// <summary>How a resource is made valid before its first read.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineInitialization>))]
 public enum ShaderPipelineInitialization {
@@ -29,40 +27,70 @@ public enum ShaderPipelineInitialization {
     /// <summary>The resource is supplied by the host.</summary>
     External,
 }
-
 /// <summary>Dimensions for an image resource.</summary>
 public sealed record ShaderPipelineDimensions(
     ShaderPipelineDimensionMode Mode,
     double Width,
     double Height
 ) {
+    private static uint ResolveExtent(double value, string name) {
+        if (
+            !double.IsFinite(d: value) ||
+            (value <= 0) ||
+            (value > uint.MaxValue)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: value,
+                message: "Resolved shader pipeline extent must be finite, positive, and fit in UInt32.",
+                paramName: name
+            );
+        }
+
+        return Math.Max(
+            val1: 1u,
+            val2: checked((uint)Math.Round(
+                mode: MidpointRounding.ToEven,
+                value: value
+            ))
+        );
+    }
+
+    /// <summary>Creates fixed pixel dimensions.</summary>
+    public static ShaderPipelineDimensions Absolute(double width, double height) =>
+        new(
+            Height: height,
+            Mode: ShaderPipelineDimensionMode.Absolute,
+            Width: width
+        );
+    /// <summary>Creates frame-relative dimensions.</summary>
+    public static ShaderPipelineDimensions Relative(double width = 1, double height = 1) =>
+        new(
+            Height: height,
+            Mode: ShaderPipelineDimensionMode.Relative,
+            Width: width
+        );
     /// <summary>Resolves this declaration against a frame extent, clamping each positive extent to one pixel.</summary>
     public (uint Width, uint Height) Resolve(uint frameWidth, uint frameHeight) {
         ArgumentOutOfRangeException.ThrowIfZero(value: frameWidth);
         ArgumentOutOfRangeException.ThrowIfZero(value: frameHeight);
-        var width = (Mode == ShaderPipelineDimensionMode.Relative) ? (frameWidth * Width) : Width;
-        var height = (Mode == ShaderPipelineDimensionMode.Relative) ? (frameHeight * Height) : Height;
+        var width = ((Mode == ShaderPipelineDimensionMode.Relative)
+            ? (frameWidth * Width)
+            : Width
+        );
+        var height = ((Mode == ShaderPipelineDimensionMode.Relative)
+            ? (frameHeight * Height)
+            : Height
+        );
 
-        return (ResolveExtent(value: width, nameof(Width)), ResolveExtent(value: height, nameof(Height)));
-    }
-
-    /// <summary>Creates frame-relative dimensions.</summary>
-    public static ShaderPipelineDimensions Relative(double width = 1, double height = 1) =>
-        new(Mode: ShaderPipelineDimensionMode.Relative, Width: width, Height: height);
-
-    /// <summary>Creates fixed pixel dimensions.</summary>
-    public static ShaderPipelineDimensions Absolute(double width, double height) =>
-        new(Mode: ShaderPipelineDimensionMode.Absolute, Width: width, Height: height);
-
-    private static uint ResolveExtent(double value, string name) {
-        if (!double.IsFinite(value) || (value <= 0) || (value > uint.MaxValue)) {
-            throw new ArgumentOutOfRangeException(name, value, "Resolved shader pipeline extent must be finite, positive, and fit in UInt32.");
-        }
-
-        return Math.Max(1u, checked((uint)Math.Round(value, MidpointRounding.ToEven)));
+        return (ResolveExtent(
+            value: width,
+            nameof(Width)
+        ), ResolveExtent(
+            value: height,
+            nameof(Height)
+        ));
     }
 }
-
 /// <summary>A named resource reference in a pass or pipeline output.</summary>
 public sealed record ResourceReference(
     string Name,
@@ -72,7 +100,6 @@ public sealed record ResourceReference(
     /// <summary>Converts the convenient document spelling <c>"name"</c> to a current-frame reference.</summary>
     public static implicit operator ResourceReference(string name) => new(Name: name);
 }
-
 /// <summary>One resource declaration in a <see cref="ShaderPipelineDefinition"/>.</summary>
 /// <param name="Name">The unique resource name.</param>
 /// <param name="Kind">Image, buffer, or depth resource.</param>
@@ -98,9 +125,8 @@ public sealed record ShaderPipelineResource(
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
-    public bool IsExternal => Initialization == ShaderPipelineInitialization.External;
+    public bool IsExternal => (Initialization == ShaderPipelineInitialization.External);
 }
-
 /// <summary>An authored output name and the resource it exposes.</summary>
 public sealed record ShaderPipelineOutput(
     string Name,
@@ -108,9 +134,11 @@ public sealed record ShaderPipelineOutput(
 ) {
     /// <summary>Converts <c>"name"</c> to an output with the same public and resource name.</summary>
     public static implicit operator ShaderPipelineOutput(string name) =>
-        new(Name: name, Resource: new ResourceReference(Name: name));
+        new(
+            Name: name,
+            Resource: new ResourceReference(Name: name)
+        );
 }
-
 /// <summary>One executable pass in a shader pipeline.</summary>
 /// <param name="Name">The unique pass name.</param>
 /// <param name="Source">The shader source or a source/bytecode asset identifier.</param>
@@ -138,13 +166,11 @@ public sealed record ShaderPipelinePass(
 ) {
     /// <summary>Gets an immutable empty input list when no resources are read.</summary>
     [JsonIgnore]
-    public IReadOnlyList<ResourceReference> InputReferences => Inputs ?? Array.Empty<ResourceReference>();
-
+    public IReadOnlyList<ResourceReference> InputReferences => (Inputs ?? Array.Empty<ResourceReference>());
     /// <summary>Gets an immutable empty output list when no resources are written.</summary>
     [JsonIgnore]
-    public IReadOnlyList<ResourceReference> OutputReferences => Outputs ?? Array.Empty<ResourceReference>();
+    public IReadOnlyList<ResourceReference> OutputReferences => (Outputs ?? Array.Empty<ResourceReference>());
 }
-
 /// <summary>A complete data-authored, multi-pass shader pipeline.</summary>
 [method: JsonConstructor]
 public sealed record ShaderPipelineDefinition(
@@ -161,7 +187,14 @@ public sealed record ShaderPipelineDefinition(
         IReadOnlyList<ShaderPipelineResource> resources,
         IReadOnlyList<ShaderPipelinePass> passes,
         IReadOnlyList<ShaderPipelineOutput> outputs
-    ) : this(Schema: ShaderPipelineSchemas.Pipeline, Name: name, Resources: resources, Passes: passes, Outputs: outputs, Config: null) { }
+    ) : this(
+        Schema: ShaderPipelineSchemas.Pipeline,
+        Name: name,
+        Resources: resources,
+        Passes: passes,
+        Outputs: outputs,
+        Config: null
+    ) { }
 
     /// <summary>The schema tag expected by the planner.</summary>
     public const string SchemaTag = ShaderPipelineSchemas.Pipeline;
@@ -179,34 +212,51 @@ public sealed record ShaderPipelineDefinition(
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
-        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+        var extension = Path.GetExtension(path: sourcePath).ToLowerInvariant();
+
         var (language, inferredKind) = extension switch {
             ".hlsl" => (ShaderSourceLanguage.Hlsl, ShaderPipelinePassKind.Compute),
             ".comp" => (ShaderSourceLanguage.Glsl, ShaderPipelinePassKind.Compute),
             ".glsl" => (ShaderSourceLanguage.ShadertoyGlsl, ShaderPipelinePassKind.Compute),
             ".frag" => (ShaderSourceLanguage.Glsl, ShaderPipelinePassKind.Fullscreen),
-            ".vert" => throw new ArgumentException("A vertex-only source cannot form the one-off pipeline; use a JSON pipeline with a fullscreen pass.", nameof(sourcePath)),
-            _ => throw new ArgumentException($"Shader source extension '{extension}' is unsupported; use .hlsl, .comp, .frag, or .glsl.", nameof(sourcePath)),
+            ".vert" => throw new ArgumentException(
+            message: "A vertex-only source cannot form the one-off pipeline; use a JSON pipeline with a fullscreen pass.",
+            paramName: nameof(sourcePath)
+        ),
+            _ => throw new ArgumentException(
+            message: $"Shader source extension '{extension}' is unsupported; use .hlsl, .comp, .frag, or .glsl.",
+            paramName: nameof(sourcePath)
+        ),
         };
-        if ((language == ShaderSourceLanguage.ShadertoyGlsl) && (entryPoint == "main")) {
+        if (
+            (language == ShaderSourceLanguage.ShadertoyGlsl) &&
+            (entryPoint == "main")
+        ) {
             entryPoint = "mainImage";
         }
         var output = new ShaderPipelineResource(
             Name: "output",
             Kind: ShaderPipelineResourceKind.Image,
             Format: "R8G8B8A8Unorm",
-            Dimensions: ShaderPipelineDimensions.Relative());
+            Dimensions: ShaderPipelineDimensions.Relative()
+        );
         var pass = new ShaderPipelinePass(
             Name: name,
-            Source: Path.GetFullPath(sourcePath),
+            Source: Path.GetFullPath(path: sourcePath),
             Language: language,
             EntryPoint: entryPoint,
-            Kind: kind ?? inferredKind,
-            Outputs: [new ResourceReference(Name: output.Name)]);
-        return new ShaderPipelineDefinition(name: name, resources: [output], passes: [pass], outputs: [(ShaderPipelineOutput)"output"]);
+            Kind: (kind ?? inferredKind),
+            Outputs: [new ResourceReference(Name: output.Name)]
+        );
+
+        return new ShaderPipelineDefinition(
+            name: name,
+            outputs: [((ShaderPipelineOutput)"output")],
+            passes: [pass],
+            resources: [output]
+        );
     }
 }
-
 /// <summary>Limits applied while compiling an execution plan.</summary>
 public sealed record ShaderPipelineLimits(
     int MaxResources = 128,
@@ -219,26 +269,26 @@ public sealed record ShaderPipelineLimits(
     uint MaxComputeWorkGroupSizeZ = 64,
     uint MaxComputeWorkGroupInvocations = 128
 );
-
 /// <summary>A planner diagnostic with an actionable code and optional pass/resource name.</summary>
 public sealed record ShaderPipelineDiagnostic(
     string Code,
     string Message,
     string? Name = null
 );
-
 /// <summary>Thrown when a pipeline cannot be made into a valid immutable execution plan.</summary>
 public sealed class ShaderPipelineCompilationException : Exception {
     /// <summary>Initializes an exception with the planner's complete diagnostic set.</summary>
     public ShaderPipelineCompilationException(IReadOnlyList<ShaderPipelineDiagnostic> diagnostics)
-        : base(message: string.Join(separator: Environment.NewLine, values: diagnostics.Select(static diagnostic => $"[{diagnostic.Code}] {diagnostic.Message}"))) {
+        : base(message: string.Join(
+        separator: Environment.NewLine,
+        values: diagnostics.Select(selector: static diagnostic => $"[{diagnostic.Code}] {diagnostic.Message}")
+    )) {
         Diagnostics = new ReadOnlyCollection<ShaderPipelineDiagnostic>(list: diagnostics.ToList());
     }
 
     /// <summary>Gets all diagnostics collected before planning stopped.</summary>
     public IReadOnlyList<ShaderPipelineDiagnostic> Diagnostics { get; }
 }
-
 /// <summary>Source-generated metadata used by <see cref="ShaderPipelineLoader"/>.</summary>
 [JsonSerializable(typeof(ShaderPipelineDefinition))]
 [JsonSerializable(typeof(ShaderPipelineResource))]

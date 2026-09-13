@@ -13,35 +13,61 @@ namespace Puck.Cli.Format.Rewriters;
 // hex/binary literals (whose trailing letters are digits, not a suffix). After conversion the type is
 // `var`, so the pass is idempotent.
 internal sealed class LiteralVarRewriter : CSharpSyntaxRewriter {
+    private static bool HasTypeSuffix(string text) =>
+        ((text.Length > 0) && (text[^1] is 'u' or 'U' or 'l' or 'L' or 'f' or 'F' or 'd' or 'D' or 'm' or 'M'));
+    private static string? SuffixFor(SyntaxKind keyword) => keyword switch {
+        SyntaxKind.UIntKeyword => "U",
+        SyntaxKind.LongKeyword => "L",
+        SyntaxKind.ULongKeyword => "UL",
+        SyntaxKind.FloatKeyword => "F",
+        SyntaxKind.DoubleKeyword => "D",
+        SyntaxKind.DecimalKeyword => "M",
+        _ => null
+    };
+
     public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node) {
         var visited = ((LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node: node)!);
 
-        if (!visited.UsingKeyword.IsKind(kind: SyntaxKind.None)
-            || visited.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.ConstKeyword))) {
+        if (
+            !visited.UsingKeyword.IsKind(kind: SyntaxKind.None) ||
+            visited.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.ConstKeyword))
+        ) {
             return visited;
         }
 
         var declaration = visited.Declaration;
 
-        if ((declaration.Type is not PredefinedTypeSyntax predefined)
-            || (SuffixFor(keyword: predefined.Keyword.Kind()) is not { } suffix)
-            || (declaration.Variables.Count != 1)) {
+        if (
+            (declaration.Type is not PredefinedTypeSyntax predefined) ||
+            (SuffixFor(keyword: predefined.Keyword.Kind()) is not { } suffix) ||
+            (declaration.Variables.Count != 1)
+        ) {
             return visited;
         }
 
         var variable = declaration.Variables[0];
 
-        if ((variable.Initializer?.Value is not LiteralExpressionSyntax literal)
-            || !literal.Token.IsKind(kind: SyntaxKind.NumericLiteralToken)) {
+        if (
+            (variable.Initializer?.Value is not LiteralExpressionSyntax literal) ||
+            !literal.Token.IsKind(kind: SyntaxKind.NumericLiteralToken)
+        ) {
             return visited;
         }
 
         var literalText = literal.Token.Text;
 
-        if (literalText.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "0x")
-            || literalText.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "0b")
-            || HasTypeSuffix(text: literalText)
-            || (SyntaxFactory.ParseExpression(text: (literalText + suffix)) is not LiteralExpressionSyntax suffixed)) {
+        if (
+            literalText.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "0x"
+        ) ||
+            literalText.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "0b"
+        ) ||
+            HasTypeSuffix(text: literalText) ||
+            (SyntaxFactory.ParseExpression(text: (literalText + suffix)) is not LiteralExpressionSyntax suffixed)
+        ) {
             return visited;
         }
 
@@ -53,21 +79,8 @@ internal sealed class LiteralVarRewriter : CSharpSyntaxRewriter {
             .WithLeadingTrivia(trivia: predefined.GetLeadingTrivia())
             .WithTrailingTrivia(trivia: predefined.GetTrailingTrivia());
 
-        return visited.WithDeclaration(
-            declaration: declaration
+        return visited.WithDeclaration(declaration: declaration
                 .WithType(type: newType)
                 .WithVariables(variables: SyntaxFactory.SingletonSeparatedList(node: newVariable)));
     }
-
-    private static string? SuffixFor(SyntaxKind keyword) => keyword switch {
-        SyntaxKind.UIntKeyword => "U",
-        SyntaxKind.LongKeyword => "L",
-        SyntaxKind.ULongKeyword => "UL",
-        SyntaxKind.FloatKeyword => "F",
-        SyntaxKind.DoubleKeyword => "D",
-        SyntaxKind.DecimalKeyword => "M",
-        _ => null
-    };
-    private static bool HasTypeSuffix(string text) =>
-        ((text.Length > 0) && (text[^1] is 'u' or 'U' or 'l' or 'L' or 'f' or 'F' or 'd' or 'D' or 'm' or 'M'));
 }

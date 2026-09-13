@@ -21,9 +21,11 @@ public sealed partial class WorldGrants {
             target[principal] = groups;
         }
 
-        groups.Add(item: new GroupRoleReach(GroupId: groupId, Reach: reach));
+        groups.Add(item: new GroupRoleReach(
+            GroupId: groupId,
+            Reach: reach
+        ));
     }
-
     // Role-scoped expansion: a group row is considered only when the member's exact role reaches the queried
     // capability, then the group's own grant row is resolved fresh. The same helper serves ordinary membership and
     // group-owner reach so both doors enforce the same null/unknown-role refusal.
@@ -74,7 +76,6 @@ public sealed partial class WorldGrants {
 
         return false;
     }
-
     // Resolves the grant row that supplied an already-allowed verdict. Payload callers (budget, reach, ceiling, and
     // masks) must read that same row, including when the verdict came from a role-scoped group fallback; reading
     // only the acting principal's dictionaries would silently turn a granted group row into an unmetered/defaulted
@@ -87,8 +88,8 @@ public sealed partial class WorldGrants {
         out GrantSubject grantSubject
     ) {
         var verdict = Allows(
-            principal: principal,
             capability: capability,
+            principal: principal,
             subject: subject
         );
 
@@ -103,11 +104,12 @@ public sealed partial class WorldGrants {
             if (
                 (verdict.Group is not { } groupId) ||
                 !TryGroupGrantSubject(
-                groupId: groupId,
                 capability: capability,
-                subject: subject,
-                grantSubject: out grantSubject
-            )) {
+                grantSubject: out grantSubject,
+                groupId: groupId,
+                subject: subject
+            )
+            ) {
                 grantPrincipal = default;
                 grantSubject = default;
 
@@ -127,7 +129,6 @@ public sealed partial class WorldGrants {
 
         return true;
     }
-
     private bool TryGroupGrantSubject(string groupId, WorldCapability capability, GrantSubject subject, out GrantSubject grantSubject) {
         if (
             m_byPrincipal.TryGetValue(
@@ -163,12 +164,22 @@ public sealed partial class WorldGrants {
     /// <param name="kinds">The live document's declared group-kind catalog.</param>
     /// <param name="ownership">The live document's ownership bindings.</param>
     public void SyncGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership) =>
-        RebuildGroups(groups, kinds, ownership, advanceRevision: true);
+        RebuildGroups(
+            groups,
+            kinds,
+            ownership,
+            advanceRevision: true
+        );
 
     /// <summary>Rehydrates the restored document's derived group authority without changing the checkpoint's
     /// revision. Restore has already discarded cached handle projections.</summary>
     internal void RestoreGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership) =>
-        RebuildGroups(groups, kinds, ownership, advanceRevision: false);
+        RebuildGroups(
+            groups,
+            kinds,
+            ownership,
+            advanceRevision: false
+        );
 
     private void RebuildGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership, bool advanceRevision) {
         m_groupMembership.Clear();
@@ -220,7 +231,10 @@ public sealed partial class WorldGrants {
             groupsById[group.Id] = group;
 
             foreach (var memberRow in group.Members) {
-                if ((memberRow.Ref.Kind != MemberRefKind.Local) || (memberRow.Ref.Principal is not { } member)) {
+                if (
+                    (memberRow.Ref.Kind != MemberRefKind.Local) ||
+                    (memberRow.Ref.Principal is not { } member)
+                ) {
                     // Verified identities are retained in the document roster but cannot impersonate a local
                     // WorldPrincipal in this local grant index; the federation/consent lane owns that projection.
                     continue;

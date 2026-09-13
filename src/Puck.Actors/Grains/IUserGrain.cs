@@ -1,15 +1,13 @@
 namespace Puck.Actors.Grains;
 
 [Flags]
-public enum ProvisioningStep
-{
+public enum ProvisioningStep {
     None = 0,
     Identity = 1,
     Storage = 2,
     Keys = 4,
     Finalized = 8,
 }
-
 /// <summary>
 /// Steps of a partition migration. Each is idempotent and recorded as it completes, so a silo
 /// restart or an expired escrow resumes rather than restarts. The container is not homogeneously
@@ -18,8 +16,7 @@ public enum ProvisioningStep
 /// never moves at all — published content is anchored to the Front Door origin partition.
 /// </summary>
 [Flags]
-public enum MigrationStep
-{
+public enum MigrationStep {
     None = 0,
     /// <summary>Destination container exists with the user's access metadata stamped and Frozen cleared (host).</summary>
     Prepared = 1,
@@ -36,16 +33,13 @@ public enum MigrationStep
     /// <summary>Source private/ blobs removed (user).</summary>
     PrivateDrained = 64,
 }
-
-public static class ProvisioningStatus
-{
+public static class ProvisioningStatus {
     public const string Faulted = "Faulted";
     public const string Migrating = "Migrating";
     public const string NotOnboarded = "NotOnboarded";
     public const string Onboarding = "Onboarding";
     public const string Ready = "Ready";
 }
-
 /// <summary>
 /// The tenant-facing lever for NON-OWNER access to their container's public/ prefix — written to
 /// container metadata and enforced by ABAC. Owners are never gated by it, and the system
@@ -53,16 +47,14 @@ public static class ProvisioningStatus
 /// behaves as <see cref="Read"/> (the ABAC operators encode that default), so stamping is for
 /// legibility, not correctness.
 /// </summary>
-public static class GuestAccessMode
-{
+public static class GuestAccessMode {
     public const string None = "None";
     public const string Read = "Read";
     public const string ReadWrite = "ReadWrite";
 
     public static bool IsValid(string? value) =>
-        (None == value) || (Read == value) || (ReadWrite == value);
+        ((None == value) || (Read == value) || (ReadWrite == value));
 }
-
 [GenerateSerializer]
 [Immutable]
 public sealed record ProvisioningState(
@@ -78,7 +70,6 @@ public sealed record ProvisioningState(
     [property: Id(id: 9)] int? MigrationSourcePartition,
     [property: Id(id: 10)] string GuestAccess
 );
-
 /// <summary>
 /// Where a user's container actually lives. This is authoritative: the partitioner computes where a
 /// user *should* live for the current partition count, but until a migration completes the data is
@@ -92,7 +83,6 @@ public sealed record StorageLocation(
     [property: Id(id: 1)] string BlobEndpoint,
     [property: Id(id: 2)] bool IsMigrating
 );
-
 /// <summary>
 /// The user's assertion, DataProtection-protected by the edge (purpose "users.tokens",
 /// sub-purposes [oid, discriminator]); the silo can unprotect it only because it shares
@@ -105,9 +95,7 @@ public sealed record TokenEscrow(
     [property: Id(id: 1)] string TokenDiscriminator,
     [property: Id(id: 2)] DateTimeOffset ExpiresAt
 );
-
-public interface IUserGrain : IGrainWithGuidKey
-{
+public interface IUserGrain : IGrainWithGuidKey {
     Task<ProvisioningState> EnsureProvisionedAsync(TokenEscrow tokenEscrow);
     Task<ProvisioningState> GetProvisioningStateAsync();
     Task<StorageLocation> GetStorageLocationAsync();

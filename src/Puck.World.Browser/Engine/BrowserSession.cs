@@ -54,14 +54,12 @@ public readonly record struct BrowserCellValue(bool Found, [property: JsonConver
 public readonly record struct BrowserRowSnapshot(string Name, string Kind, bool Keyed, IReadOnlyList<BrowserRowCell> Cells);
 /// <summary>One authored cell of a <see cref="BrowserRowSnapshot"/>.</summary>
 public readonly record struct BrowserRowCell(string Key, [property: JsonConverter(typeof(LongAsStringJsonConverter))] long Value, string? Text);
-
 /// <summary>The most evaluations one <c>Judge</c> call captures across every rule combined — a forEach-heavy document
 /// could otherwise produce an unbounded trace in one tick.</summary>
 public static class BrowserJudgeLimits {
     /// <summary>Gets the evaluation capture ceiling.</summary>
     public const int MaxTraceEvaluations = 4096;
 }
-
 /// <summary>One compiled-and-installed world document: a <see cref="FrameHost"/> over its state section plus the
 /// compiled rules <see cref="WorldRuleCompilation"/> produced at validation, held live behind an opaque handle in
 /// <see cref="BrowserSessionRegistry"/> across the JS boundary's otherwise-stateless calls. Pure C# — no
@@ -69,8 +67,9 @@ public static class BrowserJudgeLimits {
 /// only caller.</summary>
 public sealed class BrowserSession {
     private readonly BrowserRuleReader m_host;
-    private CompiledWorldRule[] m_rules;
+
     private WorldRuleCompileContext m_expressionContext;
+    private CompiledWorldRule[] m_rules;
 
     internal BrowserSession(WorldDefinition definition, WorldRuleCompilation compilation) {
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -82,15 +81,34 @@ public sealed class BrowserSession {
 
         var patternErrors = new List<string>();
 
-        if (!CompiledPatterns.TryCompileAll(rows: definition.Patterns, patterns: out var patterns, errors: patternErrors)) {
+        if (!CompiledPatterns.TryCompileAll(
+            rows: definition.Patterns,
+            patterns: out var patterns,
+            errors: patternErrors
+        )) {
             // Unreachable for a definition that already passed WorldDefinitionValidator.TryValidateLocally —
             // ValidatePatterns runs the same compiler over the same rows before validation admits the document.
-            throw new InvalidOperationException(message: $"pattern compilation failed for an already-validated document: {string.Join(separator: "; ", values: patternErrors)}");
+            throw new InvalidOperationException(message: $"pattern compilation failed for an already-validated document: {string.Join(
+                separator: "; ",
+                values: patternErrors
+            )}");
         }
 
-        var layout = new FrameLayout(rows: definition.State, topology: name => WorldTopologyCompilation.Find(definition: definition, name: name));
+        var layout = new FrameLayout(
+            rows: definition.State,
+            topology: name => WorldTopologyCompilation.Find(
+                definition: definition,
+                name: name
+            )
+        );
 
-        m_host = new BrowserRuleReader(frameHost: new FrameHost(layout: layout, rows: definition.State, catalog: definition.StateCatalog, patterns: patterns!, tables: compilation.Tables));
+        m_host = new BrowserRuleReader(frameHost: new FrameHost(
+            layout: layout,
+            rows: definition.State,
+            catalog: definition.StateCatalog,
+            patterns: patterns!,
+            tables: compilation.Tables
+        ));
 
         LoadRows(rows: definition.State);
     }
@@ -98,75 +116,44 @@ public sealed class BrowserSession {
     /// <summary>Gets the currently installed document.</summary>
     public WorldDefinition Definition { get; private set; }
 
-    // A raw row list carries only authored cells; a derived board's own row materializes here on every
-    // load/rebind, exactly as RuleFrameFixture.Evaluate does for a hypothetical position.
-    private void LoadRows(IReadOnlyList<StateRow> rows) {
-        var materialized = rows.Select(selector: row => ((row.Inverse is { } inverse) && (row.EffectiveDomain is StateDomain.CellsOf board))
-            ? (row with { Cells = DerivedBoards.Compose(rows, inverse, WorldTopologyCompilation.Find(definition: Definition, name: board.Topology)!) })
-            : row).ToArray();
+    private BrowserWrite[] DiffWrites(long[] before, ReadOnlySpan<long> after) {
+        var layout = m_host.Frame.Layout;
+        var rows = Definition.State;
+        var writes = new List<BrowserWrite>();
 
-        m_host.Rebind(rows: materialized);
-        m_host.Frame.Load(source: new RowStore(rows: materialized));
-    }
+        for (var index = 0; (index < after.Length); index++) {
+            if (before[index] == after[index]) {
+                continue;
+            }
 
-    /// <summary>Rebinds the session to an edited document whose state rows lay out identically to the installed
-    /// one (see <see cref="FrameLayout.Fits"/>) — a structural edit (a renamed or resized row, a new topology)
-    /// refuses rather than silently discarding the frame's current values; the caller recompiles a fresh session
-    /// instead.</summary>
-    /// <param name="definition">The candidate replacement, already parsed and validated by the caller.</param>
-    /// <param name="reason">Why the rebind refused, or empty on success.</param>
-    /// <returns><see langword="true"/> when the rows fit the installed layout.</returns>
-    public bool TryRebind(WorldDefinition definition, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+            var rowOrdinal = layout.RowOfIndex(index: index);
+            var rowLayout = layout[rowOrdinal];
+            var row = rows[rowOrdinal];
+            var key = ResolveKey(
+                layout: rowLayout,
+                row: row,
+                within: (index - rowLayout.Offset)
+            );
 
-        if (!m_host.Frame.Layout.Fits(rows: definition.State)) {
-            reason = "the candidate's state rows do not lay out identically to the installed document (a row was added, removed, renamed, or changed kind/domain) — recompile a fresh session instead.";
-
-            return false;
+            writes.Add(item: new BrowserWrite(
+                Row: row.Name.Value,
+                Key: key,
+                Old: before[index],
+                New: after[index]
+            ));
         }
 
-        Definition = definition;
-        m_rules = WorldRuleCompiler.CompileAll(definition: definition);
-        m_expressionContext = WorldRuleCompiler.Context(definition: definition);
-        LoadRows(rows: definition.State);
-        reason = string.Empty;
-
-        return true;
+        return [.. writes];
     }
-
-    /// <summary>Judges one tick over every rule, capturing every rule's own evaluations and diffing the frame's
-    /// values before and after.</summary>
-    /// <param name="tick">The tick the reads answer as of.</param>
-    /// <returns>The whole trace.</returns>
-    public BrowserJudgeResult Judge(ulong tick) {
-        var before = m_host.Frame.Values.ToArray();
-
-        m_host.Evaluator.ArmTraceAll(maxEvaluations: BrowserJudgeLimits.MaxTraceEvaluations);
-        m_host.Judge(rules: m_rules, tick: tick);
-
-        var rules = GroupTrace(captured: m_host.Evaluator.TraceCaptured);
-        var writes = DiffWrites(before: before, after: m_host.Frame.Values);
-        var refusals = m_host.Evaluator.Diagnostics().Select(selector: static diagnostic => new BrowserRefusal(
-            Category: diagnostic.Refusal.ToString(),
-            Count: diagnostic.Count,
-            LastTick: diagnostic.LastTick,
-            Rule: diagnostic.Rule,
-            Effect: diagnostic.Effect,
-            Detail: diagnostic.Detail
-        )).ToArray();
-        var hostFacts = m_host.HostFacts.ToArray();
-
-        m_host.Evaluator.DisarmTrace();
-
-        return new BrowserJudgeResult(Rules: rules, Writes: writes, Refusals: refusals, HostFacts: hostFacts);
-    }
-
     private BrowserRuleTrace[] GroupTrace(IReadOnlyList<RuleTraceEvaluation> captured) {
         var order = new List<string>();
         var byRule = new Dictionary<string, List<BrowserEvaluation>>(comparer: StringComparer.Ordinal);
 
         foreach (var entry in captured) {
-            if (!byRule.TryGetValue(key: entry.Rule, value: out var list)) {
+            if (!byRule.TryGetValue(
+                key: entry.Rule,
+                value: out var list
+            )) {
                 list = [];
                 byRule[entry.Rule] = list;
                 order.Add(item: entry.Rule);
@@ -188,74 +175,194 @@ public sealed class BrowserSession {
 
         for (var index = 0; (index < order.Count); index++) {
             var name = order[index];
-            var mode = m_rules.FirstOrDefault(predicate: rule => string.Equals(a: rule.Name, b: name, comparisonType: StringComparison.Ordinal))?.Mode.ToString() ?? "";
+            var mode = (m_rules.FirstOrDefault(predicate: rule => string.Equals(
+                a: rule.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            ))?.Mode.ToString() ?? "");
 
-            result[index] = new BrowserRuleTrace(Name: name, Mode: mode, Evaluations: byRule[name]);
+            result[index] = new BrowserRuleTrace(
+                Name: name,
+                Mode: mode,
+                Evaluations: byRule[name]
+            );
         }
 
         return result;
     }
-    private BrowserWrite[] DiffWrites(long[] before, ReadOnlySpan<long> after) {
-        var layout = m_host.Frame.Layout;
-        var rows = Definition.State;
-        var writes = new List<BrowserWrite>();
+    // A raw row list carries only authored cells; a derived board's own row materializes here on every
+    // load/rebind, exactly as RuleFrameFixture.Evaluate does for a hypothetical position.
+    private void LoadRows(IReadOnlyList<StateRow> rows) {
+        var materialized = rows.Select(selector: row => (((row.Inverse is { } inverse) && (row.EffectiveDomain is StateDomain.CellsOf board))
+            ? (row with { Cells = DerivedBoards.Compose(
+                rows,
+                inverse,
+                WorldTopologyCompilation.Find(
+                    definition: Definition,
+                    name: board.Topology
+                )!
+            ) })
+            : row)).ToArray();
 
-        for (var index = 0; (index < after.Length); index++) {
-            if (before[index] == after[index]) {
-                continue;
-            }
-
-            var rowOrdinal = layout.RowOfIndex(index: index);
-            var rowLayout = layout[rowOrdinal];
-            var row = rows[rowOrdinal];
-            var key = ResolveKey(layout: rowLayout, row: row, within: (index - rowLayout.Offset));
-
-            writes.Add(item: new BrowserWrite(Row: row.Name.Value, Key: key, Old: before[index], New: after[index]));
-        }
-
-        return [.. writes];
+        m_host.Rebind(rows: materialized);
+        m_host.Frame.Load(source: new RowStore(rows: materialized));
     }
     // Slot and Keyed/Board resolve to the row's own authored key spelling; Ring and Zone have no single authored
     // key per cell (a ring slot is a rotating position, a zone cell is a live pile position) — reported as their
     // raw within-row index instead, a documented simplification rather than a silent misresolution.
     private static string ResolveKey(FrameRowLayout layout, StateRow row, int within) => layout.Kind switch {
         FrameRowKind.Slot => StateRow.SlotKey.Value,
-        FrameRowKind.Keyed => ((row.Cells is { } cells) && (within < cells.Count)) ? cells[within].Key.Value : within.ToString(provider: CultureInfo.InvariantCulture),
+        FrameRowKind.Keyed => (((row.Cells is { } cells) && (within < cells.Count))
+        ? cells[within].Key.Value
+        : within.ToString(provider: CultureInfo.InvariantCulture)),
         FrameRowKind.Board => layout.Topology!.Key(cell: within),
-        FrameRowKind.Ring => ((within == (layout.Length - 1)) ? "$cursor" : within.ToString(provider: CultureInfo.InvariantCulture)),
+        FrameRowKind.Ring => ((within == (layout.Length - 1))
+        ? "$cursor"
+        : within.ToString(provider: CultureInfo.InvariantCulture)),
         _ => within.ToString(provider: CultureInfo.InvariantCulture),
     };
 
+    /// <summary>Judges one tick over every rule, capturing every rule's own evaluations and diffing the frame's
+    /// values before and after.</summary>
+    /// <param name="tick">The tick the reads answer as of.</param>
+    /// <returns>The whole trace.</returns>
+    public BrowserJudgeResult Judge(ulong tick) {
+        var before = m_host.Frame.Values.ToArray();
+
+        m_host.Evaluator.ArmTraceAll(maxEvaluations: BrowserJudgeLimits.MaxTraceEvaluations);
+        m_host.Judge(
+            rules: m_rules,
+            tick: tick
+        );
+
+        var rules = GroupTrace(captured: m_host.Evaluator.TraceCaptured);
+        var writes = DiffWrites(
+            before: before,
+            after: m_host.Frame.Values
+        );
+        var refusals = m_host.Evaluator.Diagnostics().Select(selector: static diagnostic => new BrowserRefusal(
+            Category: diagnostic.Refusal.ToString(),
+            Count: diagnostic.Count,
+            LastTick: diagnostic.LastTick,
+            Rule: diagnostic.Rule,
+            Effect: diagnostic.Effect,
+            Detail: diagnostic.Detail
+        )).ToArray();
+        var hostFacts = m_host.HostFacts.ToArray();
+
+        m_host.Evaluator.DisarmTrace();
+
+        return new BrowserJudgeResult(
+            HostFacts: hostFacts,
+            Refusals: refusals,
+            Rules: rules,
+            Writes: writes
+        );
+    }
     /// <summary>Reads one cell through the frame — the same read a rule's own state token resolves.</summary>
     /// <param name="row">The row name.</param>
     /// <param name="key">The cell key.</param>
     public BrowserCellValue ReadRow(string row, string key) {
-        if ((m_host.Frame.Find(name: row) is not { } source) || !CellName.TryParse(candidate: key, name: out var cellKey, reason: out _)) {
-            return new BrowserCellValue(Found: false, Value: 0L, Text: null);
+        if (
+            (m_host.Frame.Find(name: row) is not { } source) ||
+            !CellName.TryParse(
+            candidate: key,
+            name: out var cellKey,
+            reason: out _
+        )
+        ) {
+            return new BrowserCellValue(
+                Found: false,
+                Text: null,
+                Value: 0L
+            );
         }
 
-        var found = m_host.Frame.TryStored(row: source, key: cellKey, value: out var value, text: out var text);
+        var found = m_host.Frame.TryStored(
+            key: cellKey,
+            row: source,
+            text: out var text,
+            value: out var value
+        );
 
-        return new BrowserCellValue(Found: found, Value: value, Text: text);
+        return new BrowserCellValue(
+            Found: found,
+            Text: text,
+            Value: value
+        );
     }
-    /// <summary>Writes one cell through the frame, on the same terms a rule's own effect would.</summary>
-    /// <param name="row">The row name.</param>
-    /// <param name="key">The cell key.</param>
-    /// <param name="value">The operand.</param>
-    /// <param name="add">Whether to add to the stored value rather than replace it.</param>
-    /// <param name="reason">Why the write refused, or empty.</param>
-    /// <returns><see langword="true"/> when the write applied.</returns>
-    public bool TryWriteRow(string row, string key, long value, bool add, out string reason) {
-        if (m_host.Frame.Find(name: row) is not { } source) {
-            reason = $"row '{row}' is not in the installed document.";
+    /// <summary>Reads every row's authored cells through the frame — the whole-state read-back <c>Rows</c> exports.</summary>
+    public IReadOnlyList<BrowserRowSnapshot> Rows() {
+        var rows = Definition.State;
+        var result = new BrowserRowSnapshot[rows.Count];
 
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var cells = new List<BrowserRowCell>(capacity: (row.Cells?.Count ?? 0));
+
+            foreach (var cell in (row.Cells ?? [])) {
+                var read = ReadRow(
+                    row: row.Name.Value,
+                    key: cell.Key.Value
+                );
+
+                cells.Add(item: new BrowserRowCell(
+                    Key: cell.Key.Value,
+                    Value: read.Value,
+                    Text: read.Text
+                ));
+            }
+
+            result[index] = new BrowserRowSnapshot(
+                Name: row.Name.Value,
+                Kind: row.Kind.ToString(),
+                Keyed: row.IsKeyed,
+                Cells: cells
+            );
+        }
+
+        return result;
+    }
+    /// <summary>Gets the frame's deterministic content hash (see <see cref="StateFrameHash"/>) — the determinism
+    /// canary's shared comparator between a native and a wasm run.</summary>
+    public ulong StateHash() => StateFrameHash.Compute(frame: m_host.Frame);
+    /// <summary>Reads a board row's occupancy as one 64-bit mask — bit <c>i</c> set when cell <c>i</c> is not at the
+    /// board's declared empty value. Only meaningful for a topology of at most
+    /// <see cref="Puck.State.BoardMask.MaxCells"/> cells; a larger board reports <see langword="false"/>.</summary>
+    /// <param name="row">The board row's name.</param>
+    /// <param name="mask">The occupancy mask on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="row"/> is a board row within the mask ceiling.</returns>
+    public bool TryBoardMask(string row, out ulong mask) {
+        mask = 0UL;
+
+        if (!m_host.Frame.Layout.TryOrdinal(
+            name: row,
+            ordinal: out var ordinal
+        )) {
             return false;
         }
-        if (!CellName.TryParse(candidate: key, name: out var cellKey, reason: out reason)) {
+
+        var layout = m_host.Frame.Layout[ordinal];
+
+        if (
+            (layout.Kind != FrameRowKind.Board) ||
+            (layout.Length > Puck.State.BoardMask.MaxCells)
+        ) {
             return false;
         }
 
-        return m_host.Frame.TryWrite(row: source, key: cellKey, value: value, write: (add ? StateWriteKind.Add : StateWriteKind.Set), reason: out reason);
+        var values = m_host.Frame.Values.Slice(
+            start: layout.Offset,
+            length: layout.Length
+        );
+
+        for (var cell = 0; (cell < values.Length); cell++) {
+            if (values[cell] != layout.Empty) {
+                mask |= (1UL << cell);
+            }
+        }
+
+        return true;
     }
     /// <summary>Evaluates one postfix or infix expression against the current frame, on the same terms a rule's own
     /// expression token would.</summary>
@@ -281,14 +388,25 @@ public sealed class BrowserSession {
         CompiledExpressionToken[] compiled;
 
         try {
-            compiled = RuleCompiler.CompileExpression(expression: parsed, kind: kind, ruleName: "$evaluate", verb: "evaluate", context: m_expressionContext);
+            compiled = RuleCompiler.CompileExpression(
+                context: m_expressionContext,
+                expression: parsed,
+                kind: kind,
+                ruleName: "$evaluate",
+                verb: "evaluate"
+            );
         } catch (RuleException exception) {
             error = exception.Message;
 
             return false;
         }
 
-        if (!m_host.Evaluator.TryEvaluateExpression(program: compiled, kind: kind, tick: tick, value: out value)) {
+        if (!m_host.Evaluator.TryEvaluateExpression(
+            kind: kind,
+            program: compiled,
+            tick: tick,
+            value: out value
+        )) {
             error = "the expression could not be evaluated against the current frame (a dynamic-table key miss, or a read the frame refuses).";
 
             return false;
@@ -298,56 +416,59 @@ public sealed class BrowserSession {
 
         return true;
     }
-    /// <summary>Reads a board row's occupancy as one 64-bit mask — bit <c>i</c> set when cell <c>i</c> is not at the
-    /// board's declared empty value. Only meaningful for a topology of at most
-    /// <see cref="Puck.State.BoardMask.MaxCells"/> cells; a larger board reports <see langword="false"/>.</summary>
-    /// <param name="row">The board row's name.</param>
-    /// <param name="mask">The occupancy mask on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="row"/> is a board row within the mask ceiling.</returns>
-    public bool TryBoardMask(string row, out ulong mask) {
-        mask = 0UL;
+    /// <summary>Rebinds the session to an edited document whose state rows lay out identically to the installed
+    /// one (see <see cref="FrameLayout.Fits"/>) — a structural edit (a renamed or resized row, a new topology)
+    /// refuses rather than silently discarding the frame's current values; the caller recompiles a fresh session
+    /// instead.</summary>
+    /// <param name="definition">The candidate replacement, already parsed and validated by the caller.</param>
+    /// <param name="reason">Why the rebind refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the rows fit the installed layout.</returns>
+    public bool TryRebind(WorldDefinition definition, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (!m_host.Frame.Layout.TryOrdinal(name: row, ordinal: out var ordinal)) {
+        if (!m_host.Frame.Layout.Fits(rows: definition.State)) {
+            reason = "the candidate's state rows do not lay out identically to the installed document (a row was added, removed, renamed, or changed kind/domain) — recompile a fresh session instead.";
+
             return false;
         }
 
-        var layout = m_host.Frame.Layout[ordinal];
-
-        if ((layout.Kind != FrameRowKind.Board) || (layout.Length > Puck.State.BoardMask.MaxCells)) {
-            return false;
-        }
-
-        var values = m_host.Frame.Values.Slice(start: layout.Offset, length: layout.Length);
-
-        for (var cell = 0; (cell < values.Length); cell++) {
-            if (values[cell] != layout.Empty) {
-                mask |= (1UL << cell);
-            }
-        }
+        Definition = definition;
+        m_rules = WorldRuleCompiler.CompileAll(definition: definition);
+        m_expressionContext = WorldRuleCompiler.Context(definition: definition);
+        LoadRows(rows: definition.State);
+        reason = string.Empty;
 
         return true;
     }
-    /// <summary>Gets the frame's deterministic content hash (see <see cref="StateFrameHash"/>) — the determinism
-    /// canary's shared comparator between a native and a wasm run.</summary>
-    public ulong StateHash() => StateFrameHash.Compute(frame: m_host.Frame);
-    /// <summary>Reads every row's authored cells through the frame — the whole-state read-back <c>Rows</c> exports.</summary>
-    public IReadOnlyList<BrowserRowSnapshot> Rows() {
-        var rows = Definition.State;
-        var result = new BrowserRowSnapshot[rows.Count];
+    /// <summary>Writes one cell through the frame, on the same terms a rule's own effect would.</summary>
+    /// <param name="row">The row name.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="value">The operand.</param>
+    /// <param name="add">Whether to add to the stored value rather than replace it.</param>
+    /// <param name="reason">Why the write refused, or empty.</param>
+    /// <returns><see langword="true"/> when the write applied.</returns>
+    public bool TryWriteRow(string row, string key, long value, bool add, out string reason) {
+        if (m_host.Frame.Find(name: row) is not { } source) {
+            reason = $"row '{row}' is not in the installed document.";
 
-        for (var index = 0; (index < rows.Count); index++) {
-            var row = rows[index];
-            var cells = new List<BrowserRowCell>(capacity: (row.Cells?.Count ?? 0));
-
-            foreach (var cell in (row.Cells ?? [])) {
-                var read = ReadRow(row: row.Name.Value, key: cell.Key.Value);
-
-                cells.Add(item: new BrowserRowCell(Key: cell.Key.Value, Value: read.Value, Text: read.Text));
-            }
-
-            result[index] = new BrowserRowSnapshot(Name: row.Name.Value, Kind: row.Kind.ToString(), Keyed: row.IsKeyed, Cells: cells);
+            return false;
+        }
+        if (!CellName.TryParse(
+            candidate: key,
+            name: out var cellKey,
+            reason: out reason
+        )) {
+            return false;
         }
 
-        return result;
+        return m_host.Frame.TryWrite(
+            key: cellKey,
+            reason: out reason,
+            row: source,
+            value: value,
+            write: (add
+            ? StateWriteKind.Add
+            : StateWriteKind.Set)
+        );
     }
 }

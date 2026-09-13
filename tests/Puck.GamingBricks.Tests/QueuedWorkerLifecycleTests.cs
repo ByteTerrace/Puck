@@ -13,6 +13,133 @@ public sealed class QueuedWorkerLifecycleTests {
     private const int SegmentCount = 512;
 
     [Fact]
+    public void GroupFaultReleasesTheDrainAndReportsTheFault() {
+        var firstCore = new CountingCore();
+        var secondCore = new CountingCore();
+
+        using var firstHost = new TestHost(core: firstCore);
+        using var secondHost = new TestHost(core: secondCore);
+        using var link = new LinkedMachineGroup(
+            createCore: lent => new CountingGroupCore(lent: lent) { ThrowOnRunCycles = true },
+            machines: [firstHost, secondHost],
+            maximumPendingSteps: PendingWindow,
+            workerName: "lifecycle-link-fault-test",
+            workers: [firstHost.Worker, secondHost.Worker]
+        );
+
+        var fault = Assert.Throws<InvalidOperationException>(testCode: () => link.Step(
+            deltaTicks: 1UL,
+            inputs: [default, default]
+        ));
+
+        Assert.Contains(
+            actualString: fault.Message,
+            expectedSubstring: "link thread faulted"
+        );
+        Assert.NotNull(@object: link.QueueFault);
+        Assert.Equal(
+            actual: link.Submit(
+                deltaTicks: 1UL,
+                inputs: [default, default]
+            ),
+            expected: QueuedMachineSubmission.Rejected
+        );
+    }
+    [Fact]
+    public void GroupStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
+        var firstCore = new CountingCore();
+        var secondCore = new CountingCore();
+
+        using var firstHost = new TestHost(core: firstCore);
+        using var secondHost = new TestHost(core: secondCore);
+
+        var link = new LinkedMachineGroup(
+            createCore: lent => new CountingGroupCore(lent: lent),
+            machines: [firstHost, secondHost],
+            maximumPendingSteps: PendingWindow,
+            workerName: "lifecycle-link-load-test",
+            workers: [firstHost.Worker, secondHost.Worker]
+        );
+        var accepted = 0L;
+        var producer = new Thread(start: () => {
+            for (var index = 0; (index < SegmentCount); ++index) {
+                if (link.Submit(
+                    deltaTicks: 1UL,
+                    inputs: [default, default]
+                ) != QueuedMachineSubmission.Rejected) {
+                    _ = Interlocked.Increment(location: ref accepted);
+                }
+            }
+        }) { IsBackground = true };
+
+        producer.Start();
+
+        // The link is live for this whole loop, so every synchronous step is accepted and drained rather than refused.
+        for (var index = 0; (index < DrainCount); ++index) {
+            link.Step(
+                deltaTicks: 1UL,
+                inputs: [default, default]
+            );
+            _ = Interlocked.Increment(location: ref accepted);
+        }
+
+        Assert.True(
+            condition: producer.Join(millisecondsTimeout: JoinTimeoutMilliseconds),
+            userMessage: "the producer never finished; a lost wake left it waiting for pending-window capacity"
+        );
+
+        var completed = link.CompletedSteps;
+
+        link.Dispose();
+
+        Assert.Null(@object: link.QueueFault);
+        Assert.Equal(
+            expected: Interlocked.Read(location: ref accepted),
+            actual: completed
+        );
+        // Every member publishes once per group segment through its own worker, so the members' completed counts track
+        // the group's rather than restarting when the cable goes in.
+        Assert.Equal(
+            expected: completed,
+            actual: firstHost.Worker.CompletedSteps
+        );
+        Assert.Equal(
+            expected: completed,
+            actual: secondHost.Worker.CompletedSteps
+        );
+    }
+    [Fact]
+    public void WorkerFaultReleasesTheDrainAndReportsTheFault() {
+        using var core = new CountingCore { ThrowOnRunCycles = true };
+        using var worker = new QueuedMachineWorker(
+            width: 1,
+            height: 1,
+            maximumPendingSteps: PendingWindow,
+            workerName: "lifecycle-worker-fault-test"
+        );
+
+        worker.Load(core: core);
+
+        var fault = Assert.Throws<InvalidOperationException>(testCode: () => worker.Step(
+            deltaTicks: 1UL,
+            input: default
+        ));
+
+        Assert.Contains(
+            actualString: fault.Message,
+            expectedSubstring: "lifecycle-worker-fault-test worker faulted"
+        );
+        Assert.NotNull(@object: worker.QueueFault);
+        // A faulted queue accepts nothing further and never blocks a later producer on work that cannot run.
+        Assert.Equal(
+            actual: worker.Submit(
+                deltaTicks: 1UL,
+                input: default
+            ),
+            expected: QueuedMachineSubmission.Rejected
+        );
+    }
+    [Fact]
     public void WorkerStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
         using var core = new CountingCore();
         var worker = new QueuedMachineWorker(
@@ -133,140 +260,9 @@ public sealed class QueuedWorkerLifecycleTests {
             actual: ((int)(Interlocked.Read(location: ref accepted) + Interlocked.Read(location: ref rejected)))
         );
     }
-    [Fact]
-    public void WorkerFaultReleasesTheDrainAndReportsTheFault() {
-        using var core = new CountingCore { ThrowOnRunCycles = true };
-        using var worker = new QueuedMachineWorker(
-            width: 1,
-            height: 1,
-            maximumPendingSteps: PendingWindow,
-            workerName: "lifecycle-worker-fault-test"
-        );
-
-        worker.Load(core: core);
-
-        var fault = Assert.Throws<InvalidOperationException>(testCode: () => worker.Step(
-            deltaTicks: 1UL,
-            input: default
-        ));
-
-        Assert.Contains(
-            actualString: fault.Message,
-            expectedSubstring: "lifecycle-worker-fault-test worker faulted"
-        );
-        Assert.NotNull(@object: worker.QueueFault);
-        // A faulted queue accepts nothing further and never blocks a later producer on work that cannot run.
-        Assert.Equal(
-            actual: worker.Submit(
-                deltaTicks: 1UL,
-                input: default
-            ),
-            expected: QueuedMachineSubmission.Rejected
-        );
-    }
-    [Fact]
-    public void GroupStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
-        var firstCore = new CountingCore();
-        var secondCore = new CountingCore();
-
-        using var firstHost = new TestHost(core: firstCore);
-        using var secondHost = new TestHost(core: secondCore);
-
-        var link = new LinkedMachineGroup(
-            createCore: lent => new CountingGroupCore(lent: lent),
-            machines: [firstHost, secondHost],
-            maximumPendingSteps: PendingWindow,
-            workerName: "lifecycle-link-load-test",
-            workers: [firstHost.Worker, secondHost.Worker]
-        );
-        var accepted = 0L;
-        var producer = new Thread(start: () => {
-            for (var index = 0; (index < SegmentCount); ++index) {
-                if (link.Submit(
-                    deltaTicks: 1UL,
-                    inputs: [default, default]
-                ) != QueuedMachineSubmission.Rejected) {
-                    _ = Interlocked.Increment(location: ref accepted);
-                }
-            }
-        }) { IsBackground = true };
-
-        producer.Start();
-
-        // The link is live for this whole loop, so every synchronous step is accepted and drained rather than refused.
-        for (var index = 0; (index < DrainCount); ++index) {
-            link.Step(
-                deltaTicks: 1UL,
-                inputs: [default, default]
-            );
-            _ = Interlocked.Increment(location: ref accepted);
-        }
-
-        Assert.True(
-            condition: producer.Join(millisecondsTimeout: JoinTimeoutMilliseconds),
-            userMessage: "the producer never finished; a lost wake left it waiting for pending-window capacity"
-        );
-
-        var completed = link.CompletedSteps;
-
-        link.Dispose();
-
-        Assert.Null(@object: link.QueueFault);
-        Assert.Equal(
-            expected: Interlocked.Read(location: ref accepted),
-            actual: completed
-        );
-        // Every member publishes once per group segment through its own worker, so the members' completed counts track
-        // the group's rather than restarting when the cable goes in.
-        Assert.Equal(
-            expected: completed,
-            actual: firstHost.Worker.CompletedSteps
-        );
-        Assert.Equal(
-            expected: completed,
-            actual: secondHost.Worker.CompletedSteps
-        );
-    }
-    [Fact]
-    public void GroupFaultReleasesTheDrainAndReportsTheFault() {
-        var firstCore = new CountingCore();
-        var secondCore = new CountingCore();
-
-        using var firstHost = new TestHost(core: firstCore);
-        using var secondHost = new TestHost(core: secondCore);
-        using var link = new LinkedMachineGroup(
-            createCore: lent => new CountingGroupCore(lent: lent) { ThrowOnRunCycles = true },
-            machines: [firstHost, secondHost],
-            maximumPendingSteps: PendingWindow,
-            workerName: "lifecycle-link-fault-test",
-            workers: [firstHost.Worker, secondHost.Worker]
-        );
-
-        var fault = Assert.Throws<InvalidOperationException>(testCode: () => link.Step(
-            deltaTicks: 1UL,
-            inputs: [default, default]
-        ));
-
-        Assert.Contains(
-            actualString: fault.Message,
-            expectedSubstring: "link thread faulted"
-        );
-        Assert.NotNull(@object: link.QueueFault);
-        Assert.Equal(
-            actual: link.Submit(
-                deltaTicks: 1UL,
-                inputs: [default, default]
-            ),
-            expected: QueuedMachineSubmission.Rejected
-        );
-    }
 
     private sealed class CountingCore : IQueuedMachineCore {
         public string CheckpointIdentity => "test/counting-core";
-        private readonly uint[] m_framebuffer = [0U];
-
-        private long m_runCycleCalls;
-
         public long CycleCount => 0L;
         public ulong CyclesPerSecond => 1UL;
         public int DisposeCount { get; private set; }
@@ -274,6 +270,10 @@ public sealed class QueuedWorkerLifecycleTests {
         public long NativeFrameIndex => 0L;
         public long RunCycleCalls => Interlocked.Read(location: ref m_runCycleCalls);
         public bool ThrowOnRunCycles { get; init; }
+
+        private readonly uint[] m_framebuffer = [0U];
+
+        private long m_runCycleCalls;
 
         public void ApplyInput(in MachinePadState input) { }
         public int CaptureState(ref byte[] buffer) => 0;

@@ -30,11 +30,54 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
     // remarks) addresses by their raw document member path, which occasionally differs from the console's own
     // dotted row-verb vocabulary (world.row.set's own path table, Puck.World.WorldRowCommandModule). Identity for
     // every path not listed here.
-    private static readonly IReadOnlyDictionary<string, string> s_pathToVerb = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+    private static readonly IReadOnlyDictionary<string, string> PathToVerb = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["prototypes"] = "creations",
         ["state.world"] = "state",
         ["looks.rows"] = "looks",
     };
+
+    private static bool IsRemove(WorldMutation mutation) => mutation.GetType().Name.StartsWith(
+        comparisonType: StringComparison.Ordinal,
+        value: "Remove"
+    );
+    // A keyless section's row is the section value itself; a keyed section's row is the array element whose
+    // KeyField equals KeyValue — resolved against the patched tree so every op that touched this row (however many)
+    // is folded into the one value resubmitted.
+    private static JsonNode? ResolveRowValue(JsonObject document, string section, string? keyField, string? keyValue) {
+        JsonNode? current = document;
+
+        foreach (var segment in section.Split(separator: '.')) {
+            if (current is not JsonObject obj) {
+                return null;
+            }
+
+            current = obj[segment];
+        }
+
+        if (keyField is null) {
+            return current;
+        }
+
+        if (current is not JsonArray array) {
+            return null;
+        }
+
+        foreach (var element in array) {
+            if (
+                (element is JsonObject row) &&
+                (row[keyField] is { } keyNode) &&
+                string.Equals(
+                a: (keyNode.ToJsonString().Trim(trimChar: '"')),
+                b: keyValue,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return element;
+            }
+        }
+
+        return null;
+    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -84,9 +127,14 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                     name: name,
                     sculpt: out var sculpt
                 )) {
-                    var known = string.Join(separator: ", ", values: CreationSculptRegistry.All.Select(selector: static s => s.Name));
+                    var known = string.Join(
+                        separator: ", ",
+                        values: CreationSculptRegistry.All.Select(selector: static s => s.Name)
+                    );
 
-                    return CommandResult.Error(output: $"[creation.sculpt: unknown sculpt '{name}' — {(known.Length > 0 ? known : "none registered")}]");
+                    return CommandResult.Error(output: $"[creation.sculpt: unknown sculpt '{name}' — {((known.Length > 0)
+                        ? known
+                        : "none registered")}]");
                 }
 
                 if (!authority.TryResolveServer(
@@ -109,7 +157,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
 
                 try {
                     results = sculpt.Sculpt(context: new SculptContext(Document: document)).Apply(document: working);
-                } catch (Exception exception) when (exception is InvalidOperationException or FormatException or ArgumentException or JsonException) {
+                } catch (Exception exception) when ((exception is InvalidOperationException or FormatException or ArgumentException or JsonException)) {
                     return CommandResult.Error(output: $"[creation.sculpt: {name}: patch fault — {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
                 }
 
@@ -131,7 +179,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                 var window = server.NextInputTick;
 
                 foreach (var row in touched) {
-                    var verb = s_pathToVerb.GetValueOrDefault(
+                    var verb = PathToVerb.GetValueOrDefault(
                         key: row.Section,
                         defaultValue: row.Section
                     );
@@ -201,56 +249,14 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                         verb: "creation.sculpt"
                     );
                     stepGuard.Claim(rowIdentity: identity);
-                    _ = output.Append(value: '\n').Append(value: $"[creation.sculpt: {name}: {identity} {(IsRemove(mutation: mutation) ? "remove" : "set")} submitted as {principal.Describe()}]");
+                    _ = output.Append(value: '\n').Append(value: $"[creation.sculpt: {name}: {identity} {(IsRemove(mutation: mutation)
+                        ? "remove"
+                        : "set")} submitted as {principal.Describe()}]");
                 }
 
                 return new CommandResult(Output: output.ToString());
             },
             routing: CommandRouting.Simulation
         );
-    }
-
-    private static bool IsRemove(WorldMutation mutation) => mutation.GetType().Name.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "Remove"
-    );
-
-    // A keyless section's row is the section value itself; a keyed section's row is the array element whose
-    // KeyField equals KeyValue — resolved against the patched tree so every op that touched this row (however many)
-    // is folded into the one value resubmitted.
-    private static JsonNode? ResolveRowValue(JsonObject document, string section, string? keyField, string? keyValue) {
-        JsonNode? current = document;
-
-        foreach (var segment in section.Split(separator: '.')) {
-            if (current is not JsonObject obj) {
-                return null;
-            }
-
-            current = obj[segment];
-        }
-
-        if (keyField is null) {
-            return current;
-        }
-
-        if (current is not JsonArray array) {
-            return null;
-        }
-
-        foreach (var element in array) {
-            if (
-                (element is JsonObject row) &&
-                (row[keyField] is { } keyNode) &&
-                string.Equals(
-                    a: (keyNode.ToJsonString().Trim(trimChar: '"')),
-                    b: keyValue,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                return element;
-            }
-        }
-
-        return null;
     }
 }

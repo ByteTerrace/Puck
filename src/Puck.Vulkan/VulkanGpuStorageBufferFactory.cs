@@ -30,12 +30,10 @@ public sealed class VulkanGpuStorageBufferFactory(IVulkanStorageBufferFactory st
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
+    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         var vkContext = ((IVulkanDeviceContext)deviceContext);
 
-        // Indirect-capable. Host-visible by default (the CPU fills it via Write before submit — host-coherent, no extra
-        // barrier); device-local when a compute shader writes it as a UAV (GPU-computed args), ordered by a barrier.
-        return storageBufferFactory.Create(
+        return storageBufferFactory.CreateDeviceLocal(
             indirectArgs: true,
             logicalDevice: vkContext.LogicalDevice,
             sizeBytes: sizeBytes,
@@ -43,10 +41,12 @@ public sealed class VulkanGpuStorageBufferFactory(IVulkanStorageBufferFactory st
         );
     }
     /// <inheritdoc/>
-    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
+    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         var vkContext = ((IVulkanDeviceContext)deviceContext);
 
-        return storageBufferFactory.CreateDeviceLocal(
+        // Indirect-capable. Host-visible by default (the CPU fills it via Write before submit — host-coherent, no extra
+        // barrier); device-local when a compute shader writes it as a UAV (GPU-computed args), ordered by a barrier.
+        return storageBufferFactory.Create(
             indirectArgs: true,
             logicalDevice: vkContext.LogicalDevice,
             sizeBytes: sizeBytes,

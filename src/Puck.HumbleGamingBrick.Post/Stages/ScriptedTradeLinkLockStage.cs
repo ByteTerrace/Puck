@@ -53,6 +53,145 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
+    // Compares a later run against the reference: roles, both traffic fingerprints, both final snapshots, and both
+    // exported SRAMs must match. Snapshot equality also checks Identity (free rigor: refuses a model/ROM mismatch).
+    private static string? Difference(TradeResult expected, TradeResult actual, string leg) {
+        if (
+            (expected.RoleA != actual.RoleA) ||
+            (expected.RoleB != actual.RoleB)
+        ) {
+            return $"the {leg} rendezvous roles diverged (expected A=0x{expected.RoleA:X2} B=0x{expected.RoleB:X2}, got A=0x{actual.RoleA:X2} B=0x{actual.RoleB:X2})";
+        }
+
+        if (expected.Completed != actual.Completed) {
+            return $"the {leg} run's completion diverged (expected {expected.Completed}, got {actual.Completed})";
+        }
+
+        if (expected.TrafficA != actual.TrafficA) {
+            return $"the {leg} side-A traffic diverged (expected {expected.TrafficA}, got {actual.TrafficA})";
+        }
+
+        if (expected.TrafficB != actual.TrafficB) {
+            return $"the {leg} side-B traffic diverged (expected {expected.TrafficB}, got {actual.TrafficB})";
+        }
+
+        if (!expected.StateA.ContentEquals(other: actual.StateA)) {
+            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateA,
+                b: actual.StateA
+            )}";
+        }
+
+        if (!expected.StateB.ContentEquals(other: actual.StateB)) {
+            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateB,
+                b: actual.StateB
+            )}";
+        }
+
+        if (!expected.SramA.AsSpan().SequenceEqual(other: actual.SramA)) {
+            return $"the {leg} side-A exported SRAM diverged from the reference trade";
+        }
+
+        if (!expected.SramB.AsSpan().SequenceEqual(other: actual.SramB)) {
+            return $"the {leg} side-B exported SRAM diverged from the reference trade";
+        }
+
+        return null;
+    }
+    // The all-0xFF stream an unplugged port shifts in has a fixed FNV fingerprint per length; a real exchange never
+    // matches it.
+    private static bool IsIdle(LinkSideTraffic traffic) {
+        var idle = Fnv1aHash.Create();
+
+        for (var index = 0; (index < traffic.Completions); ++index) {
+            idle.Add(value: byte.MaxValue);
+        }
+
+        return (traffic.TrafficHash == idle.Value);
+    }
+    // The full-trade conditions: the drive completed (through the post-trade CANCEL), the pair reached TRADE_CENTER with
+    // the link established, the rendezvous resolved to distinct clock roles (no livelock), the species swap committed to
+    // both auto-saves with valid checksums, and real (non-idle) serial traffic crossed the cable on both sides.
+    private static string? Judge(TradeResult result, byte craftedLeadA, byte craftedLeadB) {
+        if (!result.ReachedTradeCenter) {
+            return "the pair did not reach TRADE_CENTER with the link established (a phase blew its frame ceiling — see ScriptedTradeDriver)";
+        }
+
+        if (!result.RolesResolved) {
+            return $"the WaitForLinkedFriend rendezvous did not resolve to distinct clock roles (side A 0x{result.RoleA:X2}, side B 0x{result.RoleB:X2}; expected one $01 and one $02) — the symmetry-break failed or the pair livelocked";
+        }
+
+        if (!result.Completed) {
+            return "the trade drive did not run to completion (seat walk, console, mon selection, swap, or the CANCEL exit blew its frame ceiling — see ScriptedTradeDriver)";
+        }
+
+        if (
+            (result.LeadA != craftedLeadB) ||
+            (result.LeadB != craftedLeadA)
+        ) {
+            return $"the species swap did not commit: exported leads A=0x{result.LeadA:X2} B=0x{result.LeadB:X2}, expected the crafted originals crossed (A=0x{craftedLeadB:X2} B=0x{craftedLeadA:X2})";
+        }
+
+        if (
+            !result.ChecksumOkA ||
+            !result.ChecksumOkB
+        ) {
+            return $"a post-trade auto-save's primary checksum/check bytes are inconsistent (side A ok={result.ChecksumOkA}, side B ok={result.ChecksumOkB})";
+        }
+
+        if (
+            (result.TrafficA.Completions == 0) ||
+            (result.TrafficB.Completions == 0)
+        ) {
+            return $"a side saw no completed serial transfers (A {result.TrafficA.Completions}, B {result.TrafficB.Completions}) — no real link traffic crossed the cable";
+        }
+
+        if (
+            IsIdle(traffic: result.TrafficA) ||
+            IsIdle(traffic: result.TrafficB)
+        ) {
+            return $"the link exchanged only idle 0xFF bytes — no real block data crossed (A 0x{result.TrafficA.TrafficHash:X16}, B 0x{result.TrafficB.TrafficHash:X16})";
+        }
+
+        return null;
+    }
+    // A mid-trade transfer-idle budget boundary: idle on both ports while the trade UI's menu drive is running (real
+    // traffic long since begun), 60% of the way through that phase so the sever lands solidly inside the mon-selection
+    // exchange rather than at its first or last byte. Falls back to a mid-rendezvous boundary if the TradeMenu phase
+    // offered none.
+    private static int PickChurnStep(List<TradeProbe> probes) {
+        foreach (var phase in ((ReadOnlySpan<string>)["TradeMenu", "Receptionist"])) {
+            var first = probes.FindIndex(match: p => string.Equals(
+                a: p.Phase.ToString(),
+                b: phase,
+                comparisonType: StringComparison.Ordinal
+            ));
+            var last = probes.FindLastIndex(match: p => string.Equals(
+                a: p.Phase.ToString(),
+                b: phase,
+                comparisonType: StringComparison.Ordinal
+            ));
+
+            if (first < 0) {
+                continue;
+            }
+
+            for (var step = (first + (((last - first) * 3) / 5)); (step <= last); ++step) {
+                var probe = probes[index: step];
+
+                if (
+                    probe.Idle &&
+                    (probe.Completed >= 1)
+                ) {
+                    return step;
+                }
+            }
+        }
+
+        return -1;
+    }
+
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var romPath = context.TradeRomPath;
@@ -118,144 +257,5 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
         return PostStageOutcome.Pass(detail: ((((string)$"{CartridgeTitleReader.CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, leads swapped and auto-saved (A 0x{craftedLeadA:X2}→0x{reference.LeadA:X2}, B 0x{craftedLeadB:X2}→0x{reference.LeadB:X2}, checksums valid), CANCEL handshake back to the overworld, ")
                 + $"A sent {reference.TrafficA.MasterSends}/completed {reference.TrafficA.Completions} B sent {reference.TrafficB.MasterSends}/completed {reference.TrafficB.Completions} transfers (traffic 0x{reference.TrafficA.TrafficHash:X16}/0x{reference.TrafficB.TrafficHash:X16}), ")
                 + $"replay- and churn-identical (severed transfer-idle at budget step {churnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes)."));
-    }
-
-    // The full-trade conditions: the drive completed (through the post-trade CANCEL), the pair reached TRADE_CENTER with
-    // the link established, the rendezvous resolved to distinct clock roles (no livelock), the species swap committed to
-    // both auto-saves with valid checksums, and real (non-idle) serial traffic crossed the cable on both sides.
-    private static string? Judge(TradeResult result, byte craftedLeadA, byte craftedLeadB) {
-        if (!result.ReachedTradeCenter) {
-            return "the pair did not reach TRADE_CENTER with the link established (a phase blew its frame ceiling — see ScriptedTradeDriver)";
-        }
-
-        if (!result.RolesResolved) {
-            return $"the WaitForLinkedFriend rendezvous did not resolve to distinct clock roles (side A 0x{result.RoleA:X2}, side B 0x{result.RoleB:X2}; expected one $01 and one $02) — the symmetry-break failed or the pair livelocked";
-        }
-
-        if (!result.Completed) {
-            return "the trade drive did not run to completion (seat walk, console, mon selection, swap, or the CANCEL exit blew its frame ceiling — see ScriptedTradeDriver)";
-        }
-
-        if (
-            (result.LeadA != craftedLeadB) ||
-            (result.LeadB != craftedLeadA)
-        ) {
-            return $"the species swap did not commit: exported leads A=0x{result.LeadA:X2} B=0x{result.LeadB:X2}, expected the crafted originals crossed (A=0x{craftedLeadB:X2} B=0x{craftedLeadA:X2})";
-        }
-
-        if (
-            !result.ChecksumOkA ||
-            !result.ChecksumOkB
-        ) {
-            return $"a post-trade auto-save's primary checksum/check bytes are inconsistent (side A ok={result.ChecksumOkA}, side B ok={result.ChecksumOkB})";
-        }
-
-        if (
-            (result.TrafficA.Completions == 0) ||
-            (result.TrafficB.Completions == 0)
-        ) {
-            return $"a side saw no completed serial transfers (A {result.TrafficA.Completions}, B {result.TrafficB.Completions}) — no real link traffic crossed the cable";
-        }
-
-        if (
-            IsIdle(traffic: result.TrafficA) ||
-            IsIdle(traffic: result.TrafficB)
-        ) {
-            return $"the link exchanged only idle 0xFF bytes — no real block data crossed (A 0x{result.TrafficA.TrafficHash:X16}, B 0x{result.TrafficB.TrafficHash:X16})";
-        }
-
-        return null;
-    }
-    // Compares a later run against the reference: roles, both traffic fingerprints, both final snapshots, and both
-    // exported SRAMs must match. Snapshot equality also checks Identity (free rigor: refuses a model/ROM mismatch).
-    private static string? Difference(TradeResult expected, TradeResult actual, string leg) {
-        if (
-            (expected.RoleA != actual.RoleA) ||
-            (expected.RoleB != actual.RoleB)
-        ) {
-            return $"the {leg} rendezvous roles diverged (expected A=0x{expected.RoleA:X2} B=0x{expected.RoleB:X2}, got A=0x{actual.RoleA:X2} B=0x{actual.RoleB:X2})";
-        }
-
-        if (expected.Completed != actual.Completed) {
-            return $"the {leg} run's completion diverged (expected {expected.Completed}, got {actual.Completed})";
-        }
-
-        if (expected.TrafficA != actual.TrafficA) {
-            return $"the {leg} side-A traffic diverged (expected {expected.TrafficA}, got {actual.TrafficA})";
-        }
-
-        if (expected.TrafficB != actual.TrafficB) {
-            return $"the {leg} side-B traffic diverged (expected {expected.TrafficB}, got {actual.TrafficB})";
-        }
-
-        if (!expected.StateA.ContentEquals(other: actual.StateA)) {
-            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.StateA,
-                b: actual.StateA
-            )}";
-        }
-
-        if (!expected.StateB.ContentEquals(other: actual.StateB)) {
-            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.StateB,
-                b: actual.StateB
-            )}";
-        }
-
-        if (!expected.SramA.AsSpan().SequenceEqual(other: actual.SramA)) {
-            return $"the {leg} side-A exported SRAM diverged from the reference trade";
-        }
-
-        if (!expected.SramB.AsSpan().SequenceEqual(other: actual.SramB)) {
-            return $"the {leg} side-B exported SRAM diverged from the reference trade";
-        }
-
-        return null;
-    }
-    // A mid-trade transfer-idle budget boundary: idle on both ports while the trade UI's menu drive is running (real
-    // traffic long since begun), 60% of the way through that phase so the sever lands solidly inside the mon-selection
-    // exchange rather than at its first or last byte. Falls back to a mid-rendezvous boundary if the TradeMenu phase
-    // offered none.
-    private static int PickChurnStep(List<TradeProbe> probes) {
-        foreach (var phase in ((ReadOnlySpan<string>)["TradeMenu", "Receptionist"])) {
-            var first = probes.FindIndex(match: p => string.Equals(
-                a: p.Phase.ToString(),
-                b: phase,
-                comparisonType: StringComparison.Ordinal
-            ));
-            var last = probes.FindLastIndex(match: p => string.Equals(
-                a: p.Phase.ToString(),
-                b: phase,
-                comparisonType: StringComparison.Ordinal
-            ));
-
-            if (first < 0) {
-                continue;
-            }
-
-            for (var step = (first + (((last - first) * 3) / 5)); (step <= last); ++step) {
-                var probe = probes[index: step];
-
-                if (
-                    probe.Idle &&
-                    (probe.Completed >= 1)
-                ) {
-                    return step;
-                }
-            }
-        }
-
-        return -1;
-    }
-    // The all-0xFF stream an unplugged port shifts in has a fixed FNV fingerprint per length; a real exchange never
-    // matches it.
-    private static bool IsIdle(LinkSideTraffic traffic) {
-        var idle = Fnv1aHash.Create();
-
-        for (var index = 0; (index < traffic.Completions); ++index) {
-            idle.Add(value: byte.MaxValue);
-        }
-
-        return (traffic.TrafficHash == idle.Value);
     }
 }

@@ -11,155 +11,11 @@ namespace Puck.Physics.Tests;
 /// consults a medium field only through <see cref="INavigationMediumField"/> — no <c>Puck.World</c> or
 /// <c>Puck.World.Schema</c> type appears anywhere in this file.</summary>
 public sealed class NavigationRuntimeLawTests {
-    [Theory]
-    [InlineData(0)]
-    [InlineData(90)]
-    [InlineData(37)]
-    [InlineData(-135)]
-    public void RotatedGridPositionsRoundTripAndKeepTheSameRoutes(int degrees) {
-        var row = VolumeDomain(width: 4, depth: 3, layers: 2);
-        var original = new NavigationRuntime([row], new OpenQuery(), null, Capacity())[0];
-        var turned = new NavigationRuntime([row with {
-            Origin = FixedVector3.FromVector3(new Vector3(12, 5, -7)),
-            YawRadians = FixedQ4816.FromDouble(degrees * (Math.PI / 180))
-        }], new OpenQuery(), null, Capacity())[0];
-        for (var index = 0; index < turned.CellCount; index++) {
-            Assert.True(turned.TryCell(turned.Position(index), out var roundTrip));
-            Assert.Equal(index, roundTrip);
-        }
-        var first = new int[256];
-        var second = new int[256];
-        Assert.Equal(original.FindPath(0, original.CellCount - 1, first, out var firstLength, out _),
-            turned.FindPath(0, turned.CellCount - 1, second, out var secondLength, out _));
-        Assert.Equal(first[..firstLength], second[..secondLength]);
-    }
-    private static NavigationCapacity Capacity() => new(MaxSurfaceClearanceSweeps: 16, MaxMediumSegmentSubdivisions: 32, MaxConcurrentRequesters: 4096);
-
-    private static NavigationDomainInput VolumeDomain(int width = 6, int depth = 1, int layers = 1, string? medium = null, NavigationSharing? shared = null) => new(
-        Name: (medium is null ? "air" : "water"),
-        Kind: (medium is null ? NavigationKind.Volume : NavigationKind.Medium),
-        Origin: FixedVector3.Zero,
-        CellSize: FixedQ4816.One,
-        Width: width,
-        Depth: depth,
-        Layers: layers,
-        Connectivity: NavigationConnectivity.Full,
-        ProbeUp: FixedQ4816.Zero,
-        ProbeDown: FixedQ4816.Zero,
-        AgentRadius: FixedQ4816.FromDouble(value: 0.1),
-        AgentHeight: FixedQ4816.Zero,
-        MaxStepHeight: FixedQ4816.Zero,
-        MaximumSlopeRise: FixedQ4816.Zero,
-        ArrivalDistance: FixedQ4816.FromDouble(value: 0.2),
-        MaxExpandedNodes: 256,
-        MaxPathNodes: 256,
-        Medium: medium,
-        Shared: shared
+    private static NavigationCapacity Capacity() => new(
+        MaxConcurrentRequesters: 4096,
+        MaxMediumSegmentSubdivisions: 32,
+        MaxSurfaceClearanceSweeps: 16
     );
-
-    // Reports every point clear — the open-universe control an obstruction test is measured against.
-    private sealed class OpenQuery : IWorldQuery {
-        public QueryCapabilities Capabilities => new(HasHeightfield: false, HasBlocked: false, HasOccupancy: false);
-        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
-        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
-        public bool Overlap(FixedPosition center, FixedQ4816 radius) => false;
-        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { groundY = FixedQ4816.Zero; return true; }
-        public bool LineOfSight(FixedPosition from, FixedPosition to) => true;
-    }
-
-    // Counts every call the kernel makes through it, so a test can prove construction alone asks nothing.
-    private sealed class CountingQuery : IWorldQuery {
-        public int Calls;
-        public QueryCapabilities Capabilities => new(HasHeightfield: true, HasBlocked: true, HasOccupancy: false);
-        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { Calls++; hit = default; return false; }
-        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { Calls++; hit = default; return false; }
-        public bool Overlap(FixedPosition center, FixedQ4816 radius) { Calls++; return false; }
-        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { Calls++; groundY = FixedQ4816.Zero; return true; }
-        public bool LineOfSight(FixedPosition from, FixedPosition to) { Calls++; return true; }
-    }
-
-    [Fact]
-    public void ConstructingADomainAsksTheQueryNothingUntilARouteIsFirstRequested() {
-        var query = new CountingQuery();
-        var runtime = new NavigationRuntime(domains: [SurfaceDomain()], query: query, fields: null, capacity: Capacity());
-
-        Assert.Equal(expected: 0, actual: query.Calls);
-
-        Span<int> path = stackalloc int[16];
-        _ = runtime[0].FindPath(start: 0, goal: 2, path: path, pathLength: out _, expanded: out _);
-
-        Assert.True(condition: query.Calls > 0, userMessage: "the first route request should have baked the domain against the query");
-    }
-
-    [Fact]
-    public void ALazilyBakedDomainRoutesIdenticallyToAnEagerlyBakedOne() {
-        var row = SurfaceDomain();
-        var query = new SurfaceQuery(blockedX: null);
-
-        // Eager: force the bake immediately after construction, before any route is requested.
-        var eager = new NavigationRuntime(domains: [row], query: query, fields: null, capacity: Capacity())[0];
-        _ = eager.WalkableCellCount;
-
-        // Lazy: touch nothing until the route request itself triggers the bake.
-        var lazy = new NavigationRuntime(domains: [row], query: query, fields: null, capacity: Capacity())[0];
-
-        Span<int> eagerPath = stackalloc int[16];
-        Span<int> lazyPath = stackalloc int[16];
-        var eagerStatus = eager.FindPath(start: 0, goal: 2, path: eagerPath, pathLength: out var eagerLength, expanded: out var eagerExpanded);
-        var lazyStatus = lazy.FindPath(start: 0, goal: 2, path: lazyPath, pathLength: out var lazyLength, expanded: out var lazyExpanded);
-
-        Assert.Equal(expected: eagerStatus, actual: lazyStatus);
-        Assert.Equal(expected: eagerExpanded, actual: lazyExpanded);
-        Assert.Equal(expected: eagerPath[..eagerLength].ToArray(), actual: lazyPath[..lazyLength].ToArray());
-        Assert.Equal(expected: eager.WalkableCellCount, actual: lazy.WalkableCellCount);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void RestoringEmptyNavigationKeepsGeometryLazyAndStillValidatesTheScheduler(bool sharing) {
-        var row = VolumeDomain(shared: sharing ? new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1) : null);
-        var source = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
-        var checkpoint = source.CaptureShared();
-        var query = new CountingQuery();
-        var restored = new NavigationRuntime([row], query, null, Capacity());
-
-        Assert.Throws<InvalidOperationException>(() => restored.ValidateShared([checkpoint[0] with { Cursor = -1 }]));
-        if (sharing) {
-            var invalid = checkpoint[0] with { Trees = [checkpoint[0].Trees[0] with { Pending = [0] }] };
-            Assert.Throws<InvalidOperationException>(() => restored.ValidateShared([invalid]));
-        }
-        restored.RestoreShared(checkpoint);
-        Assert.Equal(0, query.Calls);
-        var captured = restored.CaptureShared();
-        Assert.Equal(checkpoint[0].Cursor, captured[0].Cursor);
-        Assert.Equal(checkpoint[0].Trees.Length, captured[0].Trees.Length);
-        foreach (var tree in captured[0].Trees) {
-            Assert.Equal(-1, tree.Goal);
-            Assert.Equal(0, tree.Age);
-            Assert.Empty(tree.Nodes);
-            Assert.Empty(tree.Pending);
-        }
-        var originalPath = new int[16];
-        var restoredPath = new int[16];
-        var originalStatus = source[0].FindPath(0, 5, originalPath, out var originalLength, out var originalExpanded);
-        var restoredStatus = restored[0].FindPath(0, 5, restoredPath, out var restoredLength, out var restoredExpanded);
-        Assert.True(query.Calls > 0);
-        Assert.Equal(originalStatus, restoredStatus);
-        Assert.Equal(originalExpanded, restoredExpanded);
-        Assert.Equal(originalPath[..originalLength], restoredPath[..restoredLength]);
-    }
-
-    // A minimal live-medium field the kernel drives purely through its own narrow seam.
-    private sealed class StubMediumField(Func<FixedVector3, bool> isWet, ulong revision = 0) : INavigationMediumField {
-        private readonly ulong m_revision = revision;
-        public ulong ValueRevision(int field) => m_revision;
-        public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) => isWet(position);
-        public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) =>
-            isWet(from) && isWet(to);
-        public bool TryFieldIndex(string name, out int field) { field = 0; return true; }
-    }
-
     private static NavigationDomainInput SurfaceDomain() => new(
         Name: "ground",
         Kind: NavigationKind.Surface,
@@ -181,237 +37,437 @@ public sealed class NavigationRuntimeLawTests {
         Medium: null,
         Shared: null
     );
-
-    private sealed class SurfaceQuery(int? blockedX) : IWorldQuery {
-        public QueryCapabilities Capabilities => new(HasHeightfield: true, HasBlocked: true, HasOccupancy: false);
-        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
-        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
-        public bool Overlap(FixedPosition center, FixedQ4816 radius) => blockedX is { } x && center.Local.X == FixedQ4816.FromInteger(x);
-        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { groundY = FixedQ4816.Zero; return true; }
-        public bool LineOfSight(FixedPosition from, FixedPosition to) => true;
-    }
-
     private static SdfFieldEvaluator ThinWallAt(float x) {
         var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f)));
-        builder.Translate(offset: new Vector3(x: x, y: 0f, z: 0f));
-        builder.Box(halfExtents: new Vector3(x: 0.15f, y: 5f, z: 5f), round: 0f, material: material);
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(
+            x: 0.5f,
+            y: 0.5f,
+            z: 0.5f
+        )));
+
+        builder.Translate(offset: new Vector3(
+            x: x,
+            y: 0f,
+            z: 0f
+        ));
+        builder.Box(
+            halfExtents: new Vector3(
+                x: 0.15f,
+                y: 5f,
+                z: 5f
+            ),
+            round: 0f,
+            material: material
+        );
         return new SdfFieldEvaluator(program: builder.Build());
     }
+    private static NavigationDomainInput VolumeDomain(int width = 6, int depth = 1, int layers = 1, string? medium = null, NavigationSharing? shared = null) => new(
+        Name: ((medium is null)
+        ? "air"
+        : "water"),
+        Kind: ((medium is null)
+        ? NavigationKind.Volume
+        : NavigationKind.Medium),
+        Origin: FixedVector3.Zero,
+        CellSize: FixedQ4816.One,
+        Width: width,
+        Depth: depth,
+        Layers: layers,
+        Connectivity: NavigationConnectivity.Full,
+        ProbeUp: FixedQ4816.Zero,
+        ProbeDown: FixedQ4816.Zero,
+        AgentRadius: FixedQ4816.FromDouble(value: 0.1),
+        AgentHeight: FixedQ4816.Zero,
+        MaxStepHeight: FixedQ4816.Zero,
+        MaximumSlopeRise: FixedQ4816.Zero,
+        ArrivalDistance: FixedQ4816.FromDouble(value: 0.2),
+        MaxExpandedNodes: 256,
+        MaxPathNodes: 256,
+        Medium: medium,
+        Shared: shared
+    );
 
     [Fact]
-    public void FindPathCrossesAnOpenVolumeDomain() {
-        var runtime = new NavigationRuntime(domains: [VolumeDomain()], query: new OpenQuery(), fields: null, capacity: Capacity());
-        var domain = runtime[0];
-        Assert.True(condition: domain.TryCell(position: FixedVector3.Zero, node: out var start));
-        Assert.True(condition: domain.TryCell(position: new FixedVector3(X: FixedQ4816.FromInteger(value: 5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), node: out var goal));
+    public void ALazilyBakedDomainRoutesIdenticallyToAnEagerlyBakedOne() {
+        var row = SurfaceDomain();
+        var query = new SurfaceQuery(blockedX: null);
 
-        Span<int> path = stackalloc int[256];
-        var status = domain.FindPath(start: start, goal: goal, path: path, pathLength: out var length, expanded: out var expanded);
+        // Eager: force the bake immediately after construction, before any route is requested.
+        var eager = new NavigationRuntime(
+            domains: [row],
+            query: query,
+            fields: null,
+            capacity: Capacity()
+        )[0];
 
-        Assert.Equal(expected: NavigationStatus.Active, actual: status);
-        Assert.True(condition: length > 1);
-        Assert.True(condition: expanded > 0);
-        Assert.Equal(expected: start, actual: path[0]);
-        Assert.Equal(expected: goal, actual: path[length - 1]);
+        _ = eager.WalkableCellCount;
+
+        // Lazy: touch nothing until the route request itself triggers the bake.
+        var lazy = new NavigationRuntime(
+            domains: [row],
+            query: query,
+            fields: null,
+            capacity: Capacity()
+        )[0];
+
+        Span<int> eagerPath = stackalloc int[16];
+        Span<int> lazyPath = stackalloc int[16];
+        var eagerStatus = eager.FindPath(
+            expanded: out var eagerExpanded,
+            goal: 2,
+            path: eagerPath,
+            pathLength: out var eagerLength,
+            start: 0
+        );
+        var lazyStatus = lazy.FindPath(
+            expanded: out var lazyExpanded,
+            goal: 2,
+            path: lazyPath,
+            pathLength: out var lazyLength,
+            start: 0
+        );
+
+        Assert.Equal(
+            actual: lazyStatus,
+            expected: eagerStatus
+        );
+        Assert.Equal(
+            actual: lazyExpanded,
+            expected: eagerExpanded
+        );
+        Assert.Equal(
+            expected: eagerPath[..eagerLength].ToArray(),
+            actual: lazyPath[..lazyLength].ToArray()
+        );
+        Assert.Equal(
+            expected: eager.WalkableCellCount,
+            actual: lazy.WalkableCellCount
+        );
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ARoutedDomainRebuildsWhenACompileTimeCellBakeChanges(bool sharing) {
+        var row = VolumeDomain(
+            width: 4,
+            shared: (sharing
+            ? new NavigationSharing(
+                    ExpandedNodesPerTick: 1,
+                    GoalCapacity: 1
+                )
+            : null)
+        );
+        var previous = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+        Span<int> path = stackalloc int[16];
 
+        if (sharing) {
+            Assert.Equal(
+                NavigationStatus.Pending,
+                previous[0].RequestShared(
+                    goal: 3,
+                    length: out _,
+                    path: path,
+                    start: 0
+                )
+            );
+        } else {
+            Assert.Equal(
+                NavigationStatus.Active,
+                previous[0].FindPath(
+                    expanded: out _,
+                    goal: 3,
+                    path: path,
+                    pathLength: out _,
+                    start: 0
+                )
+            );
+        }
+        var replacement = new NavigationRuntime(
+            [row],
+            ThinWallAt(x: 0f),
+            null,
+            Capacity(),
+            previous
+        );
+
+        Assert.Equal(
+            0,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            1,
+            replacement.RebuiltDomainCount
+        );
+        Assert.NotSame(
+            previous[0],
+            replacement[0]
+        );
+    }
     [Fact]
     public void AdmitsLocomotionRefusesASweptSegmentThatCrossesSolidGeometryAndAdmitsAClearOne() {
         var query = ThinWallAt(x: 2.5f);
-        var domain = new NavigationRuntime(domains: [VolumeDomain()], query: query, fields: null, capacity: Capacity())[0];
+        var domain = new NavigationRuntime(
+            domains: [VolumeDomain()],
+            query: query,
+            fields: null,
+            capacity: Capacity()
+        )[0];
 
         var origin = FixedVector3.Zero;
-        var throughTheWall = new FixedVector3(X: FixedQ4816.FromInteger(value: 5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
-        var shortOfTheWall = new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
+        var throughTheWall = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: 5),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        );
+        var shortOfTheWall = new FixedVector3(
+            X: FixedQ4816.One,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        );
 
-        Assert.False(condition: domain.AdmitsLocomotion(from: origin, to: throughTheWall));
-        Assert.True(condition: domain.AdmitsLocomotion(from: origin, to: shortOfTheWall));
+        Assert.False(condition: domain.AdmitsLocomotion(
+            from: origin,
+            to: throughTheWall
+        ));
+        Assert.True(condition: domain.AdmitsLocomotion(
+            from: origin,
+            to: shortOfTheWall
+        ));
     }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void AnUnroutedDomainAdoptsAReplacementQueryWithoutSamplingEitherProvider(bool sharing) {
-        var row = VolumeDomain(shared: sharing ? new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1) : null);
+        var row = VolumeDomain(shared: (sharing
+            ? new NavigationSharing(
+                ExpandedNodesPerTick: 1,
+                GoalCapacity: 1
+            )
+            : null));
         var previousQuery = new CountingQuery();
-        var previous = new NavigationRuntime([row], previousQuery, null, Capacity());
+        var previous = new NavigationRuntime(
+            [row],
+            previousQuery,
+            null,
+            Capacity()
+        );
         var replacementQuery = new CountingQuery();
 
-        var replacement = new NavigationRuntime([row], replacementQuery, null, Capacity(), previous);
+        var replacement = new NavigationRuntime(
+            [row],
+            replacementQuery,
+            null,
+            Capacity(),
+            previous
+        );
 
-        Assert.Equal(1, replacement.RetainedDomainCount);
-        Assert.Same(previous[0], replacement[0]);
-        Assert.Equal(0, previousQuery.Calls);
-        Assert.Equal(0, replacementQuery.Calls);
+        Assert.Equal(
+            1,
+            replacement.RetainedDomainCount
+        );
+        Assert.Same(
+            previous[0],
+            replacement[0]
+        );
+        Assert.Equal(
+            actual: previousQuery.Calls,
+            expected: 0
+        );
+        Assert.Equal(
+            actual: replacementQuery.Calls,
+            expected: 0
+        );
 
         replacement.BeginStep();
-        Assert.Equal(0, replacementQuery.Calls);
-        Assert.Equal(6, replacement[0].WalkableCellCount);
-        Assert.True(replacementQuery.Calls > 0);
-        Assert.Equal(0, previousQuery.Calls);
+        Assert.Equal(
+            actual: replacementQuery.Calls,
+            expected: 0
+        );
+        Assert.Equal(
+            6,
+            replacement[0].WalkableCellCount
+        );
+        Assert.True(condition: (replacementQuery.Calls > 0));
+        Assert.Equal(
+            actual: previousQuery.Calls,
+            expected: 0
+        );
     }
-
     [Fact]
     public void AnUnroutedDomainRetainedAcrossChangedGeometryRoutesAsAFreshCompileWould() {
         var row = VolumeDomain(width: 4);
-        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
-        var retained = new NavigationRuntime([row], ThinWallAt(x: 2f), null, Capacity(), previous);
-        var fresh = new NavigationRuntime([row], ThinWallAt(x: 2f), null, Capacity());
+        var previous = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+        var retained = new NavigationRuntime(
+            [row],
+            ThinWallAt(x: 2f),
+            null,
+            Capacity(),
+            previous
+        );
+        var fresh = new NavigationRuntime(
+            [row],
+            ThinWallAt(x: 2f),
+            null,
+            Capacity()
+        );
 
-        Assert.Same(previous[0], retained[0]);
-        Assert.Equal(fresh[0].WalkableCellCount, retained[0].WalkableCellCount);
-        Assert.Equal(3, retained[0].WalkableCellCount);
-        for (var node = 0; node < row.Width; node++) {
-            Assert.Equal(fresh[0].IsWalkable(node), retained[0].IsWalkable(node));
+        Assert.Same(
+            previous[0],
+            retained[0]
+        );
+        Assert.Equal(
+            fresh[0].WalkableCellCount,
+            retained[0].WalkableCellCount
+        );
+        Assert.Equal(
+            3,
+            retained[0].WalkableCellCount
+        );
+        for (var node = 0; (node < row.Width); node++) {
+            Assert.Equal(
+                fresh[0].IsWalkable(node: node),
+                retained[0].IsWalkable(node: node)
+            );
         }
         var freshPath = new int[16];
         var retainedPath = new int[16];
-        var freshStatus = fresh[0].FindPath(0, 1, freshPath, out var freshLength, out var freshExpanded);
-        var retainedStatus = retained[0].FindPath(0, 1, retainedPath, out var retainedLength, out var retainedExpanded);
-        Assert.Equal(NavigationStatus.Active, retainedStatus);
-        Assert.Equal(freshStatus, retainedStatus);
-        Assert.Equal(freshExpanded, retainedExpanded);
-        Assert.Equal(freshPath[..freshLength], retainedPath[..retainedLength]);
-        Assert.Equal(NavigationStatus.Unreachable, retained[0].FindPath(0, 3, retainedPath, out _, out _));
-    }
+        var freshStatus = fresh[0].FindPath(
+            expanded: out var freshExpanded,
+            goal: 1,
+            path: freshPath,
+            pathLength: out var freshLength,
+            start: 0
+        );
+        var retainedStatus = retained[0].FindPath(
+            expanded: out var retainedExpanded,
+            goal: 1,
+            path: retainedPath,
+            pathLength: out var retainedLength,
+            start: 0
+        );
 
+        Assert.Equal(
+            actual: retainedStatus,
+            expected: NavigationStatus.Active
+        );
+        Assert.Equal(
+            actual: retainedStatus,
+            expected: freshStatus
+        );
+        Assert.Equal(
+            actual: retainedExpanded,
+            expected: freshExpanded
+        );
+        Assert.Equal(
+            freshPath[..freshLength],
+            retainedPath[..retainedLength]
+        );
+        Assert.Equal(
+            NavigationStatus.Unreachable,
+            retained[0].FindPath(
+                expanded: out _,
+                goal: 3,
+                path: retainedPath,
+                pathLength: out _,
+                start: 0
+            )
+        );
+    }
     [Fact]
-    public void RetainsEquivalentBakeAndForwardsOffGridQueriesToTheNewProvider() {
-        var row = VolumeDomain(width: 4);
-        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
-        _ = previous[0].WalkableCellCount;
-        var replacementQuery = ThinWallAt(x: 2.5f);
-        var replacement = new NavigationRuntime([row], replacementQuery, null, Capacity(), previous);
+    public void ConstructingADomainAsksTheQueryNothingUntilARouteIsFirstRequested() {
+        var query = new CountingQuery();
+        var runtime = new NavigationRuntime(
+            domains: [SurfaceDomain()],
+            query: query,
+            fields: null,
+            capacity: Capacity()
+        );
 
-        Assert.Equal(1, replacement.RetainedDomainCount);
-        Assert.Equal(0, replacement.RebuiltDomainCount);
-        Assert.Same(previous[0], replacement[0]);
-        Assert.False(replacement[0].AdmitsLocomotion(
-            from: FixedVector3.Zero,
-            to: new FixedVector3(X: FixedQ4816.FromInteger(value: 3), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)));
-    }
+        Assert.Equal(
+            actual: query.Calls,
+            expected: 0
+        );
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ARoutedDomainRebuildsWhenACompileTimeCellBakeChanges(bool sharing) {
-        var row = VolumeDomain(width: 4, shared: sharing ? new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1) : null);
-        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
         Span<int> path = stackalloc int[16];
-        if (sharing) {
-            Assert.Equal(NavigationStatus.Pending, previous[0].RequestShared(0, 3, path, out _));
-        } else {
-            Assert.Equal(NavigationStatus.Active, previous[0].FindPath(0, 3, path, out _, out _));
-        }
-        var replacement = new NavigationRuntime([row], ThinWallAt(x: 0f), null, Capacity(), previous);
 
-        Assert.Equal(0, replacement.RetainedDomainCount);
-        Assert.Equal(1, replacement.RebuiltDomainCount);
-        Assert.NotSame(previous[0], replacement[0]);
+        _ = runtime[0].FindPath(
+            expanded: out _,
+            goal: 2,
+            path: path,
+            pathLength: out _,
+            start: 0
+        );
+
+        Assert.True(
+            condition: (query.Calls > 0),
+            userMessage: "the first route request should have baked the domain against the query"
+        );
     }
-
     [Fact]
-    public void RetainsAnUnaffectedDomainWhileRebuildingTheAffectedDomain() {
-        var affected = VolumeDomain(width: 4);
-        var unaffected = affected with {
-            Name = "far",
-            Origin = new FixedVector3(X: FixedQ4816.FromInteger(value: 100), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)
-        };
-        var previous = new NavigationRuntime([affected, unaffected], new OpenQuery(), null, Capacity());
-        _ = previous[0].WalkableCellCount;
-        _ = previous[1].WalkableCellCount;
-        var replacement = new NavigationRuntime([affected, unaffected], ThinWallAt(x: 0f), null, Capacity(), previous);
+    public void FindPathCrossesAnOpenVolumeDomain() {
+        var runtime = new NavigationRuntime(
+            domains: [VolumeDomain()],
+            query: new OpenQuery(),
+            fields: null,
+            capacity: Capacity()
+        );
+        var domain = runtime[0];
 
-        Assert.Equal(1, replacement.RetainedDomainCount);
-        Assert.Equal(1, replacement.RebuiltDomainCount);
-        Assert.NotSame(previous[0], replacement[0]);
-        Assert.Same(previous[1], replacement[1]);
-    }
+        Assert.True(condition: domain.TryCell(
+            position: FixedVector3.Zero,
+            node: out var start
+        ));
+        Assert.True(condition: domain.TryCell(
+            position: new FixedVector3(
+                X: FixedQ4816.FromInteger(value: 5),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            node: out var goal
+        ));
 
-    [Fact]
-    public void RetainedDomainKeepsSharedSearchState() {
-        var row = VolumeDomain(width: 6, shared: new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1));
-        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
         Span<int> path = stackalloc int[256];
-        _ = previous[0].RequestShared(start: 0, goal: 5, path: path, length: out _);
-        previous[0].AdvanceShared();
-        var before = previous[0].CaptureShared();
+        var status = domain.FindPath(
+            expanded: out var expanded,
+            goal: goal,
+            path: path,
+            pathLength: out var length,
+            start: start
+        );
 
-        var replacement = new NavigationRuntime([row], new OpenQuery(), null, Capacity(), previous);
-
-        Assert.Same(previous[0], replacement[0]);
-        var after = replacement[0].CaptureShared();
-        Assert.Equal(before.Cursor, after.Cursor);
-        Assert.Equal(before.Trees.Length, after.Trees.Length);
-        Assert.Equal(before.Trees[0].Goal, after.Trees[0].Goal);
-        Assert.Equal(before.Trees[0].Nodes.Length, after.Trees[0].Nodes.Length);
-        Assert.Equal(before.Trees[0].Pending, after.Trees[0].Pending);
+        Assert.Equal(
+            actual: status,
+            expected: NavigationStatus.Active
+        );
+        Assert.True(condition: (length > 1));
+        Assert.True(condition: (expanded > 0));
+        Assert.Equal(
+            expected: start,
+            actual: path[0]
+        );
+        Assert.Equal(
+            expected: goal,
+            actual: path[(length - 1)]
+        );
     }
-
-    [Fact]
-    public void RetainsAnUnchangedSurfaceBakeIncludingItsBlockedCell() {
-        var row = SurfaceDomain();
-        var query = new SurfaceQuery(blockedX: 1);
-        var previous = new NavigationRuntime([row], query, null, Capacity());
-
-        Assert.Equal(2, previous[0].WalkableCellCount);
-        Assert.False(previous[0].TryCell(new FixedVector3(
-            X: FixedQ4816.One,
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.Zero), out _));
-
-        var replacement = new NavigationRuntime([row], new SurfaceQuery(blockedX: 1), null, Capacity(), previous);
-
-        Assert.Equal(1, replacement.RetainedDomainCount);
-        Assert.Equal(0, replacement.RebuiltDomainCount);
-        Assert.Same(previous[0], replacement[0]);
-    }
-
-    [Fact]
-    public void RebuildsWhenNavigationCapacityChanges() {
-        var row = VolumeDomain(width: 3);
-        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
-        var changed = Capacity() with { MaxMediumSegmentSubdivisions = Capacity().MaxMediumSegmentSubdivisions + 1 };
-
-        var replacement = new NavigationRuntime([row], new OpenQuery(), null, changed, previous);
-
-        Assert.Equal(0, replacement.RetainedDomainCount);
-        Assert.Equal(1, replacement.RebuiltDomainCount);
-        Assert.NotSame(previous[0], replacement[0]);
-    }
-
-    [Fact]
-    public void RetainsAnUnchangedMediumDomainWithTheSameProviderAndRevision() {
-        var row = VolumeDomain(width: 3, medium: "water");
-        var query = new OpenQuery();
-        var field = new StubMediumField(isWet: static _ => true, revision: 17);
-        var previous = new NavigationRuntime([row], query, field, Capacity());
-
-        var replacement = new NavigationRuntime([row], query, field, Capacity(), previous);
-
-        Assert.Equal(1, replacement.RetainedDomainCount);
-        Assert.Equal(0, replacement.RebuiltDomainCount);
-        Assert.Same(previous[0], replacement[0]);
-    }
-
-    [Fact]
-    public void RebuildsMediumDomainWhenASeparateProviderReusesItsRevision() {
-        var row = VolumeDomain(width: 3, medium: "water");
-        var query = new OpenQuery();
-        var previous = new NavigationRuntime([row], query, new StubMediumField(static _ => true, revision: 17), Capacity());
-        var replacement = new NavigationRuntime([row], query, new StubMediumField(static _ => true, revision: 17), Capacity(), previous);
-
-        Assert.Equal(0, replacement.RetainedDomainCount);
-        Assert.Equal(1, replacement.RebuiltDomainCount);
-        Assert.NotSame(previous[0], replacement[0]);
-    }
-
     [Fact]
     public void MediumDomainReadsOccupancyEntirelyThroughTheInjectedFieldSeam() {
-        var mediumField = new StubMediumField(isWet: position => position.X <= FixedQ4816.FromDouble(value: 1.5));
+        var mediumField = new StubMediumField(isWet: position => (position.X <= FixedQ4816.FromDouble(value: 1.5)));
         var domain = new NavigationRuntime(
-            domains: [VolumeDomain(width: 3, medium: "water")],
+            domains: [VolumeDomain(
+                    width: 3,
+                    medium: "water"
+                )],
             query: new OpenQuery(),
             fields: mediumField,
             capacity: Capacity()
@@ -421,46 +477,611 @@ public sealed class NavigationRuntimeLawTests {
         Assert.False(condition: domain.IsWalkable(node: 2));
 
         Span<int> path = stackalloc int[8];
-        var status = domain.FindPath(start: 0, goal: 2, path: path, pathLength: out _, expanded: out _);
+        var status = domain.FindPath(
+            expanded: out _,
+            goal: 2,
+            path: path,
+            pathLength: out _,
+            start: 0
+        );
 
-        Assert.Equal(expected: NavigationStatus.OutsideDomain, actual: status);
+        Assert.Equal(
+            actual: status,
+            expected: NavigationStatus.OutsideDomain
+        );
     }
+    [Fact]
+    public void RebuildsMediumDomainWhenASeparateProviderReusesItsRevision() {
+        var row = VolumeDomain(
+            width: 3,
+            medium: "water"
+        );
+        var query = new OpenQuery();
+        var previous = new NavigationRuntime(
+            [row],
+            query,
+            new StubMediumField(
+                static _ => true,
+                revision: 17
+            ),
+            Capacity()
+        );
+        var replacement = new NavigationRuntime(
+            [row],
+            query,
+            new StubMediumField(
+                static _ => true,
+                revision: 17
+            ),
+            Capacity(),
+            previous
+        );
 
+        Assert.Equal(
+            0,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            1,
+            replacement.RebuiltDomainCount
+        );
+        Assert.NotSame(
+            previous[0],
+            replacement[0]
+        );
+    }
+    [Fact]
+    public void RebuildsWhenNavigationCapacityChanges() {
+        var row = VolumeDomain(width: 3);
+        var previous = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+        var changed = Capacity() with { MaxMediumSegmentSubdivisions = (Capacity().MaxMediumSegmentSubdivisions + 1) };
+
+        var replacement = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            changed,
+            previous
+        );
+
+        Assert.Equal(
+            0,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            1,
+            replacement.RebuiltDomainCount
+        );
+        Assert.NotSame(
+            previous[0],
+            replacement[0]
+        );
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void RestoringEmptyNavigationKeepsGeometryLazyAndStillValidatesTheScheduler(bool sharing) {
+        var row = VolumeDomain(shared: (sharing
+            ? new NavigationSharing(
+                ExpandedNodesPerTick: 1,
+                GoalCapacity: 1
+            )
+            : null));
+        var source = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+        var checkpoint = source.CaptureShared();
+        var query = new CountingQuery();
+        var restored = new NavigationRuntime(
+            [row],
+            query,
+            null,
+            Capacity()
+        );
+
+        Assert.Throws<InvalidOperationException>(testCode: () => restored.ValidateShared(checkpoints: [checkpoint[0] with { Cursor = -1 }]));
+        if (sharing) {
+            var invalid = checkpoint[0] with { Trees = [checkpoint[0].Trees[0] with { Pending = [0] }] };
+
+            Assert.Throws<InvalidOperationException>(testCode: () => restored.ValidateShared(checkpoints: [invalid]));
+        }
+        restored.RestoreShared(checkpoints: checkpoint);
+        Assert.Equal(
+            actual: query.Calls,
+            expected: 0
+        );
+        var captured = restored.CaptureShared();
+
+        Assert.Equal(
+            checkpoint[0].Cursor,
+            captured[0].Cursor
+        );
+        Assert.Equal(
+            checkpoint[0].Trees.Length,
+            captured[0].Trees.Length
+        );
+        foreach (var tree in captured[0].Trees) {
+            Assert.Equal(
+                -1,
+                tree.Goal
+            );
+            Assert.Equal(
+                0,
+                tree.Age
+            );
+            Assert.Empty(collection: tree.Nodes);
+            Assert.Empty(collection: tree.Pending);
+        }
+        var originalPath = new int[16];
+        var restoredPath = new int[16];
+        var originalStatus = source[0].FindPath(
+            expanded: out var originalExpanded,
+            goal: 5,
+            path: originalPath,
+            pathLength: out var originalLength,
+            start: 0
+        );
+        var restoredStatus = restored[0].FindPath(
+            expanded: out var restoredExpanded,
+            goal: 5,
+            path: restoredPath,
+            pathLength: out var restoredLength,
+            start: 0
+        );
+
+        Assert.True(condition: (query.Calls > 0));
+        Assert.Equal(
+            actual: restoredStatus,
+            expected: originalStatus
+        );
+        Assert.Equal(
+            actual: restoredExpanded,
+            expected: originalExpanded
+        );
+        Assert.Equal(
+            originalPath[..originalLength],
+            restoredPath[..restoredLength]
+        );
+    }
+    [Fact]
+    public void RetainedDomainKeepsSharedSearchState() {
+        var row = VolumeDomain(
+            width: 6,
+            shared: new NavigationSharing(
+                ExpandedNodesPerTick: 1,
+                GoalCapacity: 1
+            )
+        );
+        var previous = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+        Span<int> path = stackalloc int[256];
+
+        _ = previous[0].RequestShared(
+            goal: 5,
+            length: out _,
+            path: path,
+            start: 0
+        );
+        previous[0].AdvanceShared();
+        var before = previous[0].CaptureShared();
+
+        var replacement = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity(),
+            previous
+        );
+
+        Assert.Same(
+            previous[0],
+            replacement[0]
+        );
+        var after = replacement[0].CaptureShared();
+
+        Assert.Equal(
+            before.Cursor,
+            after.Cursor
+        );
+        Assert.Equal(
+            before.Trees.Length,
+            after.Trees.Length
+        );
+        Assert.Equal(
+            before.Trees[0].Goal,
+            after.Trees[0].Goal
+        );
+        Assert.Equal(
+            before.Trees[0].Nodes.Length,
+            after.Trees[0].Nodes.Length
+        );
+        Assert.Equal(
+            before.Trees[0].Pending,
+            after.Trees[0].Pending
+        );
+    }
+    [Fact]
+    public void RetainsAnUnaffectedDomainWhileRebuildingTheAffectedDomain() {
+        var affected = VolumeDomain(width: 4);
+        var unaffected = affected with {
+            Name = "far",
+            Origin = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: 100),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        ),
+        };
+        var previous = new NavigationRuntime(
+            [affected, unaffected],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+
+        _ = previous[0].WalkableCellCount;
+        _ = previous[1].WalkableCellCount;
+        var replacement = new NavigationRuntime(
+            [affected, unaffected],
+            ThinWallAt(x: 0f),
+            null,
+            Capacity(),
+            previous
+        );
+
+        Assert.Equal(
+            1,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            1,
+            replacement.RebuiltDomainCount
+        );
+        Assert.NotSame(
+            previous[0],
+            replacement[0]
+        );
+        Assert.Same(
+            previous[1],
+            replacement[1]
+        );
+    }
+    [Fact]
+    public void RetainsAnUnchangedMediumDomainWithTheSameProviderAndRevision() {
+        var row = VolumeDomain(
+            width: 3,
+            medium: "water"
+        );
+        var query = new OpenQuery();
+        var field = new StubMediumField(
+            isWet: static _ => true,
+            revision: 17
+        );
+        var previous = new NavigationRuntime(
+            [row],
+            query,
+            field,
+            Capacity()
+        );
+
+        var replacement = new NavigationRuntime(
+            [row],
+            query,
+            field,
+            Capacity(),
+            previous
+        );
+
+        Assert.Equal(
+            1,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            0,
+            replacement.RebuiltDomainCount
+        );
+        Assert.Same(
+            previous[0],
+            replacement[0]
+        );
+    }
+    [Fact]
+    public void RetainsAnUnchangedSurfaceBakeIncludingItsBlockedCell() {
+        var row = SurfaceDomain();
+        var query = new SurfaceQuery(blockedX: 1);
+        var previous = new NavigationRuntime(
+            [row],
+            query,
+            null,
+            Capacity()
+        );
+
+        Assert.Equal(
+            2,
+            previous[0].WalkableCellCount
+        );
+        Assert.False(condition: previous[0].TryCell(
+            new FixedVector3(
+                X: FixedQ4816.One,
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            out _
+        ));
+
+        var replacement = new NavigationRuntime(
+            [row],
+            new SurfaceQuery(blockedX: 1),
+            null,
+            Capacity(),
+            previous
+        );
+
+        Assert.Equal(
+            1,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            0,
+            replacement.RebuiltDomainCount
+        );
+        Assert.Same(
+            previous[0],
+            replacement[0]
+        );
+    }
+    [Fact]
+    public void RetainsEquivalentBakeAndForwardsOffGridQueriesToTheNewProvider() {
+        var row = VolumeDomain(width: 4);
+        var previous = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        );
+
+        _ = previous[0].WalkableCellCount;
+        var replacementQuery = ThinWallAt(x: 2.5f);
+        var replacement = new NavigationRuntime(
+            [row],
+            replacementQuery,
+            null,
+            Capacity(),
+            previous
+        );
+
+        Assert.Equal(
+            1,
+            replacement.RetainedDomainCount
+        );
+        Assert.Equal(
+            0,
+            replacement.RebuiltDomainCount
+        );
+        Assert.Same(
+            previous[0],
+            replacement[0]
+        );
+        Assert.False(condition: replacement[0].AdmitsLocomotion(
+            from: FixedVector3.Zero,
+            to: new FixedVector3(
+                X: FixedQ4816.FromInteger(value: 3),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            )
+        ));
+    }
+    [InlineData(0)]
+    [InlineData(90)]
+    [InlineData(37)]
+    [InlineData(-135)]
+    [Theory]
+    public void RotatedGridPositionsRoundTripAndKeepTheSameRoutes(int degrees) {
+        var row = VolumeDomain(
+            width: 4,
+            depth: 3,
+            layers: 2
+        );
+        var original = new NavigationRuntime(
+            [row],
+            new OpenQuery(),
+            null,
+            Capacity()
+        )[0];
+        var turned = new NavigationRuntime(
+            [row with {
+            Origin = FixedVector3.FromVector3(value: new Vector3(
+                    x: 12,
+                    y: 5,
+                    z: -7
+                )),
+            YawRadians = FixedQ4816.FromDouble(value: (degrees * (Math.PI / 180))),
+        }],
+            new OpenQuery(),
+            null,
+            Capacity()
+        )[0];
+
+        for (var index = 0; (index < turned.CellCount); index++) {
+            Assert.True(condition: turned.TryCell(
+                turned.Position(node: index),
+                out var roundTrip
+            ));
+            Assert.Equal(
+                actual: roundTrip,
+                expected: index
+            );
+        }
+        var first = new int[256];
+        var second = new int[256];
+
+        Assert.Equal(
+            original.FindPath(
+                0,
+                (original.CellCount - 1),
+                first,
+                out var firstLength,
+                out _
+            ),
+            turned.FindPath(
+                0,
+                (turned.CellCount - 1),
+                second,
+                out var secondLength,
+                out _
+            )
+        );
+        Assert.Equal(
+            first[..firstLength],
+            second[..secondLength]
+        );
+    }
     [Fact]
     public void SharedRequestPendsThenSettlesAndCheckpointsThroughPlainRecordsAlone() {
         var domain = new NavigationRuntime(
-            domains: [VolumeDomain(shared: new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1))],
+            domains: [VolumeDomain(shared: new NavigationSharing(
+                    ExpandedNodesPerTick: 1,
+                    GoalCapacity: 1
+                ))],
             query: new OpenQuery(),
             fields: null,
             capacity: Capacity()
         )[0];
 
         Span<int> path = stackalloc int[256];
-        var status = domain.RequestShared(start: 0, goal: 5, path: path, length: out var length);
-        Assert.True(condition: status is NavigationStatus.Pending or NavigationStatus.Active);
+        var status = domain.RequestShared(
+            goal: 5,
+            length: out var length,
+            path: path,
+            start: 0
+        );
 
-        for (var tick = 0; tick < 32 && status != NavigationStatus.Active; tick++) {
+        Assert.True(condition: (status is NavigationStatus.Pending or NavigationStatus.Active));
+
+        for (var tick = 0; ((tick < 32) && (status != NavigationStatus.Active)); tick++) {
             domain.AdvanceShared();
-            status = domain.RequestShared(start: 0, goal: 5, path: path, length: out length);
+            status = domain.RequestShared(
+                goal: 5,
+                length: out length,
+                path: path,
+                start: 0
+            );
         }
 
-        Assert.Equal(expected: NavigationStatus.Active, actual: status);
-        Assert.Equal(expected: 0, actual: path[0]);
-        Assert.Equal(expected: 5, actual: path[length - 1]);
+        Assert.Equal(
+            actual: status,
+            expected: NavigationStatus.Active
+        );
+        Assert.Equal(
+            expected: 0,
+            actual: path[0]
+        );
+        Assert.Equal(
+            expected: 5,
+            actual: path[(length - 1)]
+        );
 
         var checkpoint = domain.CaptureShared();
         var query = new CountingQuery();
-        var restored = new NavigationRuntime([VolumeDomain(shared: new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1))], query, null, Capacity());
-        restored.RestoreShared([checkpoint]);
-        Assert.True(query.Calls > 0);
-        var invalid = checkpoint with { Trees = [checkpoint.Trees[0] with {
-            Nodes = checkpoint.Trees[0].Nodes.Select(node => node.Node == 0 ? node with { Next = 5 } : node).ToArray(),
-        }] };
-        Assert.Contains("static edge", Assert.Throws<InvalidOperationException>(() => restored.ValidateShared([invalid])).Message);
+        var restored = new NavigationRuntime(
+            [VolumeDomain(shared: new NavigationSharing(
+                    ExpandedNodesPerTick: 1,
+                    GoalCapacity: 1
+                ))],
+            query,
+            null,
+            Capacity()
+        );
+
+        restored.RestoreShared(checkpoints: [checkpoint]);
+        Assert.True(condition: (query.Calls > 0));
+        var invalid = checkpoint with {
+            Trees = [checkpoint.Trees[0] with {
+            Nodes = checkpoint.Trees[0].Nodes.Select(selector: node => ((node.Node == 0)
+            ? node with { Next = 5 }
+            : node)).ToArray(),
+        }],
+        };
+
+        Assert.Contains(
+            "static edge",
+            Assert.Throws<InvalidOperationException>(testCode: () => restored.ValidateShared(checkpoints: [invalid])).Message
+        );
         domain.RestoreShared(checkpoint: checkpoint);
         var replay = domain.CaptureShared();
 
-        Assert.Equal(expected: checkpoint.Cursor, actual: replay.Cursor);
-        Assert.Equal(expected: checkpoint.Trees.Length, actual: replay.Trees.Length);
+        Assert.Equal(
+            expected: checkpoint.Cursor,
+            actual: replay.Cursor
+        );
+        Assert.Equal(
+            expected: checkpoint.Trees.Length,
+            actual: replay.Trees.Length
+        );
+    }
+
+    // Reports every point clear — the open-universe control an obstruction test is measured against.
+    private sealed class OpenQuery : IWorldQuery {
+        public QueryCapabilities Capabilities => new(
+            HasBlocked: false,
+            HasHeightfield: false,
+            HasOccupancy: false
+        );
+
+        public bool LineOfSight(FixedPosition from, FixedPosition to) => true;
+        public bool Overlap(FixedPosition center, FixedQ4816 radius) => false;
+        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
+        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
+        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { groundY = FixedQ4816.Zero; return true; }
+    }
+    // Counts every call the kernel makes through it, so a test can prove construction alone asks nothing.
+    private sealed class CountingQuery : IWorldQuery {
+        public int Calls;
+
+        public QueryCapabilities Capabilities => new(
+            HasBlocked: true,
+            HasHeightfield: true,
+            HasOccupancy: false
+        );
+
+        public bool LineOfSight(FixedPosition from, FixedPosition to) { Calls++; return true; }
+        public bool Overlap(FixedPosition center, FixedQ4816 radius) { Calls++; return false; }
+        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { Calls++; hit = default; return false; }
+        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { Calls++; hit = default; return false; }
+        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { Calls++; groundY = FixedQ4816.Zero; return true; }
+    }
+    // A minimal live-medium field the kernel drives purely through its own narrow seam.
+    private sealed class StubMediumField(Func<FixedVector3, bool> isWet, ulong revision = 0) : INavigationMediumField {
+        private readonly ulong m_revision = revision;
+
+        public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) => isWet(position);
+        public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) =>
+            (isWet(from) && isWet(to));
+        public bool TryFieldIndex(string name, out int field) { field = 0; return true; }
+        public ulong ValueRevision(int field) => m_revision;
+    }
+    private sealed class SurfaceQuery(int? blockedX) : IWorldQuery {
+        public QueryCapabilities Capabilities => new(
+            HasBlocked: true,
+            HasHeightfield: true,
+            HasOccupancy: false
+        );
+
+        public bool LineOfSight(FixedPosition from, FixedPosition to) => true;
+        public bool Overlap(FixedPosition center, FixedQ4816 radius) => ((blockedX is { } x) && (center.Local.X == FixedQ4816.FromInteger(value: x)));
+        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
+        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
+        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { groundY = FixedQ4816.Zero; return true; }
     }
 }

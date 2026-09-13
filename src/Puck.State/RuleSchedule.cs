@@ -20,12 +20,19 @@ public sealed record RuleSchedule(StateHandle[] Rows, bool Volatile) {
         var isVolatile = volatileBase;
 
         foreach (var access in reads) {
-            if (!reader.Catalog.TryResolve(lane: StateLane.Document, name: access.Row, handle: out var handle)) {
+            if (!reader.Catalog.TryResolve(
+                lane: StateLane.Document,
+                name: access.Row,
+                handle: out var handle
+            )) {
                 isVolatile = true;
 
                 continue;
             }
-            if ((reader.Store.Find(name: access.Row) is { } row) && IsVolatileRow(row: row)) {
+            if (
+                (reader.Store.Find(name: access.Row) is { } row) &&
+                IsVolatileRow(row: row)
+            ) {
                 isVolatile = true;
             }
             if (seen.Add(item: handle.Ordinal)) {
@@ -33,18 +40,27 @@ public sealed record RuleSchedule(StateHandle[] Rows, bool Volatile) {
             }
         }
 
-        return new RuleSchedule(Rows: [.. rows], Volatile: isVolatile);
+        return new RuleSchedule(
+            Rows: [.. rows],
+            Volatile: isVolatile
+        );
     }
 
     // A row whose slot or any declared cell carries a value-over-time trait computes a different live value every
     // tick from the same stored bits, so an unchanged version proves nothing about what a read of it would answer.
     private static bool IsVolatileRow(StateRow row) {
-        if (row.IsAdvancing || row.IsCycling) {
+        if (
+            row.IsAdvancing ||
+            row.IsCycling
+        ) {
             return true;
         }
 
         foreach (var cell in (row.Cells ?? [])) {
-            if ((cell.Advance is not null) || (cell.Cycle is not null)) {
+            if (
+                (cell.Advance is not null) ||
+                (cell.Cycle is not null)
+            ) {
                 return true;
             }
         }

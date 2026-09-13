@@ -78,6 +78,52 @@ public sealed class WorldTargetRegisterTable {
 /// <param name="NavigationDomainIndex">The bounded navigation-domain index, or <c>-1</c> for a non-navigated source.</param>
 /// <param name="NavigationKind">The navigated domain's topology; surface for non-navigated sources.</param>
 public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface) {
+    // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
+    // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
+    // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
+    private static long CompileArcStepRaw(float rate, int simulationRateHz) {
+        var rateRaw = FixedQ4816.FromDouble(value: rate).Value;
+
+        return (FixedPointRounding.TryRoundRational(
+            denominator: simulationRateHz,
+            fractionBitCount: 16,
+            numerator: rateRaw,
+            result: out var arcStepRaw
+        )
+            ? arcStepRaw
+            : 0L
+        );
+    }
+    private static FixedBodyTargetSource CompileNavigated(
+        BodyTargetSource source,
+        BodyTargetSource.Navigated navigated,
+        WorldTargetRegisterTable registers,
+        WorldNavigationDomainTable navigation
+    ) {
+        var hasDomain = navigation.TryGetIndex(
+            name: navigated.Domain,
+            index: out var domainIndex
+        );
+
+        return new FixedBodyTargetSource(
+            Source: source,
+            Range: FixedQ4816.Zero,
+            MinimumDot: FixedQ4816.Zero,
+            RegisterIndex: (registers.TryGetIndex(
+                name: navigated.Register,
+                index: out var registerIndex
+            )
+            ? registerIndex
+            : -1),
+            NavigationDomainIndex: (hasDomain
+            ? domainIndex
+            : -1),
+            NavigationKind: (hasDomain
+            ? navigation.Kind(index: domainIndex)
+            : WorldNavigationKind.Surface)
+        );
+    }
+
     /// <summary>Compiles one validated target declaration.</summary>
     /// <param name="source">The authored source declaration.</param>
     /// <param name="registers">The world's compiled target-register table.</param>
@@ -119,49 +165,15 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
             rate: curve.Rate,
             simulationRateHz: simulationRateHz
         )
-        ),
+    ),
         BodyTargetSource.Navigated navigated => CompileNavigated(
-            source: source,
-            navigated: navigated,
-            registers: registers,
-            navigation: navigation
-        ),
+        navigated: navigated,
+        navigation: navigation,
+        registers: registers,
+        source: source
+    ),
         _ => throw new InvalidOperationException(message: $"Unknown body target source '{source.GetType().Name}'."),
     };
-
-    private static FixedBodyTargetSource CompileNavigated(
-        BodyTargetSource source,
-        BodyTargetSource.Navigated navigated,
-        WorldTargetRegisterTable registers,
-        WorldNavigationDomainTable navigation
-    ) {
-        var hasDomain = navigation.TryGetIndex(name: navigated.Domain, index: out var domainIndex);
-        return new FixedBodyTargetSource(
-            Source: source,
-            Range: FixedQ4816.Zero,
-            MinimumDot: FixedQ4816.Zero,
-            RegisterIndex: (registers.TryGetIndex(name: navigated.Register, index: out var registerIndex) ? registerIndex : -1),
-            NavigationDomainIndex: (hasDomain ? domainIndex : -1),
-            NavigationKind: (hasDomain ? navigation.Kind(index: domainIndex) : WorldNavigationKind.Surface)
-        );
-    }
-
-    // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
-    // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
-    // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
-    private static long CompileArcStepRaw(float rate, int simulationRateHz) {
-        var rateRaw = FixedQ4816.FromDouble(value: rate).Value;
-
-        return (FixedPointRounding.TryRoundRational(
-            denominator: simulationRateHz,
-            fractionBitCount: 16,
-            numerator: rateRaw,
-            result: out var arcStepRaw
-        )
-            ? arcStepRaw
-            : 0L
-        );
-    }
 }
 /// <summary>The shared fixed-point body-forward cone predicate used by client proposals and authoritative senses.</summary>
 public static class BodyTargetConeSense {
@@ -212,7 +224,7 @@ public static class WorldTargetSelection {
             if (
                 (rule is not null) &&
                 (PredicateReferencesLineOfSight(predicate: rule.Gate) || rule.Effects.Any(predicate: EffectReferencesLineOfSight) ||
-                 rule.Decision?.Options.Any(static option => option.Neighbors?.RequiresLineOfSight == true) == true)
+                 (rule.Decision?.Options.Any(predicate: static option => (option.Neighbors?.RequiresLineOfSight == true)) == true))
             ) {
                 return true;
             }
@@ -231,8 +243,8 @@ public static class WorldTargetSelection {
     /// forever.</summary>
     public static bool RequiresLineOfSight(WorldDefinition definition) =>
         (definition.TargetRegisters.Any(predicate: register => register.RequiresLineOfSight)
-        || definition.Navigation.Rows.Count != 0
-        || definition.Kits.Any(kit => kit.Producers.Values.Any(parameters => parameters?.Flock?.RequiresLineOfSight == true))
+        || (definition.Navigation.Rows.Count != 0)
+        || definition.Kits.Any(predicate: kit => kit.Producers.Values.Any(predicate: parameters => (parameters?.Flock?.RequiresLineOfSight == true)))
         || definition.BodyMotionPrograms.Any(predicate: program => (program.Target is BodyTargetSource.Sensed { RequiresLineOfSight: true }))
         || RulesReferenceLineOfSight(rules: definition.Rules));
 }

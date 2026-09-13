@@ -18,8 +18,12 @@ public sealed record RuleBlockNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>bind name : Kind = &lt;operand&gt;</c>. <see cref="Kind"/> is required — <c>RuleBinding.Kind</c> has
 /// no default — so its absence is PUCK006, never a silent default.</summary>
 /// <param name="Name">The binding's name.</param>
@@ -37,8 +41,12 @@ public sealed record BindStatementNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>decision { ... }</c>. <see cref="Statements"/> mixes ordinary <see cref="PropertyNode"/> entries
 /// (<c>periodSeconds</c>, required; <c>mode</c>/<c>scoreKind</c>/<c>commitmentSeconds</c>/<c>incumbentBonus</c>/
 /// <c>seed</c>, elided by the lowering stage on their C# default), at most one <see cref="InterruptStatementNode"/>,
@@ -49,8 +57,12 @@ public sealed record DecisionBlockNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>option "name" { ... }</c>. <see cref="Statements"/> mixes at most one <see cref="WhenStatementNode"/>,
 /// exactly one required <see cref="ScoreStatementNode"/>, an ordinary <see cref="PropertyNode"/> for
 /// <c>neighbors: { ... }</c>, and effect statements.</summary>
@@ -67,8 +79,12 @@ public sealed record OptionBlockNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>score: &lt;operand&gt;</c> inside an <see cref="OptionBlockNode"/> — required (PUCK013 otherwise).</summary>
 /// <param name="Text">The raw operand span, already validated through <c>ExpressionSpelling.TryParse</c>.</param>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -81,8 +97,12 @@ public sealed record ScoreStatementNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>interrupt Gate</c> inside a <see cref="DecisionBlockNode"/>, reusing the full gate grammar (§1).</summary>
 /// <param name="Predicate">The parsed gate.</param>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -95,8 +115,12 @@ public sealed record InterruptStatementNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>onNoChoice { ... }</c> inside a <see cref="DecisionBlockNode"/>, reusing the effect-statement grammar (§2).</summary>
 /// <param name="Effects">The effect statements, in source order.</param>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -109,8 +133,12 @@ public sealed record OnNoChoiceBlockNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
-
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>A bare keyword statement — an identifier with nothing else on its line, e.g. the <c>solid</c> flag
 /// inside a <c>placement { }</c> row (§4.2) standing in for <c>solid: { margin: 0 }</c>.</summary>
 /// <param name="Name">The bare keyword.</param>
@@ -124,4 +152,9 @@ public sealed record FlagStatementNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : StatementNode(Offset, Length, Line, Column);
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);

@@ -9,14 +9,25 @@ public sealed partial class WorldInstanceHost {
     /// <summary>Restricts transfer destinations to this fixed set of colocated rows. Install before activation;
     /// remote authorities and dynamically spawned destinations are outside the rewind boundary.</summary>
     public void ConstrainTransferInventory(IEnumerable<string> names) {
-        if (m_closedTransferInventory is not null || m_instances.Count != 0) { throw new InvalidOperationException("transfer inventory must be installed once before activation"); }
-        m_closedTransferInventory = new(names, StringComparer.Ordinal);
-        if (m_closedTransferInventory.Count == 0) { throw new ArgumentException("transfer inventory cannot be empty", nameof(names)); }
+        if (
+            (m_closedTransferInventory is not null) ||
+            (m_instances.Count != 0)
+        ) { throw new InvalidOperationException(message: "transfer inventory must be installed once before activation"); }
+        m_closedTransferInventory = new(
+            collection: names,
+            comparer: StringComparer.Ordinal
+        );
+        if (m_closedTransferInventory.Count == 0) { throw new ArgumentException(
+            message: "transfer inventory cannot be empty",
+            paramName: nameof(names)
+        ); }
     }
+
     private void ReconcileInDoubtTransfers() {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
-            if (!TryBindRecoveryDestination(ref pending)) {
+
+            if (!TryBindRecoveryDestination(pending: ref pending)) {
                 index++;
                 continue;
             }
@@ -28,23 +39,30 @@ public sealed partial class WorldInstanceHost {
                 // Every step below may answer "not yet". Leaving the entry exactly where it is and re-asking at the
                 // next drain is the whole reconciliation loop already does for an unresolved status.
                 var status = WorldTransferStatus.Committed;
-                if (!pending.CommitConfirmed && !targetAuthority.TryStatus(
+
+                if (
+                    !pending.CommitConfirmed &&
+                    !targetAuthority.TryStatus(
                     sourceAuthority: pending.SourceAuthority,
                     transferId: pending.Transfer.TransferId,
                     status: out status
-                )) {
+                )
+                ) {
                     index++;
                     continue;
                 }
 
                 if (status == WorldTransferStatus.Reserved) {
-                    if (pending.RollbackOnly || (
+                    if (
+                        pending.RollbackOnly ||
+                        (
                         m_instances.TryGetValue(
                         key: pending.Transfer.SourceInstance,
                         value: out var source
                     ) &&
                         ((source.Server.NextInputTick - 1UL) >= pending.SourceDeadlineTick)
-                    )) {
+                    )
+                    ) {
                         targetAuthority.Abort(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId
@@ -103,9 +121,9 @@ public sealed partial class WorldInstanceHost {
                         pending = pending with { CommitConfirmed = true };
                         m_inDoubtTransfers[index] = pending;
                     }
-                    if (!TryPublishCommittedTransfer(pending)) { index++; continue; }
+                    if (!TryPublishCommittedTransfer(pending: pending)) { index++; continue; }
                     m_inDoubtTransfers.RemoveAt(index: index);
-                    CompleteCommittedTransfer(pending);
+                    CompleteCommittedTransfer(pending: pending);
                     continue;
                 }
 
@@ -121,7 +139,11 @@ public sealed partial class WorldInstanceHost {
                     // Once any member can return, never retry the cohort commit—even after a checkpoint.
                     pending = pending with { RollbackOnly = true };
                     m_inDoubtTransfers[index] = pending;
-                    if (!RestoreDetachedMembers(source, pending.Landed, pending.CommitMembers)) {
+                    if (!RestoreDetachedMembers(
+                        source,
+                        pending.Landed,
+                        pending.CommitMembers
+                    )) {
                         index++;
                         continue;
                     }
@@ -557,11 +579,22 @@ public sealed partial class WorldInstanceHost {
     }
     private bool TryResolveWorldPeerCall(in PendingTransfer transfer, WorldInstance source, out WorldPeerCall authority, out string resolvedName, out bool spawned, out string reason) {
         if (m_closedTransferInventory is { } inventory) {
-            resolvedName = transfer.Destination.Name ?? string.Empty;
+            resolvedName = (transfer.Destination.Name ?? string.Empty);
             spawned = false;
-            if (inventory.Contains(resolvedName) && m_instances.ContainsKey(resolvedName) && transfer.Destination.Authority is null) {
-                if (TryResolveDestination(transfer, source, out var contained, out resolvedName, out spawned, out reason)) {
-                    authority = LocalPeerCall(contained!); return true;
+            if (
+                inventory.Contains(item: resolvedName) &&
+                m_instances.ContainsKey(key: resolvedName) &&
+                (transfer.Destination.Authority is null)
+            ) {
+                if (TryResolveDestination(
+                    reason: out reason,
+                    resolved: out var contained,
+                    resolvedName: out resolvedName,
+                    source: source,
+                    spawned: out spawned,
+                    transfer: transfer
+                )) {
+                    authority = LocalPeerCall(local: contained!); return true;
                 }
                 authority = default; return false;
             }
@@ -574,9 +607,13 @@ public sealed partial class WorldInstanceHost {
             resolved: out var resolvedPath
         )
         ) {
-            var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
+            var neighbours = new WorldFileNeighbourResolver(
+                baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
                 ? directory
-                : AppContext.BaseDirectory), catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog);
+                : AppContext.BaseDirectory),
+                catalogFingerprint: m_catalogFingerprint,
+                catalog: m_machineCatalog
+            );
 
             if (
                 WorldDefinitionLoader.TryLoadFile(
@@ -900,19 +937,23 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
+        var neighbours = new WorldFileNeighbourResolver(
+            baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
             ? directory
-            : AppContext.BaseDirectory), catalogFingerprint: m_catalogFingerprint, catalog: m_machineCatalog);
+            : AppContext.BaseDirectory),
+            catalogFingerprint: m_catalogFingerprint,
+            catalog: m_machineCatalog
+        );
 
         if (
             !WorldDefinitionLoader.TryLoadFile(
+            catalog: m_machineCatalog,
+            catalogFingerprint: m_catalogFingerprint,
             definition: out var loaded,
             instanceIdentity: instanceName,
             neighbours: neighbours,
             path: resolvedPath,
-            reason: out reason,
-            catalogFingerprint: m_catalogFingerprint,
-            catalog: m_machineCatalog
+            reason: out reason
         ) ||
             (loaded is null)
         ) {
@@ -1037,9 +1078,22 @@ public sealed partial class WorldInstanceHost {
             );
         }
         public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) =>
-            Remote is not null && Fault is null
-                ? Remote.PollCommit(sourceAuthority, transferId, members, out accepted, out reason)
-                : Commit(sourceAuthority, transferId, members, out accepted, out reason);
+            (((Remote is not null) && (Fault is null))
+                ? Remote.PollCommit(
+                    accepted: out accepted,
+                    members: members,
+                    reason: out reason,
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                )
+                : Commit(
+                    accepted: out accepted,
+                    members: members,
+                    reason: out reason,
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                )
+            );
         // A colocated row answers inline; a remote row answers over its persistent lane, and a lane that could not
         // deliver the step answers a named refusal rather than nothing. Every step here always answers: a caller
         // told "not yet" would leave this transfer queued while the adjacency scan minted a second crossing for the
@@ -1049,7 +1103,7 @@ public sealed partial class WorldInstanceHost {
             : ((Local is not null)
                 ? Local.Server.ReserveTransfer(request: request)
                 : Remote!.Reserve(request: request with { PeerAdmission = true })
-            ));
+        ));
         public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
             if (Fault is not null) {
                 return Fault.TryStatus(

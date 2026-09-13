@@ -22,16 +22,19 @@ public sealed partial class WorldServer {
             (m_population.Fields is not { } lattice) ||
             (WorldLatticeFill.FindDraw(trait: row.Field) is not { } fill) ||
             !lattice.TryFieldIndex(
-                field: out var field,
-                name: row.Name.Value
-            )
+            field: out var field,
+            name: row.Name.Value
+        )
         ) {
             return;
         }
 
         if (!GeneratorEngine.TryResolveSource(
             generators: definition.Generators,
-            draw: new Draw(Source: fill.Source, Generator: fill.Generator),
+            draw: new Draw(
+                Source: fill.Source,
+                Generator: fill.Generator
+            ),
             generator: out var generator,
             reason: out var resolveReason
         )) {
@@ -43,7 +46,10 @@ public sealed partial class WorldServer {
         var values = ArrayPool<long>.Shared.Rent(minimumLength: lattice.CellCount);
 
         try {
-            var pass = values.AsSpan(start: 0, length: lattice.CellCount);
+            var pass = values.AsSpan(
+                start: 0,
+                length: lattice.CellCount
+            );
 
             if (!GeneratorEngine.TryFireBatch(
                 generator: generator,
@@ -81,7 +87,10 @@ public sealed partial class WorldServer {
     // path is O(rows) total; a per-row WorldDefinitionRows.FindStateRow scan against the whole previous list would be
     // O(rows squared).
     private void RepaintChangedLatticeDraws(WorldDefinition previous, WorldDefinition current) {
-        if (ReferenceEquals(objA: previous.State, objB: current.State)) {
+        if (ReferenceEquals(
+            objA: previous.State,
+            objB: current.State
+        )) {
             return;
         }
 
@@ -101,20 +110,33 @@ public sealed partial class WorldServer {
 
             if (
                 sameCount &&
-                string.Equals(a: previousRows[index].Name.Value, b: row.Name.Value, comparisonType: StringComparison.Ordinal)
+                string.Equals(
+                a: previousRows[index].Name.Value,
+                b: row.Name.Value,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 oldRow = previousRows[index];
             } else {
                 previousByName ??= BuildRowsByName(rows: previousRows);
-                previousByName.TryGetValue(key: row.Name.Value, value: out oldRow);
+                previousByName.TryGetValue(
+                    key: row.Name.Value,
+                    value: out oldRow
+                );
             }
 
             if (
                 (oldRow is { } found) &&
                 (
                     (found.DrawCursor != row.DrawCursor) ||
-                    !SameMasks(left: found.DrawnMasks, right: row.DrawnMasks) ||
-                    !Equals(objA: WorldLatticeFill.FindDraw(trait: found.Field), objB: fill)
+                    !SameMasks(
+                left: found.DrawnMasks,
+                right: row.DrawnMasks
+            ) ||
+                    !Equals(
+                objA: WorldLatticeFill.FindDraw(trait: found.Field),
+                objB: fill
+            )
                 )
             ) {
                 PaintLatticeDraw(
@@ -125,7 +147,10 @@ public sealed partial class WorldServer {
         }
     }
     private static Dictionary<string, WorldStateRow> BuildRowsByName(IReadOnlyList<WorldStateRow> rows) {
-        var byName = new Dictionary<string, WorldStateRow>(capacity: rows.Count, comparer: StringComparer.Ordinal);
+        var byName = new Dictionary<string, WorldStateRow>(
+            capacity: rows.Count,
+            comparer: StringComparer.Ordinal
+        );
 
         for (var index = 0; (index < rows.Count); index++) {
             byName[rows[index].Name.Value] = rows[index];

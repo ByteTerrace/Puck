@@ -9,62 +9,25 @@ namespace Puck.World.Schema.Tests;
 public sealed class WorldStateDocumentValuesLawTests {
     private static DocumentIdentifier Bound(string reference = "state.label") =>
         JsonSerializer.Deserialize<DocumentIdentifier>(json: JsonSerializer.Serialize(value: reference))!;
-
     private static WorldDefinition Source() => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: [
-            new WorldStateRow(Name: CellName.Parse(candidate: "label"), Kind: CellKind.Text,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Text: "resolved")]),
+            new WorldStateRow(
+                Name: CellName.Parse(candidate: "label"),
+                Kind: CellKind.Text,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Text: "resolved"
+                    )]
+            ),
         ])
     );
-
-    [Fact]
-    public void LiteralBranchesArePrunedWhileSiblingReferencesRemainVisible() {
-        var literal = new LiteralBranch();
-        var graph = new Pair<LiteralBranch, DocumentIdentifier>(literal, new DocumentIdentifier(value: "literal"));
-
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
-        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph with { Right = Bound() }));
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new[] { literal, literal }));
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new List<LiteralBranch> { literal }));
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new Dictionary<string, LiteralBranch> { ["key"] = literal }));
-        Assert.Equal(expected: 0, actual: literal.Reads);
-    }
-
-    [Fact]
-    public void PolymorphicMembersCollectionsAndBoxedValuesRetainReferences() {
-        var bound = Bound();
-        object[] graphs = [
-            new Pair<object, int>(bound, 0),
-            new Pair<IDocumentStateValue, int>(bound, 0),
-            new Pair<Base, int>(new Derived(bound), 0),
-            new Base[] { new Derived(bound) },
-            new List<Base> { new Derived(bound) },
-            new Pair<IReadOnlyList<Base>, int>(new Base[] { new Derived(bound) }, 0),
-            new Boxed(bound),
-            new Dictionary<string, DocumentIdentifier> { ["key"] = bound },
-            new Dictionary<DocumentIdentifier, string> { [bound] = "value" },
-            new DifferentEnumerations(bound),
-        ];
-        var source = Source();
-
-        foreach (var graph in graphs) {
-            Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
-            Assert.True(condition: WorldStateDocumentValues.ReferencesRow(definition: source, graph: graph, rowName: "label"));
-            Assert.False(condition: WorldStateDocumentValues.ReferencesRow(definition: source, graph: graph, rowName: "other"));
-        }
-    }
-
-    [Fact]
-    public void ExpandingGenericShapesDoNotRequireUnboundedMetadataDiscovery() {
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new Expanding<int>()));
-        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: new Expanding<object> { Value = Bound() }));
-    }
 
     [Fact]
     public void CachedShapesDoNotCacheMutableContentsAndCyclesTerminate() {
         var first = new Node();
         var second = new Node { Next = first };
+
         first.Next = second;
         var values = new List<object> { first };
 
@@ -76,48 +39,176 @@ public sealed class WorldStateDocumentValuesLawTests {
         values.Add(item: Bound());
         Assert.True(condition: WorldStateDocumentValues.HasReference(graph: values));
     }
-
     [Fact]
-    public void UnconditionalIgnoreIsExcludedAndConditionalIgnoreStillResolves() {
-        var graph = new IgnoredValues();
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
-        graph.Optional = Bound();
-        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
-        Assert.True(condition: WorldStateDocumentValues.TryFlatten(source: Source(), graph: graph, reason: out var reason), userMessage: reason);
-        Assert.Equal(expected: "resolved", actual: graph.Optional.Value);
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
+    public void ExpandingGenericShapesDoNotRequireUnboundedMetadataDiscovery() {
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new Expanding<int>()));
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: new Expanding<object> { Value = Bound() }));
     }
-
     [Fact]
     public void FlattenResolvesNestedValuesAndPreservesNamedRefusals() {
         var bound = Bound();
         var literal = new DocumentIdentifier(value: "untouched");
-        var graph = new Pair<object, DocumentIdentifier>(new Boxed(bound), literal);
+        var graph = new Pair<object, DocumentIdentifier>(
+            Left: new Boxed(Value: bound),
+            Right: literal
+        );
 
-        Assert.True(condition: WorldStateDocumentValues.TryFlatten(source: Source(), graph: graph, reason: out var reason), userMessage: reason);
-        Assert.Equal(expected: "resolved", actual: bound.Value);
+        Assert.True(
+            condition: WorldStateDocumentValues.TryFlatten(
+                source: Source(),
+                graph: graph,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.Equal(
+            expected: "resolved",
+            actual: bound.Value
+        );
         Assert.Null(@object: bound.Reference);
-        Assert.Equal(expected: "untouched", actual: literal.Value);
+        Assert.Equal(
+            expected: "untouched",
+            actual: literal.Value
+        );
 
-        var missing = new Pair<int, DocumentIdentifier>(0, Bound(reference: "state.missing"));
-        Assert.False(condition: WorldStateDocumentValues.TryFlatten(source: Source(), graph: missing, reason: out reason));
-        Assert.Contains(expectedSubstring: "document.right reference 'state.missing'", actualString: reason);
+        var missing = new Pair<int, DocumentIdentifier>(
+            Left: 0,
+            Right: Bound(reference: "state.missing")
+        );
+
+        Assert.False(condition: WorldStateDocumentValues.TryFlatten(
+            source: Source(),
+            graph: missing,
+            reason: out reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "document.right reference 'state.missing'"
+        );
         Assert.NotNull(@object: missing.Right.Reference);
     }
+    [Fact]
+    public void LiteralBranchesArePrunedWhileSiblingReferencesRemainVisible() {
+        var literal = new LiteralBranch();
+        var graph = new Pair<LiteralBranch, DocumentIdentifier>(
+            Left: literal,
+            Right: new DocumentIdentifier(value: "literal")
+        );
 
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph with { Right = Bound() }));
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new[] { literal, literal }));
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new List<LiteralBranch> { literal }));
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: new Dictionary<string, LiteralBranch> { ["key"] = literal }));
+        Assert.Equal(
+            actual: literal.Reads,
+            expected: 0
+        );
+    }
+    [Fact]
+    public void PolymorphicMembersCollectionsAndBoxedValuesRetainReferences() {
+        var bound = Bound();
+        object[] graphs = [
+            new Pair<object, int>(
+                Left: bound,
+                Right: 0
+            ),
+            new Pair<IDocumentStateValue, int>(
+                Left: bound,
+                Right: 0
+            ),
+            new Pair<Base, int>(
+                Left: new Derived(value: bound),
+                Right: 0
+            ),
+            new Base[] { new Derived(value: bound) },
+            new List<Base> { new Derived(value: bound) },
+            new Pair<IReadOnlyList<Base>, int>(
+                Left: new Base[] { new Derived(value: bound) },
+                Right: 0
+            ),
+            new Boxed(Value: bound),
+            new Dictionary<string, DocumentIdentifier> { ["key"] = bound },
+            new Dictionary<DocumentIdentifier, string> { [bound] = "value" },
+            new DifferentEnumerations(value: bound),
+        ];
+        var source = Source();
+
+        foreach (var graph in graphs) {
+            Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+            Assert.True(condition: WorldStateDocumentValues.ReferencesRow(
+                definition: source,
+                graph: graph,
+                rowName: "label"
+            ));
+            Assert.False(condition: WorldStateDocumentValues.ReferencesRow(
+                definition: source,
+                graph: graph,
+                rowName: "other"
+            ));
+        }
+    }
     [Fact]
     public void ResolveAgainstASourceFillsTheValueAndKeepsTheReference() {
         var bound = Bound();
-        var graph = new Pair<object, DocumentIdentifier>(new Boxed(bound), new DocumentIdentifier(value: "untouched"));
+        var graph = new Pair<object, DocumentIdentifier>(
+            Left: new Boxed(Value: bound),
+            Right: new DocumentIdentifier(value: "untouched")
+        );
 
-        Assert.True(condition: WorldStateDocumentValues.TryResolveGraph(source: Source(), graph: graph, reason: out var reason), userMessage: reason);
-        Assert.Equal(expected: "resolved", actual: bound.Value);
-        Assert.Equal(expected: "state.label", actual: bound.Reference);
+        Assert.True(
+            condition: WorldStateDocumentValues.TryResolveGraph(
+                source: Source(),
+                graph: graph,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.Equal(
+            expected: "resolved",
+            actual: bound.Value
+        );
+        Assert.Equal(
+            expected: "state.label",
+            actual: bound.Reference
+        );
         Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
 
-        var missing = new Pair<int, DocumentIdentifier>(0, Bound(reference: "state.missing"));
-        Assert.False(condition: WorldStateDocumentValues.TryResolveGraph(source: Source(), graph: missing, reason: out reason));
-        Assert.Contains(expectedSubstring: "document.right reference 'state.missing'", actualString: reason);
+        var missing = new Pair<int, DocumentIdentifier>(
+            Left: 0,
+            Right: Bound(reference: "state.missing")
+        );
+
+        Assert.False(condition: WorldStateDocumentValues.TryResolveGraph(
+            source: Source(),
+            graph: missing,
+            reason: out reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "document.right reference 'state.missing'"
+        );
+    }
+    [Fact]
+    public void UnconditionalIgnoreIsExcludedAndConditionalIgnoreStillResolves() {
+        var graph = new IgnoredValues();
+
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        graph.Optional = Bound();
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        Assert.True(
+            condition: WorldStateDocumentValues.TryFlatten(
+                source: Source(),
+                graph: graph,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.Equal(
+            expected: "resolved",
+            actual: graph.Optional.Value
+        );
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
     }
 
     private sealed record Pair<TLeft, TRight>(TLeft Left, TRight Right);
@@ -132,6 +223,7 @@ public sealed class WorldStateDocumentValuesLawTests {
     }
     private sealed class LiteralBranch {
         public int Reads;
+
         public int Value { get { Reads++; return 42; } }
     }
     private sealed class Node {
@@ -145,7 +237,8 @@ public sealed class WorldStateDocumentValuesLawTests {
         public DocumentIdentifier? Optional { get; set; }
     }
     private sealed class DifferentEnumerations(DocumentIdentifier value) : IEnumerable<int> {
-        public IEnumerator<int> GetEnumerator() => ((IEnumerable<int>)new[] { 1 }).GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => new[] { value }.GetEnumerator();
+
+        public IEnumerator<int> GetEnumerator() => ((IEnumerable<int>)new[] { 1 }).GetEnumerator();
     }
 }

@@ -22,6 +22,9 @@ public sealed class AzureWorldExtension : IWorldExtension {
         registry.RegisterRetirement(provider: AzureSiloExtensions.Retirement);
         registry.RegisterAuthentication(provider: AzureSiloExtensions.Authentication);
         registry.RegisterOperation(provider: AzureConfiguredProvider.Registration);
-        registry.RegisterHealthCheck(path: "/livez/azure", handler: static live => ("application/json", AzureApplicationHealth.Response(live: live)));
+        registry.RegisterHealthCheck(
+            path: "/livez/azure",
+            handler: static live => ("application/json", AzureApplicationHealth.Response(live: live))
+        );
     }
 }

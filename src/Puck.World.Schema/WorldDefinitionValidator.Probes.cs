@@ -102,7 +102,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         foreach (var (_, source) in inputs) {
-            if ((source is WorldScreenSource.Camera camera) && (camera.Seat is null)) {
+            if (
+                (source is WorldScreenSource.Camera camera) &&
+                (camera.Seat is null)
+            ) {
                 return true;
             }
         }
@@ -121,9 +124,15 @@ public static partial class WorldDefinitionValidator {
         var hasInputs = (probe.Inputs is not null);
         var hasTrack = (probe.Track is not null);
 
-        if (hasInputs && hasTrack) {
+        if (
+            hasInputs &&
+            hasTrack
+        ) {
             errors.Add(item: $"{path} declares both 'inputs' and 'track' — a probe reads live sockets or plays back a recorded track, never both.");
-        } else if (!hasInputs && !hasTrack) {
+        } else if (
+            !hasInputs &&
+            !hasTrack
+        ) {
             errors.Add(item: $"{path} declares neither 'inputs' nor 'track' — a probe needs exactly one input leg.");
         }
 
@@ -154,7 +163,10 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{socketPath} binds a capture source, but probe kernels do not host capture inputs.");
                 }
                 if (source is WorldScreenSource.Camera camera) {
-                    if (hasCameraSeat && (camera.Seat != cameraSeat)) {
+                    if (
+                        hasCameraSeat &&
+                        (camera.Seat != cameraSeat)
+                    ) {
                         errors.Add(item: $"{socketPath}.camera.seat must match every other camera socket in the probe; one kernel run can bind only one camera graph.");
                     } else if (!hasCameraSeat) {
                         hasCameraSeat = true;
@@ -167,7 +179,11 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (source is WorldScreenSource.Probe target) &&
-                    string.Equals(a: target.Id, b: probe.Id, comparisonType: StringComparison.Ordinal)
+                    string.Equals(
+                    a: target.Id,
+                    b: probe.Id,
+                    comparisonType: StringComparison.Ordinal
+                )
                 ) {
                     errors.Add(item: $"{socketPath}.probe.id '{target.Id}' is the enclosing probe; a socket cannot bind its own probe.");
                 }
@@ -184,12 +200,22 @@ public static partial class WorldDefinitionValidator {
     // A probe id reference resolves against the declared rows by name — the same shallow check a parameter target's
     // extension id gets.
     private static bool DeclaresProbe(WorldDefinition definition, string? id) {
-        if (string.IsNullOrWhiteSpace(value: id) || (definition.ProbesRaw is not { } probes)) {
+        if (
+            string.IsNullOrWhiteSpace(value: id) ||
+            (definition.ProbesRaw is not { } probes)
+        ) {
             return false;
         }
 
         foreach (var probe in probes) {
-            if ((probe is not null) && string.Equals(a: probe.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+            if (
+                (probe is not null) &&
+                string.Equals(
+                a: probe.Id,
+                b: id,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 return true;
             }
         }
@@ -285,7 +311,11 @@ public static partial class WorldDefinitionValidator {
             maxExclusive: true
         );
 
-        if (hysteresisValid && float.IsFinite(f: axis.Deadband) && (axis.Deadband >= 0f)) {
+        if (
+            hysteresisValid &&
+            float.IsFinite(f: axis.Deadband) &&
+            (axis.Deadband >= 0f)
+        ) {
             // Activation requires a magnitude above deadband + hysteresis and release a magnitude below
             // deadband - hysteresis; both thresholds must lie inside the [0, 1) axis magnitude domain or one of the
             // two transitions can never happen.
@@ -342,7 +372,11 @@ public static partial class WorldDefinitionValidator {
                 if (
                     string.IsNullOrWhiteSpace(value: extension.Id) ||
                     (definition.Render.Extensions is not { } extensions) ||
-                    !extensions.Any(predicate: entry => ((entry is not null) && string.Equals(a: entry.Id, b: extension.Id, comparisonType: StringComparison.Ordinal)))
+                    !extensions.Any(predicate: entry => ((entry is not null) && string.Equals(
+                    a: entry.Id,
+                    b: extension.Id,
+                    comparisonType: StringComparison.Ordinal
+                )))
                 ) {
                     errors.Add(item: $"{path}.target.id '{extension.Id}' names no composed render.extensions entry.");
                 }
@@ -353,9 +387,16 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.target.field is required.");
                 }
 
-                if (!DeclaresProbe(definition: definition, id: target.Id)) {
+                if (!DeclaresProbe(
+                    definition: definition,
+                    id: target.Id
+                )) {
                     errors.Add(item: $"{path}.target.id '{target.Id}' names no declared probe.");
-                } else if (string.Equals(a: target.Id, b: probeId, comparisonType: StringComparison.Ordinal)) {
+                } else if (string.Equals(
+                    a: target.Id,
+                    b: probeId,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     errors.Add(item: $"{path}.target.id '{target.Id}' is the binding's own probe; a probe cannot steer itself.");
                 }
 

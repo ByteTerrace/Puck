@@ -15,7 +15,7 @@ the retention-gate rationale (write-up retired; the gates themselves are the rec
 it before proposing to collapse one into the other.
 
 Every public type lives flat in `namespace Puck.Maths`. The parent
-[`Puck.Maths` README](../README.md) is the library's entry point; this file is
+[Deterministic numerics](../../../docs/reference/maths.md) is the library's entry point; this file is
 the contract for the folder.
 
 ---
@@ -169,4 +169,4 @@ verify.
 
 ## Documentation
 
-📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)
+📚 [Puck.Maths](../../../docs/reference/maths.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

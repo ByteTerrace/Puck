@@ -37,30 +37,28 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// defaults to.</summary>
     public const float DefaultFieldOfViewRadians = (55f * (MathF.PI / 180f));
 
-    /// <summary>The orbit heading, radians (0 = looking down +Z). Mutable — a controller (a pad, a scripted pose)
-    /// drives this directly frame to frame, exactly like <see cref="Debug.SdfDebugController"/>'s stick-driven
-    /// orbit.</summary>
-    public float Yaw { get; set; }
-    /// <summary>The orbit tilt, radians (positive looks up). The caller owns any envelope clamp (this type applies
-    /// none) — <see cref="Debug.SdfDebugController"/> clamps to its own ±1.35 rad envelope before assigning here.</summary>
-    public float Pitch { get; set; }
-
-    /// <summary>The orbit distance, world units. The caller owns any envelope clamp, same as <see cref="Pitch"/>.</summary>
-    public float Distance { get; set; } = 4f;
-
-    /// <summary>The rig's own orbit pivot, world space — for a caller that orbits a host-controlled point (panned by
-    /// a stick, like <see cref="Debug.SdfDebugController"/>'s right-stick pan) rather than a live external anchor.
-    /// Read by the parameterless <see cref="Resolve(float)"/> convenience overload; the interface's
-    /// <see cref="ISdfCameraRig.Resolve"/> uses <see cref="SdfAnchor.Position"/> instead (for orbiting
-    /// something that moves on its own, like a companion) and never reads this property.</summary>
-    public Vector3 Target { get; set; }
     /// <summary>When set, the resolved eye locks head-on (<c>+Z</c> at zero pitch, ignoring <see cref="Yaw"/>/
     /// <see cref="Pitch"/> for this resolve while leaving them stored for when this flips back off) — the "sprite
     /// intent" framing <c>ScreenLayoutDirector</c>'s creator-workpiece/scenario-shot code locks to so the authored
     /// silhouette is exactly what a bake rasterizes. Equivalent to (and replaces the need for) a separate boolean
     /// parameter threaded through every orbit consumer.</summary>
     public bool HeadOn { get; set; }
+    /// <summary>The orbit tilt, radians (positive looks up). The caller owns any envelope clamp (this type applies
+    /// none) — <see cref="Debug.SdfDebugController"/> clamps to its own ±1.35 rad envelope before assigning here.</summary>
+    public float Pitch { get; set; }
+    /// <summary>The rig's own orbit pivot, world space — for a caller that orbits a host-controlled point (panned by
+    /// a stick, like <see cref="Debug.SdfDebugController"/>'s right-stick pan) rather than a live external anchor.
+    /// Read by the parameterless <see cref="Resolve(float)"/> convenience overload; the interface's
+    /// <see cref="ISdfCameraRig.Resolve"/> uses <see cref="SdfAnchor.Position"/> instead (for orbiting
+    /// something that moves on its own, like a companion) and never reads this property.</summary>
+    public Vector3 Target { get; set; }
+    /// <summary>The orbit heading, radians (0 = looking down +Z). Mutable — a controller (a pad, a scripted pose)
+    /// drives this directly frame to frame, exactly like <see cref="Debug.SdfDebugController"/>'s stick-driven
+    /// orbit.</summary>
+    public float Yaw { get; set; }
 
+    /// <summary>The orbit distance, world units. The caller owns any envelope clamp, same as <see cref="Pitch"/>.</summary>
+    public float Distance { get; set; } = 4f;
     /// <summary>The field of view this rig resolves at.</summary>
     public float FovRadians { get; set; } = DefaultFieldOfViewRadians;
 
@@ -85,7 +83,18 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
         var target = anchor.Position;
-        var offset = (HeadOn ? new Vector3(x: 0f, y: 0f, z: Distance) : Offset(yaw: Yaw, pitch: Pitch, distance: Distance));
+        var offset = (HeadOn
+            ? new Vector3(
+                x: 0f,
+                y: 0f,
+                z: Distance
+            )
+            : Offset(
+                yaw: Yaw,
+                pitch: Pitch,
+                distance: Distance
+            )
+        );
 
         return ((target + offset), target, FovRadians);
     }
@@ -93,7 +102,16 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// convenience overload a self-contained/pad-panned orbit (like <see cref="Debug.SdfDebugController"/>'s) uses.</summary>
     /// <param name="time">The presentation clock (unused — see the interface member's remarks).</param>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(float time) =>
-        Resolve(anchor: new SdfAnchor(Position: Target, Orientation: Quaternion.Identity), clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: time));
+        Resolve(
+            anchor: new SdfAnchor(
+                Position: Target,
+                Orientation: Quaternion.Identity
+            ),
+            clock: new SdfCameraClock(
+                AuthoritativeTick: 0UL,
+                PresentationSeconds: time
+            )
+        );
 }
 /// <summary>
 /// Chases the anchor with a fixed (host-updated) offset — the shape of a party chase framing
@@ -109,13 +127,16 @@ public sealed class FollowRig : ISdfCameraRig {
 
     /// <summary>The eye's offset from the anchor position, world-space axes (not anchor-relative — a follow camera's
     /// "up and back" reads the same regardless of which way the subject faces, unlike an anchor-relative rig).</summary>
-    public Vector3 EyeOffset { get; set; } = new(x: 0f, y: 6.5f, z: 11f);
+    public Vector3 EyeOffset { get; set; } = new(
+        x: 0f,
+        y: 6.5f,
+        z: 11f
+    );
+    /// <summary>The field of view this rig resolves at.</summary>
+    public float FovRadians { get; set; } = DefaultFieldOfViewRadians;
 
     /// <summary>The look-at target's offset from the anchor position.</summary>
     public Vector3 TargetOffset { get; set; }
-
-    /// <summary>The field of view this rig resolves at.</summary>
-    public float FovRadians { get; set; } = DefaultFieldOfViewRadians;
 
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) =>
@@ -149,16 +170,30 @@ public sealed class OrientedFollowRig : ISdfCameraRig {
     /// <see cref="SdfAnchor.Orientation"/> before adding — like <see cref="FirstPersonRig.EyeOffset"/>, unlike
     /// <see cref="FollowRig.EyeOffset"/>). The default lifts and pulls back along the anchor's local <c>+Z</c> (its
     /// "behind"), the over-the-shoulder chase shape.</summary>
-    public Vector3 EyeOffset { get; set; } = new(x: 0f, y: 2.2f, z: 5f);
+    public Vector3 EyeOffset { get; set; } = new(
+        x: 0f,
+        y: 2.2f,
+        z: 5f
+    );
     /// <summary>The look-at target's offset from the anchor position, likewise in the anchor's own local axes.</summary>
-    public Vector3 TargetOffset { get; set; } = new(x: 0f, y: 1f, z: 0f);
+    public Vector3 TargetOffset { get; set; } = new(
+        x: 0f,
+        y: 1f,
+        z: 0f
+    );
     /// <summary>The field of view this rig resolves at.</summary>
     public float FovRadians { get; set; } = DefaultFieldOfViewRadians;
 
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
-        var eye = (anchor.Position + Vector3.Transform(value: EyeOffset, rotation: anchor.Orientation));
-        var target = (anchor.Position + Vector3.Transform(value: TargetOffset, rotation: anchor.Orientation));
+        var eye = (anchor.Position + Vector3.Transform(
+            value: EyeOffset,
+            rotation: anchor.Orientation
+        ));
+        var target = (anchor.Position + Vector3.Transform(
+            value: TargetOffset,
+            rotation: anchor.Orientation
+        ));
 
         return (eye, target, FovRadians);
     }
@@ -177,7 +212,11 @@ public sealed class FirstPersonRig : ISdfCameraRig {
     /// <summary>The eye's offset from the anchor position, in the anchor's own local axes (rotated by
     /// <see cref="SdfAnchor.Orientation"/> before adding — unlike <see cref="FollowRig.EyeOffset"/>, which stays in
     /// world axes). The default lifts to a roughly human eye height above the anchor's own origin.</summary>
-    public Vector3 EyeOffset { get; set; } = new(x: 0f, y: 1.6f, z: 0f);
+    public Vector3 EyeOffset { get; set; } = new(
+        x: 0f,
+        y: 1.6f,
+        z: 0f
+    );
     /// <summary>How far ahead (along the anchor's local <c>-Z</c>, its forward axis) the look-at target sits. Only
     /// the direction matters to a look-at camera; this keeps the target a finite, well-conditioned distance out.</summary>
     public float FocusDistance { get; set; } = 1f;
@@ -186,9 +225,18 @@ public sealed class FirstPersonRig : ISdfCameraRig {
 
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
-        var eye = (anchor.Position + Vector3.Transform(value: EyeOffset, rotation: anchor.Orientation));
-        var forward = Vector3.Transform(value: -Vector3.UnitZ, rotation: anchor.Orientation);
-        var distance = MathF.Max(x: FocusDistance, y: 0.01f);
+        var eye = (anchor.Position + Vector3.Transform(
+            value: EyeOffset,
+            rotation: anchor.Orientation
+        ));
+        var forward = Vector3.Transform(
+            value: -Vector3.UnitZ,
+            rotation: anchor.Orientation
+        );
+        var distance = MathF.Max(
+            x: FocusDistance,
+            y: 0.01f
+        );
 
         return (eye, (eye + (forward * distance)), FovRadians);
     }
@@ -208,10 +256,10 @@ public sealed class FixedRig : ISdfCameraRig {
 
     /// <summary>The fixed eye position, world space.</summary>
     public Vector3 Eye { get; set; }
-    /// <summary>The fixed look-at target, world space.</summary>
-    public Vector3 Target { get; set; }
     /// <summary>The field of view this rig resolves at.</summary>
     public float FovRadians { get; set; } = DefaultFieldOfViewRadians;
+    /// <summary>The fixed look-at target, world space.</summary>
+    public Vector3 Target { get; set; }
 
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) =>

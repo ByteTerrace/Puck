@@ -118,8 +118,16 @@ public sealed partial class WorldServer : IFieldLatticeHost {
     private FixedQ4816 ReadScalarSlot(string row, ulong tick) {
         var catalog = m_definition.StateCatalog;
 
-        return (catalog.TryResolve(lane: StateLane.Document, name: row, handle: out var handle)
-            ? ReadScalarSlot(catalog: catalog, row: handle, tick: tick)
+        return (catalog.TryResolve(
+            handle: out var handle,
+            lane: StateLane.Document,
+            name: row
+        )
+            ? ReadScalarSlot(
+                catalog: catalog,
+                row: handle,
+                tick: tick
+            )
             : FixedQ4816.Zero
         );
     }

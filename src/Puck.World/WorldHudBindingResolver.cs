@@ -124,7 +124,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
                 rowName: name,
                 text: out cellText,
                 tick: m_client.Tick
-            ));
+            )
+        );
 
         if (
             !resolved ||

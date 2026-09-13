@@ -258,7 +258,7 @@ Require permissively licensed bundled firmware and retain source provenance and
 notices. GPL emibios is not the selected foundation. Original branding is not a
 cartridge authentication mechanism. The owning
 [AGB firmware guide](../../src/Puck.AdvancedGamingBrick/Firmware/README.md) and
-[HGB startup guide](../../src/Puck.HumbleGamingBrick/README.md#firmware-and-startup)
+[HGB startup guide](../emulation/hgb/embedding.md#firmware-and-startup)
 hold implementation and rebuilding details; extend those sources instead of
 creating another BIOS implementation in the host.
 

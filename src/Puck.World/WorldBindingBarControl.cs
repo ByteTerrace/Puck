@@ -68,6 +68,17 @@ internal sealed class WorldBindingBarControl {
         m_visibility = visibility;
     }
 
+    private CompiledBindingBarLayout CompiledFor(int slot, WorldBindingBarLayout layout) {
+        if (!ReferenceEquals(
+            objA: m_compiledSource[slot],
+            objB: layout
+        )) {
+            m_compiled[slot] = layout.Compile();
+            m_compiledSource[slot] = layout;
+        }
+
+        return m_compiled[slot];
+    }
     private (WorldBindingBarAuthoring Authoring, string Source) ResolveAuthoring(int slot) {
         if (m_roster.ProfileAt(slot: slot)?.Document?.BindingOverlays.FirstOrDefault()?.BindingBar is { } profile) {
             return (profile, "identity");
@@ -183,14 +194,5 @@ internal sealed class WorldBindingBarControl {
                 slot: slot
             )
         );
-    }
-
-    private CompiledBindingBarLayout CompiledFor(int slot, WorldBindingBarLayout layout) {
-        if (!ReferenceEquals(objA: m_compiledSource[slot], objB: layout)) {
-            m_compiled[slot] = layout.Compile();
-            m_compiledSource[slot] = layout;
-        }
-
-        return m_compiled[slot];
     }
 }

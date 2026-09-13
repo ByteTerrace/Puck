@@ -34,7 +34,8 @@ public sealed class MachineConfiguration {
         // AGB boot ROM shares the Color layout.
         var requiredBootRomLength = (model.SupportsColor()
             ? CgbBootRomLength
-            : DmgBootRomLength);
+            : DmgBootRomLength
+        );
 
         if (
             (bootRom is not null) &&
@@ -46,12 +47,20 @@ public sealed class MachineConfiguration {
             );
         }
 
-        BootMode = bootMode ?? (bootRom is null ? MachineBootMode.Fast : MachineBootMode.Cold);
+        BootMode = (bootMode ?? ((bootRom is null)
+            ? MachineBootMode.Fast
+            : MachineBootMode.Cold));
         if (BootMode is not (MachineBootMode.Cold or MachineBootMode.Fast)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(bootMode));
         }
-        if ((BootMode == MachineBootMode.Cold) && (bootRom is null)) {
-            throw new ArgumentException(message: "Cold startup requires a boot ROM image.", paramName: nameof(bootRom));
+        if (
+            (BootMode == MachineBootMode.Cold) &&
+            (bootRom is null)
+        ) {
+            throw new ArgumentException(
+                message: "Cold startup requires a boot ROM image.",
+                paramName: nameof(bootRom)
+            );
         }
 
         BootRom = bootRom;
@@ -60,11 +69,12 @@ public sealed class MachineConfiguration {
         TickResolution = (tickResolution ?? TickResolution.Default);
     }
 
-    /// <summary>Gets the selected boot ROM image, retained even when startup is skipped.</summary>
-    public byte[]? BootRom { get; }
+    internal bool ExecutesBootRom => (BootMode == MachineBootMode.Cold);
+
     /// <summary>Gets whether startup executes firmware or begins at the seeded cartridge handoff.</summary>
     public MachineBootMode BootMode { get; }
-    internal bool ExecutesBootRom => BootMode == MachineBootMode.Cold;
+    /// <summary>Gets the selected boot ROM image, retained even when startup is skipped.</summary>
+    public byte[]? BootRom { get; }
     /// <summary>Gets the cartridge ROM image, or <see langword="null"/> when no cartridge is loaded.</summary>
     public byte[]? CartridgeRom { get; }
     /// <summary>Gets the model to emulate.</summary>

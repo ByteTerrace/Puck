@@ -171,7 +171,8 @@ public sealed partial class AgbCartridge {
     /// no rumble hardware.</summary>
     public float MotorLevel => ((m_hasRumble && m_rumbleMotorOn)
         ? 1f
-        : 0f);
+        : 0f
+    );
 
     /// <summary>Sets the current light-level reading for the solar sensor, 0 (brightest) to 255
     /// (darkest) — recorded per-segment host input (the core adapter's ApplyInput), never a live read from inside the
@@ -308,17 +309,21 @@ public sealed partial class AgbCartridge {
 
         return ReadRomHalfword(offset: romAddr);
     }
+
     // Fetch both bytes together for ordinary mask ROM. Keep the byte path at sensor overlays and image edges:
     // those reads may have side effects, return open bus, or span one ROM byte and one out-of-range byte.
     internal ushort ReadRomHalfword(uint offset) {
-        if ((((ulong)offset + 1u) < ((uint)m_rom.Length))
-            && !(m_hasGpio && (offset >= 0xC3u) && (offset <= 0xC9u))
-            && !(m_hasTilt && (offset >= 0x81FFu) && (offset <= 0x8500u))) {
+        if (
+            ((((ulong)offset) + 1u) < ((uint)m_rom.Length)) &&
+            !(m_hasGpio && (offset >= 0xC3u) && (offset <= 0xC9u)) &&
+            !(m_hasTilt && (offset >= 0x81FFu) && (offset <= 0x8500u))
+        ) {
             return BinaryPrimitives.ReadUInt16LittleEndian(source: m_rom.AsSpan(start: ((int)offset)));
         }
 
         return ((ushort)(ReadRom(offset: offset) | (ReadRom(offset: (offset + 1u)) << 8)));
     }
+
     /// <summary>Reads a ROM byte at <paramref name="offset"/>, or the open-bus pattern beyond the image.</summary>
     /// <param name="offset">The byte offset into the cartridge ROM address space (0–0x01FFFFFF).</param>
     /// <returns>The ROM byte, or the open-bus value for out-of-range offsets.</returns>
@@ -376,7 +381,8 @@ public sealed partial class AgbCartridge {
             ) {
                 var id = ((Backup == CartridgeBackup.Flash128)
                     ? FlashIdSanyo1M
-                    : FlashIdPanasonic512);
+                    : FlashIdPanasonic512
+                );
 
                 return ((byte)(id >> (((int)offset) * 8)));
             }
@@ -466,7 +472,8 @@ public sealed partial class AgbCartridge {
         if (m_eepromAddressBits == 0) {
             var detected = ((command == 0b11)
                 ? (length - 3)
-                : (length - 67));
+                : (length - 67)
+            );
 
             m_eepromAddressBits = detected switch {
                 <= 6 => 6,
@@ -501,7 +508,8 @@ public sealed partial class AgbCartridge {
             for (var i = 0; (i < 64); ++i) {
                 var bit = (((dataStart + i) < length)
                     ? m_eepromCommand[(dataStart + i)]
-                    : 0);
+                    : 0
+                );
 
                 data = (data << 1) | ((uint)bit);
             }
@@ -551,7 +559,8 @@ public sealed partial class AgbCartridge {
             case 1: // Started: expect 0x55 to 0x2AAA.
                 m_flashPhase = (((address == 0x2AAAu) && (value == 0x55))
                     ? 2
-                    : 0);
+                    : 0
+                );
 
                 return;
             default: // Continue: the command byte (or an erase target).

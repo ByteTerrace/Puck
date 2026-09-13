@@ -12,13 +12,17 @@ internal sealed class CliGlob {
     public bool BasenameOnly { get; }
 
     public CliGlob(string glob) {
-        var normalized = glob.Replace(newChar: '/', oldChar: '\\');
+        var normalized = glob.Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
 
         BasenameOnly = !normalized.Contains(value: '/');
-        m_regex = new Regex(pattern: GlobToRegex(glob: normalized), options: ResharpOptions.HighThroughputDefaults);
+        m_regex = new Regex(
+            pattern: GlobToRegex(glob: normalized),
+            options: ResharpOptions.HighThroughputDefaults
+        );
     }
-
-    public bool IsMatch(string value) => m_regex.IsMatch(input: value);
 
     // Anchored whole-string translation. `**` -> any (incl. '/'), `*` -> any run except '/',
     // `?` -> one non-'/'. Every other char is a literal, escaping the engine's metacharacters
@@ -31,7 +35,10 @@ internal sealed class CliGlob {
             var c = glob[i];
 
             if (c == '*') {
-                if (((i + 1) < glob.Length) && (glob[(i + 1)] == '*')) {
+                if (
+                    ((i + 1) < glob.Length) &&
+                    (glob[(i + 1)] == '*')
+                ) {
                     sb.Append(value: ".*");
                     i += 2;
                 } else {
@@ -42,7 +49,10 @@ internal sealed class CliGlob {
                 sb.Append(value: "[^/]");
                 i++;
             } else {
-                if (char.IsLetterOrDigit(c: c) || (c == '/')) {
+                if (
+                    char.IsLetterOrDigit(c: c) ||
+                    (c == '/')
+                ) {
                     sb.Append(value: c);
                 } else {
                     sb.Append(value: '\\').Append(value: c);
@@ -54,4 +64,6 @@ internal sealed class CliGlob {
 
         return sb.Append(value: '$').ToString();
     }
+
+    public bool IsMatch(string value) => m_regex.IsMatch(input: value);
 }

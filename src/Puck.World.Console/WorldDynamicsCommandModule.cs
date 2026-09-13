@@ -32,38 +32,6 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
         references: WorldDefinitionRows.EnumerateDynamicsReferences(definition: definition),
         increment: static (ReferenceCounts counts, string section) => counts.Increment(section: section)
     );
-    private static string FormatRaw32(long raw) => (raw / 4294967296.0).ToString(
-        format: "0.###",
-        provider: CultureInfo.InvariantCulture
-    );
-    private static string DescribeRow(DynamicsRow row, IReadOnlyDictionary<string, ReferenceCounts> referenceCounts) {
-        // A validated row always compiles (ValidateDynamics runs this same derivation at the door), so no catch
-        // masks a refusal here.
-        var constants = SecondOrderDynamics.Create(
-            dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
-            frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
-            initialResponse: FixedQ4816.FromDouble(value: row.Response)
-        );
-        var refs = (referenceCounts.TryGetValue(
-            key: row.Name,
-            value: out var found
-        )
-            ? found
-            : default
-        );
-
-        return ((((((((((((string)$" {row.Name} f={row.Frequency.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}")
-            + $" zeta={row.Damping.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}")
-            + $" r={row.Response.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}")
-            + $" decay={FormatRaw32(raw: constants.DecayRateRaw)}")
-            + $" osc={FormatRaw32(raw: constants.OscillationRateRaw)}")
-            + $" k3={FormatRaw32(raw: constants.TargetVelocityGainRaw)}")
-            + $" refs=cameras:{refs.Cameras}")
-            + $",looks:{refs.Looks}")
-            + $",parts:{refs.Parts}")
-            + $",kits:{refs.Kits}")
-            + $",state:{refs.State}");
-    }
     private static string DescribeDynamics(WorldDefinition definition) {
         var dynamics = definition.Dynamics;
 
@@ -89,6 +57,47 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
 
         return builder.Append(value: ']').ToString();
     }
+    private static string DescribeRow(DynamicsRow row, IReadOnlyDictionary<string, ReferenceCounts> referenceCounts) {
+        // A validated row always compiles (ValidateDynamics runs this same derivation at the door), so no catch
+        // masks a refusal here.
+        var constants = SecondOrderDynamics.Create(
+            dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
+            frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
+            initialResponse: FixedQ4816.FromDouble(value: row.Response)
+        );
+        var refs = (referenceCounts.TryGetValue(
+            key: row.Name,
+            value: out var found
+        )
+            ? found
+            : default
+        );
+
+        return ((((((((((((string)$" {row.Name} f={row.Frequency.ToString(
+            format: "0.###",
+            provider: CultureInfo.InvariantCulture
+        )}")
+            + $" zeta={row.Damping.ToString(
+            format: "0.###",
+            provider: CultureInfo.InvariantCulture
+        )}")
+            + $" r={row.Response.ToString(
+            format: "0.###",
+            provider: CultureInfo.InvariantCulture
+        )}")
+            + $" decay={FormatRaw32(raw: constants.DecayRateRaw)}")
+            + $" osc={FormatRaw32(raw: constants.OscillationRateRaw)}")
+            + $" k3={FormatRaw32(raw: constants.TargetVelocityGainRaw)}")
+            + $" refs=cameras:{refs.Cameras}")
+            + $",looks:{refs.Looks}")
+            + $",parts:{refs.Parts}")
+            + $",kits:{refs.Kits}")
+            + $",state:{refs.State}");
+    }
+    private static string FormatRaw32(long raw) => (raw / 4294967296.0).ToString(
+        format: "0.###",
+        provider: CultureInfo.InvariantCulture
+    );
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -97,7 +106,10 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
             name: "world.dynamics",
             description: "Reports the dynamics census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored f/zeta/r triple, the derived decay/osc/k3 constants (the SAME fixed-point derivation the simulation reads), and how many document members reference it.",
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.dynamics") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.dynamics"
+                ) is { } refusal) {
                     return refusal;
                 }
 

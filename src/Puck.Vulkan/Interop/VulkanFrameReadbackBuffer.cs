@@ -6,9 +6,9 @@ namespace Puck.Vulkan.Interop;
 /// Owns a host-visible readback buffer and its backing memory, freeing both when disposed.
 /// </summary>
 public sealed class VulkanFrameReadbackBuffer : IDisposable {
-    private bool m_disposed;
-
     private readonly IVulkanFrameReadbackApi m_frameReadbackApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the native <c>VkBuffer</c> handle, or zero once disposed.</summary>
     public nint BufferHandle { get; private set; }

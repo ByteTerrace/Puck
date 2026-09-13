@@ -9,14 +9,14 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class SerialResumeCreditGuardStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "serial-resume-credit-guard";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

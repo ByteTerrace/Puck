@@ -35,10 +35,13 @@ public static class WorldAnchorGeometry {
             );
 
             return ((creation is null)
-                ? WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement)
-                : StaticShapePosition(
+                ? WorldDefinitionRows.ResolvedPosition(
                     definition: definition,
+                    placement: placement
+                )
+                : StaticShapePosition(
                     creation: creation,
+                    definition: definition,
                     placement: placement,
                     shapeId: shapeId
                 )
@@ -56,7 +59,10 @@ public static class WorldAnchorGeometry {
     /// <param name="shapeId">The shape id, or <see langword="null"/>.</param>
     /// <returns>The stamped world position.</returns>
     public static Vector3 StaticShapePosition(WorldDefinition definition, WorldPlacement placement, WorldPrototype creation, int? shapeId) {
-        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var frame = WorldDefinitionRows.ResolvedFrame(
+            definition: definition,
+            placement: placement
+        );
 
         if (shapeId is not { } targetShapeId) {
             return frame.Position;

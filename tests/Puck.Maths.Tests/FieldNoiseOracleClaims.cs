@@ -28,6 +28,86 @@ internal static class FieldNoiseOracleClaims {
     private const int FadeFractionBitCount = 28;
     private const long FractionMask = 0xFFFFL;
 
+    // Arithmetic (floor) right shift of a possibly-negative BigInteger by a non-negative amount, matching C#'s `>>`
+    // on a signed integral type -- which floors toward negative infinity rather than truncating toward zero, the one
+    // place BigInteger's own division semantics would silently disagree with the subject's native shifts.
+    private static BigInteger ArithmeticShiftRight(BigInteger value, int shift) =>
+        ((value.Sign >= 0)
+            ? (value >> shift)
+            : (-(((-value - BigInteger.One) >> shift) + BigInteger.One))
+        );
+    // A signed C# long reinterpreted as its unsigned 64-bit bit pattern -- the BigInteger equivalent of `(ulong)value`.
+    private static BigInteger AsUnsigned64(long value) =>
+        ((value >= 0L)
+            ? new BigInteger(value: value)
+            : (new BigInteger(value: value) + (BigInteger.One << 64))
+        );
+    // The corner hash's signed value: sign-extend the top 32 bits, then an arithmetic shift right by 15 -- the same
+    // (long)(int)(hash >> 32) >> 15 the subject reads, transcribed in BigInteger.
+    private static BigInteger CornerValue(BigInteger hash) {
+        var top32 = (hash >> 32) & 0xFFFFFFFFUL;
+        var signed = ((top32 >= 0x80000000UL)
+            ? (top32 - (BigInteger.One << 32))
+            : top32
+        );
+
+        return ArithmeticShiftRight(
+            shift: 15,
+            value: signed
+        );
+    }
+    // The quintic fade 6t^5 - 15t^4 + 10t^3 of a UQ0.16 fraction, at Q28 -- transcribed exactly, Horner-style, from
+    // FieldNoise's own FadeQ28.
+    private static BigInteger FadeQ28(BigInteger t) {
+        var t28 = (t << 12);
+        var inner = ((6 * t28) - (15L << FadeFractionBitCount));
+
+        inner = (ArithmeticShiftRight(
+            shift: FadeFractionBitCount,
+            value: (inner * t28)
+        ) + (10L << FadeFractionBitCount));
+
+        var t2 = ArithmeticShiftRight(
+            shift: FadeFractionBitCount,
+            value: (t28 * t28)
+        );
+        var t3 = ArithmeticShiftRight(
+            shift: FadeFractionBitCount,
+            value: (t2 * t28)
+        );
+
+        return ArithmeticShiftRight(
+            shift: FadeFractionBitCount,
+            value: (t3 * inner)
+        );
+    }
+    // The blend rounds its Q28 product to nearest on the magnitude (half away from zero), then re-signs -- the
+    // subject's RoundShift, transcribed in BigInteger.
+    private static BigInteger Lerp(BigInteger a, BigInteger b, BigInteger fadeQ28) =>
+        (a + RoundShift(
+            shift: FadeFractionBitCount,
+            value: ((b - a) * fadeQ28)
+        ));
+    // The three-round avalanche finalizer, over ulong-width BigIntegers throughout (every value stays in [0, 2^64)).
+    private static BigInteger Mix(BigInteger value) {
+        value &= Mask64;
+        value ^= (value >> 30);
+        value = (value * MixMultiplier1) & Mask64;
+        value ^= (value >> 27);
+        value = (value * MixMultiplier2) & Mask64;
+        value ^= (value >> 31);
+
+        return value & Mask64;
+    }
+    private static BigInteger RoundShift(BigInteger value, int shift) {
+        var magnitude = BigInteger.Abs(value: value);
+        var rounded = ((magnitude + (BigInteger.One << (shift - 1))) >> shift);
+
+        return ((value.Sign < 0)
+            ? -rounded
+            : rounded
+        );
+    }
     /// <summary>The independent oracle for <see cref="FieldNoise.Sample(ulong, FixedVector3)"/>'s flat overload: the
     /// same hash-and-interpolate recipe, computed from scratch in <see cref="BigInteger"/>.</summary>
     /// <param name="seed">The field seed.</param>
@@ -74,65 +154,43 @@ internal static class FieldNoiseOracleClaims {
         var fadeY = FadeQ28(t: yFraction);
         var fadeZ = FadeQ28(t: zFraction);
 
-        var x00 = Lerp(a: c000, b: c100, fadeQ28: fadeX);
-        var x10 = Lerp(a: c010, b: c110, fadeQ28: fadeX);
-        var x01 = Lerp(a: c001, b: c101, fadeQ28: fadeX);
-        var x11 = Lerp(a: c011, b: c111, fadeQ28: fadeX);
-        var y0Value = Lerp(a: x00, b: x10, fadeQ28: fadeY);
-        var y1Value = Lerp(a: x01, b: x11, fadeQ28: fadeY);
+        var x00 = Lerp(
+            a: c000,
+            b: c100,
+            fadeQ28: fadeX
+        );
+        var x10 = Lerp(
+            a: c010,
+            b: c110,
+            fadeQ28: fadeX
+        );
+        var x01 = Lerp(
+            a: c001,
+            b: c101,
+            fadeQ28: fadeX
+        );
+        var x11 = Lerp(
+            a: c011,
+            b: c111,
+            fadeQ28: fadeX
+        );
+        var y0Value = Lerp(
+            a: x00,
+            b: x10,
+            fadeQ28: fadeY
+        );
+        var y1Value = Lerp(
+            a: x01,
+            b: x11,
+            fadeQ28: fadeY
+        );
 
-        return ((long)Lerp(a: y0Value, b: y1Value, fadeQ28: fadeZ));
+        return ((long)Lerp(
+            a: y0Value,
+            b: y1Value,
+            fadeQ28: fadeZ
+        ));
     }
-    // The three-round avalanche finalizer, over ulong-width BigIntegers throughout (every value stays in [0, 2^64)).
-    private static BigInteger Mix(BigInteger value) {
-        value &= Mask64;
-        value ^= (value >> 30);
-        value = (value * MixMultiplier1) & Mask64;
-        value ^= (value >> 27);
-        value = (value * MixMultiplier2) & Mask64;
-        value ^= (value >> 31);
-
-        return value & Mask64;
-    }
-    // A signed C# long reinterpreted as its unsigned 64-bit bit pattern -- the BigInteger equivalent of `(ulong)value`.
-    private static BigInteger AsUnsigned64(long value) =>
-        ((value >= 0L) ? new BigInteger(value: value) : (new BigInteger(value: value) + (BigInteger.One << 64)));
-    // The corner hash's signed value: sign-extend the top 32 bits, then an arithmetic shift right by 15 -- the same
-    // (long)(int)(hash >> 32) >> 15 the subject reads, transcribed in BigInteger.
-    private static BigInteger CornerValue(BigInteger hash) {
-        var top32 = (hash >> 32) & 0xFFFFFFFFUL;
-        var signed = ((top32 >= 0x80000000UL) ? (top32 - (BigInteger.One << 32)) : top32);
-
-        return ArithmeticShiftRight(shift: 15, value: signed);
-    }
-    // The quintic fade 6t^5 - 15t^4 + 10t^3 of a UQ0.16 fraction, at Q28 -- transcribed exactly, Horner-style, from
-    // FieldNoise's own FadeQ28.
-    private static BigInteger FadeQ28(BigInteger t) {
-        var t28 = (t << 12);
-        var inner = ((6 * t28) - (15L << FadeFractionBitCount));
-
-        inner = (ArithmeticShiftRight(shift: FadeFractionBitCount, value: (inner * t28)) + (10L << FadeFractionBitCount));
-
-        var t2 = ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t28 * t28));
-        var t3 = ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t2 * t28));
-
-        return ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t3 * inner));
-    }
-    // The blend rounds its Q28 product to nearest on the magnitude (half away from zero), then re-signs -- the
-    // subject's RoundShift, transcribed in BigInteger.
-    private static BigInteger Lerp(BigInteger a, BigInteger b, BigInteger fadeQ28) =>
-        (a + RoundShift(shift: FadeFractionBitCount, value: ((b - a) * fadeQ28)));
-    private static BigInteger RoundShift(BigInteger value, int shift) {
-        var magnitude = BigInteger.Abs(value: value);
-        var rounded = ((magnitude + (BigInteger.One << (shift - 1))) >> shift);
-
-        return ((value.Sign < 0) ? -rounded : rounded);
-    }
-    // Arithmetic (floor) right shift of a possibly-negative BigInteger by a non-negative amount, matching C#'s `>>`
-    // on a signed integral type -- which floors toward negative infinity rather than truncating toward zero, the one
-    // place BigInteger's own division semantics would silently disagree with the subject's native shifts.
-    private static BigInteger ArithmeticShiftRight(BigInteger value, int shift) =>
-        ((value.Sign >= 0) ? (value >> shift) : (-(((-value - BigInteger.One) >> shift) + BigInteger.One)));
 
     /// <summary>Pins <see cref="FieldNoise.Sample(ulong, FixedVector3)"/> at exact VALUES: the absolute sibling
     /// sampling.field-noise-periodicity-canary-and-distribution's two relative canaries are owed. A hand-picked
@@ -163,9 +221,21 @@ internal static class FieldNoiseOracleClaims {
         ];
 
         foreach (var (seed, x, y, z) in ladder) {
-            var position = new FixedVector3(X: FixedQ4816.FromRawBits(value: x), Y: FixedQ4816.FromRawBits(value: y), Z: FixedQ4816.FromRawBits(value: z));
-            var subject = FieldNoise.Sample(position: position, seed: seed).Value;
-            var expected = SampleOracle(seed: seed, xRaw: x, yRaw: y, zRaw: z);
+            var position = new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: x),
+                Y: FixedQ4816.FromRawBits(value: y),
+                Z: FixedQ4816.FromRawBits(value: z)
+            );
+            var subject = FieldNoise.Sample(
+                position: position,
+                seed: seed
+            ).Value;
+            var expected = SampleOracle(
+                seed: seed,
+                xRaw: x,
+                yRaw: y,
+                zRaw: z
+            );
 
             if (subject != expected) {
                 return $"seed={seed} position=({x},{y},{z}): FieldNoise.Sample returned raw {subject}, the independent oracle computed {expected}";
@@ -176,10 +246,39 @@ internal static class FieldNoiseOracleClaims {
             var prepared = FieldNoise.Prepare(seed: seed);
 
             if (prepared.Seed != seed) { return $"Prepare({seed}).Seed reads {prepared.Seed}"; }
-            if (FieldNoise.Sample(position: position, seed: prepared).Value != subject) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed Sample diverges from the ulong overload"; }
-            if (FieldNoise.Sample(octaves: 3, position: position, seed: prepared) != FieldNoise.Sample(octaves: 3, position: position, seed: seed)) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed three-octave Sample diverges from the ulong overload"; }
-            if (FieldNoise.Hash(seed: prepared, x: x, y: y, z: z) != FieldNoise.Hash(seed: seed, x: x, y: y, z: z)) { return $"seed={seed}: the prepared-seed Hash diverges from the ulong overload"; }
-            if (FieldNoise.SampleGradient(gradient: out var preparedGradient, position: position, seed: prepared) != FieldNoise.SampleGradient(gradient: out var gradient, position: position, seed: seed)) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed SampleGradient diverges from the ulong overload"; }
+            if (FieldNoise.Sample(
+                position: position,
+                seed: prepared
+            ).Value != subject) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed Sample diverges from the ulong overload"; }
+            if (FieldNoise.Sample(
+                octaves: 3,
+                position: position,
+                seed: prepared
+            ) != FieldNoise.Sample(
+                octaves: 3,
+                position: position,
+                seed: seed
+            )) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed three-octave Sample diverges from the ulong overload"; }
+            if (FieldNoise.Hash(
+                seed: prepared,
+                x: x,
+                y: y,
+                z: z
+            ) != FieldNoise.Hash(
+                seed: seed,
+                x: x,
+                y: y,
+                z: z
+            )) { return $"seed={seed}: the prepared-seed Hash diverges from the ulong overload"; }
+            if (FieldNoise.SampleGradient(
+                gradient: out var preparedGradient,
+                position: position,
+                seed: prepared
+            ) != FieldNoise.SampleGradient(
+                gradient: out var gradient,
+                position: position,
+                seed: seed
+            )) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed SampleGradient diverges from the ulong overload"; }
             if (preparedGradient != gradient) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed gradient diverges from the ulong overload"; }
         }
 

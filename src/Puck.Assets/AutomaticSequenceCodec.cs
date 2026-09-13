@@ -52,6 +52,20 @@ public static class AutomaticIntegerSequenceCodec {
 
     private const byte Version = 1;
 
+    private static RealQuadratic ReadSurd(ref CanonicalBinaryReader reader, int maximumBigIntegerBytes) =>
+        RealQuadratic.Create(
+            denominator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
+            radicand: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
+            rationalNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
+            surdNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes)
+        );
+    private static void WriteSurd(ArrayBufferWriter<byte> writer, RealQuadratic value) {
+        writer.WriteBigInteger(value: value.Denominator);
+        writer.WriteBigInteger(value: value.Radicand);
+        writer.WriteBigInteger(value: value.RationalNumerator);
+        writer.WriteBigInteger(value: value.SurdNumerator);
+    }
+
     /// <summary>Decodes an untrusted canonical binary artifact under explicit allocation ceilings.</summary>
     /// <param name="content">The complete artifact bytes.</param>
     /// <param name="limits">The decoding ceilings, or <see langword="null"/> for <see cref="AutomaticSequenceDecodeLimits.Default"/>.</param>
@@ -192,20 +206,6 @@ public static class AutomaticIntegerSequenceCodec {
 
         return writer.WrittenSpan.ToArray();
     }
-
-    private static RealQuadratic ReadSurd(ref CanonicalBinaryReader reader, int maximumBigIntegerBytes) =>
-        RealQuadratic.Create(
-            denominator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
-            radicand: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
-            rationalNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
-            surdNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes)
-        );
-    private static void WriteSurd(ArrayBufferWriter<byte> writer, RealQuadratic value) {
-        writer.WriteBigInteger(value: value.Denominator);
-        writer.WriteBigInteger(value: value.Radicand);
-        writer.WriteBigInteger(value: value.RationalNumerator);
-        writer.WriteBigInteger(value: value.SurdNumerator);
-    }
 }
 
 internal static class CanonicalBinaryWriterExtensions {
@@ -216,19 +216,24 @@ internal static class CanonicalBinaryWriterExtensions {
             return;
         }
 
-        writer.WriteByte(value: ((value.Sign > 0) ? ((byte)1) : ((byte)2)));
+        writer.WriteByte(value: ((value.Sign > 0)
+            ? ((byte)1)
+            : ((byte)2)));
         var magnitude = BigInteger.Abs(value: value);
         var byteCount = magnitude.GetByteCount(isUnsigned: true);
 
         writer.WriteVarUInt(value: checked((uint)byteCount));
         var destination = writer.GetSpan(sizeHint: byteCount)[..byteCount];
 
-        if (!magnitude.TryWriteBytes(
+        if (
+            !magnitude.TryWriteBytes(
             bytesWritten: out var written,
             destination: destination,
             isBigEndian: true,
             isUnsigned: true
-        ) || (written != byteCount)) {
+        ) ||
+            (written != byteCount)
+        ) {
             throw new InvalidOperationException(message: "BigInteger did not write its canonical magnitude");
         }
 
@@ -259,13 +264,40 @@ internal ref struct CanonicalBinaryReader {
         m_content = content;
     }
 
+    private uint ReadVarUInt() {
+        var value = 0U;
+
+        for (var index = 0; (index < 5); ++index) {
+            var current = ReadByte();
+
+            if (
+                (index == 4) &&
+                ((current & 0xf0) != 0)
+            ) {
+                throw new InvalidDataException(message: "a variable-width integer overflows UInt32");
+            }
+
+            value |= (((uint)(current & 0x7f)) << (7 * index));
+            if ((current & 0x80) != 0) { continue; }
+            if (
+                (index > 0) &&
+                ((current & 0x7f) == 0)
+            ) {
+                throw new InvalidDataException(message: "a variable-width integer is not minimally encoded");
+            }
+            return value;
+        }
+
+        throw new InvalidDataException(message: "a variable-width integer is too long");
+    }
+
     public void Expect(ReadOnlySpan<byte> value) {
         if (
             ((m_content.Length - m_offset) < value.Length) ||
             !m_content.Slice(
-                start: m_offset,
-                length: value.Length
-            ).SequenceEqual(other: value)
+            start: m_offset,
+            length: value.Length
+        ).SequenceEqual(other: value)
         ) {
             throw new InvalidDataException(message: "the artifact magic is invalid");
         }
@@ -287,7 +319,10 @@ internal ref struct CanonicalBinaryReader {
             }
             return BigInteger.Zero;
         }
-        if ((sign != 1) && (sign != 2)) {
+        if (
+            (sign != 1) &&
+            (sign != 2)
+        ) {
             throw new InvalidDataException(message: "a nonzero integer has an invalid sign marker");
         }
         if ((m_content.Length - m_offset) < byteCount) {
@@ -310,7 +345,10 @@ internal ref struct CanonicalBinaryReader {
             value: bytes
         );
 
-        return ((sign == 1) ? magnitude : -magnitude);
+        return ((sign == 1)
+            ? magnitude
+            : -magnitude
+        );
     }
     public int ReadBoundedInt(int maximum) {
         var value = ReadVarUInt();
@@ -325,26 +363,5 @@ internal ref struct CanonicalBinaryReader {
             throw new InvalidDataException(message: "the artifact is truncated");
         }
         return m_content[m_offset++];
-    }
-
-    private uint ReadVarUInt() {
-        var value = 0U;
-
-        for (var index = 0; (index < 5); ++index) {
-            var current = ReadByte();
-
-            if ((index == 4) && ((current & 0xf0) != 0)) {
-                throw new InvalidDataException(message: "a variable-width integer overflows UInt32");
-            }
-
-            value |= (((uint)(current & 0x7f)) << (7 * index));
-            if ((current & 0x80) != 0) { continue; }
-            if ((index > 0) && ((current & 0x7f) == 0)) {
-                throw new InvalidDataException(message: "a variable-width integer is not minimally encoded");
-            }
-            return value;
-        }
-
-        throw new InvalidDataException(message: "a variable-width integer is too long");
     }
 }

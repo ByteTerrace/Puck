@@ -54,17 +54,33 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         ArgumentNullException.ThrowIfNull(types);
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(captureCause);
-        configuration = WorldExtensionConfiguration.Parse(utf8: JsonSerializer.SerializeToUtf8Bytes(configuration,
-            WorldExtensionConfigurationJson.Default.WorldExtensionConfiguration));
-        if ((configuration.World != server.Definition.DocumentId) || string.IsNullOrWhiteSpace(value: configuration.World)) {
+        configuration = WorldExtensionConfiguration.Parse(utf8: JsonSerializer.SerializeToUtf8Bytes(
+            configuration,
+            WorldExtensionConfigurationJson.Default.WorldExtensionConfiguration
+        ));
+        if (
+            (configuration.World != server.Definition.DocumentId) ||
+            string.IsNullOrWhiteSpace(value: configuration.World)
+        ) {
             throw new ArgumentException(message: "Extension configuration must name this world's exact document ID.");
         }
-        if ((configuration.Lineage == Guid.Empty) || (configuration.MaximumEntries <= 0) || (configuration.MaximumBytes <= 0) ||
-            (configuration.ScanEveryTicks <= 0) || (configuration.Recovery is not ("checkpoint" or "recording")) ||
-            (configuration.Providers.Count > 64) || (configuration.Operations.Count > 1024) || (configuration.Connections.Count > 1024)) {
+        if (
+            (configuration.Lineage == Guid.Empty) ||
+            (configuration.MaximumEntries <= 0) ||
+            (configuration.MaximumBytes <= 0) ||
+            (configuration.ScanEveryTicks <= 0) ||
+            (configuration.Recovery is not ("checkpoint" or "recording")) ||
+            (configuration.Providers.Count > 64) ||
+            (configuration.Operations.Count > 1024) ||
+            (configuration.Connections.Count > 1024)
+        ) {
             throw new ArgumentException(message: "Invalid extension namespace, recovery policy, or capacity.");
         }
-        var owner = new WorldConfiguredExtensions(captureCause: captureCause, configuration: configuration, server: server);
+        var owner = new WorldConfiguredExtensions(
+            captureCause: captureCause,
+            configuration: configuration,
+            server: server
+        );
 
         try {
             var providers = new Dictionary<string, IWorldConfiguredProvider>(comparer: StringComparer.Ordinal);
@@ -72,36 +88,87 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
             foreach (var row in configuration.Providers) {
                 ValidateName(name: row.Name);
                 if (providers.ContainsKey(key: row.Name)) { throw new ArgumentException(message: $"Duplicate provider '{row.Name}'."); }
-                if (!types.TryGet(row.Type, out var type)) { throw new ArgumentException(message: $"Provider '{row.Name}' selects uninstalled type '{row.Type}'."); }
+                if (!types.TryGet(
+                    row.Type,
+                    out var type
+                )) { throw new ArgumentException(message: $"Provider '{row.Name}' selects uninstalled type '{row.Type}'."); }
                 if (row.Settings.ValueKind != JsonValueKind.Object) { throw new ArgumentException(message: $"Provider '{row.Name}' needs object settings."); }
                 var provider = type.Create(row.Settings);
 
                 owner.m_providers.Add(item: provider);
-                providers.Add(key: row.Name, value: provider);
+                providers.Add(
+                    key: row.Name,
+                    value: provider
+                );
             }
             var operations = new Dictionary<string, WorldExtensionOperation>(comparer: StringComparer.Ordinal);
 
             foreach (var row in configuration.Operations) {
                 ValidateName(name: row.Name);
-                if (!providers.TryGetValue(key: row.Provider, value: out var provider)) { throw new ArgumentException(message: $"Operation '{row.Name}' names unknown provider '{row.Provider}'."); }
+                if (!providers.TryGetValue(
+                    key: row.Provider,
+                    value: out var provider
+                )) { throw new ArgumentException(message: $"Operation '{row.Name}' names unknown provider '{row.Provider}'."); }
                 if (row.Settings.ValueKind != JsonValueKind.Object) { throw new ArgumentException(message: $"Operation '{row.Name}' needs object settings."); }
-                var operation = provider.Bind(row.Name, row.Description, row.Settings);
+                var operation = provider.Bind(
+                    row.Name,
+                    row.Description,
+                    row.Settings
+                );
 
-                if ((operation.Description.Name != row.Name) || !operations.TryAdd(key: row.Name, value: operation)) { throw new ArgumentException(message: $"Invalid or duplicate operation '{row.Name}'."); }
+                if (
+                    (operation.Description.Name != row.Name) ||
+                    !operations.TryAdd(
+                    key: row.Name,
+                    value: operation
+                )
+                ) { throw new ArgumentException(message: $"Invalid or duplicate operation '{row.Name}'."); }
             }
-            var journal = new WorldExternalOperationJournal(store, target, new(configuration.Lineage, "external/operations.json"),
-                configuration.MaximumEntries, configuration.MaximumBytes, 8);
+            var journal = new WorldExternalOperationJournal(
+                store,
+                target,
+                new(
+                    configuration.Lineage,
+                    "external/operations.json"
+                ),
+                configuration.MaximumEntries,
+                configuration.MaximumBytes,
+                8
+            );
 
-            owner.Host = new(server, journal, configuration.Lineage.ToString(format: "D"), operations.Values,
-                captureCause, configuration.Worker);
+            owner.Host = new(
+                server,
+                journal,
+                configuration.Lineage.ToString(format: "D"),
+                operations.Values,
+                captureCause,
+                configuration.Worker
+            );
             foreach (var row in configuration.Clients) {
                 var principal = ParsePrincipal(text: row.Principal);
 
                 if (owner.m_clients.ContainsKey(key: principal)) { throw new ArgumentException(message: $"Duplicate client '{row.Principal}'."); }
                 ObjectBlobNamespace? storage = ((row.StorageBytes is { } limit)
-                    ? new(store, target, configuration.Lineage, row.Principal, limit, row.StorageWritable) : null);
+                    ? new(
+                        store,
+                        target,
+                        configuration.Lineage,
+                        row.Principal,
+                        limit,
+                        row.StorageWritable
+                    )
+                    : null
+                );
 
-                try { owner.m_clients.Add(key: principal, value: owner.Host.CreateClient(principal, row.Operations, row.Requests.Select(selector: ParseRequest), storage: storage)); } catch { storage?.Dispose(); throw; }
+                try { owner.m_clients.Add(
+                    key: principal,
+                    value: owner.Host.CreateClient(
+                        principal,
+                        row.Operations,
+                        row.Requests.Select(selector: ParseRequest),
+                        storage: storage
+                    )
+                ); } catch { storage?.Dispose(); throw; }
             }
             var names = new HashSet<string>(comparer: StringComparer.Ordinal);
             var outputs = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -111,19 +178,45 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                 if (!names.Add(item: connection.Name)) { throw new ArgumentException(message: $"Duplicate connection '{connection.Name}'."); }
                 var client = owner.Client(principal: ParsePrincipal(text: connection.Client));
 
-                _ = client.GetOperation(operation: connection.Operation, requestKey: "validation");
-                owner.RequireTable(connection.Requests, CellKind.Text);
-                owner.RequireTable(connection.Status, CellKind.Int);
+                _ = client.GetOperation(
+                    operation: connection.Operation,
+                    requestKey: "validation"
+                );
+                owner.RequireTable(
+                    connection.Requests,
+                    CellKind.Text
+                );
+                owner.RequireTable(
+                    connection.Status,
+                    CellKind.Int
+                );
                 if (!outputs.Add(item: connection.Status)) { throw new ArgumentException(message: "Connections must not overwrite each other's status tables."); }
                 if (connection.Results is { } result) {
-                    owner.RequireTable(kind: CellKind.Text, name: result);
+                    owner.RequireTable(
+                        kind: CellKind.Text,
+                        name: result
+                    );
                     if (!outputs.Add(item: result)) { throw new ArgumentException(message: "Connections must not overwrite each other's result tables."); }
                 }
-                _ = owner.ReadRequests(client: client, connection: connection);
-                _ = owner.ReadTable(client, connection.Status, CellKind.Int);
-                if (connection.Results is { } resultTable) { _ = owner.ReadTable(client: client, kind: CellKind.Text, name: resultTable); }
+                _ = owner.ReadRequests(
+                    client: client,
+                    connection: connection
+                );
+                _ = owner.ReadTable(
+                    client,
+                    connection.Status,
+                    CellKind.Int
+                );
+                if (connection.Results is { } resultTable) { _ = owner.ReadTable(
+                    client: client,
+                    kind: CellKind.Text,
+                    name: resultTable
+                ); }
             }
-            owner.ConfigureObservations(outputs: outputs, providers: providers);
+            owner.ConfigureObservations(
+                outputs: outputs,
+                providers: providers
+            );
             if (configuration.Connections.Any(predicate: connection => outputs.Contains(item: connection.Requests))) {
                 throw new ArgumentException(message: "A connection output cannot also be a request table; use authored rules to initiate a new request.");
             }
@@ -140,25 +233,63 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     /// <param name="principal">Identity supplied by the trusted ingress.</param>
     /// <returns>The configured caller capability.</returns>
     /// <exception cref="UnauthorizedAccessException">No client policy exists for this identity.</exception>
-    public WorldExtensionClient Client(WorldPrincipal principal) => (m_clients.TryGetValue(key: principal, value: out var client)
-        ? client : throw new UnauthorizedAccessException(message: "No extension policy is configured for this principal."));
+    public WorldExtensionClient Client(WorldPrincipal principal) => (m_clients.TryGetValue(
+        key: principal,
+        value: out var client
+    )
+        ? client
+        : throw new UnauthorizedAccessException(message: "No extension policy is configured for this principal.")
+    );
 
     private static void ValidateName(string name) {
-        if (!SafeName.TryParse(candidate: name, name: out _, reason: out var reason)) { throw new ArgumentException(message: $"Invalid extension name: {reason}"); }
+        if (!SafeName.TryParse(
+            candidate: name,
+            name: out _,
+            reason: out var reason
+        )) { throw new ArgumentException(message: $"Invalid extension name: {reason}"); }
     }
-    private static WorldPrincipal ParsePrincipal(string text) => (WorldPrincipal.TryParseCanonical(text, out var principal)
-        ? principal : throw new ArgumentException(message: $"Invalid principal '{text}'."));
+    private static WorldPrincipal ParsePrincipal(string text) => (WorldPrincipal.TryParseCanonical(
+        principal: out var principal,
+        token: text
+    )
+        ? principal
+        : throw new ArgumentException(message: $"Invalid principal '{text}'.")
+    );
     private static WorldCapabilityRequest ParseRequest(WorldExtensionWorldRequest request) {
-        if (!Enum.TryParse<WorldCapability>(request.Capability, true, out var capability) || !Enum.IsDefined(value: capability) ||
-            !string.Equals(a: capability.ToString(), b: request.Capability, comparisonType: StringComparison.OrdinalIgnoreCase) ||
-            !GrantSubject.TryParse(request.Subject, out var subject)) { throw new ArgumentException(message: "Invalid world capability request."); }
-        return new(Capability: capability, Subject: subject);
+        if (
+            !Enum.TryParse<WorldCapability>(
+            request.Capability,
+            true,
+            out var capability
+        ) ||
+            !Enum.IsDefined(value: capability) ||
+            !string.Equals(
+            a: capability.ToString(),
+            b: request.Capability,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ) ||
+            !GrantSubject.TryParse(
+            request.Subject,
+            out var subject
+        )
+        ) { throw new ArgumentException(message: "Invalid world capability request."); }
+        return new(
+            Capability: capability,
+            Subject: subject
+        );
     }
     /// <summary>Requires an ordinary table of any cell kind and returns which kind it declares.</summary>
     private CellKind RequireTable(string name) {
         var row = m_server.Definition.State.FirstOrDefault(predicate: row => (row.Name.Value == name));
 
-        if ((row is null) || row.IsSlot || (row.PhaseOf is not null) || (row.Advance is not null) || (row.Dynamics is not null) || (row.Cycle is not null)) {
+        if (
+            (row is null) ||
+            row.IsSlot ||
+            (row.PhaseOf is not null) ||
+            (row.Advance is not null) ||
+            (row.Dynamics is not null) ||
+            (row.Cycle is not null)
+        ) {
             throw new InvalidOperationException(message: $"Extension state '{name}' must be an ordinary table.");
         }
         return row.Kind;
@@ -167,12 +298,21 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         if (RequireTable(name: name) != kind) { throw new InvalidOperationException(message: $"Extension state '{name}' must be an ordinary {kind} table."); }
     }
     private IReadOnlyList<WorldObservedCell> ReadRequests(WorldExtensionClient client, WorldExtensionConnection connection) {
-        return ReadTable(client, connection.Requests, CellKind.Text);
+        return ReadTable(
+            client,
+            connection.Requests,
+            CellKind.Text
+        );
     }
     private IReadOnlyList<WorldObservedCell> ReadTable(WorldExtensionClient client, string name, CellKind kind) {
         var answer = client.Observe(query: new WorldQuery.StateObservations(Row: name));
 
-        if (answer.Refused || (answer.Payload is not WorldObservedRow[] rows) || (rows.SingleOrDefault() is not { } row) || (row.Kind != kind)) {
+        if (
+            answer.Refused ||
+            (answer.Payload is not WorldObservedRow[] rows) ||
+            (rows.SingleOrDefault() is not { } row) ||
+            (row.Kind != kind)
+        ) {
             throw new InvalidOperationException(message: $"Extension table '{name}' is not observable; check manifest, grants, and visibility.");
         }
         return row.Cells.Where(predicate: cell => !cell.Hidden).ToArray();

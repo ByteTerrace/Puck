@@ -93,6 +93,19 @@ public sealed class WorldInputHoldRuntime {
             body.RestoreSubmittedInput(input: in selected);
         }
     }
+    /// <summary>Captures every participant slot's live hold state.</summary>
+    public WorldInputHoldCheckpoint Capture() {
+        var participants = new WorldInputHoldParticipantCheckpoint[m_participants.Length];
+
+        for (var index = 0; (index < m_participants.Length); index++) {
+            participants[index] = m_participants[index].Capture();
+        }
+
+        return new WorldInputHoldCheckpoint(
+            MaximumSetter: m_maximumSetter,
+            Participants: participants
+        );
+    }
     public string Describe() {
         var result = new StringBuilder(value: "[world.input-holds:");
         var any = false;
@@ -204,35 +217,6 @@ public sealed class WorldInputHoldRuntime {
 
         m_maximumSetter = -1;
     }
-
-    /// <summary>One participant slot's checkpointed hold state — see <see cref="Capture"/>.</summary>
-    public readonly record struct WorldInputHoldParticipantCheckpoint(
-        bool Active,
-        WorldPrincipal Principal,
-        int Measured,
-        int Target,
-        int Applied,
-        int LowerTarget,
-        int LowerStableTicks,
-        int HistoryStart,
-        IReadOnlyList<WorldSubmittedInput> History
-    );
-    /// <summary>The runtime's own checkpointed state — see <see cref="Capture"/>.</summary>
-    public sealed record WorldInputHoldCheckpoint(int MaximumSetter, IReadOnlyList<WorldInputHoldParticipantCheckpoint> Participants);
-
-    /// <summary>Captures every participant slot's live hold state.</summary>
-    public WorldInputHoldCheckpoint Capture() {
-        var participants = new WorldInputHoldParticipantCheckpoint[m_participants.Length];
-
-        for (var index = 0; (index < m_participants.Length); index++) {
-            participants[index] = m_participants[index].Capture();
-        }
-
-        return new WorldInputHoldCheckpoint(
-            MaximumSetter: m_maximumSetter,
-            Participants: participants
-        );
-    }
     /// <summary>Restores every participant slot's live hold state from a previously captured checkpoint.</summary>
     public void Restore(WorldInputHoldCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
@@ -248,6 +232,21 @@ public sealed class WorldInputHoldRuntime {
             m_participants[index].Restore(checkpoint: checkpoint.Participants[index]);
         }
     }
+
+    /// <summary>One participant slot's checkpointed hold state — see <see cref="Capture"/>.</summary>
+    public readonly record struct WorldInputHoldParticipantCheckpoint(
+        bool Active,
+        WorldPrincipal Principal,
+        int Measured,
+        int Target,
+        int Applied,
+        int LowerTarget,
+        int LowerStableTicks,
+        int HistoryStart,
+        IReadOnlyList<WorldSubmittedInput> History
+    );
+    /// <summary>The runtime's own checkpointed state — see <see cref="Capture"/>.</summary>
+    public sealed record WorldInputHoldCheckpoint(int MaximumSetter, IReadOnlyList<WorldInputHoldParticipantCheckpoint> Participants);
 
     private sealed class ParticipantState {
         private readonly List<WorldSubmittedInput> m_history = [];
@@ -273,18 +272,6 @@ public sealed class WorldInputHoldRuntime {
             HistoryStart: m_historyStart,
             History: [.. m_history]
         );
-        public void Restore(WorldInputHoldParticipantCheckpoint checkpoint) {
-            Active = checkpoint.Active;
-            Principal = checkpoint.Principal;
-            Measured = checkpoint.Measured;
-            Target = checkpoint.Target;
-            Applied = checkpoint.Applied;
-            m_lowerTarget = checkpoint.LowerTarget;
-            m_lowerStableTicks = checkpoint.LowerStableTicks;
-            m_historyStart = checkpoint.HistoryStart;
-            m_history.Clear();
-            m_history.AddRange(collection: checkpoint.History);
-        }
         public void MoveApplied(int target, int lowerAfterTicks) {
             if (target > Applied) {
                 Applied = target;
@@ -347,6 +334,18 @@ public sealed class WorldInputHoldRuntime {
             m_lowerStableTicks = 0;
             m_history.Clear();
             m_historyStart = 0;
+        }
+        public void Restore(WorldInputHoldParticipantCheckpoint checkpoint) {
+            Active = checkpoint.Active;
+            Principal = checkpoint.Principal;
+            Measured = checkpoint.Measured;
+            Target = checkpoint.Target;
+            Applied = checkpoint.Applied;
+            m_lowerTarget = checkpoint.LowerTarget;
+            m_lowerStableTicks = checkpoint.LowerStableTicks;
+            m_historyStart = checkpoint.HistoryStart;
+            m_history.Clear();
+            m_history.AddRange(collection: checkpoint.History);
         }
     }
 }

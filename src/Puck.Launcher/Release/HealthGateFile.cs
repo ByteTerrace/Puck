@@ -19,7 +19,10 @@ internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime
 
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken) {
-        m_applicationLifetime.ApplicationStarted.Register(callback: () => HealthGateFile.ClearHealthy(cacheRoot: m_options.CacheRoot, version: m_options.InstalledVersion));
+        m_applicationLifetime.ApplicationStarted.Register(callback: () => HealthGateFile.ClearHealthy(
+            cacheRoot: m_options.CacheRoot,
+            version: m_options.InstalledVersion
+        ));
 
         return Task.CompletedTask;
     }
@@ -34,12 +37,31 @@ internal static class HealthGateFile {
     /// <param name="cacheRoot">The install root (the same directory the stub reads <c>state/health.json</c> under).</param>
     /// <param name="version">The version to clear.</param>
     public static void ClearHealthy(string cacheRoot, string version) {
-        var directory = Path.Combine(path1: cacheRoot, path2: "state");
-        var path = Path.Combine(path1: directory, path2: "health.json");
-        var tmpPath = Path.Combine(path1: directory, path2: $"{Guid.NewGuid():n}.tmp");
+        var directory = Path.Combine(
+            path1: cacheRoot,
+            path2: "state"
+        );
+        var path = Path.Combine(
+            path1: directory,
+            path2: "health.json"
+        );
+        var tmpPath = Path.Combine(
+            path1: directory,
+            path2: $"{Guid.NewGuid():n}.tmp"
+        );
 
         Directory.CreateDirectory(path: directory);
-        File.WriteAllText(path: tmpPath, contents: JsonSerializer.Serialize(value: new HealthRecord(Attempts: 0, Version: version)));
-        File.Move(destFileName: path, overwrite: true, sourceFileName: tmpPath);
+        File.WriteAllText(
+            path: tmpPath,
+            contents: JsonSerializer.Serialize(value: new HealthRecord(
+                Attempts: 0,
+                Version: version
+            ))
+        );
+        File.Move(
+            destFileName: path,
+            overwrite: true,
+            sourceFileName: tmpPath
+        );
     }
 }

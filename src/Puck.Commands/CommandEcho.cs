@@ -57,6 +57,136 @@ public sealed class CommandEcho {
         m_builder = new StringBuilder(value: "[").Append(value: verb).Append(value: ':');
     }
 
+    // Writes one character as the \uXXXX escape the reader inverts — four lowercase hex digits, always, so the reader
+    // can find the escape's end by counting rather than by scanning.
+    private static void AppendUnicodeEscape(StringBuilder builder, char character) {
+        Span<char> hex = stackalloc char[4];
+
+        _ = ((ushort)character).TryFormat(
+            destination: hex,
+            charsWritten: out _,
+            format: "x4",
+            provider: CultureInfo.InvariantCulture
+        );
+        _ = builder.Append(value: "\\u").Append(value: hex);
+    }
+    private void FlushPendingSegment() {
+        if (m_pendingSegment) {
+            _ = m_builder.Append(value: " |");
+            m_pendingSegment = false;
+        }
+    }
+    // THE ONE RULE for "this character cannot ride inside a quoted run as written", so Quote and the reader that
+    // inverts it cannot drift apart. Quoting contains everything a token or a segment split would find, but it cannot
+    // contain a LINE break: a driver splits the stream into lines first, before it looks for tokens at all, so a
+    // character .NET counts as a line ending tears the record in half however well quoted it is. That set is wider than
+    // '\n' and '\r' — ReplaceLineEndings and EnumerateLines also break on U+000B, U+000C, U+0085, U+2028 and U+2029 —
+    // and a listed set would have to be re-derived every time one is added, so the test is the CATEGORY: every control
+    // character, plus the two Unicode separators that are not control characters, plus the '"' itself — see Unescape
+    // for why that one may not ride as `\"`.
+    private static bool MustEscape(char character) => (
+        char.IsControl(c: character) ||
+        (character == '"') ||
+        (char.GetUnicodeCategory(c: character) is (UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator))
+    );
+    // Whether a driver's own split could land inside this value. Whitespace is tested by CATEGORY rather than against
+    // a listed set: char.IsWhiteSpace is the rule CommandRegistry's wire tokenizer splits on, and a listed set would
+    // let a vertical tab or a non-breaking space through unquoted for a reader that splits the way the wire does.
+    //
+    // A '\' forces quoting even though nothing splits on it: it is the escape introducer, and Unescape reads a value
+    // whose quotes some other splitter has already removed, so it cannot tell an escape from a literal backslash
+    // unless every literal one was written doubled. Quoting is what guarantees that.
+    private static bool NeedsQuoting(string value) {
+        foreach (var character in value) {
+            if (
+                char.IsWhiteSpace(c: character) ||
+                (character == '\\') ||
+                (character == ']') ||
+                (character == '|') ||
+                MustEscape(character: character)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Reads a \uXXXX escape at `index` (which addresses its '\'), or answers false for anything else — a short line, a
+    // different escape letter, a digit that is not hex. Strict AllowHexSpecifier rather than NumberStyles.HexNumber:
+    // the latter tolerates surrounding whitespace, which would let `\u 41` decode as a character.
+    private static bool TryReadUnicodeEscape(string line, int index, out char character) {
+        if (
+            (line[(index + 1)] == 'u') &&
+            ((index + 6) <= line.Length) &&
+            ushort.TryParse(
+            s: line.AsSpan(
+                length: 4,
+                start: (index + 2)
+            ),
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.AllowHexSpecifier,
+            result: out var scalar
+        )
+        ) {
+            character = ((char)scalar);
+
+            return true;
+        }
+
+        character = '\0';
+
+        return false;
+    }
+
+    /// <summary>Closes the echo line and returns the finished string.</summary>
+    /// <returns>The finished <c>[verb: …]</c> line.</returns>
+    public string Close() => m_builder.Append(value: ']').ToString();
+    /// <summary>Appends a space-prefixed <c>key=value</c> token, the value passed through
+    /// <see cref="Quote(string)"/> so a reserved character inside it cannot end the token, the segment, or the
+    /// envelope early.</summary>
+    /// <param name="key">The field name.</param>
+    /// <param name="value">The field value, already formatted.</param>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Field(string key, string value) {
+        FlushPendingSegment();
+
+        _ = m_builder.Append(value: ' ').Append(value: key).Append(value: '=').Append(value: Quote(value: value));
+
+        return this;
+    }
+    /// <summary>Appends a space-prefixed <c>key=value</c> token, the value invariant-culture formatted.</summary>
+    /// <param name="key">The field name.</param>
+    /// <param name="value">The field value.</param>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Field<T>(string key, T value) where T : IFormattable => Field(
+        key: key,
+        value: value.ToString(
+            format: null,
+            formatProvider: CultureInfo.InvariantCulture
+        )
+    );
+    /// <summary>Appends a space-prefixed <c>key=true</c>/<c>key=false</c> token.</summary>
+    /// <param name="key">The field name.</param>
+    /// <param name="value">The field value.</param>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Field(string key, bool value) => Field(
+        key: key,
+        value: (value
+        ? "true"
+        : "false")
+    );
+    /// <summary>Appends a space-prefixed, declared free-text HEAD token — the one non-<c>key=value</c> word a
+    /// segment may open with (e.g. <c>"kind"</c>, <c>"group"</c>, <c>"listing"</c>), naming what the
+    /// <see cref="Field(string, string)"/> tokens that follow describe.</summary>
+    /// <param name="head">The head word.</param>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Head(string head) {
+        FlushPendingSegment();
+
+        _ = m_builder.Append(value: ' ').Append(value: head);
+
+        return this;
+    }
     /// <summary>Starts a new echo line, writing the verb name.</summary>
     /// <param name="verb">The verb name.</param>
     /// <returns>The echo builder.</returns>
@@ -118,6 +248,54 @@ public sealed class CommandEcho {
         }
 
         return builder.Append(value: '"').ToString();
+    }
+    /// <summary>Marks a boundary between groups of fields — the <c>" | "</c> separator is written only if more
+    /// content follows, so a boundary marked immediately before <see cref="Close"/> vanishes rather than trailing.</summary>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Segment() {
+        m_pendingSegment = true;
+
+        return this;
+    }
+    /// <summary>Splices ` <paramref name="prefix"/><paramref name="value"/>` just inside an already-closed bracketed
+    /// echo's trailing <c>]</c>, or returns <paramref name="text"/> unchanged when it does not end in <c>]</c> — the
+    /// shared surgery every after-the-fact echo tag (instance, perception anchor) uses.</summary>
+    /// <remarks>
+    /// The tag is a KEY and a VALUE, never one opaque string, because only the value may be quoted. A composite tag
+    /// quoted whole (<c>"instance:my world"</c>) hides its own reserved prefix behind the quote, and the readers of
+    /// these tags test for that prefix — so the tag would still be one well-formed token and still mean nothing to the
+    /// thing it was written for. The prefix therefore rides through verbatim (callers spell a declared literal there —
+    /// <c>instance:</c>, <c>anchor=body:</c> — never interpolated text) and only the value goes through
+    /// <see cref="Quote(string)"/>, which is enough for the whole tag to stay one token.
+    /// <para>A quoted value reads back exactly as <see cref="Field(string, string)"/>'s does, but which reader is doing
+    /// the reading decides how much of the decoding is left. A driver reading the echo LINE uses
+    /// <see cref="TryReadToken(string, ref int, out string)"/>, which undoes the whole encoding. A resubmitted line
+    /// goes through the console's own splitter instead, and that splitter knows only about <c>'"'</c>: it removes the
+    /// pair — so <c>instance:"my world"</c> reaches a verb as the single token <c>instance:my world</c>, with the
+    /// reserved prefix still leading — and leaves every escape inside untouched. The verb receiving such a token
+    /// therefore finishes the job with <see cref="Unescape(string)"/>, which is why <see cref="Quote(string)"/> writes
+    /// an interior <c>'"'</c> as <c>\u0022</c> rather than <c>\"</c> and always quotes a value carrying <c>'\'</c>.</para>
+    /// </remarks>
+    /// <param name="text">The bracketed echo to tag.</param>
+    /// <param name="prefix">The tag's declared literal key, including its own separator (e.g. <c>instance:</c>).</param>
+    /// <param name="value">The tag's value, quoted only if it needs to be.</param>
+    /// <returns>The tagged echo, or <paramref name="text"/> unchanged.</returns>
+    public static string SpliceTag(string text, string prefix, string value) =>
+        (text.EndsWith(value: ']')
+            ? $"{text[..^1]} {prefix}{Quote(value: value)}]"
+            : text
+        );
+    /// <summary>Appends space-prefixed free text — a whole segment of prose not meant to be machine-parsed as
+    /// <c>key=value</c> fields at all (distinct from <see cref="Head(string)"/>, which names a segment's own
+    /// content).</summary>
+    /// <param name="text">The text to append.</param>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Text(string text) {
+        FlushPendingSegment();
+
+        _ = m_builder.Append(value: ' ').Append(value: text);
+
+        return this;
     }
     /// <summary>Reads one whole token out of an echo line, starting at <paramref name="index"/>, and decodes it — the
     /// ONE pass that undoes what this writer emits, and the exact inverse of the token shapes
@@ -215,27 +393,6 @@ public sealed class CommandEcho {
 
         return true;
     }
-    /// <summary>Decodes one token already in hand — the exact inverse of <see cref="Quote(string)"/>, so
-    /// <c>Unquote(Quote(v)) == v</c> for every <paramref name="token"/> this writer can emit.</summary>
-    /// <remarks>Reads by the same one-pass rule <see cref="TryReadToken(string, ref int, out string)"/> applies, and
-    /// therefore stops at the first whitespace outside a quoted run. Pass exactly what <see cref="Quote(string)"/>
-    /// returned; a reader working from a whole line wants <see cref="TryReadToken(string, ref int, out string)"/>
-    /// instead, which finds the token boundaries the split cannot.</remarks>
-    /// <param name="token">The token text, as this writer emitted it.</param>
-    /// <returns>The decoded value.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="token"/> is <see langword="null"/>.</exception>
-    public static string Unquote(string token) {
-        var index = 0;
-
-        return (TryReadToken(
-            index: ref index,
-            line: token,
-            token: out var decoded
-        )
-            ? decoded
-            : string.Empty
-        );
-    }
     /// <summary>Decodes the escapes <see cref="Quote(string)"/> wrote for a value whose surrounding quoted run some
     /// OTHER splitter has already removed — the console's, when an operator copies a
     /// <see cref="SpliceTag(string, string, string)"/> tag off an echo and hands it straight back as an argument.</summary>
@@ -302,180 +459,25 @@ public sealed class CommandEcho {
 
         return builder.ToString();
     }
+    /// <summary>Decodes one token already in hand — the exact inverse of <see cref="Quote(string)"/>, so
+    /// <c>Unquote(Quote(v)) == v</c> for every <paramref name="token"/> this writer can emit.</summary>
+    /// <remarks>Reads by the same one-pass rule <see cref="TryReadToken(string, ref int, out string)"/> applies, and
+    /// therefore stops at the first whitespace outside a quoted run. Pass exactly what <see cref="Quote(string)"/>
+    /// returned; a reader working from a whole line wants <see cref="TryReadToken(string, ref int, out string)"/>
+    /// instead, which finds the token boundaries the split cannot.</remarks>
+    /// <param name="token">The token text, as this writer emitted it.</param>
+    /// <returns>The decoded value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="token"/> is <see langword="null"/>.</exception>
+    public static string Unquote(string token) {
+        var index = 0;
 
-    // Writes one character as the \uXXXX escape the reader inverts — four lowercase hex digits, always, so the reader
-    // can find the escape's end by counting rather than by scanning.
-    private static void AppendUnicodeEscape(StringBuilder builder, char character) {
-        Span<char> hex = stackalloc char[4];
-
-        _ = ((ushort)character).TryFormat(
-            destination: hex,
-            charsWritten: out _,
-            format: "x4",
-            provider: CultureInfo.InvariantCulture
-        );
-        _ = builder.Append(value: "\\u").Append(value: hex);
-    }
-    // THE ONE RULE for "this character cannot ride inside a quoted run as written", so Quote and the reader that
-    // inverts it cannot drift apart. Quoting contains everything a token or a segment split would find, but it cannot
-    // contain a LINE break: a driver splits the stream into lines first, before it looks for tokens at all, so a
-    // character .NET counts as a line ending tears the record in half however well quoted it is. That set is wider than
-    // '\n' and '\r' — ReplaceLineEndings and EnumerateLines also break on U+000B, U+000C, U+0085, U+2028 and U+2029 —
-    // and a listed set would have to be re-derived every time one is added, so the test is the CATEGORY: every control
-    // character, plus the two Unicode separators that are not control characters, plus the '"' itself — see Unescape
-    // for why that one may not ride as `\"`.
-    private static bool MustEscape(char character) => (
-        char.IsControl(c: character) ||
-        (character == '"') ||
-        (char.GetUnicodeCategory(c: character) is (UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator))
-    );
-    // Whether a driver's own split could land inside this value. Whitespace is tested by CATEGORY rather than against
-    // a listed set: char.IsWhiteSpace is the rule CommandRegistry's wire tokenizer splits on, and a listed set would
-    // let a vertical tab or a non-breaking space through unquoted for a reader that splits the way the wire does.
-    //
-    // A '\' forces quoting even though nothing splits on it: it is the escape introducer, and Unescape reads a value
-    // whose quotes some other splitter has already removed, so it cannot tell an escape from a literal backslash
-    // unless every literal one was written doubled. Quoting is what guarantees that.
-    private static bool NeedsQuoting(string value) {
-        foreach (var character in value) {
-            if (
-                char.IsWhiteSpace(c: character) ||
-                (character == '\\') ||
-                (character == ']') ||
-                (character == '|') ||
-                MustEscape(character: character)
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // Reads a \uXXXX escape at `index` (which addresses its '\'), or answers false for anything else — a short line, a
-    // different escape letter, a digit that is not hex. Strict AllowHexSpecifier rather than NumberStyles.HexNumber:
-    // the latter tolerates surrounding whitespace, which would let `\u 41` decode as a character.
-    private static bool TryReadUnicodeEscape(string line, int index, out char character) {
-        if (
-            (line[(index + 1)] == 'u') &&
-            ((index + 6) <= line.Length) &&
-            ushort.TryParse(
-            s: line.AsSpan(length: 4, start: (index + 2)),
-            provider: CultureInfo.InvariantCulture,
-            style: NumberStyles.AllowHexSpecifier,
-            result: out var scalar
+        return (TryReadToken(
+            index: ref index,
+            line: token,
+            token: out var decoded
         )
-        ) {
-            character = ((char)scalar);
-
-            return true;
-        }
-
-        character = '\0';
-
-        return false;
-    }
-    private void FlushPendingSegment() {
-        if (m_pendingSegment) {
-            _ = m_builder.Append(value: " |");
-            m_pendingSegment = false;
-        }
-    }
-
-    /// <summary>Marks a boundary between groups of fields — the <c>" | "</c> separator is written only if more
-    /// content follows, so a boundary marked immediately before <see cref="Close"/> vanishes rather than trailing.</summary>
-    /// <returns>The echo builder.</returns>
-    public CommandEcho Segment() {
-        m_pendingSegment = true;
-
-        return this;
-    }
-    /// <summary>Appends a space-prefixed <c>key=value</c> token, the value passed through
-    /// <see cref="Quote(string)"/> so a reserved character inside it cannot end the token, the segment, or the
-    /// envelope early.</summary>
-    /// <param name="key">The field name.</param>
-    /// <param name="value">The field value, already formatted.</param>
-    /// <returns>The echo builder.</returns>
-    public CommandEcho Field(string key, string value) {
-        FlushPendingSegment();
-
-        _ = m_builder.Append(value: ' ').Append(value: key).Append(value: '=').Append(value: Quote(value: value));
-
-        return this;
-    }
-    /// <summary>Appends a space-prefixed <c>key=value</c> token, the value invariant-culture formatted.</summary>
-    /// <param name="key">The field name.</param>
-    /// <param name="value">The field value.</param>
-    /// <returns>The echo builder.</returns>
-    public CommandEcho Field<T>(string key, T value) where T : IFormattable => Field(
-        key: key,
-        value: value.ToString(
-            format: null,
-            formatProvider: CultureInfo.InvariantCulture
-        )
-    );
-    /// <summary>Appends a space-prefixed <c>key=true</c>/<c>key=false</c> token.</summary>
-    /// <param name="key">The field name.</param>
-    /// <param name="value">The field value.</param>
-    /// <returns>The echo builder.</returns>
-    public CommandEcho Field(string key, bool value) => Field(
-        key: key,
-        value: (value
-            ? "true"
-            : "false")
-    );
-    /// <summary>Appends a space-prefixed, declared free-text HEAD token — the one non-<c>key=value</c> word a
-    /// segment may open with (e.g. <c>"kind"</c>, <c>"group"</c>, <c>"listing"</c>), naming what the
-    /// <see cref="Field(string, string)"/> tokens that follow describe.</summary>
-    /// <param name="head">The head word.</param>
-    /// <returns>The echo builder.</returns>
-    public CommandEcho Head(string head) {
-        FlushPendingSegment();
-
-        _ = m_builder.Append(value: ' ').Append(value: head);
-
-        return this;
-    }
-    /// <summary>Appends space-prefixed free text — a whole segment of prose not meant to be machine-parsed as
-    /// <c>key=value</c> fields at all (distinct from <see cref="Head(string)"/>, which names a segment's own
-    /// content).</summary>
-    /// <param name="text">The text to append.</param>
-    /// <returns>The echo builder.</returns>
-    public CommandEcho Text(string text) {
-        FlushPendingSegment();
-
-        _ = m_builder.Append(value: ' ').Append(value: text);
-
-        return this;
-    }
-    /// <summary>Closes the echo line and returns the finished string.</summary>
-    /// <returns>The finished <c>[verb: …]</c> line.</returns>
-    public string Close() => m_builder.Append(value: ']').ToString();
-    /// <summary>Splices ` <paramref name="prefix"/><paramref name="value"/>` just inside an already-closed bracketed
-    /// echo's trailing <c>]</c>, or returns <paramref name="text"/> unchanged when it does not end in <c>]</c> — the
-    /// shared surgery every after-the-fact echo tag (instance, perception anchor) uses.</summary>
-    /// <remarks>
-    /// The tag is a KEY and a VALUE, never one opaque string, because only the value may be quoted. A composite tag
-    /// quoted whole (<c>"instance:my world"</c>) hides its own reserved prefix behind the quote, and the readers of
-    /// these tags test for that prefix — so the tag would still be one well-formed token and still mean nothing to the
-    /// thing it was written for. The prefix therefore rides through verbatim (callers spell a declared literal there —
-    /// <c>instance:</c>, <c>anchor=body:</c> — never interpolated text) and only the value goes through
-    /// <see cref="Quote(string)"/>, which is enough for the whole tag to stay one token.
-    /// <para>A quoted value reads back exactly as <see cref="Field(string, string)"/>'s does, but which reader is doing
-    /// the reading decides how much of the decoding is left. A driver reading the echo LINE uses
-    /// <see cref="TryReadToken(string, ref int, out string)"/>, which undoes the whole encoding. A resubmitted line
-    /// goes through the console's own splitter instead, and that splitter knows only about <c>'"'</c>: it removes the
-    /// pair — so <c>instance:"my world"</c> reaches a verb as the single token <c>instance:my world</c>, with the
-    /// reserved prefix still leading — and leaves every escape inside untouched. The verb receiving such a token
-    /// therefore finishes the job with <see cref="Unescape(string)"/>, which is why <see cref="Quote(string)"/> writes
-    /// an interior <c>'"'</c> as <c>\u0022</c> rather than <c>\"</c> and always quotes a value carrying <c>'\'</c>.</para>
-    /// </remarks>
-    /// <param name="text">The bracketed echo to tag.</param>
-    /// <param name="prefix">The tag's declared literal key, including its own separator (e.g. <c>instance:</c>).</param>
-    /// <param name="value">The tag's value, quoted only if it needs to be.</param>
-    /// <returns>The tagged echo, or <paramref name="text"/> unchanged.</returns>
-    public static string SpliceTag(string text, string prefix, string value) =>
-        (text.EndsWith(value: ']')
-            ? $"{text[..^1]} {prefix}{Quote(value: value)}]"
-            : text
+            ? decoded
+            : string.Empty
         );
+    }
 }

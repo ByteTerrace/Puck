@@ -19,7 +19,10 @@ internal sealed class FormatSubmission {
         var run = await GetAsync(path: $"{prefix}/actions/runs/{runId}");
         var workflow = await GetAsync(path: $"{prefix}/actions/workflows/format.yml");
 
-        if ((((long?)run["workflow_id"]) != ((long?)workflow["id"])) || (((string?)run["event"]) is not ("pull_request" or "workflow_dispatch"))) {
+        if (
+            (((long?)run["workflow_id"]) != ((long?)workflow["id"])) ||
+            (((string?)run["event"]) is not ("pull_request" or "workflow_dispatch"))
+        ) {
             throw new InvalidDataException(message: "The artifact must come from the repository's Check source formatting workflow.");
         }
         var jobs = await GetAsync(path: $"{prefix}/actions/runs/{runId}/attempts/{((int)run["run_attempt"]!)}/jobs?per_page=100");
@@ -47,7 +50,10 @@ internal sealed class FormatSubmission {
         }
         var repositoryInfo = await GetAsync(path: prefix);
 
-        if ((branch == ((string?)repositoryInfo["default_branch"])) || (branch == ((string?)pull["base"]!["ref"]))) {
+        if (
+            (branch == ((string?)repositoryInfo["default_branch"])) ||
+            (branch == ((string?)pull["base"]!["ref"]))
+        ) {
             throw new InvalidDataException(message: "Refusing to autoformat a default or base branch.");
         }
         var currentHead = ((string)pull["head"]!["sha"]!);
@@ -58,11 +64,17 @@ internal sealed class FormatSubmission {
             // create a second commit or overwrite a contributor's intervening push.
             var commit = await GetAsync(path: $"{prefix}/commits/{currentHead}");
 
-            if ((((string?)commit["commit"]?["message"]) == message)
-                && (((string?)commit["author"]?["login"]) == "github-actions[bot]")
-                && (commit["parents"]!.AsArray().Count == 1)
-                && (((string?)commit["parents"]![0]?["sha"]) == head)) {
-                await DispatchAsync(prefix: prefix, branch: branch, baseSha: ((string)pull["base"]!["sha"]!));
+            if (
+                (((string?)commit["commit"]?["message"]) == message) &&
+                (((string?)commit["author"]?["login"]) == "github-actions[bot]") &&
+                (commit["parents"]!.AsArray().Count == 1) &&
+                (((string?)commit["parents"]![0]?["sha"]) == head)
+            ) {
+                await DispatchAsync(
+                    prefix: prefix,
+                    branch: branch,
+                    baseSha: ((string)pull["base"]!["sha"]!)
+                );
                 return;
             }
             Report(message: $"PR #{number} advanced while formatting ran; the stale result was discarded.");
@@ -70,16 +82,25 @@ internal sealed class FormatSubmission {
         }
         var artifacts = await GetAsync(path: $"{prefix}/actions/runs/{runId}/artifacts?per_page=100");
         var artifact = artifacts["artifacts"]!.AsArray().Single(predicate: static item => ((((string?)item!["name"]) == "puck-format") && (((bool?)item["expired"]) == false)))!;
-        using var response = await m_client.GetAsync(requestUri: $"{prefix}/actions/artifacts/{((long)artifact["id"]!)}/zip", completionOption: HttpCompletionOption.ResponseHeadersRead);
+        using var response = await m_client.GetAsync(
+            requestUri: $"{prefix}/actions/artifacts/{((long)artifact["id"]!)}/zip",
+            completionOption: HttpCompletionOption.ResponseHeadersRead
+        );
 
         response.EnsureSuccessStatusCode();
         using var archiveBytes = new MemoryStream(buffer: await ReadBoundedAsync(stream: await response.Content.ReadAsStreamAsync()));
-        using var archive = new ZipArchive(mode: ZipArchiveMode.Read, stream: archiveBytes);
+        using var archive = new ZipArchive(
+            mode: ZipArchiveMode.Read,
+            stream: archiveBytes
+        );
         var entry = archive.Entries.Single(predicate: static item => (item.FullName == "format.json"));
         using var stream = entry.Open();
         var report = JsonNode.Parse(utf8Json: await ReadBoundedAsync(stream: stream))!;
 
-        if ((((string?)report["head"]) != head) || (((string?)report["base"]) != ((string?)pull["base"]!["sha"]))) {
+        if (
+            (((string?)report["head"]) != head) ||
+            (((string?)report["base"]) != ((string?)pull["base"]!["sha"]))
+        ) {
             Report(message: $"PR #{number}'s base or head changed; the stale result was discarded.");
             return;
         }
@@ -106,13 +127,20 @@ internal sealed class FormatSubmission {
         foreach (var item in files) {
             var path = ((string)item!["path"]!);
 
-            if (!allowed.Contains(item: path) || !seen.Add(item: path) || !IsSourcePath(path: path)) {
+            if (
+                !allowed.Contains(item: path) ||
+                !seen.Add(item: path) ||
+                !IsSourcePath(path: path)
+            ) {
                 throw new InvalidDataException(message: "The artifact contains a duplicate, excluded, or non-PR source path.");
             }
             var contents = ((string)item["contents"]!);
             var bytes = Convert.FromBase64String(s: contents);
 
-            _ = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes: bytes);
+            _ = new UTF8Encoding(
+                encoderShouldEmitUTF8Identifier: false,
+                throwOnInvalidBytes: true
+            ).GetString(bytes: bytes);
             // The Contents API can follow a symlink and describe its target as a file. Inspect Git's
             // tree modes instead, including every parent directory, without a truncated recursive walk.
             var segments = path.Split('/');
@@ -125,7 +153,10 @@ internal sealed class FormatSubmission {
                 var node = tree["tree"]!.AsArray().Single(predicate: node => (((string?)node!["path"]) == segments[index]))!;
 
                 if (index == (segments.Length - 1)) {
-                    if ((((string?)node["mode"]) is not ("100644" or "100755")) || (((string?)node["type"]) != "blob")) {
+                    if (
+                        (((string?)node["mode"]) is not ("100644" or "100755")) ||
+                        (((string?)node["type"]) != "blob")
+                    ) {
                         throw new InvalidDataException(message: "Only ordinary source files may be replaced.");
                     }
                 } else {
@@ -147,26 +178,33 @@ internal sealed class FormatSubmission {
                 },
             },
         };
-        var result = await PostAsync(path: graphUrl, value: mutation);
+        var result = await PostAsync(
+            path: graphUrl,
+            value: mutation
+        );
 
         if (result?["errors"] is not null) { throw new InvalidOperationException(message: "GitHub declined the formatting commit (the branch may have advanced or be protected)."); }
         var committed = ((string)result!["data"]!["createCommitOnBranch"]!["commit"]!["oid"]!);
 
         Report(message: $"Applied {files.Count} formatted file(s) to PR #{number} as {committed}.");
-        await DispatchAsync(prefix: prefix, branch: branch, baseSha: ((string)pull["base"]!["sha"]!));
+        await DispatchAsync(
+            prefix: prefix,
+            branch: branch,
+            baseSha: ((string)pull["base"]!["sha"]!)
+        );
     }
 
-    private static bool IsSourcePath(string path) =>
-        (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs")
-        && !path.Contains(value: '\\') && !path.Contains(value: ':')
-        && !path.Split('/').Any(predicate: static part => (part is "" or "." or ".." or "experimental" or "obj" or "bin" or "artifacts" or ".tmp" or ".git" or "node_modules" or "avm-temp" or "publish"))
-        && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".g.cs")
-        && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".generated.cs"));
     private async Task DispatchAsync(string prefix, string branch, string baseSha) {
         // GITHUB_TOKEN pushes do not provide unattended PR checks. Explicit dispatches run with
         // each workflow's own read-only permissions and validate the new head without cloud deployment.
-        await PostAsync(path: $"{prefix}/actions/workflows/format.yml/dispatches", value: new JsonObject { ["ref"] = branch, ["inputs"] = new JsonObject { ["base"] = baseSha } });
-        await PostAsync(path: $"{prefix}/actions/workflows/azure.yml/dispatches", value: new JsonObject { ["ref"] = branch, ["inputs"] = new JsonObject { ["deploy"] = "false" } });
+        await PostAsync(
+            path: $"{prefix}/actions/workflows/format.yml/dispatches",
+            value: new JsonObject { ["ref"] = branch, ["inputs"] = new JsonObject { ["base"] = baseSha } }
+        );
+        await PostAsync(
+            path: $"{prefix}/actions/workflows/azure.yml/dispatches",
+            value: new JsonObject { ["ref"] = branch, ["inputs"] = new JsonObject { ["deploy"] = "false" } }
+        );
         Report(message: "Dispatched formatting and the shared Azure validation graph, including packages and documentation, for the updated branch.");
     }
     private async Task<JsonNode> GetAsync(string path) {
@@ -175,14 +213,39 @@ internal sealed class FormatSubmission {
         response.EnsureSuccessStatusCode();
         return JsonNode.Parse(json: await response.Content.ReadAsStringAsync())!;
     }
+    private static bool IsSourcePath(string path) =>
+        (path.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ".cs"
+        )
+        && !path.Contains(value: '\\') && !path.Contains(value: ':')
+        && !path.Split('/').Any(predicate: static part => (part is "" or "." or ".." or "experimental" or "obj" or "bin" or "artifacts" or ".tmp" or ".git" or "node_modules" or "avm-temp" or "publish"))
+        && !path.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ".g.cs"
+        )
+        && !path.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ".generated.cs"
+        ));
     private async Task<JsonNode?> PostAsync(string path, JsonObject value) {
-        using var content = new StringContent(content: value.ToJsonString(), encoding: Encoding.UTF8, mediaType: "application/json");
-        using var response = await m_client.PostAsync(content: content, requestUri: path);
+        using var content = new StringContent(
+            content: value.ToJsonString(),
+            encoding: Encoding.UTF8,
+            mediaType: "application/json"
+        );
+        using var response = await m_client.PostAsync(
+            content: content,
+            requestUri: path
+        );
 
         response.EnsureSuccessStatusCode();
         var text = await response.Content.ReadAsStringAsync();
 
-        return (string.IsNullOrWhiteSpace(value: text) ? null : JsonNode.Parse(json: text));
+        return (string.IsNullOrWhiteSpace(value: text)
+            ? null
+            : JsonNode.Parse(json: text)
+        );
     }
     private static async Task<byte[]> ReadBoundedAsync(Stream stream) {
         using (stream) {
@@ -192,7 +255,11 @@ internal sealed class FormatSubmission {
 
             while ((read = await stream.ReadAsync(buffer: buffer)) != 0) {
                 if ((output.Length + read) > MaximumBytes) { throw new InvalidDataException(message: "Formatting artifact exceeds 16 MiB."); }
-                output.Write(buffer: buffer, count: read, offset: 0);
+                output.Write(
+                    buffer: buffer,
+                    count: read,
+                    offset: 0
+                );
             }
             return output.ToArray();
         }

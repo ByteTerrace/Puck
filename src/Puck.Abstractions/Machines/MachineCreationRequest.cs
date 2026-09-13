@@ -12,7 +12,6 @@ public sealed record PreparedMachineAsset(
     string Path, ReadOnlyMemory<byte> Image, string ContentHash, ReadOnlyMemory<byte> SourceBytes,
     PreparedMachineContent? PreparedContent = null
 );
-
 /// <summary>A complete construction request. Configuration paths refer to the supplied immutable asset set;
 /// providers do not reread authored paths during construction.</summary>
 /// <param name="Configuration">The provider's versioned structured configuration.</param>
@@ -29,6 +28,14 @@ public sealed record MachineCreationRequest(
     /// <param name="fieldPath">The dotted descriptor path.</param>
     /// <returns>The prepared asset.</returns>
     /// <exception cref="ArgumentException">The host did not supply the named asset.</exception>
-    public PreparedMachineAsset RequireAsset(string fieldPath) => Assets.TryGetValue(fieldPath, out var asset)
-        ? asset : throw new ArgumentException($"Configuration asset '{fieldPath}' was not prepared.", nameof(Assets));
+    public PreparedMachineAsset RequireAsset(string fieldPath) => (Assets.TryGetValue(
+        key: fieldPath,
+        value: out var asset
+    )
+        ? asset
+        : throw new ArgumentException(
+            message: $"Configuration asset '{fieldPath}' was not prepared.",
+            paramName: nameof(Assets)
+        )
+    );
 }

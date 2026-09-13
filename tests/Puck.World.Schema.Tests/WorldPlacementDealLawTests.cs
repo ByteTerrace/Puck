@@ -15,80 +15,251 @@ public sealed class WorldPlacementDealLawTests {
         Position: new DocumentVector3(value: Vector3.Zero),
         YawDegrees: 0f,
         Scale: 1f,
-        Distribution: new WorldDistribution(Region: region, Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)),
+        Distribution: new WorldDistribution(
+            Region: region,
+            Fill: new WorldSequence(
+                Name: WorldSequence.None,
+                Offset: 0,
+                Step: 0f
+            )
+        ),
         Deal: (deal ?? new WorldPlacementDeal(Row: "accounts"))
     );
 
     [Fact]
     public void AChildIdIsTheTemplateThenTheSeparatorThenTheKey() {
-        Assert.Equal(expected: "stores/bytrcstp001", actual: WorldPlacementDeal.ChildId(template: "stores", key: "bytrcstp001"));
+        Assert.Equal(
+            expected: "stores/bytrcstp001",
+            actual: WorldPlacementDeal.ChildId(
+                key: "bytrcstp001",
+                template: "stores"
+            )
+        );
         Assert.True(condition: WorldPlacementDeal.IsChildId(id: "stores/bytrcstp001"));
         Assert.False(condition: WorldPlacementDeal.IsChildId(id: "stores"));
-        Assert.True(condition: WorldPlacementDeal.IsChildOf(id: "stores/a", template: "stores", key: "a".AsSpan()));
-        Assert.False(condition: WorldPlacementDeal.IsChildOf(id: "stores/ab", template: "stores", key: "a".AsSpan()));
-        Assert.False(condition: WorldPlacementDeal.IsChildOf(id: "store/a", template: "stores", key: "a".AsSpan()));
-        Assert.True(condition: WorldPlacementDeal.TrySplitChildId(id: "stores/a", template: out var template, key: out var key));
-        Assert.Equal(expected: "stores", actual: template);
-        Assert.Equal(expected: "a", actual: key);
-        Assert.False(condition: WorldPlacementDeal.TrySplitChildId(id: "/a", template: out _, key: out _));
-        Assert.False(condition: WorldPlacementDeal.TrySplitChildId(id: "stores/", template: out _, key: out _));
+        Assert.True(condition: WorldPlacementDeal.IsChildOf(
+            id: "stores/a",
+            template: "stores",
+            key: "a".AsSpan()
+        ));
+        Assert.False(condition: WorldPlacementDeal.IsChildOf(
+            id: "stores/ab",
+            template: "stores",
+            key: "a".AsSpan()
+        ));
+        Assert.False(condition: WorldPlacementDeal.IsChildOf(
+            id: "store/a",
+            template: "stores",
+            key: "a".AsSpan()
+        ));
+        Assert.True(condition: WorldPlacementDeal.TrySplitChildId(
+            id: "stores/a",
+            key: out var key,
+            template: out var template
+        ));
+        Assert.Equal(
+            actual: template,
+            expected: "stores"
+        );
+        Assert.Equal(
+            actual: key,
+            expected: "a"
+        );
+        Assert.False(condition: WorldPlacementDeal.TrySplitChildId(
+            id: "/a",
+            key: out _,
+            template: out _
+        ));
+        Assert.False(condition: WorldPlacementDeal.TrySplitChildId(
+            id: "stores/",
+            key: out _,
+            template: out _
+        ));
     }
     [Fact]
-    public void IsChildRequiresADealtParentAndTheParentsOwnChildShape() {
-        var dealt = Template(region: new WorldDistributionRegion.Lattice(StepA: new DocumentVector3(value: Vector3.UnitX), CountA: 2, StepB: new DocumentVector3(value: Vector3.UnitZ), CountB: 1));
-        var plain = (dealt with { Deal = null });
-        var child = new WorldPlacement(Id: "stores/a", PrototypeId: "store", Position: new DocumentVector3(value: Vector3.Zero), YawDegrees: 0f, Scale: 1f, Parent: "stores");
-
-        Assert.True(condition: WorldPlacementDeal.IsChild(placement: child, parent: dealt));
-        Assert.False(condition: WorldPlacementDeal.IsChild(placement: child, parent: plain));
-        Assert.False(condition: WorldPlacementDeal.IsChild(placement: child, parent: null));
-        Assert.False(condition: WorldPlacementDeal.IsChild(placement: (child with { Parent = "court" }), parent: dealt));
-        Assert.False(condition: WorldPlacementDeal.IsChild(placement: (child with { Id = "shed/a" }), parent: dealt));
+    public void ADiscOrPointsRegionDealsNothing() {
+        Assert.Empty(collection: WorldPlacementDeal.Offsets(
+            template: Template(region: new WorldDistributionRegion.Disc(Radius: 2f)),
+            worldSeed: 0UL
+        ));
+        Assert.Equal(
+            expected: 0,
+            actual: WorldPlacementDeal.InstanceCount(
+                template: Template(region: new WorldDistributionRegion.Disc(Radius: 2f)),
+                worldSeed: 0UL
+            )
+        );
     }
     /// <summary>A lattice deals A-major, B-minor, the order <c>CreationStampLattice.ForEachFixedInstance</c> visits
     /// a static lattice's copies in, so offset k is where the k-th static copy would stand.</summary>
     [Fact]
     public void ALatticeDealsInAMajorBMinorOrder() {
         var template = Template(region: new WorldDistributionRegion.Lattice(
-            StepA: new DocumentVector3(value: new Vector3(x: 2f, y: 0f, z: 0f)),
+            StepA: new DocumentVector3(value: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 0f
+            )),
             CountA: 2,
-            StepB: new DocumentVector3(value: new Vector3(x: 0f, y: 0f, z: 3f)),
+            StepB: new DocumentVector3(value: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 3f
+            )),
             CountB: 3
         ));
-        var offsets = WorldPlacementDeal.Offsets(template: template, worldSeed: 0UL);
+        var offsets = WorldPlacementDeal.Offsets(
+            template: template,
+            worldSeed: 0UL
+        );
 
-        Assert.Equal(expected: 6, actual: offsets.Length);
-        Assert.Equal(expected: 6, actual: WorldPlacementDeal.InstanceCount(template: template, worldSeed: 0UL));
-        Assert.Equal(expected: new Vector3(x: 0f, y: 0f, z: 0f), actual: offsets[0].ToVector3());
-        Assert.Equal(expected: new Vector3(x: 0f, y: 0f, z: 3f), actual: offsets[1].ToVector3());
-        Assert.Equal(expected: new Vector3(x: 0f, y: 0f, z: 6f), actual: offsets[2].ToVector3());
-        Assert.Equal(expected: new Vector3(x: 2f, y: 0f, z: 0f), actual: offsets[3].ToVector3());
-        Assert.Equal(expected: new Vector3(x: 2f, y: 0f, z: 6f), actual: offsets[5].ToVector3());
+        Assert.Equal(
+            expected: 6,
+            actual: offsets.Length
+        );
+        Assert.Equal(
+            expected: 6,
+            actual: WorldPlacementDeal.InstanceCount(
+                template: template,
+                worldSeed: 0UL
+            )
+        );
+        Assert.Equal(
+            expected: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 0f
+            ),
+            actual: offsets[0].ToVector3()
+        );
+        Assert.Equal(
+            expected: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 3f
+            ),
+            actual: offsets[1].ToVector3()
+        );
+        Assert.Equal(
+            expected: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 6f
+            ),
+            actual: offsets[2].ToVector3()
+        );
+        Assert.Equal(
+            expected: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 0f
+            ),
+            actual: offsets[3].ToVector3()
+        );
+        Assert.Equal(
+            expected: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 6f
+            ),
+            actual: offsets[5].ToVector3()
+        );
     }
     /// <summary>A scatter's dealt offsets are the sampled offsets a static scatter of the same row materializes,
     /// element for element, and its instance count is the seed-independent block count.</summary>
     [Fact]
     public void AScatterDealsTheSameOffsetsAStaticScatterMaterializes() {
-        var template = Template(region: new WorldDistributionRegion.Scatter(CellSize: 1.6f, Width: 16, Depth: 16, Spacing: 4, Radius: 1, Seed: 7u));
-        var dealt = WorldPlacementDeal.Offsets(template: template, worldSeed: 11UL);
-        var sampled = WorldPlacementStamp.SampledFixedOffsetsFor(placement: template, worldSeed: 11UL);
+        var template = Template(region: new WorldDistributionRegion.Scatter(
+            CellSize: 1.6f,
+            Depth: 16,
+            Radius: 1,
+            Seed: 7u,
+            Spacing: 4,
+            Width: 16
+        ));
+        var dealt = WorldPlacementDeal.Offsets(
+            template: template,
+            worldSeed: 11UL
+        );
+        var sampled = WorldPlacementStamp.SampledFixedOffsetsFor(
+            placement: template,
+            worldSeed: 11UL
+        );
 
         Assert.NotNull(@object: sampled);
-        Assert.Equal(expected: 16, actual: dealt.Length);
-        Assert.Equal(expected: 16, actual: WorldPlacementDeal.InstanceCount(template: template, worldSeed: 11UL));
-        Assert.Equal<FixedVector3>(expected: sampled!, actual: dealt);
-        Assert.NotEqual<FixedVector3>(expected: WorldPlacementDeal.Offsets(template: template, worldSeed: 12UL), actual: dealt);
+        Assert.Equal(
+            expected: 16,
+            actual: dealt.Length
+        );
+        Assert.Equal(
+            expected: 16,
+            actual: WorldPlacementDeal.InstanceCount(
+                template: template,
+                worldSeed: 11UL
+            )
+        );
+        Assert.Equal<FixedVector3>(
+            actual: dealt,
+            expected: sampled!
+        );
+        Assert.NotEqual<FixedVector3>(
+            expected: WorldPlacementDeal.Offsets(
+                template: template,
+                worldSeed: 12UL
+            ),
+            actual: dealt
+        );
     }
     [Fact]
-    public void ADiscOrPointsRegionDealsNothing() {
-        Assert.Empty(collection: WorldPlacementDeal.Offsets(template: Template(region: new WorldDistributionRegion.Disc(Radius: 2f)), worldSeed: 0UL));
-        Assert.Equal(expected: 0, actual: WorldPlacementDeal.InstanceCount(template: Template(region: new WorldDistributionRegion.Disc(Radius: 2f)), worldSeed: 0UL));
+    public void IsChildRequiresADealtParentAndTheParentsOwnChildShape() {
+        var dealt = Template(region: new WorldDistributionRegion.Lattice(
+            StepA: new DocumentVector3(value: Vector3.UnitX),
+            CountA: 2,
+            StepB: new DocumentVector3(value: Vector3.UnitZ),
+            CountB: 1
+        ));
+        var plain = (dealt with { Deal = null });
+        var child = new WorldPlacement(
+            Id: "stores/a",
+            PrototypeId: "store",
+            Position: new DocumentVector3(value: Vector3.Zero),
+            YawDegrees: 0f,
+            Scale: 1f,
+            Parent: "stores"
+        );
+
+        Assert.True(condition: WorldPlacementDeal.IsChild(
+            parent: dealt,
+            placement: child
+        ));
+        Assert.False(condition: WorldPlacementDeal.IsChild(
+            parent: plain,
+            placement: child
+        ));
+        Assert.False(condition: WorldPlacementDeal.IsChild(
+            parent: null,
+            placement: child
+        ));
+        Assert.False(condition: WorldPlacementDeal.IsChild(
+            placement: (child with { Parent = "court" }),
+            parent: dealt
+        ));
+        Assert.False(condition: WorldPlacementDeal.IsChild(
+            placement: (child with { Id = "shed/a" }),
+            parent: dealt
+        ));
     }
     [Fact]
     public void TheRegistryReachesBothDealRowSites() {
         var paths = WorldNameRegistry.Sites.Select(selector: static site => site.Path).ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Contains(expected: "placements.rows[].deal.row", collection: paths);
-        Assert.Contains(expected: "placements.rows[].deal.variants.row", collection: paths);
+        Assert.Contains(
+            collection: paths,
+            expected: "placements.rows[].deal.row"
+        );
+        Assert.Contains(
+            collection: paths,
+            expected: "placements.rows[].deal.variants.row"
+        );
     }
 }

@@ -87,8 +87,8 @@ public sealed class SdfDebugRenderer {
     // that the carve pool subtracts from. A FIXED subject means the bench camera never reframes across the ladder (the
     // subject only shrinks as carves bite it, so it stays in frame at SingleShapeDistance — see SdfBenchScene).
     private const float BenchCarveSubjectRadius = 1.6f;
-    private const float BenchScatterExtent = 12f;   // the scatter cube's full side (empty-space + floor spread, subject-dwarfing)
     private const float BenchRoughness = 0.613f; // = 1 - sqrt((40 - 2) / 254), the roughness whose exponent is 40
+    private const float BenchScatterExtent = 12f;   // the scatter cube's full side (empty-space + floor spread, subject-dwarfing)
     private const float BenchSpecular = 0.35f;
     private const float SubjectRoughness = 0.613f; // = 1 - sqrt((40 - 2) / 254), the roughness whose exponent is 40
     private const float SubjectSpecular = 0.35f;

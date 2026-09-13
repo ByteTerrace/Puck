@@ -96,54 +96,12 @@ public sealed record WorldDefinition(
     /// <summary>Gets the data-side addon descriptors — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldAddonRow> Addons => (AddonsRaw ?? []);
-    /// <summary>Gets the runtime lattice composite compiled from the state section's topology and lattice-shaped
-    /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
-    /// authored source; this accessor is the engine's compiled view of it.</summary>
-    [JsonIgnore]
-    public WorldFieldsSection? Fields => GetCompiledFields();
-    /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
-    /// resolve names against this catalog once, retain <see cref="StateHandle"/> values, and then use ordinal
-    /// descriptor access without repeated string lookup.</summary>
-    [JsonIgnore]
-    public StateCatalog StateCatalog => GetStateCatalog();
-    /// <summary>Gets the typed deterministic program compiled from the lattice-shaped state rows and their ordered
-    /// reactions, or <see langword="null"/> when the state section declares no lattice topology.</summary>
-    [JsonIgnore]
-    public WorldFieldProgram? FieldProgram => GetFieldProgram();
-    /// <summary>Bridge spellings for compose sites: each writes ONE member of its dealt section, preserving the
-    /// other. The document spelling is the section object; these never serialize.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldKit>? KitRowsRaw { get => KitsRaw?.Rows; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Rows = value }); }
-    /// <summary>Gets or initializes the kit assignment through the kits section (see <see cref="KitRowsRaw"/>).</summary>
-    [JsonIgnore]
-    public WorldRowAssignment? AssignmentRaw { get => KitsRaw?.Assignment; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Assignment = value }); }
-    /// <summary>Gets or initializes the look rows through the looks section (see <see cref="KitRowsRaw"/>).</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldLook>? LookRowsRaw { get => LooksRaw?.Rows; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Rows = value }); }
-    /// <summary>Gets or initializes the look assignment through the looks section (see <see cref="KitRowsRaw"/>).</summary>
-    [JsonIgnore]
-    public WorldRowAssignment? LookAssignmentRaw { get => LooksRaw?.Assignment; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Assignment = value }); }
-    /// <summary>Gets or initializes the placement rows through the placements section (see <see cref="KitRowsRaw"/>).</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
-    /// <summary>Gets every placement's resolved WORLD-space transform, keyed by <see cref="WorldPlacement.Id"/> — a
-    /// row naming no <see cref="WorldPlacement.Parent"/> resolves to its own authored Position/YawDegrees unchanged;
-    /// a row naming one composes over that parent's own resolved frame (see <see cref="WorldPlacementFrameCompilation"/>).
-    /// Compiled once per distinct <see cref="PlacementsRaw"/> instance and cached; every consumer of a placement's
-    /// WORLD transform reads THIS, never the row's own Position/YawDegrees directly.</summary>
-    [JsonIgnore]
-    public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementFrameCompilation.Resolve(section: PlacementsRaw);
-    /// <summary>Gets the immutable fixed-point spatial query index compiled from the current placement rows. The
-    /// index is rebuilt when the placement section instance changes, and reports unsupported dynamic/distributed rows
-    /// explicitly instead of silently dropping their possible blockers.</summary>
-    [JsonIgnore]
-    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementsRaw);
-    /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
-    [JsonIgnore]
-    public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
     /// <summary>Gets the kit→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
     public WorldRowAssignment Assignment => (KitsRaw?.Assignment ?? WorldRowAssignment.Default);
+    /// <summary>Gets or initializes the kit assignment through the kits section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public WorldRowAssignment? AssignmentRaw { get => KitsRaw?.Assignment; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Assignment = value }); }
     /// <summary>Gets the audio host-section defaults — ABSENT resolves to <see cref="WorldAudioDefaults.Absent"/>
     /// (silent); the standard values are authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
@@ -153,6 +111,9 @@ public sealed record WorldDefinition(
     /// authored rows span); a world wanting live placement authoring declares the block deliberately.</summary>
     [JsonIgnore]
     public WorldPlacementPolicyDefaults Authoring => (PlacementsRaw?.Policy ?? WorldPlacementPolicyDefaults.DeriveFrom(placements: Placements));
+    /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
     /// <summary>Gets the basis document this file layers over, as a file path resolved against this document's own
     /// directory — the document-composition member (see <c>WorldDocumentBasis</c>). A file naming a basis is a
     /// delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis
@@ -164,22 +125,6 @@ public sealed record WorldDefinition(
     /// against, so a non-null basis on that path refuses rather than resolving.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Basis { get; init; }
-    /// <summary>Gets the ordered fragment documents this file imports — each a <see cref="WorldImport"/> naming a
-    /// file path resolved against this document's own directory and an optional alias its names compose under —
-    /// the fan-in half of composition beside <see cref="Basis"/>'s single-parent chain (see
-    /// <c>WorldDocumentBasis</c>). Composition order is the basis chain, then each import in list order, then this
-    /// file's own body.</summary>
-    /// <remarks>Resolved and consumed at the file-load boundary exactly like <see cref="Basis"/>: a live document
-    /// always carries <see langword="null"/> here, the validator refuses anything else, and a wire-arriving document
-    /// (no directory to resolve imports against) refuses a non-null value the same way <see cref="Basis"/> does.</remarks>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldImport>? Imports { get; init; }
-    /// <summary>Gets the surface this document offers a host that imports it (<see cref="WorldExports"/>): the
-    /// names the host may read, drive, and bind to. Every other name the document declares is private to it. Consumed
-    /// where the document is imported (<see cref="WorldModuleExports"/>), so a live document always carries
-    /// <see langword="null"/> here and the validator refuses anything else.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public WorldExports? Exports { get; init; }
     /// <summary>Gets the per-world binding overlays — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldBindingOverlay> BindingOverlays => (BindingOverlaysRaw ?? []);
@@ -214,6 +159,10 @@ public sealed record WorldDefinition(
     /// <summary>Gets the creation asset rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldPrototype> Creations => (CreationsRaw ?? []);
+    /// <summary>Gets the named curvature-first spline rows a camera path op or a sim curve-follow target names by
+    /// <see cref="WorldCurveRow.Name"/> — ABSENT resolves to none, so an unauthored world is unchanged.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldCurveRow> Curves => (CurvesRaw ?? []);
     /// <summary>Gets the kit row (by name) every seat body constructs from — ABSENT resolves to the sole declared
     /// kit's name when exactly one kit is declared, else empty (nothing to derive; a document that also declares
     /// local seats then refuses by name for naming no kit row).</summary>
@@ -228,13 +177,12 @@ public sealed record WorldDefinition(
     /// unauthored world is unchanged.</summary>
     [JsonIgnore]
     public IReadOnlyList<DynamicsRow> Dynamics => (DynamicsRaw ?? []);
-    /// <summary>Gets the named curvature-first spline rows a camera path op or a sim curve-follow target names by
-    /// <see cref="WorldCurveRow.Name"/> — ABSENT resolves to none, so an unauthored world is unchanged.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldCurveRow> Curves => (CurvesRaw ?? []);
-    /// <summary>The pattern-language table, or empty when the document declares none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<PatternRow> Patterns => (PatternsRaw ?? []);
+    /// <summary>Gets the surface this document offers a host that imports it (<see cref="WorldExports"/>): the
+    /// names the host may read, drive, and bind to. Every other name the document declares is private to it. Consumed
+    /// where the document is imported (<see cref="WorldModuleExports"/>), so a live document always carries
+    /// <see langword="null"/> here and the validator refuses anything else.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldExports? Exports { get; init; }
     /// <summary>Gets the unknown top-level members captured during deserialization, declared identically on every versioned
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a
@@ -244,6 +192,15 @@ public sealed record WorldDefinition(
     /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
+    /// <summary>Gets the typed deterministic program compiled from the lattice-shaped state rows and their ordered
+    /// reactions, or <see langword="null"/> when the state section declares no lattice topology.</summary>
+    [JsonIgnore]
+    public WorldFieldProgram? FieldProgram => GetFieldProgram();
+    /// <summary>Gets the runtime lattice composite compiled from the state section's topology and lattice-shaped
+    /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
+    /// authored source; this accessor is the engine's compiled view of it.</summary>
+    [JsonIgnore]
+    public WorldFieldsSection? Fields => GetCompiledFields();
     /// <summary>Gets the document-authored grant rows — ABSENT resolves to none (the permissive boot seed still
     /// applies; this section only ADDS to it).</summary>
     [JsonIgnore]
@@ -259,18 +216,32 @@ public sealed record WorldDefinition(
     /// cursor, no panels); the standard enabled row is authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
     public WorldHudSection Hud => (HudRaw ?? WorldHudSection.Absent);
-    /// <summary>Gets the identity-owned state declarations compiled into every body's ordinal register file and
-    /// synchronized through the durable document seam.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<ActionStateSlot> IdentityState => (StateRaw?.Identity ?? []);
     /// <summary>Gets the <c>icons</c> section — ABSENT resolves to <see cref="WorldIconographySection.Absent"/> (no
     /// icons); the standard repertoire is authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
     public WorldIconographySection Icons => (IconsRaw ?? WorldIconographySection.Absent);
+    /// <summary>Gets the identity-owned state declarations compiled into every body's ordinal register file and
+    /// synchronized through the durable document seam.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<ActionStateSlot> IdentityState => (StateRaw?.Identity ?? []);
+    /// <summary>Gets the ordered fragment documents this file imports — each a <see cref="WorldImport"/> naming a
+    /// file path resolved against this document's own directory and an optional alias its names compose under —
+    /// the fan-in half of composition beside <see cref="Basis"/>'s single-parent chain (see
+    /// <c>WorldDocumentBasis</c>). Composition order is the basis chain, then each import in list order, then this
+    /// file's own body.</summary>
+    /// <remarks>Resolved and consumed at the file-load boundary exactly like <see cref="Basis"/>: a live document
+    /// always carries <see langword="null"/> here, the validator refuses anything else, and a wire-arriving document
+    /// (no directory to resolve imports against) refuses a non-null value the same way <see cref="Basis"/> does.</remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldImport>? Imports { get; init; }
     /// <summary>Gets the participant input-hold policy, authored shape — ABSENT resolves to
     /// <see cref="WorldInputHoldAuthoring.Absent"/> (inert).</summary>
     [JsonIgnore]
     public WorldInputHoldAuthoring InputHold => (InputHoldRaw ?? WorldInputHoldAuthoring.Absent);
+    /// <summary>Bridge spellings for compose sites: each writes ONE member of its dealt section, preserving the
+    /// other. The document spelling is the section object; these never serialize.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldKit>? KitRowsRaw { get => KitsRaw?.Rows; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Rows = value }); }
     /// <summary>Gets the world's locomotion kits — ABSENT resolves to none. A kit row is required only when the
     /// document's population implies a body to move: a zero-capacity census (see <see cref="Population"/>) needs no
     /// kit at all — the derived refusal <see cref="WorldDefinitionValidator"/> applies rather than a flat floor.</summary>
@@ -279,12 +250,21 @@ public sealed record WorldDefinition(
     /// <summary>Gets the look→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
     public WorldRowAssignment LookAssignment => (LooksRaw?.Assignment ?? WorldRowAssignment.Default);
+    /// <summary>Gets or initializes the look assignment through the looks section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public WorldRowAssignment? LookAssignmentRaw { get => LooksRaw?.Assignment; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Assignment = value }); }
+    /// <summary>Gets or initializes the look rows through the looks section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldLook>? LookRowsRaw { get => LooksRaw?.Rows; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Rows = value }); }
     /// <summary>Gets the look rows — ABSENT resolves to none. A consumer resolving an entity's look row (or the
     /// whole table) reads the empty case through <see cref="WorldDefinitionRows.ResolveLook"/>/
     /// <see cref="WorldDefinitionRows.ResolveLookRows"/>, the one place that falls back to the implicit single
     /// catalog look (<see cref="WorldLook.Implicit"/>).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldLook> Looks => (LooksRaw?.Rows ?? []);
+    /// <summary>Gets the named machine instances. An absent section runs no declared devices.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldMachine> Machines => (MachinesRaw ?? []);
     /// <summary>Gets the marker rows — ABSENT resolves to none (no marker channel output).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldMarkerRow> Markers => (MarkersRaw ?? []);
@@ -292,9 +272,25 @@ public sealed record WorldDefinition(
     /// resolves to <see cref="WorldMotionDefaults.Default"/> (inert, near-zero).</summary>
     [JsonIgnore]
     public WorldMotionDefaults Motion => (MotionRaw ?? WorldMotionDefaults.Default);
+    /// <summary>Gets the bounded surface, free-volume, and live-medium navigation authoring — ABSENT resolves to no domains.</summary>
+    [JsonIgnore]
+    public WorldNavigationSection Navigation => (NavigationRaw ?? WorldNavigationSection.Absent);
     /// <summary>Gets the synth-patch asset rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldPatch> Patches => (PatchesRaw ?? []);
+    /// <summary>The pattern-language table, or empty when the document declares none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<PatternRow> Patterns => (PatternsRaw ?? []);
+    /// <summary>Gets every placement's resolved WORLD-space transform, keyed by <see cref="WorldPlacement.Id"/> — a
+    /// row naming no <see cref="WorldPlacement.Parent"/> resolves to its own authored Position/YawDegrees unchanged;
+    /// a row naming one composes over that parent's own resolved frame (see <see cref="WorldPlacementFrameCompilation"/>).
+    /// Compiled once per distinct <see cref="PlacementsRaw"/> instance and cached; every consumer of a placement's
+    /// WORLD transform reads THIS, never the row's own Position/YawDegrees directly.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementFrameCompilation.Resolve(section: PlacementsRaw);
+    /// <summary>Gets or initializes the placement rows through the placements section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
     /// <summary>Gets the placement instance rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldPlacement> Placements => (PlacementsRaw?.Rows ?? []);
@@ -323,6 +319,265 @@ public sealed record WorldDefinition(
         seconds: Population.ReconnectGraceSeconds,
         ratePerSecond: ((uint)SimulationRateHz)
     );
+    /// <summary>Gets the declared probe rows — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);
+    /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
+    /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the standard posture is authored in
+    /// <c>standard.world.json</c>.</summary>
+    [JsonIgnore]
+    public WorldRenderDefaults Render => (RenderRaw ?? WorldRenderDefaults.Absent);
+    /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
+    public string Schema { get; init; } = SchemaVersion;
+    /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldScreen> Screens => (ScreensRaw ?? []);
+    /// <summary>Gets the <c>search</c> section — ABSENT resolves to no jobs.</summary>
+    [JsonIgnore]
+    public WorldSearchSection Search => (SearchRaw ?? WorldSearchSection.Absent);
+    /// <summary>Gets the authored per-seat mode families (see <see cref="WorldSeatModeFamily"/>) — ABSENT resolves to
+    /// none. A world declares none when it wants no <c>player.mode</c>-addressable seat state at all.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldSeatModeFamily> SeatModes => (SeatModesRaw ?? []);
+    /// <summary>Gets the effective simulation rate in Hz — <see cref="Simulation"/>'s authored
+    /// <see cref="WorldSimulationDefaults.RateHz"/>, or <see cref="UnauthoredSimulationRateHz"/> when this world
+    /// authors no <see cref="Simulation"/> section at all; a world that wants the resident, non-stepping rate
+    /// instead authors <c>simulation: {"rateHz": 0}</c> by name.
+    /// The seam every simulation-tick-scoped duration on this
+    /// document compiles through (see <see cref="PopulationReconnectGraceTicks"/>, <see cref="CompiledInputHold"/>):
+    /// computed here, on the fully-parsed aggregate, rather than threaded as a parameter to each sub-section's own
+    /// converter, because a sub-section (e.g. <see cref="WorldBodiesDefaults"/>, a struct) has no reference back to
+    /// the document that carries both it and the rate, and the rate itself is just another sibling property in the same
+    /// JSON object being parsed — there is no ordering guarantee that would let a nested converter see it first. A
+    /// caller that already holds a <see cref="WorldDefinition"/> reads this property directly; nothing threads a raw
+    /// rate parameter by hand.</summary>
+    [JsonIgnore]
+    public int SimulationRateHz => (Simulation?.RateHz ?? UnauthoredSimulationRateHz);
+    /// <summary>Gets the immutable fixed-point spatial query index compiled from the current placement rows. The
+    /// index is rebuilt when the placement section instance changes, and reports unsupported dynamic/distributed rows
+    /// explicitly instead of silently dropping their possible blockers.</summary>
+    [JsonIgnore]
+    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementsRaw);
+    /// <summary>Gets the named spawn poses seats and population policies reference — ABSENT resolves to empty,
+    /// EXCEPT that a spawn-point id of <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> is always resolvable:
+    /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is
+    /// added under that id — the point <see cref="WorldBodiesDefaults.SeatSpawns"/>' own absence derivation
+    /// addresses. A document that authors its own <c>spawnPoints</c> (even an explicit empty list) gets no implicit
+    /// point; a seat spawn naming one it does not declare then refuses by name like any other dangling reference.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldSpawnPoint> SpawnPoints => (SpawnPointsRaw ?? [WorldSpawnPointDefaults.ImplicitOrigin]);
+    /// <summary>Gets the placeable speaker rows — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldSpeaker> Speakers => (SpeakersRaw ?? []);
+    /// <summary>Gets the <c>state</c> section — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldStateRow> State => (StateRaw?.World ?? []);
+    /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
+    /// resolve names against this catalog once, retain <see cref="StateHandle"/> values, and then use ordinal
+    /// descriptor access without repeated string lookup.</summary>
+    [JsonIgnore]
+    public StateCatalog StateCatalog => GetStateCatalog();
+    /// <summary>Gets the storage host-section defaults — ABSENT resolves to <see cref="WorldStorageDefaults.None"/>
+    /// (cloud unwired, identity declined).</summary>
+    [JsonIgnore]
+    public WorldStorageDefaults Storage => (StorageRaw ?? WorldStorageDefaults.None);
+    /// <summary>Gets the named per-body target registers and their designation envelopes — ABSENT resolves to
+    /// none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldTargetRegister> TargetRegisters => (TargetRegistersRaw ?? []);
+    /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
+    /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in
+    /// <c>standard.world.json</c>.</summary>
+    [JsonIgnore]
+    public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
+    /// <summary>Gets the tune asset rows — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldTune> Tunes => (TunesRaw ?? []);
+    /// <summary>Gets the window composition — ABSENT resolves to <see cref="WorldViewDefaults.Absent"/>, which
+    /// composes nothing; a document whose census implies a body is refused for authoring no <c>views</c>, so only a
+    /// seatless world ever reads the placeholder.</summary>
+    [JsonIgnore]
+    public WorldViewDefaults Views => (ViewsRaw ?? WorldViewDefaults.Absent);
+
+    private static RuntimeCompilationCache GetCompilationCache(WorldStateSection? state) => (
+        (state is null)
+        ? AbsentStateCompilation
+        : RuntimeCompilationCaches.GetOrCreateValue(key: state)
+    );
+    // Fields/FieldProgram compile from every reaction a lattice-shaped row's topology carries, and a topology's own
+    // Reactions list is not a WorldStateSection list — this cache still re-proves its product against the live
+    // section on every read to catch an in-place edit reaching in through that inner list.
+    private WorldFieldsSection? GetCompiledFields() {
+        var cache = GetCompilationCache(state: StateRaw);
+
+        if (Volatile.Read(location: ref cache.FieldsCompiled)) {
+            var warm = Volatile.Read(location: ref cache.Fields);
+
+            if (WorldFieldsSection.MatchesState(
+                composite: warm,
+                state: StateRaw
+            )) {
+                return warm;
+            }
+        }
+
+        lock (cache.SyncRoot) {
+            if (
+                !cache.FieldsCompiled ||
+                !WorldFieldsSection.MatchesState(
+                composite: cache.Fields,
+                state: StateRaw
+            )
+            ) {
+                cache.Fields = WorldFieldsSection.Compile(state: StateRaw);
+                Volatile.Write(
+                    location: ref cache.FieldsCompiled,
+                    value: true
+                );
+            }
+
+            return cache.Fields;
+        }
+    }
+    private WorldFieldProgram? GetFieldProgram() {
+        var cache = GetCompilationCache(state: StateRaw);
+
+        lock (cache.SyncRoot) {
+            var fields = GetCompiledFields();
+            var catalog = GetStateCatalog();
+
+            if (
+                !cache.FieldProgramCompiled ||
+                ((fields is null) != (cache.FieldProgram is null)) ||
+                (
+                    (fields is not null) &&
+                    (
+                        (cache.FieldProgram is null) ||
+                        (cache.FieldProgramFields is null) ||
+                        !ReferenceEquals(
+                objA: cache.FieldProgram.StateCatalog,
+                objB: catalog
+            ) ||
+                        !cache.FieldProgramFields.HasSameProgram(other: fields)
+                    )
+                )
+            ) {
+                cache.FieldProgram = ((fields is null)
+                    ? null
+                    : WorldFieldProgram.Compile(
+                        document: fields,
+                        state: catalog
+                    )
+                );
+                cache.FieldProgramFields = fields;
+                cache.FieldProgramCompiled = true;
+            }
+
+            return cache.FieldProgram;
+        }
+    }
+    // The catalog's shape depends only on WorldStateSection's own lists (World/Body/Identity/Lattices' names and
+    // kinds), every one of which the section owns an immutable copy of — construction and `with` alike. A candidate
+    // section that changed shape is therefore always a NEW StateRaw reference (a `with` publishes a new instance),
+    // so a product keyed under this reference (the ConditionalWeakTable key) is the answer for it for as long as the
+    // reference lives; a warm read trusts that without re-walking the shape, which is what makes this cache cheap on
+    // the tick path (every rule operand resolves a name through the catalog). The lock covers only compilation and
+    // its publication; a product is published after it is complete, so a reader that observes it observes a
+    // finished one.
+    private StateCatalog GetStateCatalog() {
+        var cache = GetCompilationCache(state: StateRaw);
+
+        if (Volatile.Read(location: ref cache.StateCatalog) is { } warm) {
+            return warm;
+        }
+
+        lock (cache.SyncRoot) {
+            cache.StateCatalog ??= StateCatalog.Compile(section: StateRaw);
+
+            return cache.StateCatalog;
+        }
+    }
+    private void PreserveCompatibleCompilation(WorldDefinition target) {
+        if (!TryGetCompilationCache(
+            state: StateRaw,
+            cache: out var sourceCache
+        )) {
+            return;
+        }
+
+        var targetCache = GetCompilationCache(state: target.StateRaw);
+
+        lock (sourceCache.SyncRoot) {
+            lock (targetCache.SyncRoot) {
+                if (sourceCache.FieldsCompiled) {
+                    targetCache.Fields = (WorldFieldsSection.MatchesState(
+                        composite: sourceCache.Fields,
+                        state: target.StateRaw
+                    )
+                        ? sourceCache.Fields
+                        : WorldFieldsSection.Compile(state: target.StateRaw)
+                    );
+                    Volatile.Write(
+                        location: ref targetCache.FieldsCompiled,
+                        value: true
+                    );
+                }
+
+                if (sourceCache.StateCatalog is not null) {
+                    targetCache.StateCatalog = (sourceCache.StateCatalog.MatchesShape(section: target.StateRaw)
+                        ? sourceCache.StateCatalog
+                        : StateCatalog.Compile(section: target.StateRaw)
+                    );
+                }
+
+                if (sourceCache.FieldProgramCompiled) {
+                    var fields = (targetCache.FieldsCompiled
+                        ? targetCache.Fields
+                        : WorldFieldsSection.Compile(state: target.StateRaw)
+                    );
+                    var catalog = (targetCache.StateCatalog ?? StateCatalog.Compile(section: target.StateRaw));
+
+                    targetCache.Fields = fields;
+                    Volatile.Write(
+                        location: ref targetCache.FieldsCompiled,
+                        value: true
+                    );
+                    targetCache.StateCatalog = catalog;
+                    targetCache.FieldProgram = (
+                        ((sourceCache.FieldProgram is not null) &&
+                        (sourceCache.FieldProgramFields is not null) &&
+                        (fields is not null) &&
+                        ReferenceEquals(
+                        objA: sourceCache.FieldProgram.StateCatalog,
+                        objB: catalog
+                    ) &&
+                        sourceCache.FieldProgramFields.HasSameProgram(other: fields))
+                        ? sourceCache.FieldProgram
+                        : ((fields is null)
+                            ? null
+                            : WorldFieldProgram.Compile(
+                                document: fields,
+                                state: catalog
+                            )
+                    ));
+                    targetCache.FieldProgramFields = fields;
+                    targetCache.FieldProgramCompiled = true;
+                }
+            }
+        }
+    }
+    private static bool TryGetCompilationCache(WorldStateSection? state, out RuntimeCompilationCache cache) {
+        if (state is null) {
+            cache = AbsentStateCompilation;
+
+            return true;
+        }
+
+        return RuntimeCompilationCaches.TryGetValue(
+            key: state,
+            value: out cache!
+        );
+    }
 
     /// <summary>Returns the compiled form of one adjacency row's
     /// <see cref="WorldAdjacency.LivenessGraceSeconds"/> — a <see cref="CompiledTickDuration"/> in simulation ticks,
@@ -352,7 +607,12 @@ public sealed record WorldDefinition(
                 continue;
             }
 
-            var screen = Screens.FirstOrDefault(candidate => candidate?.Source is WorldScreenSource.Machine source && string.Equals(source.Instance, machine.Name, StringComparison.Ordinal));
+            var screen = Screens.FirstOrDefault(predicate: candidate => ((candidate?.Source is WorldScreenSource.Machine source) && string.Equals(
+                a: source.Instance,
+                b: machine.Name,
+                comparisonType: StringComparison.Ordinal
+            )));
+
             if (screen is null) {
                 continue;
             }
@@ -386,83 +646,6 @@ public sealed record WorldDefinition(
 
         return groups;
     }
-
-    /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
-    /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the standard posture is authored in
-    /// <c>standard.world.json</c>.</summary>
-    [JsonIgnore]
-    public WorldRenderDefaults Render => (RenderRaw ?? WorldRenderDefaults.Absent);
-    /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
-    public string Schema { get; init; } = SchemaVersion;
-    /// <summary>Gets the authored per-seat mode families (see <see cref="WorldSeatModeFamily"/>) — ABSENT resolves to
-    /// none. A world declares none when it wants no <c>player.mode</c>-addressable seat state at all.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldSeatModeFamily> SeatModes => (SeatModesRaw ?? []);
-    /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldScreen> Screens => (ScreensRaw ?? []);
-    /// <summary>Gets the named machine instances. An absent section runs no declared devices.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldMachine> Machines => MachinesRaw ?? [];
-    /// <summary>Gets the declared probe rows — ABSENT resolves to none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);
-    /// <summary>Gets the effective simulation rate in Hz — <see cref="Simulation"/>'s authored
-    /// <see cref="WorldSimulationDefaults.RateHz"/>, or <see cref="UnauthoredSimulationRateHz"/> when this world
-    /// authors no <see cref="Simulation"/> section at all; a world that wants the resident, non-stepping rate
-    /// instead authors <c>simulation: {"rateHz": 0}</c> by name.
-    /// The seam every simulation-tick-scoped duration on this
-    /// document compiles through (see <see cref="PopulationReconnectGraceTicks"/>, <see cref="CompiledInputHold"/>):
-    /// computed here, on the fully-parsed aggregate, rather than threaded as a parameter to each sub-section's own
-    /// converter, because a sub-section (e.g. <see cref="WorldBodiesDefaults"/>, a struct) has no reference back to
-    /// the document that carries both it and the rate, and the rate itself is just another sibling property in the same
-    /// JSON object being parsed — there is no ordering guarantee that would let a nested converter see it first. A
-    /// caller that already holds a <see cref="WorldDefinition"/> reads this property directly; nothing threads a raw
-    /// rate parameter by hand.</summary>
-    [JsonIgnore]
-    public int SimulationRateHz => (Simulation?.RateHz ?? UnauthoredSimulationRateHz);
-    /// <summary>Gets the named spawn poses seats and population policies reference — ABSENT resolves to empty,
-    /// EXCEPT that a spawn-point id of <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> is always resolvable:
-    /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is
-    /// added under that id — the point <see cref="WorldBodiesDefaults.SeatSpawns"/>' own absence derivation
-    /// addresses. A document that authors its own <c>spawnPoints</c> (even an explicit empty list) gets no implicit
-    /// point; a seat spawn naming one it does not declare then refuses by name like any other dangling reference.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldSpawnPoint> SpawnPoints => (SpawnPointsRaw ?? [WorldSpawnPointDefaults.ImplicitOrigin]);
-    /// <summary>Gets the placeable speaker rows — ABSENT resolves to none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldSpeaker> Speakers => (SpeakersRaw ?? []);
-    /// <summary>Gets the <c>state</c> section — ABSENT resolves to none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldStateRow> State => (StateRaw?.World ?? []);
-    /// <summary>Gets the storage host-section defaults — ABSENT resolves to <see cref="WorldStorageDefaults.None"/>
-    /// (cloud unwired, identity declined).</summary>
-    [JsonIgnore]
-    public WorldStorageDefaults Storage => (StorageRaw ?? WorldStorageDefaults.None);
-    /// <summary>Gets the named per-body target registers and their designation envelopes — ABSENT resolves to
-    /// none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldTargetRegister> TargetRegisters => (TargetRegistersRaw ?? []);
-    /// <summary>Gets the bounded surface, free-volume, and live-medium navigation authoring — ABSENT resolves to no domains.</summary>
-    [JsonIgnore]
-    public WorldNavigationSection Navigation => (NavigationRaw ?? WorldNavigationSection.Absent);
-    /// <summary>Gets the <c>search</c> section — ABSENT resolves to no jobs.</summary>
-    [JsonIgnore]
-    public WorldSearchSection Search => (SearchRaw ?? WorldSearchSection.Absent);
-    /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
-    /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in
-    /// <c>standard.world.json</c>.</summary>
-    [JsonIgnore]
-    public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
-    /// <summary>Gets the tune asset rows — ABSENT resolves to none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldTune> Tunes => (TunesRaw ?? []);
-    /// <summary>Gets the window composition — ABSENT resolves to <see cref="WorldViewDefaults.Absent"/>, which
-    /// composes nothing; a document whose census implies a body is refused for authoring no <c>views</c>, so only a
-    /// seatless world ever reads the placeholder.</summary>
-    [JsonIgnore]
-    public WorldViewDefaults Views => (ViewsRaw ?? WorldViewDefaults.Absent);
-
     /// <summary>Returns a copy with its document-owned world-state rows replaced while preserving the body and
     /// identity declaration lanes.</summary>
     public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows) {
@@ -475,163 +658,17 @@ public sealed record WorldDefinition(
         return updated;
     }
 
-    private static readonly RuntimeCompilationCache s_absentStateCompilation = new();
-    private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> s_runtimeCompilationCaches = new();
-
-    // Fields/FieldProgram compile from every reaction a lattice-shaped row's topology carries, and a topology's own
-    // Reactions list is not a WorldStateSection list — this cache still re-proves its product against the live
-    // section on every read to catch an in-place edit reaching in through that inner list.
-    private WorldFieldsSection? GetCompiledFields() {
-        var cache = GetCompilationCache(state: StateRaw);
-
-        if (Volatile.Read(location: ref cache.FieldsCompiled)) {
-            var warm = Volatile.Read(location: ref cache.Fields);
-
-            if (WorldFieldsSection.MatchesState(composite: warm, state: StateRaw)) {
-                return warm;
-            }
-        }
-
-        lock (cache.SyncRoot) {
-            if (
-                !cache.FieldsCompiled ||
-                !WorldFieldsSection.MatchesState(
-                    composite: cache.Fields,
-                    state: StateRaw
-                )
-            ) {
-                cache.Fields = WorldFieldsSection.Compile(state: StateRaw);
-                Volatile.Write(location: ref cache.FieldsCompiled, value: true);
-            }
-
-            return cache.Fields;
-        }
-    }
-    // The catalog's shape depends only on WorldStateSection's own lists (World/Body/Identity/Lattices' names and
-    // kinds), every one of which the section owns an immutable copy of — construction and `with` alike. A candidate
-    // section that changed shape is therefore always a NEW StateRaw reference (a `with` publishes a new instance),
-    // so a product keyed under this reference (the ConditionalWeakTable key) is the answer for it for as long as the
-    // reference lives; a warm read trusts that without re-walking the shape, which is what makes this cache cheap on
-    // the tick path (every rule operand resolves a name through the catalog). The lock covers only compilation and
-    // its publication; a product is published after it is complete, so a reader that observes it observes a
-    // finished one.
-    private StateCatalog GetStateCatalog() {
-        var cache = GetCompilationCache(state: StateRaw);
-
-        if (Volatile.Read(location: ref cache.StateCatalog) is { } warm) {
-            return warm;
-        }
-
-        lock (cache.SyncRoot) {
-            cache.StateCatalog ??= StateCatalog.Compile(section: StateRaw);
-
-            return cache.StateCatalog;
-        }
-    }
-    private WorldFieldProgram? GetFieldProgram() {
-        var cache = GetCompilationCache(state: StateRaw);
-
-        lock (cache.SyncRoot) {
-            var fields = GetCompiledFields();
-            var catalog = GetStateCatalog();
-
-            if (
-                !cache.FieldProgramCompiled ||
-                ((fields is null) != (cache.FieldProgram is null)) ||
-                (
-                    (fields is not null) &&
-                    (
-                        (cache.FieldProgram is null) ||
-                        (cache.FieldProgramFields is null) ||
-                        !ReferenceEquals(objA: cache.FieldProgram.StateCatalog, objB: catalog) ||
-                        !cache.FieldProgramFields.HasSameProgram(other: fields)
-                    )
-                )
-            ) {
-                cache.FieldProgram = ((fields is null)
-                    ? null
-                    : WorldFieldProgram.Compile(document: fields, state: catalog)
-                );
-                cache.FieldProgramFields = fields;
-                cache.FieldProgramCompiled = true;
-            }
-
-            return cache.FieldProgram;
-        }
-    }
-    private void PreserveCompatibleCompilation(WorldDefinition target) {
-        if (!TryGetCompilationCache(state: StateRaw, cache: out var sourceCache)) {
-            return;
-        }
-
-        var targetCache = GetCompilationCache(state: target.StateRaw);
-
-        lock (sourceCache.SyncRoot) {
-            lock (targetCache.SyncRoot) {
-                if (sourceCache.FieldsCompiled) {
-                    targetCache.Fields = (WorldFieldsSection.MatchesState(composite: sourceCache.Fields, state: target.StateRaw)
-                        ? sourceCache.Fields
-                        : WorldFieldsSection.Compile(state: target.StateRaw)
-                    );
-                    Volatile.Write(location: ref targetCache.FieldsCompiled, value: true);
-                }
-
-                if (sourceCache.StateCatalog is not null) {
-                    targetCache.StateCatalog = (sourceCache.StateCatalog.MatchesShape(section: target.StateRaw)
-                        ? sourceCache.StateCatalog
-                        : StateCatalog.Compile(section: target.StateRaw)
-                    );
-                }
-
-                if (sourceCache.FieldProgramCompiled) {
-                    var fields = (targetCache.FieldsCompiled
-                        ? targetCache.Fields
-                        : WorldFieldsSection.Compile(state: target.StateRaw)
-                    );
-                    var catalog = (targetCache.StateCatalog ?? StateCatalog.Compile(section: target.StateRaw));
-
-                    targetCache.Fields = fields;
-                    Volatile.Write(location: ref targetCache.FieldsCompiled, value: true);
-                    targetCache.StateCatalog = catalog;
-                    targetCache.FieldProgram = (
-                        ((sourceCache.FieldProgram is not null) &&
-                        (sourceCache.FieldProgramFields is not null) &&
-                        (fields is not null) &&
-                        ReferenceEquals(objA: sourceCache.FieldProgram.StateCatalog, objB: catalog) &&
-                        sourceCache.FieldProgramFields.HasSameProgram(other: fields))
-                            ? sourceCache.FieldProgram
-                            : ((fields is null)
-                                ? null
-                                : WorldFieldProgram.Compile(document: fields, state: catalog)
-                    ));
-                    targetCache.FieldProgramFields = fields;
-                    targetCache.FieldProgramCompiled = true;
-                }
-            }
-        }
-    }
-    private static RuntimeCompilationCache GetCompilationCache(WorldStateSection? state) => (
-        (state is null)
-            ? s_absentStateCompilation
-            : s_runtimeCompilationCaches.GetOrCreateValue(key: state)
-    );
-    private static bool TryGetCompilationCache(WorldStateSection? state, out RuntimeCompilationCache cache) {
-        if (state is null) {
-            cache = s_absentStateCompilation;
-
-            return true;
-        }
-
-        return s_runtimeCompilationCaches.TryGetValue(key: state, value: out cache!);
-    }
+    private static readonly RuntimeCompilationCache AbsentStateCompilation = new();
+    private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> RuntimeCompilationCaches = new();
 
     private sealed class RuntimeCompilationCache {
-        public object SyncRoot { get; } = new();
-        public bool FieldsCompiled;
-        public WorldFieldsSection? Fields;
-        public StateCatalog? StateCatalog;
-        public bool FieldProgramCompiled { get; set; }
         public WorldFieldProgram? FieldProgram { get; set; }
+        public bool FieldProgramCompiled { get; set; }
         public WorldFieldsSection? FieldProgramFields { get; set; }
+        public object SyncRoot { get; } = new();
+
+        public WorldFieldsSection? Fields;
+        public bool FieldsCompiled;
+        public StateCatalog? StateCatalog;
     }
 }

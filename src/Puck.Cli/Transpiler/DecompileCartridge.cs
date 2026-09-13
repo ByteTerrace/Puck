@@ -13,7 +13,6 @@ internal static class DecompileCartridge {
         b: CartridgeVocabulary.Schema,
         comparisonType: StringComparison.Ordinal
     );
-
     /// <summary>Writes the cartridge out as source.</summary>
     /// <param name="document">The cartridge JSON.</param>
     /// <returns>The source text.</returns>

@@ -15,21 +15,36 @@ public static partial class WorldDecompiler {
     // property loop skips the key outright.
     private static bool CanSugarPrototypes(JsonArray prototypes) {
         foreach (var item in prototypes) {
-            if (item is not JsonObject proto || proto["id"] is not JsonValue idVal || !idVal.TryGetValue<string>(out var id) || (id.Length == 0)) {
+            if (
+                (item is not JsonObject proto) ||
+                (proto["id"] is not JsonValue idVal) ||
+                !idVal.TryGetValue<string>(value: out var id) ||
+                (id.Length == 0)
+            ) {
                 return false;
             }
-            if (proto.ContainsKey("document") && proto["document"] is not JsonObject) {
+            if (
+                proto.ContainsKey(propertyName: "document") &&
+                (proto["document"] is not JsonObject)
+            ) {
                 return false;
             }
         }
         return true;
     }
-
     private static void DecompilePrototypesBlock(StringBuilder sb, JsonArray prototypes, int indentLevel) {
-        var indent = new string(' ', indentLevel * 4);
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}prototypes {{");
+        var indent = new string(
+            c: ' ',
+            count: (indentLevel * 4)
+        );
+
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}prototypes {{"
+        );
 
         var first = true;
+
         foreach (var item in prototypes) {
             if (item is not JsonObject proto) {
                 continue;
@@ -38,21 +53,43 @@ public static partial class WorldDecompiler {
                 sb.AppendLine();
             }
             first = false;
-            AppendPrototypeRow(sb, proto, indentLevel + 1);
+            AppendPrototypeRow(
+                indentLevel: (indentLevel + 1),
+                proto: proto,
+                sb: sb
+            );
         }
 
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
     }
-
     private static void AppendPrototypeRow(StringBuilder sb, JsonObject proto, int indentLevel) {
-        var indent = new string(' ', indentLevel * 4);
-        var inner = indentLevel + 1;
-        var innerIndent = new string(' ', inner * 4);
-        var id = proto["id"]?.ToString() ?? "";
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}prototype \"{EscapeString(id)}\" {{");
+        var indent = new string(
+            c: ' ',
+            count: (indentLevel * 4)
+        );
+        var inner = (indentLevel + 1);
+        var innerIndent = new string(
+            c: ' ',
+            count: (inner * 4)
+        );
+        var id = (proto["id"]?.ToString() ?? "");
+
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}prototype \"{EscapeString(s: id)}\" {{"
+        );
 
         if (proto["document"] is JsonObject documentObj) {
-            DecompileNamedBlock(sb, "document", null, documentObj, inner);
+            DecompileNamedBlock(
+                sb,
+                "document",
+                null,
+                documentObj,
+                inner
+            );
         }
 
         foreach (var (k, v) in proto) {
@@ -60,12 +97,23 @@ public static partial class WorldDecompiler {
                 continue;
             }
             if (v is null) {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: null");
+                sb.AppendLine(
+                    CultureInfo.InvariantCulture,
+                    $"{innerIndent}{k}: null"
+                );
                 continue;
             }
-            EmitField(sb, k, v, inner);
+            EmitField(
+                indentLevel: inner,
+                key: k,
+                sb: sb,
+                value: v
+            );
         }
 
-        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
     }
 }

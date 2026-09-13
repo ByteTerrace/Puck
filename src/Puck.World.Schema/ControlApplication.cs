@@ -18,6 +18,11 @@ namespace Puck.World.Protocol;
 /// <param name="Reach">The channel ordinals this application delivers at all. A masked-out ordinal still drives the
 /// source body through its own-body application (when that member is present) but never reaches this target.</param>
 public readonly record struct ControlApplication(GrantSubject Target, string? Kit, ChannelReachMask Reach) {
+    /// <summary>Describes the application for a console echo — <c>&lt;target&gt;[/&lt;kit&gt;](mask=0x…)</c>.</summary>
+    /// <returns>The label.</returns>
+    public string Describe() => $"{Target.Describe()}{((Kit is { Length: > 0 } kit)
+        ? $"/{kit}"
+        : string.Empty)}(mask=0x{Reach.Bits:x4})";
     /// <summary>Creates the own-body application — passthrough over every ordinal onto the participant's own body.
     /// Its presence in the set is exactly "the avatar drives itself"; its absence is exactly "captured".</summary>
     /// <param name="bodyIndex">The 0-based entity index of the participant's own body.</param>
@@ -26,9 +31,4 @@ public readonly record struct ControlApplication(GrantSubject Target, string? Ki
         Reach: ChannelReachMask.All,
         Target: GrantSubject.Body(index: bodyIndex)
     );
-    /// <summary>Describes the application for a console echo — <c>&lt;target&gt;[/&lt;kit&gt;](mask=0x…)</c>.</summary>
-    /// <returns>The label.</returns>
-    public string Describe() => $"{Target.Describe()}{((Kit is { Length: > 0 } kit)
-        ? $"/{kit}"
-        : string.Empty)}(mask=0x{Reach.Bits:x4})";
 }

@@ -14,11 +14,11 @@ namespace Puck.World.Tests;
 internal static class TestHookInstaller {
     internal static WorldMachineCatalog CreateMachineCatalog() {
         var registry = new WorldMachineExtensionRegistry();
-        new HumbleGamingBrickExtension().Initialize(registry);
-        new AdvancedGamingBrickExtension().Initialize(registry);
+
+        new HumbleGamingBrickExtension().Initialize(registry: registry);
+        new AdvancedGamingBrickExtension().Initialize(registry: registry);
         return registry.Build();
     }
-
     [ModuleInitializer]
     internal static void Install() {
         WorldSchemaVocabularyHooks.Install(

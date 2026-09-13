@@ -422,7 +422,7 @@ of wrapping, and a later Replace remains an ordinary assignment.
 ## Navigation
 
 The A*/shared-search kernel—`Puck.Physics.Navigation.NavigationRuntime`—is
-Physics vocabulary; see [its README](../Puck.Physics/README.md#navigation-kernel-navigation)
+Physics vocabulary; see [the navigation reference](../../docs/reference/physics.md#navigation-kernel-navigation)
 for the algorithm, the swept-sphere edge proof, and the shared-tree checkpoint
 shapes. `WorldPopulation` owns the document seam: `CompileNavigationDomains`
 (`WorldPopulation.Navigation.cs`) compiles each authored `navigation.domains`
@@ -550,7 +550,7 @@ buffer for that fold alone.
 ## Field lattice
 
 The reaction integrator—`Puck.Physics.Fields.FieldLattice`—is Physics
-vocabulary; see [its README](../Puck.Physics/README.md#field-lattice-fields)
+vocabulary; see [the field reference](../../docs/reference/physics.md#field-lattice-fields)
 for the reaction kinds, paint fills, medium-coupling geometry, and checkpoint
 shape. `WorldPopulation` owns the document seam:
 `WorldPopulation.CompileFieldLatticeInput` (`WorldPopulation.Resolve.cs`)

@@ -17,22 +17,37 @@ internal enum SpikeShapeKind {
 /// <param name="SegmentHalf">Half the capsule's segment, in body axes; unused by the other kinds.</param>
 /// <param name="HalfExtents">The box's half-extents, in body axes; unused by the other kinds.</param>
 internal readonly record struct SpikeShape(SpikeShapeKind Kind, FixedQ4816 Radius, FixedVector3 SegmentHalf, FixedVector3 HalfExtents) {
-    /// <summary>Creates a sphere.</summary>
-    /// <param name="radius">The radius.</param>
+    /// <summary>Creates a box.</summary>
+    /// <param name="halfExtents">The half-extents, in body axes.</param>
     /// <returns>The shape.</returns>
-    internal static SpikeShape Sphere(FixedQ4816 radius) =>
-        new(Kind: SpikeShapeKind.Sphere, Radius: radius, SegmentHalf: FixedVector3.Zero, HalfExtents: FixedVector3.Zero);
+    internal static SpikeShape Box(FixedVector3 halfExtents) =>
+        new(
+            Kind: SpikeShapeKind.Box,
+            Radius: FixedQ4816.Zero,
+            SegmentHalf: FixedVector3.Zero,
+            HalfExtents: halfExtents
+        );
     /// <summary>Creates a capsule.</summary>
     /// <param name="segmentHalf">Half the segment, in body axes.</param>
     /// <param name="radius">The radius.</param>
     /// <returns>The shape.</returns>
     internal static SpikeShape Capsule(FixedVector3 segmentHalf, FixedQ4816 radius) =>
-        new(Kind: SpikeShapeKind.Capsule, Radius: radius, SegmentHalf: segmentHalf, HalfExtents: FixedVector3.Zero);
-    /// <summary>Creates a box.</summary>
-    /// <param name="halfExtents">The half-extents, in body axes.</param>
+        new(
+            Kind: SpikeShapeKind.Capsule,
+            Radius: radius,
+            SegmentHalf: segmentHalf,
+            HalfExtents: FixedVector3.Zero
+        );
+    /// <summary>Creates a sphere.</summary>
+    /// <param name="radius">The radius.</param>
     /// <returns>The shape.</returns>
-    internal static SpikeShape Box(FixedVector3 halfExtents) =>
-        new(Kind: SpikeShapeKind.Box, Radius: FixedQ4816.Zero, SegmentHalf: FixedVector3.Zero, HalfExtents: halfExtents);
+    internal static SpikeShape Sphere(FixedQ4816 radius) =>
+        new(
+            Kind: SpikeShapeKind.Sphere,
+            Radius: radius,
+            SegmentHalf: FixedVector3.Zero,
+            HalfExtents: FixedVector3.Zero
+        );
 }
 /// <summary>
 /// A body's ABSOLUTE placement. It belongs to the fixture, never to the solver: candidate generation reads it, the
@@ -60,9 +75,9 @@ internal interface ISpikeSurface {
 }
 /// <summary>An unbounded half-space: the solid is everything with <c>dot(p, normal) &lt; offset</c>.</summary>
 internal sealed class HalfSpaceSurface : ISpikeSurface {
-    private readonly int m_sourceId;
     private readonly FixedVector3 m_normal;
     private readonly FixedQ4816 m_offset;
+    private readonly int m_sourceId;
 
     /// <summary>Creates a half-space.</summary>
     /// <param name="sourceId">The surface's identity, which becomes one arm of every candidate's composite key.</param>
@@ -77,67 +92,6 @@ internal sealed class HalfSpaceSurface : ISpikeSurface {
     /// <inheritdoc/>
     public int SampleCount => 0;
 
-    /// <inheritdoc/>
-    public void ResetSampleCount() {
-    }
-    /// <inheritdoc/>
-    public void Generate(BodyPose pose, SpikeShape shape, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
-        ArgumentNullException.ThrowIfNull(argument: pose);
-        ArgumentNullException.ThrowIfNull(argument: output);
-
-        var height = (FixedVector3.Dot(left: pose.Center, right: m_normal) - m_offset);
-
-        switch (shape.Kind) {
-            case SpikeShapeKind.Sphere: {
-                    Emit(featureId: 0, offset: FixedVector3.Zero, separation: (height - shape.Radius), radius: shape.Radius, activationBound: activationBound, output: output);
-
-                    break;
-                }
-
-            case SpikeShapeKind.Capsule: {
-                    // A segment's support against a PLANE is always an endpoint, so the endpoint set is exact here; a
-                    // curved or bounded surface is a different story, which is what the field surface below exists for.
-                    var half = pose.Orientation.Rotate(vector: shape.SegmentHalf);
-
-                    for (var index = 0; (index < 2); ++index) {
-                        var end = ((index == 0) ? half : -half);
-
-                        Emit(
-                            featureId: index,
-                            offset: end,
-                            separation: ((height + FixedVector3.Dot(left: end, right: m_normal)) - shape.Radius),
-                            radius: shape.Radius,
-                            activationBound: activationBound,
-                            output: output
-                        );
-                    }
-
-                    break;
-                }
-
-            default: {
-                    for (var index = 0; (index < 8); ++index) {
-                        var corner = pose.Orientation.Rotate(vector: new FixedVector3(
-                            X: (((index & 1) == 0) ? -shape.HalfExtents.X : shape.HalfExtents.X),
-                            Y: (((index & 2) == 0) ? -shape.HalfExtents.Y : shape.HalfExtents.Y),
-                            Z: (((index & 4) == 0) ? -shape.HalfExtents.Z : shape.HalfExtents.Z)
-                        ));
-
-                        Emit(
-                            featureId: index,
-                            offset: corner,
-                            separation: (height + FixedVector3.Dot(left: corner, right: m_normal)),
-                            radius: FixedQ4816.Zero,
-                            activationBound: activationBound,
-                            output: output
-                        );
-                    }
-
-                    break;
-                }
-        }
-    }
-
     private void Emit(int featureId, FixedVector3 offset, FixedQ4816 separation, FixedQ4816 radius, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
         if (separation > activationBound) {
             return;
@@ -151,15 +105,101 @@ internal sealed class HalfSpaceSurface : ISpikeSurface {
             SourceId: m_sourceId
         ));
     }
+
+    /// <inheritdoc/>
+    public void Generate(BodyPose pose, SpikeShape shape, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
+        ArgumentNullException.ThrowIfNull(argument: pose);
+        ArgumentNullException.ThrowIfNull(argument: output);
+
+        var height = (FixedVector3.Dot(
+            left: pose.Center,
+            right: m_normal
+        ) - m_offset);
+
+        switch (shape.Kind) {
+            case SpikeShapeKind.Sphere: {
+                    Emit(
+                        featureId: 0,
+                        offset: FixedVector3.Zero,
+                        separation: (height - shape.Radius),
+                        radius: shape.Radius,
+                        activationBound: activationBound,
+                        output: output
+                    );
+
+                    break;
+                }
+
+            case SpikeShapeKind.Capsule: {
+                    // A segment's support against a PLANE is always an endpoint, so the endpoint set is exact here; a
+                    // curved or bounded surface is a different story, which is what the field surface below exists for.
+                    var half = pose.Orientation.Rotate(vector: shape.SegmentHalf);
+
+                    for (var index = 0; (index < 2); ++index) {
+                        var end = ((index == 0)
+                            ? half
+                            : -half
+                        );
+
+                        Emit(
+                            featureId: index,
+                            offset: end,
+                            separation: ((height + FixedVector3.Dot(
+                                left: end,
+                                right: m_normal
+                            )) - shape.Radius),
+                            radius: shape.Radius,
+                            activationBound: activationBound,
+                            output: output
+                        );
+                    }
+
+                    break;
+                }
+
+            default: {
+                    for (var index = 0; (index < 8); ++index) {
+                        var corner = pose.Orientation.Rotate(vector: new FixedVector3(
+                            X: (((index & 1) == 0)
+                            ? -shape.HalfExtents.X
+                            : shape.HalfExtents.X),
+                            Y: (((index & 2) == 0)
+                            ? -shape.HalfExtents.Y
+                            : shape.HalfExtents.Y),
+                            Z: (((index & 4) == 0)
+                            ? -shape.HalfExtents.Z
+                            : shape.HalfExtents.Z)
+                        ));
+
+                        Emit(
+                            featureId: index,
+                            offset: corner,
+                            separation: (height + FixedVector3.Dot(
+                                left: corner,
+                                right: m_normal
+                            )),
+                            radius: FixedQ4816.Zero,
+                            activationBound: activationBound,
+                            output: output
+                        );
+                    }
+
+                    break;
+                }
+        }
+    }
+    /// <inheritdoc/>
+    public void ResetSampleCount() {
+    }
 }
 /// <summary>
 /// A slab bounded by two parallel faces. Its witness is the NEAREST face, which is exactly the behaviour that makes a
 /// deeply embedded body's normal untrustworthy: past the midplane the nearest face is the far one.
 /// </summary>
 internal sealed class SlabSurface : ISpikeSurface {
-    private readonly int m_sourceId;
     private readonly FixedVector3 m_axis;
     private readonly FixedQ4816 m_lower;
+    private readonly int m_sourceId;
     private readonly FixedQ4816 m_upper;
 
     /// <summary>Creates a slab.</summary>
@@ -178,14 +218,14 @@ internal sealed class SlabSurface : ISpikeSurface {
     public int SampleCount => 0;
 
     /// <inheritdoc/>
-    public void ResetSampleCount() {
-    }
-    /// <inheritdoc/>
     public void Generate(BodyPose pose, SpikeShape shape, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
         ArgumentNullException.ThrowIfNull(argument: pose);
         ArgumentNullException.ThrowIfNull(argument: output);
 
-        var height = FixedVector3.Dot(left: pose.Center, right: m_axis);
+        var height = FixedVector3.Dot(
+            left: pose.Center,
+            right: m_axis
+        );
         var aboveGap = (height - m_upper);
         var belowGap = (m_lower - height);
         FixedVector3 normal;
@@ -220,6 +260,9 @@ internal sealed class SlabSurface : ISpikeSurface {
             Separation: separation
         ));
     }
+    /// <inheritdoc/>
+    public void ResetSampleCount() {
+    }
 }
 /// <summary>How a field surface looks for a capsule's witness.</summary>
 internal enum CapsuleWitnessMode {
@@ -234,11 +277,11 @@ internal enum CapsuleWitnessMode {
 /// estimated one.
 /// </summary>
 internal sealed class FieldSurface : ISpikeSurface {
-    private readonly int m_sourceId;
     private readonly IFieldEvaluator m_field;
     private readonly CapsuleWitnessMode m_mode;
-    private readonly int m_scanSegments;
     private readonly int m_refinementSteps;
+    private readonly int m_scanSegments;
+    private readonly int m_sourceId;
 
     private int m_sampleCount;
 
@@ -259,51 +302,50 @@ internal sealed class FieldSurface : ISpikeSurface {
         m_refinementSteps = refinementSteps;
     }
 
-    /// <inheritdoc/>
-    public int SampleCount => m_sampleCount;
-
     /// <summary>Gets the separation the two endpoint samples reported on the most recent generation.</summary>
     internal FixedQ4816 LastEndpointSeparation { get; private set; }
     /// <summary>Gets the separation the winning witness reported on the most recent generation.</summary>
     internal FixedQ4816 LastWitnessSeparation { get; private set; }
 
     /// <inheritdoc/>
-    public void ResetSampleCount() {
-        m_sampleCount = 0;
+    public int SampleCount => m_sampleCount;
+
+    private FixedQ4816 Distance(FixedVector3 point) {
+        ++m_sampleCount;
+
+        return (m_field.TryDistance(
+            position: FixedPosition.FromLocal(local: point),
+            distance: out var distance,
+            material: out _
+        )
+            ? distance
+            : FixedQ4816.MaxValue
+        );
     }
-    /// <inheritdoc/>
-    public void Generate(BodyPose pose, SpikeShape shape, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
-        ArgumentNullException.ThrowIfNull(argument: pose);
-        ArgumentNullException.ThrowIfNull(argument: output);
+    private void EmitAt(BodyPose pose, FixedVector3 witness, FixedQ4816 distance, FixedQ4816 radius, int featureId, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
+        var separation = (distance - radius);
 
-        if (shape.Kind == SpikeShapeKind.Sphere) {
-            EmitAt(pose: pose, witness: pose.Center, distance: Distance(point: pose.Center), radius: shape.Radius, featureId: 0, activationBound: activationBound, output: output);
-
+        if (separation > activationBound) {
             return;
         }
 
-        var half = pose.Orientation.Rotate(vector: shape.SegmentHalf);
-        var start = (pose.Center + half);
-        var end = (pose.Center - half);
-        var startDistance = Distance(point: start);
-        var endDistance = Distance(point: end);
+        m_sampleCount += 6;
 
-        LastEndpointSeparation = (FixedQ4816.Min(x: startDistance, y: endDistance) - shape.Radius);
-
-        if (m_mode == CapsuleWitnessMode.EndpointsOnly) {
-            EmitAt(pose: pose, witness: start, distance: startDistance, radius: shape.Radius, featureId: 0, activationBound: activationBound, output: output);
-            EmitAt(pose: pose, witness: end, distance: endDistance, radius: shape.Radius, featureId: 1, activationBound: activationBound, output: output);
-            LastWitnessSeparation = LastEndpointSeparation;
-
+        if (!m_field.TryFieldGradient(
+            position: FixedPosition.FromLocal(local: witness),
+            gradient: out var normal
+        )) {
             return;
         }
 
-        var (witness, distance) = FindWitness(end: end, endDistance: endDistance, start: start, startDistance: startDistance);
-
-        LastWitnessSeparation = (distance - shape.Radius);
-        EmitAt(pose: pose, witness: witness, distance: distance, radius: shape.Radius, featureId: 2, activationBound: activationBound, output: output);
+        output.Add(item: new FixedContactCandidate(
+            SourceId: m_sourceId,
+            FeatureId: featureId,
+            Anchor: ((witness - pose.Center) - (normal * radius)),
+            Normal: normal,
+            Separation: separation
+        ));
     }
-
     // A uniform scan of the segment followed by a bracket refinement. Both halves visit a FIXED, declared number of
     // parameters in ascending order and break every tie toward the lower one, so the witness is a deterministic
     // function of the pose alone.
@@ -315,7 +357,12 @@ internal sealed class FieldSurface : ISpikeSurface {
         for (var index = 1; (index <= m_scanSegments); ++index) {
             var distance = ((index == m_scanSegments)
                 ? endDistance
-                : Distance(point: FixedVector3.Lerp(from: start, to: end, amount: (FixedQ4816.FromInteger(value: index) / stepCount))));
+                : Distance(point: FixedVector3.Lerp(
+                    from: start,
+                    to: end,
+                    amount: (FixedQ4816.FromInteger(value: index) / stepCount)
+                ))
+            );
 
             if (distance < bestDistance) {
                 bestIndex = index;
@@ -323,15 +370,29 @@ internal sealed class FieldSurface : ISpikeSurface {
             }
         }
 
-        var low = (FixedQ4816.FromInteger(value: Math.Max(val1: (bestIndex - 1), val2: 0)) / stepCount);
-        var high = (FixedQ4816.FromInteger(value: Math.Min(val1: (bestIndex + 1), val2: m_scanSegments)) / stepCount);
+        var low = (FixedQ4816.FromInteger(value: Math.Max(
+            val1: (bestIndex - 1),
+            val2: 0
+        )) / stepCount);
+        var high = (FixedQ4816.FromInteger(value: Math.Min(
+            val1: (bestIndex + 1),
+            val2: m_scanSegments
+        )) / stepCount);
         var mid = (FixedQ4816.FromInteger(value: bestIndex) / stepCount);
 
         for (var refinement = 0; (refinement < m_refinementSteps); ++refinement) {
             var lowMid = ((low + mid) * FixedQ4816.FromDouble(value: 0.5d));
             var highMid = ((mid + high) * FixedQ4816.FromDouble(value: 0.5d));
-            var lowMidDistance = Distance(point: FixedVector3.Lerp(amount: lowMid, from: start, to: end));
-            var highMidDistance = Distance(point: FixedVector3.Lerp(amount: highMid, from: start, to: end));
+            var lowMidDistance = Distance(point: FixedVector3.Lerp(
+                amount: lowMid,
+                from: start,
+                to: end
+            ));
+            var highMidDistance = Distance(point: FixedVector3.Lerp(
+                amount: highMid,
+                from: start,
+                to: end
+            ));
 
             if (lowMidDistance < bestDistance) {
                 high = mid;
@@ -347,34 +408,87 @@ internal sealed class FieldSurface : ISpikeSurface {
             }
         }
 
-        return (FixedVector3.Lerp(amount: mid, from: start, to: end), bestDistance);
+        return (FixedVector3.Lerp(
+            amount: mid,
+            from: start,
+            to: end
+        ), bestDistance);
     }
-    private void EmitAt(BodyPose pose, FixedVector3 witness, FixedQ4816 distance, FixedQ4816 radius, int featureId, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
-        var separation = (distance - radius);
 
-        if (separation > activationBound) {
+    /// <inheritdoc/>
+    public void Generate(BodyPose pose, SpikeShape shape, FixedQ4816 activationBound, List<FixedContactCandidate> output) {
+        ArgumentNullException.ThrowIfNull(argument: pose);
+        ArgumentNullException.ThrowIfNull(argument: output);
+
+        if (shape.Kind == SpikeShapeKind.Sphere) {
+            EmitAt(
+                pose: pose,
+                witness: pose.Center,
+                distance: Distance(point: pose.Center),
+                radius: shape.Radius,
+                featureId: 0,
+                activationBound: activationBound,
+                output: output
+            );
+
             return;
         }
 
-        m_sampleCount += 6;
+        var half = pose.Orientation.Rotate(vector: shape.SegmentHalf);
+        var start = (pose.Center + half);
+        var end = (pose.Center - half);
+        var startDistance = Distance(point: start);
+        var endDistance = Distance(point: end);
 
-        if (!m_field.TryFieldGradient(position: FixedPosition.FromLocal(local: witness), gradient: out var normal)) {
+        LastEndpointSeparation = (FixedQ4816.Min(
+            x: startDistance,
+            y: endDistance
+        ) - shape.Radius);
+
+        if (m_mode == CapsuleWitnessMode.EndpointsOnly) {
+            EmitAt(
+                pose: pose,
+                witness: start,
+                distance: startDistance,
+                radius: shape.Radius,
+                featureId: 0,
+                activationBound: activationBound,
+                output: output
+            );
+            EmitAt(
+                pose: pose,
+                witness: end,
+                distance: endDistance,
+                radius: shape.Radius,
+                featureId: 1,
+                activationBound: activationBound,
+                output: output
+            );
+            LastWitnessSeparation = LastEndpointSeparation;
+
             return;
         }
 
-        output.Add(item: new FixedContactCandidate(
-            SourceId: m_sourceId,
-            FeatureId: featureId,
-            Anchor: ((witness - pose.Center) - (normal * radius)),
-            Normal: normal,
-            Separation: separation
-        ));
-    }
-    private FixedQ4816 Distance(FixedVector3 point) {
-        ++m_sampleCount;
+        var (witness, distance) = FindWitness(
+            end: end,
+            endDistance: endDistance,
+            start: start,
+            startDistance: startDistance
+        );
 
-        return (m_field.TryDistance(position: FixedPosition.FromLocal(local: point), distance: out var distance, material: out _)
-            ? distance
-            : FixedQ4816.MaxValue);
+        LastWitnessSeparation = (distance - shape.Radius);
+        EmitAt(
+            pose: pose,
+            witness: witness,
+            distance: distance,
+            radius: shape.Radius,
+            featureId: 2,
+            activationBound: activationBound,
+            output: output
+        );
+    }
+    /// <inheritdoc/>
+    public void ResetSampleCount() {
+        m_sampleCount = 0;
     }
 }

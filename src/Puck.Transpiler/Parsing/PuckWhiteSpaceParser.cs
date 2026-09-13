@@ -11,20 +11,33 @@ public sealed class PuckWhiteSpaceParser : Parser<TextSpan> {
         var start = cursor.Offset;
 
         while (!cursor.Eof) {
-            if (char.IsWhiteSpace(cursor.Current)) {
+            if (char.IsWhiteSpace(c: cursor.Current)) {
                 cursor.Advance();
-            } else if ((cursor.Current == '/') && (cursor.PeekNext() == '/')) {
-                cursor.Advance(2);
-                while (!cursor.Eof && (cursor.Current != '\n') && (cursor.Current != '\r')) {
+            } else if (
+                (cursor.Current == '/') &&
+                (cursor.PeekNext() == '/')
+            ) {
+                cursor.Advance(count: 2);
+                while (
+                    !cursor.Eof &&
+                    (cursor.Current != '\n') &&
+                    (cursor.Current != '\r')
+                ) {
                     cursor.Advance();
                 }
-            } else if ((cursor.Current == '/') && (cursor.PeekNext() == '*')) {
-                cursor.Advance(2);
-                while (!cursor.Eof && !((cursor.Current == '*') && (cursor.PeekNext() == '/'))) {
+            } else if (
+                (cursor.Current == '/') &&
+                (cursor.PeekNext() == '*')
+            ) {
+                cursor.Advance(count: 2);
+                while (
+                    !cursor.Eof &&
+                    !((cursor.Current == '*') && (cursor.PeekNext() == '/'))
+                ) {
                     cursor.Advance();
                 }
                 if (!cursor.Eof) {
-                    cursor.Advance(2);
+                    cursor.Advance(count: 2);
                 }
             } else {
                 break;
@@ -32,7 +45,15 @@ public sealed class PuckWhiteSpaceParser : Parser<TextSpan> {
         }
 
         if (cursor.Offset > start) {
-            result.Set(start, cursor.Offset, new TextSpan(context.Scanner.Buffer, start, cursor.Offset - start));
+            result.Set(
+                start,
+                cursor.Offset,
+                new TextSpan(
+                    context.Scanner.Buffer,
+                    start,
+                    (cursor.Offset - start)
+                )
+            );
             return true;
         }
 

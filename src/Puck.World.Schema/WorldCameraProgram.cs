@@ -184,6 +184,8 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Blend? BlendOp => FirstOrDefault<WorldCameraProgramOp.Blend>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.ClampPitch"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.ClampPitch? ClampPitchOp => FirstOrDefault<WorldCameraProgramOp.ClampPitch>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
+    public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.FieldOfView"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.FieldOfView? FovOp => FirstOrDefault<WorldCameraProgramOp.FieldOfView>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.LookAt"/> op, or <see langword="null"/>.</summary>
@@ -194,8 +196,6 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Orbit? OrbitOp => FirstOrDefault<WorldCameraProgramOp.Orbit>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Path"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.Path? PathOp => FirstOrDefault<WorldCameraProgramOp.Path>();
-    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
-    public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.SelectProgram"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.SelectProgram? SelectOp => FirstOrDefault<WorldCameraProgramOp.SelectProgram>();
 

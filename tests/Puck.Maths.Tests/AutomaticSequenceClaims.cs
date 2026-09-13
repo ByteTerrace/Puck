@@ -4,6 +4,24 @@ using Xunit;
 namespace Puck.Maths.Tests;
 
 internal static class AutomaticSequenceClaims {
+    private static BigInteger IndependentSquareRootFloor(BigInteger value) {
+        var low = BigInteger.Zero;
+        var high = BigInteger.One;
+
+        while ((high * high) <= value) { high <<= 1; }
+        while ((low + 1) < high) {
+            var middle = ((low + high) >> 1);
+
+            if ((middle * middle) <= value) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+
+        return low;
+    }
+
     public static string? NumerationAutomatonAndRadicalTowerAreExact() {
         var positional = IntegerNumerationSystem.Positional(radix: 2);
         var automaton = new DeterministicOutputAutomaton(
@@ -25,7 +43,10 @@ internal static class AutomaticSequenceClaims {
             (automaton.StateCount != 2) ||
             (automaton.StartState != 0) ||
             (automaton.AlphabetSize != 2) ||
-            (automaton.Transition(digit: 1, state: 0) != 1) ||
+            (automaton.Transition(
+            digit: 1,
+            state: 0
+        ) != 1) ||
             (automaton.OutputSymbol(state: 1) != 1) ||
             (automaton.Run(digits: [1, 0, 1]) != 0)
         ) {
@@ -63,7 +84,10 @@ internal static class AutomaticSequenceClaims {
                 return $"the BigInteger and ulong DFAO paths disagreed with parity at {index}";
             }
 
-            var expectedValue = ((expectedSymbol == 0) ? -BigInteger.One : BigInteger.One);
+            var expectedValue = ((expectedSymbol == 0)
+                ? -BigInteger.One
+                : BigInteger.One
+            );
 
             if (
                 (parity.ValueAt(index: index) != expectedValue) ||
@@ -170,7 +194,8 @@ internal static class AutomaticSequenceClaims {
         ) {
             return "the radical compiler did not preserve the mathematical certificate and zero correction";
         }
-        if (!RadicalShadowTowerVerifier.TryVerify(
+        if (
+            !RadicalShadowTowerVerifier.TryVerify(
             cancellationToken: TestContext.Current.CancellationToken,
             failure: out var verificationFailure,
             program: program,
@@ -210,7 +235,12 @@ internal static class AutomaticSequenceClaims {
 
         var undecided = RadicalShadowTowerAnalyzer.Analyze(
             cancellationToken: TestContext.Current.CancellationToken,
-            parameters: new RadicalShadowTowerParameters(D: 2, U: 0, V: 0, W: 1)
+            parameters: new RadicalShadowTowerParameters(
+                D: 2,
+                U: 0,
+                V: 0,
+                W: 1
+            )
         );
 
         if (
@@ -224,7 +254,12 @@ internal static class AutomaticSequenceClaims {
 
         var invalid = RadicalShadowTowerAnalyzer.Analyze(
             cancellationToken: TestContext.Current.CancellationToken,
-            parameters: new RadicalShadowTowerParameters(D: 4, U: 0, V: 0, W: 0)
+            parameters: new RadicalShadowTowerParameters(
+                D: 4,
+                U: 0,
+                V: 0,
+                W: 0
+            )
         );
 
         if (invalid.Status != RadicalShadowAnalysisStatus.Invalid) {
@@ -249,7 +284,8 @@ internal static class AutomaticSequenceClaims {
         ) {
             return "deterministic analysis limits did not remain distinct from undecided";
         }
-        if (RadicalShadowTowerVerifier.TryVerify(
+        if (
+            RadicalShadowTowerVerifier.TryVerify(
             cancellationToken: TestContext.Current.CancellationToken,
             failure: out verificationFailure,
             limits: new RadicalShadowAnalysisLimits(
@@ -259,7 +295,9 @@ internal static class AutomaticSequenceClaims {
             ),
             program: program,
             verified: out _
-        ) || (verificationFailure != RadicalShadowVerificationFailure.ResourceLimit)) {
+        ) ||
+            (verificationFailure != RadicalShadowVerificationFailure.ResourceLimit)
+        ) {
             return "certificate verification did not enforce the same deterministic bit ceiling";
         }
 
@@ -277,7 +315,8 @@ internal static class AutomaticSequenceClaims {
             proofKind: RadicalShadowProofKind.ExactAffine
         );
 
-        if (RadicalShadowTowerVerifier.TryVerify(
+        if (
+            RadicalShadowTowerVerifier.TryVerify(
             cancellationToken: TestContext.Current.CancellationToken,
             failure: out verificationFailure,
             program: new RadicalShadowTowerProgram(
@@ -285,7 +324,9 @@ internal static class AutomaticSequenceClaims {
                 corrections: wrongCorrections
             ),
             verified: out _
-        ) || (verificationFailure != RadicalShadowVerificationFailure.CorrectionDoesNotMatchProof)) {
+        ) ||
+            (verificationFailure != RadicalShadowVerificationFailure.CorrectionDoesNotMatchProof)
+        ) {
             return "the verifier accepted a nonzero correction under the exact-affine proof";
         }
 
@@ -297,23 +338,5 @@ internal static class AutomaticSequenceClaims {
         }
 
         return null;
-    }
-
-    private static BigInteger IndependentSquareRootFloor(BigInteger value) {
-        var low = BigInteger.Zero;
-        var high = BigInteger.One;
-
-        while ((high * high) <= value) { high <<= 1; }
-        while ((low + 1) < high) {
-            var middle = ((low + high) >> 1);
-
-            if ((middle * middle) <= value) {
-                low = middle;
-            } else {
-                high = middle;
-            }
-        }
-
-        return low;
     }
 }

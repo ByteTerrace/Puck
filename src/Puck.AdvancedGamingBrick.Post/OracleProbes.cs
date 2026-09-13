@@ -17,356 +17,80 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class OracleProbes {
+    private const uint IoBase = 0x04000000u;
+    private const uint ResultBase = 0x02000000u;
+
     private readonly ReadOnlyMemory<byte> m_bios;
 
     public OracleProbes(ReadOnlyMemory<byte> bios) {
         m_bios = bios;
     }
 
-    private const uint IoBase = 0x04000000u;
-    private const uint ResultBase = 0x02000000u;
+    // Timer0 (÷1) enabled, an immediate 1-word DMA runs, then a plain memory access follows: hardware forces the
+    // instruction fetch after a DMA non-sequential. The timer read afterward captures the combined cost. Target: 88.
+    private byte[] BuildDmaForceNseqProbe() {
+        var a = new Asm();
 
-    /// <summary>Runs every probe against the core and prints the measured-vs-documented table. Returns 0 (the two
-    /// self-checking gates gate; the measurement rows never fail the process — they are evidence).</summary>
-    public int RunOracle(string[] args) {
-        var bios = m_bios;
-        var identity = AgbBiosProfile.Identify(image: bios.Span);
-        var hasRetailBios = identity.IsCycleParityTrustworthy;
-
-        Console.WriteLine(value: "== AGB cycle-oracle probes (measured vs documented) ==");
-        Console.WriteLine(value: $"   BIOS: {identity.Description}{(hasRetailBios
-            ? string.Empty
-            : "  (interrupt/halt-region probes need the retail BIOS — they will skip)")}");
-        Console.WriteLine(value: "   rows marked [gate] are self-checking; the rest are our-harness measurements vs the documented corpus targets.");
-        Console.WriteLine();
-
-        var gateFailures = 0;
-
-        // --- Self-checking gate: the hardware-measured Direct Sound FIFO model (survey #4/#5). ------------------------
-        var (fifoOk, fifoLines) = FifoModelProbe();
-
-        Console.WriteLine(value: $"[gate] apu/fifo-model .......... {(fifoOk
-            ? "PASS"
-            : "FAIL")}");
-
-        foreach (var line in fifoLines) {
-            Console.WriteLine(value: $"          {line}");
-        }
-
-        gateFailures += (fifoOk
-            ? 0
-            : 1);
-
-        // --- Self-checking gate: per-channel DMA read-latch isolation (survey #7). ----------------------------------
-        var latch = RunRom(
-            rom: BuildDmaLatchProbe(),
-            resultCount: 2,
-            hasRetailBios: hasRetailBios,
-            needsBios: false
+        a.LdrConst(
+            rd: 0,
+            value: IoBase
         );
-        var latchOk = (latch is [0x00000000u, 0xAABBCCDDu]);
-
-        Console.WriteLine(value: $"[gate] dma/latch-per-channel ... {(latchOk
-            ? "PASS"
-            : "FAIL")}");
-        Console.WriteLine(value: $"          ch0 undrivable-source read = 0x{((latch is null)
-            ? 0
-            : latch[0]):X8} (expect 0x00000000: ch0's own latch, NOT ch1's 0xAABBCCDD — proves per-channel)");
-        Console.WriteLine(value: $"          ch1 drivable transfer      = 0x{((latch is null)
-            ? 0
-            : latch[1]):X8} (expect 0xAABBCCDD: confirms ch1 actually ran)");
-        gateFailures += (latchOk
-            ? 0
-            : 1);
-
-        // --- Measurement rows: our value beside the documented corpus target. ---------------------------------------
-        Console.WriteLine();
-        Console.WriteLine(value: "   -- measurement rows (evidence; divergence recorded, not chased) --");
-
-        Measure(
-            name: "dma/start-delay",
-            documented: "20",
-            rom: BuildDmaStartDelayProbe(),
-            resultIndex: 0,
-            hasRetailBios: hasRetailBios,
-            needsBios: false
+        a.LdrConst(
+            rd: 1,
+            value: 0x00800000u
         );
-        Measure(
-            name: "dma/force-nseq",
-            documented: "88",
-            rom: BuildDmaForceNseqProbe(),
-            resultIndex: 0,
-            hasRetailBios: hasRetailBios,
-            needsBios: false
+        a.Str(
+            imm12: 0x100,
+            rd: 1,
+            rn: 0
         );
-        Measure(
-            name: "timer/start-stop",
-            documented: "3 then frozen 8",
-            rom: BuildTimerStartStopProbe(),
-            resultIndex: -1,
-            hasRetailBios: hasRetailBios,
-            needsBios: false
+        a.LdrConst(
+            rd: 1,
+            value: 0x02000100u
         );
-        Measure(
-            name: "timer/reload-race",
-            documented: "0xDEAE / 0xFFF9 boundary",
-            rom: BuildTimerReloadRaceProbe(),
-            resultIndex: -1,
-            hasRetailBios: hasRetailBios,
-            needsBios: false
+        a.Str(
+            imm12: 0xD4,
+            rd: 1,
+            rn: 0
         );
-        Measure(
-            name: "irq/dispatch (ROM handler)",
-            documented: "120 (region-dependent 92/112/120)",
-            rom: BuildIrqLatencyProbe(),
-            resultIndex: 0,
-            hasRetailBios: hasRetailBios,
-            needsBios: true
+        a.LdrConst(
+            rd: 1,
+            value: 0x02000200u
         );
-        Measure(
-            name: "haltcnt/exit (direct)",
-            documented: "12",
-            rom: BuildHaltExitProbe(),
-            resultIndex: 0,
-            hasRetailBios: hasRetailBios,
-            needsBios: true
+        a.Str(
+            imm12: 0xD8,
+            rd: 1,
+            rn: 0
         );
-
-        Console.WriteLine();
-        Console.WriteLine(value: $"== oracle: {((gateFailures == 0)
-            ? "gates PASS"
-            : $"{gateFailures} GATE FAILURE(S)")} — measurement rows are evidence only ==");
-
-        return ((gateFailures == 0)
-            ? 0
-            : 1);
-    }
-
-    // Runs a measurement probe and prints "measured vs documented". resultIndex >= 0 reads one masked-16 timer value;
-    // resultIndex == -1 prints both 32-bit result words (for probes that store two values).
-    private void Measure(string name, string documented, byte[] rom, int resultIndex, bool hasRetailBios, bool needsBios) {
-        if (
-            needsBios &&
-            !hasRetailBios
-        ) {
-            Console.WriteLine(value: $"   {name,-30} measured=SKIP (needs retail BIOS)   documented={documented}");
-
-            return;
-        }
-
-        var results = RunRom(
-            hasRetailBios: hasRetailBios,
-            needsBios: needsBios,
-            resultCount: ((resultIndex < 0)
-            ? 2
-            : 1),
-            rom: rom
+        a.LdrConst(
+            rd: 1,
+            value: (0x8400u << 16) | 1u
         );
-
-        if (results is null) {
-            Console.WriteLine(value: $"   {name,-30} measured=SKIP   documented={documented}");
-
-            return;
-        }
-
-        var measured = ((resultIndex < 0)
-            ? $"0x{results[0] & 0xFFFFu:X4}, 0x{results[1] & 0xFFFFu:X4}"
-            : $"{results[resultIndex] & 0xFFFFu}");
-
-        Console.WriteLine(value: $"   {name,-30} measured={measured,-18} documented={documented}");
-    }
-    // Builds a direct-booted machine over the probe ROM, runs it to its spin loop (or a step cap), and reads the
-    // result words the ROM stored to EWRAM (0x02000000+). Returns null when the ROM could not run.
-    private uint[]? RunRom(byte[] rom, int resultCount, bool hasRetailBios, bool needsBios) {
-        _ = needsBios;
-
-        var cartridge = new AgbCartridge(rom: rom);
-        var services = new ServiceCollection();
-
-        _ = services.AddAdvancedGamingBrick();
-        _ = services.AddReplacementBios(image: m_bios);
-        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
-
-        using var provider = services.BuildServiceProvider();
-        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
-        var bus = ((AgbBus)machine.Bus);
-
-        machine.DirectBoot();
-
-        // Step to the ROM's spin loop (a stable PC), capped so a mis-assembled ROM cannot hang the battery.
-        var lastPc = 0xFFFFFFFFu;
-        var stable = 0;
-
-        for (var i = 0; (i < 2_000_000); ++i) {
-            var pc = machine.Cpu.GetRegister(index: 15);
-
-            machine.Step();
-
-            if (pc == lastPc) {
-                if (++stable > 8) {
-                    break;
-                }
-            } else {
-                stable = 0;
-            }
-
-            lastPc = pc;
-        }
-
-        var results = new uint[resultCount];
-
-        for (var i = 0; (i < resultCount); ++i) {
-            results[i] = bus.DebugRead32(address: (ResultBase + ((uint)(i * 4))));
-        }
-
-        return results;
-    }
-    // -------------------------------------------------------------------------------------------------------------
-    // Component-level probe: the hardware-measured Direct Sound FIFO (7-word ring + 32-bit playing buffer). We drive
-    // AgbApu directly and assert the model's documented properties. Expected values are DERIVED FROM THE MODEL SPEC, so
-    // this is a true self-checking gate.
-    // -------------------------------------------------------------------------------------------------------------
-    private (bool ok, List<string> lines) FifoModelProbe() {
-        var lines = new List<string>();
-        var ok = true;
-
-        var apu = new AgbApu();
-
-        apu.ConfigureOutput(sampleRate: 0);       // no host sampling — isolate the FIFO logic
-        apu.WriteRegister(
-            offset: 0x84u,
-            value: 0x80
-        ); // master enable (gate open)
-        apu.WriteRegister(
-            offset: 0x82u,
-            value: 0x0000
-        ); // SOUNDCNT_H: timer 0 selects both Direct Sound channels
-
-        void Check(string what, bool condition) {
-            ok &= condition;
-            lines.Add(item: $"[{(condition
-                ? "ok"
-                : "XX")}] {what}");
-        }
-
-        void Reset() => apu.WriteRegister(
-            offset: 0x82u,
-            value: 0x8800
-        ); // bits 11 + 15 reset FIFO A + B
-
-        void WriteWord(uint word) {
-            for (var i = 0; (i < 4); ++i) {
-                apu.WriteFifoByte(
-                    fifo: 0,
-                    value: ((byte)(word >> (8 * i)))
-                );
-            }
-        }
-
-        // (1) Ring capacity + narrow (partial-word) fill.
-        Reset();
-        Check(
-            what: "reset clears ring + playing",
-            ((apu.DebugFifoWordCount(fifo: 0) == 0) && (apu.DebugFifoPlayingBytes(fifo: 0) == 0))
+        a.Str(
+            imm12: 0xDC,
+            rd: 1,
+            rn: 0
         );
-        apu.WriteFifoByte(
-            fifo: 0,
-            value: 0x11
+        a.Nop();
+        a.Nop();
+        a.Nop();
+        a.Ldr(
+            imm12: 0x100,
+            rd: 1,
+            rn: 0
         );
-        apu.WriteFifoByte(
-            fifo: 0,
-            value: 0x22
+        a.LdrConst(
+            rd: 2,
+            value: ResultBase
         );
-        apu.WriteFifoByte(
-            fifo: 0,
-            value: 0x33
+        a.Str(
+            imm12: 0,
+            rd: 1,
+            rn: 2
         );
-        Check(
-            what: "3 bytes = partial word, ring still empty",
-            (apu.DebugFifoWordCount(fifo: 0) == 0)
-        );
-        apu.WriteFifoByte(
-            fifo: 0,
-            value: 0x44
-        );
-        Check(
-            what: "4th byte completes one ring word",
-            (apu.DebugFifoWordCount(fifo: 0) == 1)
-        );
+        a.Spin();
 
-        // (2) The DAC drains the completed word LSB-first out of the playing buffer, one byte per timer overflow.
-        apu.OnTimerOverflow(timer: 0);
-        Check(
-            what: "overflow refills playing buffer + outputs low byte 0x11",
-            (apu.DebugDirectSound(fifo: 0) == 0x11)
-        );
-        Check(
-            what: "playing buffer holds the remaining 3 bytes",
-            (apu.DebugFifoPlayingBytes(fifo: 0) == 3)
-        );
-        apu.OnTimerOverflow(timer: 0);
-        Check(
-            what: "next overflow outputs 0x22",
-            (apu.DebugDirectSound(fifo: 0) == 0x22)
-        );
-        apu.OnTimerOverflow(timer: 0);
-        apu.OnTimerOverflow(timer: 0);
-        Check(
-            what: "fourth overflow outputs 0x44 (word drained)",
-            (apu.DebugDirectSound(fifo: 0) == 0x44)
-        );
-        _ = apu.ConsumeFifoARefill();
-
-        // (3) DMA-request threshold: the ring must have >= 4 EMPTY words (i.e. <= 3 filled) at overflow.
-        Reset();
-        WriteWord(word: 0);
-        WriteWord(word: 0);
-        WriteWord(word: 0); // 3 filled → 4 empty → request expected
-        apu.OnTimerOverflow(timer: 0);
-        Check(
-            what: "3 filled words (>=4 empty) requests a DMA top-up",
-            apu.ConsumeFifoARefill()
-        );
-        Reset();
-        WriteWord(word: 0);
-        WriteWord(word: 0);
-        WriteWord(word: 0);
-        WriteWord(word: 0); // 4 filled → 3 empty → no request
-        apu.OnTimerOverflow(timer: 0);
-        Check(
-            what: "4 filled words (<4 empty) requests NO DMA top-up",
-            !apu.ConsumeFifoARefill()
-        );
-
-        // (4) The load-bearing invariant: two DMA requests cannot occur without an intervening timer overflow.
-        Reset();
-        apu.OnTimerOverflow(timer: 0);
-        var first = apu.ConsumeFifoARefill();
-        var second = apu.ConsumeFifoARefill(); // no overflow between the two consumes
-
-        Check(
-            what: "invariant: no second DMA request without an intervening overflow",
-            (first && !second)
-        );
-
-        // (5) Write overrun auto-resets the FIFO to empty (drops buffered samples, does not wrap).
-        Reset();
-
-        for (var i = 0; (i < 7); ++i) {
-            WriteWord(word: 0x01020304u);
-        }
-
-        Check(
-            what: "ring fills to its 7-word capacity",
-            (apu.DebugFifoWordCount(fifo: 0) == 7)
-        );
-        WriteWord(word: 0x0A0B0C0Du); // the 8th word overruns
-        Check(
-            what: "overrun auto-resets the FIFO to empty",
-            (apu.DebugFifoWordCount(fifo: 0) == 0)
-        );
-
-        return (ok, lines);
+        return a.Finish();
     }
     // -------------------------------------------------------------------------------------------------------------
     // ROM probe builders. Each is a direct-boot ARM ROM: it stores its result word(s) to EWRAM 0x02000000+ and spins.
@@ -523,181 +247,95 @@ internal sealed class OracleProbes {
 
         return a.Finish();
     }
-    // Timer0 (÷1) enabled, an immediate 1-word DMA runs, then a plain memory access follows: hardware forces the
-    // instruction fetch after a DMA non-sequential. The timer read afterward captures the combined cost. Target: 88.
-    private byte[] BuildDmaForceNseqProbe() {
+    // Enable timer0 (÷1), HALT (write HALTCNT=0), and immediately raise a pending timer IRQ so the CPU wakes; the
+    // timer is read after wake, capturing the halt-exit latency. Documented direct halt-exit: 12. Needs the retail BIOS.
+    private byte[] BuildHaltExitProbe() {
         var a = new Asm();
 
         a.LdrConst(
             rd: 0,
             value: IoBase
         );
-        a.LdrConst(
-            rd: 1,
-            value: 0x00800000u
-        );
-        a.Str(
-            imm12: 0x100,
-            rd: 1,
-            rn: 0
-        );
-        a.LdrConst(
-            rd: 1,
-            value: 0x02000100u
-        );
-        a.Str(
-            imm12: 0xD4,
-            rd: 1,
-            rn: 0
-        );
-        a.LdrConst(
-            rd: 1,
-            value: 0x02000200u
-        );
-        a.Str(
-            imm12: 0xD8,
-            rd: 1,
-            rn: 0
-        );
-        a.LdrConst(
-            rd: 1,
-            value: (0x8400u << 16) | 1u
-        );
-        a.Str(
-            imm12: 0xDC,
-            rd: 1,
-            rn: 0
-        );
-        a.Nop();
-        a.Nop();
-        a.Nop();
-        a.Ldr(
-            imm12: 0x100,
-            rd: 1,
-            rn: 0
+        a.LdrLabel(
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 2,
-            value: ResultBase
+            value: 0x03007FFCu
         );
         a.Str(
             imm12: 0,
             rd: 1,
             rn: 2
         );
-        a.Spin();
-
-        return a.Finish();
-    }
-    // Enable timer0 (÷1), read it a few cycles later (result 0), then STOP it and read again (result 1, frozen).
-    // Documented: reads ~3 while running, then a frozen value (corpus target 8).
-    private byte[] BuildTimerStartStopProbe() {
-        var a = new Asm();
-
-        a.LdrConst(
-            rd: 0,
-            value: IoBase
+        a.Mov(
+            imm8: 1,
+            rd: 1
         );
+        a.Str(
+            imm12: 0x208,
+            rd: 1,
+            rn: 0
+        );              // IME = 1
+        a.Mov(
+            imm8: 8,
+            rd: 1
+        );
+        a.Str(
+            imm12: 0x200,
+            rd: 1,
+            rn: 0
+        );              // IE = timer0
         a.LdrConst(
             rd: 1,
-            value: 0x00800000u
-        );          // enable ÷1
+            value: (0x00C0u << 16) | 0xFFFFu
+        ); // timer0 overflow next cycle, enable + IRQ
         a.Str(
             imm12: 0x100,
             rd: 1,
             rn: 0
-        );
-        a.Ldr(
-            imm12: 0x100,
-            rd: 3,
-            rn: 0
-        );              // read running counter → result 0
-        a.LdrConst(
-            rd: 2,
-            value: ResultBase
-        );
-        a.Str(
-            imm12: 0,
-            rd: 3,
-            rn: 2
         );
         a.Mov(
             imm8: 0,
             rd: 1
         );
         a.Str(
-            imm12: 0x100,
+            imm12: 0x301,
             rd: 1,
             rn: 0
-        );              // reload 0, control 0 → stop (freezes the counter)
+        );              // HALTCNT = 0 → halt (wakes on the timer IRQ)
         a.Ldr(
             imm12: 0x100,
-            rd: 3,
-            rn: 0
-        );              // read frozen counter → result 1
-        a.Str(
-            imm12: 4,
-            rd: 3,
-            rn: 2
-        );
-        a.Spin();
-
-        return a.Finish();
-    }
-    // Timer0 near overflow (reload 0xFFF0), let it run, then write a new reload while live and read the counter: probes
-    // whether the live counter or the freshly written reload wins at the boundary. Documented boundary: 0xDEAE/0xFFF9.
-    private byte[] BuildTimerReloadRaceProbe() {
-        var a = new Asm();
-
-        a.LdrConst(
-            rd: 0,
-            value: IoBase
-        );
-        a.LdrConst(
-            rd: 1,
-            value: (0x0080u << 16) | 0xFFF0u
-        ); // reload 0xFFF0, enable ÷1
-        a.Str(
-            imm12: 0x100,
             rd: 1,
             rn: 0
-        );
-        a.Nop();
-        a.Nop();
-        a.Ldr(
-            imm12: 0x100,
-            rd: 3,
-            rn: 0
-        );              // read live counter → result 0
+        );              // read timer0 after wake → result 0
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
             imm12: 0,
-            rd: 3,
-            rn: 2
-        );
-        a.LdrConst(
             rd: 1,
-            value: 0xDEAEu
-        );              // write a new reload low half while live
-        a.Str(
-            imm12: 0x100,
-            rd: 1,
-            rn: 0
-        );
-        a.Ldr(
-            imm12: 0x100,
-            rd: 3,
-            rn: 0
-        );              // read again → result 1
-        a.Str(
-            imm12: 4,
-            rd: 3,
             rn: 2
         );
         a.Spin();
+
+        a.Label(name: "handler");
+        a.LdrConst(
+            rd: 3,
+            value: 0x04000000u
+        );
+        a.LdrConst(
+            rd: 1,
+            value: 0x00080008u
+        );
+        a.Str(
+            imm12: 0x200,
+            rd: 1,
+            rn: 3
+        );              // ack timer0
+        a.Bx(rn: 14);
 
         return a.Finish();
     }
@@ -801,97 +439,463 @@ internal sealed class OracleProbes {
 
         return a.Finish();
     }
-    // Enable timer0 (÷1), HALT (write HALTCNT=0), and immediately raise a pending timer IRQ so the CPU wakes; the
-    // timer is read after wake, capturing the halt-exit latency. Documented direct halt-exit: 12. Needs the retail BIOS.
-    private byte[] BuildHaltExitProbe() {
+    // Timer0 near overflow (reload 0xFFF0), let it run, then write a new reload while live and read the counter: probes
+    // whether the live counter or the freshly written reload wins at the boundary. Documented boundary: 0xDEAE/0xFFF9.
+    private byte[] BuildTimerReloadRaceProbe() {
         var a = new Asm();
 
         a.LdrConst(
             rd: 0,
             value: IoBase
         );
-        a.LdrLabel(
-            label: "handler",
-            rd: 1
-        );
-        a.LdrConst(
-            rd: 2,
-            value: 0x03007FFCu
-        );
-        a.Str(
-            imm12: 0,
-            rd: 1,
-            rn: 2
-        );
-        a.Mov(
-            imm8: 1,
-            rd: 1
-        );
-        a.Str(
-            imm12: 0x208,
-            rd: 1,
-            rn: 0
-        );              // IME = 1
-        a.Mov(
-            imm8: 8,
-            rd: 1
-        );
-        a.Str(
-            imm12: 0x200,
-            rd: 1,
-            rn: 0
-        );              // IE = timer0
         a.LdrConst(
             rd: 1,
-            value: (0x00C0u << 16) | 0xFFFFu
-        ); // timer0 overflow next cycle, enable + IRQ
+            value: (0x0080u << 16) | 0xFFF0u
+        ); // reload 0xFFF0, enable ÷1
         a.Str(
             imm12: 0x100,
             rd: 1,
             rn: 0
         );
-        a.Mov(
-            imm8: 0,
-            rd: 1
-        );
-        a.Str(
-            imm12: 0x301,
-            rd: 1,
-            rn: 0
-        );              // HALTCNT = 0 → halt (wakes on the timer IRQ)
+        a.Nop();
+        a.Nop();
         a.Ldr(
             imm12: 0x100,
-            rd: 1,
+            rd: 3,
             rn: 0
-        );              // read timer0 after wake → result 0
+        );              // read live counter → result 0
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
             imm12: 0,
+            rd: 3,
+            rn: 2
+        );
+        a.LdrConst(
             rd: 1,
+            value: 0xDEAEu
+        );              // write a new reload low half while live
+        a.Str(
+            imm12: 0x100,
+            rd: 1,
+            rn: 0
+        );
+        a.Ldr(
+            imm12: 0x100,
+            rd: 3,
+            rn: 0
+        );              // read again → result 1
+        a.Str(
+            imm12: 4,
+            rd: 3,
             rn: 2
         );
         a.Spin();
 
-        a.Label(name: "handler");
+        return a.Finish();
+    }
+    // Enable timer0 (÷1), read it a few cycles later (result 0), then STOP it and read again (result 1, frozen).
+    // Documented: reads ~3 while running, then a frozen value (corpus target 8).
+    private byte[] BuildTimerStartStopProbe() {
+        var a = new Asm();
+
         a.LdrConst(
-            rd: 3,
-            value: 0x04000000u
+            rd: 0,
+            value: IoBase
         );
         a.LdrConst(
             rd: 1,
-            value: 0x00080008u
+            value: 0x00800000u
+        );          // enable ÷1
+        a.Str(
+            imm12: 0x100,
+            rd: 1,
+            rn: 0
+        );
+        a.Ldr(
+            imm12: 0x100,
+            rd: 3,
+            rn: 0
+        );              // read running counter → result 0
+        a.LdrConst(
+            rd: 2,
+            value: ResultBase
         );
         a.Str(
-            imm12: 0x200,
+            imm12: 0,
+            rd: 3,
+            rn: 2
+        );
+        a.Mov(
+            imm8: 0,
+            rd: 1
+        );
+        a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 3
-        );              // ack timer0
-        a.Bx(rn: 14);
+            rn: 0
+        );              // reload 0, control 0 → stop (freezes the counter)
+        a.Ldr(
+            imm12: 0x100,
+            rd: 3,
+            rn: 0
+        );              // read frozen counter → result 1
+        a.Str(
+            imm12: 4,
+            rd: 3,
+            rn: 2
+        );
+        a.Spin();
 
         return a.Finish();
+    }
+    // -------------------------------------------------------------------------------------------------------------
+    // Component-level probe: the hardware-measured Direct Sound FIFO (7-word ring + 32-bit playing buffer). We drive
+    // AgbApu directly and assert the model's documented properties. Expected values are DERIVED FROM THE MODEL SPEC, so
+    // this is a true self-checking gate.
+    // -------------------------------------------------------------------------------------------------------------
+    private (bool ok, List<string> lines) FifoModelProbe() {
+        var lines = new List<string>();
+        var ok = true;
+
+        var apu = new AgbApu();
+
+        apu.ConfigureOutput(sampleRate: 0);       // no host sampling — isolate the FIFO logic
+        apu.WriteRegister(
+            offset: 0x84u,
+            value: 0x80
+        ); // master enable (gate open)
+        apu.WriteRegister(
+            offset: 0x82u,
+            value: 0x0000
+        ); // SOUNDCNT_H: timer 0 selects both Direct Sound channels
+
+        void Check(string what, bool condition) {
+            ok &= condition;
+            lines.Add(item: $"[{(condition
+                ? "ok"
+                : "XX")}] {what}");
+        }
+
+        void Reset() => apu.WriteRegister(
+            offset: 0x82u,
+            value: 0x8800
+        ); // bits 11 + 15 reset FIFO A + B
+
+        void WriteWord(uint word) {
+            for (var i = 0; (i < 4); ++i) {
+                apu.WriteFifoByte(
+                    fifo: 0,
+                    value: ((byte)(word >> (8 * i)))
+                );
+            }
+        }
+
+        // (1) Ring capacity + narrow (partial-word) fill.
+        Reset();
+        Check(
+            what: "reset clears ring + playing",
+            ((apu.DebugFifoWordCount(fifo: 0) == 0) && (apu.DebugFifoPlayingBytes(fifo: 0) == 0))
+        );
+        apu.WriteFifoByte(
+            fifo: 0,
+            value: 0x11
+        );
+        apu.WriteFifoByte(
+            fifo: 0,
+            value: 0x22
+        );
+        apu.WriteFifoByte(
+            fifo: 0,
+            value: 0x33
+        );
+        Check(
+            what: "3 bytes = partial word, ring still empty",
+            (apu.DebugFifoWordCount(fifo: 0) == 0)
+        );
+        apu.WriteFifoByte(
+            fifo: 0,
+            value: 0x44
+        );
+        Check(
+            what: "4th byte completes one ring word",
+            (apu.DebugFifoWordCount(fifo: 0) == 1)
+        );
+
+        // (2) The DAC drains the completed word LSB-first out of the playing buffer, one byte per timer overflow.
+        apu.OnTimerOverflow(timer: 0);
+        Check(
+            what: "overflow refills playing buffer + outputs low byte 0x11",
+            (apu.DebugDirectSound(fifo: 0) == 0x11)
+        );
+        Check(
+            what: "playing buffer holds the remaining 3 bytes",
+            (apu.DebugFifoPlayingBytes(fifo: 0) == 3)
+        );
+        apu.OnTimerOverflow(timer: 0);
+        Check(
+            what: "next overflow outputs 0x22",
+            (apu.DebugDirectSound(fifo: 0) == 0x22)
+        );
+        apu.OnTimerOverflow(timer: 0);
+        apu.OnTimerOverflow(timer: 0);
+        Check(
+            what: "fourth overflow outputs 0x44 (word drained)",
+            (apu.DebugDirectSound(fifo: 0) == 0x44)
+        );
+        _ = apu.ConsumeFifoARefill();
+
+        // (3) DMA-request threshold: the ring must have >= 4 EMPTY words (i.e. <= 3 filled) at overflow.
+        Reset();
+        WriteWord(word: 0);
+        WriteWord(word: 0);
+        WriteWord(word: 0); // 3 filled → 4 empty → request expected
+        apu.OnTimerOverflow(timer: 0);
+        Check(
+            what: "3 filled words (>=4 empty) requests a DMA top-up",
+            apu.ConsumeFifoARefill()
+        );
+        Reset();
+        WriteWord(word: 0);
+        WriteWord(word: 0);
+        WriteWord(word: 0);
+        WriteWord(word: 0); // 4 filled → 3 empty → no request
+        apu.OnTimerOverflow(timer: 0);
+        Check(
+            what: "4 filled words (<4 empty) requests NO DMA top-up",
+            !apu.ConsumeFifoARefill()
+        );
+
+        // (4) The load-bearing invariant: two DMA requests cannot occur without an intervening timer overflow.
+        Reset();
+        apu.OnTimerOverflow(timer: 0);
+        var first = apu.ConsumeFifoARefill();
+        var second = apu.ConsumeFifoARefill(); // no overflow between the two consumes
+
+        Check(
+            what: "invariant: no second DMA request without an intervening overflow",
+            (first && !second)
+        );
+
+        // (5) Write overrun auto-resets the FIFO to empty (drops buffered samples, does not wrap).
+        Reset();
+
+        for (var i = 0; (i < 7); ++i) {
+            WriteWord(word: 0x01020304u);
+        }
+
+        Check(
+            what: "ring fills to its 7-word capacity",
+            (apu.DebugFifoWordCount(fifo: 0) == 7)
+        );
+        WriteWord(word: 0x0A0B0C0Du); // the 8th word overruns
+        Check(
+            what: "overrun auto-resets the FIFO to empty",
+            (apu.DebugFifoWordCount(fifo: 0) == 0)
+        );
+
+        return (ok, lines);
+    }
+    // Runs a measurement probe and prints "measured vs documented". resultIndex >= 0 reads one masked-16 timer value;
+    // resultIndex == -1 prints both 32-bit result words (for probes that store two values).
+    private void Measure(string name, string documented, byte[] rom, int resultIndex, bool hasRetailBios, bool needsBios) {
+        if (
+            needsBios &&
+            !hasRetailBios
+        ) {
+            Console.WriteLine(value: $"   {name,-30} measured=SKIP (needs retail BIOS)   documented={documented}");
+
+            return;
+        }
+
+        var results = RunRom(
+            hasRetailBios: hasRetailBios,
+            needsBios: needsBios,
+            resultCount: ((resultIndex < 0)
+            ? 2
+            : 1),
+            rom: rom
+        );
+
+        if (results is null) {
+            Console.WriteLine(value: $"   {name,-30} measured=SKIP   documented={documented}");
+
+            return;
+        }
+
+        var measured = ((resultIndex < 0)
+            ? $"0x{results[0] & 0xFFFFu:X4}, 0x{results[1] & 0xFFFFu:X4}"
+            : $"{results[resultIndex] & 0xFFFFu}"
+        );
+
+        Console.WriteLine(value: $"   {name,-30} measured={measured,-18} documented={documented}");
+    }
+    // Builds a direct-booted machine over the probe ROM, runs it to its spin loop (or a step cap), and reads the
+    // result words the ROM stored to EWRAM (0x02000000+). Returns null when the ROM could not run.
+    private uint[]? RunRom(byte[] rom, int resultCount, bool hasRetailBios, bool needsBios) {
+        _ = needsBios;
+
+        var cartridge = new AgbCartridge(rom: rom);
+        var services = new ServiceCollection();
+
+        _ = services.AddAdvancedGamingBrick();
+        _ = services.AddReplacementBios(image: m_bios);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
+
+        using var provider = services.BuildServiceProvider();
+        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
+        var bus = ((AgbBus)machine.Bus);
+
+        machine.DirectBoot();
+
+        // Step to the ROM's spin loop (a stable PC), capped so a mis-assembled ROM cannot hang the battery.
+        var lastPc = 0xFFFFFFFFu;
+        var stable = 0;
+
+        for (var i = 0; (i < 2_000_000); ++i) {
+            var pc = machine.Cpu.GetRegister(index: 15);
+
+            machine.Step();
+
+            if (pc == lastPc) {
+                if (++stable > 8) {
+                    break;
+                }
+            } else {
+                stable = 0;
+            }
+
+            lastPc = pc;
+        }
+
+        var results = new uint[resultCount];
+
+        for (var i = 0; (i < resultCount); ++i) {
+            results[i] = bus.DebugRead32(address: (ResultBase + ((uint)(i * 4))));
+        }
+
+        return results;
+    }
+
+    /// <summary>Runs every probe against the core and prints the measured-vs-documented table. Returns 0 (the two
+    /// self-checking gates gate; the measurement rows never fail the process — they are evidence).</summary>
+    public int RunOracle(string[] args) {
+        var bios = m_bios;
+        var identity = AgbBiosProfile.Identify(image: bios.Span);
+        var hasRetailBios = identity.IsCycleParityTrustworthy;
+
+        Console.WriteLine(value: "== AGB cycle-oracle probes (measured vs documented) ==");
+        Console.WriteLine(value: $"   BIOS: {identity.Description}{(hasRetailBios
+            ? string.Empty
+            : "  (interrupt/halt-region probes need the retail BIOS — they will skip)")}");
+        Console.WriteLine(value: "   rows marked [gate] are self-checking; the rest are our-harness measurements vs the documented corpus targets.");
+        Console.WriteLine();
+
+        var gateFailures = 0;
+
+        // --- Self-checking gate: the hardware-measured Direct Sound FIFO model (survey #4/#5). ------------------------
+        var (fifoOk, fifoLines) = FifoModelProbe();
+
+        Console.WriteLine(value: $"[gate] apu/fifo-model .......... {(fifoOk
+            ? "PASS"
+            : "FAIL")}");
+
+        foreach (var line in fifoLines) {
+            Console.WriteLine(value: $"          {line}");
+        }
+
+        gateFailures += (fifoOk
+            ? 0
+            : 1
+        );
+
+        // --- Self-checking gate: per-channel DMA read-latch isolation (survey #7). ----------------------------------
+        var latch = RunRom(
+            rom: BuildDmaLatchProbe(),
+            resultCount: 2,
+            hasRetailBios: hasRetailBios,
+            needsBios: false
+        );
+        var latchOk = (latch is [0x00000000u, 0xAABBCCDDu]);
+
+        Console.WriteLine(value: $"[gate] dma/latch-per-channel ... {(latchOk
+            ? "PASS"
+            : "FAIL")}");
+        Console.WriteLine(value: $"          ch0 undrivable-source read = 0x{((latch is null)
+            ? 0
+            : latch[0]):X8} (expect 0x00000000: ch0's own latch, NOT ch1's 0xAABBCCDD — proves per-channel)");
+        Console.WriteLine(value: $"          ch1 drivable transfer      = 0x{((latch is null)
+            ? 0
+            : latch[1]):X8} (expect 0xAABBCCDD: confirms ch1 actually ran)");
+        gateFailures += (latchOk
+            ? 0
+            : 1
+        );
+
+        // --- Measurement rows: our value beside the documented corpus target. ---------------------------------------
+        Console.WriteLine();
+        Console.WriteLine(value: "   -- measurement rows (evidence; divergence recorded, not chased) --");
+
+        Measure(
+            name: "dma/start-delay",
+            documented: "20",
+            rom: BuildDmaStartDelayProbe(),
+            resultIndex: 0,
+            hasRetailBios: hasRetailBios,
+            needsBios: false
+        );
+        Measure(
+            name: "dma/force-nseq",
+            documented: "88",
+            rom: BuildDmaForceNseqProbe(),
+            resultIndex: 0,
+            hasRetailBios: hasRetailBios,
+            needsBios: false
+        );
+        Measure(
+            name: "timer/start-stop",
+            documented: "3 then frozen 8",
+            rom: BuildTimerStartStopProbe(),
+            resultIndex: -1,
+            hasRetailBios: hasRetailBios,
+            needsBios: false
+        );
+        Measure(
+            name: "timer/reload-race",
+            documented: "0xDEAE / 0xFFF9 boundary",
+            rom: BuildTimerReloadRaceProbe(),
+            resultIndex: -1,
+            hasRetailBios: hasRetailBios,
+            needsBios: false
+        );
+        Measure(
+            name: "irq/dispatch (ROM handler)",
+            documented: "120 (region-dependent 92/112/120)",
+            rom: BuildIrqLatencyProbe(),
+            resultIndex: 0,
+            hasRetailBios: hasRetailBios,
+            needsBios: true
+        );
+        Measure(
+            name: "haltcnt/exit (direct)",
+            documented: "12",
+            rom: BuildHaltExitProbe(),
+            resultIndex: 0,
+            hasRetailBios: hasRetailBios,
+            needsBios: true
+        );
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"== oracle: {((gateFailures == 0)
+            ? "gates PASS"
+            : $"{gateFailures} GATE FAILURE(S)")} — measurement rows are evidence only ==");
+
+        return ((gateFailures == 0)
+            ? 0
+            : 1
+        );
     }
 
     // -------------------------------------------------------------------------------------------------------------
@@ -906,23 +910,7 @@ internal sealed class OracleProbes {
         private readonly List<(int instr, int rd, uint value, string? label)> m_loads = new();
         private readonly Dictionary<string, int> m_labels = new();
 
-        public void Label(string name) => m_labels[name] = m_code.Count;
-        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | (((uint)rd) << 12) | (imm8 & 0xFFu));
-        public void Nop() => m_code.Add(item: 0xE1A00000u); // mov r0,r0
-        public void Str(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
-        public void Ldr(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5900000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
         public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | ((uint)rn));
-        public void Spin() => m_code.Add(item: 0xEAFFFFFEu); // b . (branch to self)
-        public void LdrConst(int rd, uint value) {
-            m_loads.Add(item: (m_code.Count, rd, value, null));
-            m_code.Add(item: 0);
-        }
-        public void LdrLabel(int rd, string label) {
-            m_loads.Add(item: (m_code.Count, rd, 0, label));
-            m_code.Add(item: 0);
-        }
         public byte[] Finish() {
             var poolBase = m_code.Count;
             var pool = AsmLiteralPool.Resolve(
@@ -948,5 +936,21 @@ internal sealed class OracleProbes {
 
             return bytes;
         }
+        public void Label(string name) => m_labels[name] = m_code.Count;
+        public void Ldr(int rd, int rn, uint imm12) =>
+            m_code.Add(item: 0xE5900000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
+        public void LdrConst(int rd, uint value) {
+            m_loads.Add(item: (m_code.Count, rd, value, null));
+            m_code.Add(item: 0);
+        }
+        public void LdrLabel(int rd, string label) {
+            m_loads.Add(item: (m_code.Count, rd, 0, label));
+            m_code.Add(item: 0);
+        }
+        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | (((uint)rd) << 12) | (imm8 & 0xFFu));
+        public void Nop() => m_code.Add(item: 0xE1A00000u); // mov r0,r0
+        public void Spin() => m_code.Add(item: 0xEAFFFFFEu); // b . (branch to self)
+        public void Str(int rd, int rn, uint imm12) =>
+            m_code.Add(item: 0xE5800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
     }
 }

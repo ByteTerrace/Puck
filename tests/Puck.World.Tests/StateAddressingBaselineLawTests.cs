@@ -15,59 +15,68 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
         var hash31 = 0UL;
         var hash151 = 0UL;
 
-        for (var tick = 1; tick <= 151; tick++) {
+        for (var tick = 1; (tick <= 151); tick++) {
             fixture.Step(stepTicks: width);
             if (tick == 31) {
-                hash31 = WorldRuntimeStateHash.Hash(scope: WorldStateHashScope.Capture, server: fixture.Server, tick: 31);
+                hash31 = WorldRuntimeStateHash.Hash(
+                    scope: WorldStateHashScope.Capture,
+                    server: fixture.Server,
+                    tick: 31
+                );
             } else if (tick == 151) {
-                hash151 = WorldRuntimeStateHash.Hash(scope: WorldStateHashScope.Capture, server: fixture.Server, tick: 151);
+                hash151 = WorldRuntimeStateHash.Hash(
+                    scope: WorldStateHashScope.Capture,
+                    server: fixture.Server,
+                    tick: 151
+                );
             }
         }
 
-        output.WriteLine($"puck.world.json state hash at tick 31:  {hash31:x16}");
-        output.WriteLine($"puck.world.json state hash at tick 151: {hash151:x16}");
+        output.WriteLine(message: $"puck.world.json state hash at tick 31:  {hash31:x16}");
+        output.WriteLine(message: $"puck.world.json state hash at tick 151: {hash151:x16}");
 
-        var compilation = WorldRuleCompilation.Compile(definition);
-        var allRules = compilation.Rules.Concat(compilation.Interactions).ToArray();
+        var compilation = WorldRuleCompilation.Compile(definition: definition);
+        var allRules = compilation.Rules.Concat(second: compilation.Interactions).ToArray();
 
         var operands = new List<OperandFact>();
+
         void CollectTokens(CompiledExpressionToken[]? tokens) {
             if (tokens is null) {
                 return;
             }
             foreach (var token in tokens) {
                 if (token.Operand is not null) {
-                    operands.Add(token.Operand);
+                    operands.Add(item: token.Operand);
                 }
             }
         }
         void CollectGate(GateToken[] gate) {
             foreach (var token in gate) {
                 if (token.Left is not null) {
-                    operands.Add(token.Left);
+                    operands.Add(item: token.Left);
                 }
                 if (token.Comparand is not null) {
-                    operands.Add(token.Comparand);
+                    operands.Add(item: token.Comparand);
                 }
-                CollectTokens(token.LeftExpression);
-                CollectTokens(token.RightExpression);
+                CollectTokens(tokens: token.LeftExpression);
+                CollectTokens(tokens: token.RightExpression);
             }
         }
 
         foreach (var rule in allRules) {
-            CollectGate(rule.Gate);
+            CollectGate(gate: rule.Gate);
             if (rule.Bindings is not null) {
                 foreach (var binding in rule.Bindings) {
-                    CollectTokens(binding.Expression);
+                    CollectTokens(tokens: binding.Expression);
                 }
             }
             if (rule.Decision is not null) {
                 if (rule.Decision.Interrupt is not null) {
-                    CollectGate(rule.Decision.Interrupt);
+                    CollectGate(gate: rule.Decision.Interrupt);
                 }
                 foreach (var opt in rule.Decision.Options) {
-                    CollectGate(opt.Gate);
-                    CollectTokens(opt.Score);
+                    CollectGate(gate: opt.Gate);
+                    CollectTokens(tokens: opt.Score);
                 }
             }
         }
@@ -100,17 +109,23 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
             }
         }
 
-        output.WriteLine($"Total compiled operands inspected: {operands.Count}");
-        output.WriteLine($"  StateCellOperand fixed row & literal key: {fixedLiteralCellOps}");
-        output.WriteLine($"  StateCellOperand dynamic key ($cell:, etc): {dynamicKeyCellOps}");
-        output.WriteLine($"  StateCellOperand live zone:               {liveZoneCellOps}");
-        output.WriteLine($"  BoardOperand:                             {boardOps}");
-        output.WriteLine($"  SymmetryOperand:                          {symmetryOps}");
-        output.WriteLine($"  PatternOperand:                           {patternOps}");
-        output.WriteLine($"  Other operands (binding, tick, etc):      {otherOps}");
+        output.WriteLine(message: $"Total compiled operands inspected: {operands.Count}");
+        output.WriteLine(message: $"  StateCellOperand fixed row & literal key: {fixedLiteralCellOps}");
+        output.WriteLine(message: $"  StateCellOperand dynamic key ($cell:, etc): {dynamicKeyCellOps}");
+        output.WriteLine(message: $"  StateCellOperand live zone:               {liveZoneCellOps}");
+        output.WriteLine(message: $"  BoardOperand:                             {boardOps}");
+        output.WriteLine(message: $"  SymmetryOperand:                          {symmetryOps}");
+        output.WriteLine(message: $"  PatternOperand:                           {patternOps}");
+        output.WriteLine(message: $"  Other operands (binding, tick, etc):      {otherOps}");
 
-        Assert.Equal(0x05ed666c0438fb08UL, hash31);
-        Assert.Equal(0x92dd209305359d13UL, hash151);
-        Assert.True(fixedLiteralCellOps > 0);
+        Assert.Equal(
+            actual: hash31,
+            expected: 0x05ed666c0438fb08UL
+        );
+        Assert.Equal(
+            actual: hash151,
+            expected: 0x92dd209305359d13UL
+        );
+        Assert.True(condition: (fixedLiteralCellOps > 0));
     }
 }

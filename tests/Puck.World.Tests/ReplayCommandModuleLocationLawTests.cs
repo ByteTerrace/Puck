@@ -10,6 +10,9 @@ namespace Puck.World.Tests;
 public sealed class ReplayCommandModuleLocationLawTests {
     [Fact]
     public void ReplayCommandModule_LivesInConsole() {
-        Assert.Equal(expected: "Puck.World.Console", actual: typeof(WorldReplayCommandModule).Assembly.GetName().Name);
+        Assert.Equal(
+            expected: "Puck.World.Console",
+            actual: typeof(WorldReplayCommandModule).Assembly.GetName().Name
+        );
     }
 }

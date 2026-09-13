@@ -17,6 +17,78 @@ public unsafe sealed class VulkanNativeFrameReadbackApi : IVulkanFrameReadbackAp
     private const uint SharingModeExclusive = 0;
     private const uint StructureTypeBufferCreateInfo = 12;
 
+    private static unsafe nint CreateBufferHandle(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong sizeBytes) {
+        var createInfo = new VkBufferCreateInfo {
+            SType = StructureTypeBufferCreateInfo,
+            SharingMode = SharingModeExclusive,
+            Size = sizeBytes,
+            Usage = BufferUsageTransferDestinationBit,
+        };
+        var result = createBuffer(
+            deviceHandle,
+            in createInfo,
+            0,
+            out var bufferHandle
+        );
+
+        result.ThrowIfFailed(operation: "vkCreateBuffer");
+        if (0 == bufferHandle) {
+            throw new InvalidOperationException(message: "vkCreateBuffer returned success without a valid readback buffer handle.");
+        }
+
+        return bufferHandle;
+    }
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
+                instanceHandle: handle
+            )),
+            }
+        );
+    }
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkAllocateMemory"u8
+            )),
+                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkBindBufferMemory"u8
+            )),
+                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateBuffer"u8
+            )),
+                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyBuffer"u8
+            )),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkFreeMemory"u8
+            )),
+                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetBufferMemoryRequirements"u8
+            )),
+                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkMapMemory"u8
+            )),
+                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkUnmapMemory"u8
+            )),
+            }
+        );
+    }
+
     /// <inheritdoc/>
     public VulkanFrameReadbackBuffer CreateBuffer(VulkanFrameReadbackBufferCreateRequest request) {
         VulkanArgument.RequireHandle(
@@ -102,6 +174,32 @@ public unsafe sealed class VulkanNativeFrameReadbackApi : IVulkanFrameReadbackAp
         }
     }
     /// <inheritdoc/>
+    public void DestroyBuffer(VulkanFrameReadbackBufferDestroyRequest request) {
+        if (0 == request.DeviceHandle) {
+            return;
+        }
+
+        if (0 != request.MemoryHandle) {
+            var freeMemory = GetPointers(deviceHandle: request.DeviceHandle).FreeMemory;
+
+            freeMemory(
+                request.DeviceHandle,
+                request.MemoryHandle,
+                0
+            );
+        }
+
+        if (0 != request.BufferHandle) {
+            var destroyBuffer = GetPointers(deviceHandle: request.DeviceHandle).DestroyBuffer;
+
+            destroyBuffer(
+                request.DeviceHandle,
+                request.BufferHandle,
+                0
+            );
+        }
+    }
+    /// <inheritdoc/>
     public byte[] ReadBuffer(VulkanFrameReadbackBuffer buffer) {
         ArgumentNullException.ThrowIfNull(buffer);
         if (buffer.SizeBytes > int.MaxValue) {
@@ -136,54 +234,6 @@ public unsafe sealed class VulkanNativeFrameReadbackApi : IVulkanFrameReadbackAp
             );
         }
     }
-    /// <inheritdoc/>
-    public void DestroyBuffer(VulkanFrameReadbackBufferDestroyRequest request) {
-        if (0 == request.DeviceHandle) {
-            return;
-        }
-
-        if (0 != request.MemoryHandle) {
-            var freeMemory = GetPointers(deviceHandle: request.DeviceHandle).FreeMemory;
-
-            freeMemory(
-                request.DeviceHandle,
-                request.MemoryHandle,
-                0
-            );
-        }
-
-        if (0 != request.BufferHandle) {
-            var destroyBuffer = GetPointers(deviceHandle: request.DeviceHandle).DestroyBuffer;
-
-            destroyBuffer(
-                request.DeviceHandle,
-                request.BufferHandle,
-                0
-            );
-        }
-    }
-
-    private static unsafe nint CreateBufferHandle(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong sizeBytes) {
-        var createInfo = new VkBufferCreateInfo {
-            SType = StructureTypeBufferCreateInfo,
-            SharingMode = SharingModeExclusive,
-            Size = sizeBytes,
-            Usage = BufferUsageTransferDestinationBit,
-        };
-        var result = createBuffer(
-            deviceHandle,
-            in createInfo,
-            0,
-            out var bufferHandle
-        );
-
-        result.ThrowIfFailed(operation: "vkCreateBuffer");
-        if (0 == bufferHandle) {
-            throw new InvalidOperationException(message: "vkCreateBuffer returned success without a valid readback buffer handle.");
-        }
-
-        return bufferHandle;
-    }
 
     private unsafe struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> CreateBuffer;
@@ -201,28 +251,4 @@ public unsafe sealed class VulkanNativeFrameReadbackApi : IVulkanFrameReadbackAp
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
-                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8)),
-                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8)),
-                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8)),
-                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
-                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8)),
-                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8)),
-                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8)),
-            }
-        );
-    }
-    private InstancePointers GetInstancePointers(nint instanceHandle) {
-        return m_instancePointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
-            }
-        );
-    }
 }

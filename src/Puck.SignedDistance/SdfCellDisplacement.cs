@@ -2,7 +2,6 @@ namespace Puck.SignedDistance;
 
 /// <summary>The nearest feature distance, or the gap between the nearest two feature distances.</summary>
 public enum SdfCellMode : uint { F1, F2MinusF1 }
-
 /// <summary>Cellular field relief with an exact fixed 27-cell neighborhood.</summary>
 /// <param name="Frequency">Positive cells per local unit.</param>
 /// <param name="Amplitude">Nonnegative displacement in field units.</param>
@@ -16,22 +15,40 @@ public readonly record struct SdfCellDisplacement(float Frequency, float Amplitu
     /// The containing cell and the closest face neighbor supply two points inside that radius;
     /// every cell outside the 27-cell neighborhood starts beyond the right-hand bound.</summary>
     public const float MaxF2Randomness = 0.2f;
+
     /// <summary>The mode's exact-neighborhood admission ceiling.</summary>
     public static float MaxRandomness(SdfCellMode mode) => mode switch {
         SdfCellMode.F1 => MaxF1Randomness,
         SdfCellMode.F2MinusF1 => MaxF2Randomness,
-        _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(mode)),
     };
-    /// <summary>The local derivative bound including an initially unit-Lipschitz field.</summary>
-    public float StepFactor => 1f + Amplitude * Frequency * (Mode == SdfCellMode.F1 ? 1f : 2f);
-    /// <summary>The greatest outward relief: both distance functions are nonnegative.</summary>
-    public float OutwardReach => 0.5f * Amplitude;
     /// <summary>Refuses nonfinite inputs, negative amplitude, unsupported modes, or excessive randomness.</summary>
     public void Validate() {
-        if (!float.IsFinite(Frequency) || Frequency <= 0f) { throw new ArgumentOutOfRangeException(nameof(Frequency)); }
-        if (!float.IsFinite(Amplitude) || Amplitude < 0f) { throw new ArgumentOutOfRangeException(nameof(Amplitude)); }
-        var maximum = MaxRandomness(Mode);
-        if (!float.IsFinite(Randomness) || Randomness < 0f || Randomness > maximum) { throw new ArgumentOutOfRangeException(nameof(Randomness)); }
-        if (!float.IsFinite(StepFactor)) { throw new ArgumentOutOfRangeException(nameof(Amplitude), "The cellular derivative bound must be finite."); }
+        if (
+            !float.IsFinite(f: Frequency) ||
+            (Frequency <= 0f)
+        ) { throw new ArgumentOutOfRangeException(paramName: nameof(Frequency)); }
+        if (
+            !float.IsFinite(f: Amplitude) ||
+            (Amplitude < 0f)
+        ) { throw new ArgumentOutOfRangeException(paramName: nameof(Amplitude)); }
+        var maximum = MaxRandomness(mode: Mode);
+
+        if (
+            !float.IsFinite(f: Randomness) ||
+            (Randomness < 0f) ||
+            (Randomness > maximum)
+        ) { throw new ArgumentOutOfRangeException(paramName: nameof(Randomness)); }
+        if (!float.IsFinite(f: StepFactor)) { throw new ArgumentOutOfRangeException(
+            nameof(Amplitude),
+            "The cellular derivative bound must be finite."
+        ); }
     }
+
+    /// <summary>The greatest outward relief: both distance functions are nonnegative.</summary>
+    public float OutwardReach => (0.5f * Amplitude);
+    /// <summary>The local derivative bound including an initially unit-Lipschitz field.</summary>
+    public float StepFactor => (1f + ((Amplitude * Frequency) * ((Mode == SdfCellMode.F1)
+        ? 1f
+        : 2f)));
 }

@@ -156,7 +156,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             | (((uint)m_sioMode) << 12)
             | (m_irqEnable
             ? 0x4000u
-            : 0u);
+            : 0u
+        );
 
         // In multiplayer mode bits 4-5 expose the assigned player id and bit 6 the error flag.
         if (m_sioMode == 2) {
@@ -213,7 +214,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
 
         var bitCycles = (m_shiftClock2MHz
             ? 8
-            : 64); // 2 MHz vs 256 KHz internal shift clock
+            : 64
+        ); // 2 MHz vs 256 KHz internal shift clock
         int cycles;
 
         switch (m_sioMode) {
@@ -276,7 +278,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         ? 1
         : 0) | (m_shiftClock2MHz
         ? 2
-        : 0);
+        : 0
+    );
     private int UartBaudCycles() => GetBaudRateIndex() switch {
         0 => 64,  //   9600 bps
         1 => 32,  //  38400 bps

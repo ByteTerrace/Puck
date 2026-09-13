@@ -3,26 +3,34 @@ using Puck.Maths;
 namespace Puck.Physics.Tests;
 
 public sealed class ContactKernelTests {
-    [Fact]
-    public void DynamicSpherePairReturnsTheDeepestRightToLeftCorrection() {
-        FixedBodyColliderVolume[] left = [Sphere(radius: 1d)];
-        FixedBodyColliderVolume[] right = [Sphere(radius: 1d)];
-
-        var overlaps = FixedDynamicBodyContacts.TryCorrection(
-            leftPosition: FixedVector3.Zero,
-            leftOrientation: FixedQuaternion.Identity,
-            leftVolumes: left,
-            rightPosition: Vector(x: 1.5d, y: 0d, z: 0d),
-            rightOrientation: FixedQuaternion.Identity,
-            rightVolumes: right,
-            tieBreaker: 0,
-            correction: out var correction
+    private static FixedBodyColliderVolume Box((double X, double Y, double Z) halfExtents) => new(
+        Kind: FixedBodyColliderKind.Box,
+        Center: FixedVector3.Zero,
+        Endpoint: FixedVector3.Zero,
+        HalfExtents: Vector(
+            x: halfExtents.X,
+            y: halfExtents.Y,
+            z: halfExtents.Z
+        ),
+        Rotation: FixedQuaternion.Identity,
+        Radius: FixedQ4816.Zero
+    );
+    private static FixedQ4816 Scalar(double value) => FixedQ4816.FromDouble(value: value);
+    private static FixedBodyColliderVolume Sphere(double radius) => new(
+        Kind: FixedBodyColliderKind.Sphere,
+        Center: FixedVector3.Zero,
+        Endpoint: FixedVector3.Zero,
+        HalfExtents: FixedVector3.Zero,
+        Rotation: FixedQuaternion.Identity,
+        Radius: Scalar(value: radius)
+    );
+    private static FixedVector3 Vector(double x, double y, double z) =>
+        new(
+            X: Scalar(value: x),
+            Y: Scalar(value: y),
+            Z: Scalar(value: z)
         );
 
-        Assert.True(condition: overlaps);
-        Assert.Equal(expected: Vector(x: -0.5d, y: 0d, z: 0d), actual: correction);
-        Assert.Equal(expected: Scalar(value: 1d), actual: FixedDynamicBodyContacts.BroadphaseRadius(volumes: left));
-    }
     [Fact]
     public void DynamicBoxPairAlongAWorldAxisMatchesTheAxisAlignedOverlap() {
         FixedBodyColliderVolume[] left = [Box(halfExtents: (0.5d, 0.5d, 0.5d))];
@@ -32,7 +40,11 @@ public sealed class ContactKernelTests {
             leftPosition: FixedVector3.Zero,
             leftOrientation: FixedQuaternion.Identity,
             leftVolumes: left,
-            rightPosition: Vector(x: 0.9d, y: 0d, z: 0d),
+            rightPosition: Vector(
+                x: 0.9d,
+                y: 0d,
+                z: 0d
+            ),
             rightOrientation: FixedQuaternion.Identity,
             rightVolumes: right,
             tieBreaker: 0,
@@ -40,7 +52,14 @@ public sealed class ContactKernelTests {
         );
 
         Assert.True(condition: overlaps);
-        Assert.Equal(expected: Vector(x: -0.1d, y: 0d, z: 0d), actual: correction);
+        Assert.Equal(
+            expected: Vector(
+                x: -0.1d,
+                y: 0d,
+                z: 0d
+            ),
+            actual: correction
+        );
     }
     [Fact]
     public void DynamicBoxPairTestsEachBoxsOwnFaceAxisNotOnlyWorldAxes() {
@@ -59,9 +78,17 @@ public sealed class ContactKernelTests {
             leftPosition: FixedVector3.Zero,
             leftOrientation: FixedQuaternion.Identity,
             leftVolumes: left,
-            rightPosition: new FixedVector3(X: component, Y: component, Z: FixedQ4816.Zero),
+            rightPosition: new FixedVector3(
+                X: component,
+                Y: component,
+                Z: FixedQ4816.Zero
+            ),
             rightOrientation: FixedQuaternion.FromAxisAngle(
-                axis: Vector(x: 0d, y: 0d, z: 1d),
+                axis: Vector(
+                    x: 0d,
+                    y: 0d,
+                    z: 1d
+                ),
                 angle: FixedQ4816.FromDouble(value: (Math.PI / 4d))
             ),
             rightVolumes: right,
@@ -69,19 +96,74 @@ public sealed class ContactKernelTests {
             correction: out _
         );
 
-        Assert.False(condition: overlaps, userMessage: "the diagonal box-box pair must read separated on the tilted box's own face axis, not just world X/Y/Z");
+        Assert.False(
+            condition: overlaps,
+            userMessage: "the diagonal box-box pair must read separated on the tilted box's own face axis, not just world X/Y/Z"
+        );
+    }
+    [Fact]
+    public void DynamicSpherePairReturnsTheDeepestRightToLeftCorrection() {
+        FixedBodyColliderVolume[] left = [Sphere(radius: 1d)];
+        FixedBodyColliderVolume[] right = [Sphere(radius: 1d)];
+
+        var overlaps = FixedDynamicBodyContacts.TryCorrection(
+            leftPosition: FixedVector3.Zero,
+            leftOrientation: FixedQuaternion.Identity,
+            leftVolumes: left,
+            rightPosition: Vector(
+                x: 1.5d,
+                y: 0d,
+                z: 0d
+            ),
+            rightOrientation: FixedQuaternion.Identity,
+            rightVolumes: right,
+            tieBreaker: 0,
+            correction: out var correction
+        );
+
+        Assert.True(condition: overlaps);
+        Assert.Equal(
+            expected: Vector(
+                x: -0.5d,
+                y: 0d,
+                z: 0d
+            ),
+            actual: correction
+        );
+        Assert.Equal(
+            expected: Scalar(value: 1d),
+            actual: FixedDynamicBodyContacts.BroadphaseRadius(volumes: left)
+        );
+    }
+    [Fact]
+    public void RigidSolverRefusesAnInvalidIterationBudgetByName() {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () =>
+            new FixedRigidSolver(options: new FixedRigidSolverOptions { SolveIterations = 0 }));
+
+        Assert.Equal(
+            expected: nameof(FixedRigidSolverOptions.SolveIterations),
+            actual: exception.ParamName
+        );
     }
     [Fact]
     public void StaticHalfSpaceReturnsGeometryWithoutApplyingWorldPolicy() {
         var ground = FixedStaticCollider.HalfSpace(
             point: FixedVector3.Zero,
-            normal: Vector(x: 0d, y: 1d, z: 0d)
+            normal: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            )
         );
         var volume = Sphere(radius: 1d);
         var orientation = FixedQuaternion.Identity;
 
         var overlaps = ground.TryGetPush(
-            position: Vector(x: 0d, y: 0.5d, z: 0d),
+            position: Vector(
+                x: 0d,
+                y: 0.5d,
+                z: 0d
+            ),
             orientation: in orientation,
             volume: in volume,
             skin: Scalar(value: 0.1d),
@@ -89,34 +171,17 @@ public sealed class ContactKernelTests {
         );
 
         Assert.True(condition: overlaps);
-        Assert.Equal(expected: Vector(x: 0d, y: 1d, z: 0d), actual: push.Normal);
-        Assert.Equal(expected: Scalar(value: 0.6d), actual: push.Penetration);
+        Assert.Equal(
+            expected: Vector(
+                x: 0d,
+                y: 1d,
+                z: 0d
+            ),
+            actual: push.Normal
+        );
+        Assert.Equal(
+            expected: Scalar(value: 0.6d),
+            actual: push.Penetration
+        );
     }
-    [Fact]
-    public void RigidSolverRefusesAnInvalidIterationBudgetByName() {
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () =>
-            new FixedRigidSolver(options: new FixedRigidSolverOptions { SolveIterations = 0 }));
-
-        Assert.Equal(expected: nameof(FixedRigidSolverOptions.SolveIterations), actual: exception.ParamName);
-    }
-
-    private static FixedBodyColliderVolume Box((double X, double Y, double Z) halfExtents) => new(
-        Kind: FixedBodyColliderKind.Box,
-        Center: FixedVector3.Zero,
-        Endpoint: FixedVector3.Zero,
-        HalfExtents: Vector(x: halfExtents.X, y: halfExtents.Y, z: halfExtents.Z),
-        Rotation: FixedQuaternion.Identity,
-        Radius: FixedQ4816.Zero
-    );
-    private static FixedBodyColliderVolume Sphere(double radius) => new(
-        Kind: FixedBodyColliderKind.Sphere,
-        Center: FixedVector3.Zero,
-        Endpoint: FixedVector3.Zero,
-        HalfExtents: FixedVector3.Zero,
-        Rotation: FixedQuaternion.Identity,
-        Radius: Scalar(value: radius)
-    );
-    private static FixedQ4816 Scalar(double value) => FixedQ4816.FromDouble(value: value);
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(X: Scalar(value: x), Y: Scalar(value: y), Z: Scalar(value: z));
 }

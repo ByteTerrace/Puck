@@ -9,5 +9,7 @@ namespace Puck.World;
 public sealed class WorldConsoleNarrationSink : IWorldNarrationSink {
     /// <inheritdoc/>
     public void Narrate(in WorldNarration narration) =>
-        ((narration.Stream == WorldNarrationStream.Output) ? Console.Out : Console.Error).WriteLine(value: narration.Text);
+        ((narration.Stream == WorldNarrationStream.Output)
+            ? Console.Out
+            : Console.Error).WriteLine(value: narration.Text);
 }

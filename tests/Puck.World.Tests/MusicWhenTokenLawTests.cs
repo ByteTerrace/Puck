@@ -13,11 +13,161 @@ namespace Puck.World.Tests;
 /// behind it) can never validate cleanly and then compile to a lane that cannot fire.
 /// </summary>
 public sealed class MusicWhenTokenLawTests {
-    [Fact]
-    public void MusicWhenTokensAreAPublishedEventTokenSubset() {
-        foreach (var token in WorldAudioCue.MusicWhenTokens) {
-            Assert.True(condition: WorldAudioCue.IsEventToken(token: token), userMessage: $"'{token}' is not a published event token");
+    private static void AssertWhenRefuses(MusicSegmentDocument segment, string path, string token) {
+        WithDocument(
+            assert: document => {
+                Assert.False(
+                    condition: WorldDefinitionValidator.TryValidate(
+                        definition: document,
+                        neighbours: null,
+                        reason: out var reason
+                    ),
+                    userMessage: $"'{token}' was expected to refuse"
+                );
+                Assert.Contains(
+                    actualString: reason,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: path
+                );
+                Assert.Contains(
+                    actualString: reason,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: $"'{token}' is not a sense-mappable when token"
+                );
+            },
+            segment: segment
+        );
+    }
+    private static void WithDocument(Action<WorldDefinition> assert, MusicSegmentDocument segment) {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-when-law-").FullName;
+
+        try {
+            var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
+                Schema: MusicDocument.CurrentSchema,
+                Name: "when-law",
+                Tempo: new MusicTempoDocument(
+                    BeatsPerBar: 4,
+                    TicksPerBeat: 2100
+                ),
+                Segments: [segment]
+            ));
+            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(
+                Effects: null,
+                Name: "bed",
+                Order: null,
+                Patterns: null,
+                Schema: AudioDocument.CurrentSchema,
+                Tempo: null
+            ));
+            var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(
+                Schema: SynthPatchDocument.CurrentSchema,
+                Name: "stinger",
+                Oscillator: null,
+                DutyThousandths: null,
+                Polynomial: null,
+                AttackFrames: null,
+                DecayFrames: null,
+                SustainThousandths: null,
+                ReleaseFrames: null,
+                PitchMillihertz: 440_000
+            ));
+            var musicPath = Path.Combine(
+                path1: directory,
+                path2: "when-law.puck.music.v1.json"
+            );
+            var tunePath = Path.Combine(
+                path1: directory,
+                path2: "bed-tune.puck.tune.v1.json"
+            );
+            var patchPath = Path.Combine(
+                path1: directory,
+                path2: "stinger.puck.synthesizer-patch.v1.json"
+            );
+
+            File.WriteAllBytes(
+                path: musicPath,
+                bytes: music.Bytes
+            );
+            File.WriteAllBytes(
+                path: tunePath,
+                bytes: tune.Bytes
+            );
+            File.WriteAllBytes(
+                path: patchPath,
+                bytes: patch.Bytes
+            );
+
+            assert(obj: Fixtures.BuildDocument() with {
+                Music = [new WorldMusicRow(
+                    Name: "when-law",
+                    Source: musicPath,
+                    Hash: music.Hash
+                )],
+                PatchesRaw = [new WorldPatch(
+                    Name: "stinger",
+                    Source: patchPath,
+                    Hash: patch.Hash
+                )],
+                TunesRaw = [new WorldTune(
+                    Name: "bed-tune",
+                    Source: tunePath,
+                    Hash: tune.Hash
+                )],
+            });
+        } finally {
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
         }
+    }
+
+    [Fact]
+    public void CueOnlyEmbellishmentWhenRefusesByName() {
+        AssertWhenRefuses(
+            path: "embellishments.when",
+            segment: new MusicSegmentDocument(
+                Id: "calm",
+                Transitions: null,
+                Embellishments: [new MusicEmbellishmentDocument(
+                        GainThousandths: null,
+                        PatchId: "stinger",
+                        When: WorldAudioCue.GrantDenied
+                    )]
+            ),
+            token: WorldAudioCue.GrantDenied
+        );
+    }
+    [Fact]
+    public void CueOnlyLayerWhenRefusesByName() {
+        AssertWhenRefuses(
+            path: "layers.when",
+            segment: new MusicSegmentDocument(
+                Id: "calm",
+                Transitions: null,
+                Layers: [new MusicLayerDocument(
+                        GainThousandths: null,
+                        TuneId: "bed-tune",
+                        When: WorldAudioCue.MutationApplied
+                    )]
+            ),
+            token: WorldAudioCue.MutationApplied
+        );
+    }
+    [Fact]
+    public void CueOnlyTransitionWhenRefusesByName() {
+        AssertWhenRefuses(
+            path: "transitions.when",
+            segment: new MusicSegmentDocument(
+                Id: "calm",
+                Transitions: [new MusicTransitionDocument(
+                        At: null,
+                        To: "calm",
+                        When: WorldAudioCue.PlayerJump
+                    )]
+            ),
+            token: WorldAudioCue.PlayerJump
+        );
     }
     [Fact]
     public void EveryMusicWhenTokenMapsToASenseFamily() {
@@ -34,50 +184,43 @@ public sealed class MusicWhenTokenLawTests {
         // coincidental fault of the shared fixture.
         WithDocument(
             assert: static document => {
-                Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: reason);
+                Assert.True(
+                    condition: WorldDefinitionValidator.TryValidate(
+                        definition: document,
+                        neighbours: null,
+                        reason: out var reason
+                    ),
+                    userMessage: reason
+                );
             },
             segment: new MusicSegmentDocument(
                 Id: "calm",
-                Transitions: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicTransitionDocument(At: null, To: "calm", When: token))],
-                Layers: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicLayerDocument(GainThousandths: null, TuneId: "bed-tune", When: token))],
-                Embellishments: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicEmbellishmentDocument(GainThousandths: null, PatchId: "stinger", When: token))]
+                Transitions: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicTransitionDocument(
+                        At: null,
+                        To: "calm",
+                        When: token
+                    ))],
+                Layers: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicLayerDocument(
+                        GainThousandths: null,
+                        TuneId: "bed-tune",
+                        When: token
+                    ))],
+                Embellishments: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicEmbellishmentDocument(
+                        GainThousandths: null,
+                        PatchId: "stinger",
+                        When: token
+                    ))]
             )
         );
     }
     [Fact]
-    public void CueOnlyTransitionWhenRefusesByName() {
-        AssertWhenRefuses(
-            path: "transitions.when",
-            segment: new MusicSegmentDocument(
-                Id: "calm",
-                Transitions: [new MusicTransitionDocument(At: null, To: "calm", When: WorldAudioCue.PlayerJump)]
-            ),
-            token: WorldAudioCue.PlayerJump
-        );
-    }
-    [Fact]
-    public void CueOnlyLayerWhenRefusesByName() {
-        AssertWhenRefuses(
-            path: "layers.when",
-            segment: new MusicSegmentDocument(
-                Id: "calm",
-                Transitions: null,
-                Layers: [new MusicLayerDocument(GainThousandths: null, TuneId: "bed-tune", When: WorldAudioCue.MutationApplied)]
-            ),
-            token: WorldAudioCue.MutationApplied
-        );
-    }
-    [Fact]
-    public void CueOnlyEmbellishmentWhenRefusesByName() {
-        AssertWhenRefuses(
-            path: "embellishments.when",
-            segment: new MusicSegmentDocument(
-                Id: "calm",
-                Transitions: null,
-                Embellishments: [new MusicEmbellishmentDocument(GainThousandths: null, PatchId: "stinger", When: WorldAudioCue.GrantDenied)]
-            ),
-            token: WorldAudioCue.GrantDenied
-        );
+    public void MusicWhenTokensAreAPublishedEventTokenSubset() {
+        foreach (var token in WorldAudioCue.MusicWhenTokens) {
+            Assert.True(
+                condition: WorldAudioCue.IsEventToken(token: token),
+                userMessage: $"'{token}' is not a published event token"
+            );
+        }
     }
     [Fact]
     public void WhitespaceLayerWhenRefuses() {
@@ -88,49 +231,13 @@ public sealed class MusicWhenTokenLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Layers: [new MusicLayerDocument(GainThousandths: null, TuneId: "bed-tune", When: " ")]
+                Layers: [new MusicLayerDocument(
+                        GainThousandths: null,
+                        TuneId: "bed-tune",
+                        When: " "
+                    )]
             ),
             token: " "
         );
-    }
-
-    private static void AssertWhenRefuses(MusicSegmentDocument segment, string path, string token) {
-        WithDocument(
-            assert: document => {
-                Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: $"'{token}' was expected to refuse");
-                Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: path);
-                Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"'{token}' is not a sense-mappable when token");
-            },
-            segment: segment
-        );
-    }
-    private static void WithDocument(Action<WorldDefinition> assert, MusicSegmentDocument segment) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-when-law-").FullName;
-
-        try {
-            var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
-                Schema: MusicDocument.CurrentSchema,
-                Name: "when-law",
-                Tempo: new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: 2100),
-                Segments: [segment]
-            ));
-            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "bed", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
-            var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: "stinger", Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
-            var musicPath = Path.Combine(path1: directory, path2: "when-law.puck.music.v1.json");
-            var tunePath = Path.Combine(path1: directory, path2: "bed-tune.puck.tune.v1.json");
-            var patchPath = Path.Combine(path1: directory, path2: "stinger.puck.synthesizer-patch.v1.json");
-
-            File.WriteAllBytes(path: musicPath, bytes: music.Bytes);
-            File.WriteAllBytes(path: tunePath, bytes: tune.Bytes);
-            File.WriteAllBytes(path: patchPath, bytes: patch.Bytes);
-
-            assert(obj: Fixtures.BuildDocument() with {
-                Music = [new WorldMusicRow(Name: "when-law", Source: musicPath, Hash: music.Hash)],
-                PatchesRaw = [new WorldPatch(Name: "stinger", Source: patchPath, Hash: patch.Hash)],
-                TunesRaw = [new WorldTune(Name: "bed-tune", Source: tunePath, Hash: tune.Hash)],
-            });
-        } finally {
-            Directory.Delete(path: directory, recursive: true);
-        }
     }
 }

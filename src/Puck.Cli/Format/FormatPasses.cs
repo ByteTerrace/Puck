@@ -19,30 +19,97 @@ internal static class FormatPasses {
     // semantic cost. NOTE: the tree is not swept to these, so a bare `format`/`-WhatIf` reports (and
     // fixes) drift until a deliberate tree-wide run converts it.
     public static readonly FormatPass[] All = [
-        new(Name: "attr-order", Default: true, Apply: static node => new AttrRewriter().Visit(node: node)!),
-        new(Name: "member-groups", Default: false, Apply: static node => new MemberGroupsRewriter().Visit(node: node)!),
-        new(Name: "member-spacing", Default: true, Apply: static node => new MemberSpacingRewriter().Visit(node: node)!),
-        new(Name: "member-order", Default: true, Apply: static node => new MemberOrderRewriter().Visit(node: node)!),
-        new(Apply: null, Default: true, Name: "null-pattern"),
-        new(Name: "string-merge", Default: true, Apply: static node => new StringMergeRewriter().Visit(node: node)!),
-        new(Name: "paren-clarity", Default: true, Apply: static node => new ParenClarityRewriter().Visit(node: node)!),
-        new(Name: "logical-lines", Default: false, Apply: static node => new LogicalLinesRewriter().Visit(node: node)!),
-        new(Name: "arg-lines", Default: false, Apply: static node => new ArgLinesRewriter().Visit(node: node)!),
-        new(Name: "ternary-lines", Default: false, Apply: static node => new TernaryLinesRewriter().Visit(node: node)!),
-        new(Name: "init-order", Default: true, Apply: static node => new InitOrderRewriter().Visit(node: node)!),
-        new(Name: "trailing-comma", Default: true, Apply: static node => new TrailingCommaRewriter().Visit(node: node)!),
-        new(Name: "decl-spacing", Default: true, Apply: static node => new DeclSpacingRewriter().Visit(node: node)!),
-        new(Name: "literal-var", Default: true, Apply: static node => new LiteralVarRewriter().Visit(node: node)!),
-        new(Apply: null, Default: true, Name: "named-args"),
+        new(
+            Name: "attr-order",
+            Default: true,
+            Apply: static node => new AttrRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "member-groups",
+            Default: false,
+            Apply: static node => new MemberGroupsRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "member-spacing",
+            Default: true,
+            Apply: static node => new MemberSpacingRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "member-order",
+            Default: true,
+            Apply: static node => new MemberOrderRewriter().Visit(node: node)!
+        ),
+        new(
+            Apply: null,
+            Default: true,
+            Name: "null-pattern"
+        ),
+        new(
+            Name: "string-merge",
+            Default: true,
+            Apply: static node => new StringMergeRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "paren-clarity",
+            Default: true,
+            Apply: static node => new ParenClarityRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "logical-lines",
+            Default: false,
+            Apply: static node => new LogicalLinesRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "arg-lines",
+            Default: false,
+            Apply: static node => new ArgLinesRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "ternary-lines",
+            Default: false,
+            Apply: static node => new TernaryLinesRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "init-order",
+            Default: true,
+            Apply: static node => new InitOrderRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "trailing-comma",
+            Default: true,
+            Apply: static node => new TrailingCommaRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "decl-spacing",
+            Default: true,
+            Apply: static node => new DeclSpacingRewriter().Visit(node: node)!
+        ),
+        new(
+            Name: "literal-var",
+            Default: true,
+            Apply: static node => new LiteralVarRewriter().Visit(node: node)!
+        ),
+        new(
+            Apply: null,
+            Default: true,
+            Name: "named-args"
+        ),
     ];
 
     // The pass names in canonical order, for the unknown-pass error.
     public static string Names =>
-        string.Join(separator: ", ", values: All.Select(selector: static pass => pass.Name));
+        string.Join(
+            separator: ", ",
+            values: All.Select(selector: static pass => pass.Name)
+        );
 
-    public static bool IsKnown(string name) =>
-        All.Any(predicate: pass => string.Equals(a: pass.Name, b: name, comparisonType: StringComparison.Ordinal));
     // The names a bare `format` selects.
     public static HashSet<string> DefaultSelection() =>
         All.Where(predicate: static pass => pass.Default).Select(selector: static pass => pass.Name).ToHashSet(comparer: StringComparer.Ordinal);
+    public static bool IsKnown(string name) =>
+        All.Any(predicate: pass => string.Equals(
+            a: pass.Name,
+            b: name,
+            comparisonType: StringComparison.Ordinal
+        ));
 }

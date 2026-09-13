@@ -70,8 +70,14 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var files = CatalogFiles(directory: dir.RootPath);
 
-        Assert.Equal(expected: 3, actual: files.Length);
-        Assert.Equal(expected: 3, actual: Open(dir: dir).All.Count);
+        Assert.Equal(
+            expected: 3,
+            actual: files.Length
+        );
+        Assert.Equal(
+            expected: 3,
+            actual: Open(dir: dir).All.Count
+        );
 
         return files;
     }
@@ -124,16 +130,25 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var swept = Open(dir: dir);
 
-        Assert.Equal(expected: files.Length, actual: swept.Discarded.Count);
+        Assert.Equal(
+            expected: files.Length,
+            actual: swept.Discarded.Count
+        );
 
         foreach (var entry in swept.Discarded) {
-            Assert.True(condition: entry.Moved, userMessage: entry.Reason);
+            Assert.True(
+                condition: entry.Moved,
+                userMessage: entry.Reason
+            );
             Assert.Contains(
                 actualString: entry.Reason,
                 comparisonType: StringComparison.Ordinal,
                 expectedSubstring: "'motion' could not be mapped"
             );
-            Assert.True(condition: File.Exists(path: entry.QuarantinePath), userMessage: entry.QuarantinePath);
+            Assert.True(
+                condition: File.Exists(path: entry.QuarantinePath),
+                userMessage: entry.QuarantinePath
+            );
         }
 
         // The retired shape never reaches a parsed definition: the catalog that came back is the fresh seed the
@@ -141,12 +156,15 @@ public sealed class OwnedWorldDisposalLawTests {
         Assert.NotEmpty(collection: swept.All);
 
         foreach (var path in CatalogFiles(directory: dir.RootPath)) {
-            Assert.True(condition: WorldDefinitionFileSource.TryLoad(
-                contentHash: out _,
-                definition: out _,
-                path: path,
-                reason: out var reason
-            ), userMessage: reason);
+            Assert.True(
+                condition: WorldDefinitionFileSource.TryLoad(
+                    contentHash: out _,
+                    definition: out _,
+                    path: path,
+                    reason: out var reason
+                ),
+                userMessage: reason
+            );
         }
 
         Assert.Empty(collection: Open(dir: dir).Discarded);
@@ -171,15 +189,30 @@ public sealed class OwnedWorldDisposalLawTests {
         var swept = Open(dir: dir);
         var discarded = Assert.Single(collection: swept.Discarded);
 
-        Assert.Equal(expected: Path.GetFileName(path: corrupt), actual: discarded.FileName);
-        Assert.True(condition: discarded.Moved, userMessage: discarded.Reason);
+        Assert.Equal(
+            expected: Path.GetFileName(path: corrupt),
+            actual: discarded.FileName
+        );
+        Assert.True(
+            condition: discarded.Moved,
+            userMessage: discarded.Reason
+        );
         // No re-seed: the catalog was not left empty, so the discarded id is simply absent from it.
-        Assert.Equal(expected: survivors.Count, actual: swept.All.Count);
+        Assert.Equal(
+            expected: survivors.Count,
+            actual: swept.All.Count
+        );
         Assert.False(condition: File.Exists(path: corrupt));
 
         foreach (var (path, bytes) in survivors) {
-            Assert.True(condition: File.Exists(path: path), userMessage: path);
-            Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: path));
+            Assert.True(
+                condition: File.Exists(path: path),
+                userMessage: path
+            );
+            Assert.Equal(
+                expected: bytes,
+                actual: File.ReadAllBytes(path: path)
+            );
         }
     }
     /// <summary>CONTROL: a directory of documents this catalog CAN admit is swept by nothing — no disposal, no
@@ -194,16 +227,28 @@ public sealed class OwnedWorldDisposalLawTests {
         var reopened = Open(dir: dir);
 
         Assert.Empty(collection: reopened.Discarded);
-        Assert.Equal(expected: before.Count, actual: reopened.All.Count);
+        Assert.Equal(
+            expected: before.Count,
+            actual: reopened.All.Count
+        );
         Assert.False(condition: Directory.Exists(path: QuarantineDirectory(dir: dir)));
 
         foreach (var (path, bytes) in before) {
-            Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: path));
+            Assert.Equal(
+                expected: bytes,
+                actual: File.ReadAllBytes(path: path)
+            );
         }
         // The catalog that reloaded is the one on disk, not a fresh seed standing in for it: the fixture document
         // authors neither of the hand-placed ids, so a re-seed could not produce them.
-        Assert.Contains(collection: reopened.All, filter: identity => (identity.Id == "cobalt"));
-        Assert.Contains(collection: reopened.All, filter: identity => (identity.Id == "moss"));
+        Assert.Contains(
+            collection: reopened.All,
+            filter: identity => (identity.Id == "cobalt")
+        );
+        Assert.Contains(
+            collection: reopened.All,
+            filter: identity => (identity.Id == "moss")
+        );
     }
     /// <summary>A discarded document is disposed of, not destroyed: its bytes survive verbatim under the quarantine
     /// directory the entry names, so an operator can still read what was refused.</summary>
@@ -218,7 +263,10 @@ public sealed class OwnedWorldDisposalLawTests {
         var swept = Open(dir: dir);
         var discarded = Assert.Single(collection: swept.Discarded);
 
-        Assert.Equal(expected: staleBytes, actual: File.ReadAllBytes(path: discarded.QuarantinePath));
+        Assert.Equal(
+            expected: staleBytes,
+            actual: File.ReadAllBytes(path: discarded.QuarantinePath)
+        );
         Assert.Equal(
             actual: Path.GetDirectoryName(path: discarded.QuarantinePath),
             expected: QuarantineDirectory(dir: dir)
@@ -241,9 +289,18 @@ public sealed class OwnedWorldDisposalLawTests {
 
         Assert.Empty(collection: swept.Discarded);
         Assert.False(condition: Directory.Exists(path: QuarantineDirectory(dir: dir)));
-        Assert.True(condition: File.Exists(path: target), userMessage: target);
-        Assert.Equal(expected: before, actual: File.ReadAllBytes(path: target));
-        Assert.Equal(expected: (files.Length - 1), actual: swept.All.Count);
+        Assert.True(
+            condition: File.Exists(path: target),
+            userMessage: target
+        );
+        Assert.Equal(
+            expected: before,
+            actual: File.ReadAllBytes(path: target)
+        );
+        Assert.Equal(
+            expected: (files.Length - 1),
+            actual: swept.All.Count
+        );
     }
     /// <summary>CONTROL for the denial above: the SAME file, refused for a reason that IS a verdict on its bytes, is
     /// disposed of — so the retention proved above rests on the refusal's class, not on the sweep being inert.</summary>
@@ -260,7 +317,10 @@ public sealed class OwnedWorldDisposalLawTests {
         var swept = Open(dir: dir);
         var discarded = Assert.Single(collection: swept.Discarded);
 
-        Assert.True(condition: discarded.Moved, userMessage: discarded.Reason);
+        Assert.True(
+            condition: discarded.Moved,
+            userMessage: discarded.Reason
+        );
         Assert.False(condition: File.Exists(path: target));
     }
     /// <summary>RETENTION: when every document is unreadable the catalog comes back EMPTY rather than re-seeded —
@@ -291,10 +351,16 @@ public sealed class OwnedWorldDisposalLawTests {
 
         Assert.Empty(collection: swept.All);
         Assert.Empty(collection: swept.Discarded);
-        Assert.Equal(expected: files.Length, actual: CatalogFiles(directory: dir.RootPath).Length);
+        Assert.Equal(
+            expected: files.Length,
+            actual: CatalogFiles(directory: dir.RootPath).Length
+        );
 
         foreach (var (path, bytes) in before) {
-            Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: path));
+            Assert.Equal(
+                expected: bytes,
+                actual: File.ReadAllBytes(path: path)
+            );
         }
     }
     /// <summary>A directory can occupy a deterministic seed path without appearing in the catalog's file glob. The
@@ -335,7 +401,10 @@ public sealed class OwnedWorldDisposalLawTests {
         var firstBytes = File.ReadAllBytes(path: target);
         var first = Assert.Single(collection: Open(dir: dir).Discarded);
 
-        Assert.True(condition: first.Moved, userMessage: first.Reason);
+        Assert.True(
+            condition: first.Moved,
+            userMessage: first.Reason
+        );
 
         File.WriteAllText(
             contents: "{ this is not a document either",
@@ -345,10 +414,22 @@ public sealed class OwnedWorldDisposalLawTests {
         var secondBytes = File.ReadAllBytes(path: target);
         var second = Assert.Single(collection: Open(dir: dir).Discarded);
 
-        Assert.True(condition: second.Moved, userMessage: second.Reason);
-        Assert.NotEqual(expected: first.QuarantinePath, actual: second.QuarantinePath);
-        Assert.Equal(expected: firstBytes, actual: File.ReadAllBytes(path: first.QuarantinePath));
-        Assert.Equal(expected: secondBytes, actual: File.ReadAllBytes(path: second.QuarantinePath));
+        Assert.True(
+            condition: second.Moved,
+            userMessage: second.Reason
+        );
+        Assert.NotEqual(
+            expected: first.QuarantinePath,
+            actual: second.QuarantinePath
+        );
+        Assert.Equal(
+            expected: firstBytes,
+            actual: File.ReadAllBytes(path: first.QuarantinePath)
+        );
+        Assert.Equal(
+            expected: secondBytes,
+            actual: File.ReadAllBytes(path: second.QuarantinePath)
+        );
     }
     /// <summary>A directory can occupy a path just as completely as a file. It is skipped by the same suffix walk
     /// rather than turning a recoverable name collision into a failed disposal.</summary>
@@ -368,7 +449,10 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var disposal = Assert.Single(collection: Open(dir: dir).Discarded);
 
-        Assert.True(condition: disposal.Moved, userMessage: disposal.Reason);
+        Assert.True(
+            condition: disposal.Moved,
+            userMessage: disposal.Reason
+        );
         Assert.True(condition: Directory.Exists(path: occupied));
         Assert.EndsWith(
             actualString: disposal.QuarantinePath,
@@ -402,16 +486,28 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var swept = Open(dir: dir);
 
-        Assert.Equal(expected: files.Length, actual: swept.Discarded.Count);
+        Assert.Equal(
+            expected: files.Length,
+            actual: swept.Discarded.Count
+        );
         Assert.All(
-            action: entry => Assert.False(condition: entry.Moved, userMessage: entry.Reason),
+            action: entry => Assert.False(
+                condition: entry.Moved,
+                userMessage: entry.Reason
+            ),
             collection: swept.Discarded
         );
         Assert.Empty(collection: swept.All);
-        Assert.Equal(expected: files.Length, actual: CatalogFiles(directory: dir.RootPath).Length);
+        Assert.Equal(
+            expected: files.Length,
+            actual: CatalogFiles(directory: dir.RootPath).Length
+        );
 
         foreach (var (path, bytes) in before) {
-            Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: path));
+            Assert.Equal(
+                expected: bytes,
+                actual: File.ReadAllBytes(path: path)
+            );
         }
     }
     /// <summary>DENIAL: when <c>File.Move</c> itself fails, BOTH copies survive — the source keeps its bytes in the
@@ -428,7 +524,10 @@ public sealed class OwnedWorldDisposalLawTests {
         var firstBytes = File.ReadAllBytes(path: target);
         var first = Assert.Single(collection: Open(dir: dir).Discarded);
 
-        Assert.True(condition: first.Moved, userMessage: first.Reason);
+        Assert.True(
+            condition: first.Moved,
+            userMessage: first.Reason
+        );
 
         File.WriteAllText(
             contents: "{ this is not a document either",
@@ -444,16 +543,31 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var second = Assert.Single(collection: swept.Discarded);
 
-        Assert.False(condition: second.Moved, userMessage: second.Reason);
+        Assert.False(
+            condition: second.Moved,
+            userMessage: second.Reason
+        );
         Assert.Contains(
             actualString: second.Reason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "it could not be moved aside"
         );
-        Assert.NotEqual(expected: first.QuarantinePath, actual: second.QuarantinePath);
-        Assert.False(condition: File.Exists(path: second.QuarantinePath), userMessage: second.QuarantinePath);
-        Assert.Equal(expected: secondBytes, actual: File.ReadAllBytes(path: target));
-        Assert.Equal(expected: firstBytes, actual: File.ReadAllBytes(path: first.QuarantinePath));
+        Assert.NotEqual(
+            expected: first.QuarantinePath,
+            actual: second.QuarantinePath
+        );
+        Assert.False(
+            condition: File.Exists(path: second.QuarantinePath),
+            userMessage: second.QuarantinePath
+        );
+        Assert.Equal(
+            expected: secondBytes,
+            actual: File.ReadAllBytes(path: target)
+        );
+        Assert.Equal(
+            expected: firstBytes,
+            actual: File.ReadAllBytes(path: first.QuarantinePath)
+        );
     }
     /// <summary>CONTROL for the denial above: the SAME second document, with nothing holding it open, IS moved to the
     /// destination the suffix walk chose — so the retention proved above rests on the move failing, not on the
@@ -467,7 +581,10 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var first = Assert.Single(collection: Open(dir: dir).Discarded);
 
-        Assert.True(condition: first.Moved, userMessage: first.Reason);
+        Assert.True(
+            condition: first.Moved,
+            userMessage: first.Reason
+        );
 
         File.WriteAllText(
             contents: "{ this is not a document either",
@@ -477,9 +594,15 @@ public sealed class OwnedWorldDisposalLawTests {
         var secondBytes = File.ReadAllBytes(path: target);
         var second = Assert.Single(collection: Open(dir: dir).Discarded);
 
-        Assert.True(condition: second.Moved, userMessage: second.Reason);
+        Assert.True(
+            condition: second.Moved,
+            userMessage: second.Reason
+        );
         Assert.False(condition: File.Exists(path: target));
-        Assert.Equal(expected: secondBytes, actual: File.ReadAllBytes(path: second.QuarantinePath));
+        Assert.Equal(
+            expected: secondBytes,
+            actual: File.ReadAllBytes(path: second.QuarantinePath)
+        );
     }
     /// <summary>READ-BACK: a document refused IN PLACE is not only narrated on stderr — it is carried on
     /// <see cref="WorldOwnedWorlds.Refused"/>, naming the file that is still sitting in the catalog directory, so a
@@ -498,7 +621,10 @@ public sealed class OwnedWorldDisposalLawTests {
 
         var refused = Assert.Single(collection: swept.Refused);
 
-        Assert.Equal(expected: Path.GetFileName(path: target), actual: refused.FileName);
+        Assert.Equal(
+            expected: Path.GetFileName(path: target),
+            actual: refused.FileName
+        );
         Assert.Empty(collection: swept.Discarded);
         Assert.DoesNotContain(
             actualString: refused.Reason,

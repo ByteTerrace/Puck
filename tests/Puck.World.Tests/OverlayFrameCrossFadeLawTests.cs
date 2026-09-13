@@ -11,6 +11,150 @@ public sealed class OverlayFrameCrossFadeLawTests {
     private const int Height = 100;
     private const int Width = 200;
 
+    private static OverlayFrameBuilder BuildBuilder() => new(
+        glyphs: CreateGlyphs(
+            atlasCellHeight: 1,
+            atlasCellWidth: 1,
+            distanceRange: 1f,
+            glyphCount: 1,
+            packedSdf: [0u]
+        ),
+        height: Height,
+        leases: new OverlayChannelLeases(capacity: new OverlayCapacity(
+            BindingBarMaxBanks: 0,
+            BindingBarMaxModifiers: 0,
+            BindingBarMaxSlotsPerBank: 0,
+            HudElementsPerPanel: 1,
+            HudElementsPerSeatPanel: 0,
+            HudPanels: 1,
+            HudSeatPanelsPerSeat: 0,
+            MarkerMaxChipsPerSeat: 0,
+            Seats: 0,
+            WheelMaxRings: 0,
+            WheelMaxSectorsPerRing: 0
+        )),
+        theme: OverlayThemeValues.Zero,
+        width: Width
+    );
+    private static HudWriter BuildWriter(OverlayHudElement element, OverlayFrameSlots frameSlots) => new(
+        bindings: new NoBindings(),
+        frameSlots: frameSlots,
+        source: new FixedHudSource(frame: new OverlayHudFrame(Panels: new[] {
+                    new OverlayHudPanel(
+            Id: "fade",
+            Rect: new OverlayHudRect(
+                Height: 1f,
+                Width: 1f,
+                X: 0f,
+                Y: 0f
+            ),
+            Band: OverlayHudBand.Over,
+            Style: OverlayPanelStyle.Panel,
+            Elements: new[] { element }
+        ),
+                })),
+        theme: new OverlayThemeStore()
+    );
+    [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
+    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
+    private static OverlayHudElement FrameElement(int sourceA, int sourceB, float mix) => new(
+        Kind: OverlayHudElementKind.Frame,
+        Rect: new OverlayHudRect(
+            Height: 1f,
+            Width: 1f,
+            X: 0f,
+            Y: 0f
+        ),
+        Role: default,
+        Text: null,
+        Binding: null,
+        FrameSource: sourceA,
+        FrameSourceB: sourceB,
+        FrameMix: mix
+    );
+    private static ReadOnlySpan<uint> Record(OverlayFrameBuilder builder) => builder.Scratch.Slice(
+        start: (builder.ElementBaseWords + ((builder.ElementCount - 1) * OverlayFrameBuilder.ElementWords)),
+        length: OverlayFrameBuilder.ElementWords
+    );
+
+    [Fact]
+    public void EmitFrameCarriesBothSlotsAndTheMixWhenBothSourcesBind() {
+        var builder = BuildBuilder();
+        var writer = BuildWriter(
+            element: FrameElement(
+                mix: 0.5f,
+                sourceA: 11,
+                sourceB: 12
+            ),
+            frameSlots: new OverlayFrameSlots(sources: new FixedFrameSources(refuseKey: -1))
+        );
+
+        writer.RefreshFrame();
+        builder.BeginChannel(channel: OverlayChannel.Hud);
+        writer.EmitOver(builder: builder);
+
+        var record = Record(builder: builder);
+
+        Assert.Equal(
+            expected: 1,
+            actual: builder.ElementCount
+        );
+        Assert.Equal(
+            expected: 4u | (0u << 4) | (2u << 16),
+            actual: record[4]
+        );
+        Assert.Equal(
+            expected: BitConverter.SingleToUInt32Bits(value: 0.5f),
+            actual: record[8]
+        );
+    }
+    [InlineData(12)]
+    [InlineData(-1)]
+    [Theory]
+    public void EmitFrameDegradesToTheWinnerAloneWhenTheOutgoingSourceCannotBind(int refuseKey) {
+        var builder = BuildBuilder();
+        var sources = new FixedFrameSources(refuseKey: refuseKey);
+        var frameSlots = new OverlayFrameSlots(sources: sources);
+
+        if (refuseKey < 0) {
+            // Fill every slot but the one the winner takes so the outgoing bind trips the capacity refusal.
+            for (var key = 100; (key < (100 + (OverlayFrameSlots.SlotCount - 1))); key++) {
+                Assert.True(condition: (frameSlots.Bind(key: key) >= 0));
+            }
+        }
+
+        var writer = BuildWriter(
+            element: FrameElement(
+                mix: 0.5f,
+                sourceA: 11,
+                sourceB: 12
+            ),
+            frameSlots: frameSlots
+        );
+
+        writer.RefreshFrame();
+        builder.BeginChannel(channel: OverlayChannel.Hud);
+        writer.EmitOver(builder: builder);
+
+        var record = Record(builder: builder);
+        var winnerSlot = ((refuseKey < 0)
+            ? (uint)(OverlayFrameSlots.SlotCount - 1)
+            : 0u
+        );
+
+        Assert.Equal(
+            expected: 1,
+            actual: builder.ElementCount
+        );
+        Assert.Equal(
+            expected: 4u | (winnerSlot << 4),
+            actual: record[4]
+        );
+        Assert.Equal(
+            expected: 0u,
+            actual: record[8]
+        );
+    }
     [Fact]
     public void WriteFramePacksTheOutgoingSlotIntoWord4AndTheMixIntoWord8() {
         var builder = BuildBuilder();
@@ -32,8 +176,14 @@ public sealed class OverlayFrameCrossFadeLawTests {
 
         var record = Record(builder: builder);
 
-        Assert.Equal(expected: 4u | (3u << 4) | (1u << 12) | (1u << 13) | (6u << 16), actual: record[4]);
-        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 0.25f), actual: record[8]);
+        Assert.Equal(
+            expected: 4u | (3u << 4) | (1u << 12) | (1u << 13) | (6u << 16),
+            actual: record[4]
+        );
+        Assert.Equal(
+            expected: BitConverter.SingleToUInt32Bits(value: 0.25f),
+            actual: record[8]
+        );
     }
     [Fact]
     public void WriteFrameWithoutAnOutgoingSlotLeavesBits16UpAndWord8Zero() {
@@ -56,120 +206,15 @@ public sealed class OverlayFrameCrossFadeLawTests {
 
         var record = Record(builder: builder);
 
-        Assert.Equal(expected: 4u | (7u << 4), actual: record[4]);
-        Assert.Equal(expected: 0u, actual: record[8]);
-    }
-    [Fact]
-    public void EmitFrameCarriesBothSlotsAndTheMixWhenBothSourcesBind() {
-        var builder = BuildBuilder();
-        var writer = BuildWriter(
-            element: FrameElement(mix: 0.5f, sourceA: 11, sourceB: 12),
-            frameSlots: new OverlayFrameSlots(sources: new FixedFrameSources(refuseKey: -1))
+        Assert.Equal(
+            expected: 4u | (7u << 4),
+            actual: record[4]
         );
-
-        writer.RefreshFrame();
-        builder.BeginChannel(channel: OverlayChannel.Hud);
-        writer.EmitOver(builder: builder);
-
-        var record = Record(builder: builder);
-
-        Assert.Equal(expected: 1, actual: builder.ElementCount);
-        Assert.Equal(expected: 4u | (0u << 4) | (2u << 16), actual: record[4]);
-        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 0.5f), actual: record[8]);
-    }
-    [InlineData(12)]
-    [InlineData(-1)]
-    [Theory]
-    public void EmitFrameDegradesToTheWinnerAloneWhenTheOutgoingSourceCannotBind(int refuseKey) {
-        var builder = BuildBuilder();
-        var sources = new FixedFrameSources(refuseKey: refuseKey);
-        var frameSlots = new OverlayFrameSlots(sources: sources);
-
-        if (refuseKey < 0) {
-            // Fill every slot but the one the winner takes so the outgoing bind trips the capacity refusal.
-            for (var key = 100; (key < (100 + (OverlayFrameSlots.SlotCount - 1))); key++) {
-                Assert.True(condition: (frameSlots.Bind(key: key) >= 0));
-            }
-        }
-
-        var writer = BuildWriter(
-            element: FrameElement(mix: 0.5f, sourceA: 11, sourceB: 12),
-            frameSlots: frameSlots
+        Assert.Equal(
+            expected: 0u,
+            actual: record[8]
         );
-
-        writer.RefreshFrame();
-        builder.BeginChannel(channel: OverlayChannel.Hud);
-        writer.EmitOver(builder: builder);
-
-        var record = Record(builder: builder);
-        var winnerSlot = ((refuseKey < 0) ? (uint)(OverlayFrameSlots.SlotCount - 1) : 0u);
-
-        Assert.Equal(expected: 1, actual: builder.ElementCount);
-        Assert.Equal(expected: 4u | (winnerSlot << 4), actual: record[4]);
-        Assert.Equal(expected: 0u, actual: record[8]);
     }
-
-    private static OverlayFrameBuilder BuildBuilder() => new(
-        glyphs: CreateGlyphs(
-            atlasCellHeight: 1,
-            atlasCellWidth: 1,
-            distanceRange: 1f,
-            glyphCount: 1,
-            packedSdf: [0u]
-        ),
-        height: Height,
-        leases: new OverlayChannelLeases(
-            capacity: new OverlayCapacity(
-                BindingBarMaxBanks: 0,
-                BindingBarMaxModifiers: 0,
-                BindingBarMaxSlotsPerBank: 0,
-                HudElementsPerPanel: 1,
-                HudElementsPerSeatPanel: 0,
-                HudPanels: 1,
-                HudSeatPanelsPerSeat: 0,
-                MarkerMaxChipsPerSeat: 0,
-                Seats: 0,
-                WheelMaxRings: 0,
-                WheelMaxSectorsPerRing: 0
-            )
-        ),
-        theme: OverlayThemeValues.Zero,
-        width: Width
-    );
-    private static HudWriter BuildWriter(OverlayHudElement element, OverlayFrameSlots frameSlots) => new(
-        bindings: new NoBindings(),
-        frameSlots: frameSlots,
-        source: new FixedHudSource(
-            frame: new OverlayHudFrame(
-                Panels: new[] {
-                    new OverlayHudPanel(
-                        Id: "fade",
-                        Rect: new OverlayHudRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
-                        Band: OverlayHudBand.Over,
-                        Style: OverlayPanelStyle.Panel,
-                        Elements: new[] { element }
-                    ),
-                }
-            )
-        ),
-        theme: new OverlayThemeStore()
-    );
-    private static OverlayHudElement FrameElement(int sourceA, int sourceB, float mix) => new(
-        Kind: OverlayHudElementKind.Frame,
-        Rect: new OverlayHudRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
-        Role: default,
-        Text: null,
-        Binding: null,
-        FrameSource: sourceA,
-        FrameSourceB: sourceB,
-        FrameMix: mix
-    );
-    private static ReadOnlySpan<uint> Record(OverlayFrameBuilder builder) => builder.Scratch.Slice(
-        start: (builder.ElementBaseWords + ((builder.ElementCount - 1) * OverlayFrameBuilder.ElementWords)),
-        length: OverlayFrameBuilder.ElementWords
-    );
-    [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
 
     private sealed class FixedFrameSources(int refuseKey) : IOverlayFrameSources {
         public bool TryAcquire(int key, out OverlayFrameLease lease) {
@@ -190,12 +235,12 @@ public sealed class OverlayFrameCrossFadeLawTests {
     }
     private sealed class FixedHudSource(OverlayHudFrame frame) : IHudSource {
         public bool TrySnapshot(out OverlayHudFrame frame) {
-            frame = this.frame;
+            frame = this.m_frame;
 
             return true;
         }
 
-        private readonly OverlayHudFrame frame = frame;
+        private readonly OverlayHudFrame m_frame = frame;
     }
     private sealed class NoBindings : IHudBindingResolver {
         public bool TryResolve(string binding, out float fraction, out string text) {

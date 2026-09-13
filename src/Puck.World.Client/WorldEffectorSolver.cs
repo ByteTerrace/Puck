@@ -30,6 +30,105 @@ public static class WorldEffectorSolver {
     /// pixel at any camera distance a limb is visible from.</summary>
     public const float ReachedTolerance = 1e-5f;
 
+    // One bone's turn about a posed pivot: recorded on that bone in its own delta frame, and carried on every
+    // descendant joint, descendant parent frame, and the tip.
+    private static void Turn(Span<Vector3> posedJoints, Span<Quaternion> parentRotations, Span<Quaternion> corrections, ref Vector3 posedTip, int bone, Vector3 pivot, Quaternion turn) {
+        if (turn == Quaternion.Identity) {
+            return;
+        }
+
+        var parent = parentRotations[bone];
+
+        corrections[bone] = (((Quaternion.Conjugate(value: parent) * turn) * parent) * corrections[bone]);
+
+        for (var index = (bone + 1); (index < posedJoints.Length); index++) {
+            posedJoints[index] = (pivot + Vector3.Transform(
+                rotation: turn,
+                value: (posedJoints[index] - pivot)
+            ));
+            parentRotations[index] = (turn * parentRotations[index]);
+        }
+
+        posedTip = (pivot + Vector3.Transform(
+            rotation: turn,
+            value: (posedTip - pivot)
+        ));
+    }
+
+    /// <summary>Returns the shortest rotation carrying one direction onto another.</summary>
+    /// <param name="from">The direction to rotate; need not be normalized.</param>
+    /// <param name="to">The direction to rotate onto; need not be normalized.</param>
+    /// <returns>The rotation, or the identity when either direction is degenerate.</returns>
+    public static Quaternion FromTo(Vector3 from, Vector3 to) {
+        var fromLength = from.Length();
+        var toLength = to.Length();
+
+        if (
+            (fromLength < MinLength) ||
+            (toLength < MinLength)
+        ) {
+            return Quaternion.Identity;
+        }
+
+        var a = (from / fromLength);
+        var b = (to / toLength);
+        var cosine = Math.Clamp(
+            max: 1f,
+            min: -1f,
+            value: Vector3.Dot(
+                vector1: a,
+                vector2: b
+            )
+        );
+
+        if (cosine < (-1f + MinLength)) {
+            // Antiparallel: every axis perpendicular to the pair is a half turn, and no cross product names one.
+            return Quaternion.CreateFromAxisAngle(
+                angle: MathF.PI,
+                axis: Perpendicular(direction: a)
+            );
+        }
+
+        // The half-way form: (cross(a, b), 1 + dot(a, b)) normalized. It stays exact through the near-parallel case an
+        // acos/normalized-axis pair loses to rounding, which is what lets a sweep close the last millimetre instead
+        // of stalling once every bone is merely nearly aligned.
+        var axis = Vector3.Cross(
+            vector1: a,
+            vector2: b
+        );
+
+        return Quaternion.Normalize(value: new Quaternion(
+            w: (1f + cosine),
+            x: axis.X,
+            y: axis.Y,
+            z: axis.Z
+        ));
+    }
+    /// <summary>Returns whether a driver phase falls inside a plant window.</summary>
+    /// <param name="phase">The driver's wrapped phase, radians in [0, 2π).</param>
+    /// <param name="from">The window's opening phase, radians.</param>
+    /// <param name="to">The window's closing phase, radians.</param>
+    /// <returns><see langword="true"/> while the phase is inside. A window whose <paramref name="from"/> exceeds its
+    /// <paramref name="to"/> names the interval through the phase origin rather than an empty one.</returns>
+    public static bool InWindow(float phase, float from, float to) => ((from <= to)
+        ? ((phase >= from) && (phase <= to))
+        : ((phase >= from) || (phase <= to))
+    );
+    /// <summary>Returns a unit direction perpendicular to another.</summary>
+    /// <param name="direction">The direction to be perpendicular to; assumed non-degenerate.</param>
+    /// <returns>The perpendicular direction.</returns>
+    public static Vector3 Perpendicular(Vector3 direction) {
+        // Cross with whichever axis the direction is least aligned to, so the cross product never collapses.
+        var axis = ((MathF.Abs(x: direction.X) < 0.7f)
+            ? Vector3.UnitX
+            : Vector3.UnitY
+        );
+
+        return Vector3.Normalize(value: Vector3.Cross(
+            vector1: direction,
+            vector2: axis
+        ));
+    }
     /// <summary>Solves a chain in place and accumulates each bone's correction.</summary>
     /// <param name="posedJoints">Each bone's joint, root→tip, in posed creation space; advanced to the solved
     /// configuration.</param>
@@ -153,7 +252,7 @@ public static class WorldEffectorSolver {
         var cosine = Math.Clamp(
             max: 1f,
             min: -1f,
-            value: (((upperLength * upperLength) + (reach * reach) - (lowerLength * lowerLength)) / (2f * upperLength * reach))
+            value: ((((upperLength * upperLength) + (reach * reach)) - (lowerLength * lowerLength)) / ((2f * upperLength) * reach))
         );
         var sine = MathF.Sqrt(x: MathF.Max(
             x: 0f,
@@ -172,7 +271,7 @@ public static class WorldEffectorSolver {
 
         var normal = Vector3.Normalize(value: bend);
 
-        solvedMid = (root + (direction * (upperLength * cosine)) + (normal * (upperLength * sine)));
+        solvedMid = ((root + (direction * (upperLength * cosine))) + (normal * (upperLength * sine)));
         solvedTip = (root + (direction * reach));
     }
     /// <summary>Probes a query field for the surface an effector's tip is reaching toward.</summary>
@@ -237,104 +336,5 @@ public static class WorldEffectorSolver {
         }
 
         return true;
-    }
-    /// <summary>Returns whether a driver phase falls inside a plant window.</summary>
-    /// <param name="phase">The driver's wrapped phase, radians in [0, 2π).</param>
-    /// <param name="from">The window's opening phase, radians.</param>
-    /// <param name="to">The window's closing phase, radians.</param>
-    /// <returns><see langword="true"/> while the phase is inside. A window whose <paramref name="from"/> exceeds its
-    /// <paramref name="to"/> names the interval through the phase origin rather than an empty one.</returns>
-    public static bool InWindow(float phase, float from, float to) => ((from <= to)
-        ? ((phase >= from) && (phase <= to))
-        : ((phase >= from) || (phase <= to))
-    );
-    /// <summary>Returns the shortest rotation carrying one direction onto another.</summary>
-    /// <param name="from">The direction to rotate; need not be normalized.</param>
-    /// <param name="to">The direction to rotate onto; need not be normalized.</param>
-    /// <returns>The rotation, or the identity when either direction is degenerate.</returns>
-    public static Quaternion FromTo(Vector3 from, Vector3 to) {
-        var fromLength = from.Length();
-        var toLength = to.Length();
-
-        if (
-            (fromLength < MinLength) ||
-            (toLength < MinLength)
-        ) {
-            return Quaternion.Identity;
-        }
-
-        var a = (from / fromLength);
-        var b = (to / toLength);
-        var cosine = Math.Clamp(
-            max: 1f,
-            min: -1f,
-            value: Vector3.Dot(
-                vector1: a,
-                vector2: b
-            )
-        );
-
-        if (cosine < (-1f + MinLength)) {
-            // Antiparallel: every axis perpendicular to the pair is a half turn, and no cross product names one.
-            return Quaternion.CreateFromAxisAngle(
-                angle: MathF.PI,
-                axis: Perpendicular(direction: a)
-            );
-        }
-
-        // The half-way form: (cross(a, b), 1 + dot(a, b)) normalized. It stays exact through the near-parallel case an
-        // acos/normalized-axis pair loses to rounding, which is what lets a sweep close the last millimetre instead
-        // of stalling once every bone is merely nearly aligned.
-        var axis = Vector3.Cross(
-            vector1: a,
-            vector2: b
-        );
-
-        return Quaternion.Normalize(value: new Quaternion(
-            w: (1f + cosine),
-            x: axis.X,
-            y: axis.Y,
-            z: axis.Z
-        ));
-    }
-    /// <summary>Returns a unit direction perpendicular to another.</summary>
-    /// <param name="direction">The direction to be perpendicular to; assumed non-degenerate.</param>
-    /// <returns>The perpendicular direction.</returns>
-    public static Vector3 Perpendicular(Vector3 direction) {
-        // Cross with whichever axis the direction is least aligned to, so the cross product never collapses.
-        var axis = ((MathF.Abs(x: direction.X) < 0.7f)
-            ? Vector3.UnitX
-            : Vector3.UnitY
-        );
-
-        return Vector3.Normalize(value: Vector3.Cross(
-            vector1: direction,
-            vector2: axis
-        ));
-    }
-
-    // One bone's turn about a posed pivot: recorded on that bone in its own delta frame, and carried on every
-    // descendant joint, descendant parent frame, and the tip.
-    private static void Turn(Span<Vector3> posedJoints, Span<Quaternion> parentRotations, Span<Quaternion> corrections, ref Vector3 posedTip, int bone, Vector3 pivot, Quaternion turn) {
-        if (turn == Quaternion.Identity) {
-            return;
-        }
-
-        var parent = parentRotations[bone];
-
-        corrections[bone] = ((Quaternion.Conjugate(value: parent) * turn * parent) * corrections[bone]);
-
-        for (var index = (bone + 1); (index < posedJoints.Length); index++) {
-            posedJoints[index] = (pivot + Vector3.Transform(
-                rotation: turn,
-                value: (posedJoints[index] - pivot)
-            ));
-            parentRotations[index] = (turn * parentRotations[index]);
-        }
-
-        posedTip = (pivot + Vector3.Transform(
-            rotation: turn,
-            value: (posedTip - pivot)
-        ));
     }
 }

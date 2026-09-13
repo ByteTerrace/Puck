@@ -21,7 +21,7 @@ public sealed partial class WorldServer {
         _ = connectionId;
         _ = correlationId;
 
-        if (string.IsNullOrWhiteSpace(operation.Instance)) {
+        if (string.IsNullOrWhiteSpace(value: operation.Instance)) {
             return new MachineOperationResult(
                 status: MachineOperationStatus.Refused,
                 reason: "machine operation requires a named instance"
@@ -30,8 +30,8 @@ public sealed partial class WorldServer {
 
         var subject = GrantSubject.Machine(name: operation.Instance);
         var control = m_grants.Allows(
-            principal: principal,
             capability: WorldCapability.Control,
+            principal: principal,
             subject: subject
         );
 
@@ -49,8 +49,10 @@ public sealed partial class WorldServer {
         // Generic operation receipts are not part of the current replay format. Refuse before preparation while
         // recording, rather than let an untaped runtime change contaminate an otherwise valid tape.
         if (ScreenOpTap is not null) {
-            return new MachineOperationResult(MachineOperationStatus.Refused,
-                reason: "machine operations cannot execute while recording; the current replay format does not capture provider operations");
+            return new MachineOperationResult(
+                MachineOperationStatus.Refused,
+                reason: "machine operations cannot execute while recording; the current replay format does not capture provider operations"
+            );
         }
 
         var request = new MachineOperationRequest(
@@ -81,14 +83,24 @@ public sealed partial class WorldServer {
             var currentMachines = m_definition.Machines;
             var candidateMachines = currentMachines.ToArray();
             var candidateIndex = -1;
-            for (var index = 0; index < candidateMachines.Length; index++) {
-                if (string.Equals(candidateMachines[index].Name, plan.Current.Name, StringComparison.Ordinal)) {
+
+            for (var index = 0; (index < candidateMachines.Length); index++) {
+                if (string.Equals(
+                    a: candidateMachines[index].Name,
+                    b: plan.Current.Name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     candidateIndex = index;
                     break;
                 }
             }
-            if (candidateIndex < 0 ||
-                !JsonElement.DeepEquals(candidateMachines[candidateIndex].Configuration, plan.Current.Configuration)) {
+            if (
+                (candidateIndex < 0) ||
+                !JsonElement.DeepEquals(
+                element1: candidateMachines[candidateIndex].Configuration,
+                element2: plan.Current.Configuration
+            )
+            ) {
                 return new MachineOperationResult(
                     status: MachineOperationStatus.Refused,
                     reason: $"Machine '{operation.Instance}' declaration changed before candidate validation."
@@ -97,6 +109,7 @@ public sealed partial class WorldServer {
 
             candidateMachines[candidateIndex] = plan.Candidate;
             var candidateDefinition = m_definition with { MachinesRaw = candidateMachines };
+
             if (!WorldDefinitionValidator.TryValidateLocally(
                 definition: candidateDefinition,
                 machines: m_machines.ValidationCatalog,
@@ -112,6 +125,7 @@ public sealed partial class WorldServer {
             // replay/checkpoint gate at the runtime barrier, including such failed applications.
             AnyScreenOpEverApplied = true;
             var result = m_machines.TryCommitOperation(plan: plan);
+
             if (result.Status != MachineOperationStatus.Applied) {
                 return result;
             }

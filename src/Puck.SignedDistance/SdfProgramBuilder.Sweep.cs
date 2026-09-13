@@ -22,6 +22,7 @@ public sealed partial class SdfProgramBuilder {
     /// outside the tube's own radius is the combination the calibration grid found unsound even with a generous
     /// margin, so it is decoupled from and capped tighter than the bulge ratio.</summary>
     public const float MaxSweepStrandOffsetRatio = 2f;
+
     // The three conservative-margin coefficients SweepConservativeMargin folds against the curve's own authored
     // bulge/strand-offset/taper — calibrated over a randomized grid against a fine-sampled reference tube within the
     // MaxSweepBulgeRatio/MaxSweepTaperRatio/MaxSweepStrandOffsetRatio envelope above (see SweepLawTests). KEEP IN
@@ -43,9 +44,9 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="radiusEnd">The sweep radius at <c>t = 1</c>.</param>
     /// <returns>The non-negative margin.</returns>
     public static float SweepConservativeMargin(float bulge, float strandOffset, float twist, float radiusStart, float radiusEnd) =>
-        ((SweepBulgeMarginFactor * MathF.Abs(x: bulge)) +
+        (((SweepBulgeMarginFactor * MathF.Abs(x: bulge)) +
         ((SweepStrandMarginFactor * strandOffset) * (1f + MathF.Abs(x: twist)))) +
-        (SweepTaperMarginFactor * MathF.Abs(x: (radiusEnd - radiusStart)));
+        (SweepTaperMarginFactor * MathF.Abs(x: (radiusEnd - radiusStart))));
     /// <summary>Adds a quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as
     /// helical strands orbiting the curve — see <see cref="SdfShapeType.Sweep"/>. The control points and radius
     /// endpoints live in a side table this program's own word stream carries; the instruction's Data0.x carries only
@@ -73,14 +74,46 @@ public sealed partial class SdfProgramBuilder {
     /// exceeds the ratio this shape's conservative margin is calibrated against (see
     /// <see cref="MaxSweepBulgeRatio"/>).</exception>
     public SdfProgramBuilder Sweep(Vector3 a, Vector3 b, Vector3 c, float radiusStart, float radiusEnd, float bulge, int strands, float twist, float strandOffset, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
-        RequireFinite(value: a, paramName: nameof(a), subject: "A sweep control point");
-        RequireFinite(value: b, paramName: nameof(b), subject: "A sweep control point");
-        RequireFinite(value: c, paramName: nameof(c), subject: "A sweep control point");
-        RequirePositive(value: radiusStart, paramName: nameof(radiusStart), subject: "A sweep start radius");
-        RequirePositive(value: radiusEnd, paramName: nameof(radiusEnd), subject: "A sweep end radius");
-        RequireFinite(value: bulge, paramName: nameof(bulge), subject: "A sweep bulge");
-        RequireFinite(value: twist, paramName: nameof(twist), subject: "A sweep twist rate");
-        RequireNonNegative(value: strandOffset, paramName: nameof(strandOffset), subject: "A sweep strand offset");
+        RequireFinite(
+            value: a,
+            paramName: nameof(a),
+            subject: "A sweep control point"
+        );
+        RequireFinite(
+            value: b,
+            paramName: nameof(b),
+            subject: "A sweep control point"
+        );
+        RequireFinite(
+            value: c,
+            paramName: nameof(c),
+            subject: "A sweep control point"
+        );
+        RequirePositive(
+            value: radiusStart,
+            paramName: nameof(radiusStart),
+            subject: "A sweep start radius"
+        );
+        RequirePositive(
+            value: radiusEnd,
+            paramName: nameof(radiusEnd),
+            subject: "A sweep end radius"
+        );
+        RequireFinite(
+            value: bulge,
+            paramName: nameof(bulge),
+            subject: "A sweep bulge"
+        );
+        RequireFinite(
+            value: twist,
+            paramName: nameof(twist),
+            subject: "A sweep twist rate"
+        );
+        RequireNonNegative(
+            value: strandOffset,
+            paramName: nameof(strandOffset),
+            subject: "A sweep strand offset"
+        );
 
         if (
             (strands < MinSweepStrands) ||
@@ -92,8 +125,14 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        var maxRadius = MathF.Max(x: radiusStart, y: radiusEnd);
-        var minRadius = MathF.Min(x: radiusStart, y: radiusEnd);
+        var maxRadius = MathF.Max(
+            x: radiusStart,
+            y: radiusEnd
+        );
+        var minRadius = MathF.Min(
+            x: radiusStart,
+            y: radiusEnd
+        );
 
         if (MathF.Abs(x: bulge) > (MaxSweepBulgeRatio * maxRadius)) {
             throw new ArgumentOutOfRangeException(

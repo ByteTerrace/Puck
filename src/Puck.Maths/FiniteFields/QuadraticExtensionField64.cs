@@ -63,6 +63,45 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
 
         return modulus;
     }
+    // The Karatsuba product of Multiply, over Montgomery-form coordinates: the representation is linear, so Add and
+    // Subtract apply unchanged, and each REDC product of two encoded operands is again encoded.
+    private static (ulong A, ulong B) MultiplyEncoded(in ScaledResidueRing64 ring, ulong nonSquare, ulong leftA, ulong leftB, ulong rightA, ulong rightB) {
+        var outer = ring.Multiply(
+            left: leftA,
+            right: rightA
+        );
+        var squareTerm = ring.Multiply(
+            left: leftB,
+            right: rightB
+        );
+        var cross = ring.Subtract(
+            left: ring.Subtract(
+                left: ring.Multiply(
+                    left: ring.Add(
+                        left: leftA,
+                        right: leftB
+                    ),
+                    right: ring.Add(
+                        left: rightA,
+                        right: rightB
+                    )
+                ),
+                right: outer
+            ),
+            right: squareTerm
+        );
+
+        return (
+            A: ring.Add(
+            left: outer,
+            right: ring.Multiply(
+                left: squareTerm,
+                right: nonSquare
+            )
+        ),
+            B: cross
+        );
+    }
     /// <summary>Prints the descriptor's two data, the base field and the non-square.</summary>
     /// <param name="builder">The builder the record's <c>ToString</c> assembles into.</param>
     /// <returns><see langword="true"/>, because members were written.</returns>
@@ -338,47 +377,6 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
             B: ring.Decode(value: resultB)
         );
     }
-
-    // The Karatsuba product of Multiply, over Montgomery-form coordinates: the representation is linear, so Add and
-    // Subtract apply unchanged, and each REDC product of two encoded operands is again encoded.
-    private static (ulong A, ulong B) MultiplyEncoded(in ScaledResidueRing64 ring, ulong nonSquare, ulong leftA, ulong leftB, ulong rightA, ulong rightB) {
-        var outer = ring.Multiply(
-            left: leftA,
-            right: rightA
-        );
-        var squareTerm = ring.Multiply(
-            left: leftB,
-            right: rightB
-        );
-        var cross = ring.Subtract(
-            left: ring.Subtract(
-                left: ring.Multiply(
-                    left: ring.Add(
-                        left: leftA,
-                        right: leftB
-                    ),
-                    right: ring.Add(
-                        left: rightA,
-                        right: rightB
-                    )
-                ),
-                right: outer
-            ),
-            right: squareTerm
-        );
-
-        return (
-            A: ring.Add(
-                left: outer,
-                right: ring.Multiply(
-                    left: squareTerm,
-                    right: nonSquare
-                )
-            ),
-            B: cross
-        );
-    }
-
     /// <summary>Selects the smallest quadratic non-square of a base field.</summary>
     /// <param name="baseField">The base field to search.</param>
     /// <returns>The least value in <c>2, 3, 5, ...</c> whose quadratic character is <c>-1</c>. Perfect squares along the way are skipped by the character itself.</returns>

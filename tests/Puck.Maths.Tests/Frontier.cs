@@ -16,25 +16,6 @@ internal static class Frontier {
     private static readonly ConcurrentDictionary<string, byte> ConsumedKeys = new();
     private static readonly Model State = (ArtifactJson.ReadOrDefault<Model>(path: TestPaths.Artifact(fileName: "frontier.json")) ?? new Model());
 
-    /// <summary>Records that <paramref name="key"/> was consumed this run and returns its current block window.</summary>
-    /// <param name="key">The domain key.</param>
-    /// <param name="block">The block size to register when the domain is first seen.</param>
-    /// <returns>The current counter <c>k</c> and the block size <c>B</c> for the domain.</returns>
-    public static (long Index, int Block) Consume(string key, int block) {
-        _ = ConsumedKeys.TryAdd(key: key, value: 0);
-
-        lock (Gate) {
-            var entry = State.Domains.Find(match: candidate => (candidate.Key == key));
-
-            if (entry is null) {
-                entry = new Entry { Block = block, Index = 0L, Key = key };
-
-                State.Domains.Add(item: entry);
-            }
-
-            return (entry.Index, entry.Block);
-        }
-    }
     /// <summary>Advances the block counter of every domain consumed this run by one and rewrites the artifact when any
     /// counter moved — but only on a GREEN run. Two runs own nothing here: one that consumed no domain, and one in
     /// which any law failed.</summary>
@@ -56,7 +37,10 @@ internal static class Frontier {
     /// run persisted nothing, because it consumed no domain or because a law failed.</returns>
     public static IReadOnlyList<(string Key, int Block, long Index)>? AdvanceAndPersist(bool lawsPassed) {
         lock (Gate) {
-            if (ConsumedKeys.IsEmpty || !lawsPassed) {
+            if (
+                ConsumedKeys.IsEmpty ||
+                !lawsPassed
+            ) {
                 return null;
             }
 
@@ -66,23 +50,51 @@ internal static class Frontier {
                 }
             }
 
-            State.Domains.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Key, strB: right.Key));
+            State.Domains.Sort(comparison: static (left, right) => string.CompareOrdinal(
+                strA: left.Key,
+                strB: right.Key
+            ));
 
-            _ = ArtifactJson.WriteIfChanged(path: TestPaths.Artifact(fileName: "frontier.json"), content: ArtifactJson.Serialize(value: State));
+            _ = ArtifactJson.WriteIfChanged(
+                path: TestPaths.Artifact(fileName: "frontier.json"),
+                content: ArtifactJson.Serialize(value: State)
+            );
 
             return [.. State.Domains.Select(selector: static entry => (entry.Key, entry.Block, entry.Index))];
+        }
+    }
+    /// <summary>Records that <paramref name="key"/> was consumed this run and returns its current block window.</summary>
+    /// <param name="key">The domain key.</param>
+    /// <param name="block">The block size to register when the domain is first seen.</param>
+    /// <returns>The current counter <c>k</c> and the block size <c>B</c> for the domain.</returns>
+    public static (long Index, int Block) Consume(string key, int block) {
+        _ = ConsumedKeys.TryAdd(
+            key: key,
+            value: 0
+        );
+
+        lock (Gate) {
+            var entry = State.Domains.Find(match: candidate => (candidate.Key == key));
+
+            if (entry is null) {
+                entry = new Entry { Block = block, Index = 0L, Key = key };
+
+                State.Domains.Add(item: entry);
+            }
+
+            return (entry.Index, entry.Block);
         }
     }
 
     /// <summary>The persisted counter for one domain.</summary>
     internal sealed class Entry {
-        /// <summary>Gets or sets the domain key.</summary>
-        public string Key { get; set; } = "";
         /// <summary>Gets or sets the block size <c>B</c> — the number of sample indices consumed per run.</summary>
         public int Block { get; set; }
         /// <summary>Gets or sets the current block counter <c>k</c>; a consuming run takes indices
         /// <c>[k·B, (k+1)·B)</c> and leaves <c>k + 1</c> behind.</summary>
         public long Index { get; set; }
+        /// <summary>Gets or sets the domain key.</summary>
+        public string Key { get; set; } = "";
     }
     /// <summary>The persisted frontier document.</summary>
     internal sealed class Model {

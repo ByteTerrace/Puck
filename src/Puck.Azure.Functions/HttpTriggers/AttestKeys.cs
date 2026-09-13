@@ -77,7 +77,10 @@ public sealed class AttestKeys(
             traits: BlobTraits.None
         )) {
             // Expected shape: private/keys/{type}/fingerprints/sha256:{fp}/public.pem
-            if (!blobItem.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "/public.pem")) {
+            if (!blobItem.Name.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "/public.pem"
+            )) {
                 continue;
             }
 
@@ -89,14 +92,16 @@ public sealed class AttestKeys(
 
             var keyType = segments[2];
             var fingerprintSegment = segments[4]; // "sha256:{fp}"
-            var keyPath = string.Join(separator: '/', value: segments[1..5]); // "keys/{type}/fingerprints/sha256:{fp}"
+            var keyPath = string.Join(
+                separator: '/',
+                value: segments[1..5]
+            ); // "keys/{type}/fingerprints/sha256:{fp}"
             var publicKeyBlobClient = containerClient.GetBlobClient(blobName: blobItem.Name);
             var publicKeyPem = Encoding.UTF8.GetString(bytes: (await publicKeyBlobClient
                 .DownloadContentAsync(cancellationToken: cancellationToken))
                 .Value
                 .Content
-                .ToArray()
-            );
+                .ToArray());
             var pemFields = PemEncoding.Find(pemData: publicKeyPem);
             var publicKey = new byte[pemFields.DecodedDataLength];
 

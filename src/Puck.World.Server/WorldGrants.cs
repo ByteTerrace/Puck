@@ -61,7 +61,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     private static readonly long DefaultHoldCeiling = Puck.Maths.FixedQ4816.FromDouble(value: WorldGrant.DefaultHoldSeconds).Value;
     // The per-body-index own-body default sets, minted on first read and never mutated afterward — every
     // uncomposed participant shares its index's instance.
-    private static readonly IReadOnlyList<ControlApplication>?[] s_ownBodyApplications = new IReadOnlyList<ControlApplication>?[WorldBodiesLimits.CapacityCeiling];
+    private static readonly IReadOnlyList<ControlApplication>?[] OwnBodyApplications = new IReadOnlyList<ControlApplication>?[WorldBodiesLimits.CapacityCeiling];
     private readonly Dictionary<WorldPrincipal, PrincipalGrants> m_byPrincipal = new();
     // Every principal that has COMPOSED an application set away from its own-body default. An absent row IS the
     // default (see DefaultApplications) — the single storage engagement lives in, distinct from the capability sets
@@ -742,7 +742,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 // population exactly like Drive/Observe's own body subjects.
                 ((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind == GrantSubjectKind.Composition) && trustedWildcard) ||
-                ((subject.Kind == GrantSubjectKind.Machine) && !string.IsNullOrWhiteSpace(subject.Id)) ||
+                ((subject.Kind == GrantSubjectKind.Machine) && !string.IsNullOrWhiteSpace(value: subject.Id)) ||
                 ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Peer)))),
             // Mutate additionally admits the two ROW-SCOPED dispatch subjects — one creations row, one placements
             // row — for any principal. They are an alternative to the section hold, never a narrowing beneath it,
@@ -821,11 +821,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         var index = principal.Index;
 
-        if (((uint)index) >= ((uint)s_ownBodyApplications.Length)) {
+        if (((uint)index) >= ((uint)OwnBodyApplications.Length)) {
             return [];
         }
 
-        return (s_ownBodyApplications[index] ??= [ControlApplication.OwnBody(bodyIndex: index)]);
+        return (OwnBodyApplications[index] ??= [ControlApplication.OwnBody(bodyIndex: index)]);
     }
     private static bool Holds(IReadOnlyList<ControlApplication> applications, GrantSubject target) {
         for (var index = 0; (index < applications.Count); index++) {
@@ -1376,16 +1376,16 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
     /// <inheritdoc/>
     public long HoldCeiling(WorldPrincipal principal, GrantSubject subject) {
-        return (TryResolveDecidingGrant(
+        return ((TryResolveDecidingGrant(
             capability: WorldCapability.Drive,
-            principal: principal,
-            subject: subject,
             grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject
+            grantSubject: out var grantSubject,
+            principal: principal,
+            subject: subject
         ) && m_holdCeilings.TryGetValue(
             key: (grantPrincipal, WorldCapability.Drive, grantSubject),
             value: out var ceiling
-        )
+        ))
             ? ceiling
             : DefaultHoldCeiling
         );
@@ -1861,7 +1861,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         foreach (var row in definition.State) {
             if (
                 !row.GatesDrive ||
-                !catalog.TryResolve(lane: StateLane.Document, name: row.Name, handle: out var handle)
+                !catalog.TryResolve(
+                lane: StateLane.Document,
+                name: row.Name,
+                handle: out var handle
+            )
             ) {
                 continue;
             }
@@ -1903,10 +1907,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public bool TryGetBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
         if (TryResolveDecidingGrant(
             capability: capability,
-            principal: principal,
-            subject: subject,
             grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject
+            grantSubject: out var grantSubject,
+            principal: principal,
+            subject: subject
         )) {
             return m_budgets.TryGetValue(
                 key: (grantPrincipal, capability, grantSubject),
@@ -1922,10 +1926,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public bool TryGetChannelReach(WorldPrincipal principal, GrantSubject subject, out ChannelReachMask mask) {
         if (TryResolveDecidingGrant(
             capability: WorldCapability.Drive,
-            principal: principal,
-            subject: subject,
             grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject
+            grantSubject: out var grantSubject,
+            principal: principal,
+            subject: subject
         )) {
             return m_channelReach.TryGetValue(
                 key: (grantPrincipal, WorldCapability.Drive, grantSubject),
@@ -1961,10 +1965,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public bool TryGetEventBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
         if (TryResolveDecidingGrant(
             capability: capability,
-            principal: principal,
-            subject: subject,
             grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject
+            grantSubject: out var grantSubject,
+            principal: principal,
+            subject: subject
         )) {
             return m_eventBudgets.TryGetValue(
                 key: (grantPrincipal, capability, grantSubject),
@@ -1980,10 +1984,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public bool TryGetKindMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out MutationKindMask mask) {
         if (TryResolveDecidingGrant(
             capability: capability,
-            principal: principal,
-            subject: subject,
             grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject
+            grantSubject: out var grantSubject,
+            principal: principal,
+            subject: subject
         )) {
             return m_kindMasks.TryGetValue(
                 key: (grantPrincipal, capability, grantSubject),
@@ -1999,10 +2003,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public bool TryGetWriteMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask) {
         if (TryResolveDecidingGrant(
             capability: capability,
-            principal: principal,
-            subject: subject,
             grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject
+            grantSubject: out var grantSubject,
+            principal: principal,
+            subject: subject
         )) {
             return m_writeMasks.TryGetValue(
                 key: (grantPrincipal, capability, grantSubject),
@@ -2249,19 +2253,34 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             var grants = new PrincipalGrants();
 
             foreach (var subject in row.Drive) {
-                grants.Add(capability: WorldCapability.Drive, subject: subject);
+                grants.Add(
+                    capability: WorldCapability.Drive,
+                    subject: subject
+                );
             }
             foreach (var subject in row.Observe) {
-                grants.Add(capability: WorldCapability.Observe, subject: subject);
+                grants.Add(
+                    capability: WorldCapability.Observe,
+                    subject: subject
+                );
             }
             foreach (var subject in row.Control) {
-                grants.Add(capability: WorldCapability.Control, subject: subject);
+                grants.Add(
+                    capability: WorldCapability.Control,
+                    subject: subject
+                );
             }
             foreach (var subject in row.Mutate) {
-                grants.Add(capability: WorldCapability.Mutate, subject: subject);
+                grants.Add(
+                    capability: WorldCapability.Mutate,
+                    subject: subject
+                );
             }
             foreach (var subject in row.Edit) {
-                grants.Add(capability: WorldCapability.Edit, subject: subject);
+                grants.Add(
+                    capability: WorldCapability.Edit,
+                    subject: subject
+                );
             }
 
             m_byPrincipal[row.Principal] = grants;

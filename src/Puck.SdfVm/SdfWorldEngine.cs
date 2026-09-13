@@ -92,11 +92,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // KEEP IN SYNC with SdfPartBoundFloatCount and sdfPartBoundIndex in sdf-part-bounds.hlsli.
     private const uint PartBoundFloatCount = 12;
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
+
     /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
     /// sdf-world.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
     /// against the budget that has to reach it (a ray skimming open ground at height <c>h</c> takes roughly one step
     /// per <c>h</c> units of depth, so the far distance is that ray's step count per unit of height).</summary>
     public const int PrimaryMarchSteps = 128;
+
     private const uint TimingCapacity = 11; // frame start plus one close per pass; must stay >= TimingMarkCount
     // One timing pool more than the ring depth, so the pool read back by TryReadPassTimings (frame N−2's — the
     // newest frame the slot fence PROVES complete) is never the one the current frame is about to reset.
@@ -109,9 +111,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // list, so its SRV resolves to register t43 (after sdfFrameInstanceGrid t42). KEEP IN SYNC with sdf-world.hlsli.
     private const uint VolumeBindingIndex = 48;
     private const uint PrimaryHitBindingIndex = 49; // sdfPrimaryHits at u6, after the five source images
-    private const int PrimaryHitByteLength = 5 * 16; // hit, surface and AO data; paired with sdf-world.hlsli
+    private const int PrimaryHitByteLength = (5 * 16); // hit, surface and AO data; paired with sdf-world.hlsli
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
-    private const int VolumeByteLength = sizeof(float) * 4 * SdfVolume.VectorsPerEntry;
+    private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
     private const uint WorkgroupEdge = 8;
 
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
@@ -173,11 +175,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // FrameUploadTableCount per slot, in table order.
     private readonly IGpuComputePipeline m_frameUploadPipeline;
     private readonly IGpuShaderModule m_frameUploadShaderModule;
+
     private readonly nint[] m_frameUploadSets = new nint[(FrameRingSize * FrameUploadTableCount)];
     private readonly byte[] m_frameUploadPush = new byte[FrameUploadPushByteLength];
+
     private readonly IGpuBuffer m_viewportDeviceBuffer;
     private readonly IGpuBuffer m_dynamicTransformDeviceBuffer;
     private readonly IGpuBuffer m_instanceGridDeviceBuffer;
+
     // The frame instance grid's written word count — the copy window (UploadProgram seeds it for an invariant grid,
     // PrepareFrame for a per-frame rebuild).
     private int m_instanceGridWordsWritten;
@@ -188,11 +193,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_brickPoolBuffer;
     private readonly bool m_brickPoolEnabled;
     private readonly int m_brickPoolVoxelCapacity;
+
     // The LIVE child-slot mask (bit v set = viewport v shows a hosted child's surface this frame, so the beam prepass
     // and Stage 1 skip it and Stage 2 copies the host-bound source 1:1) — rewritten every frame by SetChildMask from
     // the frame's own view bindings, never construction-frozen: a layout switch may turn any slot into a child or
     // back, so every slot keeps its SDF source texture regardless.
     private uint m_childMask;
+
     private readonly IGpuStorageBuffer m_compositeArgsBuffer;
     private readonly IGpuComputePipeline m_compositePipeline;
     private readonly IGpuShaderModule m_compositeShaderModule;
@@ -507,8 +514,16 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             stage: GpuShaderStage.Compute,
             bytecode: kernels.Primary
         );
-        m_surfaceShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Surface);
-        m_ambientShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Ambient);
+        m_surfaceShaderModule = gpu.ShaderModuleFactory.Create(
+            deviceContext: device,
+            stage: GpuShaderStage.Compute,
+            bytecode: kernels.Surface
+        );
+        m_ambientShaderModule = gpu.ShaderModuleFactory.Create(
+            deviceContext: device,
+            stage: GpuShaderStage.Compute,
+            bytecode: kernels.Ambient
+        );
         m_viewsCoreShaderModule = gpu.ShaderModuleFactory.Create(
             deviceContext: device,
             stage: GpuShaderStage.Compute,
@@ -630,15 +645,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // Reserve the construction envelope, but index with live viewport/instance counts, as the masks do.
         m_tileBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
             deviceContext: device,
-            sizeBytes: checked((ulong)m_viewportCapacity *
-                ((ulong)TilePlaneCount * m_tileGridX * m_tileGridY + (ulong)PartBoundFloatCount * (uint)m_instanceCapacity) * sizeof(float))
+            sizeBytes: checked(((((ulong)m_viewportCapacity) *
+                (((((ulong)TilePlaneCount) * m_tileGridX) * m_tileGridY) + (((ulong)PartBoundFloatCount) * ((uint)m_instanceCapacity)))) * sizeof(float)))
         );
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
         m_primaryHitBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
             deviceContext: device,
-            sizeBytes: checked((ulong)width * height * m_viewportCapacity * PrimaryHitByteLength)
+            sizeBytes: checked((((((ulong)width) * height) * m_viewportCapacity) * PrimaryHitByteLength))
         );
         // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by instance
         // cull before the beam (a UAV, so device-local too), read by Stage 1 to gate its masked map() calls. The
@@ -1212,14 +1227,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: beamSet
             );
             WriteStorageBuffer(
-                set: beamSet,
                 binding: ViewportBindingIndex,
-                buffer: m_viewportDeviceBuffer
+                buffer: m_viewportDeviceBuffer,
+                set: beamSet
             );
             WriteStorageBuffer(
-                set: beamSet,
                 binding: DynamicTransformBindingIndex,
-                buffer: m_dynamicTransformDeviceBuffer
+                buffer: m_dynamicTransformDeviceBuffer,
+                set: beamSet
             );
             WriteStorageBufferReadWrite(
                 binding: TileBindingIndex,
@@ -1252,14 +1267,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: instanceCullSet
             );
             WriteStorageBuffer(
-                set: instanceCullSet,
                 binding: ViewportBindingIndex,
-                buffer: m_viewportDeviceBuffer
+                buffer: m_viewportDeviceBuffer,
+                set: instanceCullSet
             );
             WriteStorageBuffer(
-                set: instanceCullSet,
                 binding: DynamicTransformBindingIndex,
-                buffer: m_dynamicTransformDeviceBuffer
+                buffer: m_dynamicTransformDeviceBuffer,
+                set: instanceCullSet
             );
             WriteStorageBufferReadWrite(
                 binding: InstanceMaskBindingIndex,
@@ -1267,9 +1282,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: instanceCullSet
             );
             WriteStorageBufferReadOnly(
-                set: instanceCullSet,
                 binding: FrameInstanceGridBindingIndex,
-                buffer: m_instanceGridDeviceBuffer
+                buffer: m_instanceGridDeviceBuffer,
+                set: instanceCullSet
             );
 
             var viewsSet = m_descriptorAllocator.AllocateSet(
@@ -1285,14 +1300,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: viewsSet
             );
             WriteStorageBuffer(
-                set: viewsSet,
                 binding: ViewportBindingIndex,
-                buffer: m_viewportDeviceBuffer
+                buffer: m_viewportDeviceBuffer,
+                set: viewsSet
             );
             WriteStorageBuffer(
-                set: viewsSet,
                 binding: DynamicTransformBindingIndex,
-                buffer: m_dynamicTransformDeviceBuffer
+                buffer: m_dynamicTransformDeviceBuffer,
+                set: viewsSet
             );
             WriteStorageBufferReadWrite(
                 binding: TileBindingIndex,
@@ -1334,9 +1349,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: viewsSet
             );
             WriteStorageBufferReadOnly(
-                set: viewsSet,
                 binding: FrameInstanceGridBindingIndex,
-                buffer: m_instanceGridDeviceBuffer
+                buffer: m_instanceGridDeviceBuffer,
+                set: viewsSet
             );
             // The per-frame bounded-volume buffer (float4 stride, same 16-byte pattern as the screen-light buffer).
             WriteStorageBuffer(

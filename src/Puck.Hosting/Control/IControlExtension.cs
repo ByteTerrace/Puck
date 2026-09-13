@@ -13,7 +13,6 @@ public interface IControlExtension {
     /// <param name="registry">The registry to register control services into.</param>
     void Register(IControlExtensionRegistry registry);
 }
-
 /// <summary>
 /// Registry supplied to a control extension to register hosted control services.
 /// </summary>

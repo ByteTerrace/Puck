@@ -5,6 +5,70 @@ namespace Puck.GamingBricks.Tests;
 /// it steps them in decides which console writes a cable word first, so the recorded sequence — not just the totals —
 /// is the contract a link replay depends on.</summary>
 public sealed class LinkPacerLawTests {
+    // The oracle: at each round rank every machine that is still behind by remainder descending, then by cable
+    // position, and step the winner. Deliberately expressed as an ordering rather than as a running maximum, so it
+    // agrees with the implementation only when the tie-break really is "lowest index wins".
+    private static List<int> OracleOrder(long[] rates, long[] targets, long[] cycles) {
+        var order = new List<int>();
+
+        while (true) {
+            var behind = Enumerable
+                .Range(
+                count: rates.Length,
+                start: 0
+            )
+                .Select(selector: index => (Index: index, Remaining: (targets[index] - cycles[index])))
+                .Where(predicate: candidate => (candidate.Remaining > 0L))
+                .OrderByDescending(keySelector: candidate => candidate.Remaining)
+                .ThenBy(keySelector: candidate => candidate.Index)
+                .ToList();
+
+            if (behind.Count == 0) {
+                return order;
+            }
+
+            var winner = behind[0].Index;
+
+            cycles[winner] += rates[winner];
+
+            order.Add(item: winner);
+        }
+    }
+
+    [Fact]
+    public void AMachineAlreadyPastItsTargetIsNeverStepped() {
+        var machines = TestMachine.Fleet(rates: [1L, 1L]);
+
+        machines[0].Cycles = 10L;
+
+        LinkPacer.Run(participants: new Fleet(
+            machines: machines,
+            targets: [4L, 4L]
+        ));
+
+        Assert.Equal(
+            actual: TestMachine.MergeByRound(machines: machines),
+            expected: new List<int> { 1, 1, 1, 1 }
+        );
+        Assert.Equal(
+            actual: machines[0].Cycles,
+            expected: 10L
+        );
+    }
+    [Fact]
+    public void EquallyBehindMachinesStepInCableOrder() {
+        var machines = TestMachine.Fleet(rates: [1L, 1L, 1L, 1L]);
+
+        LinkPacer.Run(participants: new Fleet(
+            machines: machines,
+            targets: [3L, 3L, 3L, 3L]
+        ));
+
+        Assert.Equal(
+            actual: TestMachine.MergeByRound(machines: machines),
+            expected: new List<int> { 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3 }
+        );
+    }
     [Theory]
     // Two machines, coprime rates: no step ever lands on a shared boundary.
     [InlineData(new long[] { 4L, 7L })]
@@ -58,70 +122,6 @@ public sealed class LinkPacerLawTests {
                 high: ((pacedTargets[index] + rates[index]) - 1L),
                 low: pacedTargets[index]
             );
-        }
-    }
-    [Fact]
-    public void EquallyBehindMachinesStepInCableOrder() {
-        var machines = TestMachine.Fleet(rates: [1L, 1L, 1L, 1L]);
-
-        LinkPacer.Run(participants: new Fleet(
-            machines: machines,
-            targets: [3L, 3L, 3L, 3L]
-        ));
-
-        Assert.Equal(
-            actual: TestMachine.MergeByRound(machines: machines),
-            expected: new List<int> { 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3 }
-        );
-    }
-    [Fact]
-    public void AMachineAlreadyPastItsTargetIsNeverStepped() {
-        var machines = TestMachine.Fleet(rates: [1L, 1L]);
-
-        machines[0].Cycles = 10L;
-
-        LinkPacer.Run(participants: new Fleet(
-            machines: machines,
-            targets: [4L, 4L]
-        ));
-
-        Assert.Equal(
-            actual: TestMachine.MergeByRound(machines: machines),
-            expected: new List<int> { 1, 1, 1, 1 }
-        );
-        Assert.Equal(
-            actual: machines[0].Cycles,
-            expected: 10L
-        );
-    }
-
-    // The oracle: at each round rank every machine that is still behind by remainder descending, then by cable
-    // position, and step the winner. Deliberately expressed as an ordering rather than as a running maximum, so it
-    // agrees with the implementation only when the tie-break really is "lowest index wins".
-    private static List<int> OracleOrder(long[] rates, long[] targets, long[] cycles) {
-        var order = new List<int>();
-
-        while (true) {
-            var behind = Enumerable
-                .Range(
-                    count: rates.Length,
-                    start: 0
-                )
-                .Select(selector: index => (Index: index, Remaining: (targets[index] - cycles[index])))
-                .Where(predicate: candidate => (candidate.Remaining > 0L))
-                .OrderByDescending(keySelector: candidate => candidate.Remaining)
-                .ThenBy(keySelector: candidate => candidate.Index)
-                .ToList();
-
-            if (behind.Count == 0) {
-                return order;
-            }
-
-            var winner = behind[0].Index;
-
-            cycles[winner] += rates[winner];
-
-            order.Add(item: winner);
         }
     }
 

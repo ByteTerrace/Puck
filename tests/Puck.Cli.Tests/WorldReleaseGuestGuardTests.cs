@@ -10,48 +10,153 @@ public sealed class WorldReleaseGuestGuardTests {
     [Fact]
     public async Task DelayedGuestEffectsRefuseChangedOperationsAndBootstrapRoles() {
         var token = TestContext.Current.CancellationToken;
-        var python = Environment.GetEnvironmentVariable("PUCK_TEST_PYTHON") ?? (OperatingSystem.IsWindows() ? "python" : "python3");
-        try { await CliProcess.RunCheckedAsync(Environment.CurrentDirectory, python, ["--version"], capture: true, cancellationToken: token); }
-        catch (System.ComponentModel.Win32Exception) { Assert.Skip("Install Python 3 or set PUCK_TEST_PYTHON to run the retained guest guard contract law."); return; }
-        Assert.True(CliPaths.TryGetRepositoryRoot(out var root), "repository root is required");
+        var python = (Environment.GetEnvironmentVariable(variable: "PUCK_TEST_PYTHON") ?? (OperatingSystem.IsWindows()
+            ? "python"
+            : "python3"));
+
+        try { await CliProcess.RunCheckedAsync(
+            Environment.CurrentDirectory,
+            python,
+            ["--version"],
+            capture: true,
+            cancellationToken: token
+        ); } catch (System.ComponentModel.Win32Exception) { Assert.Skip(reason: "Install Python 3 or set PUCK_TEST_PYTHON to run the retained guest guard contract law."); return; }
+        Assert.True(
+            condition: CliPaths.TryGetRepositoryRoot(out var root),
+            userMessage: "repository root is required"
+        );
         var operation = Guid.NewGuid();
         var owner = Guid.NewGuid();
         var record = new WorldReleaseGroupRecord {
-            Schema = WorldReleaseGroupStore.Schema, DeploymentGroup = "official", Owner = owner, ActiveRelease = "source",
-            PendingOperationId = operation, PendingSourceRelease = "source", PendingTargetRelease = "target", PendingPhase = WorldReleaseOperationPhase.Activate,
+            ActiveRelease = "source",
+            DeploymentGroup = "official",
+            Owner = owner,
+            PendingOperationId = operation,
+            PendingPhase = WorldReleaseOperationPhase.Activate,
+            PendingSourceRelease = "source",
+            PendingTargetRelease = "target",
+            Schema = WorldReleaseGroupStore.Schema,
         };
         var request = new JsonObject {
-            ["owner"] = owner.ToString("D"), ["group"] = "official", ["operation"] = operation.ToString("D"),
-            ["source"] = "source", ["target"] = "target", ["phases"] = new JsonArray((int)WorldReleaseOperationPhase.Activate),
+            ["owner"] = owner.ToString(format: "D"),
+            ["group"] = "official",
+            ["operation"] = operation.ToString(format: "D"),
+            ["source"] = "source",
+            ["target"] = "target",
+            ["phases"] = new JsonArray(((int)WorldReleaseOperationPhase.Activate)),
         };
         var cases = new JsonArray();
-        void Add(JsonObject wanted, WorldReleaseGroupRecord actual, bool accepted) => cases.Add(new JsonObject {
-            ["request"] = wanted.DeepClone(), ["record"] = JsonSerializer.SerializeToNode(actual), ["accepted"] = accepted,
+
+        void Add(JsonObject wanted, WorldReleaseGroupRecord actual, bool accepted) => cases.Add(value: new JsonObject {
+            ["request"] = wanted.DeepClone(),
+            ["record"] = JsonSerializer.SerializeToNode(actual),
+            ["accepted"] = accepted,
         });
-        Add(request, record, true);
-        Add(request, record with { PendingOperationId = Guid.NewGuid() }, false);
-        Add(request, record with { PendingOperationId = null }, false);
-        Add(request, record with { PendingPhase = WorldReleaseOperationPhase.Recover }, false);
-        Add(request, record with { Owner = Guid.NewGuid() }, false);
-        Add(request, record with { DeploymentGroup = "another" }, false);
-        Add(request, record with { PendingTargetRelease = "another" }, false);
-        Add(request, record with { PendingSourceRelease = "another" }, false);
-        var bootstrap = new JsonObject { ["owner"] = owner.ToString("D"), ["group"] = "official", ["bootRelease"] = "target" };
-        Add(bootstrap, record, true);
-        Add(bootstrap, record with { PendingPhase = WorldReleaseOperationPhase.Drain }, false);
-        Add(bootstrap, record with { PendingPhase = WorldReleaseOperationPhase.Commit }, true);
-        Add(bootstrap, record with { PendingOperationId = null, ActiveRelease = "target", Admission = WorldReleaseAdmissionState.Open }, true);
-        Add(bootstrap, record with { PendingOperationId = null, ActiveRelease = "source", Admission = WorldReleaseAdmissionState.Open }, false);
-        Add(bootstrap, record with { PendingOperationId = null, ActiveRelease = "target", Admission = WorldReleaseAdmissionState.Closed }, false);
-        Add(bootstrap, record with { PendingPhase = WorldReleaseOperationPhase.RecoverActivate }, false);
+        Add(
+            accepted: true,
+            actual: record,
+            wanted: request
+        );
+        Add(
+            request,
+            record with { PendingOperationId = Guid.NewGuid() },
+            false
+        );
+        Add(
+            request,
+            record with { PendingOperationId = null },
+            false
+        );
+        Add(
+            request,
+            record with { PendingPhase = WorldReleaseOperationPhase.Recover },
+            false
+        );
+        Add(
+            request,
+            record with { Owner = Guid.NewGuid() },
+            false
+        );
+        Add(
+            request,
+            record with { DeploymentGroup = "another" },
+            false
+        );
+        Add(
+            request,
+            record with { PendingTargetRelease = "another" },
+            false
+        );
+        Add(
+            request,
+            record with { PendingSourceRelease = "another" },
+            false
+        );
+        var bootstrap = new JsonObject { ["owner"] = owner.ToString(format: "D"), ["group"] = "official", ["bootRelease"] = "target" };
+
+        Add(
+            accepted: true,
+            actual: record,
+            wanted: bootstrap
+        );
+        Add(
+            bootstrap,
+            record with { PendingPhase = WorldReleaseOperationPhase.Drain },
+            false
+        );
+        Add(
+            bootstrap,
+            record with { PendingPhase = WorldReleaseOperationPhase.Commit },
+            true
+        );
+        Add(
+            bootstrap,
+            record with { PendingOperationId = null, ActiveRelease = "target", Admission = WorldReleaseAdmissionState.Open },
+            true
+        );
+        Add(
+            bootstrap,
+            record with { PendingOperationId = null, ActiveRelease = "source", Admission = WorldReleaseAdmissionState.Open },
+            false
+        );
+        Add(
+            bootstrap,
+            record with { PendingOperationId = null, ActiveRelease = "target", Admission = WorldReleaseAdmissionState.Closed },
+            false
+        );
+        Add(
+            bootstrap,
+            record with { PendingPhase = WorldReleaseOperationPhase.RecoverActivate },
+            false
+        );
         bootstrap["bootRelease"] = "source";
-        Add(bootstrap, record, false);
-        Add(bootstrap, record with { PendingPhase = WorldReleaseOperationPhase.RecoverActivate }, true);
-        Add(bootstrap, record with { PendingPhase = WorldReleaseOperationPhase.Finalized, PendingOperationId = null }, false);
-        var directory = Directory.CreateTempSubdirectory("puck-guest-guard-");
+        Add(
+            accepted: false,
+            actual: record,
+            wanted: bootstrap
+        );
+        Add(
+            bootstrap,
+            record with { PendingPhase = WorldReleaseOperationPhase.RecoverActivate },
+            true
+        );
+        Add(
+            bootstrap,
+            record with { PendingPhase = WorldReleaseOperationPhase.Finalized, PendingOperationId = null },
+            false
+        );
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-guest-guard-");
+
         try {
-            var path = Path.Combine(directory.FullName, "cases.json");
-            File.WriteAllText(path, cases.ToJsonString());
+            var path = Path.Combine(
+                path1: directory.FullName,
+                path2: "cases.json"
+            );
+
+            File.WriteAllText(
+                path,
+                cases.ToJsonString()
+            );
             const string Program = """
                 import json, runpy, sys
                 validate = runpy.run_path(sys.argv[1])['validate']
@@ -64,8 +169,22 @@ public sealed class WorldReleaseGuestGuardTests {
                     assert accepted == case['accepted'], f'guest guard case {index} returned {accepted}'
                 print('guest guard wire contract passed')
                 """;
-            var result = await CliProcess.RunCheckedAsync(directory.FullName, python, ["-c", Program, Path.Combine(root, "build/Guard-WorldRelease.py"), path], capture: true, cancellationToken: token);
-            Assert.Contains("guest guard wire contract passed", result, StringComparison.Ordinal);
+            var result = await CliProcess.RunCheckedAsync(
+                directory.FullName,
+                python,
+                ["-c", Program, Path.Combine(
+                        path1: root,
+                        path2: "build/Guard-WorldRelease.py"
+                    ), path],
+                capture: true,
+                cancellationToken: token
+            );
+
+            Assert.Contains(
+                "guest guard wire contract passed",
+                result,
+                StringComparison.Ordinal
+            );
         } finally { directory.Delete(recursive: true); }
     }
 }

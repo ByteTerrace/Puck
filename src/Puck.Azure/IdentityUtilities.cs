@@ -13,14 +13,14 @@ public sealed class OnBehalfOfOptions {
     }
 }
 public static class IdentityUtilities {
-    private static readonly string[] Scopes = ["api://AzureADTokenExchange"];
-
     /// <summary>
     /// Keyed-service key for the credential that mints the client assertion an on-behalf-of exchange
     /// signs with. It is a separate registration from the ambient credential because a host may run
     /// the exchange under a user-assigned identity federated to the shared app registration.
     /// </summary>
     public const string ClientAssertionCredentialKey = "ClientAssertionCredential";
+
+    private static readonly string[] Scopes = ["api://AzureADTokenExchange"];
 
     public static OnBehalfOfCredential ToOnBehalfOfCredential(
         this TokenCredential tokenCredential,
@@ -38,9 +38,9 @@ public static class IdentityUtilities {
         return new OnBehalfOfCredential(
             clientAssertionCallback: async (cancellationToken) => (await tokenCredential
                 .GetTokenAsync(
-                    cancellationToken: cancellationToken,
-                    requestContext: new(scopes: Scopes)
-                ))
+                cancellationToken: cancellationToken,
+                requestContext: new(scopes: Scopes)
+            ))
                 .Token,
             clientId: onBehalfOfClientId,
             options: default,

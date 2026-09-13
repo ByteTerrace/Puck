@@ -36,7 +36,8 @@ public static class FixedCosineTransform {
     private static int FoldedIndex(int sample, int length) =>
         ((0 == (sample & 1))
             ? (sample >> 1)
-            : ((length - 1) - (sample >> 1)));
+            : ((length - 1) - (sample >> 1))
+        );
 
     /// <summary>Computes the unscaled DCT-II in place.</summary>
     /// <param name="plan">The plan for the length of <paramref name="values"/>.</param>
@@ -58,7 +59,10 @@ public static class FixedCosineTransform {
         var n = values.Length;
 
         for (var i = 0; (i < n); ++i) {
-            scratch[FoldedIndex(length: n, sample: i)] = new(
+            scratch[FoldedIndex(
+                length: n,
+                sample: i
+            )] = new(
                 Real: values[i],
                 Imaginary: FixedQ4816.Zero
             );
@@ -72,7 +76,10 @@ public static class FixedCosineTransform {
         var twiddles = plan.ForwardTwiddles;
 
         for (var k = 0; (k < n); ++k) {
-            values[k] = FixedComplex.RealOfProduct(left: scratch[k], right: twiddles[k]);
+            values[k] = FixedComplex.RealOfProduct(
+                left: scratch[k],
+                right: twiddles[k]
+            );
         }
     }
     /// <summary>Computes the normalized DCT-III in place, undoing <see cref="Forward"/> within the measured bound.</summary>
@@ -98,7 +105,8 @@ public static class FixedCosineTransform {
         for (var k = 0; (k < n); ++k) {
             var partner = ((0 == k)
                 ? FixedQ4816.Zero
-                : values[(n - k)]);
+                : values[(n - k)]
+            );
 
             scratch[k] = (new FixedComplex(
                 Real: values[k],
@@ -112,7 +120,10 @@ public static class FixedCosineTransform {
         );
 
         for (var i = 0; (i < n); ++i) {
-            values[i] = scratch[FoldedIndex(length: n, sample: i)].Real;
+            values[i] = scratch[FoldedIndex(
+                length: n,
+                sample: i
+            )].Real;
         }
     }
 }

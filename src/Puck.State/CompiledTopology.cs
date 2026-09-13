@@ -38,7 +38,7 @@ public sealed partial class CompiledTopology {
         m_coordinates = coordinates;
         if (coordinates is not null) {
             m_coordinateIndex = new Dictionary<(int, int, int), int>(capacity: coordinates.Length);
-            for (var cell = 0; cell < coordinates.Length; cell++) {
+            for (var cell = 0; (cell < coordinates.Length); cell++) {
                 m_coordinateIndex[coordinates[cell]] = cell;
             }
         }
@@ -61,32 +61,50 @@ public sealed partial class CompiledTopology {
         m_cellSize = cellSize;
         m_keys = new string[count];
         m_names = new CellName[count];
-        for (var cell = 0; cell < count; cell++) {
-            m_keys[cell] = cell.ToString(CultureInfo.InvariantCulture);
-            m_names[cell] = CellName.Parse(m_keys[cell]);
+        for (var cell = 0; (cell < count); cell++) {
+            m_keys[cell] = cell.ToString(provider: CultureInfo.InvariantCulture);
+            m_names[cell] = CellName.Parse(candidate: m_keys[cell]);
         }
-        if (count <= BoardMask.MaxCells && directions > 0) {
-            var shiftMasks = new ulong[directions * BoardMask.MaxCells];
-            for (var d = 0; d < directions; d++) {
-                var offset = d * BoardMask.MaxCells;
-                for (var cell = 0; cell < count; cell++) {
-                    var neighbour = neighbours[cell * directions + d];
-                    if (neighbour >= 0 && neighbour < BoardMask.MaxCells) {
-                        shiftMasks[offset + cell] = 1UL << neighbour;
+        if (
+            (count <= BoardMask.MaxCells) &&
+            (directions > 0)
+        ) {
+            var shiftMasks = new ulong[(directions * BoardMask.MaxCells)];
+
+            for (var d = 0; (d < directions); d++) {
+                var offset = (d * BoardMask.MaxCells);
+
+                for (var cell = 0; (cell < count); cell++) {
+                    var neighbour = neighbours[((cell * directions) + d)];
+
+                    if (
+                        (neighbour >= 0) &&
+                        (neighbour < BoardMask.MaxCells)
+                    ) {
+                        shiftMasks[(offset + cell)] = (1UL << neighbour);
                     }
                 }
             }
             m_directionShiftMasks = shiftMasks;
         }
-        if (count <= BoardMask.MaxCells && images is { Length: > 0 }) {
-            var imageMasks = new ulong[images.Length * BoardMask.MaxCells];
-            for (var elem = 0; elem < images.Length; elem++) {
-                var offset = elem * BoardMask.MaxCells;
+        if (
+            (count <= BoardMask.MaxCells) &&
+            (images is { Length: > 0 })
+        ) {
+            var imageMasks = new ulong[(images.Length * BoardMask.MaxCells)];
+
+            for (var elem = 0; (elem < images.Length); elem++) {
+                var offset = (elem * BoardMask.MaxCells);
                 var elemImages = images[elem];
-                for (var cell = 0; cell < count && cell < elemImages.Length; cell++) {
+
+                for (var cell = 0; ((cell < count) && (cell < elemImages.Length)); cell++) {
                     var carried = elemImages[cell];
-                    if (carried >= 0 && carried < BoardMask.MaxCells) {
-                        imageMasks[offset + cell] = 1UL << carried;
+
+                    if (
+                        (carried >= 0) &&
+                        (carried < BoardMask.MaxCells)
+                    ) {
+                        imageMasks[(offset + cell)] = (1UL << carried);
                     }
                 }
             }
@@ -118,37 +136,46 @@ public sealed partial class CompiledTopology {
 
     // Row spacing of a pointy-top hex lattice in cell units: √3/2. Cell (q, r) sits at origin + cellSize · (q − r/2, 0, r·√3/2),
     // so +q is +X and +r leans toward +Z. KEEP IN SYNC with TryCellOf's inverse.
-    private static readonly FixedQ4816 s_hexRowSpacing = FixedQ4816.FromDouble(value: 0.8660254037844386);
-    private static readonly FixedQ4816 s_half = FixedQ4816.FromDouble(value: 0.5);
+    private static readonly FixedQ4816 HexRowSpacing = FixedQ4816.FromDouble(value: 0.8660254037844386);
+    private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
 
     /// <summary>Returns the centre of a cell: a grid or box cell's square (or cube) centre, a hex cell's lattice
     /// point, in the topology's anchored frame.</summary>
     /// <param name="cell">The cell ordinal.</param>
     public FixedVector3 CellCentre(int cell) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)cell), other: ((uint)CellCount));
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: ((uint)cell),
+            other: ((uint)CellCount)
+        );
         if (m_cellCentres is { } centres) {
             var centre = centres[cell];
-            return new FixedVector3(X: (m_origin.X + centre.X), Y: (m_origin.Y + centre.Y), Z: (m_origin.Z + centre.Z));
+
+            return new FixedVector3(
+                X: (m_origin.X + centre.X),
+                Y: (m_origin.Y + centre.Y),
+                Z: (m_origin.Z + centre.Z)
+            );
         }
         if (Kind == TopologyKind.Hex) {
             var coordinate = new HexagonalIndex(value: cell).ToCoordinate();
             var q = FixedQ4816.FromInteger(value: coordinate.Q);
             var r = FixedQ4816.FromInteger(value: coordinate.R);
+
             return new FixedVector3(
-                X: (m_origin.X + (m_cellSize * (q - (r * s_half)))),
+                X: (m_origin.X + (m_cellSize * (q - (r * Half)))),
                 Y: m_origin.Y,
-                Z: (m_origin.Z + (m_cellSize * (r * s_hexRowSpacing)))
+                Z: (m_origin.Z + (m_cellSize * (r * HexRowSpacing)))
             );
         }
         var planar = (cell % (m_width * m_depth));
         var layer = (cell / (m_width * m_depth));
+
         return new FixedVector3(
-            X: (m_origin.X + (m_cellSize * (FixedQ4816.FromInteger(value: (planar % m_width)) + s_half))),
+            X: (m_origin.X + (m_cellSize * (FixedQ4816.FromInteger(value: (planar % m_width)) + Half))),
             Y: (m_origin.Y + (m_layerHeight * FixedQ4816.FromInteger(value: layer))),
-            Z: (m_origin.Z + (m_cellSize * (FixedQ4816.FromInteger(value: (planar / m_width)) + s_half)))
+            Z: (m_origin.Z + (m_cellSize * (FixedQ4816.FromInteger(value: (planar / m_width)) + Half)))
         );
     }
-
     /// <summary>Resolves the grid cell a world position falls in, X/Z only — a board carries one layer, so no
     /// height test applies. Only <see cref="TopologyKind.Grid"/> carries a rectangular X/Z frame; every other
     /// kind answers <see langword="false"/>.</summary>
@@ -158,42 +185,64 @@ public sealed partial class CompiledTopology {
     public bool TryCellOf(in FixedVector3 position, out int cell) {
         cell = -1;
         if (m_cellCentres is { } centres) {
-            return TryNearestCellOf(position: in position, centres: centres, cell: out cell);
+            return TryNearestCellOf(
+                cell: out cell,
+                centres: centres,
+                position: in position
+            );
         }
         if (Kind == TopologyKind.Hex) {
-            return TryHexCellOf(position: in position, cell: out cell);
+            return TryHexCellOf(
+                cell: out cell,
+                position: in position
+            );
         }
         if (Kind is not (TopologyKind.Grid or TopologyKind.Box)) {
             return false;
         }
         var layer = 0;
+
         if (Kind == TopologyKind.Box) {
-            var localY = ((Int128)position.Y.Value) - m_origin.Y.Value;
+            var localY = (((Int128)position.Y.Value) - m_origin.Y.Value);
+
             if (localY < Int128.Zero) {
                 return false;
             }
-            var y = localY / m_layerHeight.Value;
+            var y = (localY / m_layerHeight.Value);
+
             if (y >= m_layers) {
                 return false;
             }
-            layer = (int)y;
+            layer = ((int)y);
         } else if (m_band > FixedQ4816.Zero) {
-            var localY = ((Int128)position.Y.Value) - m_origin.Y.Value;
-            if (localY > m_band.Value || localY < -(Int128)m_band.Value) {
+            var localY = (((Int128)position.Y.Value) - m_origin.Y.Value);
+
+            if (
+                (localY > m_band.Value) ||
+                (localY < -((Int128)m_band.Value))
+            ) {
                 return false;
             }
         }
-        var localX = ((Int128)position.X.Value) - m_origin.X.Value;
-        var localZ = ((Int128)position.Z.Value) - m_origin.Z.Value;
-        if (localX < Int128.Zero || localZ < Int128.Zero) {
+        var localX = (((Int128)position.X.Value) - m_origin.X.Value);
+        var localZ = (((Int128)position.Z.Value) - m_origin.Z.Value);
+
+        if (
+            (localX < Int128.Zero) ||
+            (localZ < Int128.Zero)
+        ) {
             return false;
         }
-        var x = localX / m_cellSize.Value;
-        var z = localZ / m_cellSize.Value;
-        if (x >= m_width || z >= m_depth) {
+        var x = (localX / m_cellSize.Value);
+        var z = (localZ / m_cellSize.Value);
+
+        if (
+            (x >= m_width) ||
+            (z >= m_depth)
+        ) {
             return false;
         }
-        cell = (((layer * m_depth) + (int)z) * m_width) + (int)x;
+        cell = ((((layer * m_depth) + ((int)z)) * m_width) + ((int)x));
         return true;
     }
 
@@ -212,12 +261,14 @@ public sealed partial class CompiledTopology {
         cell = -1;
         var half = ((Int128)(m_cellSize.Value >> 1));
         var best = ((half * half) + Int128.One);
-        for (var index = 0; index < centres.Length; index++) {
+
+        for (var index = 0; (index < centres.Length); index++) {
             var centre = centres[index];
             var dx = (((Int128)position.X.Value) - (((Int128)m_origin.X.Value) + centre.X.Value));
             var dy = (((Int128)position.Y.Value) - (((Int128)m_origin.Y.Value) + centre.Y.Value));
             var dz = (((Int128)position.Z.Value) - (((Int128)m_origin.Z.Value) + centre.Z.Value));
-            var distance = ((dx * dx) + (dy * dy) + (dz * dz));
+            var distance = (((dx * dx) + (dy * dy)) + (dz * dz));
+
             if (distance < best) {
                 best = distance;
                 cell = index;
@@ -225,20 +276,27 @@ public sealed partial class CompiledTopology {
         }
         return (cell >= 0);
     }
-
     private bool TryHexCellOf(in FixedVector3 position, out int cell) {
         cell = -1;
         if (m_band > FixedQ4816.Zero) {
             var localY = (((Int128)position.Y.Value) - m_origin.Y.Value);
-            if ((localY > m_band.Value) || (localY < -(Int128)m_band.Value)) {
+
+            if (
+                (localY > m_band.Value) ||
+                (localY < -((Int128)m_band.Value))
+            ) {
                 return false;
             }
         }
         var localX = ((position.X - m_origin.X) / m_cellSize);
         var localZ = ((position.Z - m_origin.Z) / m_cellSize);
-        var r = (localZ / s_hexRowSpacing);
-        var q = (localX + (r * s_half));
-        var coordinate = HexagonalCoordinate.Round(q: q, r: r);
+        var r = (localZ / HexRowSpacing);
+        var q = (localX + (r * Half));
+        var coordinate = HexagonalCoordinate.Round(
+            q: q,
+            r: r
+        );
+
         if (coordinate.Length > m_radius) {
             return false;
         }
@@ -264,17 +322,21 @@ public sealed partial class CompiledTopology {
         dx = 0;
         dz = 0;
         dy = 0;
-        if ((m_coordinates is null) || ((uint)from >= (uint)CellCount) || ((uint)to >= (uint)CellCount)) {
+        if (
+            (m_coordinates is null) ||
+            (((uint)from) >= ((uint)CellCount)) ||
+            (((uint)to) >= ((uint)CellCount))
+        ) {
             return false;
         }
         var source = m_coordinates[from];
         var target = m_coordinates[to];
+
         dx = (target.X - source.X);
         dz = (target.Y - source.Y);
         dy = (target.Z - source.Z);
         return true;
     }
-
     /// <summary>Returns the cell a lattice translation away — (dx, dz) on a grid or ring, (dq, dr) on a hex, with
     /// <paramref name="dy"/> the layer step on a box — or <see langword="false"/> off the board or on a topology
     /// without translations. A wrapping axis (a ring, a grid declaring <c>wrap</c>) folds the step back.</summary>
@@ -285,20 +347,31 @@ public sealed partial class CompiledTopology {
     /// <param name="dy">The signed layer step; must be zero on every kind but a box.</param>
     public bool TryOffset(int cell, int dx, int dz, out int result, int dy = 0) {
         result = -1;
-        if ((m_coordinates is null) || (m_coordinateIndex is null) || ((uint)cell >= (uint)CellCount)) {
+        if (
+            (m_coordinates is null) ||
+            (m_coordinateIndex is null) ||
+            (((uint)cell) >= ((uint)CellCount))
+        ) {
             return false;
         }
         var source = m_coordinates[cell];
         var x = (source.X + dx);
         var y = (source.Y + dz);
         var z = (source.Z + dy);
-        if ((Kind == TopologyKind.Ring) || (m_wrap is TopologyWrap.X or TopologyWrap.Both)) {
+
+        if (
+            (Kind == TopologyKind.Ring) ||
+            (m_wrap is TopologyWrap.X or TopologyWrap.Both)
+        ) {
             x = (((x % m_width) + m_width) % m_width);
         }
         if (m_wrap is TopologyWrap.Y or TopologyWrap.Both) {
             y = (((y % m_depth) + m_depth) % m_depth);
         }
-        if (!m_coordinateIndex.TryGetValue((x, y, z), out result)) {
+        if (!m_coordinateIndex.TryGetValue(
+            key: (x, y, z),
+            value: out result
+        )) {
             result = -1;
             return false;
         }
@@ -308,56 +381,77 @@ public sealed partial class CompiledTopology {
     /// <param name="cell">The source cell ordinal.</param>
     /// <param name="direction">The direction ordinal in this shape's vocabulary.</param>
     /// <returns>The neighbour, or -1 for an edge or invalid address.</returns>
-    public int Neighbour(int cell, int direction) => (uint)cell < CellCount && (uint)direction < DirectionCount
-        ? m_neighbours[cell * DirectionCount + direction] : -1;
-
+    public int Neighbour(int cell, int direction) => (((((uint)cell) < CellCount) && (((uint)direction) < DirectionCount))
+        ? m_neighbours[((cell * DirectionCount) + direction)]
+        : -1
+    );
     /// <summary>Reads the direction ordinal whose step vector is the negation of <paramref name="direction"/>'s —
     /// compiled once from each direction's own offset rather than assumed from ordinal arithmetic, so an
     /// asymmetrically-ordered direction table (a <see cref="TopologyKind.Box"/>'s 26) still resolves correctly.</summary>
     /// <param name="direction">The direction ordinal.</param>
     /// <returns>The opposite direction ordinal, or -1 for an invalid address.</returns>
-    public int Opposite(int direction) => (uint)direction < DirectionCount ? m_opposite[direction] : -1;
-
+    public int Opposite(int direction) => ((((uint)direction) < DirectionCount)
+        ? m_opposite[direction]
+        : -1
+    );
     /// <summary>Returns a precompiled canonical cell key.</summary>
     /// <param name="cell">The cell ordinal.</param>
     /// <returns>The decimal key.</returns>
     public string Key(int cell) => m_keys[cell];
-
     /// <summary>Resolves a canonical decimal cell key without allocation.</summary>
     /// <param name="key">The key.</param>
     /// <param name="cell">The ordinal.</param>
     /// <returns>Whether the key names a cell.</returns>
-    public bool TryCell(string key, out int cell) => int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out cell)
-        && (uint)cell < CellCount && string.Equals(key, m_keys[cell], StringComparison.Ordinal);
-
+    public bool TryCell(string key, out int cell) => (int.TryParse(
+        key,
+        NumberStyles.None,
+        CultureInfo.InvariantCulture,
+        out cell
+    )
+        && (((uint)cell) < CellCount) && string.Equals(
+        a: key,
+        b: m_keys[cell],
+        comparisonType: StringComparison.Ordinal
+    ));
     /// <summary>Resolves a direction token for this topology — this topology's own authored names when
     /// <see cref="IDiscreteLatticeTopology.Directions"/> was declared, its kind's default names otherwise.</summary>
     /// <param name="token">The case-sensitive direction name.</param>
     /// <returns>The direction ordinal or -1.</returns>
-    public int Direction(string token) => Array.IndexOf(m_directionNames, token);
+    public int Direction(string token) => Array.IndexOf(
+        array: m_directionNames,
+        value: token
+    );
     /// <summary>Gets a direction's own name.</summary>
     /// <param name="direction">The direction ordinal.</param>
     /// <returns>The name, or <see langword="null"/> for an invalid ordinal.</returns>
-    public string? DirectionName(int direction) => ((uint)direction < (uint)m_directionNames.Length) ? m_directionNames[direction] : null;
-
+    public string? DirectionName(int direction) => ((((uint)direction) < ((uint)m_directionNames.Length))
+        ? m_directionNames[direction]
+        : null
+    );
     /// <summary>Attempts to read precomputed 64-bit shift masks for a direction when the topology has at most 64 cells.</summary>
     /// <param name="direction">The direction ordinal.</param>
     /// <param name="masks">The 64-element span of destination bitmasks indexed by source cell ordinal.</param>
     /// <returns><see langword="true"/> when precomputed masks are available; otherwise <see langword="false"/>.</returns>
     public bool TryGetShiftMasks(int direction, out ReadOnlySpan<ulong> masks) {
-        if (m_directionShiftMasks is not null && (uint)direction < (uint)DirectionCount) {
-            masks = m_directionShiftMasks.AsSpan(direction * BoardMask.MaxCells, BoardMask.MaxCells);
+        if (
+            (m_directionShiftMasks is not null) &&
+            (((uint)direction) < ((uint)DirectionCount))
+        ) {
+            masks = m_directionShiftMasks.AsSpan(
+                length: BoardMask.MaxCells,
+                start: (direction * BoardMask.MaxCells)
+            );
             return true;
         }
         masks = default;
         return false;
     }
 }
-
 public sealed partial class CompiledTopology {
     private readonly int[][] m_images = [];
     private readonly string[] m_elementNames = [];
-    private readonly Dictionary<string, int> m_elementAliases = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> m_elementAliases = new(comparer: StringComparer.Ordinal);
+
     private readonly ulong[]? m_elementImageMasks;
 
     /// <summary>Attempts to read precomputed 64-bit image masks for a point-group element when the topology has at most 64 cells.</summary>
@@ -365,8 +459,14 @@ public sealed partial class CompiledTopology {
     /// <param name="masks">The 64-element span of destination bitmasks indexed by source cell ordinal.</param>
     /// <returns><see langword="true"/> when precomputed masks are available; otherwise <see langword="false"/>.</returns>
     public bool TryGetImageMasks(int element, out ReadOnlySpan<ulong> masks) {
-        if (m_elementImageMasks is not null && (uint)element < (uint)ElementCount) {
-            masks = m_elementImageMasks.AsSpan(element * BoardMask.MaxCells, BoardMask.MaxCells);
+        if (
+            (m_elementImageMasks is not null) &&
+            (((uint)element) < ((uint)ElementCount))
+        ) {
+            masks = m_elementImageMasks.AsSpan(
+                length: BoardMask.MaxCells,
+                start: (element * BoardMask.MaxCells)
+            );
             return true;
         }
         masks = default;
@@ -380,23 +480,32 @@ public sealed partial class CompiledTopology {
     /// <summary>Gets an element's canonical signed-axis name by ordinal; ordinal 0 is the identity.</summary>
     /// <param name="element">The element ordinal.</param>
     public string ElementName(int element) => m_elementNames[element];
-
     /// <summary>Finds an element by its canonical name or an authored alias.</summary>
     /// <param name="name">A name <see cref="ElementName"/> answers, or an authored
     /// <see cref="IDiscreteLatticeTopology.ElementAliases"/> entry.</param>
     /// <returns>The element ordinal, or -1.</returns>
     public int Element(string name) {
-        var canonical = Array.IndexOf(m_elementNames, name);
-        return (canonical >= 0) ? canonical : (m_elementAliases.TryGetValue(name, out var aliased) ? aliased : -1);
-    }
+        var canonical = Array.IndexOf(
+            array: m_elementNames,
+            value: name
+        );
 
+        return ((canonical >= 0)
+            ? canonical
+            : (m_elementAliases.TryGetValue(
+                key: name,
+                value: out var aliased
+            )
+                ? aliased
+                : -1
+        ));
+    }
     /// <summary>Gets every authored alias name and the canonical element name it resolves to, for a read-back.</summary>
     public IEnumerable<(string Alias, string Canonical)> ElementAliases() {
         foreach (var (alias, element) in m_elementAliases) {
             yield return (alias, m_elementNames[element]);
         }
     }
-
     /// <summary>Gets the cell an element carries a cell to.</summary>
     /// <param name="element">The element ordinal.</param>
     /// <param name="cell">The cell ordinal.</param>
@@ -409,12 +518,29 @@ public sealed partial class CompiledTopology {
     // over all elements and rely on the untransformed board being among the images.
     internal static (int[][] Images, string[] Names) BuildSymmetry(TopologyKind kind, int width, int depth, int layers,
         IReadOnlyList<(int X, int Y, int Z)> coordinates, Dictionary<(int, int, int), int> indices) {
-        var group = EnumerateGroup(kind, width, depth, layers);
-        return (kind == TopologyKind.Hex)
-            ? MaterializeHex(group.Elements, coordinates, indices)
-            : MaterializeAxis(group.Elements, group.AxisCount, group.Letters, group.Extents, coordinates, indices);
-    }
+        var group = EnumerateGroup(
+            depth: depth,
+            kind: kind,
+            layers: layers,
+            width: width
+        );
 
+        return ((kind == TopologyKind.Hex)
+            ? MaterializeHex(
+                group.Elements,
+                coordinates,
+                indices
+            )
+            : MaterializeAxis(
+                group.Elements,
+                group.AxisCount,
+                group.Letters,
+                group.Extents,
+                coordinates,
+                indices
+            )
+        );
+    }
     /// <summary>Names every element of a topology's point group without materializing per-cell images — the
     /// bare-group enumeration a validator uses to check an authored <see cref="IDiscreteLatticeTopology.ElementAliases"/>
     /// entry names a real element before any topology cell exists to carry.</summary>
@@ -424,10 +550,19 @@ public sealed partial class CompiledTopology {
     /// <param name="layers">Cells along +Y.</param>
     /// <returns>Every element's canonical signed-axis name, identity first.</returns>
     internal static string[] ElementNames(TopologyKind kind, int width, int depth, int layers) {
-        var group = EnumerateGroup(kind, width, depth, layers);
+        var group = EnumerateGroup(
+            depth: depth,
+            kind: kind,
+            layers: layers,
+            width: width
+        );
         var names = new string[group.Elements.Count];
-        for (var element = 0; element < names.Length; element++) {
-            names[element] = group.Elements[element].Name(group.AxisCount, group.Letters);
+
+        for (var element = 0; (element < names.Length); element++) {
+            names[element] = group.Elements[element].Name(
+                axisCount: group.AxisCount,
+                letters: group.Letters
+            );
         }
         return names;
     }
@@ -435,37 +570,68 @@ public sealed partial class CompiledTopology {
     private readonly record struct Group(List<AxisMap> Elements, int AxisCount, string Letters, int[] Extents);
 
     private static Group EnumerateGroup(TopologyKind kind, int width, int depth, int layers) => kind switch {
-        TopologyKind.Grid => EnumerateAxisGroup(axisCount: 2, extents: [width, depth, 1], letters: "xz"),
-        TopologyKind.Box => EnumerateAxisGroup(axisCount: 3, extents: [width, depth, layers], letters: "xyz"),
+        TopologyKind.Grid => EnumerateAxisGroup(
+        axisCount: 2,
+        extents: [width, depth, 1],
+        letters: "xz"
+    ),
+        TopologyKind.Box => EnumerateAxisGroup(
+        axisCount: 3,
+        extents: [width, depth, layers],
+        letters: "xyz"
+    ),
         TopologyKind.Hex => EnumerateHexGroup(),
-        _ => new([AxisMap.Identity], 3, "xyz", [width, depth, layers]),
+        _ => new(
+        AxisCount: 3,
+        Elements: [AxisMap.Identity],
+        Extents: [width, depth, layers],
+        Letters: "xyz"
+    ),
     };
 
     // A signed permutation of up to three axes: axis k's SOURCE is this[k], carried with sign Sign(k). Slots beyond
     // an axis count in play (Grid uses 2) stay the identity (axis 2, sign +1) by construction — no generator ever
     // touches them — so the same three-slot representation and per-cell loop serve every kind.
     private readonly record struct AxisMap(int A0, int S0, int A1, int S1, int A2, int S2) {
-        public static readonly AxisMap Identity = new(0, 1, 1, 1, 2, 1);
+        public static readonly AxisMap Identity = new(
+            A0: 0,
+            A1: 1,
+            A2: 2,
+            S0: 1,
+            S1: 1,
+            S2: 1
+        );
+
         public int this[int axis] => axis switch { 0 => A0, 1 => A1, _ => A2 };
-        public int Sign(int axis) => axis switch { 0 => S0, 1 => S1, _ => S2 };
+
         public bool IsIdentity(int axisCount) {
-            for (var axis = 0; axis < axisCount; axis++) {
-                if (this[axis] != axis || Sign(axis) != 1) { return false; }
+            for (var axis = 0; (axis < axisCount); axis++) {
+                if (
+                    (this[axis] != axis) ||
+                    (Sign(axis: axis) != 1)
+                ) { return false; }
             }
             return true;
         }
         public string Name(int axisCount, string letters) {
-            if (IsIdentity(axisCount)) { return "identity"; }
+            if (IsIdentity(axisCount: axisCount)) { return "identity"; }
             var name = string.Empty;
-            for (var axis = 0; axis < axisCount; axis++) {
-                name += (Sign(axis) > 0 ? "+" : "-") + letters[this[axis]];
+
+            for (var axis = 0; (axis < axisCount); axis++) {
+                name += (((Sign(axis: axis) > 0)
+                    ? "+"
+                    : "-") + letters[this[axis]]);
             }
             return name;
         }
+        public int Sign(int axis) => axis switch { 0 => S0, 1 => S1, _ => S2 };
         public AxisMap Then(AxisMap next) => new(
-            this[next.A0], Sign(next.A0) * next.S0,
-            this[next.A1], Sign(next.A1) * next.S1,
-            this[next.A2], Sign(next.A2) * next.S2
+            this[next.A0],
+            (Sign(axis: next.A0) * next.S0),
+            this[next.A1],
+            (Sign(axis: next.A1) * next.S1),
+            this[next.A2],
+            (Sign(axis: next.A2) * next.S2)
         );
     }
 
@@ -474,52 +640,100 @@ public sealed partial class CompiledTopology {
     // with Grid's rectangle/square case instead of a second hand-written generator list.
     private static Group EnumerateAxisGroup(int axisCount, int[] extents, string letters) {
         var generators = new List<AxisMap>();
-        for (var axis = 0; axis < axisCount; axis++) {
-            generators.Add(FlipAxis(axis));
+
+        for (var axis = 0; (axis < axisCount); axis++) {
+            generators.Add(item: FlipAxis(axis: axis));
         }
-        for (var a = 0; a < axisCount; a++) {
-            for (var b = a + 1; b < axisCount; b++) {
-                if (extents[a] == extents[b]) { generators.Add(SwapAxes(a, b)); }
+        for (var a = 0; (a < axisCount); a++) {
+            for (var b = (a + 1); (b < axisCount); b++) {
+                if (extents[a] == extents[b]) { generators.Add(item: SwapAxes(
+                    a: a,
+                    b: b
+                )); }
             }
         }
         var elements = new List<AxisMap> { AxisMap.Identity };
-        var seen = new HashSet<AxisMap>(elements);
-        for (var index = 0; index < elements.Count; index++) {
+        var seen = new HashSet<AxisMap>(collection: elements);
+
+        for (var index = 0; (index < elements.Count); index++) {
             foreach (var generator in generators) {
-                var composed = elements[index].Then(generator);
-                if (seen.Add(composed)) { elements.Add(composed); }
+                var composed = elements[index].Then(next: generator);
+
+                if (seen.Add(item: composed)) { elements.Add(item: composed); }
             }
         }
-        return new(elements, axisCount, letters, extents);
+        return new(
+            AxisCount: axisCount,
+            Elements: elements,
+            Extents: extents,
+            Letters: letters
+        );
     }
-
     private static AxisMap FlipAxis(int axis) => axis switch {
-        0 => new(0, -1, 1, 1, 2, 1),
-        1 => new(0, 1, 1, -1, 2, 1),
-        _ => new(0, 1, 1, 1, 2, -1),
+        0 => new(
+        A0: 0,
+        A1: 1,
+        A2: 2,
+        S0: -1,
+        S1: 1,
+        S2: 1
+    ),
+        1 => new(
+        A0: 0,
+        A1: 1,
+        A2: 2,
+        S0: 1,
+        S1: -1,
+        S2: 1
+    ),
+        _ => new(
+        A0: 0,
+        A1: 1,
+        A2: 2,
+        S0: 1,
+        S1: 1,
+        S2: -1
+    ),
     };
-
     private static AxisMap SwapAxes(int a, int b) {
         Span<int> axis = [0, 1, 2];
-        (axis[a], axis[b]) = (axis[b], axis[a]);
-        return new(axis[0], 1, axis[1], 1, axis[2], 1);
-    }
 
+        (axis[a], axis[b]) = (axis[b], axis[a]);
+        return new(
+            axis[0],
+            1,
+            axis[1],
+            1,
+            axis[2],
+            1
+        );
+    }
     private static (int[][] Images, string[] Names) MaterializeAxis(List<AxisMap> elements, int axisCount, string letters, int[] extents,
         IReadOnlyList<(int X, int Y, int Z)> coordinates, Dictionary<(int, int, int), int> indices) {
         var images = new int[elements.Count][];
         var names = new string[elements.Count];
-        for (var element = 0; element < elements.Count; element++) {
+
+        for (var element = 0; (element < elements.Count); element++) {
             var map = elements[element];
-            names[element] = map.Name(axisCount, letters);
+
+            names[element] = map.Name(
+                axisCount: axisCount,
+                letters: letters
+            );
             var image = new int[coordinates.Count];
-            for (var cell = 0; cell < coordinates.Count; cell++) {
+
+            for (var cell = 0; (cell < coordinates.Count); cell++) {
                 var p = coordinates[cell];
                 int[] source = [p.X, p.Y, p.Z];
                 var target = new int[3];
-                for (var axis = 0; axis < 3; axis++) {
+
+                for (var axis = 0; (axis < 3); axis++) {
                     var value = source[map[axis]];
-                    target[axis] = (map.Sign(axis) > 0) ? value : (extents[map[axis]] - 1 - value);
+
+                    target[axis] = ((map.Sign(axis: axis) > 0)
+                        ? value
+                        : ((extents[map[axis]] - 1) - value)
+                    );
                 }
                 image[cell] = indices[(target[0], target[1], target[2])];
             }
@@ -527,7 +741,6 @@ public sealed partial class CompiledTopology {
         }
         return (images, names);
     }
-
     // A hex's axial (q, r) is one plane of the cube coordinates (q, r, s) with q + r + s = 0. The elements of its
     // point group are exactly the signed permutations of (q, r, s) that keep every point on that plane: a bare
     // permutation of the three (six of them), or the same six permutations composed with negating all three — any
@@ -536,35 +749,63 @@ public sealed partial class CompiledTopology {
     private static Group EnumerateHexGroup() {
         Span<int> identityAxes = [0, 1, 2];
         var permutations = new List<int[]>();
-        Permute(identityAxes, 0, permutations);
+
+        Permute(
+            axes: identityAxes,
+            from: 0,
+            results: permutations
+        );
 
         var elements = new List<AxisMap>();
+
         foreach (var sign in new[] { 1, -1 }) {
             foreach (var permutation in permutations) {
-                elements.Add(new(permutation[0], sign, permutation[1], sign, permutation[2], sign));
+                elements.Add(item: new(
+                    permutation[0],
+                    sign,
+                    permutation[1],
+                    sign,
+                    permutation[2],
+                    sign
+                ));
             }
         }
-        elements.Sort((left, right) => left.IsIdentity(3) ? -1 : right.IsIdentity(3) ? 1 : 0);
-        return new(elements, 3, "qrs", [0, 0, 0]);
+        elements.Sort(comparison: (left, right) => (left.IsIdentity(axisCount: 3)
+            ? -1
+            : (right.IsIdentity(axisCount: 3)
+                ? 1
+                : 0)));
+        return new(
+            AxisCount: 3,
+            Elements: elements,
+            Extents: [0, 0, 0],
+            Letters: "qrs"
+        );
     }
-
     private static (int[][] Images, string[] Names) MaterializeHex(List<AxisMap> elements, IReadOnlyList<(int X, int Y, int Z)> coordinates, Dictionary<(int, int, int), int> indices) {
         var images = new int[elements.Count][];
         var names = new string[elements.Count];
-        for (var element = 0; element < elements.Count; element++) {
+
+        for (var element = 0; (element < elements.Count); element++) {
             var map = elements[element];
-            names[element] = map.Name(3, "qrs");
+
+            names[element] = map.Name(
+                axisCount: 3,
+                letters: "qrs"
+            );
             var image = new int[coordinates.Count];
-            for (var cell = 0; cell < coordinates.Count; cell++) {
+
+            for (var cell = 0; (cell < coordinates.Count); cell++) {
                 // The symmetry walk is spelled over cube coordinates of the 60° axial basis; a cell's Eisenstein
                 // (Q, R) maps to axial (Q, −R). KEEP IN SYNC with the inverse on the image lookup below.
                 var (q, negatedR, _) = coordinates[cell];
                 var r = -negatedR;
-                var s = -q - r;
+                var s = (-q - r);
                 int[] cube = [q, r, s];
                 var target = new int[3];
-                for (var axis = 0; axis < 3; axis++) {
-                    target[axis] = map.Sign(axis) * cube[map[axis]];
+
+                for (var axis = 0; (axis < 3); axis++) {
+                    target[axis] = (map.Sign(axis: axis) * cube[map[axis]]);
                 }
                 image[cell] = indices[(target[0], -target[1], 0)];
             }
@@ -572,15 +813,18 @@ public sealed partial class CompiledTopology {
         }
         return (images, names);
     }
-
     private static void Permute(Span<int> axes, int from, List<int[]> results) {
         if (from == axes.Length) {
-            results.Add(axes.ToArray());
+            results.Add(item: axes.ToArray());
             return;
         }
-        for (var index = from; index < axes.Length; index++) {
+        for (var index = from; (index < axes.Length); index++) {
             (axes[from], axes[index]) = (axes[index], axes[from]);
-            Permute(axes, from + 1, results);
+            Permute(
+                axes: axes,
+                from: (from + 1),
+                results: results
+            );
             (axes[from], axes[index]) = (axes[index], axes[from]);
         }
     }
@@ -591,8 +835,12 @@ public sealed partial class CompiledTopology {
     // its topology's own recompile — install it defensively rather than throw.
     internal void InstallElementAliases(IReadOnlyList<TopologyElementAlias>? aliases) {
         m_elementAliases.Clear();
-        foreach (var alias in aliases ?? []) {
-            var canonical = Array.IndexOf(m_elementNames, alias.Element);
+        foreach (var alias in (aliases ?? [])) {
+            var canonical = Array.IndexOf(
+                array: m_elementNames,
+                value: alias.Element
+            );
+
             if (canonical >= 0) {
                 m_elementAliases[alias.Name] = canonical;
             }

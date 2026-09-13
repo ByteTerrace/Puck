@@ -6,25 +6,6 @@ namespace Puck.State;
 /// <summary>Hard bounds for a search runtime: how many jobs, shapes, and candidates one document (or one
 /// hand-built job set) may declare, and the fixed magnitudes its search math never overflows.</summary>
 public static class SearchCapacity {
-    /// <summary>The most jobs one document declares.</summary>
-    public const int MaxJobs = 8;
-    /// <summary>The most candidate shapes one job declares.</summary>
-    public const int MaxShapesPerJob = 8;
-    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
-    public const int MaxNodesPerTick = 4_096;
-    /// <summary>The most plies one job searches ahead.</summary>
-    public const int MaxDepth = 32;
-    /// <summary>The most codes one <c>promote</c> shape offers.</summary>
-    public const int MaxPromotions = 8;
-    /// <summary>The most hops one <c>jump</c> shape's chain may take in a single candidate.</summary>
-    public const int MaxJumpHops = 12;
-    /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
-    /// position's frame hash.</summary>
-    public const int TranspositionEntries = 1_024;
-    /// <summary>The tree nodes one job with an outcome may grow.</summary>
-    public const int TreeNodes = 2_048;
-    /// <summary>The most tree iterations one job runs before it lands.</summary>
-    public const int MaxIterations = 65_536;
     /// <summary>The magnitude a terminal position (no accepted relocation) scores for the side to move, and the
     /// negamax search window's width — shifted down from <see cref="long.MaxValue"/> so a value repeatedly negated
     /// and compared across the deepest authored search never overflows.</summary>
@@ -32,8 +13,26 @@ public static class SearchCapacity {
     /// <summary>The most outcomes one <see cref="SearchChancePlan"/> may bake — the cross product of its row's own
     /// generator's domain across every one of the row's cells (two six-sided dice bakes 36).</summary>
     public const int MaxChanceOutcomes = 64;
+    /// <summary>The most plies one job searches ahead.</summary>
+    public const int MaxDepth = 32;
+    /// <summary>The most tree iterations one job runs before it lands.</summary>
+    public const int MaxIterations = 65_536;
+    /// <summary>The most jobs one document declares.</summary>
+    public const int MaxJobs = 8;
+    /// <summary>The most hops one <c>jump</c> shape's chain may take in a single candidate.</summary>
+    public const int MaxJumpHops = 12;
+    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
+    public const int MaxNodesPerTick = 4_096;
+    /// <summary>The most codes one <c>promote</c> shape offers.</summary>
+    public const int MaxPromotions = 8;
+    /// <summary>The most candidate shapes one job declares.</summary>
+    public const int MaxShapesPerJob = 8;
+    /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
+    /// position's frame hash.</summary>
+    public const int TranspositionEntries = 1_024;
+    /// <summary>The tree nodes one job with an outcome may grow.</summary>
+    public const int TreeNodes = 2_048;
 }
-
 /// <summary>How a job with a score compares plies.</summary>
 [JsonConverter(typeof(StrictEnumConverter<SearchMethod>))]
 public enum SearchMethod : byte {
@@ -43,7 +42,6 @@ public enum SearchMethod : byte {
     /// accepted or at the depth cap, the most-visited root move landed.</summary>
     Tree,
 }
-
 /// <summary>Which board-state change one candidate shape makes. <see cref="Relocate"/> is the plain default shape.</summary>
 public enum SearchShapeKind : byte {
     /// <summary>One own token moves onto any other cell.</summary>
@@ -59,7 +57,6 @@ public enum SearchShapeKind : byte {
     /// <summary>The walked token, at one end of its ordered zone, moves onto another of the job's zones.</summary>
     Transfer,
 }
-
 /// <summary>One compiled candidate shape a search job enumerates, ahead of token and target/direction in the walk's
 /// fixed order. <see cref="Directions"/> is populated for <see cref="SearchShapeKind.Jump"/> alone — the resolved
 /// direction ordinals its authored shape names. <see cref="PairWithIndex"/> is populated for
@@ -78,6 +75,23 @@ public enum SearchShapeKind : byte {
 /// hops, each over an occupied cell onto an empty one never repeating a cell of the chain (including the token's
 /// own starting cell), and none of the chain's intermediate cells are evicted.</param>
 public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1) {
+    // A base-(directions + 1) count, saturating at int.MaxValue rather than throwing — validation keeps a real
+    // document's product far under this ceiling; the saturated value only ever reaches a caller as an early refusal.
+    private static int ChainCandidateCount(int directions, int maxHops) {
+        var radix = (((long)directions) + 1);
+        var total = 1L;
+
+        for (var hop = 0; (hop < maxHops); hop++) {
+            total *= radix;
+
+            if (total > int.MaxValue) {
+                return int.MaxValue;
+            }
+        }
+
+        return ((int)total);
+    }
+
     /// <summary>Gets how many candidates this shape enumerates per token: every cell (a board's cells, or a zone
     /// job's zones) for every kind but <see cref="SearchShapeKind.Jump"/>, which enumerates its resolved directions
     /// alone at <see cref="MaxHops"/> 1, or every base-(directions + 1) digit string of length
@@ -87,29 +101,16 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
     /// <see cref="SearchShapeKind.Promote"/>, which offers every code on every cell.</summary>
     /// <param name="cellCount">The job's cell count.</param>
     public int CandidateCount(int cellCount) => Kind switch {
-        SearchShapeKind.Jump => ((MaxHops <= 1) ? Directions.Length : ChainCandidateCount(directions: Directions.Length, maxHops: MaxHops)),
+        SearchShapeKind.Jump => ((MaxHops <= 1)
+        ? Directions.Length
+        : ChainCandidateCount(
+            directions: Directions.Length,
+            maxHops: MaxHops
+        )),
         SearchShapeKind.Promote => (cellCount * (PromoteTo?.Length ?? 0)),
         _ => cellCount,
     };
-
-    // A base-(directions + 1) count, saturating at int.MaxValue rather than throwing — validation keeps a real
-    // document's product far under this ceiling; the saturated value only ever reaches a caller as an early refusal.
-    private static int ChainCandidateCount(int directions, int maxHops) {
-        var radix = ((long)directions + 1);
-        var total = 1L;
-
-        for (var hop = 0; hop < maxHops; hop++) {
-            total *= radix;
-
-            if (total > int.MaxValue) {
-                return int.MaxValue;
-            }
-        }
-
-        return (int)total;
-    }
 }
-
 /// <summary>One search job's baked chance node: the ply whose move choice the job's search averages over instead of
 /// choosing, and the outcome table a document project bakes once from the row's own declared generator (its cells'
 /// cross product — two dice of <c>uniformRange 1..6</c> bake 36 outcomes) so <see cref="SearchRuntime"/> reads pure
@@ -123,7 +124,6 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
 /// <param name="Outcomes">Every outcome's per-cell values, flattened outcome-major (<c>outcome * CellCount + cell</c>).</param>
 /// <param name="Weights">Every outcome's relative weight, one per stride of <paramref name="Outcomes"/>.</param>
 public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, long[] Outcomes, ulong[] Weights);
-
 /// <summary>One search job's fully resolved plan — every row it reads or writes, by name, plus the compiled shapes
 /// and the per-tick node quota. A document project derives this from its own authored row (validating it against
 /// the document, resolving row and topology references) and hands the plan to <see cref="SearchRuntime"/>, which
@@ -187,7 +187,6 @@ public sealed record SearchPlan(
     SearchChancePlan? Chance = null,
     string? Scores = null
 );
-
 /// <summary>One state write a finished search job wants applied, through whatever mutation door the document
 /// project owns — <see cref="SearchRuntime"/> knows only that a job wants these writes made, never how a document
 /// project encodes them on the wire.</summary>

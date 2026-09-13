@@ -16,6 +16,24 @@ internal static class RewriteShaping {
     // source keep whatever the source had (Roslyn preserves that trivia); phase 0 owns normalizing those.
     public static readonly SyntaxTrivia EndOfLine = SyntaxFactory.LineFeed;
 
+    // The accessibility-scope key two adjacent members are grouped by. Only the access modifiers count
+    // (public/private/protected/internal); ordering is normalized so `protected internal` and `internal
+    // protected` compare equal. A member with no explicit accessibility (interface members,
+    // implicit-private) keys as the empty string, so such siblings group together.
+    public static string AccessibilityScope(MemberDeclarationSyntax member) => string.Join(
+        separator: ' ',
+        values: member.Modifiers
+            .Where(predicate: static modifier =>
+                (modifier.IsKind(kind: SyntaxKind.PublicKeyword)
+                || modifier.IsKind(kind: SyntaxKind.PrivateKeyword)
+                || modifier.IsKind(kind: SyntaxKind.ProtectedKeyword)
+                || modifier.IsKind(kind: SyntaxKind.InternalKeyword)))
+            .Select(selector: static modifier => modifier.ValueText)
+            .OrderBy(
+            keySelector: static text => text,
+            comparer: StringComparer.Ordinal
+        )
+    );
     // True when a trivia run carries prose or a preprocessor directive. Every reordering pass is gated
     // on this: trivia is reassigned by SLOT, so moving an element out from under its own comment (or
     // across an #if) silently changes what the annotation documents — and the write guard only counts
@@ -38,20 +56,26 @@ internal static class RewriteShaping {
     public static bool IsAnnotated<TNode>(SeparatedSyntaxList<TNode> list) where TNode : SyntaxNode =>
         (list.Any(predicate: static node => IsAnnotated(node: node))
         || list.GetSeparators().Any(predicate: static separator => IsAnnotated(token: separator)));
-    // The accessibility-scope key two adjacent members are grouped by. Only the access modifiers count
-    // (public/private/protected/internal); ordering is normalized so `protected internal` and `internal
-    // protected` compare equal. A member with no explicit accessibility (interface members,
-    // implicit-private) keys as the empty string, so such siblings group together.
-    public static string AccessibilityScope(MemberDeclarationSyntax member) => string.Join(
-        separator: ' ',
-        values: member.Modifiers
-            .Where(predicate: static modifier =>
-                (modifier.IsKind(kind: SyntaxKind.PublicKeyword)
-                || modifier.IsKind(kind: SyntaxKind.PrivateKeyword)
-                || modifier.IsKind(kind: SyntaxKind.ProtectedKeyword)
-                || modifier.IsKind(kind: SyntaxKind.InternalKeyword)))
-            .Select(selector: static modifier => modifier.ValueText)
-            .OrderBy(keySelector: static text => text, comparer: StringComparer.Ordinal));
+    // Reassigns an already-reordered element sequence back into a separated list, keeping each SLOT's
+    // trivia and separator where they were — so the source's existing single-line or one-per-line layout
+    // survives the reorder. Sound only because every caller first declines a list whose elements OR
+    // separators carry an annotation (see the SeparatedSyntaxList overload of IsAnnotated).
+    public static SeparatedSyntaxList<TNode> ReorderInPlace<TNode>(SeparatedSyntaxList<TNode> original, IReadOnlyList<TNode> ordered) where TNode : SyntaxNode {
+        var separators = original.GetSeparators().ToArray();
+        var nodesAndTokens = new List<SyntaxNodeOrToken>(capacity: (original.Count * 2));
+
+        for (var slot = 0; (slot < ordered.Count); slot++) {
+            nodesAndTokens.Add(item: ordered[slot]
+                    .WithLeadingTrivia(trivia: original[slot].GetLeadingTrivia())
+                    .WithTrailingTrivia(trivia: original[slot].GetTrailingTrivia()));
+
+            if (slot < separators.Length) {
+                nodesAndTokens.Add(item: separators[slot]);
+            }
+        }
+
+        return SyntaxFactory.SeparatedList<TNode>(nodesAndTokens: nodesAndTokens);
+    }
     // Forces exactly `desired` blank lines ahead of a construct: the leading end-of-lines are collapsed
     // and that many newlines are prepended, while the indentation whitespace (and any other lead) is
     // kept, so the construct stays where it sits horizontally.
@@ -59,7 +83,10 @@ internal static class RewriteShaping {
         var trivia = lead.ToList();
         var start = 0;
 
-        while ((start < trivia.Count) && trivia[start].IsKind(kind: SyntaxKind.EndOfLineTrivia)) {
+        while (
+            (start < trivia.Count) &&
+            trivia[start].IsKind(kind: SyntaxKind.EndOfLineTrivia)
+        ) {
             start++;
         }
 
@@ -108,32 +135,14 @@ internal static class RewriteShaping {
         var child = node;
 
         for (var ancestor = node.Parent; ((ancestor is not null) && (ancestor != anchor)); child = ancestor, ancestor = ancestor.Parent) {
-            if (addsLevel(arg1: ancestor, arg2: child)) {
+            if (addsLevel(
+                arg1: ancestor,
+                arg2: child
+            )) {
                 depth++;
             }
         }
 
         return (baseIndent + (4 * depth));
-    }
-    // Reassigns an already-reordered element sequence back into a separated list, keeping each SLOT's
-    // trivia and separator where they were — so the source's existing single-line or one-per-line layout
-    // survives the reorder. Sound only because every caller first declines a list whose elements OR
-    // separators carry an annotation (see the SeparatedSyntaxList overload of IsAnnotated).
-    public static SeparatedSyntaxList<TNode> ReorderInPlace<TNode>(SeparatedSyntaxList<TNode> original, IReadOnlyList<TNode> ordered) where TNode : SyntaxNode {
-        var separators = original.GetSeparators().ToArray();
-        var nodesAndTokens = new List<SyntaxNodeOrToken>(capacity: (original.Count * 2));
-
-        for (var slot = 0; (slot < ordered.Count); slot++) {
-            nodesAndTokens.Add(
-                item: ordered[slot]
-                    .WithLeadingTrivia(trivia: original[slot].GetLeadingTrivia())
-                    .WithTrailingTrivia(trivia: original[slot].GetTrailingTrivia()));
-
-            if (slot < separators.Length) {
-                nodesAndTokens.Add(item: separators[slot]);
-            }
-        }
-
-        return SyntaxFactory.SeparatedList<TNode>(nodesAndTokens: nodesAndTokens);
     }
 }

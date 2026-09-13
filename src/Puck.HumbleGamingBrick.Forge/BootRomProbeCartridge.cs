@@ -15,6 +15,17 @@ public static class BootRomProbeCartridge {
     private const int TitleEnd = 0x0142;
     private const int TitleStart = 0x0134;
 
+    // The header checksum the boot program recomputes: x = x - byte - 1 over 0x0134-0x014C.
+    private static byte HeaderChecksum(byte[] rom) {
+        byte checksum = 0;
+
+        for (var offset = HeaderChecksumStart; (offset <= HeaderChecksumEnd); ++offset) {
+            checksum = ((byte)((checksum - rom[offset]) - 1));
+        }
+
+        return checksum;
+    }
+
     /// <summary>Creates the probe cartridge image for a header.</summary>
     /// <param name="probe">The header the probe presents.</param>
     /// <returns>A 32&#160;KiB ROM-only cartridge image.</returns>
@@ -34,7 +45,8 @@ public static class BootRomProbeCartridge {
 
             rom[offset] = ((index < title.Length)
                 ? ((byte)title[index])
-                : ((byte)0x00));
+                : ((byte)0x00)
+            );
         }
 
         var newLicensee = (probe.NewLicenseeCode ?? "  ");
@@ -46,16 +58,5 @@ public static class BootRomProbeCartridge {
         rom[HeaderChecksumOffset] = HeaderChecksum(rom: rom);
 
         return rom;
-    }
-
-    // The header checksum the boot program recomputes: x = x - byte - 1 over 0x0134-0x014C.
-    private static byte HeaderChecksum(byte[] rom) {
-        byte checksum = 0;
-
-        for (var offset = HeaderChecksumStart; (offset <= HeaderChecksumEnd); ++offset) {
-            checksum = ((byte)((checksum - rom[offset]) - 1));
-        }
-
-        return checksum;
     }
 }

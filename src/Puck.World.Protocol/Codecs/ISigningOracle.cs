@@ -28,8 +28,8 @@ public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
     private readonly string m_domain;
     private readonly ECDsa m_key;
     private readonly Func<DateTimeOffset> m_now;
-    private readonly TimeSpan m_validity;
     private readonly string m_subject;
+    private readonly TimeSpan m_validity;
 
     /// <summary>Initializes the oracle over an already-generated key.</summary>
     /// <param name="key">The private signing key. Owned by this instance; disposed with it.</param>

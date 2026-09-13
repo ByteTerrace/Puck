@@ -22,16 +22,28 @@ internal static class PuckWorldLoader {
         try {
             path = (explicitly
                 ? Path.GetFullPath(path: explicitPath!)
-                : Path.Combine(path1: AppContext.BaseDirectory, path2: WorldDefinitionLoader.DefaultRelativePath)
+                : Path.Combine(
+                    path1: AppContext.BaseDirectory,
+                    path2: WorldDefinitionLoader.DefaultRelativePath
+                )
             );
-        } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
+        } catch (Exception ex) when ((ex is ArgumentException or NotSupportedException or PathTooLongException)) {
             source = null!;
             failure = $"[world] definition refused: cannot resolve path '{explicitPath}' ({ex.Message})";
             return false;
         }
 
-        if (!path.EndsWith(".puck", StringComparison.OrdinalIgnoreCase)) {
-            return WorldDefinitionLoader.TryResolve(explicitPath: explicitPath, failure: out failure, source: out source, catalogFingerprint: catalogFingerprint, catalog: catalog);
+        if (!path.EndsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: ".puck"
+        )) {
+            return WorldDefinitionLoader.TryResolve(
+                catalog: catalog,
+                catalogFingerprint: catalogFingerprint,
+                explicitPath: explicitPath,
+                failure: out failure,
+                source: out source
+            );
         }
 
         if (!File.Exists(path: path)) {
@@ -41,6 +53,7 @@ internal static class PuckWorldLoader {
         }
 
         string puckSource;
+
         try {
             puckSource = File.ReadAllText(path: path);
         } catch (Exception ex) {
@@ -50,10 +63,17 @@ internal static class PuckWorldLoader {
         }
 
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source: puckSource);
-        if (parseResult.Diagnostics.HasErrors || parseResult.Value is null) {
+
+        if (
+            parseResult.Diagnostics.HasErrors ||
+            (parseResult.Value is null)
+        ) {
             source = null!;
-            failure = $"[world] definition refused: syntax errors in '{path}':\n" +
-                      parseResult.Diagnostics.FormatReport(sourceText: puckSource, filePath: path);
+            failure = ($"[world] definition refused: syntax errors in '{path}':\n" +
+                      parseResult.Diagnostics.FormatReport(
+                filePath: path,
+                sourceText: puckSource
+            ));
             return false;
         }
 
@@ -64,10 +84,16 @@ internal static class PuckWorldLoader {
             document: parseResult.Value
         );
 
-        if (loweringDiags.HasErrors || loweringResult.Value is null) {
+        if (
+            loweringDiags.HasErrors ||
+            (loweringResult.Value is null)
+        ) {
             source = null!;
-            failure = $"[world] definition refused: lowering errors in '{path}':\n" +
-                      loweringDiags.FormatReport(sourceText: puckSource, filePath: path);
+            failure = ($"[world] definition refused: lowering errors in '{path}':\n" +
+                      loweringDiags.FormatReport(
+                filePath: path,
+                sourceText: puckSource
+            ));
             return false;
         }
 
@@ -76,13 +102,13 @@ internal static class PuckWorldLoader {
         var finalBytes = rawBytes;
 
         if (!PuckDocumentComposer.TryComposeWorldDocument(
-            rootResolvedPath: path,
-            rootBytes: rawBytes,
-            composed: out var composed,
-            chainBytes: out _,
-            reason: out var composeReason,
+            catalog: catalog,
             catalogFingerprint: catalogFingerprint,
-            catalog: catalog
+            chainBytes: out _,
+            composed: out var composed,
+            reason: out var composeReason,
+            rootBytes: rawBytes,
+            rootResolvedPath: path
         )) {
             source = null!;
             failure = $"[world] definition refused: {path} composition refused: {composeReason}";
@@ -93,25 +119,34 @@ internal static class PuckWorldLoader {
             finalBytes = Encoding.UTF8.GetBytes(s: composed.ToJsonString());
         }
 
-        var directory = (Path.GetDirectoryName(path: path) is { Length: > 0 } dir ? dir : AppContext.BaseDirectory);
-        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory, catalogFingerprint: catalogFingerprint, catalog: catalog);
+        var directory = ((Path.GetDirectoryName(path: path) is { Length: > 0 } dir)
+            ? dir
+            : AppContext.BaseDirectory
+        );
+        var neighbours = new WorldFileNeighbourResolver(
+            baseDirectory: () => directory,
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint
+        );
 
         if (!WorldDefinitionLoader.TryLoad(
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
             definition: out var loadedDef,
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             neighbours: neighbours,
             reason: out var loadReason,
             sourceName: path,
-            utf8: finalBytes,
-            catalogFingerprint: catalogFingerprint,
-            catalog: catalog
+            utf8: finalBytes
         )) {
             source = null!;
             failure = $"[world] definition refused: {loadReason}";
             return false;
         }
 
-        Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly ? "--world .puck transpiled" : "shipped default")})");
+        Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly
+            ? "--world .puck transpiled"
+            : "shipped default")})");
         source = new WorldDefinitionSource(
             Definition: loadedDef!,
             SourcePath: path

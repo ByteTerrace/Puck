@@ -11,9 +11,7 @@ public enum WorldReleaseOperationPhase {
     RecoverActivate,
     Finalized,
 }
-
 /// <summary>Whether public, federation, and console admission is open for a group.</summary>
 public enum WorldReleaseAdmissionState { Closed, Open }
-
 /// <summary>Named result returned by guarded release-group writes.</summary>
 public enum WorldReleaseOperationOutcomeKind { Ok, Missing, AlreadyExists, PreconditionFailed, Conflict, Failed }

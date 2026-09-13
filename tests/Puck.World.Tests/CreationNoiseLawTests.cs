@@ -17,6 +17,15 @@ namespace Puck.World.Tests;
 public sealed class CreationNoiseLawTests {
     private const string PrototypeId = "probe";
 
+    private static CreationDocument Document(CreationNoiseDocument? noise, IReadOnlyList<FrameDocument>? frames = null) =>
+        new(
+            Schema: CreationDocument.CurrentSchema,
+            Name: PrototypeId,
+            Palette: null,
+            Shapes: [Shape()],
+            Frames: frames,
+            Noise: noise
+        );
     private static ShapeDocument Shape() =>
         new(
             Id: 0,
@@ -29,15 +38,6 @@ public sealed class CreationNoiseLawTests {
             Blend: SdfBlendOp.Union,
             Smooth: 0f,
             Group: 0
-        );
-    private static CreationDocument Document(CreationNoiseDocument? noise, IReadOnlyList<FrameDocument>? frames = null) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: [Shape()],
-            Frames: frames,
-            Noise: noise
         );
     private static WorldDefinition World(CreationNoiseDocument? noise, IReadOnlyList<FrameDocument>? frames = null, bool solid = true) {
         var source = Fixtures.BuildDocument();
@@ -52,22 +52,22 @@ public sealed class CreationNoiseLawTests {
         return (source with {
             CreationsRaw = [
                 new WorldPrototype(
-                    Id: PrototypeId,
-                    Document: canonical.Document,
-                    HashRaw: canonical.Hash
-                ),
+                Id: PrototypeId,
+                Document: canonical.Document,
+                HashRaw: canonical.Hash
+            ),
             ],
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: PrototypeId,
-                    PrototypeId: PrototypeId,
-                    Position: Vector3.Zero,
-                    YawDegrees: 0f,
-                    Scale: 1f,
-                    Solid: (solid
-                    ? new WorldSolid(Margin: 0f)
-                    : null)
-                ),
+                Id: PrototypeId,
+                PrototypeId: PrototypeId,
+                Position: Vector3.Zero,
+                YawDegrees: 0f,
+                Scale: 1f,
+                Solid: (solid
+            ? new WorldSolid(Margin: 0f)
+            : null)
+            ),
             ],
         });
     }
@@ -84,81 +84,6 @@ public sealed class CreationNoiseLawTests {
             ),
             userMessage: reason
         );
-    }
-    [Fact]
-    public void AnOverBudgetStepFactorRefusesByName() {
-        var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
-            Amplitude: 4f,
-            Frequency: 8f,
-            Lacunarity: 4f,
-            Octaves: 8
-        )));
-
-        Assert.Contains(
-            collection: violations,
-            filter: violation => (
-                (violation.Path == "noise") &&
-                violation.Message.Contains(comparisonType: StringComparison.Ordinal, value: "step factor")
-            )
-        );
-    }
-    [Fact]
-    public void TheStepFactorControlDiffersOnlyInAmplitude() {
-        var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
-            Amplitude: 0.001f,
-            Frequency: 8f,
-            Lacunarity: 4f,
-            Octaves: 8
-        )));
-
-        Assert.Empty(collection: violations);
-    }
-    [InlineData(0f, 1f, "noise.frequency")]
-    [InlineData(9f, 1f, "noise.frequency")]
-    [InlineData(0.3f, 0f, "noise.amplitude")]
-    [InlineData(0.3f, 5f, "noise.amplitude")]
-    [InlineData(float.NaN, 1f, "noise.frequency")]
-    [Theory]
-    public void AnOutOfRangeParameterRefusesByPath(float frequency, float amplitude, string path) {
-        var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
-            Amplitude: amplitude,
-            Frequency: frequency
-        )));
-
-        Assert.Contains(
-            collection: violations,
-            filter: violation => (violation.Path == path)
-        );
-    }
-    [Fact]
-    public void NormalizationResolvesEveryOptionalAndIsIdempotent() {
-        var once = CreationCanonicalizer.Normalize(document: Document(noise: new CreationNoiseDocument(
-            Amplitude: 1f,
-            Frequency: 0.5f
-        )));
-
-        Assert.Equal(
-            actual: once.Noise,
-            expected: new CreationNoiseDocument(
-                Amplitude: 1f,
-                Frequency: 0.5f,
-                Gain: 0.5f,
-                Lacunarity: 2f,
-                Octaves: 4,
-                Seed: 0u
-            )
-        );
-        Assert.Equal(
-            actual: CreationCanonicalizer.Normalize(document: once).Noise,
-            expected: once.Noise
-        );
-    }
-    [Fact]
-    public void AnInertAmplitudeDropsTheFacet() {
-        Assert.Null(@object: CreationCanonicalizer.Normalize(document: Document(noise: new CreationNoiseDocument(
-            Amplitude: 0f,
-            Frequency: 0.5f
-        ))).Noise);
     }
     [Fact]
     public void AnAnimatedCreationRefusesNoiseByName() {
@@ -191,29 +116,47 @@ public sealed class CreationNoiseLawTests {
         );
     }
     [Fact]
-    public void TheAnimatedControlWithoutNoiseValidates() {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: World(
-                    frames: [
-                        new FrameDocument(
-                            Name: "blink",
-                            Transforms: [
-                                new FrameTransformDocument(
-                                    Id: 0,
-                                    Position: Vector3.Zero,
-                                    Rotation: Quaternion.Identity,
-                                    Scale: Vector3.One
-                                ),
-                            ]
-                        ),
-                    ],
-                    noise: null,
-                    solid: false
-                ),
-                reason: out var reason
-            ),
-            userMessage: reason
+    public void AnInertAmplitudeDropsTheFacet() {
+        Assert.Null(@object: CreationCanonicalizer.Normalize(document: Document(noise: new CreationNoiseDocument(
+            Amplitude: 0f,
+            Frequency: 0.5f
+        ))).Noise);
+    }
+    [InlineData(0f, 1f, "noise.frequency")]
+    [InlineData(9f, 1f, "noise.frequency")]
+    [InlineData(0.3f, 0f, "noise.amplitude")]
+    [InlineData(0.3f, 5f, "noise.amplitude")]
+    [InlineData(float.NaN, 1f, "noise.frequency")]
+    [Theory]
+    public void AnOutOfRangeParameterRefusesByPath(float frequency, float amplitude, string path) {
+        var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
+            Amplitude: amplitude,
+            Frequency: frequency
+        )));
+
+        Assert.Contains(
+            collection: violations,
+            filter: violation => (violation.Path == path)
+        );
+    }
+    [Fact]
+    public void AnOverBudgetStepFactorRefusesByName() {
+        var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
+            Amplitude: 4f,
+            Frequency: 8f,
+            Lacunarity: 4f,
+            Octaves: 8
+        )));
+
+        Assert.Contains(
+            collection: violations,
+            filter: violation => (
+                (violation.Path == "noise") &&
+                violation.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "step factor"
+            )
+            )
         );
     }
     [Fact]
@@ -230,9 +173,9 @@ public sealed class CreationNoiseLawTests {
             _ = builder
                 .ResetPoint()
                 .Sphere(
-                    radius: 1f,
-                    material: 0
-                );
+                radius: 1f,
+                material: 0
+            );
 
             if (noise is not null) {
                 CreationStampEmitter.EmitNoise(
@@ -274,7 +217,10 @@ public sealed class CreationNoiseLawTests {
             expected: 1f
         );
 
-        var pop = Assert.Single(collection: noised.Instructions, predicate: instruction => (instruction.Op == SdfOp.PopField));
+        var pop = Assert.Single(
+            collection: noised.Instructions,
+            predicate: instruction => (instruction.Op == SdfOp.PopField)
+        );
         var expectedFactor = SdfProgram.NoiseDisplaceStepFactor(
             amplitude: 1.5f,
             frequency: 0.3f,
@@ -293,7 +239,10 @@ public sealed class CreationNoiseLawTests {
             filter: instruction => (instruction.Op == SdfOp.NoiseDisplace)
         );
 
-        var controlPop = Assert.Single(collection: control.Instructions, predicate: instruction => (instruction.Op == SdfOp.PopField));
+        var controlPop = Assert.Single(
+            collection: control.Instructions,
+            predicate: instruction => (instruction.Op == SdfOp.PopField)
+        );
 
         Assert.Equal(
             actual: controlPop.Data1.Y,
@@ -303,5 +252,65 @@ public sealed class CreationNoiseLawTests {
             actual: control.StepScale,
             expected: 1f
         );
+    }
+    [Fact]
+    public void NormalizationResolvesEveryOptionalAndIsIdempotent() {
+        var once = CreationCanonicalizer.Normalize(document: Document(noise: new CreationNoiseDocument(
+            Amplitude: 1f,
+            Frequency: 0.5f
+        )));
+
+        Assert.Equal(
+            actual: once.Noise,
+            expected: new CreationNoiseDocument(
+                Amplitude: 1f,
+                Frequency: 0.5f,
+                Gain: 0.5f,
+                Lacunarity: 2f,
+                Octaves: 4,
+                Seed: 0u
+            )
+        );
+        Assert.Equal(
+            actual: CreationCanonicalizer.Normalize(document: once).Noise,
+            expected: once.Noise
+        );
+    }
+    [Fact]
+    public void TheAnimatedControlWithoutNoiseValidates() {
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: World(
+                    frames: [
+                        new FrameDocument(
+                            Name: "blink",
+                            Transforms: [
+                                new FrameTransformDocument(
+                                    Id: 0,
+                                    Position: Vector3.Zero,
+                                    Rotation: Quaternion.Identity,
+                                    Scale: Vector3.One
+                                ),
+                            ]
+                        ),
+                    ],
+                    noise: null,
+                    solid: false
+                ),
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+    }
+    [Fact]
+    public void TheStepFactorControlDiffersOnlyInAmplitude() {
+        var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
+            Amplitude: 0.001f,
+            Frequency: 8f,
+            Lacunarity: 4f,
+            Octaves: 8
+        )));
+
+        Assert.Empty(collection: violations);
     }
 }

@@ -25,7 +25,10 @@ public sealed class AuthorizationMiddleware(
                 var clientAssertionCredential = instanceServices.GetKeyedService<TokenCredential>(serviceKey: IdentityUtilities.ClientAssertionCredentialKey);
                 var onBehalfOfOptions = httpContext.RequestServices.GetService<IOptions<OnBehalfOfOptions>>();
 
-                if ((clientAssertionCredential is not null) && (onBehalfOfOptions is not null)) {
+                if (
+                    (clientAssertionCredential is not null) &&
+                    (onBehalfOfOptions is not null)
+                ) {
                     var userCredentialContext = instanceServices.GetRequiredService<IUserCredentialContext>();
 
                     userCredentialContext.UserContext = clientAssertionCredential.ToOnBehalfOfCredential(

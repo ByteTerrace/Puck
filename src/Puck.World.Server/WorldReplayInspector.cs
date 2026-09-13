@@ -39,10 +39,10 @@ public sealed class WorldReplayInspector {
     private const string WherePrefix = "[body.where: ";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
+    private readonly IWorldDocumentSource? m_documents;
     private readonly IReadOnlyList<IMachineEngine> m_engines;
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldOwnedWorlds m_profiles;
-    private readonly IWorldDocumentSource? m_documents;
 
     /// <summary>Initializes the inspector over the same things a re-drive needs — the profile catalog seats
     /// re-resolve against, the screen-machine engine set and host factory, and the shadow addon-host factory — so
@@ -69,32 +69,6 @@ public sealed class WorldReplayInspector {
         m_documents = documents;
     }
 
-    private static void AppendHeader(List<string> lines, string name, in WorldReplayLoad loaded) {
-        var recording = loaded.Recording;
-
-        lines.Add(item: $"{Prefix}tape '{name}' path={loaded.Path}]");
-        lines.Add(item: $"{Prefix}shape magic=0x{loaded.Magic:X8} token={loaded.ShapeToken}]");
-        lines.Add(item: $"{Prefix}rate {recording.SimulationRate} Hz | ticks {recording.TickCount} | tail hash 0x{recording.RecordedTailHash:X16}]");
-
-        if (recording.ForkedFrom is { } fork) {
-            lines.Add(item: $"{Prefix}forked from '{fork.ParentName}' at tick {fork.Tick}]");
-        }
-
-        foreach (var seat in recording.Seats) {
-            lines.Add(item: ((seat.Profile is { } pin)
-                ? $"{Prefix}seat slot={seat.Slot} profile='{pin.Name}' move={DescribeRate(rate: pin.MoveSpeed)} turn={DescribeRate(rate: pin.TurnSpeed)}]"
-                : $"{Prefix}seat slot={seat.Slot} profile=none]"
-            ));
-        }
-
-        if (recording.MountedAddons.Count == 0) {
-            lines.Add(item: $"{Prefix}addons none]");
-        }
-
-        foreach (var receipt in recording.MountedAddons) {
-            lines.Add(item: $"{Prefix}addon '{receipt.Name}' hash={receipt.Hash} fuel={receipt.Fuel}/tick]");
-        }
-    }
     // A pinned rate as the operator reads it beside the raw lane the re-drive actually integrates with; 'kit' for an
     // identity that claimed none (the re-drive falls back to the kit's rate the same way the live run did).
     /// <summary>Spells a pinned profile rate the way every replay read-back prints one — the decimal beside its raw
@@ -109,6 +83,235 @@ public sealed class WorldReplayInspector {
             )
             : absent
         );
+    }
+
+    private static void AppendDriveVerdict(List<string> lines, WorldReplaySnapshot recording, ulong[] trace, string[]?[] poses, int divergedAt) {
+        if (divergedAt < 0) {
+            lines.Add(item: $"{Prefix}pose re-drive MATCH over {recording.TickCount} ticks | tail 0x{recording.RecordedPoseTailHash:X16}]");
+
+            return;
+        }
+
+        var recorded = ((divergedAt < recording.RecordedHashes.Length)
+            ? $"0x{recording.RecordedHashes[divergedAt]:X16}"
+            : "(none — the re-drive ran past the recorded trace)"
+        );
+        var replayed = ((divergedAt < trace.Length)
+            ? $"0x{trace[divergedAt]:X16}"
+            : "(none — the re-drive stopped short of the recorded trace)"
+        );
+        var bodies = (((divergedAt < poses.Length) && (poses[divergedAt] is { } atDivergence))
+            ? string.Join(
+                separator: " ",
+                values: atDivergence
+            )
+            : "(no pose observed)"
+        );
+
+        // The tape pins ONE hash per tick, never a per-body pose, so the body cannot be named from the tape alone;
+        // what CAN be shown is every body the re-drive holds at that tick — the operator compares against the live
+        // session's own body.where at the same tick.
+        lines.Add(item: $"{Prefix}re-drive DIVERGED first at tick {divergedAt} of {recording.TickCount} | recorded {recorded} replayed {replayed} | re-driven bodies there: {bodies} — the tape pins only the hash per tick, so the diverging body is read against the live session's body.where at that tick, never off the tape]");
+    }
+    private static void AppendHeader(List<string> lines, string name, in WorldReplayLoad loaded) {
+        var recording = loaded.Recording;
+
+        lines.Add(item: $"{Prefix}tape '{name}' path={loaded.Path}]");
+        lines.Add(item: $"{Prefix}shape magic=0x{loaded.Magic:X8} token={loaded.ShapeToken}]");
+        lines.Add(item: $"{Prefix}rate {recording.SimulationRate} Hz | ticks {recording.TickCount} | tail hash 0x{recording.RecordedTailHash:X16}]");
+
+        if (recording.ForkedFrom is { } fork) {
+            lines.Add(item: $"{Prefix}forked from '{fork.ParentName}' at tick {fork.Tick}]");
+        }
+
+        foreach (var seat in recording.Seats) {
+            lines.Add(item: ((seat.Profile is { } pin)
+                ? $"{Prefix}seat slot={seat.Slot} profile='{pin.Name}' move={DescribeRate(rate: pin.MoveSpeed)} turn={DescribeRate(rate: pin.TurnSpeed)}]"
+                : $"{Prefix}seat slot={seat.Slot} profile=none]"));
+        }
+
+        if (recording.MountedAddons.Count == 0) {
+            lines.Add(item: $"{Prefix}addons none]");
+        }
+
+        foreach (var receipt in recording.MountedAddons) {
+            lines.Add(item: $"{Prefix}addon '{receipt.Name}' hash={receipt.Hash} fuel={receipt.Fuel}/tick]");
+        }
+    }
+    // One entity's changed channels against its previous submission — appended as "p1 forward=1 strafe=-0.5" (seats)
+    // or "body:7 turn=0.25" (everything else); nothing when the vector is unchanged. `previous` is advanced either way.
+    private static void AppendIntentEdge(WorldChannelTable channels, StringBuilder edges, PlayerIntent[] previous, int index, PlayerIntent after, string lane) {
+        if (((uint)index) >= ((uint)previous.Length)) {
+            return;
+        }
+
+        var before = previous[index];
+        var labelled = false;
+
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            if (before[ordinal] == after[ordinal]) {
+                continue;
+            }
+
+            if (!labelled) {
+                if (edges.Length > 0) {
+                    edges.Append(value: ' ');
+                }
+
+                edges.Append(value: DescribeEntity(index: index));
+                labelled = true;
+            }
+
+            edges.Append(value: ' ');
+            edges.Append(value: lane);
+            edges.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
+            edges.Append(value: '=');
+            edges.Append(value: DescribeValue(value: after[ordinal]));
+        }
+
+        previous[index] = after;
+    }
+    private static string[] CapturePoses(WorldPopulation population) {
+        var poses = new List<string>();
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (
+                !population.IsActive(index: index) ||
+                (population.EntryBody(index: index) is not { } body)
+            ) {
+                continue;
+            }
+
+            var where = body.DescribeWhere(index: index);
+
+            // The standalone echo is "[body.where: body:N pos=(…) yaw=…° pitch=…° roll=…°]" — keep exactly its
+            // body-and-pose payload so the line reads like body.where without nesting a second bracketed echo.
+            poses.Add(item: ((where.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WherePrefix
+            ) && where.EndsWith(value: ']'))
+                ? where[WherePrefix.Length..^1]
+                : where));
+        }
+
+        return [.. poses];
+    }
+    private static string DescribeTick(int tick, ulong hash, IReadOnlyList<WorldReplayEntry> authority, WorldChannelTable channels, StringBuilder edges, string[]? poses, bool posesRequested, bool diverged) {
+        var line = new StringBuilder();
+
+        line.Append(value: Prefix);
+        line.Append(value: "tick ");
+        line.Append(value: tick);
+        line.Append(value: " hash=0x");
+        line.Append(value: hash.ToString(
+            format: "X16",
+            provider: CultureInfo.InvariantCulture
+        ));
+
+        if (authority.Count > 0) {
+            line.Append(value: " | ");
+
+            for (var index = 0; (index < authority.Count); index++) {
+                if (index > 0) {
+                    line.Append(value: "; ");
+                }
+
+                line.Append(value: WorldReplayEntryDescriber.Describe(
+                    channels: channels,
+                    entry: authority[index]
+                ));
+            }
+        }
+
+        if (edges.Length > 0) {
+            line.Append(value: " | ");
+            line.Append(value: edges);
+        }
+
+        if (posesRequested) {
+            line.Append(value: " | ");
+
+            if (poses is null) {
+                line.Append(value: "(no pose observed)");
+            } else {
+                for (var index = 0; (index < poses.Length); index++) {
+                    if (index > 0) {
+                        line.Append(value: ' ');
+                    }
+
+                    line.Append(value: poses[index]);
+                }
+            }
+        }
+
+        if (diverged) {
+            line.Append(value: " | DIVERGED — the re-driven hash first disagrees with the recorded one here");
+        }
+
+        line.Append(value: ']');
+
+        return line.ToString();
+    }
+    // Re-drives the tape through the untouched WorldReplaySnapshot.Drive, observing every tick's post-step population
+    // at the addon seam's third pump point. Returns the per-tick poses and Drive's own trace.
+    private (string[]?[] Poses, ulong[] Trace) DrivePoses(WorldReplaySnapshot recording) {
+        var poses = new string[]?[recording.TickCount];
+        var observed = new ulong[recording.TickCount];
+        var observedCount = 0;
+        WorldPopulation? shadow = null;
+        var trace = recording.Drive(
+            addonHostFactory: (definition, server) => {
+                shadow = server.Population;
+
+                return new ObservingAddonHost(
+                    inner: m_addonHostFactory(
+                        definition,
+                        server
+                    ),
+                    onResolved: tick => {
+                        // ResolveReads receives context.Tick + 1 (the tick that just advanced, 1-based).
+                        var index = ((int)(tick - 1UL));
+
+                        if (
+                            (((uint)index) >= ((uint)poses.Length)) ||
+                            (shadow is not { } population)
+                        ) {
+                            return;
+                        }
+
+                        poses[index] = CapturePoses(population: population);
+                        observed[index] = WorldReplaySnapshot.HashState(population: population);
+                        observedCount = Math.Max(
+                            val1: observedCount,
+                            val2: (index + 1)
+                        );
+                    }
+                );
+            },
+            engines: m_engines,
+            machineHostFactory: m_machineHostFactory,
+            profiles: m_profiles,
+            documents: m_documents
+        );
+
+        // The observation point is a CLAIM about WorldServer.Step's internal order (ResolveReads runs after the
+        // population advances) — prove it every drive rather than trust it: the hash recomputed at the observer must
+        // be the hash Drive itself folded after the same Step, tick for tick, or the poses printed here would be a
+        // tick stale and silently wrong.
+        if (observedCount != trace.Length) {
+            throw new InvalidOperationException(message: $"the --poses observer saw {observedCount} of {trace.Length} re-driven ticks — the shadow server's addon seam did not reach ResolveReads on every step, so the poses cannot be trusted; this is a host bug, not tape data.");
+        }
+
+        var disagreement = HashTrace.FirstDivergence(
+            left: trace,
+            right: observed
+        );
+
+        if (disagreement >= 0) {
+            throw new InvalidOperationException(message: $"the --poses observer's hash at tick {disagreement} (0x{observed[disagreement]:X16}) disagrees with the re-drive's own trace (0x{trace[disagreement]:X16}) — the observation point (IWorldAddonHost.ResolveReads) no longer sits after pose integration, so the poses would be stale; this is a host bug, not tape data.");
+        }
+
+        return (poses, trace);
     }
 
     /// <summary>Renders the per-tick lines — the pure walk <c>replay.inspect</c> prints after its header, exposed on
@@ -203,102 +406,13 @@ public sealed class WorldReplayInspector {
                 diverged: (tick == divergedAt),
                 edges: edges,
                 hash: hashes[tick],
-                poses: ((poses is not null) && (tick < poses.Count)
-                    ? poses[tick]
-                    : null),
+                poses: (((poses is not null) && (tick < poses.Count))
+                ? poses[tick]
+                : null),
                 posesRequested: (poses is not null),
                 tick: tick
             ));
         }
-    }
-    // One entity's changed channels against its previous submission — appended as "p1 forward=1 strafe=-0.5" (seats)
-    // or "body:7 turn=0.25" (everything else); nothing when the vector is unchanged. `previous` is advanced either way.
-    private static void AppendIntentEdge(WorldChannelTable channels, StringBuilder edges, PlayerIntent[] previous, int index, PlayerIntent after, string lane) {
-        if (((uint)index) >= ((uint)previous.Length)) {
-            return;
-        }
-
-        var before = previous[index];
-        var labelled = false;
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if (before[ordinal] == after[ordinal]) {
-                continue;
-            }
-
-            if (!labelled) {
-                if (edges.Length > 0) {
-                    edges.Append(value: ' ');
-                }
-
-                edges.Append(value: DescribeEntity(index: index));
-                labelled = true;
-            }
-
-            edges.Append(value: ' ');
-            edges.Append(value: lane);
-            edges.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
-            edges.Append(value: '=');
-            edges.Append(value: DescribeValue(value: after[ordinal]));
-        }
-
-        previous[index] = after;
-    }
-    private static string DescribeTick(int tick, ulong hash, IReadOnlyList<WorldReplayEntry> authority, WorldChannelTable channels, StringBuilder edges, string[]? poses, bool posesRequested, bool diverged) {
-        var line = new StringBuilder();
-
-        line.Append(value: Prefix);
-        line.Append(value: "tick ");
-        line.Append(value: tick);
-        line.Append(value: " hash=0x");
-        line.Append(value: hash.ToString(
-            format: "X16",
-            provider: CultureInfo.InvariantCulture
-        ));
-
-        if (authority.Count > 0) {
-            line.Append(value: " | ");
-
-            for (var index = 0; (index < authority.Count); index++) {
-                if (index > 0) {
-                    line.Append(value: "; ");
-                }
-
-                line.Append(value: WorldReplayEntryDescriber.Describe(
-                    channels: channels,
-                    entry: authority[index]
-                ));
-            }
-        }
-
-        if (edges.Length > 0) {
-            line.Append(value: " | ");
-            line.Append(value: edges);
-        }
-
-        if (posesRequested) {
-            line.Append(value: " | ");
-
-            if (poses is null) {
-                line.Append(value: "(no pose observed)");
-            } else {
-                for (var index = 0; (index < poses.Length); index++) {
-                    if (index > 0) {
-                        line.Append(value: ' ');
-                    }
-
-                    line.Append(value: poses[index]);
-                }
-            }
-        }
-
-        if (diverged) {
-            line.Append(value: " | DIVERGED — the re-driven hash first disagrees with the recorded one here");
-        }
-
-        line.Append(value: ']');
-
-        return line.ToString();
     }
     /// <summary>Labels an entity the way the console addresses it — <c>p1</c>..<c>p4</c> for a local seat (the
     /// 1-based player display index), <c>body:N</c> (0-based) for everything else.</summary>
@@ -316,157 +430,6 @@ public sealed class WorldReplayInspector {
         format: "0.####",
         provider: CultureInfo.InvariantCulture
     );
-
-    private static string[] CapturePoses(WorldPopulation population) {
-        var poses = new List<string>();
-
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (
-                !population.IsActive(index: index) ||
-                (population.EntryBody(index: index) is not { } body)
-            ) {
-                continue;
-            }
-
-            var where = body.DescribeWhere(index: index);
-
-            // The standalone echo is "[body.where: body:N pos=(…) yaw=…° pitch=…° roll=…°]" — keep exactly its
-            // body-and-pose payload so the line reads like body.where without nesting a second bracketed echo.
-            poses.Add(item: ((where.StartsWith(
-                value: WherePrefix,
-                comparisonType: StringComparison.Ordinal
-            ) && where.EndsWith(value: ']'))
-                ? where[WherePrefix.Length..^1]
-                : where
-            ));
-        }
-
-        return [.. poses];
-    }
-    // Re-drives the tape through the untouched WorldReplaySnapshot.Drive, observing every tick's post-step population
-    // at the addon seam's third pump point. Returns the per-tick poses and Drive's own trace.
-    private (string[]?[] Poses, ulong[] Trace) DrivePoses(WorldReplaySnapshot recording) {
-        var poses = new string[]?[recording.TickCount];
-        var observed = new ulong[recording.TickCount];
-        var observedCount = 0;
-        WorldPopulation? shadow = null;
-        var trace = recording.Drive(
-            addonHostFactory: (definition, server) => {
-                shadow = server.Population;
-
-                return new ObservingAddonHost(
-                    inner: m_addonHostFactory(
-                        definition,
-                        server
-                    ),
-                    onResolved: tick => {
-                        // ResolveReads receives context.Tick + 1 (the tick that just advanced, 1-based).
-                        var index = ((int)(tick - 1UL));
-
-                        if (
-                            (((uint)index) >= ((uint)poses.Length)) ||
-                            (shadow is not { } population)
-                        ) {
-                            return;
-                        }
-
-                        poses[index] = CapturePoses(population: population);
-                        observed[index] = WorldReplaySnapshot.HashState(population: population);
-                        observedCount = Math.Max(
-                            val1: observedCount,
-                            val2: (index + 1)
-                        );
-                    }
-                );
-            },
-            engines: m_engines,
-            machineHostFactory: m_machineHostFactory,
-            profiles: m_profiles,
-            documents: m_documents
-        );
-
-        // The observation point is a CLAIM about WorldServer.Step's internal order (ResolveReads runs after the
-        // population advances) — prove it every drive rather than trust it: the hash recomputed at the observer must
-        // be the hash Drive itself folded after the same Step, tick for tick, or the poses printed here would be a
-        // tick stale and silently wrong.
-        if (observedCount != trace.Length) {
-            throw new InvalidOperationException(message: $"the --poses observer saw {observedCount} of {trace.Length} re-driven ticks — the shadow server's addon seam did not reach ResolveReads on every step, so the poses cannot be trusted; this is a host bug, not tape data.");
-        }
-
-        var disagreement = HashTrace.FirstDivergence(
-            left: trace,
-            right: observed
-        );
-
-        if (disagreement >= 0) {
-            throw new InvalidOperationException(message: $"the --poses observer's hash at tick {disagreement} (0x{observed[disagreement]:X16}) disagrees with the re-drive's own trace (0x{trace[disagreement]:X16}) — the observation point (IWorldAddonHost.ResolveReads) no longer sits after pose integration, so the poses would be stale; this is a host bug, not tape data.");
-        }
-
-        return (poses, trace);
-    }
-    private static void AppendDriveVerdict(List<string> lines, WorldReplaySnapshot recording, ulong[] trace, string[]?[] poses, int divergedAt) {
-        if (divergedAt < 0) {
-            lines.Add(item: $"{Prefix}pose re-drive MATCH over {recording.TickCount} ticks | tail 0x{recording.RecordedPoseTailHash:X16}]");
-
-            return;
-        }
-
-        var recorded = ((divergedAt < recording.RecordedHashes.Length)
-            ? $"0x{recording.RecordedHashes[divergedAt]:X16}"
-            : "(none — the re-drive ran past the recorded trace)"
-        );
-        var replayed = ((divergedAt < trace.Length)
-            ? $"0x{trace[divergedAt]:X16}"
-            : "(none — the re-drive stopped short of the recorded trace)"
-        );
-        var bodies = (((divergedAt < poses.Length) && (poses[divergedAt] is { } atDivergence))
-            ? string.Join(
-                separator: " ",
-                values: atDivergence
-            )
-            : "(no pose observed)"
-        );
-
-        // The tape pins ONE hash per tick, never a per-body pose, so the body cannot be named from the tape alone;
-        // what CAN be shown is every body the re-drive holds at that tick — the operator compares against the live
-        // session's own body.where at the same tick.
-        lines.Add(item: $"{Prefix}re-drive DIVERGED first at tick {divergedAt} of {recording.TickCount} | recorded {recorded} replayed {replayed} | re-driven bodies there: {bodies} — the tape pins only the hash per tick, so the diverging body is read against the live session's body.where at that tick, never off the tape]");
-    }
-
-    /// <summary>Reads a saved tape by name — its leading shape words verbatim, then the decoded recording through
-    /// <see cref="WorldReplaySnapshot.Read"/> (which refuses a foreign shape by name before anything else decodes).</summary>
-    /// <param name="name">The saved recording's name (already validated by <see cref="WorldReplayTape.IsValidName"/>).</param>
-    /// <returns>The loaded tape.</returns>
-    /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
-    /// <exception cref="InvalidDataException">The file is not a readable <c>.puckreplay</c> tape.</exception>
-    public static WorldReplayLoad Load(string name) {
-        var path = WorldReplayTape.PathFor(name: name);
-
-        using var stream = File.OpenRead(path: path);
-
-        Span<byte> header = stackalloc byte[8];
-
-        try {
-            stream.ReadExactly(buffer: header);
-        } catch (EndOfStreamException exception) {
-            throw new InvalidDataException(
-                message: "Corrupt .puckreplay recording (shorter than its own shape header).",
-                innerException: exception
-            );
-        }
-
-        var magic = BinaryPrimitives.ReadUInt32LittleEndian(source: header);
-        var shapeToken = BinaryPrimitives.ReadUInt32LittleEndian(source: header[4..]);
-
-        stream.Position = 0L;
-
-        return new WorldReplayLoad(
-            Magic: magic,
-            Path: path,
-            Recording: WorldReplaySnapshot.Read(stream: stream),
-            ShapeToken: shapeToken
-        );
-    }
     /// <summary>Renders the whole read-back: the header (one line per fact), the per-tick walk over
     /// <paramref name="from"/>..<paramref name="to"/>, and — with <paramref name="poses"/> — the re-drive's own
     /// verdict line naming the first divergent tick, if any.</summary>
@@ -546,6 +509,40 @@ public sealed class WorldReplayInspector {
         }
 
         return lines;
+    }
+    /// <summary>Reads a saved tape by name — its leading shape words verbatim, then the decoded recording through
+    /// <see cref="WorldReplaySnapshot.Read"/> (which refuses a foreign shape by name before anything else decodes).</summary>
+    /// <param name="name">The saved recording's name (already validated by <see cref="WorldReplayTape.IsValidName"/>).</param>
+    /// <returns>The loaded tape.</returns>
+    /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
+    /// <exception cref="InvalidDataException">The file is not a readable <c>.puckreplay</c> tape.</exception>
+    public static WorldReplayLoad Load(string name) {
+        var path = WorldReplayTape.PathFor(name: name);
+
+        using var stream = File.OpenRead(path: path);
+
+        Span<byte> header = stackalloc byte[8];
+
+        try {
+            stream.ReadExactly(buffer: header);
+        } catch (EndOfStreamException exception) {
+            throw new InvalidDataException(
+                innerException: exception,
+                message: "Corrupt .puckreplay recording (shorter than its own shape header)."
+            );
+        }
+
+        var magic = BinaryPrimitives.ReadUInt32LittleEndian(source: header);
+        var shapeToken = BinaryPrimitives.ReadUInt32LittleEndian(source: header[4..]);
+
+        stream.Position = 0L;
+
+        return new WorldReplayLoad(
+            Magic: magic,
+            Path: path,
+            Recording: WorldReplaySnapshot.Read(stream: stream),
+            ShapeToken: shapeToken
+        );
     }
 
     // A forwarding host: every member reaches the ordinary factory's product untouched, and ResolveReads — pump point

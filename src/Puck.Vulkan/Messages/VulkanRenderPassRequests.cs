@@ -67,8 +67,8 @@ public static class VulkanRenderPassRequests {
             // A loading pass both reads (loadOp) and writes the attachment.
             new() {
                 DstAccessMask = (preserveExistingContents
-                    ? AccessColorAttachmentRead | AccessColorAttachmentWrite
-                    : AccessColorAttachmentRead),
+            ? AccessColorAttachmentRead | AccessColorAttachmentWrite
+            : AccessColorAttachmentRead),
                 DstStageMask = PipelineStageColorAttachmentOutput,
                 DstSubpass = 0,
                 SrcStageMask = PipelineStageColorAttachmentOutput,
@@ -95,11 +95,11 @@ public static class VulkanRenderPassRequests {
                     FinalLayout = finalLayout,
                     Format = colorFormat,
                     InitialLayout = (preserveExistingContents
-                        ? finalLayout
-                        : ImageLayoutUndefined),
+            ? finalLayout
+            : ImageLayoutUndefined),
                     LoadOp = (preserveExistingContents
-                        ? AttachmentLoadOpLoad
-                        : AttachmentLoadOpClear),
+            ? AttachmentLoadOpLoad
+            : AttachmentLoadOpClear),
                     Samples = SampleCount1Bit,
                     StencilLoadOp = AttachmentStoreOpDontCare,
                     StencilStoreOp = AttachmentStoreOpDontCare,

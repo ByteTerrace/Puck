@@ -150,11 +150,17 @@ internal static partial class Subjects {
         foreach (var (value, fractionBitCount) in samples) {
             var (numerator, decimalExponent) = DecimalParts(value: value);
             var expected = FixedPointRounding.RoundRational(
-                denominator: BigInteger.Pow(exponent: decimalExponent, value: 10),
+                denominator: BigInteger.Pow(
+                    exponent: decimalExponent,
+                    value: 10
+                ),
                 fractionBitCount: fractionBitCount,
                 numerator: numerator
             );
-            var actual = FixedPointConvert.ScaleDecimalWide(value: value, fractionBitCount: fractionBitCount);
+            var actual = FixedPointConvert.ScaleDecimalWide(
+                value: value,
+                fractionBitCount: fractionBitCount
+            );
 
             if (actual != expected) {
                 return $"ScaleDecimalWide({value}, {fractionBitCount}) = {actual}, but RoundRational on the same decomposed (numerator={numerator}, denominator=10^{decimalExponent}) is {expected}";
@@ -176,7 +182,7 @@ internal static partial class Subjects {
     /// branch where all three modes must agree.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? Q1648DecimalConversionModes() {
-        const long expectedTruncatingAtMax = unchecked((long)0xFFFF000000000000UL);
+        const long ExpectedTruncatingAtMax = unchecked((long)0xFFFF000000000000UL);
         var scaledMax = ScaledDecimalAt(
             fractionBitCount: FixedQ1648.FractionBitCount,
             value: decimal.MaxValue
@@ -192,7 +198,7 @@ internal static partial class Subjects {
 
         var truncatedMax = ConvertTruncating<FixedQ1648, decimal>(value: decimal.MaxValue).Value;
 
-        if (truncatedMax != expectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {expectedTruncatingAtMax}"; }
+        if (truncatedMax != ExpectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {ExpectedTruncatingAtMax}"; }
 
         if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ1648, decimal>(value: decimal.MinValue))) { return "CreateChecked accepted decimal.MinValue instead of refusing it"; }
 
@@ -202,7 +208,7 @@ internal static partial class Subjects {
 
         var truncatedMin = ConvertTruncating<FixedQ1648, decimal>(value: decimal.MinValue).Value;
 
-        if (truncatedMin != unchecked(-expectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-expectedTruncatingAtMax)}"; }
+        if (truncatedMin != unchecked(-ExpectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-ExpectedTruncatingAtMax)}"; }
 
         // An in-range decimal: all three modes must agree with each other and with the independent oracle.
         var inRangeExpected = ((long)ScaledDecimalAt(
@@ -924,7 +930,10 @@ internal static partial class Subjects {
             numerator: 1
         ) + (high >> 44));
     // Q96 full-range reduction plus the local Q60 kernel and the final ties-to-even narrowing.
-    private static BigInteger SinCosToleranceUnits() => UlpUnits(numerator: 50000001, denominator: 100000000);
+    private static BigInteger SinCosToleranceUnits() => UlpUnits(
+        denominator: 100000000,
+        numerator: 50000001
+    );
 
     /// <summary>Proves the square root is BIT-EXACTLY the documented floor at every swept raw, against a Newton descent
     /// in arbitrary width settled by the exact predicate; states that predicate directly on the returned raw, so the
@@ -960,12 +969,16 @@ internal static partial class Subjects {
         // its remainder above r² exceeds r, and an integer radicand can never sit halfway.
         var expected = (((radicand - (floor * floor)) > floor)
             ? (floor + BigInteger.One)
-            : floor);
+            : floor
+        );
         var exact = new BigInteger(value: actual);
         var offset = (radicand - (exact * exact));
 
         if (exact != expected) { return $"the square root of {raw} is {actual}, expected {expected}"; }
-        if ((offset <= -exact) || (offset > exact)) { return $"the square root of {raw} is not the integer nearest the radicand's root: radicand - result² = {offset} lies outside (-result, result]"; }
+        if (
+            (offset <= -exact) ||
+            (offset > exact)
+        ) { return $"the square root of {raw} is not the integer nearest the radicand's root: radicand - result² = {offset} lies outside (-result, result]"; }
 
         return null;
     }

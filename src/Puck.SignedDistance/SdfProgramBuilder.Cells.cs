@@ -14,9 +14,26 @@ public sealed partial class SdfProgramBuilder {
     /// <remarks>Build refuses sampling through folds without a global continuous derivative bound.
     /// ResetPoint and restore a rigid sampling frame after such geometry.</remarks>
     public SdfProgramBuilder CellDisplace(float frequency, float amplitude, uint seed, SdfCellMode mode, float randomness) {
-        new SdfCellDisplacement(frequency, amplitude, seed, mode, randomness).Validate();
-        m_instructions.Add(new SdfInstruction(SdfOp.CellDisplace, seed, (uint)mode, 0,
-            new Vector4(frequency, amplitude, randomness, 0f), Vector4.Zero));
+        new SdfCellDisplacement(
+            Amplitude: amplitude,
+            Frequency: frequency,
+            Mode: mode,
+            Randomness: randomness,
+            Seed: seed
+        ).Validate();
+        m_instructions.Add(item: new SdfInstruction(
+            SdfOp.CellDisplace,
+            seed,
+            ((uint)mode),
+            0,
+            new Vector4(
+                w: 0f,
+                x: frequency,
+                y: amplitude,
+                z: randomness
+            ),
+            Vector4.Zero
+        ));
         return this;
     }
 }

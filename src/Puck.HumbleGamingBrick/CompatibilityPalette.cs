@@ -55,46 +55,24 @@ public static class CompatibilityPalette {
         0x7FFF, 0x7E8C, 0x7C00, 0x0000, 0x7FFF, 0x1BEF, 0x6180, 0x0000, 0x7FFF, 0x7FEA, 0x7D5F, 0x0000, 0x4778, 0x3290, 0x1D87, 0x0861,
     ];
 
-    /// <summary>Gets the title checksums the boot ROM's built-in table recognizes, in row order.</summary>
-    public static ReadOnlySpan<byte> TitleChecksumRows =>
-        TitleChecksums;
+    /// <summary>Gets the palette pool the combinations offset into, four little-endian BGR555 colors per palette.</summary>
+    public static ReadOnlySpan<ushort> Colors =>
+        Palettes;
     /// <summary>Gets the palette combination each checksum row selects; only the low seven bits are the
     /// combination.</summary>
     public static ReadOnlySpan<byte> CombinationPerRow =>
         PalettePerChecksum;
-    /// <summary>Gets the fourth title letter that disambiguates each duplicated checksum row past
-    /// <see cref="FirstDuplicateIndex"/>.</summary>
-    public static ReadOnlySpan<byte> DuplicateLetters =>
-        DuplicateFourthLetters;
     /// <summary>Gets the palette combinations, three byte offsets into <see cref="Colors"/>'s little-endian byte image
     /// per combination: object palette 0, object palette 1, then the background palette.</summary>
     public static ReadOnlySpan<byte> Combinations =>
         PaletteCombinations;
-    /// <summary>Gets the palette pool the combinations offset into, four little-endian BGR555 colors per palette.</summary>
-    public static ReadOnlySpan<ushort> Colors =>
-        Palettes;
-
-    /// <summary>Resolves the palettes the boot ROM assigns to a monochrome cartridge.</summary>
-    /// <param name="header">The parsed cartridge header (title hash + licensee).</param>
-    /// <param name="background">Receives the background palette's four BGR555 colors.</param>
-    /// <param name="object0">Receives the first object palette's four BGR555 colors.</param>
-    /// <param name="object1">Receives the second object palette's four BGR555 colors.</param>
-    public static void Resolve(CartridgeHeader header, Span<ushort> background, Span<ushort> object0, Span<ushort> object1) {
-        var combination = (CombinationIndex(header: header) * 3);
-
-        ReadPalette(
-            byteOffset: PaletteCombinations[(combination + 2)],
-            destination: background
-        );
-        ReadPalette(
-            byteOffset: PaletteCombinations[combination],
-            destination: object0
-        );
-        ReadPalette(
-            byteOffset: PaletteCombinations[(combination + 1)],
-            destination: object1
-        );
-    }
+    /// <summary>Gets the fourth title letter that disambiguates each duplicated checksum row past
+    /// <see cref="FirstDuplicateIndex"/>.</summary>
+    public static ReadOnlySpan<byte> DuplicateLetters =>
+        DuplicateFourthLetters;
+    /// <summary>Gets the title checksums the boot ROM's built-in table recognizes, in row order.</summary>
+    public static ReadOnlySpan<byte> TitleChecksumRows =>
+        TitleChecksums;
 
     // The palette-combination index the boot ROM picks: the title-checksum row for first-party titles (the duplicated
     // rows told apart by the fourth title letter), the default row for everything else.
@@ -126,5 +104,27 @@ public static class CompatibilityPalette {
         for (var color = 0; (color < 4); ++color) {
             destination[color] = Palettes[(start + color)];
         }
+    }
+
+    /// <summary>Resolves the palettes the boot ROM assigns to a monochrome cartridge.</summary>
+    /// <param name="header">The parsed cartridge header (title hash + licensee).</param>
+    /// <param name="background">Receives the background palette's four BGR555 colors.</param>
+    /// <param name="object0">Receives the first object palette's four BGR555 colors.</param>
+    /// <param name="object1">Receives the second object palette's four BGR555 colors.</param>
+    public static void Resolve(CartridgeHeader header, Span<ushort> background, Span<ushort> object0, Span<ushort> object1) {
+        var combination = (CombinationIndex(header: header) * 3);
+
+        ReadPalette(
+            byteOffset: PaletteCombinations[(combination + 2)],
+            destination: background
+        );
+        ReadPalette(
+            byteOffset: PaletteCombinations[combination],
+            destination: object0
+        );
+        ReadPalette(
+            byteOffset: PaletteCombinations[(combination + 1)],
+            destination: object1
+        );
     }
 }

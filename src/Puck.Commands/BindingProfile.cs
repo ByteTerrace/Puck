@@ -33,6 +33,80 @@ public static class BindingProfile {
     /// it before it reaches that per-tick transport.</summary>
     public const int MaxTextPayloadLength = 1024;
 
+    // The single-page reading of the flattening Compile does in bulk, for a caller holding only a document and one
+    // page id — BindingSessionPlan.FromPage is that caller, and reading a page's raw Entries there walked only the
+    // overrides while every runtime reader saw the flattened set. It re-derives the two tables the walk needs (the
+    // group each row sits in, the row each page id names) and then runs the SAME ResolveEffectivePages: a walk of
+    // its own here is what let the plan flatten across a group boundary Compile refuses, so the rule has exactly one
+    // implementation and the two routes cannot disagree about which documents are legal.
+    internal static BindingPageDefinition? EffectivePage(BindingProfileDocument document, string pageId) {
+        var documentRows = (document.Chords ?? []);
+        var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var pageRowsById = new Dictionary<string, (int GroupIndex, int RowIndex)>(comparer: StringComparer.Ordinal);
+        var rowGroups = new int[documentRows.Count];
+
+        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
+            var row = documentRows[rowIndex];
+            // A row naming no group is Compile's refusal to make, in its own words; here it simply sits in the
+            // anonymous group, where it can inherit nothing and nothing can inherit it.
+            var rowGroup = (ResolveIdentifier(identifier: row?.Group) ?? string.Empty);
+
+            if (!groupIndexByName.TryGetValue(
+                key: rowGroup,
+                value: out var groupIndex
+            )) {
+                groupIndex = groupIndexByName.Count;
+                groupIndexByName[rowGroup] = groupIndex;
+            }
+
+            rowGroups[rowIndex] = groupIndex;
+
+            if (
+                (row?.Page is { } page) &&
+                !string.IsNullOrEmpty(value: page.Id)
+            ) {
+                // First row wins, exactly as Compile's own TryAdd does before it refuses the duplicate by name.
+                _ = pageRowsById.TryAdd(
+                    key: page.Id,
+                    value: (GroupIndex: groupIndex, RowIndex: rowIndex)
+                );
+            }
+        }
+
+        if (!pageRowsById.TryGetValue(
+            key: pageId,
+            value: out var pageRow
+        )) {
+            return null;
+        }
+
+        return ResolveEffectivePages(
+            document: document,
+            documentRows: documentRows,
+            pageRowsById: pageRowsById,
+            rowGroups: rowGroups
+        )[pageRow.RowIndex];
+    }
+    // A DocumentIdentifier-typed field can reach a document gate in two shapes that are not an identifier at all:
+    // JSON null (the converter is never asked, so the property arrives null) and an unresolved "state.<row>"
+    // reference no containing document has bound yet. Reading either through the implicit string conversion throws a
+    // NullReferenceException or an InvalidOperationException — past Compile's every caller, all of which catch
+    // ArgumentException only, and past BindingVocabularyCheck's promise to answer malformed documents with refusal
+    // lines rather than exceptions. Both read identifiers through here and refuse the row by name instead. The catch
+    // is the honest shape: DocumentIdentifier publishes no "is resolved" predicate, and a resolved reference keeps
+    // its Reference, so the two cannot be told apart from outside. It never runs on a well-formed document.
+    internal static string? ResolveIdentifier(DocumentIdentifier? identifier) {
+        if (identifier is null) {
+            return null;
+        }
+
+        try {
+            return identifier.Value;
+        } catch (InvalidOperationException) {
+            return null;
+        }
+    }
+
     private static string ActivatorIdentity(BindingActivatorDefinition activator) => $"{activator.Mode}\0{string.Join(
         separator: ',',
         values: (activator.Sequence ?? [])
@@ -421,62 +495,66 @@ public static class BindingProfile {
             PageId: page.Id
         );
     }
+    // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
+    // a modal page source-level overrides instead of forcing it to duplicate a resting page's unrelated controls.
+    private static BindingPageDefinition OverlayInheritedPage(BindingPageDefinition inherited, BindingPageDefinition page) {
+        var pageEntries = (page.Entries ?? []);
+        var claimedSources = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var claimedActivators = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-    // The single-page reading of the flattening Compile does in bulk, for a caller holding only a document and one
-    // page id — BindingSessionPlan.FromPage is that caller, and reading a page's raw Entries there walked only the
-    // overrides while every runtime reader saw the flattened set. It re-derives the two tables the walk needs (the
-    // group each row sits in, the row each page id names) and then runs the SAME ResolveEffectivePages: a walk of
-    // its own here is what let the plan flatten across a group boundary Compile refuses, so the rule has exactly one
-    // implementation and the two routes cannot disagree about which documents are legal.
-    internal static BindingPageDefinition? EffectivePage(BindingProfileDocument document, string pageId) {
-        var documentRows = (document.Chords ?? []);
-        var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var pageRowsById = new Dictionary<string, (int GroupIndex, int RowIndex)>(comparer: StringComparer.Ordinal);
-        var rowGroups = new int[documentRows.Count];
+        foreach (var entry in pageEntries) {
+            if (entry?.Activator is { } activator) {
+                _ = claimedActivators.Add(item: ActivatorIdentity(activator: activator));
 
-        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
-            var row = documentRows[rowIndex];
-            // A row naming no group is Compile's refusal to make, in its own words; here it simply sits in the
-            // anonymous group, where it can inherit nothing and nothing can inherit it.
-            var rowGroup = (ResolveIdentifier(identifier: row?.Group) ?? string.Empty);
-
-            if (!groupIndexByName.TryGetValue(
-                key: rowGroup,
-                value: out var groupIndex
-            )) {
-                groupIndex = groupIndexByName.Count;
-                groupIndexByName[rowGroup] = groupIndex;
+                continue;
             }
 
-            rowGroups[rowIndex] = groupIndex;
-
-            if (
-                (row?.Page is { } page) &&
-                !string.IsNullOrEmpty(value: page.Id)
-            ) {
-                // First row wins, exactly as Compile's own TryAdd does before it refuses the duplicate by name.
-                _ = pageRowsById.TryAdd(
-                    key: page.Id,
-                    value: (GroupIndex: groupIndex, RowIndex: rowIndex)
-                );
+            foreach (var source in (entry?.Sources ?? [])) {
+                _ = claimedSources.Add(item: source);
             }
         }
 
-        if (!pageRowsById.TryGetValue(
-            key: pageId,
-            value: out var pageRow
-        )) {
-            return null;
+        var entries = new List<BindingPageEntryDefinition>();
+
+        foreach (var entry in (inherited.Entries ?? [])) {
+            if (entry is null) {
+                entries.Add(item: entry!);
+
+                continue;
+            }
+
+            if (entry.Activator is { } activator) {
+                if (!claimedActivators.Contains(item: ActivatorIdentity(activator: activator))) {
+                    entries.Add(item: entry);
+                }
+
+                continue;
+            }
+
+            if (entry.Sources is not { Count: > 0 } sources) {
+                entries.Add(item: entry);
+
+                continue;
+            }
+
+            var survivingSources = sources.Where(predicate: source => !claimedSources.Contains(item: source)).ToImmutableArray();
+
+            if (survivingSources.Length == 0) {
+                continue;
+            }
+
+            entries.Add(item: ((survivingSources.Length == sources.Count)
+                ? entry
+                : (entry with { Sources = survivingSources })));
         }
 
-        return ResolveEffectivePages(
-            document: document,
-            documentRows: documentRows,
-            pageRowsById: pageRowsById,
-            rowGroups: rowGroups
-        )[pageRow.RowIndex];
+        entries.AddRange(collection: pageEntries);
+
+        return page with {
+            Entries = entries.ToImmutableArray(),
+            Inherits = null,
+        };
     }
-
     // The one page-inheritance walk in this file, shared by Compile (which arrives with the row tables already
     // built) and EffectivePage (which rebuilds them). Sharing the WALK rather than only OverlayInheritedPage is the
     // point: the same-group rule, the empty-inherits refusal and the cycle refusal all live here, so the whole
@@ -566,66 +644,6 @@ public static class BindingProfile {
 
         return effectivePages;
     }
-    // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
-    // a modal page source-level overrides instead of forcing it to duplicate a resting page's unrelated controls.
-    private static BindingPageDefinition OverlayInheritedPage(BindingPageDefinition inherited, BindingPageDefinition page) {
-        var pageEntries = (page.Entries ?? []);
-        var claimedSources = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-        var claimedActivators = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in pageEntries) {
-            if (entry?.Activator is { } activator) {
-                _ = claimedActivators.Add(item: ActivatorIdentity(activator: activator));
-
-                continue;
-            }
-
-            foreach (var source in (entry?.Sources ?? [])) {
-                _ = claimedSources.Add(item: source);
-            }
-        }
-
-        var entries = new List<BindingPageEntryDefinition>();
-
-        foreach (var entry in (inherited.Entries ?? [])) {
-            if (entry is null) {
-                entries.Add(item: entry!);
-
-                continue;
-            }
-
-            if (entry.Activator is { } activator) {
-                if (!claimedActivators.Contains(item: ActivatorIdentity(activator: activator))) {
-                    entries.Add(item: entry);
-                }
-
-                continue;
-            }
-
-            if (entry.Sources is not { Count: > 0 } sources) {
-                entries.Add(item: entry);
-
-                continue;
-            }
-
-            var survivingSources = sources.Where(predicate: source => !claimedSources.Contains(item: source)).ToImmutableArray();
-
-            if (survivingSources.Length == 0) {
-                continue;
-            }
-
-            entries.Add(item: ((survivingSources.Length == sources.Count)
-                ? entry
-                : (entry with { Sources = survivingSources })));
-        }
-
-        entries.AddRange(collection: pageEntries);
-
-        return page with {
-            Entries = entries.ToImmutableArray(),
-            Inherits = null,
-        };
-    }
     // A row member resolves to a modifier index: a declared modifier by id, else the declared modifier owning that
     // source, else an implicit single-source digital modifier appended for it. A member may appear once per row.
     private static int[] ResolveMembers(BindingProfileDocument document, string group, IReadOnlyList<string> members, Dictionary<string, int> modifierIndexById, Dictionary<string, int> modifierIndexBySource, List<BindingModifierDefinition> modifiers, int rowIndex, HashSet<int> rowMembers) {
@@ -701,6 +719,29 @@ public static class BindingProfile {
             );
         }
     }
+    private static void ValidateTextPayload(string? text, string path, string paramName) {
+        if (text is null) {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(value: text)) {
+            throw new ArgumentException(
+                message: $"{path} text payload must contain a non-whitespace argument.",
+                paramName: paramName
+            );
+        }
+        if (text.Length > MaxTextPayloadLength) {
+            throw new ArgumentException(
+                message: $"{path} text payload exceeds the {MaxTextPayloadLength}-character bound.",
+                paramName: paramName
+            );
+        }
+        if (text.IndexOfAny(anyOf: ['\r', '\n', '\u0085', '\u2028', '\u2029']) >= 0) {
+            throw new ArgumentException(
+                message: $"{path} text payload must be a single line.",
+                paramName: paramName
+            );
+        }
+    }
     private static void ValidateValue(CommandValue? value, string path, bool isChannel, string paramName) {
         if (value is not { } constant) {
             return;
@@ -727,49 +768,6 @@ public static class BindingProfile {
                 message: $"{path} Value components must be finite.",
                 paramName: paramName
             );
-        }
-    }
-    private static void ValidateTextPayload(string? text, string path, string paramName) {
-        if (text is null) {
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(value: text)) {
-            throw new ArgumentException(
-                message: $"{path} text payload must contain a non-whitespace argument.",
-                paramName: paramName
-            );
-        }
-        if (text.Length > MaxTextPayloadLength) {
-            throw new ArgumentException(
-                message: $"{path} text payload exceeds the {MaxTextPayloadLength}-character bound.",
-                paramName: paramName
-            );
-        }
-        if (text.IndexOfAny(anyOf: ['\r', '\n', '\u0085', '\u2028', '\u2029']) >= 0) {
-            throw new ArgumentException(
-                message: $"{path} text payload must be a single line.",
-                paramName: paramName
-            );
-        }
-    }
-
-    // A DocumentIdentifier-typed field can reach a document gate in two shapes that are not an identifier at all:
-    // JSON null (the converter is never asked, so the property arrives null) and an unresolved "state.<row>"
-    // reference no containing document has bound yet. Reading either through the implicit string conversion throws a
-    // NullReferenceException or an InvalidOperationException — past Compile's every caller, all of which catch
-    // ArgumentException only, and past BindingVocabularyCheck's promise to answer malformed documents with refusal
-    // lines rather than exceptions. Both read identifiers through here and refuse the row by name instead. The catch
-    // is the honest shape: DocumentIdentifier publishes no "is resolved" predicate, and a resolved reference keeps
-    // its Reference, so the two cannot be told apart from outside. It never runs on a well-formed document.
-    internal static string? ResolveIdentifier(DocumentIdentifier? identifier) {
-        if (identifier is null) {
-            return null;
-        }
-
-        try {
-            return identifier.Value;
-        } catch (InvalidOperationException) {
-            return null;
         }
     }
 
@@ -1308,7 +1306,10 @@ public static class BindingProfile {
                 );
             }
 
-            if ((style.SectorOffset < 0f) || (style.SectorOffset >= 1f)) {
+            if (
+                (style.SectorOffset < 0f) ||
+                (style.SectorOffset >= 1f)
+            ) {
                 throw new ArgumentException(
                     message: $"Wheel \"{wheel.Id}\" sectorOffset {style.SectorOffset} is outside [0, 1): a whole sector of rotation is an entry reorder — move the entry instead.",
                     paramName: nameof(document)

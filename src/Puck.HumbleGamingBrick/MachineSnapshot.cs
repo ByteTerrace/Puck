@@ -30,12 +30,12 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
     /// <returns>The identity stamp.</returns>
     public static MachineIdentity Compute(ConsoleModel model, ReadOnlySpan<byte> bootRom, ReadOnlySpan<byte> rom) =>
         new(
-        Version: CurrentVersion,
-        Model: ((int)model),
-        BootRomHash: Fnv1aHash.Compute(values: bootRom),
-        RomHash: Fnv1aHash.Compute(values: rom),
-        RomLength: rom.Length
-    );
+            Version: CurrentVersion,
+            Model: ((int)model),
+            BootRomHash: Fnv1aHash.Compute(values: bootRom),
+            RomHash: Fnv1aHash.Compute(values: rom),
+            RomLength: rom.Length
+        );
 }
 /// <summary>
 /// An immutable, self-contained capture of a machine's entire mutable state at one instant. It owns its bytes (through a
@@ -55,8 +55,8 @@ public sealed class MachineSnapshot : Puck.GamingBricks.MachineSnapshot<MachineS
     /// <inheritdoc/>
     protected override MachineSnapshot Create(MachineIdentity identity, Tick takenAt, SnapshotImage image) =>
         new(
-        identity: identity,
-        image: image,
-        takenAt: takenAt
-    );
+            identity: identity,
+            image: image,
+            takenAt: takenAt
+        );
 }

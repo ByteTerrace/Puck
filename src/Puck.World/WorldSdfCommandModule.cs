@@ -36,11 +36,10 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
             }
 
             return new CommandResult(Output: $"[world.sdf.dump: '{path}' — {words.Length} little-endian uint32 word(s); transforms and frame grid are separate]");
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)) {
             return CommandResult.Error(output: $"[world.sdf.dump: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
     }
-
     private CommandResult LoadHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
             return CommandResult.Error(output: "[world.sdf.load: expected <path>]");

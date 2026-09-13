@@ -6,15 +6,16 @@ namespace Puck.Storage;
 /// <summary>A revocable storage capability for one host-selected object namespace. Callers supply logical keys,
 /// never a storage target, object id, or host path. Possession grants only the configured read/write reach.</summary>
 public sealed class ObjectBlobNamespace : IDisposable {
+    private readonly Func<bool>? m_isActive;
+    private readonly int m_maximumBlobBytes;
+    private readonly Guid m_objectId;
+    private readonly ObjectBlobNamespace? m_parent;
+    private readonly string m_prefix;
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
-    private readonly Guid m_objectId;
-    private readonly string m_prefix;
-    private readonly int m_maximumBlobBytes;
     private readonly bool m_writable;
+
     private bool m_revoked;
-    private readonly ObjectBlobNamespace? m_parent;
-    private readonly Func<bool>? m_isActive;
 
     /// <summary>Creates a capability at a trusted hosting boundary.</summary>
     /// <param name="store">The routed store; never exposed to the capability's consumer.</param>
@@ -35,11 +36,18 @@ public sealed class ObjectBlobNamespace : IDisposable {
         m_store = store;
         m_target = target;
         m_objectId = objectId;
-        var encoding = new UTF8Encoding(false, true);
-        if (encoding.GetByteCount(name) > 1024) { throw new ArgumentException("Namespace name exceeds its byte budget.", nameof(name)); }
-        var nameBytes = encoding.GetBytes(name);
+        var encoding = new UTF8Encoding(
+            encoderShouldEmitUTF8Identifier: false,
+            throwOnInvalidBytes: true
+        );
+
+        if (encoding.GetByteCount(chars: name) > 1024) { throw new ArgumentException(
+            message: "Namespace name exceeds its byte budget.",
+            paramName: nameof(name)
+        ); }
+        var nameBytes = encoding.GetBytes(s: name);
         // Fixed-depth opaque names cannot overlap through path nesting, case folding, or filesystem aliases.
-        m_prefix = "namespaces/" + Convert.ToHexStringLower(SHA256.HashData(nameBytes)) + "/";
+        m_prefix = (("namespaces/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: nameBytes))) + "/");
         m_maximumBlobBytes = maximumBlobBytes;
         m_writable = writable;
     }
@@ -50,17 +58,30 @@ public sealed class ObjectBlobNamespace : IDisposable {
         m_parent = parent; m_isActive = isActive;
     }
 
-    /// <summary>Adds a lifetime restriction without widening this capability. Parent revocation also revokes the child.</summary>
-    /// <param name="isActive">Host lifetime check evaluated on every operation.</param>
-    /// <returns>A capability subject to both the parent's restrictions and the supplied check.</returns>
-    /// <exception cref="ArgumentNullException">The lifetime check is null.</exception>
-    /// <exception cref="ObjectDisposedException">This capability has been revoked.</exception>
-    public ObjectBlobNamespace WithLifetime(Func<bool> isActive) {
-        ArgumentNullException.ThrowIfNull(isActive);
-        CheckActive();
-        return new(this, isActive);
+    private ObjectBlobAddress Address(string key) => new(
+        m_objectId,
+        (m_prefix + ObjectBlobAddressPath.GetNormalizedKey(address: new(
+            Key: key,
+            ObjectId: m_objectId
+        )))
+    );
+    private void CheckActive() {
+        ObjectDisposedException.ThrowIf(
+            condition: Volatile.Read(location: ref m_revoked),
+            instance: this
+        );
+        m_parent?.CheckActive();
+        ObjectDisposedException.ThrowIf(
+            condition: ((m_isActive is not null) && !m_isActive()),
+            instance: this
+        );
     }
 
+    /// <summary>Revokes future requests. Already-admitted writes may still complete.</summary>
+    public void Dispose() => Volatile.Write(
+        location: ref m_revoked,
+        value: true
+    );
     /// <summary>Reads within this namespace, or returns null when the key is absent.</summary>
     /// <param name="key">A relative logical blob key.</param>
     /// <param name="cancellationToken">Cancels storage work.</param>
@@ -70,12 +91,29 @@ public sealed class ObjectBlobNamespace : IDisposable {
     /// <exception cref="IOException">Storage fails or the blob exceeds its byte ceiling.</exception>
     public async ValueTask<ObjectBlobContent?> ReadAsync(string key, CancellationToken cancellationToken = default) {
         CheckActive();
-        var result = await m_store.ReadAsync(m_target, Address(key), cancellationToken).ConfigureAwait(false);
+        var result = await m_store.ReadAsync(
+            m_target,
+            Address(key: key),
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
         CheckActive();
-        if (result?.Content.Length > m_maximumBlobBytes) { throw new IOException("Namespace blob exceeds its byte budget."); }
+        if (result?.Content.Length > m_maximumBlobBytes) { throw new IOException(message: "Namespace blob exceeds its byte budget."); }
         return result;
     }
-
+    /// <summary>Adds a lifetime restriction without widening this capability. Parent revocation also revokes the child.</summary>
+    /// <param name="isActive">Host lifetime check evaluated on every operation.</param>
+    /// <returns>A capability subject to both the parent's restrictions and the supplied check.</returns>
+    /// <exception cref="ArgumentNullException">The lifetime check is null.</exception>
+    /// <exception cref="ObjectDisposedException">This capability has been revoked.</exception>
+    public ObjectBlobNamespace WithLifetime(Func<bool> isActive) {
+        ArgumentNullException.ThrowIfNull(isActive);
+        CheckActive();
+        return new(
+            isActive: isActive,
+            parent: this
+        );
+    }
     /// <summary>Writes within this namespace after checking its write capability and byte ceiling.</summary>
     /// <param name="key">A relative logical blob key.</param>
     /// <param name="content">The bounded content, copied before asynchronous work.</param>
@@ -91,18 +129,15 @@ public sealed class ObjectBlobNamespace : IDisposable {
         ObjectBlobWriteMode mode = ObjectBlobWriteMode.CreateOnly, string? ifMatchVersion = null,
         CancellationToken cancellationToken = default) {
         CheckActive();
-        if (!m_writable) { throw new UnauthorizedAccessException("This storage namespace is read-only."); }
-        if (content.Length > m_maximumBlobBytes) { throw new IOException("Namespace blob exceeds its byte budget."); }
-        return m_store.WriteAsync(m_target, Address(key), content.ToArray(), mode, ifMatchVersion, cancellationToken);
+        if (!m_writable) { throw new UnauthorizedAccessException(message: "This storage namespace is read-only."); }
+        if (content.Length > m_maximumBlobBytes) { throw new IOException(message: "Namespace blob exceeds its byte budget."); }
+        return m_store.WriteAsync(
+            m_target,
+            Address(key: key),
+            content.ToArray(),
+            mode,
+            ifMatchVersion,
+            cancellationToken
+        );
     }
-
-    private ObjectBlobAddress Address(string key) => new(m_objectId,
-        m_prefix + ObjectBlobAddressPath.GetNormalizedKey(new(m_objectId, key)));
-    private void CheckActive() {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref m_revoked), this);
-        m_parent?.CheckActive();
-        ObjectDisposedException.ThrowIf(m_isActive is not null && !m_isActive(), this);
-    }
-    /// <summary>Revokes future requests. Already-admitted writes may still complete.</summary>
-    public void Dispose() => Volatile.Write(ref m_revoked, true);
 }

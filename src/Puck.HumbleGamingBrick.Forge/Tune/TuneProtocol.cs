@@ -8,11 +8,11 @@ namespace Puck.HumbleGamingBrick.Forge.Tune;
 /// against, so the C# oracle and the SM83 cart can never drift apart.
 /// </summary>
 public static class TuneProtocol {
-    /// <summary>The (only) play state: the loop is already running, and START toggles play/stop.</summary>
-    public const byte StatePlay = 0;
     // Game work RAM (0xC200+).
     /// <summary>Non-zero while the loop is (meant to be) playing — the WRAM mirror <see cref="TuneGame"/>'s START
     /// handler flips, independent of the driver's own idle/playing bookkeeping (so the verifier can observe player
     /// INTENT even on a frame the driver's pointer already unwound to idle).</summary>
     public const ushort PlayingFlag = 0xC200;
+    /// <summary>The (only) play state: the loop is already running, and START toggles play/stop.</summary>
+    public const byte StatePlay = 0;
 }

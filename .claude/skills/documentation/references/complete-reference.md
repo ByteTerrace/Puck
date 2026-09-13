@@ -75,7 +75,7 @@ lives there, and links out. The child owns the contract table, the invariant
 list, and the worked detail. Entry points on different surfaces name each other
 explicitly — the human entry point states that it is the human entry point, and
 the agent-facing counterpart states which document wins a disagreement.
-[`src/Puck.Maths/README.md`](../../../../src/Puck.Maths/README.md) and
+[Deterministic numerics](../../../../docs/reference/maths.md) and
 [`maths-usage`](../../maths-usage/SKILL.md) are the working example of that
 pairing.
 
@@ -384,8 +384,10 @@ document under `docs/` that names the skill.
 
 - **The engine manual starts at `docs/README.md`.** Its overview, getting-started
   guide and topic pages help developers and agents learn and navigate the engine.
-  Project READMEs own detailed API and local implementation contracts; manual
-  pages may teach a workflow across those projects and link to the owners.
+  Manual topics own library usage and detailed human contracts; package READMEs
+  identify their component and link to those topics. XML comments own member
+  contracts. Existing specialized source references retain their ownership until
+  migrated; never copy them into a competing manual page.
   Keep plans and design decisions distinct from current reference material.
   The root `README.md` routes into the manual, and both entry points are updated
   when their destinations change. Do not duplicate a contract to fill an index.

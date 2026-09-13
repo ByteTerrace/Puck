@@ -184,10 +184,12 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     // through this same link — identically loopback (the completion fires inline) and over a socket, never a live
     // reference into the server's own state.
     private readonly IServerLink m_link;
+
     // The catalog snapshot, fetched once at construction (WorldQuery.ProfileCatalog) and rebuilt client-side via
     // WorldIdentity.FromProjection — the same rehydration a federation arrival already uses. A catalog identity
     // created after this snapshot (identity.create) is not visible to this roster until the next boot.
     private WorldIdentity[] m_catalog;
+
     private readonly float m_noseFactor;
     private readonly float m_pickerNeutralBlend;
     private readonly Vector3 m_pickerNeutralColor;
@@ -297,7 +299,10 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             completion: answer => name = (answer.Payload as WorldIdentityProjection?)?.Name
         );
 
-        return ((name is { } found) ? FindProfile(name: found) : null);
+        return ((name is { } found)
+            ? FindProfile(name: found)
+            : null
+        );
     }
     // The query form of Server.WorldGrants.Allows.
     private GrantVerdict QueryGrantAllows(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
@@ -346,12 +351,15 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     // Whether a and b name the same catalog identity — Id-based, not ReferenceEquals: m_catalog is rehydrated from a
     // projection, so two reads of "the same" identity are never the same CLR object.
     private static bool SameProfile(WorldIdentity? a, WorldIdentity? b) => (
-        ReferenceEquals(objA: a, objB: b) ||
+        ReferenceEquals(
+        objA: a,
+        objB: b
+    ) ||
         ((a is not null) && (b is not null) && string.Equals(
-            a: a.Id,
-            b: b.Id,
-            comparisonType: StringComparison.Ordinal
-        ))
+        a: a.Id,
+        b: b.Id,
+        comparisonType: StringComparison.Ordinal
+    ))
     );
     // Promote a pending participant to active on its candidate, first computing the final profile (bumped off any
     // profile now taken by another active player) WITHOUT installing it, then reseating the server body on that
@@ -1476,6 +1484,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     public WorldIdentity? FindProfile(string name) {
         return (FindInCatalog(name: name) ?? RefreshAndFindProfile(name: name));
     }
+
     private WorldIdentity? FindInCatalog(string name) {
         foreach (var candidate in m_catalog) {
             if (string.Equals(
@@ -1503,6 +1512,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
 
         return FindInCatalog(name: name);
     }
+
     /// <summary>Whether the slot is under an exclusive <see cref="TryClaimSlot"/> hold. A claimed slot's own protocol
     /// (its claimant's explicit commands) is its only legitimate driver — the guard a pushed/context-routed roster
     /// gesture (confirm, seat, cycle) checks before treating a claimed slot as an ordinary human target.</summary>

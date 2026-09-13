@@ -12,7 +12,7 @@ namespace Puck.World.Server;
 /// absent from that host resolve from the extension's published dependency graph.
 /// </summary>
 public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
-    private static readonly HashSet<string> SharedHostPrefixes = new(StringComparer.OrdinalIgnoreCase) {
+    private static readonly HashSet<string> SharedHostPrefixes = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "Puck.Abstractions",
         "Puck.World.Server",
         "Puck.World.Machines",
@@ -41,10 +41,16 @@ public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
 
     /// <summary>Initializes a new isolated extension load context.</summary>
     /// <param name="pluginPath">The file path to the extension assembly.</param>
-    public PuckExtensionLoadContext(string pluginPath) : this(pluginPath, isCollectible: true) { }
+    public PuckExtensionLoadContext(string pluginPath) : this(
+        pluginPath,
+        isCollectible: true
+    ) { }
 
-    internal PuckExtensionLoadContext(string pluginPath, bool isCollectible) : base(name: Path.GetFileNameWithoutExtension(pluginPath), isCollectible: isCollectible) {
-        m_resolver = new AssemblyDependencyResolver(pluginPath);
+    internal PuckExtensionLoadContext(string pluginPath, bool isCollectible) : base(
+        name: Path.GetFileNameWithoutExtension(path: pluginPath),
+        isCollectible: isCollectible
+    ) {
+        m_resolver = new AssemblyDependencyResolver(componentAssemblyPath: pluginPath);
     }
 
     /// <inheritdoc/>
@@ -53,44 +59,44 @@ public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
 
         if (name is not null) {
             foreach (var prefix in SharedHostPrefixes) {
-                if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
+                if (name.StartsWith(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: prefix
+                )) {
                     // Share contracts available to this host. An optional dependency can match a broad prefix
                     // without being installed in the host (for example ModelContextProtocol in a bare silo).
                     // In that case the extension's published dependency graph must supply it.
-                    try { return Default.LoadFromAssemblyName(assemblyName); }
-                    catch (FileNotFoundException) { break; }
+                    try { return Default.LoadFromAssemblyName(assemblyName: assemblyName); } catch (FileNotFoundException) { break; }
                 }
             }
         }
 
-        var assemblyPath = m_resolver.ResolveAssemblyToPath(assemblyName);
+        var assemblyPath = m_resolver.ResolveAssemblyToPath(assemblyName: assemblyName);
 
         if (assemblyPath is not null) {
-            return LoadFromAssemblyPath(assemblyPath);
+            return LoadFromAssemblyPath(assemblyPath: assemblyPath);
         }
 
         return null;
     }
-
     /// <inheritdoc/>
     protected override nint LoadUnmanagedDll(string unmanagedDllName) {
-        var libraryPath = m_resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+        var libraryPath = m_resolver.ResolveUnmanagedDllToPath(unmanagedDllName: unmanagedDllName);
 
         if (libraryPath is not null) {
-            return LoadUnmanagedDllFromPath(libraryPath);
+            return LoadUnmanagedDllFromPath(unmanagedDllPath: libraryPath);
         }
 
         return nint.Zero;
     }
 }
-
 /// <summary>
 /// Unified dynamic extension loader that discovers, isolates via <see cref="AssemblyLoadContext"/>,
 /// and activates extensions (both cloud/silo service extensions and machine extensions) from assemblies
 /// or directories.
 /// </summary>
 public static class WorldExtensionLoader {
-    private static readonly HashSet<string> HostAssemblyNames = new(StringComparer.OrdinalIgnoreCase) {
+    private static readonly HashSet<string> HostAssemblyNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "Puck.Abstractions.dll",
         "Puck.World.Server.dll",
         "Puck.World.Protocol.dll",
@@ -101,6 +107,20 @@ public static class WorldExtensionLoader {
         "Puck.Networking.dll",
         "Puck.Attestation.dll",
     };
+
+    private static void DispatchExtension(
+        object extension,
+        IWorldExtensionRegistry? serverRegistry,
+        Action<object>? onExtensionLoaded) {
+        if (
+            (serverRegistry is not null) &&
+            (extension is IWorldExtension worldExtension)
+        ) {
+            worldExtension.Register(registry: serverRegistry);
+        }
+
+        onExtensionLoaded?.Invoke(extension);
+    }
 
     /// <summary>
     /// Loads an extension assembly, discovers extension types, activates them, and registers them.
@@ -113,15 +133,21 @@ public static class WorldExtensionLoader {
         string assemblyPath,
         IWorldExtensionRegistry? serverRegistry = null,
         Action<object>? onExtensionLoaded = null) {
-        var fullPath = Path.GetFullPath(assemblyPath);
+        var fullPath = Path.GetFullPath(path: assemblyPath);
 
-        if (!File.Exists(fullPath)) {
-            throw new FileNotFoundException($"Extension assembly not found at '{fullPath}'.", fullPath);
+        if (!File.Exists(path: fullPath)) {
+            throw new FileNotFoundException(
+                fileName: fullPath,
+                message: $"Extension assembly not found at '{fullPath}'."
+            );
         }
 
         // This API installs process-lifetime providers and returns no unload owner. A collectible context can
         // finalize before a later hosted-service callback resolves one of its dependencies.
-        var loadContext = new PuckExtensionLoadContext(pluginPath: fullPath, isCollectible: false);
+        var loadContext = new PuckExtensionLoadContext(
+            isCollectible: false,
+            pluginPath: fullPath
+        );
         var assembly = loadContext.LoadFromAssemblyPath(assemblyPath: fullPath);
         var activatedExtensions = new List<object>();
 
@@ -130,9 +156,13 @@ public static class WorldExtensionLoader {
 
         if (extensionAttributes.Length > 0) {
             foreach (var attribute in extensionAttributes) {
-                if (Activator.CreateInstance(attribute.ExtensionType) is { } extension) {
-                    activatedExtensions.Add(extension);
-                    DispatchExtension(extension, serverRegistry, onExtensionLoaded);
+                if (Activator.CreateInstance(type: attribute.ExtensionType) is { } extension) {
+                    activatedExtensions.Add(item: extension);
+                    DispatchExtension(
+                        extension: extension,
+                        onExtensionLoaded: onExtensionLoaded,
+                        serverRegistry: serverRegistry
+                    );
                 }
             }
             return activatedExtensions;
@@ -140,22 +170,30 @@ public static class WorldExtensionLoader {
 
         // Fallback: scan exported types
         foreach (var type in assembly.GetExportedTypes()) {
-            if (type.IsAbstract || type.IsInterface) {
+            if (
+                type.IsAbstract ||
+                type.IsInterface
+            ) {
                 continue;
             }
 
-            if (typeof(IWorldExtension).IsAssignableFrom(type) ||
-                typeof(IMachineExtension).IsAssignableFrom(type)) {
-                if (Activator.CreateInstance(type) is { } extension) {
-                    activatedExtensions.Add(extension);
-                    DispatchExtension(extension, serverRegistry, onExtensionLoaded);
+            if (
+                typeof(IWorldExtension).IsAssignableFrom(c: type) ||
+                typeof(IMachineExtension).IsAssignableFrom(c: type)
+            ) {
+                if (Activator.CreateInstance(type: type) is { } extension) {
+                    activatedExtensions.Add(item: extension);
+                    DispatchExtension(
+                        extension: extension,
+                        onExtensionLoaded: onExtensionLoaded,
+                        serverRegistry: serverRegistry
+                    );
                 }
             }
         }
 
         return activatedExtensions;
     }
-
     /// <summary>
     /// Scans a directory for extension assemblies (both flat layout and directory-per-extension),
     /// loading and activating each discovered extension.
@@ -170,7 +208,7 @@ public static class WorldExtensionLoader {
         IWorldExtensionRegistry? serverRegistry = null,
         Action<object>? onExtensionLoaded = null,
         Action<string>? log = null) {
-        if (!Directory.Exists(directoryPath)) {
+        if (!Directory.Exists(path: directoryPath)) {
             log?.Invoke($"Extension directory '{directoryPath}' does not exist.");
             return [];
         }
@@ -178,23 +216,34 @@ public static class WorldExtensionLoader {
         var candidateDlls = new List<string>();
 
         // Top-level DLLs
-        foreach (var file in Directory.EnumerateFiles(directoryPath, "*.dll", SearchOption.TopDirectoryOnly)) {
-            if (!HostAssemblyNames.Contains(Path.GetFileName(file))) {
-                candidateDlls.Add(file);
+        foreach (var file in Directory.EnumerateFiles(
+            path: directoryPath,
+            searchOption: SearchOption.TopDirectoryOnly,
+            searchPattern: "*.dll"
+        )) {
+            if (!HostAssemblyNames.Contains(item: Path.GetFileName(path: file))) {
+                candidateDlls.Add(item: file);
             }
         }
 
         // Immediate subdirectories (e.g. extensions/azure/Puck.World.Azure.dll, extensions/hgb/Puck.HumbleGamingBrick.Forge.dll)
-        foreach (var subDir in Directory.EnumerateDirectories(directoryPath)) {
-            var subDirName = Path.GetFileName(subDir);
-            var matchingDll = Path.Combine(subDir, $"{subDirName}.dll");
+        foreach (var subDir in Directory.EnumerateDirectories(path: directoryPath)) {
+            var subDirName = Path.GetFileName(path: subDir);
+            var matchingDll = Path.Combine(
+                path1: subDir,
+                path2: $"{subDirName}.dll"
+            );
 
-            if (File.Exists(matchingDll)) {
-                candidateDlls.Add(matchingDll);
+            if (File.Exists(path: matchingDll)) {
+                candidateDlls.Add(item: matchingDll);
             } else {
-                foreach (var file in Directory.EnumerateFiles(subDir, "*.dll", SearchOption.TopDirectoryOnly)) {
-                    if (!HostAssemblyNames.Contains(Path.GetFileName(file))) {
-                        candidateDlls.Add(file);
+                foreach (var file in Directory.EnumerateFiles(
+                    path: subDir,
+                    searchOption: SearchOption.TopDirectoryOnly,
+                    searchPattern: "*.dll"
+                )) {
+                    if (!HostAssemblyNames.Contains(item: Path.GetFileName(path: file))) {
+                        candidateDlls.Add(item: file);
                     }
                 }
             }
@@ -206,26 +255,16 @@ public static class WorldExtensionLoader {
             try {
                 var loaded = LoadFromAssembly(
                     assemblyPath: dllPath,
-                    serverRegistry: serverRegistry,
-                    onExtensionLoaded: onExtensionLoaded);
+                    onExtensionLoaded: onExtensionLoaded,
+                    serverRegistry: serverRegistry
+                );
 
-                results.AddRange(loaded);
+                results.AddRange(collection: loaded);
             } catch (Exception ex) {
                 log?.Invoke($"Failed to load candidate assembly at '{dllPath}': {ex.Message}");
             }
         }
 
         return results;
-    }
-
-    private static void DispatchExtension(
-        object extension,
-        IWorldExtensionRegistry? serverRegistry,
-        Action<object>? onExtensionLoaded) {
-        if (serverRegistry is not null && extension is IWorldExtension worldExtension) {
-            worldExtension.Register(serverRegistry);
-        }
-
-        onExtensionLoaded?.Invoke(extension);
     }
 }

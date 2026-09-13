@@ -52,6 +52,9 @@ public sealed class CreationSubmissionBoundaryLawTests {
         var landed = fixture.Server.Definition.Creations.SingleOrDefault(predicate: static creation => (creation.Id.Value == "boundary-piece"));
 
         Assert.NotNull(@object: landed);
-        Assert.False(condition: string.IsNullOrEmpty(value: landed!.Hash), userMessage: "an absent submitted hash adopts the canonical one");
+        Assert.False(
+            condition: string.IsNullOrEmpty(value: landed!.Hash),
+            userMessage: "an absent submitted hash adopts the canonical one"
+        );
     }
 }

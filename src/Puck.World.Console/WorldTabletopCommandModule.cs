@@ -14,7 +14,6 @@ namespace Puck.World;
 /// <remarks>Read-only. A board's rows are authored/mutated through the same ordinary state doors (<c>world.row.set
 /// state</c>, rule effects) every other row uses — this module only names which rows belong to which tabletop.</remarks>
 public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
-    private static string DescribeFixed(FixedQ4816 value) => ((double)value).ToString(format: "0.#####", provider: CultureInfo.InvariantCulture);
     private static void AppendCells(StringBuilder text, WorldStateRow? row, string label) {
         _ = text.Append(value: ' ').Append(value: label).Append(value: '=');
         if (row is null) {
@@ -22,17 +21,24 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
             return;
         }
         var cells = row.Cells;
-        if (cells is null || cells.Count == 0) {
+
+        if (
+            (cells is null) ||
+            (cells.Count == 0)
+        ) {
             _ = text.Append(value: "(empty)");
             return;
         }
         _ = text.Append(value: '{');
-        for (var index = 0; index < cells.Count; index++) {
+        for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
+
             if (index > 0) {
                 _ = text.Append(value: ',');
             }
-            _ = text.Append(value: cell.Key.Value).Append(value: ':').Append(value: (row.Kind == CellKind.Text ? (cell.Text ?? "") : cell.Value.ToString(CultureInfo.InvariantCulture)));
+            _ = text.Append(value: cell.Key.Value).Append(value: ':').Append(value: ((row.Kind == CellKind.Text)
+                ? (cell.Text ?? "")
+                : cell.Value.ToString(provider: CultureInfo.InvariantCulture)));
         }
         _ = text.Append(value: '}');
     }
@@ -48,15 +54,25 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
 
             if (
                 (filter is { } only) &&
-                !string.Equals(a: placement.Id, b: only, comparisonType: StringComparison.Ordinal)
+                !string.Equals(
+                a: placement.Id,
+                b: only,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 continue;
             }
 
             matched++;
 
-            var topology = WorldTopologyCompilation.Find(definition, board.Topology);
-            var occupancy = WorldDefinitionRows.FindStateRow(definition.State, board.Occupancy);
+            var topology = WorldTopologyCompilation.Find(
+                definition: definition,
+                name: board.Topology
+            );
+            var occupancy = WorldDefinitionRows.FindStateRow(
+                definition.State,
+                board.Occupancy
+            );
 
             var text = new StringBuilder(value: "tabletop '").Append(value: placement.Id).Append(value: '\'')
                 .Append(value: " topology=").Append(value: board.Topology);
@@ -64,10 +80,10 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
             if (topology is null) {
                 _ = text.Append(value: " frame=(unresolved)");
             } else {
-                _ = text.Append(value: " origin=(").Append(value: DescribeFixed(topology.Origin.X)).Append(value: ',')
-                    .Append(value: DescribeFixed(topology.Origin.Y)).Append(value: ',')
-                    .Append(value: DescribeFixed(topology.Origin.Z)).Append(value: ')')
-                    .Append(value: " cellSize=").Append(value: DescribeFixed(topology.CellSize));
+                _ = text.Append(value: " origin=(").Append(value: DescribeFixed(value: topology.Origin.X)).Append(value: ',')
+                    .Append(value: DescribeFixed(value: topology.Origin.Y)).Append(value: ',')
+                    .Append(value: DescribeFixed(value: topology.Origin.Z)).Append(value: ')')
+                    .Append(value: " cellSize=").Append(value: DescribeFixed(value: topology.CellSize));
                 if (topology.Kind == TopologyKind.Hex) {
                     _ = text.Append(value: " radius=").Append(value: topology.Radius);
                 } else if (topology.Kind is TopologyKind.Graph or TopologyKind.Tiling) {
@@ -77,22 +93,54 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
                 }
             }
 
-            AppendCells(text: text, row: occupancy, label: "occupancy");
+            AppendCells(
+                label: "occupancy",
+                row: occupancy,
+                text: text
+            );
 
             if (board.Turn is { } turnName) {
-                AppendCells(text: text, row: WorldDefinitionRows.FindStateRow(definition.State, turnName), label: "turn");
+                AppendCells(
+                    text: text,
+                    row: WorldDefinitionRows.FindStateRow(
+                        definition.State,
+                        turnName
+                    ),
+                    label: "turn"
+                );
             }
 
             if (board.Verdict is { } verdictName) {
-                AppendCells(text: text, row: WorldDefinitionRows.FindStateRow(definition.State, verdictName), label: "verdict");
+                AppendCells(
+                    text: text,
+                    row: WorldDefinitionRows.FindStateRow(
+                        definition.State,
+                        verdictName
+                    ),
+                    label: "verdict"
+                );
             }
 
             if (board.Move is { } moveName) {
-                AppendCells(text: text, row: WorldDefinitionRows.FindStateRow(definition.State, moveName), label: "move");
+                AppendCells(
+                    text: text,
+                    row: WorldDefinitionRows.FindStateRow(
+                        definition.State,
+                        moveName
+                    ),
+                    label: "move"
+                );
             }
 
             if (board.Plan is { } planName) {
-                AppendCells(text: text, row: WorldDefinitionRows.FindStateRow(definition.State, planName), label: "plan");
+                AppendCells(
+                    text: text,
+                    row: WorldDefinitionRows.FindStateRow(
+                        definition.State,
+                        planName
+                    ),
+                    label: "plan"
+                );
             }
 
             _ = echo.Text(text: text.ToString()).Segment();
@@ -101,14 +149,20 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
         if (matched == 0) {
             _ = echo.Text(text: ((filter is { } missing)
                 ? $"no tabletop '{missing}'"
-                : "(no tabletops)"
-            ));
+                : "(no tabletops)"));
         }
 
-        _ = echo.Field(key: "tick", value: (server.NextInputTick - 1UL));
+        _ = echo.Field(
+            key: "tick",
+            value: (server.NextInputTick - 1UL)
+        );
 
         return echo.Close();
     }
+    private static string DescribeFixed(FixedQ4816 value) => ((double)value).ToString(
+        format: "0.#####",
+        provider: CultureInfo.InvariantCulture
+    );
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -133,8 +187,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
                 return new CommandResult(Output: Describe(
                     filter: ((args.Count == 1)
                     ? args[0].ToString()
-                    : null
-                ),
+                    : null),
                     server: server
                 ));
             }

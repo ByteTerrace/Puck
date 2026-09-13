@@ -27,14 +27,29 @@ public sealed class LegLedgerTests {
 
         var rows = LegLedger.LawRows();
 
-        Assert.Equal(expected: LawRegistry.All.Count, actual: rows.Count);
+        Assert.Equal(
+            expected: LawRegistry.All.Count,
+            actual: rows.Count
+        );
 
         var violations = LegLedger.DeclarationViolations(rows: rows);
 
-        Assert.True(condition: (violations.Count == 0), userMessage: $"{violations.Count} malformed leg declaration(s): {string.Join(separator: " ", values: violations.Take(count: 20))}");
+        Assert.True(
+            condition: (violations.Count == 0),
+            userMessage: $"{violations.Count} malformed leg declaration(s): {string.Join(
+                separator: " ",
+                values: violations.Take(count: 20)
+            )}"
+        );
 
         var unresolved = LegLedger.UnresolvedSiblings(rows: rows);
 
-        Assert.True(condition: (unresolved.Count == 0), userMessage: $"{unresolved.Count} relative canary/canaries name an absolute sibling that does not resolve: {string.Join(separator: " ", values: unresolved.Take(count: 20))}");
+        Assert.True(
+            condition: (unresolved.Count == 0),
+            userMessage: $"{unresolved.Count} relative canary/canaries name an absolute sibling that does not resolve: {string.Join(
+                separator: " ",
+                values: unresolved.Take(count: 20)
+            )}"
+        );
     }
 }

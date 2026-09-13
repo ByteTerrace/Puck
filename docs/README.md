@@ -7,6 +7,8 @@ Puck is a C# engine for document-defined interactive worlds. Start with the
 | I want to… | Start here |
 |---|---|
 | Understand how the engine works | [Engine architecture](architecture/README.md): documents, simulation, presentation, and world hosting. |
+| Use the simulation libraries in my own host | [State and rules](reference/state.md), [Commands and input](reference/commands.md), [Deterministic numerics](reference/maths.md), and [Physics kernels](reference/physics.md). |
+| Connect devices and provide feedback | [Device input](reference/input.md): controllers, motion, haptics, and lighting. |
 | Create or change content | [Authoring content](authoring/README.md): world documents, the DSL, shader pipelines, and cartridges. |
 | Work on graphics or emulation | [Rendering](rendering/README.md) or [Machine emulation](emulation/README.md): introductions followed by detailed technical guides. |
 | Investigate or change the code | [Development](development/README.md): project ownership, debugging, verification, and releases. |

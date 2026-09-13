@@ -14,12 +14,15 @@ public sealed partial class SdfProgram {
             for (var vertexIndex = 0; (vertexIndex < vertices.Length); vertexIndex += 2) {
                 var entryBase = ((baseVectors + (vertexIndex / 2)) * WordsPerVector);
                 var first = vertices[vertexIndex];
-                var second = (((vertexIndex + 1) < vertices.Length) ? vertices[(vertexIndex + 1)] : Vector2.Zero);
+                var second = (((vertexIndex + 1) < vertices.Length)
+                    ? vertices[(vertexIndex + 1)]
+                    : Vector2.Zero
+                );
 
                 WriteVector4(
-                    words: m_words,
                     baseIndex: entryBase,
                     w: second.Y,
+                    words: m_words,
                     x: first.X,
                     y: first.Y,
                     z: second.X

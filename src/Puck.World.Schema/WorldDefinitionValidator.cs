@@ -78,7 +78,9 @@ public static partial class WorldDefinitionValidator {
             : null)
         );
     }
+
     private delegate bool TryLoadAsset<TRow, TDocument>(TRow row, out TDocument? document, out string? error);
+
     // The load-then-check shape every off-disk asset row (patch, table, tune) validates through: a row that cannot
     // load refuses on its source, one that loads runs the SAME structural CheckAsset every embedded family gets.
     // CheckMusic keeps its own body because it layers document-crossing facts on top of the canonicalizer's own.
@@ -179,7 +181,10 @@ public static partial class WorldDefinitionValidator {
                     !string.IsNullOrWhiteSpace(value: transition.When) &&
                     !WorldAudioCue.IsMusicWhenToken(token: transition.When)
                 ) {
-                    violations.Add(item: ($"segments[{segment.Id}].transitions.when", $"'{transition.When}' is not a sense-mappable when token ({string.Join(separator: " | ", values: WorldAudioCue.MusicWhenTokens)})."));
+                    violations.Add(item: ($"segments[{segment.Id}].transitions.when", $"'{transition.When}' is not a sense-mappable when token ({string.Join(
+                        separator: " | ",
+                        values: WorldAudioCue.MusicWhenTokens
+                    )})."));
                 }
             }
 
@@ -201,7 +206,10 @@ public static partial class WorldDefinitionValidator {
                     (layer.When is { } when) &&
                     !WorldAudioCue.IsMusicWhenToken(token: when)
                 ) {
-                    violations.Add(item: ($"segments[{segment.Id}].layers.when", $"'{when}' is not a sense-mappable when token ({string.Join(separator: " | ", values: WorldAudioCue.MusicWhenTokens)})."));
+                    violations.Add(item: ($"segments[{segment.Id}].layers.when", $"'{when}' is not a sense-mappable when token ({string.Join(
+                        separator: " | ",
+                        values: WorldAudioCue.MusicWhenTokens
+                    )})."));
                 }
 
                 if (
@@ -228,7 +236,10 @@ public static partial class WorldDefinitionValidator {
                     !string.IsNullOrWhiteSpace(value: embellishment.When) &&
                     !WorldAudioCue.IsMusicWhenToken(token: embellishment.When)
                 ) {
-                    violations.Add(item: ($"segments[{segment.Id}].embellishments.when", $"'{embellishment.When}' is not a sense-mappable when token ({string.Join(separator: " | ", values: WorldAudioCue.MusicWhenTokens)})."));
+                    violations.Add(item: ($"segments[{segment.Id}].embellishments.when", $"'{embellishment.When}' is not a sense-mappable when token ({string.Join(
+                        separator: " | ",
+                        values: WorldAudioCue.MusicWhenTokens
+                    )})."));
                 }
 
                 if (
@@ -506,7 +517,10 @@ public static partial class WorldDefinitionValidator {
 
                 for (var stopIndex = 1; (stopIndex < stops.Length); stopIndex++) {
                     if (stops[stopIndex] <= stops[(stopIndex - 1)]) {
-                        errors.Add(item: $"{path}.sky resolves gradient stops [{string.Join(separator: ", ", values: stops)}] once the fields it leaves unset are inherited; stops must stay strictly ascending in elevation at every key.");
+                        errors.Add(item: $"{path}.sky resolves gradient stops [{string.Join(
+                            separator: ", ",
+                            values: stops
+                        )}] once the fields it leaves unset are inherited; stops must stay strictly ascending in elevation at every key.");
 
                         break;
                     }
@@ -531,13 +545,19 @@ public static partial class WorldDefinitionValidator {
 
                 return;
             case OverlaySubject.Seat seat:
-                if ((seat.Number is { } number) && ((number < 1) || (number > WorldBodiesLimits.LocalSeatCount))) {
+                if (
+                    (seat.Number is { } number) &&
+                    ((number < 1) || (number > WorldBodiesLimits.LocalSeatCount))
+                ) {
                     errors.Add(item: $"{path}.number {number} is outside 1..{WorldBodiesLimits.LocalSeatCount}.");
                 }
 
                 return;
             case OverlaySubject.Entity entity:
-                if ((entity.Index < 0) || ((definition is not null) && (entity.Index >= definition.Population.Capacity))) {
+                if (
+                    (entity.Index < 0) ||
+                    ((definition is not null) && (entity.Index >= definition.Population.Capacity))
+                ) {
                     errors.Add(item: $"{path}.index {entity.Index} is outside the authored population capacity.");
                 }
 
@@ -545,7 +565,13 @@ public static partial class WorldDefinitionValidator {
             case OverlaySubject.Placement placement:
                 if (string.IsNullOrWhiteSpace(value: placement.PlacementId)) {
                     errors.Add(item: $"{path}.placementId is required.");
-                } else if ((definition is not null) && (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placement.PlacementId) is null)) {
+                } else if (
+                    (definition is not null) &&
+                    (WorldDefinitionRows.FindPlacement(
+                    placements: definition.Placements,
+                    id: placement.PlacementId
+                ) is null)
+                ) {
                     errors.Add(item: $"{path}.placementId '{placement.PlacementId}' names no placement row.");
                 }
 
@@ -572,11 +598,17 @@ public static partial class WorldDefinitionValidator {
                     subject: speaking.Subject
                 );
 
-                if (!float.IsFinite(f: speaking.WindowSeconds) || (speaking.WindowSeconds < 0f)) {
+                if (
+                    !float.IsFinite(f: speaking.WindowSeconds) ||
+                    (speaking.WindowSeconds < 0f)
+                ) {
                     errors.Add(item: $"{path}.windowSeconds must be finite and non-negative.");
                 }
 
-                if (!float.IsFinite(f: speaking.FadeSeconds) || (speaking.FadeSeconds < 0f)) {
+                if (
+                    !float.IsFinite(f: speaking.FadeSeconds) ||
+                    (speaking.FadeSeconds < 0f)
+                ) {
                     errors.Add(item: $"{path}.fadeSeconds must be finite and non-negative.");
                 }
 
@@ -598,7 +630,10 @@ public static partial class WorldDefinitionValidator {
                     );
                 }
 
-                if (!float.IsFinite(f: near.Distance) || (near.Distance < 0f)) {
+                if (
+                    !float.IsFinite(f: near.Distance) ||
+                    (near.Distance < 0f)
+                ) {
                     errors.Add(item: $"{path}.distance must be finite and non-negative.");
                 }
 
@@ -615,13 +650,25 @@ public static partial class WorldDefinitionValidator {
                     // (threaded down from ValidateCore); falling back to a scan of definition.State keeps this
                     // correct for a caller that has definition but not the map.
                     var row = ((stateRows is not null)
-                        ? (stateRows.TryGetValue(key: stateRow, value: out var mappedRow) ? mappedRow : null)
-                        : definition.State.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name.ToString(), b: stateRow, comparisonType: StringComparison.Ordinal)));
+                        ? (stateRows.TryGetValue(
+                            key: stateRow,
+                            value: out var mappedRow
+                        )
+                            ? mappedRow
+                            : null)
+                        : definition.State.FirstOrDefault(predicate: candidate => string.Equals(
+                            a: candidate.Name.ToString(),
+                            b: stateRow,
+                            comparisonType: StringComparison.Ordinal
+                        ))
+                    );
 
                     if (row is null) {
                         errors.Add(item: $"{path}.binding '{state.Binding}' names no declared state row.");
                     } else if ((row.Kind == CellKind.Text) != (state.Text is not null)) {
-                        errors.Add(item: $"{path} compares {((row.Kind == CellKind.Text) ? "a text row, which needs 'text'" : "a numeric row, which needs 'value'")}.");
+                        errors.Add(item: $"{path} compares {((row.Kind == CellKind.Text)
+                            ? "a text row, which needs 'text'"
+                            : "a numeric row, which needs 'value'")}.");
                     }
                 }
 
@@ -629,11 +676,17 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} needs exactly one of 'value' or 'text'.");
                 }
 
-                if ((state.Text is not null) && (state.Comparison is not (ActionStateComparison.Equal or ActionStateComparison.NotEqual))) {
+                if (
+                    (state.Text is not null) &&
+                    (state.Comparison is not (ActionStateComparison.Equal or ActionStateComparison.NotEqual))
+                ) {
                     errors.Add(item: $"{path}.comparison {state.Comparison} is not a text comparison (equal or notEqual).");
                 }
 
-                if ((state.Value is { } value) && !float.IsFinite(f: value)) {
+                if (
+                    (state.Value is { } value) &&
+                    !float.IsFinite(f: value)
+                ) {
                     errors.Add(item: $"{path}.value must be finite.");
                 }
 
@@ -748,7 +801,10 @@ public static partial class WorldDefinitionValidator {
             string.IsNullOrWhiteSpace(value: value) ||
             !declaredSet.Contains(item: value)
         ) {
-            var fullPath = (string.IsNullOrEmpty(value: field) ? path : $"{path}.{field}");
+            var fullPath = (string.IsNullOrEmpty(value: field)
+                ? path
+                : $"{path}.{field}"
+            );
 
             errors.Add(item: $"{fullPath} '{value}' names no {rowNoun} row.");
 
@@ -828,11 +884,21 @@ public static partial class WorldDefinitionValidator {
     private static void RequireRange(float value, float min, float max, string name, List<string> errors, bool minExclusive = false, bool maxExclusive = false) {
         if (
             !float.IsFinite(f: value) ||
-            (minExclusive ? (value <= min) : (value < min)) ||
-            (maxExclusive ? (value >= max) : (value > max))
+            (minExclusive
+            ? (value <= min)
+            : (value < min)) ||
+            (maxExclusive
+            ? (value >= max)
+            : (value > max))
         ) {
-            var openBracket = (minExclusive ? "(" : "[");
-            var closeBracket = (maxExclusive ? ")" : "]");
+            var openBracket = (minExclusive
+                ? "("
+                : "["
+            );
+            var closeBracket = (maxExclusive
+                ? ")"
+                : "]"
+            );
 
             errors.Add(item: $"{name} {value} must be finite and within {openBracket}{min}, {max}{closeBracket}.");
         }
@@ -843,7 +909,10 @@ public static partial class WorldDefinitionValidator {
     // Returns whether the name is admitted, so a caller gating further per-row work on it (an ordinal table insert,
     // a nested loop) can do so without re-deriving the same check.
     private static bool RequireUniqueName(string? value, HashSet<string> seen, string path, string field, List<string> errors) {
-        var fullPath = (string.IsNullOrEmpty(value: field) ? path : $"{path}.{field}");
+        var fullPath = (string.IsNullOrEmpty(value: field)
+            ? path
+            : $"{path}.{field}"
+        );
 
         if (string.IsNullOrWhiteSpace(value: value)) {
             errors.Add(item: $"{fullPath} is required.");
@@ -942,20 +1011,27 @@ public static partial class WorldDefinitionValidator {
     // read once ValidateCore's own call to its owning Validate* method has run, the same dependency order the
     // un-scoped locals already followed.
     private sealed class ValidationScope {
-        public IMachineValidationCatalog? Machines { get; init; }
         public HashSet<string> Cameras { get; set; } = [];
         public HashSet<string> DestinationNames { get; set; } = [];
         public HashSet<string> FontNames { get; set; } = [];
         public bool HasTextCatalog { get; set; }
         public HashSet<string> KitNames { get; set; } = [];
         public HashSet<string> LookNames { get; set; } = [];
+        public IMachineValidationCatalog? Machines { get; init; }
         public HashSet<string> PatchIds { get; set; } = [];
         public HashSet<string> PrototypeIds { get; set; } = [];
     }
 
     private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) =>
-        ValidateCore(definition, neighbours, validateAdjacencyClaims, retainCompilation, throwOnErrors: true, errorSink: null, deferredSink: null);
-
+        ValidateCore(
+            definition,
+            neighbours,
+            validateAdjacencyClaims,
+            retainCompilation,
+            throwOnErrors: true,
+            errorSink: null,
+            deferredSink: null
+        );
     // The collecting twin ValidateCore's throwing overload wraps: throwOnErrors selects RefuseCollected's
     // aggregate-and-throw ending (every existing caller) versus copying the same per-message list into errorSink and
     // returning a compilation only when the candidate is sound — the shape TryValidateLocally's structured-errors
@@ -985,7 +1061,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (definition.Imports is { } imports) {
-            errors.Add(item: $"imports [{string.Join(separator: ", ", values: imports.Select(selector: static import => import.Document))}] survived to validation — imports resolve only at the file-load boundary; this document arrived somewhere no import can be resolved, so it must be composed (flattened) before it can run.");
+            errors.Add(item: $"imports [{string.Join(
+                separator: ", ",
+                values: imports.Select(selector: static import => import.Document)
+            )}] survived to validation — imports resolve only at the file-load boundary; this document arrived somewhere no import can be resolved, so it must be composed (flattened) before it can run.");
         }
 
         if (definition.Exports is { } exports) {
@@ -1422,8 +1501,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         ValidateIdentityFactLane(
-            stateRows: stateRows,
-            errors: errors
+            errors: errors,
+            stateRows: stateRows
         );
         ValidateIdentityVoiceProfile(
             identity: definition.Identity,
@@ -1468,24 +1547,35 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             context: ref ruleContext
         );
+
         if (errors.Count == 0) {
-            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(compiledRules)) {
+            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(rules: compiledRules)) {
                 errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
             }
-            var ruleBudget = WorldRuleWorkBudget.Measure(definition, compiledRules, compiledInteractions);
+            var ruleBudget = WorldRuleWorkBudget.Measure(
+                definition: definition,
+                interactions: compiledInteractions,
+                rules: compiledRules
+            );
+
             if (ruleBudget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick) {
                 var costliest = string.Join(
                     separator: ", ",
-                    values: WorldRuleWorkBudget.Contributors(definition, compiledRules, compiledInteractions).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
+                    values: WorldRuleWorkBudget.Contributors(
+                        definition: definition,
+                        interactions: compiledInteractions,
+                        rules: compiledRules
+                    ).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
                 );
+
                 errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
             }
         }
         if (errors.Count == 0) {
             ValidateSearch(
                 definition: definition,
-                rules: compiledRules,
-                errors: errors
+                errors: errors,
+                rules: compiledRules
             );
         }
 
@@ -1605,7 +1695,7 @@ public static partial class WorldDefinitionValidator {
         var lookNames = ValidateLooks(
             definition: definition,
             creations: definition.Creations,
-                looks: definition.Looks,
+            looks: definition.Looks,
             prototypeIds: prototypeIds,
             dynamicsNames: dynamicsNames,
             errors: errors
@@ -1753,9 +1843,9 @@ public static partial class WorldDefinitionValidator {
         // does, so this runs only once that set is fully built above — never earlier, and never twice.
         ValidateProbes(
             cameras: cameras,
+            deferred: deferredSink,
             definition: definition,
-            errors: errors,
-            deferred: deferredSink
+            errors: errors
         );
 
         ValidateCaptures(
@@ -1979,7 +2069,12 @@ public static partial class WorldDefinitionValidator {
             )} both do.");
         }
 
-        ValidateMachines(definition, scope.Machines, errors, deferredSink);
+        ValidateMachines(
+            definition,
+            scope.Machines,
+            errors,
+            deferredSink
+        );
 
         // The machine cable groups derive from named machine rows and their display consumers.
         ValidateMachineCables(
@@ -2039,7 +2134,18 @@ public static partial class WorldDefinitionValidator {
         if (throwOnErrors) {
             RefuseCollected(errors: errors);
 
-            return retainCompilation ? new WorldRuleCompilation(definition, compiledRules, compiledInteractions, WorldRuleCompilation.CompileTables(definition, ruleContext)) : null;
+            return (retainCompilation
+                ? new WorldRuleCompilation(
+                    definition,
+                    compiledRules,
+                    compiledInteractions,
+                    WorldRuleCompilation.CompileTables(
+                        context: ruleContext,
+                        definition: definition
+                    )
+                )
+                : null
+            );
         }
 
         if (errorSink is not null) {
@@ -2048,7 +2154,18 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        return ((retainCompilation && (errors.Count == 0)) ? new WorldRuleCompilation(definition, compiledRules, compiledInteractions, WorldRuleCompilation.CompileTables(definition, ruleContext)) : null);
+        return ((retainCompilation && (errors.Count == 0))
+            ? new WorldRuleCompilation(
+                definition,
+                compiledRules,
+                compiledInteractions,
+                WorldRuleCompilation.CompileTables(
+                    context: ruleContext,
+                    definition: definition
+                )
+            )
+            : null
+        );
     }
     private static void RefuseCollected(List<string> errors) {
         if (errors.Count > 0) {
@@ -2118,14 +2235,14 @@ public static partial class WorldDefinitionValidator {
     public static bool TryValidate(WorldDefinition definition, out string reason, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? machines = null) {
         try {
             ValidateCore(
+                deferredSink: null,
                 definition: definition,
+                errorSink: null,
+                machines: machines,
                 neighbours: neighbours,
-                validateAdjacencyClaims: true,
                 retainCompilation: false,
                 throwOnErrors: true,
-                errorSink: null,
-                deferredSink: null,
-                machines: machines
+                validateAdjacencyClaims: true
             );
             reason = string.Empty;
 
@@ -2142,16 +2259,24 @@ public static partial class WorldDefinitionValidator {
     /// <param name="definition">The candidate definition.</param>
     /// <param name="reason">The collapsed failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the document-local facts are valid.</returns>
-    public static bool TryValidateLocally(WorldDefinition definition, out string reason) => TryValidateLocallyCore(definition, out reason, out _, retainCompilation: false);
-
+    public static bool TryValidateLocally(WorldDefinition definition, out string reason) => TryValidateLocallyCore(
+        definition,
+        out reason,
+        out _,
+        retainCompilation: false
+    );
     /// <summary>Validates document-local facts and returns the same programs used by validation for immediate
     /// installation. On failure no compilation result escapes.</summary>
     /// <param name="definition">The candidate, whose collections must remain unchanged through installation.</param>
     /// <param name="reason">The failure reason, or empty on success.</param>
     /// <param name="compilation">The validated programs, or null on failure.</param>
     /// <returns>Whether the document-local facts are valid.</returns>
-    public static bool TryValidateLocally(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation) => TryValidateLocallyCore(definition, out reason, out compilation, retainCompilation: true);
-
+    public static bool TryValidateLocally(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation) => TryValidateLocallyCore(
+        definition,
+        out reason,
+        out compilation,
+        retainCompilation: true
+    );
     /// <summary>Validates document-local facts into <paramref name="errors"/> as individual, unflattened messages —
     /// skipping <see cref="RefuseCollected"/>'s aggregate-and-throw ending — and returns the same compiled programs
     /// as <see cref="TryValidateLocally(WorldDefinition, out string, out WorldRuleCompilation?)"/> on success. The
@@ -2163,8 +2288,12 @@ public static partial class WorldDefinitionValidator {
     /// <param name="errors">Every collected message is added here, in validation order; empty when the candidate is sound.</param>
     /// <param name="compilation">The validated programs, or <see langword="null"/> when any message was added.</param>
     /// <returns><see langword="true"/> when no message was added.</returns>
-    public static bool TryValidateLocally(WorldDefinition definition, ICollection<string> errors, out WorldRuleCompilation? compilation) => TryValidateLocally(definition, errors, deferred: null, out compilation);
-
+    public static bool TryValidateLocally(WorldDefinition definition, ICollection<string> errors, out WorldRuleCompilation? compilation) => TryValidateLocally(
+        definition,
+        errors,
+        deferred: null,
+        out compilation
+    );
     /// <summary>The same structured-errors validation as
     /// <see cref="TryValidateLocally(WorldDefinition, ICollection{string}, out WorldRuleCompilation?)"/>, additionally
     /// collecting the admission section's platform-deferred notices (a browser runtime cannot run
@@ -2176,9 +2305,14 @@ public static partial class WorldDefinitionValidator {
     /// <param name="compilation">The validated programs, or <see langword="null"/> when any message was added.</param>
     /// <returns><see langword="true"/> when no message was added.</returns>
     public static bool TryValidateLocally(WorldDefinition definition, ICollection<string> errors, ICollection<string>? deferred, out WorldRuleCompilation? compilation) {
-        return TryValidateLocally(definition, machines: null, errors, deferred, out compilation);
+        return TryValidateLocally(
+            definition,
+            machines: null,
+            errors,
+            deferred,
+            out compilation
+        );
     }
-
     /// <summary>Validates document-local facts against an explicitly selected machine catalog.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <param name="machines">The deployment's machine vocabulary, or null for structural validation with deferred provider notices.</param>
@@ -2191,7 +2325,16 @@ public static partial class WorldDefinitionValidator {
 
         var before = errors.Count;
 
-        compilation = ValidateCore(definition, neighbours: null, validateAdjacencyClaims: false, retainCompilation: true, throwOnErrors: false, errorSink: errors, deferredSink: deferred, machines: machines);
+        compilation = ValidateCore(
+            definition,
+            neighbours: null,
+            validateAdjacencyClaims: false,
+            retainCompilation: true,
+            throwOnErrors: false,
+            errorSink: errors,
+            deferredSink: deferred,
+            machines: machines
+        );
 
         if (errors.Count != before) {
             compilation = null;
@@ -2199,16 +2342,19 @@ public static partial class WorldDefinitionValidator {
         }
         return true;
     }
-
     /// <summary>Validates local structure and machine admission using this deployment's catalog.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <param name="machines">The selected machine vocabulary.</param>
     /// <param name="reason">The collapsed refusal, or an empty string.</param>
     /// <returns>Whether the candidate is admitted.</returns>
     public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog machines, out string reason) {
-        return TryValidateLocally(definition, machines, out reason, out _);
+        return TryValidateLocally(
+            compilation: out _,
+            definition: definition,
+            machines: machines,
+            reason: out reason
+        );
     }
-
     /// <summary>Validates local structure and machine admission, retaining the validated programs.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <param name="machines">The selected machine vocabulary.</param>
@@ -2218,8 +2364,18 @@ public static partial class WorldDefinitionValidator {
     public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog machines, out string reason, out WorldRuleCompilation? compilation) {
         ArgumentNullException.ThrowIfNull(machines);
         var errors = new List<string>();
-        var valid = TryValidateLocally(definition, machines, errors, deferred: null, out compilation);
-        reason = string.Join(" ", errors);
+        var valid = TryValidateLocally(
+            definition,
+            machines,
+            errors,
+            deferred: null,
+            out compilation
+        );
+
+        reason = string.Join(
+            separator: " ",
+            values: errors
+        );
         return valid;
     }
 
@@ -2229,8 +2385,8 @@ public static partial class WorldDefinitionValidator {
             compilation = ValidateCore(
                 definition: definition,
                 neighbours: null,
-                validateAdjacencyClaims: false,
-                retainCompilation: retainCompilation
+                retainCompilation: retainCompilation,
+                validateAdjacencyClaims: false
             );
             reason = string.Empty;
 
@@ -2241,6 +2397,7 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
     }
+
     /// <summary>Determines whether <paramref name="motion"/> supplies every tuning facet <paramref name="program"/>'s
     /// selected operations read — the one check <see cref="ValidateMotionRow"/> (at boot) and the runtime
     /// body-motion-program switch (the <c>body.motion</c> door) share, so a document-legal kit can never

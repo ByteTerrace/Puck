@@ -13,7 +13,6 @@ public enum NavigationKind : byte {
     /// <summary>A 3D grid constrained to one live fluid-medium field.</summary>
     Medium,
 }
-
 /// <summary>The neighbour set used by a volume navigation domain. Mirrors the authored document's own connectivity
 /// vocabulary one level up the seam.</summary>
 public enum NavigationConnectivity : byte {
@@ -24,7 +23,6 @@ public enum NavigationConnectivity : byte {
     /// <summary>All 26 neighbours, including three-axis diagonals.</summary>
     Full,
 }
-
 /// <summary>Bounds one domain's reusable destination trees and their aggregate expansion work — a plain mirror of
 /// an authored sharing policy the kernel itself never parses.</summary>
 /// <param name="GoalCapacity">Resident destination-cell trees. A full cache with pending work refuses another
@@ -34,7 +32,6 @@ public enum NavigationConnectivity : byte {
 /// cell; the independent A* <see cref="NavigationDomainInput.MaxExpandedNodes"/> bound does not truncate a shared
 /// tree.</param>
 public sealed record NavigationSharing(int GoalCapacity, int ExpandedNodesPerTick);
-
 /// <summary>One finite navigation grid's fixed-point tuning, compiled once at a host's document boundary and handed
 /// to the kernel as plain data — the kernel parses no document, so every field here is already in the kernel's own
 /// units and vocabulary.</summary>
@@ -81,7 +78,6 @@ public readonly record struct NavigationDomainInput(
     NavigationSharing? Shared,
     FixedQ4816 YawRadians = default
 );
-
 /// <summary>Representation ceilings a host names when constructing a <see cref="NavigationRuntime"/>. The kernel
 /// parses no document, so it cannot own these as its own constants; a host's values here must equal whatever its
 /// own authoring ceiling declares, or a checkpoint round-trip and the host's own validator disagree.</summary>
@@ -92,7 +88,6 @@ public readonly record struct NavigationDomainInput(
 /// <param name="MaxConcurrentRequesters">The greatest number of distinct bodies that can hold a pending shared-tree
 /// request at once; bounds a domain's per-tree pending-request list.</param>
 public readonly record struct NavigationCapacity(int MaxSurfaceClearanceSweeps, int MaxMediumSegmentSubdivisions, int MaxConcurrentRequesters);
-
 /// <summary>The live-medium field seam a medium navigation domain reads through. A host's own field-lattice
 /// representation implements this narrow view rather than the kernel depending on that representation directly.</summary>
 public interface INavigationMediumField {

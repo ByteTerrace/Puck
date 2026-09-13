@@ -11,7 +11,15 @@ namespace Puck.Vulkan;
 /// <c>vkCreateRenderPass</c> and <c>vkDestroyRenderPass</c> entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
+    // Color attachments are referenced in COLOR_ATTACHMENT_OPTIMAL during the subpass — structural to being a
+    // color attachment, not a policy choice. Per-attachment initial/final layouts come from the caller's
+    // VkAttachmentDescription.
+    private const uint ColorAttachmentOptimalLayout = 2;
+    private const uint GraphicsPipelineBindPoint = 0;
+    private const uint StructureTypeRenderPassCreateInfo = 38;
+
     private readonly IAllocator m_allocator;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeRenderPassApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -22,12 +30,21 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         m_allocator = allocator;
     }
 
-    // Color attachments are referenced in COLOR_ATTACHMENT_OPTIMAL during the subpass — structural to being a
-    // color attachment, not a policy choice. Per-attachment initial/final layouts come from the caller's
-    // VkAttachmentDescription.
-    private const uint ColorAttachmentOptimalLayout = 2;
-    private const uint GraphicsPipelineBindPoint = 0;
-    private const uint StructureTypeRenderPassCreateInfo = 38;
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateRenderPass"u8
+            )),
+                DestroyRenderPass = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyRenderPass"u8
+            )),
+            }
+        );
+    }
 
     /// <inheritdoc/>
     public VkResult CreateRenderPass(VulkanRenderPassCreateRequest request, out nint renderPassHandle) {
@@ -63,7 +80,8 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         var subpassPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkSubpassDescription>());
         var dependencyPointer = ((dependencyCount > 0)
             ? m_allocator.Alloc(size: (dependencyStride * dependencyCount))
-            : nint.Zero);
+            : nint.Zero
+        );
 
         try {
             for (var index = 0; (index < attachmentCount); index++) {
@@ -146,17 +164,5 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
     private unsafe struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult> CreateRenderPass;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyRenderPass;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateRenderPass"u8)),
-                DestroyRenderPass = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyRenderPass"u8)),
-            }
-        );
     }
 }

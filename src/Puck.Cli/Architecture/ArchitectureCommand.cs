@@ -22,12 +22,41 @@ internal static class ArchitectureCommand {
     private const string PresentationLayer = "Presentation";
     private const string ProjectMapRelativePath = "docs/project-map.md";
 
+    /// <summary>Emits one layering row, wrapping its members under a hanging indent past 79 columns.</summary>
+    private static void AppendRow(string label, string[] members, StringBuilder output, int width) {
+        var line = new StringBuilder(value: label.PadRight(totalWidth: width));
+        var first = true;
+
+        foreach (var member in members) {
+            if (
+                !first &&
+                (((line.Length + 2) + member.Length) > 79)
+            ) {
+                _ = output.AppendLine(value: line.ToString().TrimEnd());
+                _ = line.Clear().Append(value: new string(
+                    c: ' ',
+                    count: width
+                ));
+                first = true;
+            }
+
+            _ = line.Append(value: (first
+                ? member
+                : $"  {member}"));
+            first = false;
+        }
+
+        _ = output.AppendLine(value: line.ToString().TrimEnd());
+    }
     /// <summary>
     /// Compares the generated layering block with the first <c>```text</c> fence under the Layering heading of
     /// docs/project-map.md and returns the exit code: 0 when they match, 1 on drift or a missing block.
     /// </summary>
     private static int CheckProjectMap(string generated, string repositoryRoot) {
-        var path = Path.Combine(path1: repositoryRoot, path2: ProjectMapRelativePath);
+        var path = Path.Combine(
+            path1: repositoryRoot,
+            path2: ProjectMapRelativePath
+        );
 
         if (!File.Exists(path: path)) {
             Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} is missing.");
@@ -36,9 +65,26 @@ internal static class ArchitectureCommand {
         }
 
         var lines = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
-        var heading = Array.IndexOf(array: lines, value: LayeringHeading);
-        var open = ((heading < 0) ? -1 : Array.IndexOf(array: lines, startIndex: heading, value: LayeringFenceOpen));
-        var close = ((open < 0) ? -1 : Array.IndexOf(array: lines, startIndex: (open + 1), value: LayeringFenceClose));
+        var heading = Array.IndexOf(
+            array: lines,
+            value: LayeringHeading
+        );
+        var open = ((heading < 0)
+            ? -1
+            : Array.IndexOf(
+                array: lines,
+                startIndex: heading,
+                value: LayeringFenceOpen
+            )
+        );
+        var close = ((open < 0)
+            ? -1
+            : Array.IndexOf(
+                array: lines,
+                startIndex: (open + 1),
+                value: LayeringFenceClose
+            )
+        );
 
         if (close < 0) {
             Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} has no `{LayeringFenceOpen}` block under `{LayeringHeading}`; paste the output of `puck architecture --map` there.");
@@ -48,13 +94,26 @@ internal static class ArchitectureCommand {
 
         var onDisk = lines[(open + 1)..close];
         var expected = generated.ReplaceLineEndings(replacementText: "\n").TrimEnd(trimChar: '\n').Split(separator: '\n');
-        var count = Math.Max(val1: onDisk.Length, val2: expected.Length);
+        var count = Math.Max(
+            val1: onDisk.Length,
+            val2: expected.Length
+        );
 
         for (var index = 0; (index < count); index++) {
-            var onDiskLine = ((index < onDisk.Length) ? onDisk[index] : "(end of block)");
-            var expectedLine = ((index < expected.Length) ? expected[index] : "(end of block)");
+            var onDiskLine = ((index < onDisk.Length)
+                ? onDisk[index]
+                : "(end of block)"
+            );
+            var expectedLine = ((index < expected.Length)
+                ? expected[index]
+                : "(end of block)"
+            );
 
-            if (string.Equals(a: onDiskLine, b: expectedLine, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: onDiskLine,
+                b: expectedLine,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 continue;
             }
 
@@ -69,85 +128,23 @@ internal static class ArchitectureCommand {
 
         return 0;
     }
-
-    public static Command Create() {
-        var configurationOption = new Option<string>(name: "--configuration") {
-            DefaultValueFactory = static _ => "Release",
-            Description = "Which build configuration's assemblies to read for the friend-set comparison.",
-        };
-        var mapOption = new Option<bool>(name: "--map") {
-            Description = "Print only the layering block, generated from each project's own <PuckLayer> declaration, for docs/project-map.md.",
-        };
-        var checkOption = new Option<bool>(name: "--check") {
-            Description = $"Compare the generated layering block with the one checked in under {ProjectMapRelativePath}; exit 1 on drift.",
-        };
-        var command = new Command(description: $"""
-            Report on the repository's project-layering policy.
-
-            The build-time gate is the authority; this verb explains it. Policy lives in
-            build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
-            --map prints the layering block for {ProjectMapRelativePath}; --check fails when the
-            checked-in block no longer matches the declarations.
-            """, name: "architecture") { configurationOption, mapOption, checkOption };
-
-        command.SetAction(action: parseResult => Run(
-            check: parseResult.GetValue(option: checkOption),
-            configuration: parseResult.GetRequiredValue(option: configurationOption),
-            map: parseResult.GetValue(option: mapOption)));
-
-        return command;
-    }
-
-    private static int Run(bool check, string configuration, bool map) {
-        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
+    private static bool ConditionalReferenceIn(string file) {
+        foreach (var line in File.ReadLines(path: file)) {
+            if (
+                line.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "<ProjectReference"
+            ) &&
+                line.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "Condition="
+            )
+            ) {
+                return true;
+            }
         }
 
-        var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
-
-        if (map) {
-            Console.Out.Write(value: RenderLayeringBlock(model: model));
-
-            return 0;
-        }
-
-        if (check) {
-            return CheckProjectMap(generated: RenderLayeringBlock(model: model), repositoryRoot: repositoryRoot);
-        }
-
-        var failures = new List<string>();
-        var output = new StringBuilder();
-
-        ReportDeclarations(failures: failures, model: model, output: output);
-        ReportLayerGraph(failures: failures, model: model, output: output);
-        ReportBackendQuarantine(failures: failures, model: model, output: output);
-        ReportProfiles(failures: failures, model: model, output: output);
-        ReportFriends(configuration: configuration, failures: failures, model: model, output: output);
-        ReportConfigurationSensitivity(model: model, output: output);
-
-        Console.Out.Write(value: output.ToString());
-
-        if (failures.Count == 0) {
-            // NOT the gate, and the line says so. The enforcement is PuckArchitectureGate, which runs in every
-            // in-scope project's build against the RESOLVED reference set; this verb reads csproj declarations and
-            // closes over @(ProjectReference). The difference is not cosmetic: a Puck assembly arriving by a path no
-            // ProjectReference declares is exactly what PUCKARCH006 exists to catch, and is exactly what this verb
-            // cannot see. A green line here must never be reported as the architecture holding.
-            Console.Out.WriteLine(value: $"architecture: {model.Projects.Count} projects, every declared check passed.");
-            Console.Out.WriteLine(value: "  This is a REPORT over declared references, not the gate. The gate is PuckArchitectureGate,");
-            Console.Out.WriteLine(value: "  which runs in each project's build over the RESOLVED reference set and catches edges that");
-            Console.Out.WriteLine(value: "  arrive by paths no ProjectReference declares. Build the solution to enforce.");
-
-            return 0;
-        }
-
-        Console.Error.WriteLine(value: $"architecture: {failures.Count} failing check(s).");
-
-        foreach (var failure in failures) {
-            Console.Error.WriteLine(value: $"  {failure}");
-        }
-
-        return 1;
+        return false;
     }
     /// <summary>
     /// The layering block for docs/project-map.md, GENERATED from each project's own declaration.
@@ -164,62 +161,75 @@ internal static class ArchitectureCommand {
 
         foreach (var layer in model.Layers) {
             var members = model.Projects.Values
-                .Where(predicate: p => string.Equals(a: p.Layer, b: layer, comparisonType: StringComparison.OrdinalIgnoreCase))
+                .Where(predicate: p => string.Equals(
+                a: p.Layer,
+                b: layer,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ))
                 .Select(selector: p => p.Name)
-                .OrderBy(keySelector: n => n, comparer: StringComparer.Ordinal)
+                .OrderBy(
+                keySelector: n => n,
+                comparer: StringComparer.Ordinal
+            )
                 .ToArray();
 
             if (members.Length == 0) {
                 continue;
             }
 
-            AppendRow(label: layer, members: members, output: output, width: width);
+            AppendRow(
+                label: layer,
+                members: members,
+                output: output,
+                width: width
+            );
         }
 
         foreach (var kind in model.Kinds.Where(predicate: k => !k.Value).Select(selector: k => k.Key)) {
             var members = model.Projects.Values
-                .Where(predicate: p => string.Equals(a: p.Kind, b: kind, comparisonType: StringComparison.OrdinalIgnoreCase))
+                .Where(predicate: p => string.Equals(
+                a: p.Kind,
+                b: kind,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ))
                 .Select(selector: p => p.Name)
-                .OrderBy(keySelector: n => n, comparer: StringComparer.Ordinal)
+                .OrderBy(
+                keySelector: n => n,
+                comparer: StringComparer.Ordinal
+            )
                 .ToArray();
 
             if (members.Length == 0) {
                 continue;
             }
 
-            AppendRow(label: $"({kind})", members: members, output: output, width: width);
+            AppendRow(
+                label: $"({kind})",
+                members: members,
+                output: output,
+                width: width
+            );
         }
 
         return output.ToString();
-    }
-    /// <summary>Emits one layering row, wrapping its members under a hanging indent past 79 columns.</summary>
-    private static void AppendRow(string label, string[] members, StringBuilder output, int width) {
-        var line = new StringBuilder(value: label.PadRight(totalWidth: width));
-        var first = true;
-
-        foreach (var member in members) {
-            if (!first && (((line.Length + 2) + member.Length) > 79)) {
-                _ = output.AppendLine(value: line.ToString().TrimEnd());
-                _ = line.Clear().Append(value: new string(c: ' ', count: width));
-                first = true;
-            }
-
-            _ = line.Append(value: (first ? member : $"  {member}"));
-            first = false;
-        }
-
-        _ = output.AppendLine(value: line.ToString().TrimEnd());
     }
     private static void ReportBackendQuarantine(List<string> failures, ArchitectureModel model, StringBuilder output) {
         _ = output.AppendLine(value: "## Backend quarantine").AppendLine();
 
         var backends = model.Projects.Values
-            .Where(predicate: p => string.Equals(a: p.Layer, b: BackendsLayer, comparisonType: StringComparison.OrdinalIgnoreCase))
+            .Where(predicate: p => string.Equals(
+            a: p.Layer,
+            b: BackendsLayer,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ))
             .Select(selector: p => p.Name)
             .ToHashSet(comparer: StringComparer.OrdinalIgnoreCase);
         var holders = 0;
 
-        foreach (var project in model.Projects.Values.OrderBy(keySelector: p => p.Name, comparer: StringComparer.Ordinal)) {
+        foreach (var project in model.Projects.Values.OrderBy(
+            keySelector: p => p.Name,
+            comparer: StringComparer.Ordinal
+        )) {
             var held = model.Closure(name: project.Name).Where(predicate: c => backends.Contains(item: c)).ToArray();
 
             if (held.Length == 0) {
@@ -228,19 +238,35 @@ internal static class ArchitectureCommand {
 
             ++holders;
 
-            var terminal = (model.Kinds.TryGetValue(key: project.Kind, value: out var ranked) && !ranked);
-            var introduced = held.Where(predicate: h => project.Edges.Contains(value: h, comparer: StringComparer.OrdinalIgnoreCase)).ToArray();
+            var terminal = (model.Kinds.TryGetValue(
+                key: project.Kind,
+                value: out var ranked
+            ) && !ranked);
+            var introduced = held.Where(predicate: h => project.Edges.Contains(
+                value: h,
+                comparer: StringComparer.OrdinalIgnoreCase
+            )).ToArray();
             var permission =
-                (((project.Layer == PresentationLayer) || (project.Layer == CompositionRootsLayer)) ? $"permitted: {project.Layer}"
-                : (model.BackendExceptions.ContainsKey(key: project.Name) ? "permitted: NAMED EXCEPTION"
-                : ((terminal && (introduced.Length == 0)) ? $"permitted: terminal kind ({project.Kind}), inherits and introduces nothing"
-                : "NOT PERMITTED")));
+                (((project.Layer == PresentationLayer) || (project.Layer == CompositionRootsLayer))
+                ? $"permitted: {project.Layer}"
+                : (model.BackendExceptions.ContainsKey(key: project.Name)
+                    ? "permitted: NAMED EXCEPTION"
+                    : ((terminal && (introduced.Length == 0))
+                        ? $"permitted: terminal kind ({project.Kind}), inherits and introduces nothing"
+                        : "NOT PERMITTED"
+            )));
 
             if (permission == "NOT PERMITTED") {
-                failures.Add(item: $"{project.Name} holds {string.Join(separator: ", ", values: held)} and is not permitted to.");
+                failures.Add(item: $"{project.Name} holds {string.Join(
+                    separator: ", ",
+                    values: held
+                )} and is not permitted to.");
             }
 
-            _ = output.AppendLine(value: $"  {project.Name,-30} {string.Join(separator: ", ", values: held),-28} {permission}");
+            _ = output.AppendLine(value: $"  {project.Name,-30} {string.Join(
+                separator: ", ",
+                values: held
+            ),-28} {permission}");
         }
 
         _ = output.AppendLine();
@@ -253,7 +279,11 @@ internal static class ArchitectureCommand {
         // The absent finding is the load-bearing half, so it is reported rather than left as a silence:
         // empty-because-the-rule-was-too-wide and empty-because-the-graph-is-clean read identically.
         var engineHolders = model.Projects.Values
-            .Where(predicate: p => string.Equals(a: p.Layer, b: "Engine services", comparisonType: StringComparison.OrdinalIgnoreCase))
+            .Where(predicate: p => string.Equals(
+            a: p.Layer,
+            b: "Engine services",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ))
             .Count(predicate: p => model.Closure(name: p.Name).Any(predicate: c => backends.Contains(item: c)));
 
         _ = output.AppendLine(value: $"  Engine-services projects reaching a backend: {engineHolders}.").AppendLine();
@@ -265,7 +295,10 @@ internal static class ArchitectureCommand {
         // proves less than it appears. Rather than print that caveat unconditionally, MEASURE it: a caveat
         // that is always emitted teaches a reader to skip it.
         var conditional = model.Projects.Values
-            .Where(predicate: p => (File.ReadAllText(path: p.File).Contains(comparisonType: StringComparison.Ordinal, value: "<ProjectReference") && ConditionalReferenceIn(file: p.File)))
+            .Where(predicate: p => (File.ReadAllText(path: p.File).Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: "<ProjectReference"
+        ) && ConditionalReferenceIn(file: p.File)))
             .Select(selector: p => p.Name)
             .ToArray();
 
@@ -282,18 +315,36 @@ internal static class ArchitectureCommand {
             return;
         }
 
-        _ = output.AppendLine(value: $"  CONDITIONAL project references in: {string.Join(separator: ", ", values: conditional)}.");
+        _ = output.AppendLine(value: $"  CONDITIONAL project references in: {string.Join(
+            separator: ", ",
+            values: conditional
+        )}.");
         _ = output.AppendLine(value: "  This pass reflects ONE configuration. Those projects' graphs may differ in another.").AppendLine();
     }
     private static void ReportDeclarations(List<string> failures, ArchitectureModel model, StringBuilder output) {
         _ = output.AppendLine(value: "## Declarations").AppendLine();
 
-        foreach (var project in model.Projects.Values.OrderBy(keySelector: p => p.Name, comparer: StringComparer.Ordinal)) {
-            if (!model.Kinds.TryGetValue(key: project.Kind, value: out var ranked)) {
+        foreach (var project in model.Projects.Values.OrderBy(
+            keySelector: p => p.Name,
+            comparer: StringComparer.Ordinal
+        )) {
+            if (!model.Kinds.TryGetValue(
+                key: project.Kind,
+                value: out var ranked
+            )) {
                 failures.Add(item: $"{project.Name} declares no valid <PuckKind> (found '{project.Kind}').");
-            } else if (ranked && !model.Layers.Contains(value: project.Layer, comparer: StringComparer.OrdinalIgnoreCase)) {
+            } else if (
+                ranked &&
+                !model.Layers.Contains(
+                value: project.Layer,
+                comparer: StringComparer.OrdinalIgnoreCase
+            )
+            ) {
                 failures.Add(item: $"{project.Name} is a ranked kind and declares no valid <PuckLayer> (found '{project.Layer}').");
-            } else if (!ranked && (project.Layer.Length != 0)) {
+            } else if (
+                !ranked &&
+                (project.Layer.Length != 0)
+            ) {
                 failures.Add(item: $"{project.Name} is a terminal kind and must not declare a <PuckLayer>.");
             }
 
@@ -307,13 +358,26 @@ internal static class ArchitectureCommand {
 
         var unread = new List<string>();
 
-        foreach (var project in model.Projects.Values.OrderBy(keySelector: p => p.Name, comparer: StringComparer.Ordinal)) {
+        foreach (var project in model.Projects.Values.OrderBy(
+            keySelector: p => p.Name,
+            comparer: StringComparer.Ordinal
+        )) {
             var assembly = Directory.EnumerateFiles(
                 path: Path.GetDirectoryName(path: project.File)!,
                 searchPattern: $"{project.Name}.dll",
-                searchOption: SearchOption.AllDirectories)
-                .FirstOrDefault(predicate: p => p.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}{configuration}{Path.DirectorySeparatorChar}"));
-            var declared = (model.Friends.TryGetValue(key: project.Name, value: out var listed) ? listed : []);
+                searchOption: SearchOption.AllDirectories
+            )
+                .FirstOrDefault(predicate: p => p.Contains(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}{configuration}{Path.DirectorySeparatorChar}"
+            ));
+            var declared = (model.Friends.TryGetValue(
+                key: project.Name,
+                value: out var listed
+            )
+                ? listed
+                : []
+            );
 
             if (assembly is null) {
                 // An unread assembly is NOT a pass. Reporting it as one would make "no findings" mean
@@ -327,21 +391,45 @@ internal static class ArchitectureCommand {
 
             var actual = ArchitectureModel.ReadFriendsFromAssembly(assemblyPath: assembly);
 
-            if (actual.SequenceEqual(second: declared.OrderBy(keySelector: f => f, comparer: StringComparer.OrdinalIgnoreCase), comparer: StringComparer.OrdinalIgnoreCase)) {
+            if (actual.SequenceEqual(
+                second: declared.OrderBy(
+                    keySelector: f => f,
+                    comparer: StringComparer.OrdinalIgnoreCase
+                ),
+                comparer: StringComparer.OrdinalIgnoreCase
+            )) {
                 if (actual.Count != 0) {
-                    _ = output.AppendLine(value: $"  {project.Name,-30} {string.Join(separator: ", ", values: actual)}");
+                    _ = output.AppendLine(value: $"  {project.Name,-30} {string.Join(
+                        separator: ", ",
+                        values: actual
+                    )}");
                 }
 
                 continue;
             }
 
-            failures.Add(item: $"{project.Name} friend set differs — declared [{string.Join(separator: ", ", values: declared)}], compiled [{string.Join(separator: ", ", values: actual)}].");
-            _ = output.AppendLine(value: $"  {project.Name,-30} MISMATCH: compiled [{string.Join(separator: ", ", values: actual)}]");
+            failures.Add(item: $"{project.Name} friend set differs — declared [{string.Join(
+                separator: ", ",
+                values: declared
+            )}], compiled [{string.Join(
+                separator: ", ",
+                values: actual
+            )}].");
+            _ = output.AppendLine(value: $"  {project.Name,-30} MISMATCH: compiled [{string.Join(
+                separator: ", ",
+                values: actual
+            )}]");
         }
 
         if (unread.Count != 0) {
-            _ = output.AppendLine(value: $"  NOT CHECKED (no {configuration} assembly on disk): {string.Join(separator: ", ", values: unread)}");
-            failures.Add(item: $"friend sets unverified for {string.Join(separator: ", ", values: unread)} — build the {configuration} configuration first; an unread assembly is not a passing one.");
+            _ = output.AppendLine(value: $"  NOT CHECKED (no {configuration} assembly on disk): {string.Join(
+                separator: ", ",
+                values: unread
+            )}");
+            failures.Add(item: $"friend sets unverified for {string.Join(
+                separator: ", ",
+                values: unread
+            )} — build the {configuration} configuration first; an unread assembly is not a passing one.");
         }
 
         _ = output.AppendLine();
@@ -351,11 +439,17 @@ internal static class ArchitectureCommand {
 
         var upward = 0;
 
-        foreach (var project in model.Projects.Values.OrderBy(keySelector: p => p.Name, comparer: StringComparer.Ordinal)) {
+        foreach (var project in model.Projects.Values.OrderBy(
+            keySelector: p => p.Name,
+            comparer: StringComparer.Ordinal
+        )) {
             var ownRank = model.RankOf(project: project);
 
             foreach (var edge in model.Closure(name: project.Name)) {
-                if (!model.Projects.TryGetValue(key: edge, value: out var target)) {
+                if (!model.Projects.TryGetValue(
+                    key: edge,
+                    value: out var target
+                )) {
                     continue;
                 }
 
@@ -382,24 +476,142 @@ internal static class ArchitectureCommand {
             }
 
             var actual = model.Closure(name: name);
-            var matches = actual.SequenceEqual(second: expected.OrderBy(keySelector: e => e, comparer: StringComparer.OrdinalIgnoreCase), comparer: StringComparer.OrdinalIgnoreCase);
+            var matches = actual.SequenceEqual(
+                second: expected.OrderBy(
+                    keySelector: e => e,
+                    comparer: StringComparer.OrdinalIgnoreCase
+                ),
+                comparer: StringComparer.OrdinalIgnoreCase
+            );
 
             if (!matches) {
-                failures.Add(item: $"{name} closure [{string.Join(separator: ", ", values: actual)}] does not equal its profile [{string.Join(separator: ", ", values: expected)}].");
+                failures.Add(item: $"{name} closure [{string.Join(
+                    separator: ", ",
+                    values: actual
+                )}] does not equal its profile [{string.Join(
+                    separator: ", ",
+                    values: expected
+                )}].");
             }
 
-            _ = output.AppendLine(value: $"  {name,-30} {(matches ? "equal" : "DIFFERS")}: {string.Join(separator: ", ", values: actual)}");
+            _ = output.AppendLine(value: $"  {name,-30} {(matches
+                ? "equal"
+                : "DIFFERS")}: {string.Join(
+                separator: ", ",
+                values: actual
+            )}");
         }
 
         _ = output.AppendLine();
     }
-    private static bool ConditionalReferenceIn(string file) {
-        foreach (var line in File.ReadLines(path: file)) {
-            if (line.Contains(comparisonType: StringComparison.Ordinal, value: "<ProjectReference") && line.Contains(comparisonType: StringComparison.Ordinal, value: "Condition=")) {
-                return true;
-            }
+    private static int Run(bool check, string configuration, bool map) {
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+            return 2;
         }
 
-        return false;
+        var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
+
+        if (map) {
+            Console.Out.Write(value: RenderLayeringBlock(model: model));
+
+            return 0;
+        }
+
+        if (check) {
+            return CheckProjectMap(
+                generated: RenderLayeringBlock(model: model),
+                repositoryRoot: repositoryRoot
+            );
+        }
+
+        var failures = new List<string>();
+        var output = new StringBuilder();
+
+        ReportDeclarations(
+            failures: failures,
+            model: model,
+            output: output
+        );
+        ReportLayerGraph(
+            failures: failures,
+            model: model,
+            output: output
+        );
+        ReportBackendQuarantine(
+            failures: failures,
+            model: model,
+            output: output
+        );
+        ReportProfiles(
+            failures: failures,
+            model: model,
+            output: output
+        );
+        ReportFriends(
+            configuration: configuration,
+            failures: failures,
+            model: model,
+            output: output
+        );
+        ReportConfigurationSensitivity(
+            model: model,
+            output: output
+        );
+
+        Console.Out.Write(value: output.ToString());
+
+        if (failures.Count == 0) {
+            // NOT the gate, and the line says so. The enforcement is PuckArchitectureGate, which runs in every
+            // in-scope project's build against the RESOLVED reference set; this verb reads csproj declarations and
+            // closes over @(ProjectReference). The difference is not cosmetic: a Puck assembly arriving by a path no
+            // ProjectReference declares is exactly what PUCKARCH006 exists to catch, and is exactly what this verb
+            // cannot see. A green line here must never be reported as the architecture holding.
+            Console.Out.WriteLine(value: $"architecture: {model.Projects.Count} projects, every declared check passed.");
+            Console.Out.WriteLine(value: "  This is a REPORT over declared references, not the gate. The gate is PuckArchitectureGate,");
+            Console.Out.WriteLine(value: "  which runs in each project's build over the RESOLVED reference set and catches edges that");
+            Console.Out.WriteLine(value: "  arrive by paths no ProjectReference declares. Build the solution to enforce.");
+
+            return 0;
+        }
+
+        Console.Error.WriteLine(value: $"architecture: {failures.Count} failing check(s).");
+
+        foreach (var failure in failures) {
+            Console.Error.WriteLine(value: $"  {failure}");
+        }
+
+        return 1;
+    }
+
+    public static Command Create() {
+        var configurationOption = new Option<string>(name: "--configuration") {
+            DefaultValueFactory = static _ => "Release",
+            Description = "Which build configuration's assemblies to read for the friend-set comparison.",
+        };
+        var mapOption = new Option<bool>(name: "--map") {
+            Description = "Print only the layering block, generated from each project's own <PuckLayer> declaration, for docs/project-map.md.",
+        };
+        var checkOption = new Option<bool>(name: "--check") {
+            Description = $"Compare the generated layering block with the one checked in under {ProjectMapRelativePath}; exit 1 on drift.",
+        };
+        var command = new Command(
+            description: $"""
+            Report on the repository's project-layering policy.
+
+            The build-time gate is the authority; this verb explains it. Policy lives in
+            build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
+            --map prints the layering block for {ProjectMapRelativePath}; --check fails when the
+            checked-in block no longer matches the declarations.
+            """,
+            name: "architecture"
+        ) { configurationOption, mapOption, checkOption };
+
+        command.SetAction(action: parseResult => Run(
+            check: parseResult.GetValue(option: checkOption),
+            configuration: parseResult.GetRequiredValue(option: configurationOption),
+            map: parseResult.GetValue(option: mapOption)
+        ));
+
+        return command;
     }
 }

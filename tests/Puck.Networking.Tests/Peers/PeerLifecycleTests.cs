@@ -139,51 +139,6 @@ public sealed class PeerLifecycleTests {
         );
     }
     [Fact]
-    public async Task PeerDisposeAsync_WhileConnectionsAreStillBeingAccepted_ReturnsOnlyOnceEveryAcceptedConnectionIsDisposed() {
-        using var deadline = Laws.SocketDeadline();
-
-        var transport = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials"));
-        var peer = new Peer(
-            identity: PeerIdentity.Create(),
-            transport: transport
-        );
-
-        await peer.ListenAsync(
-            ct: deadline.Token,
-            endpoint: PeerTestSupport.Loopback()
-        );
-
-        // Connections keep arriving while the peer is disposed, so the accept loop is mid-accept — a connection
-        // taken but not yet counted as a handshake — at some point close to the disposal. Each one parks in its
-        // handshake (no control stream ever opens), and disposal must not return while any it took is live.
-        var offering = Task.Run(
-            cancellationToken: deadline.Token,
-            function: async () => {
-                for (var i = 0; (i < ConnectionsOfferedDuringDisposal); i++) {
-                    transport.Accept(connection: new SilentPeerConnection());
-
-                    await Task.Yield();
-                }
-            }
-        );
-
-        await Task.Yield();
-        await peer.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
-        await offering.WaitAsync(cancellationToken: deadline.Token);
-
-        Assert.Null(@object: peer.ListenerFault);
-
-        // Nothing here waits: a taken connection the drain gate missed would be disposed only after this assertion,
-        // by a handshake still running against a disposed peer.
-        Assert.All(
-            action: static connection => Assert.True(
-                condition: Assert.IsType<SilentPeerConnection>(@object: connection).IsDisposed,
-                userMessage: "the peer's disposal returned while a connection its accept loop took was still live"
-            ),
-            collection: transport.Taken
-        );
-    }
-    [Fact]
     public async Task PeerDisposeAsync_WhileADialIsInFlight_UnwindsTheDialAsDisposed_BeforeReturning() {
         using var deadline = Laws.SocketDeadline();
 
@@ -256,6 +211,51 @@ public sealed class PeerLifecycleTests {
             actual: linkAtoB.CloseFailure.Refusal
         );
         Assert.Empty(collection: peerA.Links);
+    }
+    [Fact]
+    public async Task PeerDisposeAsync_WhileConnectionsAreStillBeingAccepted_ReturnsOnlyOnceEveryAcceptedConnectionIsDisposed() {
+        using var deadline = Laws.SocketDeadline();
+
+        var transport = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials"));
+        var peer = new Peer(
+            identity: PeerIdentity.Create(),
+            transport: transport
+        );
+
+        await peer.ListenAsync(
+            ct: deadline.Token,
+            endpoint: PeerTestSupport.Loopback()
+        );
+
+        // Connections keep arriving while the peer is disposed, so the accept loop is mid-accept — a connection
+        // taken but not yet counted as a handshake — at some point close to the disposal. Each one parks in its
+        // handshake (no control stream ever opens), and disposal must not return while any it took is live.
+        var offering = Task.Run(
+            cancellationToken: deadline.Token,
+            function: async () => {
+                for (var i = 0; (i < ConnectionsOfferedDuringDisposal); i++) {
+                    transport.Accept(connection: new SilentPeerConnection());
+
+                    await Task.Yield();
+                }
+            }
+        );
+
+        await Task.Yield();
+        await peer.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
+        await offering.WaitAsync(cancellationToken: deadline.Token);
+
+        Assert.Null(@object: peer.ListenerFault);
+
+        // Nothing here waits: a taken connection the drain gate missed would be disposed only after this assertion,
+        // by a handshake still running against a disposed peer.
+        Assert.All(
+            action: static connection => Assert.True(
+                condition: Assert.IsType<SilentPeerConnection>(@object: connection).IsDisposed,
+                userMessage: "the peer's disposal returned while a connection its accept loop took was still live"
+            ),
+            collection: transport.Taken
+        );
     }
     [Fact]
     public async Task PeerDisposeAsync_WhileTheEventsConsumerNeverReads_CompletesWithinTheSocketBudget_AndCloseFailureIsDisposed() {

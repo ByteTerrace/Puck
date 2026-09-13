@@ -49,10 +49,25 @@ internal sealed class HostRow : IDisposable {
         var bytes = WorldDefinitionSerialization.Serialize(definition: (definition ?? Fixtures.BuildDocument()));
         var doc = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
         var population = new WorldPopulation(definition: doc);
-        var machines = new WorldMachineHost(screens: doc.Screens, engines: []);
+        var machines = new WorldMachineHost(
+            screens: doc.Screens,
+            engines: []
+        );
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-host-row-tests-{name}-").FullName;
-        var profiles = new WorldOwnedWorlds(template: doc, directory: stateDirectory, machineId: Guid.NewGuid());
-        var server = new WorldServer(definition: doc, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines, instanceIdentity: name, narrationSink: new WorldConsoleNarrationSink());
+        var profiles = new WorldOwnedWorlds(
+            template: doc,
+            directory: stateDirectory,
+            machineId: Guid.NewGuid()
+        );
+        var server = new WorldServer(
+            definition: doc,
+            population: population,
+            profiles: profiles,
+            envelope: new WorldRenderEnvelope(),
+            machines: machines,
+            instanceIdentity: name,
+            narrationSink: new WorldConsoleNarrationSink()
+        );
         var link = new LoopbackTransport(server: server);
         var instance = new WorldInstance(
             name: name,
@@ -60,11 +75,35 @@ internal sealed class HostRow : IDisposable {
             server: server,
             ownedMachines: machines,
             link: link,
-            federation: new WorldFederationIdentity(Authenticator: new InertAuthenticator(), Subject: server.AuthorityIdentity),
+            federation: new WorldFederationIdentity(
+                Authenticator: new InertAuthenticator(),
+                Subject: server.AuthorityIdentity
+            ),
             documentOrigin: new WorldFileOrigin(resolvedPath: name)
         );
 
-        return new HostRow(instance: instance, machines: machines, stateDirectory: stateDirectory);
+        return new HostRow(
+            instance: instance,
+            machines: machines,
+            stateDirectory: stateDirectory
+        );
+    }
+    /// <inheritdoc/>
+    public void Dispose() {
+        Instance.Dispose();
+
+        if (m_stateDirectory.Length == 0) {
+            return;
+        }
+
+        try {
+            Directory.Delete(
+                path: m_stateDirectory,
+                recursive: true
+            );
+        } catch (IOException) {
+            // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the test itself.
+        }
     }
     /// <summary>Wraps an ALREADY-BUILT server (a checkpoint restore's own <see cref="WorldServer.FromCheckpoint"/>
     /// output) into a row this suite's host can admit and drive — the reciprocal of <see cref="Build"/> for the
@@ -82,24 +121,17 @@ internal sealed class HostRow : IDisposable {
             server: server,
             ownedMachines: machines,
             link: link,
-            federation: new WorldFederationIdentity(Authenticator: new InertAuthenticator(), Subject: server.AuthorityIdentity),
+            federation: new WorldFederationIdentity(
+                Authenticator: new InertAuthenticator(),
+                Subject: server.AuthorityIdentity
+            ),
             documentOrigin: new WorldFileOrigin(resolvedPath: name)
         );
 
-        return new HostRow(instance: instance, machines: machines, stateDirectory: string.Empty);
-    }
-    /// <inheritdoc/>
-    public void Dispose() {
-        Instance.Dispose();
-
-        if (m_stateDirectory.Length == 0) {
-            return;
-        }
-
-        try {
-            Directory.Delete(path: m_stateDirectory, recursive: true);
-        } catch (IOException) {
-            // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the test itself.
-        }
+        return new HostRow(
+            instance: instance,
+            machines: machines,
+            stateDirectory: string.Empty
+        );
     }
 }

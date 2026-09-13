@@ -11,7 +11,10 @@ namespace Puck.World;
 public readonly record struct WorldThemeCubicBezier(float X1, float Y1, float X2, float Y2) {
     /// <summary>Gets the inert absence — the identity curve's four zeroed control points.</summary>
     public static WorldThemeCubicBezier Absent { get; } = new(
-        X1: 0f, X2: 0f, Y1: 0f, Y2: 0f
+        X1: 0f,
+        X2: 0f,
+        Y1: 0f,
+        Y2: 0f
     );
 }
 /// <summary>One elevation bloom hue's lit ring + outer halo pair (see <c>Puck.Overlays.DesignTokens.Elevation</c>
@@ -74,12 +77,32 @@ public sealed record WorldThemeColor(
     /// <summary>Gets the inert absence — every surface, line, and text role transparent black; every scrim
     /// transparent.</summary>
     public static WorldThemeColor Absent { get; } = new(
-        Accent: Zero, AccentInk: Zero, AccentLine: Zero, AccentQuiet: Zero,
-        BadgeDark: Zero, BadgeLight: Zero, Danger: Zero, LineHair: Zero, LineInset: Zero,
-        LineSoft: Zero, LineStrong: Zero, Phosphor: Zero, PhosphorCyan: Zero, PhosphorDim: Zero,
-        Positive: Zero, ScrimChip: WorldThemeScrim.Absent, ScrimPanel: WorldThemeScrim.Absent,
-        ScrimStrip: WorldThemeScrim.Absent, SurfaceBase: Zero, SurfaceInset: Zero, SurfacePanel: Zero,
-        SurfaceRaised: Zero, TextDim: Zero, TextMute: Zero, TextPrimary: Zero, Warning: Zero
+        Accent: Zero,
+        AccentInk: Zero,
+        AccentLine: Zero,
+        AccentQuiet: Zero,
+        BadgeDark: Zero,
+        BadgeLight: Zero,
+        Danger: Zero,
+        LineHair: Zero,
+        LineInset: Zero,
+        LineSoft: Zero,
+        LineStrong: Zero,
+        Phosphor: Zero,
+        PhosphorCyan: Zero,
+        PhosphorDim: Zero,
+        Positive: Zero,
+        ScrimChip: WorldThemeScrim.Absent,
+        ScrimPanel: WorldThemeScrim.Absent,
+        ScrimStrip: WorldThemeScrim.Absent,
+        SurfaceBase: Zero,
+        SurfaceInset: Zero,
+        SurfacePanel: Zero,
+        SurfaceRaised: Zero,
+        TextDim: Zero,
+        TextMute: Zero,
+        TextPrimary: Zero,
+        Warning: Zero
     );
 
     private static BindableColor Zero { get; } = new(Raw: "#00000000");
@@ -107,9 +130,22 @@ public sealed record WorldThemeSpace(
 ) {
     /// <summary>Gets the inert absence — every grid step and component height zero.</summary>
     public static WorldThemeSpace Absent { get; } = new(
-        HeightBadge: 0f, HeightBindBar: 0f, HeightChip: 0f, HeightConsoleHead: 0f, HeightModeRow: 0f,
-        HeightPromptRow: 0f, HeightTrackerBar: 0f, HeightTrackerCell: 0f, Space0: 0f, Space1: 0f, Space2: 0f,
-        Space3: 0f, Space4: 0f, Space5: 0f, Space6: 0f, Space8: 0f
+        HeightBadge: 0f,
+        HeightBindBar: 0f,
+        HeightChip: 0f,
+        HeightConsoleHead: 0f,
+        HeightModeRow: 0f,
+        HeightPromptRow: 0f,
+        HeightTrackerBar: 0f,
+        HeightTrackerCell: 0f,
+        Space0: 0f,
+        Space1: 0f,
+        Space2: 0f,
+        Space3: 0f,
+        Space4: 0f,
+        Space5: 0f,
+        Space6: 0f,
+        Space8: 0f
     );
 }
 /// <summary>The theme's 3-step radius scale — the authored twin of <c>Puck.Overlays.DesignTokens.Radius</c>.
@@ -118,7 +154,9 @@ public sealed record WorldThemeSpace(
 public sealed record WorldThemeRadius(float Radius1, float Radius2, float Radius3) {
     /// <summary>Gets the inert absence — every radius step zero.</summary>
     public static WorldThemeRadius Absent { get; } = new(
-        Radius1: 0f, Radius2: 0f, Radius3: 0f
+        Radius1: 0f,
+        Radius2: 0f,
+        Radius3: 0f
     );
 }
 /// <summary>The theme's 5-step type scale — the authored twin of <c>Puck.Overlays.DesignTokens.Type</c>.
@@ -151,10 +189,27 @@ public sealed record WorldThemeType(
 ) {
     /// <summary>Gets the inert absence — every size/line/tracking zero, every weight zero.</summary>
     public static WorldThemeType Absent { get; } = new(
-        BodyLine: 0f, BodySize: 0f, BodyWeight: 0, LabelLine: 0f, LabelSize: 0f, LabelTracking: 0f,
-        LabelWeight: 0, MicroLine: 0f, MicroSize: 0f, MicroTracking: 0f, MicroWeight: 0, MonoBadgeSize: 0f,
-        MonoLine: 0f, MonoReadoutSize: 0f, MonoSize: 0f, MonoTracking: 0f, MonoWeight: 0, TitleLine: 0f,
-        TitleSize: 0f, TitleTracking: 0f, TitleWeight: 0
+        BodyLine: 0f,
+        BodySize: 0f,
+        BodyWeight: 0,
+        LabelLine: 0f,
+        LabelSize: 0f,
+        LabelTracking: 0f,
+        LabelWeight: 0,
+        MicroLine: 0f,
+        MicroSize: 0f,
+        MicroTracking: 0f,
+        MicroWeight: 0,
+        MonoBadgeSize: 0f,
+        MonoLine: 0f,
+        MonoReadoutSize: 0f,
+        MonoSize: 0f,
+        MonoTracking: 0f,
+        MonoWeight: 0,
+        TitleLine: 0f,
+        TitleSize: 0f,
+        TitleTracking: 0f,
+        TitleWeight: 0
     );
 }
 /// <summary>The theme's two-tier elevation recipe — the authored twin of
@@ -201,16 +256,40 @@ public sealed record WorldThemeElevation(
 ) {
     /// <summary>Gets the inert absence — every geometry scalar and alpha zero, every color transparent.</summary>
     public static WorldThemeElevation Absent { get; } = new(
-        BloomAccent: WorldThemeBloomHue.Absent, BloomDanger: WorldThemeBloomHue.Absent,
-        BloomHaloAlpha: Zero, BloomHaloBlur: 0f, BloomHaloSpread: 0f, BloomHeldInsetAlpha: Zero,
-        BloomHeldInsetBlur: 0f, BloomHeldInsetSpread: 0f, BloomNeutral: WorldThemeBloomHue.Absent,
-        BloomNeutralHaloAlpha: Zero, BloomNeutralRingAlpha: Zero, BloomPositive: WorldThemeBloomHue.Absent,
-        BloomRingAlpha: Zero, BloomRingWidth: 0f, BloomWarning: WorldThemeBloomHue.Absent,
-        CatchlightColor: ZeroColor, CatchlightOffsetY: 0f, ChipRestOpacity: 0f, EdgeHairlineWidth: 0f,
-        PressHeldGlowBlur: 0f, PressHeldGlowColor: ZeroColor, PressHeldGlowSpread: 0f, PressHeldShadowBlur: 0f,
-        PressHeldShadowColor: ZeroColor, PressHeldShadowOffsetY: 0f, PressHeldTranslateY: 0f,
-        RingStatusAlpha: 0f, RingStatusWidth: 0f, ShadowSeatBlur: 0f, ShadowSeatColor: ZeroColor,
-        ShadowSeatOffsetY: 0f, ShadowSeatSpread: 0f, ShadowSeatStripColor: ZeroColor, ShadowSeatStripSpread: 0f
+        BloomAccent: WorldThemeBloomHue.Absent,
+        BloomDanger: WorldThemeBloomHue.Absent,
+        BloomHaloAlpha: Zero,
+        BloomHaloBlur: 0f,
+        BloomHaloSpread: 0f,
+        BloomHeldInsetAlpha: Zero,
+        BloomHeldInsetBlur: 0f,
+        BloomHeldInsetSpread: 0f,
+        BloomNeutral: WorldThemeBloomHue.Absent,
+        BloomNeutralHaloAlpha: Zero,
+        BloomNeutralRingAlpha: Zero,
+        BloomPositive: WorldThemeBloomHue.Absent,
+        BloomRingAlpha: Zero,
+        BloomRingWidth: 0f,
+        BloomWarning: WorldThemeBloomHue.Absent,
+        CatchlightColor: ZeroColor,
+        CatchlightOffsetY: 0f,
+        ChipRestOpacity: 0f,
+        EdgeHairlineWidth: 0f,
+        PressHeldGlowBlur: 0f,
+        PressHeldGlowColor: ZeroColor,
+        PressHeldGlowSpread: 0f,
+        PressHeldShadowBlur: 0f,
+        PressHeldShadowColor: ZeroColor,
+        PressHeldShadowOffsetY: 0f,
+        PressHeldTranslateY: 0f,
+        RingStatusAlpha: 0f,
+        RingStatusWidth: 0f,
+        ShadowSeatBlur: 0f,
+        ShadowSeatColor: ZeroColor,
+        ShadowSeatOffsetY: 0f,
+        ShadowSeatSpread: 0f,
+        ShadowSeatStripColor: ZeroColor,
+        ShadowSeatStripSpread: 0f
     );
 
     private static BindableScalar Zero { get; } = new(literal: 0f);
@@ -246,12 +325,28 @@ public sealed record WorldThemeDiegetic(
 ) {
     /// <summary>Gets the inert absence — every color transparent black, every shadow scalar zero.</summary>
     public static WorldThemeDiegetic Absent { get; } = new(
-        BezelEdge: Zero, BezelInner: Zero, BezelOuter: Zero, EmbossFill: Zero, EmbossShadowDropAlpha: 0f,
-        EmbossShadowDropBlur: 0f, EmbossShadowDropOffsetY: 0f, EmbossShadowLitAlpha: 0f,
-        EmbossShadowLitOffsetY: 0f, EngraveFill: Zero, EngraveShadowLipAlpha: 0f, EngraveShadowLipOffsetY: 0f,
-        EngraveShadowRecessAlpha: 0f, EngraveShadowRecessBlur: 0f, EngraveShadowRecessOffsetY: 0f,
-        PhosphorGlowBlur: 0f, PlateBottom: Zero, PlateMid: Zero, PlateStripeColor: Zero, PlateTop: Zero,
-        ScreenWellInner: Zero, ScreenWellOuter: Zero
+        BezelEdge: Zero,
+        BezelInner: Zero,
+        BezelOuter: Zero,
+        EmbossFill: Zero,
+        EmbossShadowDropAlpha: 0f,
+        EmbossShadowDropBlur: 0f,
+        EmbossShadowDropOffsetY: 0f,
+        EmbossShadowLitAlpha: 0f,
+        EmbossShadowLitOffsetY: 0f,
+        EngraveFill: Zero,
+        EngraveShadowLipAlpha: 0f,
+        EngraveShadowLipOffsetY: 0f,
+        EngraveShadowRecessAlpha: 0f,
+        EngraveShadowRecessBlur: 0f,
+        EngraveShadowRecessOffsetY: 0f,
+        PhosphorGlowBlur: 0f,
+        PlateBottom: Zero,
+        PlateMid: Zero,
+        PlateStripeColor: Zero,
+        PlateTop: Zero,
+        ScreenWellInner: Zero,
+        ScreenWellOuter: Zero
     );
 
     private static BindableColor Zero { get; } = new(Raw: "#00000000");
@@ -269,8 +364,12 @@ public sealed record WorldThemeMotion(
 ) {
     /// <summary>Gets the inert absence — every duration zero, both easings the identity curve.</summary>
     public static WorldThemeMotion Absent { get; } = new(
-        CaretBlink: 0f, DurFast: 0f, DurMed: 0f, DurPanel: 0f,
-        EaseOut: WorldThemeCubicBezier.Absent, EaseStd: WorldThemeCubicBezier.Absent
+        CaretBlink: 0f,
+        DurFast: 0f,
+        DurMed: 0f,
+        DurPanel: 0f,
+        EaseOut: WorldThemeCubicBezier.Absent,
+        EaseStd: WorldThemeCubicBezier.Absent
     );
 }
 /// <summary>The theme's procedural icon feel — the authored twin of the non-AA-ramp half of
@@ -324,10 +423,21 @@ public sealed record WorldThemeChrome(
 ) {
     /// <summary>Gets the inert absence — every opacity and every extent zero (no authored theme, no chrome).</summary>
     public static WorldThemeChrome Absent { get; } = new(
-        BarHintAlpha: 0f, BarLabelAlpha: 0f, CursorAlpha: 0f, CursorDotMaxHalf: 0f, CursorDotRatio: 0f,
-        CursorLabelGap: 0f, DimQuietAlpha: 0f, WheelActiveRingAlpha: 0f, WheelActiveRingOffset: 0f,
-        WheelHubDotHalf: 0f, WheelHubLabelGap: 0f, WheelLabelAlpha: 0f, WheelMarkerGapRatio: 0f,
-        WheelMarkerHalf: 0f, WheelRingAlpha: 0f
+        BarHintAlpha: 0f,
+        BarLabelAlpha: 0f,
+        CursorAlpha: 0f,
+        CursorDotMaxHalf: 0f,
+        CursorDotRatio: 0f,
+        CursorLabelGap: 0f,
+        DimQuietAlpha: 0f,
+        WheelActiveRingAlpha: 0f,
+        WheelActiveRingOffset: 0f,
+        WheelHubDotHalf: 0f,
+        WheelHubLabelGap: 0f,
+        WheelLabelAlpha: 0f,
+        WheelMarkerGapRatio: 0f,
+        WheelMarkerHalf: 0f,
+        WheelRingAlpha: 0f
     );
 }
 /// <summary>
@@ -360,9 +470,15 @@ public sealed record WorldThemeSection(
     /// no theme of its own: the standard "Instrument + grafts" recipe is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis.</summary>
     public static WorldThemeSection Absent { get; } = new(
-        Chrome: WorldThemeChrome.Absent, Color: WorldThemeColor.Absent, Diegetic: WorldThemeDiegetic.Absent,
-        Elevation: WorldThemeElevation.Absent, Icon: WorldThemeIcon.Absent, Motion: WorldThemeMotion.Absent,
-        Radius: WorldThemeRadius.Absent, Space: WorldThemeSpace.Absent, Type: WorldThemeType.Absent
+        Chrome: WorldThemeChrome.Absent,
+        Color: WorldThemeColor.Absent,
+        Diegetic: WorldThemeDiegetic.Absent,
+        Elevation: WorldThemeElevation.Absent,
+        Icon: WorldThemeIcon.Absent,
+        Motion: WorldThemeMotion.Absent,
+        Radius: WorldThemeRadius.Absent,
+        Space: WorldThemeSpace.Absent,
+        Type: WorldThemeType.Absent
     );
 }
 /// <summary>The theme's two engine-side perceptual floors — never authored, always enforced. A literal value below

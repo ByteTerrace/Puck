@@ -16,7 +16,7 @@ public sealed partial class WorldServer {
         lock (m_authorityGate) {
             if (m_authorityRetiring) { return; }
             if (m_externalOperationsInFlight != 0) {
-                throw new InvalidOperationException("Authority retirement requires external operations to settle first.");
+                throw new InvalidOperationException(message: "Authority retirement requires external operations to settle first.");
             }
             // No other thread can admit work during this drain. Accepted extension contributions still use
             // the ordinary submission door, so admission closes only after that existing queue has settled.
@@ -30,7 +30,7 @@ public sealed partial class WorldServer {
 
     private void ThrowIfAuthorityRetiring() {
         if (m_authorityRetiring) {
-            throw new InvalidOperationException("The authority activation is retiring; use its current host.");
+            throw new InvalidOperationException(message: "The authority activation is retiring; use its current host.");
         }
     }
 }

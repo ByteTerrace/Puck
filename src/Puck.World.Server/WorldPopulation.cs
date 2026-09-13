@@ -147,9 +147,9 @@ public sealed partial class WorldPopulation {
     /// (<see cref="FieldLattice.Revision"/>). Every term only increases, so an unchanged sum proves none of them
     /// changed since the value was last observed.</summary>
     public ulong ContactFieldVersion => unchecked(
-        m_contactFieldInstallVersion +
-        ((m_contactField as WorldColliderSet)?.AttachedRevision ?? 0UL) +
-        ((ulong)(m_fields?.Revision ?? 0))
+        ((m_contactFieldInstallVersion +
+        ((m_contactField as WorldColliderSet)?.AttachedRevision ?? 0UL)) +
+        ((ulong)(m_fields?.Revision ?? 0)))
     );
     /// <summary>Gets the authored engine-tick idle floor (<c>bodies.sleepAfterTicks</c>) before a non-seat body's
     /// motion program and contact solve stop running — 0 means never sleep.</summary>
@@ -162,6 +162,7 @@ public sealed partial class WorldPopulation {
     public int LocalSeatCount { get; private set; }
 
     private readonly Entry[] m_entries;
+
     // The placement:<id> body-reference token's ordinal table — index-aligned with the document's OWN
     // definition.Placements order (a placement's ordinal IS its position in that list), rebuilt whenever
     // ReconcileInhabitants runs (boot, and every mutation apply) so the tick-path rule read
@@ -169,6 +170,7 @@ public sealed partial class WorldPopulation {
     // placement, the same convention an inactive body already reads as. Derived, never checkpointed — see its own
     // rebuild site.
     private int[] m_placementOrdinalToBody = [];
+
     // Reused broadphase scratch. This used to be four population-sized stackallocs while the table ceiling was
     // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
@@ -177,8 +179,8 @@ public sealed partial class WorldPopulation {
     // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
     // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
     private readonly CarryRelationship[] m_activeCarries;
-    private int m_activeCarryCount;
 
+    private int m_activeCarryCount;
     private IWorldAdjacencySource? m_adjacencies;
     private WorldDefinition? m_adjacencyDefinition;
     // The world contact field derived from the definition's solid geometry and collision tuning. Built by
@@ -198,19 +200,23 @@ public sealed partial class WorldPopulation {
     // geometric facts; every body receives this policy separately so provider composition (including adjacency)
     // never decides how those facts orient simulation state.
     private WorldBodyUpPolicy m_bodyUpPolicy;
+
     // The world's compiled cos(collision.maxSlopeDegrees), handed to every body on the same terms as the frame
     // policy above so a hold and the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
+
     private WorldContactCensus m_contactCensus;
     private IContactField? m_contactField;
     // The compiled population distribution (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
     private FixedWorldDistribution m_distribution;
+
     private WorldBodyContactPolicy m_bodyContactPolicy = WorldBodyContactPolicy.Default;
     // WorldBodyContactPolicy's rigid-specific fields, converted to fixed point/engine ticks once here (Resolve's own
     // recompile) rather than every AdvanceRigid call — the same "authored float, compiled once" split every other
     // per-document tunable in this file already keeps.
     private RigidContactPolicy m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: WorldBodyContactPolicy.Default);
+
     // The document-derived speed ceiling (WorldFacePortalPolicy.SpeedCeiling) a rigid impulse's resulting velocity
     // is refused past — see RigidVelocityCeiling.
     private FixedQ4816 m_rigidVelocityCeiling;
@@ -347,7 +353,7 @@ public sealed partial class WorldPopulation {
                 Kind = ((index < LocalSeatCount)
                 ? PopulationKind.LocalSeat
                 : PopulationKind.NetworkPeer),
-                CatalogRig = WorldLookSource.Catalog.DefaultIndex(index),
+                CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index),
                 Designations = NewDesignations(),
                 ProducerState = new BodyProducerState {
                     AcquiredTarget = -1,
@@ -456,9 +462,9 @@ public sealed partial class WorldPopulation {
         // one slot) and the timed path's outcome (effective hold + which cap decided it) — ALWAYS written together,
         // the same pairing discipline as StopRefusal/StopOutcome above.
         public string PressRefusal { get; set; } = string.Empty;
-
-        public BodyProducerState ProducerState;
-        public BodyAutonomyState AutonomyState;
         public BodyNavigationState NavigationState { get; } = new();
+
+        public BodyAutonomyState AutonomyState;
+        public BodyProducerState ProducerState;
     }
 }

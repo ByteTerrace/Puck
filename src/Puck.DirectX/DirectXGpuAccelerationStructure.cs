@@ -39,7 +39,10 @@ public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure 
             return;
         }
 
-        m_resources = m_api.CreateResources(deviceHandle: m_deviceHandle, maxInstanceCount: maxInstanceCount);
+        m_resources = m_api.CreateResources(
+            deviceHandle: m_deviceHandle,
+            maxInstanceCount: maxInstanceCount
+        );
         m_created = true;
     }
     /// <inheritdoc/>

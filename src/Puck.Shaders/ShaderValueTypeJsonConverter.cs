@@ -10,7 +10,10 @@ public sealed class ShaderValueTypeJsonConverter : JsonConverter<ShaderValueType
     public override ShaderValueType Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         var text = reader.GetString();
 
-        return (ShaderValueTypes.TryParse(spelling: text, type: out var type)
+        return (ShaderValueTypes.TryParse(
+            spelling: text,
+            type: out var type
+        )
             ? type
             : throw new JsonException(message: $"Unrecognized shader value type '{text}'; expected float|float2|float3|float4|uint|uint2|uint3|uint4|int|int2|int3|int4.")
         );

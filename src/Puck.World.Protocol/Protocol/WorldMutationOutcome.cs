@@ -10,7 +10,6 @@ public enum WorldMutationDecision : byte {
     /// <summary>The mutation was refused and did not change authoritative state.</summary>
     Refused,
 }
-
 /// <summary>The persistence state reported independently from a mutation's decision.</summary>
 public enum WorldMutationPersistenceStatus : byte {
     /// <summary>No durable receipt was requested for this outcome.</summary>
@@ -25,7 +24,6 @@ public enum WorldMutationPersistenceStatus : byte {
     /// <summary>The persistence result is uncertain and must be reconciled from the authority root.</summary>
     RecoveryRequired,
 }
-
 /// <summary>The coherent authority publication watermark associated with a durable mutation completion.</summary>
 /// <param name="RootSequence">The root publication sequence.</param>
 /// <param name="CheckpointOrdinal">The checkpoint ordinal named by the published root, or <see langword="null"/>
@@ -41,10 +39,9 @@ public readonly record struct WorldDurableWatermark(
 ) {
     /// <summary>Validates the watermark's root, checkpoint, and journal sequence shape.</summary>
     /// <returns><see langword="true"/> when the ordinal is valid.</returns>
-    public bool IsValid => RootSequence >= 0 && CheckpointOrdinal is not (< -1) && JournalSequence is not (< 0) &&
-        (JournalSequence is null || CheckpointOrdinal is not null);
+    public bool IsValid => ((RootSequence >= 0) && (CheckpointOrdinal is not (< -1)) && (JournalSequence is not (< 0)) &&
+        ((JournalSequence is null) || (CheckpointOrdinal is not null)));
 }
-
 /// <summary>The immutable identity binding an operation id to the actor and canonical payload it submitted.</summary>
 /// <param name="OperationId">The caller-minted operation id.</param>
 /// <param name="Actor">The exact actor stamped by the ingress door.</param>
@@ -52,28 +49,33 @@ public readonly record struct WorldDurableWatermark(
 public readonly record struct WorldMutationBinding(Guid OperationId, WorldPrincipal Actor, string PayloadDigest) {
     /// <summary>Returns whether all binding fields have their canonical shape.</summary>
     public bool IsValid =>
-        OperationId != Guid.Empty &&
+        ((OperationId != Guid.Empty) &&
         Actor.IsCanonical() &&
-        IsSha256Hex(PayloadDigest);
-
-    /// <summary>Returns the actor's stable canonical label and payload digest as one diagnostic token.</summary>
-    public override string ToString() => $"{Actor.Describe()}:{PayloadDigest}";
+        IsSha256Hex(value: PayloadDigest));
 
     internal static bool IsSha256Hex(string? value) {
-        if (value is null || value.Length != 64) {
+        if (
+            (value is null) ||
+            (value.Length != 64)
+        ) {
             return false;
         }
 
         foreach (var character in value) {
-            if (!Uri.IsHexDigit(character) || char.IsUpper(character)) {
+            if (
+                !Uri.IsHexDigit(character: character) ||
+                char.IsUpper(c: character)
+            ) {
                 return false;
             }
         }
 
         return true;
     }
-}
 
+    /// <summary>Returns the actor's stable canonical label and payload digest as one diagnostic token.</summary>
+    public override string ToString() => $"{Actor.Describe()}:{PayloadDigest}";
+}
 /// <summary>The actor/payload-bound decision and persistence facts returned for one operation.</summary>
 /// <param name="OperationId">The operation id from the submission envelope.</param>
 /// <param name="Actor">The exact actor stamped by ingress.</param>
@@ -96,62 +98,27 @@ public readonly record struct WorldMutationOutcome(
     WorldDurableWatermark? DurableWatermark
 ) {
     /// <summary>Gets whether the mutation was applied.</summary>
-    public bool Applied => Decision == WorldMutationDecision.Applied;
-
-    /// <summary>Gets whether the mutation was refused.</summary>
-    public bool Refused => Decision == WorldMutationDecision.Refused;
-
+    public bool Applied => (Decision == WorldMutationDecision.Applied);
     /// <summary>Gets the actor/payload binding carried by this outcome.</summary>
-    public WorldMutationBinding Binding => new(OperationId, Actor, PayloadDigest);
-
+    public WorldMutationBinding Binding => new(
+        OperationId,
+        Actor,
+        PayloadDigest
+    );
     /// <summary>Returns whether the outcome's identity, decision, strings, and optional facts are valid.</summary>
     public bool IsValid =>
-        Binding.IsValid &&
-        Enum.IsDefined(Decision) &&
-        Enum.IsDefined(PersistenceStatus) &&
-        !string.IsNullOrWhiteSpace(Code) &&
-        !Code.Any(char.IsWhiteSpace) &&
-        Detail is not null &&
-        (AffectedGroupRevision is null || AffectedGroupRevision.Value >= 0) &&
-        (PersistenceStatus is not (WorldMutationPersistenceStatus.Durable) || DurableWatermark is { IsValid: true }) &&
-        (PersistenceStatus is not (WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending) || DurableWatermark is null) &&
-        (DurableWatermark is null || DurableWatermark.Value.IsValid);
-
-    /// <summary>Builds an applied outcome.</summary>
-    public static WorldMutationOutcome AppliedOutcome(
-        WorldMutationBinding binding,
-        string code,
-        string detail = "",
-        long? affectedGroupRevision = null,
-        WorldMutationPersistenceStatus persistenceStatus = WorldMutationPersistenceStatus.NotRequested,
-        WorldDurableWatermark? durableWatermark = null
-    ) => Create(
-        binding,
-        WorldMutationDecision.Applied,
-        code,
-        detail,
-        affectedGroupRevision,
-        persistenceStatus,
-        durableWatermark
-    );
-
-    /// <summary>Builds a refused outcome. Refusal remains the decision even when its receipt is durable.</summary>
-    public static WorldMutationOutcome RefusedOutcome(
-        WorldMutationBinding binding,
-        string code,
-        string detail,
-        long? affectedGroupRevision = null,
-        WorldMutationPersistenceStatus persistenceStatus = WorldMutationPersistenceStatus.NotRequested,
-        WorldDurableWatermark? durableWatermark = null
-    ) => Create(
-        binding,
-        WorldMutationDecision.Refused,
-        code,
-        detail,
-        affectedGroupRevision,
-        persistenceStatus,
-        durableWatermark
-    );
+        (Binding.IsValid &&
+        Enum.IsDefined(value: Decision) &&
+        Enum.IsDefined(value: PersistenceStatus) &&
+        !string.IsNullOrWhiteSpace(value: Code) &&
+        !Code.Any(predicate: char.IsWhiteSpace) &&
+        (Detail is not null) &&
+        ((AffectedGroupRevision is null) || (AffectedGroupRevision.Value >= 0)) &&
+        ((PersistenceStatus is not (WorldMutationPersistenceStatus.Durable)) || (DurableWatermark is { IsValid: true })) &&
+        ((PersistenceStatus is not (WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending)) || (DurableWatermark is null)) &&
+        ((DurableWatermark is null) || DurableWatermark.Value.IsValid));
+    /// <summary>Gets whether the mutation was refused.</summary>
+    public bool Refused => (Decision == WorldMutationDecision.Refused);
 
     private static WorldMutationOutcome Create(
         WorldMutationBinding binding,
@@ -163,18 +130,33 @@ public readonly record struct WorldMutationOutcome(
         WorldDurableWatermark? durableWatermark
     ) {
         if (!binding.IsValid) {
-            throw new ArgumentException("The operation binding is not canonical.", nameof(binding));
+            throw new ArgumentException(
+                message: "The operation binding is not canonical.",
+                paramName: nameof(binding)
+            );
         }
-        if (string.IsNullOrWhiteSpace(code) || code.Any(char.IsWhiteSpace)) {
-            throw new ArgumentException("The decision code must be a stable non-whitespace token.", nameof(code));
+        if (
+            string.IsNullOrWhiteSpace(value: code) ||
+            code.Any(predicate: char.IsWhiteSpace)
+        ) {
+            throw new ArgumentException(
+                message: "The decision code must be a stable non-whitespace token.",
+                paramName: nameof(code)
+            );
         }
-        if (!Enum.IsDefined(persistenceStatus)) {
-            throw new ArgumentOutOfRangeException(nameof(persistenceStatus));
+        if (!Enum.IsDefined(value: persistenceStatus)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(persistenceStatus));
         }
-        if ((affectedGroupRevision is < 0) || (durableWatermark is { IsValid: false }) ||
-            (persistenceStatus == WorldMutationPersistenceStatus.Durable && durableWatermark is null) ||
-            (persistenceStatus is WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending && durableWatermark is not null)) {
-            throw new ArgumentException("Outcome durability and revision facts are malformed.", nameof(durableWatermark));
+        if (
+            (affectedGroupRevision is < 0) ||
+            (durableWatermark is { IsValid: false }) ||
+            ((persistenceStatus == WorldMutationPersistenceStatus.Durable) && (durableWatermark is null)) ||
+            ((persistenceStatus is WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending) && (durableWatermark is not null))
+        ) {
+            throw new ArgumentException(
+                message: "Outcome durability and revision facts are malformed.",
+                paramName: nameof(durableWatermark)
+            );
         }
 
         return new WorldMutationOutcome(
@@ -183,14 +165,48 @@ public readonly record struct WorldMutationOutcome(
             binding.PayloadDigest,
             decision,
             code,
-            detail ?? string.Empty,
+            (detail ?? string.Empty),
             affectedGroupRevision,
             persistenceStatus,
             durableWatermark
         );
     }
-}
 
+    /// <summary>Builds an applied outcome.</summary>
+    public static WorldMutationOutcome AppliedOutcome(
+        WorldMutationBinding binding,
+        string code,
+        string detail = "",
+        long? affectedGroupRevision = null,
+        WorldMutationPersistenceStatus persistenceStatus = WorldMutationPersistenceStatus.NotRequested,
+        WorldDurableWatermark? durableWatermark = null
+    ) => Create(
+        affectedGroupRevision: affectedGroupRevision,
+        binding: binding,
+        code: code,
+        decision: WorldMutationDecision.Applied,
+        detail: detail,
+        durableWatermark: durableWatermark,
+        persistenceStatus: persistenceStatus
+    );
+    /// <summary>Builds a refused outcome. Refusal remains the decision even when its receipt is durable.</summary>
+    public static WorldMutationOutcome RefusedOutcome(
+        WorldMutationBinding binding,
+        string code,
+        string detail,
+        long? affectedGroupRevision = null,
+        WorldMutationPersistenceStatus persistenceStatus = WorldMutationPersistenceStatus.NotRequested,
+        WorldDurableWatermark? durableWatermark = null
+    ) => Create(
+        affectedGroupRevision: affectedGroupRevision,
+        binding: binding,
+        code: code,
+        decision: WorldMutationDecision.Refused,
+        detail: detail,
+        durableWatermark: durableWatermark,
+        persistenceStatus: persistenceStatus
+    );
+}
 /// <summary>Computes the immutable actor-plus-canonical-mutation binding for an envelope.</summary>
 public static class WorldMutationBindingFactory {
     /// <summary>Attempts to bind a stamped mutation envelope without trusting client-supplied assertions.</summary>
@@ -226,14 +242,15 @@ public static class WorldMutationBindingFactory {
 
         // Bind the payload's canonical discriminator as well as its leaf bytes. This keeps two polymorphic leaves
         // that happen to share a byte shape from aliasing one operation identity.
-        var canonical = new byte[checked(bytes.Length + sizeof(byte))];
-        canonical[0] = (byte)kind;
-        bytes.CopyTo(canonical.AsSpan(start: sizeof(byte)));
+        var canonical = new byte[checked((bytes.Length + sizeof(byte)))];
+
+        canonical[0] = ((byte)kind);
+        bytes.CopyTo(destination: canonical.AsSpan(start: sizeof(byte)));
 
         binding = new WorldMutationBinding(
             envelope.OperationId,
             envelope.Principal,
-            Convert.ToHexString(SHA256.HashData(canonical)).ToLowerInvariant()
+            Convert.ToHexString(inArray: SHA256.HashData(source: canonical)).ToLowerInvariant()
         );
         return true;
     }

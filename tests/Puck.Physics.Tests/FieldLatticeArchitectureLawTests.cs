@@ -12,7 +12,10 @@ public sealed class FieldLatticeArchitectureLawTests {
 
         Assert.DoesNotContain(
             collection: referenced,
-            filter: static name => ((name.Name is { } value) && value.StartsWith(value: "Puck.World", comparisonType: StringComparison.Ordinal))
+            filter: static name => ((name.Name is { } value) && value.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "Puck.World"
+            ))
         );
     }
 }

@@ -9,14 +9,14 @@ namespace Puck.AdvancedGamingBrick;
 public sealed partial class AgbScheduler {
     /// <summary>A scheduled callback. <see cref="When"/> is an absolute time on the <see cref="Now"/> clock.</summary>
     public sealed class Event {
+        internal Event? Next;
+
         /// <summary>The callback, invoked with how many cycles late it fired (0 = exactly on time).</summary>
         public Action<int> Callback = static _ => { };
-        /// <summary>The absolute fire time.</summary>
-        public long When;
         /// <summary>Whether this event is currently in the queue.</summary>
         public bool Scheduled;
-
-        internal Event? Next;
+        /// <summary>The absolute fire time.</summary>
+        public long When;
     }
 
     private Event? m_root;

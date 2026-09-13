@@ -96,7 +96,10 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
                 return null;
             }
 
-            if ((capabilities.UsagePage != LightingPage) || (capabilities.Usage != UsageLampArray)) {
+            if (
+                (capabilities.UsagePage != LightingPage) ||
+                (capabilities.Usage != UsageLampArray)
+            ) {
                 _ = PInvoke.HidD_FreePreparsedData(PreparsedData: preparsedData);
                 deviceHandle.Dispose();
 
@@ -198,7 +201,10 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         m_deviceHandle = deviceHandle;
         m_devicePath = devicePath;
         m_preparsedData = preparsedData;
-        m_scratch = new byte[Math.Max(val1: ((int)capabilities.FeatureReportByteLength), val2: 1)];
+        m_scratch = new byte[Math.Max(
+            val1: ((int)capabilities.FeatureReportByteLength),
+            val2: 1
+        )];
     }
 
     /// <inheritdoc />
@@ -212,7 +218,10 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
 
     /// <inheritdoc />
     public bool TryGetLampInfo(int index, out LampInfo info) {
-        if ((index < 0) || (index >= m_lamps.Length)) {
+        if (
+            (index < 0) ||
+            (index >= m_lamps.Length)
+        ) {
             info = default;
 
             return false;
@@ -227,7 +236,11 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
     private bool Initialize() {
         DiscoverReports();
 
-        if ((m_attributesReportId == 0) || (m_responseReportId == 0) || (m_requestReportId == 0)) {
+        if (
+            (m_attributesReportId == 0) ||
+            (m_responseReportId == 0) ||
+            (m_requestReportId == 0)
+        ) {
             return false;
         }
 
@@ -238,7 +251,10 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         var lamps = new LampInfo[lampCount];
 
         for (var index = 0; (index < lampCount); index++) {
-            if (!ReadLampInfo(lampId: index, info: out lamps[index])) {
+            if (!ReadLampInfo(
+                lampId: index,
+                info: out lamps[index]
+            )) {
                 // A gap in the lamp table still yields a usable device; leave the unread lamp at its default.
                 lamps[index] = new LampInfo(
                     BlueLevelCount: 0,
@@ -292,12 +308,21 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
                 continue;
             }
 
-            var usage = (cap.IsRange ? cap.Anonymous.Range.UsageMin : cap.Anonymous.NotRange.Usage);
-            var reportCount = ((cap.ReportCount == 0) ? (ushort)1 : cap.ReportCount);
+            var usage = (cap.IsRange
+                ? cap.Anonymous.Range.UsageMin
+                : cap.Anonymous.NotRange.Usage
+            );
+            var reportCount = ((cap.ReportCount == 0)
+                ? (ushort)1
+                : cap.ReportCount
+            );
 
             // Accumulate this field's bit span into its report's running length (the reports are byte-packed with
             // no gaps, so a plain sum of field widths is exact).
-            m_reportLengthById.TryGetValue(key: cap.ReportID, value: out var bits);
+            m_reportLengthById.TryGetValue(
+                key: cap.ReportID,
+                value: out var bits
+            );
             m_reportLengthById[cap.ReportID] = (bits + (cap.BitSize * reportCount));
 
             switch (usage) {
@@ -333,7 +358,10 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         }
 
         foreach (var reportId in lampIdReportIds) {
-            if ((reportId != m_responseReportId) && (reportId != m_multiUpdateReportId)) {
+            if (
+                (reportId != m_responseReportId) &&
+                (reportId != m_multiUpdateReportId)
+            ) {
                 m_requestReportId = reportId;
 
                 break;
@@ -351,7 +379,8 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
             value: out var length
         )
             ? length
-            : m_scratch.Length);
+            : m_scratch.Length
+        );
     }
     private bool ReadAttributes(out int lampCount) {
         lampCount = 0;
@@ -360,17 +389,35 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
             return false;
         }
 
-        if (!TryGetUsageValue(usage: UsageLampCount, value: out var count)) {
+        if (!TryGetUsageValue(
+            usage: UsageLampCount,
+            value: out var count
+        )) {
             return false;
         }
 
         lampCount = ((int)count);
 
-        _ = TryGetUsageValue(usage: UsageBoundingBoxWidth, value: out var width);
-        _ = TryGetUsageValue(usage: UsageBoundingBoxHeight, value: out var height);
-        _ = TryGetUsageValue(usage: UsageBoundingBoxDepth, value: out var depth);
-        _ = TryGetUsageValue(usage: UsageLampArrayKind, value: out var kind);
-        _ = TryGetUsageValue(usage: UsageMinUpdateInterval, value: out var minInterval);
+        _ = TryGetUsageValue(
+            usage: UsageBoundingBoxWidth,
+            value: out var width
+        );
+        _ = TryGetUsageValue(
+            usage: UsageBoundingBoxHeight,
+            value: out var height
+        );
+        _ = TryGetUsageValue(
+            usage: UsageBoundingBoxDepth,
+            value: out var depth
+        );
+        _ = TryGetUsageValue(
+            usage: UsageLampArrayKind,
+            value: out var kind
+        );
+        _ = TryGetUsageValue(
+            usage: UsageMinUpdateInterval,
+            value: out var minInterval
+        );
 
         m_boundingBoxWidth = ((int)width);
         m_boundingBoxHeight = ((int)height);
@@ -398,29 +445,74 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
             return false;
         }
 
-        _ = TryGetUsageValue(usage: UsagePositionX, value: out var posX);
-        _ = TryGetUsageValue(usage: UsagePositionY, value: out var posY);
-        _ = TryGetUsageValue(usage: UsagePositionZ, value: out var posZ);
-        _ = TryGetUsageValue(usage: UsageLampPurposes, value: out var purposes);
-        _ = TryGetUsageValue(usage: UsageUpdateLatency, value: out var latency);
-        _ = TryGetUsageValue(usage: UsageRedLevelCount, value: out var redLevels);
-        _ = TryGetUsageValue(usage: UsageGreenLevelCount, value: out var greenLevels);
-        _ = TryGetUsageValue(usage: UsageBlueLevelCount, value: out var blueLevels);
-        _ = TryGetUsageValue(usage: UsageIntensityLevelCount, value: out var intensityLevels);
-        _ = TryGetUsageValue(usage: UsageIsProgrammable, value: out var isProgrammable);
-        _ = TryGetUsageValue(usage: UsageInputBinding, value: out var inputBinding);
+        _ = TryGetUsageValue(
+            usage: UsagePositionX,
+            value: out var posX
+        );
+        _ = TryGetUsageValue(
+            usage: UsagePositionY,
+            value: out var posY
+        );
+        _ = TryGetUsageValue(
+            usage: UsagePositionZ,
+            value: out var posZ
+        );
+        _ = TryGetUsageValue(
+            usage: UsageLampPurposes,
+            value: out var purposes
+        );
+        _ = TryGetUsageValue(
+            usage: UsageUpdateLatency,
+            value: out var latency
+        );
+        _ = TryGetUsageValue(
+            usage: UsageRedLevelCount,
+            value: out var redLevels
+        );
+        _ = TryGetUsageValue(
+            usage: UsageGreenLevelCount,
+            value: out var greenLevels
+        );
+        _ = TryGetUsageValue(
+            usage: UsageBlueLevelCount,
+            value: out var blueLevels
+        );
+        _ = TryGetUsageValue(
+            usage: UsageIntensityLevelCount,
+            value: out var intensityLevels
+        );
+        _ = TryGetUsageValue(
+            usage: UsageIsProgrammable,
+            value: out var isProgrammable
+        );
+        _ = TryGetUsageValue(
+            usage: UsageInputBinding,
+            value: out var inputBinding
+        );
 
         var bindingUsage = ((ushort)inputBinding);
         var bindingPage = ((bindingUsage == 0)
             ? (ushort)0
-            : ((m_kind == LampArrayKind.Mouse) ? ButtonUsagePage : KeyboardUsagePage));
+            : ((m_kind == LampArrayKind.Mouse)
+                ? ButtonUsagePage
+                : KeyboardUsagePage
+        ));
 
         info = new LampInfo(
             LampId: lampId,
             Position: new LampPosition(
-                X: Normalize(extent: m_boundingBoxWidth, value: posX),
-                Y: Normalize(extent: m_boundingBoxHeight, value: posY),
-                Z: Normalize(extent: m_boundingBoxDepth, value: posZ)
+                X: Normalize(
+                    extent: m_boundingBoxWidth,
+                    value: posX
+                ),
+                Y: Normalize(
+                    extent: m_boundingBoxHeight,
+                    value: posY
+                ),
+                Z: Normalize(
+                    extent: m_boundingBoxDepth,
+                    value: posZ
+                )
             ),
             Purposes: ((LampPurposes)purposes),
             InputBindingUsagePage: bindingPage,
@@ -439,19 +531,34 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
     /// <inheritdoc />
     public void UpdateLamps(ReadOnlySpan<int> lampIds, ReadOnlySpan<LampColor> colors) {
         if (lampIds.Length != colors.Length) {
-            throw new ArgumentException(message: "lampIds and colors must be the same length.", paramName: nameof(colors));
+            throw new ArgumentException(
+                message: "lampIds and colors must be the same length.",
+                paramName: nameof(colors)
+            );
         }
 
-        if ((m_multiUpdateReportId == 0) || lampIds.IsEmpty) {
+        if (
+            (m_multiUpdateReportId == 0) ||
+            lampIds.IsEmpty
+        ) {
             return;
         }
 
         for (var start = 0; (start < lampIds.Length); start += MultiUpdateBatch) {
-            var count = Math.Min(val1: MultiUpdateBatch, val2: (lampIds.Length - start));
+            var count = Math.Min(
+                val1: MultiUpdateBatch,
+                val2: (lampIds.Length - start)
+            );
 
             WriteMultiUpdate(
-                colors: colors.Slice(length: count, start: start),
-                lampIds: lampIds.Slice(length: count, start: start)
+                colors: colors.Slice(
+                    length: count,
+                    start: start
+                ),
+                lampIds: lampIds.Slice(
+                    length: count,
+                    start: start
+                )
             );
         }
     }
@@ -515,15 +622,24 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         }
 
         // Fallback for a device without a range report: batch every lamp through multi-update.
-        var ids = ((lampCount <= 256) ? stackalloc int[lampCount] : new int[lampCount]);
-        var fill = ((lampCount <= 256) ? stackalloc LampColor[lampCount] : new LampColor[lampCount]);
+        var ids = ((lampCount <= 256)
+            ? stackalloc int[lampCount]
+            : new int[lampCount]
+        );
+        var fill = ((lampCount <= 256)
+            ? stackalloc LampColor[lampCount]
+            : new LampColor[lampCount]
+        );
 
         for (var index = 0; (index < lampCount); index++) {
             ids[index] = index;
             fill[index] = color;
         }
 
-        UpdateLamps(colors: fill, lampIds: ids);
+        UpdateLamps(
+            colors: fill,
+            lampIds: ids
+        );
     }
     /// <inheritdoc />
     public bool TrySetAutonomousMode(bool enabled) {
@@ -534,7 +650,9 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         Array.Clear(array: m_scratch);
 
         m_scratch[0] = m_controlReportId;
-        m_scratch[1] = ((byte)(enabled ? 1 : 0));
+        m_scratch[1] = ((byte)(enabled
+            ? 1
+            : 0));
 
         return SetFeature(reportId: m_controlReportId);
     }
@@ -578,10 +696,20 @@ internal sealed class Win32LampArrayDevice : ILampArrayDevice {
         }
     }
     private static float Normalize(uint value, int extent) {
-        return ((extent <= 0) ? 0.5f : Math.Clamp(max: 1f, min: 0f, value: (value / ((float)extent))));
+        return ((extent <= 0)
+            ? 0.5f
+            : Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: (value / ((float)extent))
+            )
+        );
     }
     private static LampArrayKind ToKind(uint value) {
-        return (Enum.IsDefined(value: ((LampArrayKind)value)) ? ((LampArrayKind)value) : LampArrayKind.Undefined);
+        return (Enum.IsDefined(value: ((LampArrayKind)value))
+            ? ((LampArrayKind)value)
+            : LampArrayKind.Undefined
+        );
     }
 
     ~Win32LampArrayDevice() => Dispose(disposing: false);

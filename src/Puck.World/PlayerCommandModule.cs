@@ -259,7 +259,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     }
     // Whether a drive verb's resolved target is a local seat — seats carry client-side device state (held keys/lanes,
     // the possession latch copy) that some commands must also touch.
-    private bool IsSeat(int index) => ((uint)index < (uint)m_population.LocalSeatCount);
+    private bool IsSeat(int index) => (((uint)index) < ((uint)m_population.LocalSeatCount));
     // A pending local seat (1..3) is choosing a profile — its inputs drive the picker, not locomotion — so a tape
     // enqueued now would sit dormant and burst the instant the seat confirms. The tape verbs (run/fly) refuse it; the
     // teleport verbs (warp/face/pose/where/stop) stay allowed. Population entries (4..4095) are never pending. Returns

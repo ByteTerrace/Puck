@@ -53,7 +53,11 @@ public sealed class SdfFieldEvaluatorTests {
         ));
         var histogram = WorldQueryDriftInstrument.Evaluate(
             evaluator: evaluator,
-            points: [Position(x: 0.0, y: 0.0, z: 0.0),],
+            points: [Position(
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                ),],
             epsilonShell: FixedQ4816.FromDouble(value: 0.01),
             gpuInsideOrNear: static _ => true,
             baked: baked,
@@ -73,120 +77,6 @@ public sealed class SdfFieldEvaluatorTests {
         Assert.Equal(
             expected: 0,
             actual: histogram.BakedComparisons
-        );
-    }
-    [InlineData(0.0, 0.0, 0.0, -0.25)]
-    [InlineData(2.0, 0.0, 0.0, 1.0)]
-    [Theory]
-    public void RoundedRectangleUsesTheShaderExactDistanceBody(double x, double y, double z, double expectedDistance) {
-        var evaluator = BuildRoundedRectangleEvaluator();
-
-        var found = evaluator.TryDistance(
-            position: Position(
-                x: x,
-                y: y,
-                z: z
-            ),
-            distance: out var distance,
-            material: out _
-        );
-
-        Assert.True(condition: found);
-        Assert.Equal(
-            expected: FixedQ4816.FromDouble(value: expectedDistance),
-            actual: distance
-        );
-    }
-    [Fact]
-    public void RoundedRectangleSupportsTheRevolveLift() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.RoundedRectangle(
-            halfWidth: 1f,
-            halfHeight: 0.5f,
-            cornerRadius: 0.1f,
-            lift: SdfLift.Revolve,
-            liftAmount: 2f,
-            material: material
-        );
-
-        var evaluator = new SdfFieldEvaluator(program: builder.Build());
-        var found = evaluator.TryDistance(
-            position: Position(
-                x: 3.0,
-                y: 0.0,
-                z: 0.0
-            ),
-            distance: out var distance,
-            material: out _
-        );
-
-        Assert.True(condition: found);
-        Assert.Equal(
-            expected: FixedQ4816.Zero,
-            actual: distance
-        );
-    }
-    /// <summary>The ground-height bake allocates one height cell and runs one ground march per cell of the measured
-    /// grid, so the cell budget has to be measured first or the refusal costs the whole working set it exists to
-    /// prevent. The refused region below is 16000x16000 cells: if the per-cell loop ran, the refusal would arrive a
-    /// minute-plus later, after every one of those 256 million marches — which is what the elapsed bound pins.</summary>
-    [Fact]
-    public void GroundHeightBakeRefusesAnOverBudgetRegionBeforeMarchingIt() {
-        var evaluator = BuildRoundedRectangleEvaluator();
-        var elapsed = Stopwatch.StartNew();
-        var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: evaluator,
-            maxX: 2000f,
-            maxZ: 2000f,
-            minX: -2000f,
-            minZ: -2000f,
-            probeDown: 4f,
-            probeUp: 4f
-        ));
-
-        elapsed.Stop();
-
-        Assert.Equal(
-            expected: "maxCellCount",
-            actual: refusal.ParamName
-        );
-        Assert.True(
-            condition: (elapsed.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
-            userMessage: $"The over-budget refusal took {elapsed.Elapsed}, long enough to have marched cells before refusing."
-        );
-
-        // The ceiling is now the caller's to raise, and a region inside it still bakes.
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: evaluator,
-            maxCellCount: 0,
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            probeDown: 4f,
-            probeUp: 4f
-        ));
-
-        var control = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: evaluator,
-            maxCellCount: 16,
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            probeDown: 4f,
-            probeUp: 4f
-        );
-
-        Assert.Equal(
-            expected: 4,
-            actual: control.Width
-        );
-        Assert.Equal(
-            expected: 4,
-            actual: control.Height
         );
     }
     /// <summary>The bake authors one float point per cell, so a region whose coordinates are coarser in
@@ -262,9 +152,18 @@ public sealed class SdfFieldEvaluatorTests {
             condition: (walk.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
             userMessage: $"The eight-cell bake took {walk.Elapsed}, which is not a bounded cell walk."
         );
-        Assert.Equal(expected: 4, actual: artifact.Width);
-        Assert.Equal(expected: 2, actual: artifact.Height);
-        Assert.Equal(expected: 8, actual: artifact.HeightRaw.Length);
+        Assert.Equal(
+            expected: 4,
+            actual: artifact.Width
+        );
+        Assert.Equal(
+            expected: 2,
+            actual: artifact.Height
+        );
+        Assert.Equal(
+            expected: 8,
+            actual: artifact.HeightRaw.Length
+        );
 
         double[] expected = [
             -0.09375, -0.15625, -0.21875, -0.28125,
@@ -278,5 +177,119 @@ public sealed class SdfFieldEvaluatorTests {
                 tolerance: 0.005
             );
         }
+    }
+    /// <summary>The ground-height bake allocates one height cell and runs one ground march per cell of the measured
+    /// grid, so the cell budget has to be measured first or the refusal costs the whole working set it exists to
+    /// prevent. The refused region below is 16000x16000 cells: if the per-cell loop ran, the refusal would arrive a
+    /// minute-plus later, after every one of those 256 million marches — which is what the elapsed bound pins.</summary>
+    [Fact]
+    public void GroundHeightBakeRefusesAnOverBudgetRegionBeforeMarchingIt() {
+        var evaluator = BuildRoundedRectangleEvaluator();
+        var elapsed = Stopwatch.StartNew();
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxX: 2000f,
+            maxZ: 2000f,
+            minX: -2000f,
+            minZ: -2000f,
+            probeDown: 4f,
+            probeUp: 4f
+        ));
+
+        elapsed.Stop();
+
+        Assert.Equal(
+            expected: "maxCellCount",
+            actual: refusal.ParamName
+        );
+        Assert.True(
+            condition: (elapsed.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
+            userMessage: $"The over-budget refusal took {elapsed.Elapsed}, long enough to have marched cells before refusing."
+        );
+
+        // The ceiling is now the caller's to raise, and a region inside it still bakes.
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxCellCount: 0,
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            probeDown: 4f,
+            probeUp: 4f
+        ));
+
+        var control = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxCellCount: 16,
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            probeDown: 4f,
+            probeUp: 4f
+        );
+
+        Assert.Equal(
+            expected: 4,
+            actual: control.Width
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: control.Height
+        );
+    }
+    [Fact]
+    public void RoundedRectangleSupportsTheRevolveLift() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.RoundedRectangle(
+            halfWidth: 1f,
+            halfHeight: 0.5f,
+            cornerRadius: 0.1f,
+            lift: SdfLift.Revolve,
+            liftAmount: 2f,
+            material: material
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var found = evaluator.TryDistance(
+            position: Position(
+                x: 3.0,
+                y: 0.0,
+                z: 0.0
+            ),
+            distance: out var distance,
+            material: out _
+        );
+
+        Assert.True(condition: found);
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: distance
+        );
+    }
+    [InlineData(0.0, 0.0, 0.0, -0.25)]
+    [InlineData(2.0, 0.0, 0.0, 1.0)]
+    [Theory]
+    public void RoundedRectangleUsesTheShaderExactDistanceBody(double x, double y, double z, double expectedDistance) {
+        var evaluator = BuildRoundedRectangleEvaluator();
+
+        var found = evaluator.TryDistance(
+            position: Position(
+                x: x,
+                y: y,
+                z: z
+            ),
+            distance: out var distance,
+            material: out _
+        );
+
+        Assert.True(condition: found);
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: expectedDistance),
+            actual: distance
+        );
     }
 }

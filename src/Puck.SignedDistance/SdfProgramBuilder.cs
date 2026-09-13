@@ -501,6 +501,7 @@ public sealed partial class SdfProgramBuilder {
             );
         }
     }
+
     /// <summary>The chamfer radius <see cref="ChamferedRectangle"/> actually emits at: clamped to the rectangle's own
     /// half-extents and — for <see cref="SdfLift.Extrude"/>, whose cap join bevels at the same radius — to the lift
     /// half-height. A chamfer at exactly <c>min(halfWidth, halfHeight)</c> degenerates the profile to a diamond (a
@@ -563,8 +564,10 @@ public sealed partial class SdfProgramBuilder {
             )
         );
     }
+
     // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/sdf-vm.hlsli and SdfProgram's private copy.
     private const float SqrtHalf = 0.70710678f;
+
     /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
     /// never past the profile's own inradius, and — for <see cref="SdfLift.Extrude"/> — never past the lift
     /// half-height.</summary>
@@ -634,14 +637,23 @@ public sealed partial class SdfProgramBuilder {
         var topRate = ((twoHeight / slantLength) + ((delta / twoHeight) * (1f + (delta / slantLength))));
 
         if (bottomRate > 0f) {
-            ceiling = MathF.Min(x: ceiling, y: (bottom / bottomRate));
+            ceiling = MathF.Min(
+                x: ceiling,
+                y: (bottom / bottomRate)
+            );
         }
 
         if (topRate > 0f) {
-            ceiling = MathF.Min(x: ceiling, y: (top / topRate));
+            ceiling = MathF.Min(
+                x: ceiling,
+                y: (top / topRate)
+            );
         }
 
-        return MathF.Max(x: 0f, y: ceiling);
+        return MathF.Max(
+            x: 0f,
+            y: ceiling
+        );
     }
     /// <summary>Returns the largest inscribed-circle radius an isosceles trapezoid profile contains — its true
     /// inradius, unlike <see cref="TrapezoidRoundingCeiling"/>, which additionally stops where the narrower end's inset
@@ -727,7 +739,9 @@ public sealed partial class SdfProgramBuilder {
 
         return MathF.Max(
             x: 0f,
-            y: (inradius == float.MaxValue ? 0f : inradius)
+            y: ((inradius == float.MaxValue)
+            ? 0f
+            : inradius)
         );
     }
     /// <summary>Uniformly insets a validated convex polygon by <paramref name="round"/>: every edge's supporting line
@@ -757,9 +771,18 @@ public sealed partial class SdfProgramBuilder {
             // A clockwise polygon's inward edge normal is its direction rotated -90 degrees: (x, y) -> (y, -x).
             var edgeIn = (current - previous);
             var edgeOut = (next - current);
-            var normalIn = SdfSafeNormal2D(new Vector2(x: edgeIn.Y, y: -edgeIn.X));
-            var normalOut = SdfSafeNormal2D(new Vector2(x: edgeOut.Y, y: -edgeOut.X));
-            var cosine = Vector2.Dot(normalIn, normalOut);
+            var normalIn = SdfSafeNormal2D(value: new Vector2(
+                x: edgeIn.Y,
+                y: -edgeIn.X
+            ));
+            var normalOut = SdfSafeNormal2D(value: new Vector2(
+                x: edgeOut.Y,
+                y: -edgeOut.X
+            ));
+            var cosine = Vector2.Dot(
+                value1: normalIn,
+                value2: normalOut
+            );
             // A miter displacement of round*(nIn+nOut)/(1+dot(nIn,nOut)) satisfies dot(displacement, nIn) ==
             // dot(displacement, nOut) == round exactly; the denominator is floored well away from zero (a near-180-
             // degree turn between two admitted convex edges) so a very shallow vertex insets by a large but finite
@@ -774,6 +797,7 @@ public sealed partial class SdfProgramBuilder {
 
         return result;
     }
+
     private static Vector2 SdfSafeNormal2D(Vector2 value) {
         var lengthSquared = value.LengthSquared();
 
@@ -791,7 +815,8 @@ public sealed partial class SdfProgramBuilder {
                 x: 0f,
                 y: (liftAmount - rounding)
             )
-            : liftAmount);
+            : liftAmount
+        );
     // Shared by the whole 2D-primitive-lift family (RoundedRectangle/RegularPolygon/Star/Trapezoid/Ellipse):
     // SdfProgram.LiftedBoundRadius derives each one's cull bound from its own 2D reach (radius2D) and its lift amount
     // — sqrt(radius2D² + liftAmount²) for Extrude, radius2D + liftAmount for Revolve — and either form can overflow
@@ -1062,6 +1087,7 @@ public sealed partial class SdfProgramBuilder {
 
         return this;
     }
+
     /// <summary>Marks the most recently emitted <see cref="SdfOp.ShapeBlend"/> instruction's
     /// <see cref="SdfInstruction.Secondary"/> — false excludes it from a soft-shadow/AO march while it still marches
     /// for the camera and every other consumer (see <see cref="SdfInstruction"/>'s remarks). Must chain directly onto
@@ -1072,7 +1098,10 @@ public sealed partial class SdfProgramBuilder {
     public SdfProgramBuilder MarkSecondary(bool secondary) {
         var index = (m_instructions.Count - 1);
 
-        if ((index < 0) || (m_instructions[index].Op != SdfOp.ShapeBlend)) {
+        if (
+            (index < 0) ||
+            (m_instructions[index].Op != SdfOp.ShapeBlend)
+        ) {
             throw new InvalidOperationException(message: "MarkSecondary must chain directly onto the shape method that emitted the most recent SdfOp.ShapeBlend instruction.");
         }
 
@@ -1080,6 +1109,7 @@ public sealed partial class SdfProgramBuilder {
 
         return this;
     }
+
     private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default, uint shape = 0u, uint blend = 0u) {
         m_instructions.Add(item: new SdfInstruction(
             Blend: blend,

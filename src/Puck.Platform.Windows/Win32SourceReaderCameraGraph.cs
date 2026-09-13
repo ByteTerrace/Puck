@@ -62,12 +62,19 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         var started = false;
 
         try {
-            Check(hr: MFStartup(Version: MfVersion, dwFlags: 0));
+            Check(hr: MFStartup(
+                Version: MfVersion,
+                dwFlags: 0
+            ));
             started = true;
             Prepare();
             reader = OpenReader(streamIndex: out var streamIndex);
 
-            ReadSamples(reader: reader, stopWhenLive: true, streamIndex: streamIndex);
+            ReadSamples(
+                reader: reader,
+                stopWhenLive: true,
+                streamIndex: streamIndex
+            );
 
             if (Stopping) {
                 return;
@@ -76,7 +83,11 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
             Ready();
 
             if (BeginStreaming()) {
-                ReadSamples(reader: reader, stopWhenLive: false, streamIndex: streamIndex);
+                ReadSamples(
+                    reader: reader,
+                    stopWhenLive: false,
+                    streamIndex: streamIndex
+                );
             }
         } finally {
             if (reader is not null) {
@@ -85,7 +96,10 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
 
             m_controls = null;
 
-            ReleaseSource(activate: ref m_activate, source: ref m_mediaSource);
+            ReleaseSource(
+                activate: ref m_activate,
+                source: ref m_mediaSource
+            );
             ReleaseTier();
 
             if (started) {
@@ -125,7 +139,11 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         var infrared = (CameraSensor.Infrared == Request.Sensor);
 
         var (colorLink, infraredLink) = ResolveDeviceLinks();
-        var (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(extended: infrared, infrared: false, symbolicLink: colorLink);
+        var (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(
+            extended: infrared,
+            infrared: false,
+            symbolicLink: colorLink
+        );
         IMFMediaType? infraredType = null;
         IMFPresentationDescriptor? infraredPresentation = null;
 
@@ -133,13 +151,33 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         m_mediaSource = mediaSource;
         m_activate = activate;
 
-        if (infrared && !TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
-            ReleaseSource(activate: ref m_activate, source: ref m_mediaSource);
-            (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(extended: true, infrared: true, symbolicLink: infraredLink);
+        if (
+            infrared &&
+            !TryPrepareInfraredStream(
+            mediaSource: mediaSource,
+            mediaType: out infraredType,
+            presentationDescriptor: out infraredPresentation,
+            streamIndex: out streamIndex
+        )
+        ) {
+            ReleaseSource(
+                activate: ref m_activate,
+                source: ref m_mediaSource
+            );
+            (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(
+                extended: true,
+                infrared: true,
+                symbolicLink: infraredLink
+            );
             m_mediaSource = mediaSource;
             m_activate = activate;
 
-            if (!TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
+            if (!TryPrepareInfraredStream(
+                mediaSource: mediaSource,
+                mediaType: out infraredType,
+                presentationDescriptor: out infraredPresentation,
+                streamIndex: out streamIndex
+            )) {
                 throw new InvalidOperationException(message: "the infrared capture device exposes no native L8 stream");
             }
         }
@@ -153,22 +191,39 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         IMFSourceReader? reader = null;
 
         try {
-            Check(hr: MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var config));
+            Check(hr: MFCreateAttributes(
+                cInitialSize: 2,
+                ppMFAttributes: out var config
+            ));
 
             try {
                 ConfigureReader(config: config);
-                Check(hr: MFCreateSourceReaderFromMediaSource(pAttributes: config, pMediaSource: mediaSource, ppSourceReader: out reader));
+                Check(hr: MFCreateSourceReaderFromMediaSource(
+                    pAttributes: config,
+                    pMediaSource: mediaSource,
+                    ppSourceReader: out reader
+                ));
             } finally {
                 _ = Marshal.ReleaseComObject(o: config);
             }
 
             // Exactly one stream stays selected — a second stream's bandwidth (and the driver's shared pipeline) must not be
             // spent on frames nothing reads.
-            Check(hr: reader.SetStreamSelection(dwStreamIndex: AllStreams, fSelected: false));
-            Check(hr: reader.SetStreamSelection(dwStreamIndex: streamIndex, fSelected: true));
+            Check(hr: reader.SetStreamSelection(
+                dwStreamIndex: AllStreams,
+                fSelected: false
+            ));
+            Check(hr: reader.SetStreamSelection(
+                dwStreamIndex: streamIndex,
+                fSelected: true
+            ));
 
             if (infraredType is not null) {
-                Check(hr: reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: infraredType, pdwReserved: IntPtr.Zero));
+                Check(hr: reader.SetCurrentMediaType(
+                    dwStreamIndex: streamIndex,
+                    pMediaType: infraredType,
+                    pdwReserved: IntPtr.Zero
+                ));
             }
 
             Win32CameraModeNegotiation.SelectNativeType(
@@ -176,13 +231,24 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
                 requestedHeight: Request.Height,
                 requestedRateHz: Request.RateHz,
                 requestedWidth: Request.Width,
-                requiredSubtype: (infrared ? MFVideoFormat_L8 : null),
+                requiredSubtype: (infrared
+                ? MFVideoFormat_L8
+                : null),
                 streamIndex: streamIndex
             );
 
-            var nativeFormat = Win32CameraModeNegotiation.ReadNativeFormat(reader: reader, streamIndex: streamIndex, subtype: out var nativeSubtype);
+            var nativeFormat = Win32CameraModeNegotiation.ReadNativeFormat(
+                reader: reader,
+                streamIndex: streamIndex,
+                subtype: out var nativeSubtype
+            );
 
-            m_streams = [Negotiate(nativeFormat: nativeFormat, nativeSubtype: nativeSubtype, reader: reader, streamIndex: streamIndex)];
+            m_streams = [Negotiate(
+                    nativeFormat: nativeFormat,
+                    nativeSubtype: nativeSubtype,
+                    reader: reader,
+                    streamIndex: streamIndex
+                )];
 
             return reader;
         } catch {
@@ -205,11 +271,20 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
     // IMFActivate by. A host below the MediaFrameSourceGroup floor falls back to the first enumerated device of each
     // category, exactly as the graph behaved before per-device selection existed.
     private (string? Color, string? Infrared) ResolveDeviceLinks() {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)) {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            10,
+            0,
+            14393
+        )) {
             return (null, null);
         }
 
-        if (!Win32CameraDeviceGroups.TryFind(deviceId: DeviceId, color: out var color, group: out _, infrared: out var infrared)) {
+        if (!Win32CameraDeviceGroups.TryFind(
+            deviceId: DeviceId,
+            color: out var color,
+            group: out _,
+            infrared: out var infrared
+        )) {
             throw new InvalidOperationException(message: $"camera device '{DeviceId}' is no longer attached");
         }
 
@@ -281,7 +356,10 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
                 _ = Marshal.ReleaseComObject(o: sample);
             }
 
-            if (stopWhenLive && IsLive) {
+            if (
+                stopWhenLive &&
+                IsLive
+            ) {
                 return;
             }
         }
@@ -290,23 +368,35 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
     /// <summary>Reads the negotiated frame size and signed default stride off the reader's current type, releasing the
     /// temporary media-type COM object before returning.</summary>
     protected static (int Width, int Height) ReadFrameLayout(IMFSourceReader reader, uint streamIndex, out int defaultStride) {
-        Check(hr: reader.GetCurrentMediaType(dwStreamIndex: streamIndex, ppMediaType: out var currentType));
+        Check(hr: reader.GetCurrentMediaType(
+            dwStreamIndex: streamIndex,
+            ppMediaType: out var currentType
+        ));
 
         try {
             var frameSizeKey = MF_MT_FRAME_SIZE;
 
-            Check(hr: currentType.GetUINT64(guidKey: ref frameSizeKey, punValue: out var packedSize));
+            Check(hr: currentType.GetUINT64(
+                guidKey: ref frameSizeKey,
+                punValue: out var packedSize
+            ));
 
             var width = ((int)(packedSize >> 32));
             var height = ((int)(packedSize & 0xffffffff));
 
-            if ((width <= 0) || (height <= 0)) {
+            if (
+                (width <= 0) ||
+                (height <= 0)
+            ) {
                 throw new InvalidOperationException(message: $"the camera reported an invalid frame size ({width}x{height})");
             }
 
             var strideKey = MF_MT_DEFAULT_STRIDE;
 
-            defaultStride = ((currentType.GetUINT32(guidKey: ref strideKey, punValue: out var rawStride) >= 0)
+            defaultStride = ((currentType.GetUINT32(
+                guidKey: ref strideKey,
+                punValue: out var rawStride
+            ) >= 0)
                 ? unchecked((int)rawStride)
                 : 0
             );
@@ -324,11 +414,17 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
             var majorTypeKey = MF_MT_MAJOR_TYPE;
             var video = MFMediaType_Video;
 
-            Check(hr: outputType.SetGUID(guidKey: ref majorTypeKey, guidValue: ref video));
+            Check(hr: outputType.SetGUID(
+                guidKey: ref majorTypeKey,
+                guidValue: ref video
+            ));
 
             var subTypeKey = MF_MT_SUBTYPE;
 
-            Check(hr: outputType.SetGUID(guidKey: ref subTypeKey, guidValue: ref subtype));
+            Check(hr: outputType.SetGUID(
+                guidKey: ref subTypeKey,
+                guidValue: ref subtype
+            ));
 
             return outputType;
         } catch {
@@ -358,7 +454,10 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
     private Win32PixelStream? m_stream;
     private int m_width;
 
-    public Win32SourceReaderPixelGraph(string deviceId, CameraStreamRequest request) : base(deviceId: deviceId, request: request) {
+    public Win32SourceReaderPixelGraph(string deviceId, CameraStreamRequest request) : base(
+        deviceId: deviceId,
+        request: request
+    ) {
         Start(threadName: "camera-grabber");
     }
 
@@ -371,7 +470,10 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
         if (CameraSensor.Infrared != Request.Sensor) {
             var enableVideoProcessing = MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING;
 
-            Check(hr: config.SetUINT32(guidKey: ref enableVideoProcessing, unValue: 1));
+            Check(hr: config.SetUINT32(
+                guidKey: ref enableVideoProcessing,
+                unValue: 1
+            ));
         }
     }
     protected override Win32PixelStream Negotiate(IMFSourceReader reader, uint streamIndex, Guid nativeSubtype, CameraCaptureFormat nativeFormat) {
@@ -386,7 +488,11 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             int outputResult;
 
             try {
-                outputResult = reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: outputType, pdwReserved: IntPtr.Zero);
+                outputResult = reader.SetCurrentMediaType(
+                    dwStreamIndex: streamIndex,
+                    pMediaType: outputType,
+                    pdwReserved: IntPtr.Zero
+                );
             } finally {
                 _ = Marshal.ReleaseComObject(o: outputType);
             }
@@ -402,10 +508,19 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             }
         }
 
-        var (width, height) = ReadFrameLayout(defaultStride: out m_defaultStride, reader: reader, streamIndex: streamIndex);
+        var (width, height) = ReadFrameLayout(
+            defaultStride: out m_defaultStride,
+            reader: reader,
+            streamIndex: streamIndex
+        );
         m_width = width;
         m_height = height;
-        m_stream = new Win32PixelStream(height: height, nativeFormat: nativeFormat, sensor: Request.Sensor, width: width);
+        m_stream = new Win32PixelStream(
+            height: height,
+            nativeFormat: nativeFormat,
+            sensor: Request.Sensor,
+            width: width
+        );
 
         return m_stream;
     }
@@ -415,7 +530,11 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
         }
 
         try {
-            if (buffer.Lock(pcbCurrentLength: out var length, pcbMaxLength: out _, ppbBuffer: out var pointer) < 0) {
+            if (buffer.Lock(
+                pcbCurrentLength: out var length,
+                pcbMaxLength: out _,
+                ppbBuffer: out var pointer
+            ) < 0) {
                 return;
             }
 
@@ -424,7 +543,12 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
                     m_scratch = new byte[length];
                 }
 
-                Marshal.Copy(destination: m_scratch, length: ((int)length), source: pointer, startIndex: 0);
+                Marshal.Copy(
+                    destination: m_scratch,
+                    length: ((int)length),
+                    source: pointer,
+                    startIndex: 0
+                );
                 LogFirstFrame(length: ((int)length));
 
                 if (m_expandLuminance) {
@@ -450,7 +574,10 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
         if (!CameraFramePacking.TryPackBgra(
             destination: m_packed,
             height: m_height,
-            source: m_scratch.AsSpan(length: length, start: 0),
+            source: m_scratch.AsSpan(
+                length: length,
+                start: 0
+            ),
             sourceStride: m_defaultStride,
             width: m_width
         )) {
@@ -459,7 +586,11 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             return;
         }
 
-        m_stream!.Frames.Publish(height: m_height, pixels: m_packed, width: m_width);
+        m_stream!.Frames.Publish(
+            height: m_height,
+            pixels: m_packed,
+            width: m_width
+        );
     }
     // L8 -> opaque gray BGRA, host-side; the luminance sum rides the same row-normalizing pass and drives the lit-frame gate.
     private void PublishLuminance(int length) {
@@ -473,7 +604,10 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             destination: m_expanded,
             height: m_height,
             luminanceSum: out var total,
-            source: m_scratch.AsSpan(length: length, start: 0),
+            source: m_scratch.AsSpan(
+                length: length,
+                start: 0
+            ),
             sourceStride: m_defaultStride,
             width: m_width
         )) {
@@ -482,15 +616,31 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             return;
         }
 
-        var mean = (((double)total) / Math.Max(val1: pixelCount, val2: 1));
+        var mean = (((double)total) / Math.Max(
+            val1: pixelCount,
+            val2: 1
+        ));
 
-        m_luminanceHigh = Math.Max(val1: mean, val2: (m_luminanceHigh * 0.95));
-        m_luminanceLow = Math.Min(val1: mean, val2: ((m_luminanceLow * 0.95) + (m_luminanceHigh * 0.05)));
+        m_luminanceHigh = Math.Max(
+            val1: mean,
+            val2: (m_luminanceHigh * 0.95)
+        );
+        m_luminanceLow = Math.Min(
+            val1: mean,
+            val2: ((m_luminanceLow * 0.95) + (m_luminanceHigh * 0.05))
+        );
 
         var strobing = (m_luminanceHigh > ((m_luminanceLow * 4) + 8));
 
-        if (!strobing || (mean >= ((m_luminanceLow + m_luminanceHigh) / 2))) {
-            m_stream!.Frames.Publish(height: m_height, pixels: m_expanded, width: m_width);
+        if (
+            !strobing ||
+            (mean >= ((m_luminanceLow + m_luminanceHigh) / 2))
+        ) {
+            m_stream!.Frames.Publish(
+                height: m_height,
+                pixels: m_expanded,
+                width: m_width
+            );
         }
     }
     private void LogLayoutFault(int length) {
@@ -510,10 +660,21 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
 
         m_firstFrameLogged = true;
 
-        var expected = ((m_width * m_height) * (m_expandLuminance ? 1 : 4));
-        var orientation = ((m_defaultStride < 0) ? "bottom-up" : ((m_defaultStride > 0) ? "top-down" : "unreported(assume top-down)"));
+        var expected = ((m_width * m_height) * (m_expandLuminance
+            ? 1
+            : 4));
+        var orientation = ((m_defaultStride < 0)
+            ? "bottom-up"
+            : ((m_defaultStride > 0)
+                ? "top-down"
+                : "unreported(assume top-down)"
+        ));
 
-        Console.Out.WriteLine(value: $"[camera] first frame {m_width}x{m_height}{(m_expandLuminance ? " (L8 luminance, host-expanded)" : "")}: buffer {length} bytes (packed expects {expected}, {((length == expected) ? "no padding" : "PADDED/short")}); default stride {m_defaultStride} ({orientation}).");
+        Console.Out.WriteLine(value: $"[camera] first frame {m_width}x{m_height}{(m_expandLuminance
+            ? " (L8 luminance, host-expanded)"
+            : "")}: buffer {length} bytes (packed expects {expected}, {((length == expected)
+            ? "no padding"
+            : "PADDED/short")}); default stride {m_defaultStride} ({orientation}).");
     }
 }
 /// <summary>The shared-texture tier: a Direct3D 11 video device on the consumer's adapter backs the reader's DXGI
@@ -536,7 +697,10 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
 
     private nint[] m_targets = [];
 
-    public Win32SourceReaderSharedGraph(long adapterLuid, string deviceId, CameraStreamRequest request) : base(deviceId: deviceId, request: request) {
+    public Win32SourceReaderSharedGraph(long adapterLuid, string deviceId, CameraStreamRequest request) : base(
+        deviceId: deviceId,
+        request: request
+    ) {
         // A standalone infrared stream's L8 luminance has no DXVA-to-ARGB32 path; the coordinated Face Authentication
         // graph keeps native L8 and expands it with the camera-device compute path instead.
         if (CameraSensor.Infrared == request.Sensor) {
@@ -551,30 +715,56 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
 
     protected override void Prepare() {
         m_device = new Win32D3D11VideoDevice(adapterLuid: m_adapterLuid);
-        Check(hr: MFCreateDXGIDeviceManager(pResetToken: out var resetToken, ppDeviceManager: out m_manager));
-        Check(hr: m_manager.ResetDevice(pUnkDevice: m_device.DevicePointer, resetToken: resetToken));
+        Check(hr: MFCreateDXGIDeviceManager(
+            pResetToken: out var resetToken,
+            ppDeviceManager: out m_manager
+        ));
+        Check(hr: m_manager.ResetDevice(
+            pUnkDevice: m_device.DevicePointer,
+            resetToken: resetToken
+        ));
     }
     protected override void ConfigureReader(IMFAttributes config) {
         var managerKey = MF_SOURCE_READER_D3D_MANAGER;
 
-        Check(hr: config.SetUnknown(guidKey: ref managerKey, punkValue: m_manager!));
+        Check(hr: config.SetUnknown(
+            guidKey: ref managerKey,
+            punkValue: m_manager!
+        ));
 
         var advancedProcessing = MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING;
 
-        Check(hr: config.SetUINT32(guidKey: ref advancedProcessing, unValue: 1));
+        Check(hr: config.SetUINT32(
+            guidKey: ref advancedProcessing,
+            unValue: 1
+        ));
     }
     protected override Win32SharedStream Negotiate(IMFSourceReader reader, uint streamIndex, Guid nativeSubtype, CameraCaptureFormat nativeFormat) {
         var outputType = OutputType(subtype: MFVideoFormat_ARGB32);
 
         try {
-            Check(hr: reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: outputType, pdwReserved: IntPtr.Zero));
+            Check(hr: reader.SetCurrentMediaType(
+                dwStreamIndex: streamIndex,
+                pMediaType: outputType,
+                pdwReserved: IntPtr.Zero
+            ));
         } finally {
             _ = Marshal.ReleaseComObject(o: outputType);
         }
 
-        var (width, height) = ReadFrameLayout(defaultStride: out _, reader: reader, streamIndex: streamIndex);
+        var (width, height) = ReadFrameLayout(
+            defaultStride: out _,
+            reader: reader,
+            streamIndex: streamIndex
+        );
 
-        m_stream = new Win32SharedStream(height: height, nativeFormat: nativeFormat, sensor: Request.Sensor, targetFormat: SurfaceFormat.B8G8R8A8Unorm, width: width);
+        m_stream = new Win32SharedStream(
+            height: height,
+            nativeFormat: nativeFormat,
+            sensor: Request.Sensor,
+            targetFormat: SurfaceFormat.B8G8R8A8Unorm,
+            width: width
+        );
 
         return m_stream;
     }
@@ -598,7 +788,10 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
         return true;
     }
     protected override void Deliver(IMFSample sample) {
-        if (sample.GetBufferByIndex(dwIndex: 0, ppBuffer: out var buffer) < 0) {
+        if (sample.GetBufferByIndex(
+            dwIndex: 0,
+            ppBuffer: out var buffer
+        ) < 0) {
             return;
         }
 
@@ -609,7 +802,13 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
 
             var texture2dIid = global::Windows.Win32.Graphics.Direct3D11.ID3D11Texture2D.IID_Guid;
 
-            if ((dxgiBuffer.GetResource(ppvObject: out var frameTexture, riid: ref texture2dIid) < 0) || (0 == frameTexture)) {
+            if (
+                (dxgiBuffer.GetResource(
+                ppvObject: out var frameTexture,
+                riid: ref texture2dIid
+            ) < 0) ||
+                (0 == frameTexture)
+            ) {
                 return;
             }
 
@@ -626,10 +825,19 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
                     return;
                 }
 
-                m_device!.CopyToTarget(sourceSubresource: subresource, sourceTexture: frameTexture, targetTexture: m_targets[slot]);
+                m_device!.CopyToTarget(
+                    sourceSubresource: subresource,
+                    sourceTexture: frameTexture,
+                    targetTexture: m_targets[slot]
+                );
                 m_stream.Slots.Publish(slot: slot);
                 m_latestSlot = slot;
-                m_bench.OnFrame(captureTimestamp: m_stream.LastFrameTimestamp, device: m_device, resolver: this, sensor: CameraSensor.Color);
+                m_bench.OnFrame(
+                    captureTimestamp: m_stream.LastFrameTimestamp,
+                    device: m_device,
+                    resolver: this,
+                    sensor: CameraSensor.Color
+                );
             } finally {
                 Win32D3D11VideoDevice.ReleaseTexture(texture: frameTexture);
             }
@@ -666,14 +874,20 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             }
         }
 
-        if (!triggered || (CameraSensor.Color != request.Trigger)) {
+        if (
+            !triggered ||
+            (CameraSensor.Color != request.Trigger)
+        ) {
             run = null;
             fault = "the trigger sensor must be the graph's color stream";
 
             return false;
         }
 
-        run = m_bench.Attach(request: in request, ring: ring);
+        run = m_bench.Attach(
+            request: in request,
+            ring: ring
+        );
         fault = "";
 
         return true;
@@ -718,7 +932,10 @@ internal static class Win32CameraModeNegotiation {
     // requested. A device that refuses the selection throws (Check) rather than being tolerated and left on whatever
     // mode was previously current.
     public static void SelectNativeType(IMFSourceReader reader, int requestedWidth, int requestedHeight, uint requestedRateHz, uint streamIndex = FirstVideoStream, Guid? requiredSubtype = null) {
-        if ((requestedWidth <= 0) || (requestedHeight <= 0)) {
+        if (
+            (requestedWidth <= 0) ||
+            (requestedHeight <= 0)
+        ) {
             return;
         }
 
@@ -731,25 +948,38 @@ internal static class Win32CameraModeNegotiation {
         var bestRate = 0.0;
         var bestRateCovers = false;
 
-        for (var index = 0u; (reader.GetNativeMediaType(dwMediaTypeIndex: index, dwStreamIndex: streamIndex, ppMediaType: out var candidate) >= 0); index++) {
+        for (var index = 0u; (reader.GetNativeMediaType(
+            dwMediaTypeIndex: index,
+            dwStreamIndex: streamIndex,
+            ppMediaType: out var candidate
+        ) >= 0); index++) {
             var retained = false;
 
             try {
                 if (
                     (requiredSubtype is { } subtype) &&
-                    ((candidate.GetGUID(guidKey: ref subTypeKey, guidValue: out var candidateSubtype) < 0) || (subtype != candidateSubtype))
+                    ((candidate.GetGUID(
+                    guidKey: ref subTypeKey,
+                    guidValue: out var candidateSubtype
+                ) < 0) || (subtype != candidateSubtype))
                 ) {
                     continue;
                 }
 
-                if (candidate.GetUINT64(guidKey: ref frameSizeKey, punValue: out var packedSize) < 0) {
+                if (candidate.GetUINT64(
+                    guidKey: ref frameSizeKey,
+                    punValue: out var packedSize
+                ) < 0) {
                     continue;
                 }
 
                 var width = ((long)(packedSize >> 32));
                 var height = ((long)(packedSize & 0xffffffff));
 
-                if ((width <= 0) || (height <= 0)) {
+                if (
+                    (width <= 0) ||
+                    (height <= 0)
+                ) {
                     continue;
                 }
 
@@ -760,13 +990,14 @@ internal static class Win32CameraModeNegotiation {
                 var better = ((best is null) || ((covers != bestCovers)
                     ? covers
                     : ((area != bestArea)
-                        ? (covers ? (area < bestArea) : (area > bestArea))
+                        ? (covers
+                            ? (area < bestArea)
+                            : (area > bestArea))
                         : ((rateCovers != bestRateCovers)
                             ? rateCovers
-                            : (rateCovers ? (rate < bestRate) : (rate > bestRate))
-                        )
-                    )
-                ));
+                            : (rateCovers
+                                ? (rate < bestRate)
+                                : (rate > bestRate))))));
 
                 if (better) {
                     if (best is not null) {
@@ -789,7 +1020,11 @@ internal static class Win32CameraModeNegotiation {
 
         if (best is not null) {
             try {
-                Check(hr: reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: best, pdwReserved: IntPtr.Zero));
+                Check(hr: reader.SetCurrentMediaType(
+                    dwStreamIndex: streamIndex,
+                    pMediaType: best,
+                    pdwReserved: IntPtr.Zero
+                ));
             } finally {
                 _ = Marshal.ReleaseComObject(o: best);
             }
@@ -800,10 +1035,16 @@ internal static class Win32CameraModeNegotiation {
     public static CameraCaptureFormat ReadNativeFormat(IMFSourceReader reader, uint streamIndex, out Guid subtype) {
         var subtypeKey = MF_MT_SUBTYPE;
 
-        Check(hr: reader.GetCurrentMediaType(dwStreamIndex: streamIndex, ppMediaType: out var mediaType));
+        Check(hr: reader.GetCurrentMediaType(
+            dwStreamIndex: streamIndex,
+            ppMediaType: out var mediaType
+        ));
 
         try {
-            subtype = ((mediaType.GetGUID(guidKey: ref subtypeKey, guidValue: out var value) >= 0)
+            subtype = ((mediaType.GetGUID(
+                guidKey: ref subtypeKey,
+                guidValue: out var value
+            ) >= 0)
                 ? value
                 : Guid.Empty
             );
@@ -820,7 +1061,10 @@ internal static class Win32CameraModeNegotiation {
     private static double FrameRate(IMFMediaType mediaType) {
         var frameRateKey = MF_MT_FRAME_RATE;
 
-        return (((mediaType.GetUINT64(guidKey: ref frameRateKey, punValue: out var packedRate) >= 0) && ((packedRate & 0xffffffff) != 0))
+        return (((mediaType.GetUINT64(
+            guidKey: ref frameRateKey,
+            punValue: out var packedRate
+        ) >= 0) && ((packedRate & 0xffffffff) != 0))
             ? (((double)(packedRate >> 32)) / (packedRate & 0xffffffff))
             : 0.0
         );

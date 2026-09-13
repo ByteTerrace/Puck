@@ -17,6 +17,26 @@ public static class WorldScreenTextDecal {
     private static readonly Vector3 DefaultBackground = Vector3.Zero;
     private static readonly Vector3 DefaultForeground = Vector3.One;
 
+    // RGB in [0, 1] → rgba8 with R in the low byte and opaque alpha, matching the shader's unpack.
+    private static uint PackColor(Vector3 rgb) {
+        var r = ((uint)MathF.Round(x: (Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: rgb.X
+        ) * 255f)));
+        var g = ((uint)MathF.Round(x: (Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: rgb.Y
+        ) * 255f)));
+        var b = ((uint)MathF.Round(x: (Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: rgb.Z
+        ) * 255f)));
+
+        return r | (g << 8) | (b << 16) | 0xFF000000;
+    }
     // Host-side unorm2x16 pack, u in the low half — the same encoding SdfProgramBuilder.PackUv and the console decal
     // bake use (KEEP IN SYNC with sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).
     private static uint PackUv(float u, float v) {
@@ -38,14 +58,6 @@ public static class WorldScreenTextDecal {
         ));
 
         return packedU | (packedV << 16);
-    }
-    // RGB in [0, 1] → rgba8 with R in the low byte and opaque alpha, matching the shader's unpack.
-    private static uint PackColor(Vector3 rgb) {
-        var r = ((uint)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.X) * 255f)));
-        var g = ((uint)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.Y) * 255f)));
-        var b = ((uint)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.Z) * 255f)));
-
-        return r | (g << 8) | (b << 16) | 0xFF000000;
     }
 
     /// <summary>Bakes the authored lines into a decal frame against the resolved catalog font.</summary>

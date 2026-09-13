@@ -24,15 +24,15 @@ public enum AgbBiosKind {
 /// description. This is a host-side identification aid (computed at machine assembly, never on the emulated path), so
 /// a SHA-1 content hash is used for a stable, recognisable fingerprint.</summary>
 public readonly struct AgbBiosIdentity {
-    /// <summary>The BIOS classification.</summary>
-    public AgbBiosKind Kind { get; init; }
-    /// <summary>The lowercase hexadecimal SHA-1 of the image (40 chars), or empty for a wrong-sized image.</summary>
-    public string Sha1 { get; init; }
     /// <summary>A short human-readable description of the image (kind + hash prefix).</summary>
     public string Description { get; init; }
     /// <summary>Whether this image is trustworthy for cycle-parity / co-simulation work (only the verified retail
     /// BIOS is). Parity/co-sim diagnostics warn — the documented "phantom cycle drift" trap — when this is false.</summary>
     public bool IsCycleParityTrustworthy => (Kind == AgbBiosKind.RealVerified);
+    /// <summary>The BIOS classification.</summary>
+    public AgbBiosKind Kind { get; init; }
+    /// <summary>The lowercase hexadecimal SHA-1 of the image (40 chars), or empty for a wrong-sized image.</summary>
+    public string Sha1 { get; init; }
 
     /// <inheritdoc/>
     public override string ToString() => Description;

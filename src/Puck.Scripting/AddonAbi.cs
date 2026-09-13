@@ -220,6 +220,13 @@ public static class AddonAbi {
         /// carried it. A nonzero count means "resync by polling the level state you already observe" — the dropped
         /// edges are gone, never replayed.</summary>
         public const int EventGap = 10;
+        /// <summary>An adjacency row's federation link went its authored grace without a delivered neighbour
+        /// refresh. <c>A</c> = the adjacency row's 0-based ordinal; <c>B</c> = the staleness in simulation ticks at
+        /// the moment the edge fired.</summary>
+        public const int EventLinkDropped = 12;
+        /// <summary>An adjacency row's federation link came back after being dropped. <c>A</c> = the adjacency row's
+        /// 0-based ordinal (document order among <c>adjacencies</c> rows); <c>B</c> is always zero.</summary>
+        public const int EventLinkEstablished = 11;
         /// <summary>A watched machine-memory byte range changed value. <c>A</c> = <c>(screenIndex &lt;&lt; 32) |
         /// (uint)address</c>; <c>B</c> = the new byte value, zero-extended. Published only when the host composes
         /// presentation (a headless host peeks no machine and publishes nothing on this verb — see
@@ -240,13 +247,6 @@ public static class AddonAbi {
         /// <summary>A seat became human-occupied. <c>A</c> = the 0-based seat index (also its body index); <c>B</c>
         /// is always zero.</summary>
         public const int EventSeatJoin = 3;
-        /// <summary>An adjacency row's federation link came back after being dropped. <c>A</c> = the adjacency row's
-        /// 0-based ordinal (document order among <c>adjacencies</c> rows); <c>B</c> is always zero.</summary>
-        public const int EventLinkEstablished = 11;
-        /// <summary>An adjacency row's federation link went its authored grace without a delivered neighbour
-        /// refresh. <c>A</c> = the adjacency row's 0-based ordinal; <c>B</c> = the staleness in simulation ticks at
-        /// the moment the edge fired.</summary>
-        public const int EventLinkDropped = 12;
         /// <summary>A seat stopped being human-occupied. Same payload shape as <see cref="EventSeatJoin"/>.</summary>
         public const int EventSeatLeave = 4;
         /// <summary>The disclosure of a minted handle over a body the addon's principal was granted.</summary>

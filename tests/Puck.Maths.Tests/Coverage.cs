@@ -23,55 +23,57 @@ internal static class MemberSurface {
 
     /// <summary>Gets every enumerated public member, ordered by id.</summary>
     public static IReadOnlyList<Record> All { get; } = Enumerate();
-
-    /// <summary>Resolves a <see cref="CoverRef"/> to the ids of the matching members (all overloads of the name).</summary>
-    /// <param name="reference">The reference to resolve.</param>
-    /// <returns>The matching member ids.</returns>
-    public static IEnumerable<string> Resolve(CoverRef reference) {
-        var normalized = Normalize(type: reference.Type);
-
-        return All
-            .Where(predicate: record => ((record.DeclaringType == normalized) && (record.Name == reference.Name)))
-            .Select(selector: record => record.Id);
-    }
-
     /// <summary>Gets the set of all current member ids.</summary>
     public static IReadOnlySet<string> Ids { get; } = All.Select(selector: record => record.Id).ToHashSet();
 
-    private static Type Normalize(Type type) =>
-        (type.IsGenericType ? type.GetGenericTypeDefinition() : type);
     private static IReadOnlyList<Record> Enumerate() {
         var assembly = typeof(FixedQ4816).Assembly;
         var records = new List<Record>();
 
         foreach (var type in assembly.GetTypes()) {
-            if (!type.IsVisible || type.Name.Contains(value: '<')) {
+            if (
+                !type.IsVisible ||
+                type.Name.Contains(value: '<')
+            ) {
                 continue;
             }
 
             foreach (var member in type.GetMembers(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
-                if ((member is Type) || (member is EventInfo) || ExcludedNames.Contains(item: member.Name) || member.Name.Contains(value: '<')) {
+                if (
+                    (member is Type) ||
+                    (member is EventInfo) ||
+                    ExcludedNames.Contains(item: member.Name) ||
+                    member.Name.Contains(value: '<')
+                ) {
                     continue;
                 }
 
-                if ((member is MethodInfo method) && IsAccessor(name: method.Name)) {
+                if (
+                    (member is MethodInfo method) &&
+                    IsAccessor(name: method.Name)
+                ) {
                     continue;
                 }
 
-                records.Add(item: new Record(Id: Format(declaringType: type, member: member), DeclaringType: type, Name: member.Name));
+                records.Add(item: new Record(
+                    Id: Format(
+                        declaringType: type,
+                        member: member
+                    ),
+                    DeclaringType: type,
+                    Name: member.Name
+                ));
             }
         }
 
         return [.. records
             .GroupBy(keySelector: record => record.Id)
             .Select(selector: group => group.First())
-            .OrderBy(keySelector: record => record.Id, comparer: StringComparer.Ordinal)];
+            .OrderBy(
+                keySelector: record => record.Id,
+                comparer: StringComparer.Ordinal
+            )];
     }
-    private static bool IsAccessor(string name) =>
-        (name.StartsWith(comparisonType: StringComparison.Ordinal, value: "get_") ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "set_") ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "add_") ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "remove_"));
     private static string Format(Type declaringType, MemberInfo member) {
         var typeName = TypeName(type: declaringType);
 
@@ -81,14 +83,89 @@ internal static class MemberSurface {
 
         // An indexer is a parameterized property; carry its index parameters so overloaded indexers stay distinct, the
         // same discipline the method ids follow. A plain property renders as its bare name.
-        if ((member is PropertyInfo property) && (property.GetIndexParameters().Length > 0)) {
+        if (
+            (member is PropertyInfo property) &&
+            (property.GetIndexParameters().Length > 0)
+        ) {
             return $"{typeName}.{property.Name}({ParameterList(parameters: property.GetIndexParameters())})";
         }
 
         return $"{typeName}.{member.Name}";
     }
+    // Renders a generic type, distributing the flattened argument list across the nesting chain so a type nested in a
+    // generic keeps BOTH its own segment and its own arguments (QuadraticAlgebra<TScalar>.Element, never the collapsed
+    // outer name). The reflection argument list is ordered outer-to-inner, so each level takes the arguments its
+    // declaring type does not, and the remainder are its own.
+    private static string GenericTypeName(Type type, Type[] arguments) {
+        var declaring = type.DeclaringType;
+        var inherited = (((declaring is not null) && declaring.IsGenericType)
+            ? declaring.GetGenericArguments().Length
+            : 0
+        );
+        var ownArguments = arguments[inherited..];
+        var simpleName = StripArity(name: type.Name);
+        var rendered = ((ownArguments.Length == 0)
+            ? simpleName
+            : $"{simpleName}<{string.Join(
+                separator: ",",
+                values: ownArguments.Select(selector: TypeName)
+            )}>"
+        );
+
+        if (declaring is null) {
+            return ((type.Namespace is { Length: > 0 } space)
+                ? $"{space}.{rendered}"
+                : rendered
+            );
+        }
+
+        var declaringName = (declaring.IsGenericType
+            ? GenericTypeName(
+                type: declaring,
+                arguments: arguments[..inherited]
+            )
+            : TypeName(type: declaring)
+        );
+
+        return $"{declaringName}.{rendered}";
+    }
+    private static bool IsAccessor(string name) =>
+        (name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "get_"
+        ) ||
+        name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "set_"
+        ) ||
+        name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "add_"
+        ) ||
+        name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "remove_"
+        ));
+    private static Type Normalize(Type type) =>
+        (type.IsGenericType
+            ? type.GetGenericTypeDefinition()
+            : type
+        );
     private static string ParameterList(ParameterInfo[] parameters) =>
-        string.Join(separator: ",", values: parameters.Select(selector: parameter => TypeName(type: parameter.ParameterType)));
+        string.Join(
+            separator: ",",
+            values: parameters.Select(selector: parameter => TypeName(type: parameter.ParameterType))
+        );
+    private static string StripArity(string name) {
+        var tick = name.IndexOf(value: '`');
+
+        return ((tick < 0)
+            ? name
+            : name[..tick]).Replace(
+            newChar: '.',
+            oldChar: '+'
+        );
+    }
     private static string TypeName(Type type) {
         if (type.IsByRef) {
             return (TypeName(type: type.GetElementType()!) + "&");
@@ -107,38 +184,27 @@ internal static class MemberSurface {
         }
 
         if (type.IsGenericType) {
-            return GenericTypeName(type: type, arguments: type.GetGenericArguments());
+            return GenericTypeName(
+                type: type,
+                arguments: type.GetGenericArguments()
+            );
         }
 
-        return (type.FullName ?? type.Name).Replace(newChar: '.', oldChar: '+');
+        return (type.FullName ?? type.Name).Replace(
+            newChar: '.',
+            oldChar: '+'
+        );
     }
-    // Renders a generic type, distributing the flattened argument list across the nesting chain so a type nested in a
-    // generic keeps BOTH its own segment and its own arguments (QuadraticAlgebra<TScalar>.Element, never the collapsed
-    // outer name). The reflection argument list is ordered outer-to-inner, so each level takes the arguments its
-    // declaring type does not, and the remainder are its own.
-    private static string GenericTypeName(Type type, Type[] arguments) {
-        var declaring = type.DeclaringType;
-        var inherited = (((declaring is not null) && declaring.IsGenericType) ? declaring.GetGenericArguments().Length : 0);
-        var ownArguments = arguments[inherited..];
-        var simpleName = StripArity(name: type.Name);
-        var rendered = ((ownArguments.Length == 0)
-            ? simpleName
-            : $"{simpleName}<{string.Join(separator: ",", values: ownArguments.Select(selector: TypeName))}>");
 
-        if (declaring is null) {
-            return ((type.Namespace is { Length: > 0 } space) ? $"{space}.{rendered}" : rendered);
-        }
+    /// <summary>Resolves a <see cref="CoverRef"/> to the ids of the matching members (all overloads of the name).</summary>
+    /// <param name="reference">The reference to resolve.</param>
+    /// <returns>The matching member ids.</returns>
+    public static IEnumerable<string> Resolve(CoverRef reference) {
+        var normalized = Normalize(type: reference.Type);
 
-        var declaringName = (declaring.IsGenericType
-            ? GenericTypeName(type: declaring, arguments: arguments[..inherited])
-            : TypeName(type: declaring));
-
-        return $"{declaringName}.{rendered}";
-    }
-    private static string StripArity(string name) {
-        var tick = name.IndexOf(value: '`');
-
-        return ((tick < 0) ? name : name[..tick]).Replace(newChar: '.', oldChar: '+');
+        return All
+            .Where(predicate: record => ((record.DeclaringType == normalized) && (record.Name == reference.Name)))
+            .Select(selector: record => record.Id);
     }
 
     /// <summary>One enumerated public member.</summary>
@@ -149,14 +215,14 @@ internal static class MemberSurface {
 }
 /// <summary>One member's coverage state in the committed manifest.</summary>
 internal sealed class ManifestEntry {
-    /// <summary>Gets or sets the member id.</summary>
-    public string Id { get; set; } = "";
-    /// <summary>Gets or sets the state: <c>covered</c>, <c>waived</c>, or <c>uncovered</c>.</summary>
-    public string State { get; set; } = "uncovered";
     /// <summary>Gets or sets the law/fact ids covering this member (present only when <see cref="State"/> is covered).</summary>
     public List<string>? CoveredBy { get; set; }
+    /// <summary>Gets or sets the member id.</summary>
+    public string Id { get; set; } = "";
     /// <summary>Gets or sets the mandatory waiver reason (present only when <see cref="State"/> is waived).</summary>
     public string? Reason { get; set; }
+    /// <summary>Gets or sets the state: <c>covered</c>, <c>waived</c>, or <c>uncovered</c>.</summary>
+    public string State { get; set; } = "uncovered";
 }
 /// <summary>The committed coverage manifest.</summary>
 internal sealed class Manifest {
@@ -172,6 +238,18 @@ internal sealed class Manifest {
 /// <see cref="Generate"/> never invents one, so an unclassified member keeps failing the gate on every run.
 /// </summary>
 internal static class Coverage {
+    private const string CurvatureSplineCoefficientScaleReason = "A documentation constant naming the scale every CurvatureSplineSegment raw is carried at; every law in the curvature-spline family reads and compares those raws, so a wrong value here would desynchronize every comparison in the family rather than fail one case that names it — the constant has no operand domain, subject shape or oracle of its own.";
+    private const string CurvatureSplineUnreachableArcErrorReason = "Named refusal with no reachable trigger through legal authored knots: composite-Simpson error scales with the FOURTH power of the panel width, so each doubling divides the Richardson error estimate by roughly sixteen; CheckInteriorCusp already certifies every admitted segment's speed stays at or above MinSpeedFloor everywhere on [0, 1] (an exact, interval-isolated bound), which keeps the integrand's own higher derivatives from the kind of near-singular blowup that would demand many doublings, so the panel count converges within a handful of doublings for every admitted segment this suite or a hand-constructed adversarial one has reached — nowhere near the 65,536-panel budget. The refusal stays as the defensive catch-all a bounded search demands, not because a law can drive it.";
+    private const string CurvatureSplineUnreachableOverflowReason = "Named refusal with no reachable trigger through legal authored knots: every §1.6 derived bound (MaxCoordinate, MaxTangentChordRatio, MinTangentLength) exists specifically to keep the Q32 raw carrier from overflowing, and a knot pair inside KnotOutOfRange's own coordinate bound compiles or refuses by an earlier, more specific name first (curvature-spline.refusal-ladder's own leg records a 30000-draw sweep at the coordinate cap finding zero occurrences). The refusal stays in the ladder as the defensive catch-all TryRoundRational's own Try-shape demands, not because a law can drive it.";
+    private const string DrawGeneratorShapeReason = "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws.";
+    private const string EnumStorageReason = "The compiler-generated enum storage field, not authored API.";
+    // The shared category reasons. Each is written once and cited by every member of its category, which is what makes
+    // the category reviewable as a category rather than as a pile of one-off prose.
+    private const string FieldSeamCarrierReason = "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.";
+    private const string FieldSeamReason = "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.";
+    private const string SymmetryLatticeReason = "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.";
+    private const string UnreachedCertificateReason = "Enumeration case with no producer: the guarded sum names the certificate it ATTEMPTED, and every attempt in the library is Nilpotent, Idempotent or FieldResolvent. A divisibility window is locally finite but reports the nilpotence it observed, so LocallyFinite is still issued nowhere, and None is the absence of any issued certificate rather than a certificate itself.";
+
     /// <summary>The waived members: intentionally outside the algebra law suite, each with a mandatory reason. Declared
     /// by reference (type + name) so the ids resolve mechanically.</summary>
     private static readonly (CoverRef Reference, string Reason)[] WaiverDeclarations = [
@@ -222,31 +300,94 @@ internal static class Coverage {
         // — are additionally named by integer.symmetry-lattice-exact-structure, so their entries are inert rather than
         // load-bearing; they are left in place because the waiver register is a declaration of intent and thinning it
         // is a separate review.
-        (new CoverRef(Name: "Antipode", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "CanonicalRay", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "Dimension", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "NodeCount", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "Project", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "RayCount", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "Ring", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "RingCount", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
-        (new CoverRef(Name: "RingSize", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "Antipode",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "CanonicalRay",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "Dimension",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "NodeCount",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "Project",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "RayCount",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "Ring",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "RingCount",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
+        (new CoverRef(
+            Name: "RingSize",
+            Type: typeof(SymmetryLattice)
+        ), SymmetryLatticeReason),
 
         // ---- the presented charged algebra ----
         // One CATEGORY reason per kind, repeated verbatim; an individual reason appears only where the category does
         // not honestly fit. Nothing here is arithmetic: every member that computes a value answers to a law.
-        (new CoverRef(Name: "value__", Type: typeof(ChargeLane)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(ClosureCertificate)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(ClosureOutcome)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(ResidualTwist)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(RuleKind)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(DiscreteMeasureCompilationFailure)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(SecondOrderDynamicsBranch)), EnumStorageReason),
-        (new CoverRef(Name: "value__", Type: typeof(CurvatureSplineRefusal)), EnumStorageReason),
-        (new CoverRef(Name: "CarrierOverflow", Type: typeof(CurvatureSplineRefusal)), CurvatureSplineUnreachableOverflowReason),
-        (new CoverRef(Name: "ArcLengthErrorUnbounded", Type: typeof(CurvatureSplineRefusal)), CurvatureSplineUnreachableArcErrorReason),
-        (new CoverRef(Name: "CoefficientFractionBitCount", Type: typeof(CurvatureSpline)), CurvatureSplineCoefficientScaleReason),
-        (new CoverRef(Name: "LocallyFinite", Type: typeof(ClosureCertificate)), UnreachedCertificateReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(ChargeLane)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(ClosureCertificate)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(ClosureOutcome)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(ResidualTwist)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(RuleKind)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(DiscreteMeasureCompilationFailure)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(SecondOrderDynamicsBranch)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(CurvatureSplineRefusal)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "CarrierOverflow",
+            Type: typeof(CurvatureSplineRefusal)
+        ), CurvatureSplineUnreachableOverflowReason),
+        (new CoverRef(
+            Name: "ArcLengthErrorUnbounded",
+            Type: typeof(CurvatureSplineRefusal)
+        ), CurvatureSplineUnreachableArcErrorReason),
+        (new CoverRef(
+            Name: "CoefficientFractionBitCount",
+            Type: typeof(CurvatureSpline)
+        ), CurvatureSplineCoefficientScaleReason),
+        (new CoverRef(
+            Name: "LocallyFinite",
+            Type: typeof(ClosureCertificate)
+        ), UnreachedCertificateReason),
 
         // ---- the continued-fraction lenses ----
         // Nothing is waived here: every member of this group answers to a law.
@@ -269,30 +410,102 @@ internal static class Coverage {
         // behavior belongs to each provider and is gated where the provider lives: SdfFieldEvaluator answers in
         // tests/Puck.SignedDistance.Tests. FieldEvaluatorCapabilities is the one-flag carrier the contract hands back.
         // NOTHING is owed here; a law would become owed only if Puck.Maths ever ships a field implementation of its own.
-        (new CoverRef(Name: "Capabilities", Type: typeof(IWorldQuery)), FieldSeamReason),
-        (new CoverRef(Name: "LineOfSight", Type: typeof(IWorldQuery)), FieldSeamReason),
-        (new CoverRef(Name: "Overlap", Type: typeof(IWorldQuery)), FieldSeamReason),
-        (new CoverRef(Name: "Raycast", Type: typeof(IWorldQuery)), FieldSeamReason),
-        (new CoverRef(Name: "SphereCast", Type: typeof(IWorldQuery)), FieldSeamReason),
-        (new CoverRef(Name: "TryGroundHeight", Type: typeof(IWorldQuery)), FieldSeamReason),
-        (new CoverRef(Name: ".ctor", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "HasBlocked", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "HasHeightfield", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "HasOccupancy", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
-        (new CoverRef(Name: ".ctor", Type: typeof(RayHit)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Confidence", Type: typeof(RayHit)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Distance", Type: typeof(RayHit)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Material", Type: typeof(RayHit)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Normal", Type: typeof(RayHit)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Point", Type: typeof(RayHit)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Bounded", Type: typeof(WorldQueryConfidence)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "Exact", Type: typeof(WorldQueryConfidence)), FieldSeamCarrierReason),
-        (new CoverRef(Name: "value__", Type: typeof(WorldQueryConfidence)), EnumStorageReason),
-        (new CoverRef(Name: "Capabilities", Type: typeof(IFieldEvaluator)), FieldSeamReason),
-        (new CoverRef(Name: "TryDistance", Type: typeof(IFieldEvaluator)), FieldSeamReason),
-        (new CoverRef(Name: "TryFieldGradient", Type: typeof(IFieldEvaluator)), FieldSeamReason),
-        (new CoverRef(Name: ".ctor", Type: typeof(FieldEvaluatorCapabilities)), FieldSeamReason),
-        (new CoverRef(Name: "WarpFree", Type: typeof(FieldEvaluatorCapabilities)), FieldSeamReason),
+        (new CoverRef(
+            Name: "Capabilities",
+            Type: typeof(IWorldQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "LineOfSight",
+            Type: typeof(IWorldQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "Overlap",
+            Type: typeof(IWorldQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "Raycast",
+            Type: typeof(IWorldQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "SphereCast",
+            Type: typeof(IWorldQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "TryGroundHeight",
+            Type: typeof(IWorldQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: ".ctor",
+            Type: typeof(QueryCapabilities)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "HasBlocked",
+            Type: typeof(QueryCapabilities)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "HasHeightfield",
+            Type: typeof(QueryCapabilities)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "HasOccupancy",
+            Type: typeof(QueryCapabilities)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: ".ctor",
+            Type: typeof(RayHit)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Confidence",
+            Type: typeof(RayHit)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Distance",
+            Type: typeof(RayHit)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Material",
+            Type: typeof(RayHit)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Normal",
+            Type: typeof(RayHit)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Point",
+            Type: typeof(RayHit)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Bounded",
+            Type: typeof(WorldQueryConfidence)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Exact",
+            Type: typeof(WorldQueryConfidence)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(WorldQueryConfidence)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "Capabilities",
+            Type: typeof(IFieldEvaluator)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "TryDistance",
+            Type: typeof(IFieldEvaluator)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "TryFieldGradient",
+            Type: typeof(IFieldEvaluator)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: ".ctor",
+            Type: typeof(FieldEvaluatorCapabilities)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "WarpFree",
+            Type: typeof(FieldEvaluatorCapabilities)
+        ), FieldSeamReason),
 
         // ---- the generic-draw dispatch contract ----
         // IDrawGenerator carries no body of its own: it exists so a generic caller (Puck.State.GeneratorEngine,
@@ -301,22 +514,26 @@ internal static class Coverage {
         // separate reflected member under its own declaring type and already carries its own coverage
         // (Pcg32XshRr.NextUInt32/NextUInt32(uint,uint)/Advance and Pcg32Extended's own via the sampling.* laws);
         // the interface declaration itself computes nothing to state a law against.
-        (new CoverRef(Name: "NextUInt32", Type: typeof(IDrawGenerator)), DrawGeneratorShapeReason),
-        (new CoverRef(Name: "Advance", Type: typeof(IDrawGenerator)), DrawGeneratorShapeReason),
+        (new CoverRef(
+            Name: "NextUInt32",
+            Type: typeof(IDrawGenerator)
+        ), DrawGeneratorShapeReason),
+        (new CoverRef(
+            Name: "Advance",
+            Type: typeof(IDrawGenerator)
+        ), DrawGeneratorShapeReason),
     ];
 
-    // The shared category reasons. Each is written once and cited by every member of its category, which is what makes
-    // the category reviewable as a category rather than as a pile of one-off prose.
-    private const string FieldSeamCarrierReason = "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.";
-    private const string CurvatureSplineCoefficientScaleReason = "A documentation constant naming the scale every CurvatureSplineSegment raw is carried at; every law in the curvature-spline family reads and compares those raws, so a wrong value here would desynchronize every comparison in the family rather than fail one case that names it — the constant has no operand domain, subject shape or oracle of its own.";
-    private const string CurvatureSplineUnreachableArcErrorReason = "Named refusal with no reachable trigger through legal authored knots: composite-Simpson error scales with the FOURTH power of the panel width, so each doubling divides the Richardson error estimate by roughly sixteen; CheckInteriorCusp already certifies every admitted segment's speed stays at or above MinSpeedFloor everywhere on [0, 1] (an exact, interval-isolated bound), which keeps the integrand's own higher derivatives from the kind of near-singular blowup that would demand many doublings, so the panel count converges within a handful of doublings for every admitted segment this suite or a hand-constructed adversarial one has reached — nowhere near the 65,536-panel budget. The refusal stays as the defensive catch-all a bounded search demands, not because a law can drive it.";
-    private const string CurvatureSplineUnreachableOverflowReason = "Named refusal with no reachable trigger through legal authored knots: every §1.6 derived bound (MaxCoordinate, MaxTangentChordRatio, MinTangentLength) exists specifically to keep the Q32 raw carrier from overflowing, and a knot pair inside KnotOutOfRange's own coordinate bound compiles or refuses by an earlier, more specific name first (curvature-spline.refusal-ladder's own leg records a 30000-draw sweep at the coordinate cap finding zero occurrences). The refusal stays in the ladder as the defensive catch-all TryRoundRational's own Try-shape demands, not because a law can drive it.";
-    private const string DrawGeneratorShapeReason = "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws.";
-    private const string EnumStorageReason = "The compiler-generated enum storage field, not authored API.";
-    private const string FieldSeamReason = "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.";
-    private const string SymmetryLatticeReason = "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.";
-    private const string UnreachedCertificateReason = "Enumeration case with no producer: the guarded sum names the certificate it ATTEMPTED, and every attempt in the library is Nilpotent, Idempotent or FieldResolvent. A divisibility window is locally finite but reports the nilpotence it observed, so LocallyFinite is still issued nowhere, and None is the absence of any issued certificate rather than a certificate itself.";
+    /// <summary>Counts the manifest states.</summary>
+    /// <param name="manifest">The manifest.</param>
+    /// <returns>The covered/waived/uncovered counts.</returns>
+    public static (int Covered, int Waived, int Uncovered) Counts(Manifest manifest) {
+        var covered = manifest.Members.Count(predicate: entry => (entry.State == "covered"));
+        var waived = manifest.Members.Count(predicate: entry => (entry.State == "waived"));
+        var uncovered = manifest.Members.Count(predicate: entry => (entry.State == "uncovered"));
 
+        return (covered, waived, uncovered);
+    }
     /// <summary>Builds the map from covered member id to the sorted law ids covering it, from the registry. Every case
     /// in <see cref="LawRegistry.All"/> is a law the runner executes, so coverage is only ever credited from a case
     /// that can run and assert.</summary>
@@ -327,7 +544,10 @@ internal static class Coverage {
         foreach (var lawCase in LawRegistry.All) {
             foreach (var reference in lawCase.Members) {
                 foreach (var id in MemberSurface.Resolve(reference: reference)) {
-                    if (!covered.TryGetValue(key: id, value: out var laws)) {
+                    if (!covered.TryGetValue(
+                        key: id,
+                        value: out var laws
+                    )) {
                         laws = new SortedSet<string>(comparer: StringComparer.Ordinal);
                         covered[id] = laws;
                     }
@@ -337,20 +557,11 @@ internal static class Coverage {
             }
         }
 
-        return covered.ToDictionary(keySelector: pair => pair.Key, elementSelector: IReadOnlyList<string> (pair) => [.. pair.Value], comparer: StringComparer.Ordinal);
-    }
-    /// <summary>The waived member ids resolved from the declarations.</summary>
-    /// <returns>The map from waived member id to reason.</returns>
-    public static IReadOnlyDictionary<string, string> WaivedMembers() {
-        var waived = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var (reference, reason) in WaiverDeclarations) {
-            foreach (var id in MemberSurface.Resolve(reference: reference)) {
-                waived[id] = reason;
-            }
-        }
-
-        return waived;
+        return covered.ToDictionary(
+            keySelector: pair => pair.Key,
+            elementSelector: IReadOnlyList<string> (pair) => [.. pair.Value],
+            comparer: StringComparer.Ordinal
+        );
     }
     /// <summary>Regenerates the manifest mechanically: upgrades to covered, applies waivers, keeps a previously-covered
     /// member covered (so a regression stays visible until fixed), and re-emits every other member with the state the
@@ -365,36 +576,48 @@ internal static class Coverage {
         var covered = CoveredMembers();
         var waived = WaivedMembers();
         var bootstrapping = (existing is null);
-        var previous = (existing?.Members ?? []).ToDictionary(keySelector: entry => entry.Id, elementSelector: entry => entry, comparer: StringComparer.Ordinal);
+        var previous = (existing?.Members ?? []).ToDictionary(
+            keySelector: entry => entry.Id,
+            elementSelector: entry => entry,
+            comparer: StringComparer.Ordinal
+        );
         var members = new List<ManifestEntry>();
 
         foreach (var id in MemberSurface.Ids) {
-            if (covered.TryGetValue(key: id, value: out var laws)) {
+            if (covered.TryGetValue(
+                key: id,
+                value: out var laws
+            )) {
                 members.Add(item: new ManifestEntry { CoveredBy = [.. laws], Id = id, State = "covered" });
-            } else if (previous.TryGetValue(key: id, value: out var prior) && (prior.State == "covered")) {
+            } else if (
+                previous.TryGetValue(
+                key: id,
+                value: out var prior
+            ) &&
+                (prior.State == "covered")
+            ) {
                 // Sticky: a member that was covered but no longer is stays covered in the manifest so the ratchet keeps
                 // failing until coverage is restored (grow-only never silently downgrades).
                 members.Add(item: new ManifestEntry { CoveredBy = prior.CoveredBy, Id = id, State = "covered" });
-            } else if (waived.TryGetValue(key: id, value: out var reason)) {
+            } else if (waived.TryGetValue(
+                key: id,
+                value: out var reason
+            )) {
                 members.Add(item: new ManifestEntry { Id = id, Reason = reason, State = "waived" });
-            } else if (bootstrapping || previous.ContainsKey(key: id)) {
+            } else if (
+                bootstrapping ||
+                previous.ContainsKey(key: id)
+            ) {
                 members.Add(item: new ManifestEntry { Id = id, State = "uncovered" });
             }
         }
 
-        members.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Id, strB: right.Id));
+        members.Sort(comparison: static (left, right) => string.CompareOrdinal(
+            strA: left.Id,
+            strB: right.Id
+        ));
 
         return new Manifest { Members = members };
-    }
-    /// <summary>Counts the manifest states.</summary>
-    /// <param name="manifest">The manifest.</param>
-    /// <returns>The covered/waived/uncovered counts.</returns>
-    public static (int Covered, int Waived, int Uncovered) Counts(Manifest manifest) {
-        var covered = manifest.Members.Count(predicate: entry => (entry.State == "covered"));
-        var waived = manifest.Members.Count(predicate: entry => (entry.State == "waived"));
-        var uncovered = manifest.Members.Count(predicate: entry => (entry.State == "uncovered"));
-
-        return (covered, waived, uncovered);
     }
     /// <summary>Applies the ratchet against the committed manifest. A member counts as classified when the committed
     /// manifest gives it a state OR a declaration does — a law case covering it, or a waiver naming it — so landing a
@@ -405,16 +628,26 @@ internal static class Coverage {
     public static (IReadOnlyList<string> NewMembers, IReadOnlyList<string> Regressions) Ratchet(Manifest committed) {
         var covered = CoveredMembers();
         var waived = WaivedMembers();
-        var known = committed.Members.ToDictionary(keySelector: entry => entry.Id, elementSelector: entry => entry, comparer: StringComparer.Ordinal);
+        var known = committed.Members.ToDictionary(
+            keySelector: entry => entry.Id,
+            elementSelector: entry => entry,
+            comparer: StringComparer.Ordinal
+        );
         var newMembers = new List<string>();
         var regressions = new List<string>();
 
         foreach (var id in MemberSurface.Ids) {
             if (!known.ContainsKey(key: id)) {
-                if (!covered.ContainsKey(key: id) && !waived.ContainsKey(key: id)) {
+                if (
+                    !covered.ContainsKey(key: id) &&
+                    !waived.ContainsKey(key: id)
+                ) {
                     newMembers.Add(item: id);
                 }
-            } else if ((known[id].State == "covered") && !covered.ContainsKey(key: id)) {
+            } else if (
+                (known[id].State == "covered") &&
+                !covered.ContainsKey(key: id)
+            ) {
                 regressions.Add(item: id);
             }
         }
@@ -423,5 +656,18 @@ internal static class Coverage {
         regressions.Sort(comparison: StringComparer.Ordinal.Compare);
 
         return (newMembers, regressions);
+    }
+    /// <summary>The waived member ids resolved from the declarations.</summary>
+    /// <returns>The map from waived member id to reason.</returns>
+    public static IReadOnlyDictionary<string, string> WaivedMembers() {
+        var waived = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var (reference, reason) in WaiverDeclarations) {
+            foreach (var id in MemberSurface.Resolve(reference: reference)) {
+                waived[id] = reason;
+            }
+        }
+
+        return waived;
     }
 }

@@ -32,11 +32,14 @@ public sealed partial class WorldPopulation {
         body.SetContactConfiguration(
             field: m_contactField,
             upPolicy: m_bodyUpPolicy,
-                walkableThreshold: m_walkableThreshold
+            walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
 
-        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var frame = WorldDefinitionRows.ResolvedFrame(
+            definition: definition,
+            placement: placement
+        );
         var spawn = InhabitantSpawn(
             frame: frame,
             distribution: inhabit.Distribution!,
@@ -61,7 +64,7 @@ public sealed partial class WorldPopulation {
         entry.PlacementId = placement.Id;
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
-        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(index);
+        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
@@ -75,7 +78,7 @@ public sealed partial class WorldPopulation {
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
-        m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(index);
+        m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
@@ -102,7 +105,7 @@ public sealed partial class WorldPopulation {
         player.SetContactConfiguration(
             field: m_contactField,
             upPolicy: m_bodyUpPolicy,
-                walkableThreshold: m_walkableThreshold
+            walkableThreshold: m_walkableThreshold
         );
         player.SetGravityField(field: m_gravityField);
 
@@ -275,7 +278,7 @@ public sealed partial class WorldPopulation {
         body.SetContactConfiguration(
             field: m_contactField,
             upPolicy: m_bodyUpPolicy,
-                walkableThreshold: m_walkableThreshold
+            walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
 
@@ -294,7 +297,7 @@ public sealed partial class WorldPopulation {
         SeedSeatSteeringProducer(slot: slot);
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
-        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(slot);
+        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: slot);
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
         m_revision++;
@@ -566,6 +569,7 @@ public sealed partial class WorldPopulation {
         index: index,
         generation: m_entries[index].Generation
     );
+
     // Mirrors what a full Capacity scan would find, as of the last m_revision it was rebuilt from. Every site that
     // touches Entry.Parked or Entry.ParkedUntilTick (including Rebuild, on a document reload) bumps m_revision, so
     // an unmoved revision is a sound proof nothing here needs rescanning.
@@ -624,7 +628,10 @@ public sealed partial class WorldPopulation {
 
                     entry.ParkedUntilTick = (signedTick + m_reconnectGraceTicks.Ticks);
                     changed = true;
-                    m_parkDeadlines.Add(dueTick: entry.ParkedUntilTick.Value, token: index);
+                    m_parkDeadlines.Add(
+                        dueTick: entry.ParkedUntilTick.Value,
+                        token: index
+                    );
 
                     continue;
                 }
@@ -636,11 +643,17 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                m_parkDeadlines.Add(dueTick: deadline, token: index);
+                m_parkDeadlines.Add(
+                    dueTick: deadline,
+                    token: index
+                );
             }
         }
 
-        while (m_parkDeadlines.TryDequeueDue(tick: signedTick, out var slot)) {
+        while (m_parkDeadlines.TryDequeueDue(
+            tick: signedTick,
+            out var slot
+        )) {
             RetireParkedEntry(entry: m_entries[slot]);
             changed = true;
         }
@@ -652,6 +665,7 @@ public sealed partial class WorldPopulation {
 
         m_parkDeadlineRevision = m_revision;
     }
+
     // The full-teardown half of an expired park, shared by both the rescan and the plain table drain below it.
     private static void RetireParkedEntry(Entry entry) {
         entry.Body = null;
@@ -669,6 +683,7 @@ public sealed partial class WorldPopulation {
             entry.IdentitySubject = string.Empty;
         }
     }
+
     /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's
     /// Install after <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's inhabit facet joins bodies
     /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
@@ -783,6 +798,7 @@ public sealed partial class WorldPopulation {
         InvalidateInhabitCountCache();
         m_revision++;
     }
+
     // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in
     // document order (HighestFreeSlot's own remarks — the first body admitted always lands at the highest index), and
     // shrink retires the lowest surviving index that is not currently a seat's own claimed body (Entry.IsRemoteHuman)
@@ -798,7 +814,10 @@ public sealed partial class WorldPopulation {
 
             if (slot < 0) {
                 if (NarrationHub is { HasNarrationSink: true }) {
-                    NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
+                    NarrationHub?.Narrate(
+                        channel: "world.placement",
+                        text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]"
+                    );
                 }
 
                 return;
@@ -837,7 +856,11 @@ public sealed partial class WorldPopulation {
 
             if (
                 !entry.IsRemoteHuman &&
-                string.Equals(a: entry.PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)
+                string.Equals(
+                a: entry.PlacementId,
+                b: placementId,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 return index;
             }
@@ -856,7 +879,10 @@ public sealed partial class WorldPopulation {
             m_placementOrdinalToBody = new int[placements.Count];
         }
 
-        Array.Fill(array: m_placementOrdinalToBody, value: -1);
+        Array.Fill(
+            array: m_placementOrdinalToBody,
+            value: -1
+        );
 
         for (var index = 0; (index < m_entries.Length); index++) {
             if (m_entries[index].PlacementId is not { } placementId) {
@@ -864,7 +890,11 @@ public sealed partial class WorldPopulation {
             }
 
             for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
-                if (string.Equals(a: placements[ordinal].Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                if (string.Equals(
+                    a: placements[ordinal].Id,
+                    b: placementId,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     m_placementOrdinalToBody[ordinal] = index;
 
                     break;
@@ -872,12 +902,13 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+
     /// <summary>Resolves the <c>placement:&lt;id&gt;</c> body-reference token's compiled ordinal (the placement's own
     /// position in <see cref="WorldDefinition.Placements"/>) to the body index currently inhabiting it, or -1 when
     /// uninhabited — one array index, no string work, the tick-path contract <c>placement:$each</c>/<c>$distance:</c>/
     /// <c>$los:</c>/etc. rely on.</summary>
     /// <param name="ordinal">The compiled placement ordinal.</param>
-    public int BodyForPlacementOrdinal(int ordinal) => (((uint)ordinal < (uint)m_placementOrdinalToBody.Length)
+    public int BodyForPlacementOrdinal(int ordinal) => ((((uint)ordinal) < ((uint)m_placementOrdinalToBody.Length))
         ? m_placementOrdinalToBody[ordinal]
         : -1
     );
@@ -995,7 +1026,7 @@ public sealed partial class WorldPopulation {
         body.SetContactConfiguration(
             field: m_contactField,
             upPolicy: m_bodyUpPolicy,
-                walkableThreshold: m_walkableThreshold
+            walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.Pose(
@@ -1340,8 +1371,16 @@ public sealed partial class WorldPopulation {
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             if (
                 !IsParked(index: index) ||
-                !string.Equals(a: m_entries[index].IdentityDomain, b: identityDomain, comparisonType: StringComparison.Ordinal) ||
-                !string.Equals(a: m_entries[index].IdentitySubject, b: identitySubject, comparisonType: StringComparison.Ordinal)
+                !string.Equals(
+                a: m_entries[index].IdentityDomain,
+                b: identityDomain,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                !string.Equals(
+                a: m_entries[index].IdentitySubject,
+                b: identitySubject,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 continue;
             }

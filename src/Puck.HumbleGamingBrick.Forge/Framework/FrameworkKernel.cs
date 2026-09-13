@@ -44,29 +44,250 @@ public static class FrameworkKernel {
     // OAM DMA gates the rest of the bus; the countdown outlasts the 160-machine-cycle transfer.
     private static readonly byte[] DmaTrampolineBlob = [0x3E, 0xC1, 0xE0, 0x46, 0x3E, 0x28, 0x3D, 0x20, 0xFD, 0xC9];
 
+    private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort, int byteCount) {
+        var loop = emitter.NewLabel();
+
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: sourceAddress
+        );
+        emitter.LoadImmediate(
+            destination: Reg8.B,
+            value: ((byte)byteCount)
+        );
+        emitter.MarkLabel(label: loop);
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToHighPage(port: dataPort);
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: loop
+        );
+    }
+    // The VBlank handler (fixed at 0x0153): registers saved, shadow OAM DMA-copied via the HRAM trampoline, the
+    // background write queue drained while VRAM is open, the frame counter advanced, registers restored, reti.
+    private static void EmitVBlankHandler(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm = null) {
+        var noQueue = emitter.NewLabel();
+        var attributeLoop = emitter.NewLabel();
+        var drainLoop = emitter.NewLabel();
+        var noCounterHigh = emitter.NewLabel();
+
+        emitter.Push(pair: StackPair.Af);
+        emitter.Push(pair: StackPair.Bc);
+        emitter.Push(pair: StackPair.De);
+        emitter.Push(pair: StackPair.Hl);
+
+        emitter.Call(address: FrameworkMemoryMap.DmaTrampoline);
+
+        // Two passes over the same run, because a cell's tile and its attribute live at one address in two different
+        // video-memory banks: tiles with the bank register at zero, then attributes with it at one.
+        emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
+        emitter.Arithmetic(
+            op: AluOp.Or,
+            source: Reg8.A
+        );
+        emitter.JumpRelative(
+            condition: Condition.Zero,
+            label: noQueue
+        );
+        emitter.Load(
+            destination: Reg8.B,
+            source: Reg8.A
+        );
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: FrameworkMemoryMap.VramQueue
+        );
+        emitter.MarkLabel(label: drainLoop);
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(
+            destination: Reg8.D,
+            source: Reg8.A
+        );
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(
+            destination: Reg8.E,
+            source: Reg8.A
+        );
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToDe();
+        emitter.Increment(pair: Reg16.Hl);
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: drainLoop
+        );
+        emitter.LoadAImmediate(value: 0x01);
+        emitter.StoreAToHighPage(port: Hw.PortVramBank);
+        emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
+        emitter.Load(
+            destination: Reg8.B,
+            source: Reg8.A
+        );
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: FrameworkMemoryMap.VramQueue
+        );
+        emitter.MarkLabel(label: attributeLoop);
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(
+            destination: Reg8.D,
+            source: Reg8.A
+        );
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(
+            destination: Reg8.E,
+            source: Reg8.A
+        );
+        emitter.Increment(pair: Reg16.Hl);
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToDe();
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: attributeLoop
+        );
+        emitter.XorA();
+        emitter.StoreAToHighPage(port: Hw.PortVramBank);
+        emitter.StoreAToAddress(address: FrameworkMemoryMap.VramQueueCount);
+        emitter.MarkLabel(label: noQueue);
+
+        rasterRearm?.Invoke(obj: emitter);
+
+        emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounter);
+        emitter.Increment(register: Reg8.A);
+        emitter.StoreAToAddress(address: FrameworkMemoryMap.FrameCounter);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: noCounterHigh
+        );
+        emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounterHigh);
+        emitter.Increment(register: Reg8.A);
+        emitter.StoreAToAddress(address: FrameworkMemoryMap.FrameCounterHigh);
+        emitter.MarkLabel(label: noCounterHigh);
+
+        emitter.Pop(pair: StackPair.Hl);
+        emitter.Pop(pair: StackPair.De);
+        emitter.Pop(pair: StackPair.Bc);
+        emitter.Pop(pair: StackPair.Af);
+        emitter.ReturnFromInterrupt();
+    }
+
     /// <summary>Builds the 10-byte OAM-DMA trampoline blob (baked into ROM, copied to HRAM at boot).</summary>
     /// <returns>The trampoline bytes.</returns>
     public static byte[] BuildDmaTrampolineBlob() => [.. DmaTrampolineBlob];
-    /// <summary>Emits the fixed prologue: <c>jp boot</c> at <see cref="Hw.EntryAddress"/> (exactly 3 bytes), then the
-    /// whole VBlank handler at <see cref="Hw.VBlankHandlerAddress"/> — the address the cartridge's 0x0040 vector jumps
-    /// to. Must be the FIRST emission into the routine.</summary>
+    /// <summary>Copies <paramref name="byteCount"/> bytes from <paramref name="sourceAddress"/> to
+    /// <paramref name="destinationAddress"/> (a 16-bit block copy via HL/DE/BC). Clobbers A, B, C, D, E, H, L.</summary>
     /// <param name="emitter">The routine emitter.</param>
-    /// <param name="bootLabel">The boot label the prologue jumps to (marked later by the boot emission).</param>
-    /// <param name="rasterRearm">Rearms the mid-picture scroll walk each frame, or null when there is none.</param>
-    public static void EmitPrologue(Sm83Emitter emitter, int bootLabel, Action<Sm83Emitter>? rasterRearm = null) {
+    /// <param name="sourceAddress">The source address.</param>
+    /// <param name="destinationAddress">The destination address.</param>
+    /// <param name="byteCount">The byte count (≥ 1).</param>
+    public static void EmitBlockCopy(Sm83Emitter emitter, ushort sourceAddress, ushort destinationAddress, ushort byteCount) {
         ArgumentNullException.ThrowIfNull(emitter);
 
-        if (emitter.Length != 0) {
-            throw new InvalidOperationException(message: "The prologue must be the first emission (the VBlank handler's address is fixed at 0x0153).");
+        var loop = emitter.NewLabel();
+
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: sourceAddress
+        );
+        emitter.LoadImmediate(
+            pair: Reg16.De,
+            value: destinationAddress
+        );
+        emitter.LoadImmediate(
+            pair: Reg16.Bc,
+            value: byteCount
+        );
+        emitter.MarkLabel(label: loop);
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToDe();
+        emitter.Increment(pair: Reg16.De);
+        emitter.Decrement(pair: Reg16.Bc);
+        emitter.Load(
+            destination: Reg8.A,
+            source: Reg8.B
+        );
+        emitter.Arithmetic(
+            op: AluOp.Or,
+            source: Reg8.C
+        );
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: loop
+        );
+    }
+    /// <summary>Fills <paramref name="byteCount"/> bytes at <paramref name="destinationAddress"/> with
+    /// <paramref name="value"/>. Clobbers A, B, C, D, H, L.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="destinationAddress">The destination address.</param>
+    /// <param name="byteCount">The byte count (≥ 1).</param>
+    /// <param name="value">The fill byte.</param>
+    public static void EmitBlockFill(Sm83Emitter emitter, ushort destinationAddress, ushort byteCount, byte value) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        var loop = emitter.NewLabel();
+
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: destinationAddress
+        );
+        emitter.LoadImmediate(
+            pair: Reg16.Bc,
+            value: byteCount
+        );
+        emitter.LoadImmediate(
+            destination: Reg8.D,
+            value: value
+        );
+        emitter.MarkLabel(label: loop);
+        emitter.Load(
+            destination: Reg8.A,
+            source: Reg8.D
+        );
+        emitter.StoreAToHlIncrement();
+        emitter.Decrement(pair: Reg16.Bc);
+        emitter.Load(
+            destination: Reg8.A,
+            source: Reg8.B
+        );
+        emitter.Arithmetic(
+            op: AluOp.Or,
+            source: Reg8.C
+        );
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: loop
+        );
+    }
+    /// <summary>Emits the boot sequence's tail: request the initial state, turn the LCD on, clear the post-boot stale
+    /// IF (the seeded handoff leaves VBlank requested), enable ONLY the VBlank interrupt, and <c>ei</c>.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="spec">The boot spec.</param>
+    public static void EmitBootEpilogue(Sm83Emitter emitter, FrameworkBootSpec spec) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        emitter.LoadAImmediate(value: spec.InitialState);
+        emitter.StoreAToAddress(address: FrameworkMemoryMap.PendingState);
+        emitter.LoadAImmediate(value: GameStateMachine.NoPendingState);
+        emitter.StoreAToAddress(address: FrameworkMemoryMap.GameState);
+
+        emitter.LoadAImmediate(value: spec.Lcdc);
+        emitter.StoreAToHighPage(port: Hw.PortLcdControl);
+
+        emitter.XorA();
+        emitter.StoreAToHighPage(port: Hw.PortInterruptFlag);
+        emitter.LoadAImmediate(value: ((byte)(Hw.InterruptVBlankBit | ((spec.RasterRows > 0)
+            ? Hw.InterruptStatBit
+            : 0))));
+        emitter.StoreAToHighPage(port: Hw.PortInterruptEnable);
+        if (spec.RasterRows > 0) {
+            // Bit 6 raises the interrupt on a scanline match; the compare value is set per row.
+            emitter.LoadAImmediate(value: 0x40);
+            emitter.StoreAToHighPage(port: Hw.PortLcdStatus);
         }
 
-        emitter.JumpAbsolute(label: bootLabel);
-
-        if (emitter.Length != 3) {
-            throw new InvalidOperationException(message: $"The prologue jump is {emitter.Length} bytes; the handler must land at 0x0153.");
-        }
-
-        EmitVBlankHandler(emitter: emitter, rasterRearm: rasterRearm);
+        emitter.EnableInterrupts();
     }
     /// <summary>Emits the boot sequence's hardware half: interrupts off, stack, framework + game work RAM cleared,
     /// the DMA trampoline installed in HRAM, and the LCD-off video bring-up (palettes, tiles, initial map, cleared
@@ -91,11 +312,26 @@ public static class FrameworkKernel {
         // SPLIT AROUND the 16-byte victory-share source slot (0xC0F0..0xC0FF), which the host seeds BEFORE the game
         // boots (a per-cabinet poke). Clearing it here would wipe the seed, so the fill covers 0xC000..0xC0EF and
         // 0xC100..0xC3FF and steps over the reserved slot. Everything else in the 0xC000..0xC3FF span is still zeroed.
-        EmitBlockFill(byteCount: ((ushort)(FrameworkMemoryMap.VictoryShareSource - FrameworkMemoryMap.FrameCounter)), destinationAddress: FrameworkMemoryMap.FrameCounter, emitter: emitter, value: 0x00);
-        EmitBlockFill(byteCount: ((ushort)((FrameworkMemoryMap.FrameCounter + 0x0400) - FrameworkMemoryMap.ShadowOam)), destinationAddress: FrameworkMemoryMap.ShadowOam, emitter: emitter, value: 0x00);
+        EmitBlockFill(
+            byteCount: ((ushort)(FrameworkMemoryMap.VictoryShareSource - FrameworkMemoryMap.FrameCounter)),
+            destinationAddress: FrameworkMemoryMap.FrameCounter,
+            emitter: emitter,
+            value: 0x00
+        );
+        EmitBlockFill(
+            byteCount: ((ushort)((FrameworkMemoryMap.FrameCounter + 0x0400) - FrameworkMemoryMap.ShadowOam)),
+            destinationAddress: FrameworkMemoryMap.ShadowOam,
+            emitter: emitter,
+            value: 0x00
+        );
 
         // The HRAM OAM-DMA trampoline.
-        EmitBlockCopy(emitter: emitter, sourceAddress: dmaTrampoline.Address, destinationAddress: FrameworkMemoryMap.DmaTrampoline, byteCount: ((ushort)dmaTrampoline.Length));
+        EmitBlockCopy(
+            emitter: emitter,
+            sourceAddress: dmaTrampoline.Address,
+            destinationAddress: FrameworkMemoryMap.DmaTrampoline,
+            byteCount: ((ushort)dmaTrampoline.Length)
+        );
 
         // Video bring-up with the LCD off (VRAM freely writable).
         emitter.XorA();
@@ -110,56 +346,59 @@ public static class FrameworkKernel {
 
         emitter.LoadAImmediate(value: Hw.PaletteAutoIncrement);
         emitter.StoreAToHighPage(port: Hw.PortBgPaletteIndex);
-        EmitPaletteCopy(emitter: emitter, sourceAddress: spec.BgPalettes.Address, dataPort: Hw.PortBgPaletteData, byteCount: spec.BgPalettes.Length);
+        EmitPaletteCopy(
+            emitter: emitter,
+            sourceAddress: spec.BgPalettes.Address,
+            dataPort: Hw.PortBgPaletteData,
+            byteCount: spec.BgPalettes.Length
+        );
         emitter.LoadAImmediate(value: Hw.PaletteAutoIncrement);
         emitter.StoreAToHighPage(port: Hw.PortObjPaletteIndex);
-        EmitPaletteCopy(emitter: emitter, sourceAddress: spec.ObjPalettes.Address, dataPort: Hw.PortObjPaletteData, byteCount: spec.ObjPalettes.Length);
+        EmitPaletteCopy(
+            emitter: emitter,
+            sourceAddress: spec.ObjPalettes.Address,
+            dataPort: Hw.PortObjPaletteData,
+            byteCount: spec.ObjPalettes.Length
+        );
 
         spec.SelectTileBank?.Invoke(obj: emitter);
-        EmitBlockCopy(emitter: emitter, sourceAddress: spec.Tiles.Address, destinationAddress: Hw.VramTiles, byteCount: ((ushort)spec.TileByteCount));
+        EmitBlockCopy(
+            emitter: emitter,
+            sourceAddress: spec.Tiles.Address,
+            destinationAddress: Hw.VramTiles,
+            byteCount: ((ushort)spec.TileByteCount)
+        );
         spec.SelectMapBank?.Invoke(obj: emitter);
-        EmitBlockCopy(emitter: emitter, sourceAddress: spec.InitialMap.Address, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400);
+        EmitBlockCopy(
+            emitter: emitter,
+            sourceAddress: spec.InitialMap.Address,
+            destinationAddress: Hw.VramBackgroundMap,
+            byteCount: 0x0400
+        );
 
         // Bank 1 holds one attribute byte per cell; without an authored table every cell sits on palette zero.
         emitter.LoadAImmediate(value: 0x01);
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
         if (spec.BgAttributes is { } attributes) {
             spec.SelectAttributeBank?.Invoke(obj: emitter);
-            EmitBlockCopy(emitter: emitter, sourceAddress: attributes.Address, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400);
+            EmitBlockCopy(
+                emitter: emitter,
+                sourceAddress: attributes.Address,
+                destinationAddress: Hw.VramBackgroundMap,
+                byteCount: 0x0400
+            );
         } else {
-            EmitBlockFill(byteCount: 0x0400, destinationAddress: Hw.VramBackgroundMap, emitter: emitter, value: 0x00);
+            EmitBlockFill(
+                byteCount: 0x0400,
+                destinationAddress: Hw.VramBackgroundMap,
+                emitter: emitter,
+                value: 0x00
+            );
         }
         emitter.XorA();
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
 
         spec.RestoreFixedBank?.Invoke(obj: emitter);
-    }
-    /// <summary>Emits the boot sequence's tail: request the initial state, turn the LCD on, clear the post-boot stale
-    /// IF (the seeded handoff leaves VBlank requested), enable ONLY the VBlank interrupt, and <c>ei</c>.</summary>
-    /// <param name="emitter">The routine emitter.</param>
-    /// <param name="spec">The boot spec.</param>
-    public static void EmitBootEpilogue(Sm83Emitter emitter, FrameworkBootSpec spec) {
-        ArgumentNullException.ThrowIfNull(emitter);
-
-        emitter.LoadAImmediate(value: spec.InitialState);
-        emitter.StoreAToAddress(address: FrameworkMemoryMap.PendingState);
-        emitter.LoadAImmediate(value: GameStateMachine.NoPendingState);
-        emitter.StoreAToAddress(address: FrameworkMemoryMap.GameState);
-
-        emitter.LoadAImmediate(value: spec.Lcdc);
-        emitter.StoreAToHighPage(port: Hw.PortLcdControl);
-
-        emitter.XorA();
-        emitter.StoreAToHighPage(port: Hw.PortInterruptFlag);
-        emitter.LoadAImmediate(value: (byte)(Hw.InterruptVBlankBit | (spec.RasterRows > 0 ? Hw.InterruptStatBit : 0)));
-        emitter.StoreAToHighPage(port: Hw.PortInterruptEnable);
-        if (spec.RasterRows > 0) {
-            // Bit 6 raises the interrupt on a scanline match; the compare value is set per row.
-            emitter.LoadAImmediate(value: 0x40);
-            emitter.StoreAToHighPage(port: Hw.PortLcdStatus);
-        }
-
-        emitter.EnableInterrupts();
     }
     /// <summary>Emits the main loop's frame wait: <c>halt</c> until the VBlank handler advances the frame counter past
     /// the loop's last-seen value (a spurious wake just halts again). Clobbers A and B.</summary>
@@ -172,127 +411,24 @@ public static class FrameworkKernel {
         emitter.MarkLabel(label: wait);
         emitter.Halt();
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounter);
-        emitter.Load(destination: Reg8.B, source: Reg8.A);
+        emitter.Load(
+            destination: Reg8.B,
+            source: Reg8.A
+        );
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.LastFrame);
-        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
-        emitter.JumpRelative(condition: Condition.Zero, label: wait);
-        emitter.Load(destination: Reg8.A, source: Reg8.B);
+        emitter.Arithmetic(
+            op: AluOp.Compare,
+            source: Reg8.B
+        );
+        emitter.JumpRelative(
+            condition: Condition.Zero,
+            label: wait
+        );
+        emitter.Load(
+            destination: Reg8.A,
+            source: Reg8.B
+        );
         emitter.StoreAToAddress(address: FrameworkMemoryMap.LastFrame);
-    }
-    /// <summary>Copies <paramref name="byteCount"/> bytes from <paramref name="sourceAddress"/> to
-    /// <paramref name="destinationAddress"/> (a 16-bit block copy via HL/DE/BC). Clobbers A, B, C, D, E, H, L.</summary>
-    /// <param name="emitter">The routine emitter.</param>
-    /// <param name="sourceAddress">The source address.</param>
-    /// <param name="destinationAddress">The destination address.</param>
-    /// <param name="byteCount">The byte count (≥ 1).</param>
-    public static void EmitBlockCopy(Sm83Emitter emitter, ushort sourceAddress, ushort destinationAddress, ushort byteCount) {
-        ArgumentNullException.ThrowIfNull(emitter);
-
-        var loop = emitter.NewLabel();
-
-        emitter.LoadImmediate(pair: Reg16.Hl, value: sourceAddress);
-        emitter.LoadImmediate(pair: Reg16.De, value: destinationAddress);
-        emitter.LoadImmediate(pair: Reg16.Bc, value: byteCount);
-        emitter.MarkLabel(label: loop);
-        emitter.LoadAFromHlIncrement();
-        emitter.StoreAToDe();
-        emitter.Increment(pair: Reg16.De);
-        emitter.Decrement(pair: Reg16.Bc);
-        emitter.Load(destination: Reg8.A, source: Reg8.B);
-        emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
-        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
-    }
-    /// <summary>Fills <paramref name="byteCount"/> bytes at <paramref name="destinationAddress"/> with
-    /// <paramref name="value"/>. Clobbers A, B, C, D, H, L.</summary>
-    /// <param name="emitter">The routine emitter.</param>
-    /// <param name="destinationAddress">The destination address.</param>
-    /// <param name="byteCount">The byte count (≥ 1).</param>
-    /// <param name="value">The fill byte.</param>
-    public static void EmitBlockFill(Sm83Emitter emitter, ushort destinationAddress, ushort byteCount, byte value) {
-        ArgumentNullException.ThrowIfNull(emitter);
-
-        var loop = emitter.NewLabel();
-
-        emitter.LoadImmediate(pair: Reg16.Hl, value: destinationAddress);
-        emitter.LoadImmediate(pair: Reg16.Bc, value: byteCount);
-        emitter.LoadImmediate(destination: Reg8.D, value: value);
-        emitter.MarkLabel(label: loop);
-        emitter.Load(destination: Reg8.A, source: Reg8.D);
-        emitter.StoreAToHlIncrement();
-        emitter.Decrement(pair: Reg16.Bc);
-        emitter.Load(destination: Reg8.A, source: Reg8.B);
-        emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
-        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
-    }
-
-    // The VBlank handler (fixed at 0x0153): registers saved, shadow OAM DMA-copied via the HRAM trampoline, the
-    // background write queue drained while VRAM is open, the frame counter advanced, registers restored, reti.
-    private static void EmitVBlankHandler(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm = null) {
-        var noQueue = emitter.NewLabel();
-        var attributeLoop = emitter.NewLabel();
-        var drainLoop = emitter.NewLabel();
-        var noCounterHigh = emitter.NewLabel();
-
-        emitter.Push(pair: StackPair.Af);
-        emitter.Push(pair: StackPair.Bc);
-        emitter.Push(pair: StackPair.De);
-        emitter.Push(pair: StackPair.Hl);
-
-        emitter.Call(address: FrameworkMemoryMap.DmaTrampoline);
-
-        // Two passes over the same run, because a cell's tile and its attribute live at one address in two different
-        // video-memory banks: tiles with the bank register at zero, then attributes with it at one.
-        emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
-        emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
-        emitter.JumpRelative(condition: Condition.Zero, label: noQueue);
-        emitter.Load(destination: Reg8.B, source: Reg8.A);
-        emitter.LoadImmediate(pair: Reg16.Hl, value: FrameworkMemoryMap.VramQueue);
-        emitter.MarkLabel(label: drainLoop);
-        emitter.LoadAFromHlIncrement();
-        emitter.Load(destination: Reg8.D, source: Reg8.A);
-        emitter.LoadAFromHlIncrement();
-        emitter.Load(destination: Reg8.E, source: Reg8.A);
-        emitter.LoadAFromHlIncrement();
-        emitter.StoreAToDe();
-        emitter.Increment(pair: Reg16.Hl);
-        emitter.Decrement(register: Reg8.B);
-        emitter.JumpRelative(condition: Condition.NotZero, label: drainLoop);
-        emitter.LoadAImmediate(value: 0x01);
-        emitter.StoreAToHighPage(port: Hw.PortVramBank);
-        emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
-        emitter.Load(destination: Reg8.B, source: Reg8.A);
-        emitter.LoadImmediate(pair: Reg16.Hl, value: FrameworkMemoryMap.VramQueue);
-        emitter.MarkLabel(label: attributeLoop);
-        emitter.LoadAFromHlIncrement();
-        emitter.Load(destination: Reg8.D, source: Reg8.A);
-        emitter.LoadAFromHlIncrement();
-        emitter.Load(destination: Reg8.E, source: Reg8.A);
-        emitter.Increment(pair: Reg16.Hl);
-        emitter.LoadAFromHlIncrement();
-        emitter.StoreAToDe();
-        emitter.Decrement(register: Reg8.B);
-        emitter.JumpRelative(condition: Condition.NotZero, label: attributeLoop);
-        emitter.XorA();
-        emitter.StoreAToHighPage(port: Hw.PortVramBank);
-        emitter.StoreAToAddress(address: FrameworkMemoryMap.VramQueueCount);
-        emitter.MarkLabel(label: noQueue);
-
-        rasterRearm?.Invoke(obj: emitter);
-
-        emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounter);
-        emitter.Increment(register: Reg8.A);
-        emitter.StoreAToAddress(address: FrameworkMemoryMap.FrameCounter);
-        emitter.JumpRelative(condition: Condition.NotZero, label: noCounterHigh);
-        emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounterHigh);
-        emitter.Increment(register: Reg8.A);
-        emitter.StoreAToAddress(address: FrameworkMemoryMap.FrameCounterHigh);
-        emitter.MarkLabel(label: noCounterHigh);
-
-        emitter.Pop(pair: StackPair.Hl);
-        emitter.Pop(pair: StackPair.De);
-        emitter.Pop(pair: StackPair.Bc);
-        emitter.Pop(pair: StackPair.Af);
-        emitter.ReturnFromInterrupt();
     }
     /// <summary>Emits a palette republish from wherever HL already points, leaving HL past the bytes written.</summary>
     /// <param name="emitter">The routine emitter.</param>
@@ -307,23 +443,41 @@ public static class FrameworkKernel {
 
         emitter.LoadAImmediate(value: Hw.PaletteAutoIncrement);
         emitter.StoreAToHighPage(port: indexPort);
-        emitter.LoadImmediate(destination: Reg8.B, value: ((byte)byteCount));
+        emitter.LoadImmediate(
+            destination: Reg8.B,
+            value: ((byte)byteCount)
+        );
         emitter.MarkLabel(label: loop);
         emitter.LoadAFromHlIncrement();
         emitter.StoreAToHighPage(port: dataPort);
         emitter.Decrement(register: Reg8.B);
-        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: loop
+        );
     }
+    /// <summary>Emits the fixed prologue: <c>jp boot</c> at <see cref="Hw.EntryAddress"/> (exactly 3 bytes), then the
+    /// whole VBlank handler at <see cref="Hw.VBlankHandlerAddress"/> — the address the cartridge's 0x0040 vector jumps
+    /// to. Must be the FIRST emission into the routine.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="bootLabel">The boot label the prologue jumps to (marked later by the boot emission).</param>
+    /// <param name="rasterRearm">Rearms the mid-picture scroll walk each frame, or null when there is none.</param>
+    public static void EmitPrologue(Sm83Emitter emitter, int bootLabel, Action<Sm83Emitter>? rasterRearm = null) {
+        ArgumentNullException.ThrowIfNull(emitter);
 
-    private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort, int byteCount) {
-        var loop = emitter.NewLabel();
+        if (emitter.Length != 0) {
+            throw new InvalidOperationException(message: "The prologue must be the first emission (the VBlank handler's address is fixed at 0x0153).");
+        }
 
-        emitter.LoadImmediate(pair: Reg16.Hl, value: sourceAddress);
-        emitter.LoadImmediate(destination: Reg8.B, value: ((byte)byteCount));
-        emitter.MarkLabel(label: loop);
-        emitter.LoadAFromHlIncrement();
-        emitter.StoreAToHighPage(port: dataPort);
-        emitter.Decrement(register: Reg8.B);
-        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
+        emitter.JumpAbsolute(label: bootLabel);
+
+        if (emitter.Length != 3) {
+            throw new InvalidOperationException(message: $"The prologue jump is {emitter.Length} bytes; the handler must land at 0x0153.");
+        }
+
+        EmitVBlankHandler(
+            emitter: emitter,
+            rasterRearm: rasterRearm
+        );
     }
 }

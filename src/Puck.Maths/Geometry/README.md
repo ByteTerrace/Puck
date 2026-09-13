@@ -9,7 +9,7 @@ inverse of a quadratic prefix sum, and a modular transform is a 2×2 integer
 matrix of determinant one.
 
 Every public type lives flat in `namespace Puck.Maths`. The parent
-[`Puck.Maths` README](../README.md) is the library's entry point; this file is
+[Deterministic numerics](../../../docs/reference/maths.md) is the library's entry point; this file is
 the contract for the folder.
 
 ---
@@ -268,4 +268,4 @@ cannot be represented by `long`. `Inverse` likewise throws when negating a
 
 ## Documentation
 
-📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)
+📚 [Puck.Maths](../../../docs/reference/maths.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

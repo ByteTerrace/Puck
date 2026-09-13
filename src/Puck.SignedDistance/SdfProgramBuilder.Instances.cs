@@ -66,8 +66,14 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(material),
             subject: "A material bounce tint"
         );
-        if (!SdfMaterialLayers.IsValid(material.Inset, material.Weathering)) {
-            throw new ArgumentOutOfRangeException(nameof(material), "Invalid inset or weathering layer.");
+        if (!SdfMaterialLayers.IsValid(
+            inset: material.Inset,
+            weathering: material.Weathering
+        )) {
+            throw new ArgumentOutOfRangeException(
+                nameof(material),
+                "Invalid inset or weathering layer."
+            );
         }
 
         // THE PALETTE/SENTINEL COLLISION GATE. A shape's material id is a plain composed index below ScreenMaterialId,

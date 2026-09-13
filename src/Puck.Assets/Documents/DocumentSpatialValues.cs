@@ -21,13 +21,26 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
     private protected DocumentSpatialValue(string reference) => Reference = reference;
 
     /// <inheritdoc/>
-    public string? Reference { get; private set; }
-    /// <inheritdoc/>
     public abstract string ExpectedValue { get; }
+    /// <inheritdoc/>
+    public string? Reference { get; private set; }
     /// <summary>The resolved value.</summary>
     public TValue Value => (m_isResolved
         ? m_value
-        : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document."));
+        : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document.")
+    );
+
+    private protected bool EqualsCore(DocumentSpatialValue<TValue>? other) => ((other is not null) && ((Reference is { } reference)
+        ? string.Equals(
+            a: reference,
+            b: other.Reference,
+            comparisonType: StringComparison.Ordinal
+        )
+        : ((other.Reference is null) && m_value.Equals(other: other.m_value))));
+    private protected int GetHashCodeCore() => ((Reference is { } reference)
+        ? StringComparer.Ordinal.GetHashCode(obj: reference)
+        : m_value.GetHashCode()
+    );
 
     /// <inheritdoc/>
     public void Detach() {
@@ -37,7 +50,10 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         try {
-            m_value = JsonSerializer.Deserialize<TValue>(json: text, options: DocumentJsonOptions.Shared);
+            m_value = JsonSerializer.Deserialize<TValue>(
+                json: text,
+                options: DocumentJsonOptions.Shared
+            );
             m_isResolved = true;
             reason = string.Empty;
             return true;
@@ -46,13 +62,6 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
             return false;
         }
     }
-
-    private protected bool EqualsCore(DocumentSpatialValue<TValue>? other) => ((other is not null) && ((Reference is { } reference)
-        ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
-        : ((other.Reference is null) && m_value.Equals(other: other.m_value))));
-    private protected int GetHashCodeCore() => ((Reference is { } reference)
-        ? StringComparer.Ordinal.GetHashCode(obj: reference)
-        : m_value.GetHashCode());
 }
 /// <summary>A <see cref="Vector2"/> authored as <c>[x, y]</c> or as a symbolic reference string.</summary>
 [JsonConverter(typeof(DocumentVector2JsonConverter))]
@@ -90,7 +99,11 @@ public sealed class DocumentVector3 : DocumentSpatialValue<Vector3>, IEquatable<
     public DocumentVector3(Vector3 value) : base(value: value) {
     }
     /// <summary>Creates a literal value from its components.</summary>
-    public DocumentVector3(float x, float y, float z) : this(value: new Vector3(x: x, y: y, z: z)) {
+    public DocumentVector3(float x, float y, float z) : this(value: new Vector3(
+        x: x,
+        y: y,
+        z: z
+    )) {
     }
 
     internal DocumentVector3(string reference) : base(reference: reference) {
@@ -131,7 +144,12 @@ public sealed class DocumentQuaternion : DocumentSpatialValue<Quaternion>, IEqua
     public DocumentQuaternion(Quaternion value) : base(value: value) {
     }
     /// <summary>Creates a literal value from its components.</summary>
-    public DocumentQuaternion(float x, float y, float z, float w) : this(value: new Quaternion(w: w, x: x, y: y, z: z)) {
+    public DocumentQuaternion(float x, float y, float z, float w) : this(value: new Quaternion(
+        w: w,
+        x: x,
+        y: y,
+        z: z
+    )) {
     }
 
     internal DocumentQuaternion(string reference) : base(reference: reference) {
@@ -169,13 +187,13 @@ internal static class DocumentSpatialValueJson {
     /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference string the containing document resolves.</summary>
     public static JsonObject LiteralOrReference(JsonObject literal) => new() {
         ["anyOf"] = new JsonArray(
-            literal,
-            new JsonObject {
+        literal,
+        new JsonObject {
                 ["type"] = "string",
                 ["minLength"] = 1,
                 ["description"] = "A state.<row>[.<key>] reference the containing document resolves from a cell.",
             }
-        ),
+    ),
     };
     public static string ReadReference(ref Utf8JsonReader reader, string kind) {
         var reference = reader.GetString();
@@ -194,14 +212,26 @@ public sealed class DocumentVector2JsonConverter : JsonConverter<DocumentVector2
     /// <inheritdoc/>
     public override DocumentVector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
-            ? new DocumentVector2(reference: DocumentSpatialValueJson.ReadReference(kind: "Vector2", reader: ref reader))
-            : new DocumentVector2(value: new Vector2JsonConverter().Read(options: options, reader: ref reader, typeToConvert: typeof(Vector2))));
+            ? new DocumentVector2(reference: DocumentSpatialValueJson.ReadReference(
+                kind: "Vector2",
+                reader: ref reader
+            ))
+            : new DocumentVector2(value: new Vector2JsonConverter().Read(
+                options: options,
+                reader: ref reader,
+                typeToConvert: typeof(Vector2)
+            ))
+        );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DocumentVector2 value, JsonSerializerOptions options) {
         if (value.Reference is { } reference) {
             writer.WriteStringValue(value: reference);
         } else {
-            new Vector2JsonConverter().Write(writer: writer, value: value.Value, options: options);
+            new Vector2JsonConverter().Write(
+                writer: writer,
+                value: value.Value,
+                options: options
+            );
         }
     }
 }
@@ -212,14 +242,26 @@ public sealed class DocumentVector3JsonConverter : JsonConverter<DocumentVector3
     /// <inheritdoc/>
     public override DocumentVector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
-            ? new DocumentVector3(reference: DocumentSpatialValueJson.ReadReference(kind: "Vector3", reader: ref reader))
-            : new DocumentVector3(value: new Vector3JsonConverter().Read(options: options, reader: ref reader, typeToConvert: typeof(Vector3))));
+            ? new DocumentVector3(reference: DocumentSpatialValueJson.ReadReference(
+                kind: "Vector3",
+                reader: ref reader
+            ))
+            : new DocumentVector3(value: new Vector3JsonConverter().Read(
+                options: options,
+                reader: ref reader,
+                typeToConvert: typeof(Vector3)
+            ))
+        );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DocumentVector3 value, JsonSerializerOptions options) {
         if (value.Reference is { } reference) {
             writer.WriteStringValue(value: reference);
         } else {
-            new Vector3JsonConverter().Write(writer: writer, value: value.Value, options: options);
+            new Vector3JsonConverter().Write(
+                writer: writer,
+                value: value.Value,
+                options: options
+            );
         }
     }
 }
@@ -230,18 +272,29 @@ public sealed class DocumentQuaternionJsonConverter : JsonConverter<DocumentQuat
     /// <inheritdoc/>
     public override DocumentQuaternion Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
-            ? new DocumentQuaternion(reference: DocumentSpatialValueJson.ReadReference(kind: "Quaternion", reader: ref reader))
-            : new DocumentQuaternion(value: new QuaternionJsonConverter().Read(options: options, reader: ref reader, typeToConvert: typeof(Quaternion))));
+            ? new DocumentQuaternion(reference: DocumentSpatialValueJson.ReadReference(
+                kind: "Quaternion",
+                reader: ref reader
+            ))
+            : new DocumentQuaternion(value: new QuaternionJsonConverter().Read(
+                options: options,
+                reader: ref reader,
+                typeToConvert: typeof(Quaternion)
+            ))
+        );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DocumentQuaternion value, JsonSerializerOptions options) {
         if (value.Reference is { } reference) {
             writer.WriteStringValue(value: reference);
         } else {
-            new QuaternionJsonConverter().Write(writer: writer, value: value.Value, options: options);
+            new QuaternionJsonConverter().Write(
+                writer: writer,
+                value: value.Value,
+                options: options
+            );
         }
     }
 }
-
 /// <summary>A number authored as a JSON number or as a symbolic reference string (<c>state.&lt;row&gt;[.&lt;key&gt;]</c>),
 /// resolved by its containing document from a numeric or text cell.</summary>
 [JsonConverter(typeof(DocumentScalarJsonConverter))]
@@ -276,8 +329,12 @@ public sealed class DocumentScalarJsonConverter : JsonConverter<DocumentScalar>,
     /// <inheritdoc/>
     public override DocumentScalar Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
-            ? new DocumentScalar(reference: DocumentSpatialValueJson.ReadReference(kind: "number", reader: ref reader))
-            : new DocumentScalar(value: reader.GetSingle()));
+            ? new DocumentScalar(reference: DocumentSpatialValueJson.ReadReference(
+                kind: "number",
+                reader: ref reader
+            ))
+            : new DocumentScalar(value: reader.GetSingle())
+        );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DocumentScalar value, JsonSerializerOptions options) {
         if (value.Reference is { } reference) {

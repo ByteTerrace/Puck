@@ -78,113 +78,10 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
-
-    /// <summary>Returns how many further T-cycles the resampler can absorb before it next emits a frame; unbounded
-    /// with no sink configured.</summary>
-    public int QuietCycles() {
-        if (m_sampleRate == 0) {
-            return int.MaxValue;
-        }
-
-        return ((int)m_phase.QuietSteps(
-            period: HalfDotsPerSecond,
-            weight: HalfDotAddend()
-        ));
-    }
-    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the resampler
-    /// phase.</summary>
-    /// <param name="cycles">The T-cycles to absorb.</param>
-    public void Skip(int cycles) {
-        if (m_sampleRate != 0) {
-            m_phase.Skip(weight: (cycles * HalfDotAddend()));
-        }
-    }
-
     /// <inheritdoc/>
     public int SampleRate =>
         m_sampleRate;
 
-    /// <inheritdoc/>
-    public void Configure(int sampleRate) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: sampleRate);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: sampleRate,
-            other: DotsPerSecond
-        );
-
-        m_capacityFrames = sampleRate;
-        m_frameCount = 0;
-        m_phase.Reset();
-        m_readFrame = 0;
-        m_ring = ((sampleRate > 0)
-            ? new short[(sampleRate * 2)]
-            : []);
-        m_sampleRate = sampleRate;
-        m_writeFrame = 0;
-    }
-    /// <inheritdoc/>
-    public int ReadSamples(Span<short> destination) {
-        var frames = Math.Min(
-            val1: (destination.Length / 2),
-            val2: m_frameCount
-        );
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            var index = (m_readFrame * 2);
-
-            destination[(frame * 2)] = m_ring[index];
-            destination[((frame * 2) + 1)] = m_ring[(index + 1)];
-            m_readFrame = ((m_readFrame + 1) % m_capacityFrames);
-        }
-
-        m_frameCount -= frames;
-
-        return (frames * 2);
-    }
-    /// <inheritdoc/>
-    public void Tick() {
-        if (m_sampleRate == 0) {
-            return;
-        }
-
-        var due = m_phase.Advance(
-            period: HalfDotsPerSecond,
-            weight: HalfDotAddend()
-        );
-
-        for (var frame = 0L; (frame < due); ++frame) {
-            EmitFrame();
-        }
-    }
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        // Intentionally empty: the output stage carries no emulated state (see the class remarks), and writing
-        // nothing keeps snapshots bit-identical regardless of the host's audio configuration.
-        ArgumentNullException.ThrowIfNull(argument: writer);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        // Nothing was saved; a restore resets the stream so a rewound machine does not replay stale output. The
-        // configured sample rate is host configuration and survives untouched.
-        m_frameCount = 0;
-        m_phase.Reset();
-        m_readFrame = 0;
-        m_writeFrame = 0;
-    }
-
-    // One CPU T-cycle is a whole dot at normal speed and half a dot under double speed; weighting the addend by the
-    // T-cycle's half-dot width keeps the phase an exact function of real emulated time, so the output rate is
-    // speed-invariant and a mid-run speed switch carries no drift or discontinuity.
-    private int HalfDotAddend() =>
-        (m_key1.IsDoubleSpeed
-            ? m_sampleRate
-            : (m_sampleRate << 1));
-    // One side of the mix law: recenter the gated 0-60 channel sum around zero at the x512 scale, then apply the
-    // side's NR50 volume as (volume + 1) / 8. The extremes land at -16384 and +14336, comfortably inside 16 bits.
-    private static short MixSide(int gatedSum, int volume) =>
-        ((short)((((gatedSum * MixScale) - MixMidpoint) * (volume + 1)) / 8));
     // Sample the APU's live state into one stereo frame. Everything is read through the APU's side-effect-free
     // register surface: PCM12/34 pack the four channels' digital outputs (a disabled channel reads zero), and the
     // NR50/NR51 mix registers read back their raw bits.
@@ -232,6 +129,18 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
             )
         );
     }
+    // One CPU T-cycle is a whole dot at normal speed and half a dot under double speed; weighting the addend by the
+    // T-cycle's half-dot width keeps the phase an exact function of real emulated time, so the output rate is
+    // speed-invariant and a mid-run speed switch carries no drift or discontinuity.
+    private int HalfDotAddend() =>
+        (m_key1.IsDoubleSpeed
+            ? m_sampleRate
+            : (m_sampleRate << 1)
+        );
+    // One side of the mix law: recenter the gated 0-60 channel sum around zero at the x512 scale, then apply the
+    // side's NR50 volume as (volume + 1) / 8. The extremes land at -16384 and +14336, comfortably inside 16 bits.
+    private static short MixSide(int gatedSum, int volume) =>
+        ((short)((((gatedSum * MixScale) - MixMidpoint) * (volume + 1)) / 8));
     // Append one frame to the ring; when full, the oldest frame is dropped so the buffer always holds the newest
     // emulated second of audio (a stalled host loses the past, never the present).
     private void PushFrame(short left, short right) {
@@ -246,5 +155,96 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         m_ring[(index + 1)] = right;
         m_writeFrame = ((m_writeFrame + 1) % m_capacityFrames);
         ++m_frameCount;
+    }
+
+    /// <inheritdoc/>
+    public void Configure(int sampleRate) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: sampleRate);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: sampleRate,
+            other: DotsPerSecond
+        );
+
+        m_capacityFrames = sampleRate;
+        m_frameCount = 0;
+        m_phase.Reset();
+        m_readFrame = 0;
+        m_ring = ((sampleRate > 0)
+            ? new short[(sampleRate * 2)]
+            : []
+        );
+        m_sampleRate = sampleRate;
+        m_writeFrame = 0;
+    }
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        // Nothing was saved; a restore resets the stream so a rewound machine does not replay stale output. The
+        // configured sample rate is host configuration and survives untouched.
+        m_frameCount = 0;
+        m_phase.Reset();
+        m_readFrame = 0;
+        m_writeFrame = 0;
+    }
+    /// <summary>Returns how many further T-cycles the resampler can absorb before it next emits a frame; unbounded
+    /// with no sink configured.</summary>
+    public int QuietCycles() {
+        if (m_sampleRate == 0) {
+            return int.MaxValue;
+        }
+
+        return ((int)m_phase.QuietSteps(
+            period: HalfDotsPerSecond,
+            weight: HalfDotAddend()
+        ));
+    }
+    /// <inheritdoc/>
+    public int ReadSamples(Span<short> destination) {
+        var frames = Math.Min(
+            val1: (destination.Length / 2),
+            val2: m_frameCount
+        );
+
+        for (var frame = 0; (frame < frames); ++frame) {
+            var index = (m_readFrame * 2);
+
+            destination[(frame * 2)] = m_ring[index];
+            destination[((frame * 2) + 1)] = m_ring[(index + 1)];
+            m_readFrame = ((m_readFrame + 1) % m_capacityFrames);
+        }
+
+        m_frameCount -= frames;
+
+        return (frames * 2);
+    }
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        // Intentionally empty: the output stage carries no emulated state (see the class remarks), and writing
+        // nothing keeps snapshots bit-identical regardless of the host's audio configuration.
+        ArgumentNullException.ThrowIfNull(argument: writer);
+    }
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the resampler
+    /// phase.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        if (m_sampleRate != 0) {
+            m_phase.Skip(weight: (cycles * HalfDotAddend()));
+        }
+    }
+    /// <inheritdoc/>
+    public void Tick() {
+        if (m_sampleRate == 0) {
+            return;
+        }
+
+        var due = m_phase.Advance(
+            period: HalfDotsPerSecond,
+            weight: HalfDotAddend()
+        );
+
+        for (var frame = 0L; (frame < due); ++frame) {
+            EmitFrame();
+        }
     }
 }

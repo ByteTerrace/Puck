@@ -62,11 +62,11 @@ public sealed record WorldBindingBarSlotPlacement(
             y: Y
         ),
         Badge: ((Badge is { Count: 2 } badge)
-            ? new Vector2(
+        ? new Vector2(
                 x: badge[0],
                 y: badge[1]
             )
-            : DefaultBadge)
+        : DefaultBadge)
     );
 }
 /// <summary>One placed table: a named table of the layout, moved by <see cref="At"/>.</summary>
@@ -157,10 +157,15 @@ public sealed record WorldBindingBarLayout(
             var plates = new Dictionary<string, BindingPlatePlacement>(comparer: StringComparer.Ordinal);
 
             foreach (var piece in (bank.Pieces ?? [])) {
-                if ((piece?.Table is not { Length: > 0 } tableName) || (Tables is null) || !Tables.TryGetValue(
+                if (
+                    (piece?.Table is not { Length: > 0 } tableName) ||
+                    (Tables is null) ||
+                    !Tables.TryGetValue(
                     key: tableName,
                     value: out var rows
-                ) || (rows is null)) {
+                ) ||
+                    (rows is null)
+                ) {
                     continue;
                 }
 
@@ -367,10 +372,14 @@ public sealed record WorldBindingBarAuthoring(
             return WorldBindingBarLayout.Default;
         }
 
-        if ((name is { Length: > 0 }) && layouts.TryGetValue(
+        if (
+            (name is { Length: > 0 }) &&
+            layouts.TryGetValue(
             key: name,
             value: out var named
-        ) && (named is not null)) {
+        ) &&
+            (named is not null)
+        ) {
             return named;
         }
 
@@ -379,7 +388,8 @@ public sealed record WorldBindingBarAuthoring(
             value: out var fallback
         ) && (fallback is not null))
             ? fallback
-            : WorldBindingBarLayout.Default);
+            : WorldBindingBarLayout.Default
+        );
     }
 }
 /// <summary>One per-world binding overlay — a whole <see cref="BindingProfileDocument"/> layered over the engine

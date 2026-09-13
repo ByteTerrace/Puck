@@ -409,10 +409,10 @@ public static class WorldAdjacencyPolicy {
     }
     private static FixedQ4816 CeilingFixed(decimal value) {
         var fixedValue = FixedQ4816.Abs(value: NumericLiteral.ToFixed(value: value));
-        var exact = ((decimal)fixedValue.Value / 65_536m);
+        var exact = (((decimal)fixedValue.Value) / 65_536m);
 
         return ((exact < decimal.Abs(value: value))
-            ? FixedQ4816.FromRawBits(value: checked(fixedValue.Value + 1L))
+            ? FixedQ4816.FromRawBits(value: checked((fixedValue.Value + 1L)))
             : fixedValue
         );
     }

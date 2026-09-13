@@ -8,6 +8,17 @@ namespace Puck.Vulkan;
 /// converting <see cref="GpuShaderStage"/> flags to the <see cref="ShaderStage"/> enum.
 /// </summary>
 public sealed class VulkanGpuShaderModuleFactory(IVulkanShaderModuleFactory shaderModuleFactory) : IGpuShaderModuleFactory {
+    private static ShaderStage ToShaderStage(GpuShaderStage stageFlags) => stageFlags switch {
+        GpuShaderStage.Vertex => ShaderStage.Vertex,
+        GpuShaderStage.Fragment => ShaderStage.Fragment,
+        GpuShaderStage.Compute => ShaderStage.Compute,
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(stageFlags),
+        actualValue: stageFlags,
+        message: null
+    ),
+    };
+
     /// <inheritdoc/>
     public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         ShaderBytecode.ValidateFormat(bytecode: bytecode.Span);
@@ -26,11 +37,4 @@ public sealed class VulkanGpuShaderModuleFactory(IVulkanShaderModuleFactory shad
             stageInfo: stageInfo
         );
     }
-
-    private static ShaderStage ToShaderStage(GpuShaderStage stageFlags) => stageFlags switch {
-        GpuShaderStage.Vertex => ShaderStage.Vertex,
-        GpuShaderStage.Fragment => ShaderStage.Fragment,
-        GpuShaderStage.Compute => ShaderStage.Compute,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(stageFlags), actualValue: stageFlags, message: null),
-    };
 }

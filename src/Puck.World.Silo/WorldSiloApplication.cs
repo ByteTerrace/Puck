@@ -13,6 +13,70 @@ namespace Puck.World.Silo;
 
 /// <summary>Composes and runs the silo, allowing dynamic host extensions to register capabilities.</summary>
 public static class WorldSiloApplication {
+    // Preserve BackgroundService supervision and IHostedLifecycleService callbacks when an extension uses
+    // the .NET hosting contract. A forwarding-only wrapper hides its execution task and startup failures.
+    private static IHostedService AdaptHostedService(Puck.Abstractions.IPuckHostedService service) =>
+        ((service as IHostedService) ?? new SiloHostedServiceAdapter(service: service));
+    private static LoadedExtensions LoadDynamicExtensions(string? explicitDir) {
+        var serverRegistry = new WorldSiloExtensions.Registry();
+        var loaded = new LoadedExtensions();
+        var machineRegistry = loaded.Machines;
+
+        void Scan(string dir) {
+            WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: dir,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
+                        brickExtension.Initialize(registry: machineRegistry);
+                    }
+                    if (ext is IControlExtension controlExtension) {
+                        loaded.ControlExtensions.Add(item: controlExtension);
+                    }
+                    if (ext is Puck.World.Protocol.IWorldAgentExtension agentExtension) {
+                        loaded.AgentExtensions.Add(item: agentExtension);
+                    }
+                },
+                log: static msg => Console.WriteLine(value: msg)
+            );
+        }
+
+        if (
+            !string.IsNullOrWhiteSpace(value: explicitDir) &&
+            Directory.Exists(path: explicitDir)
+        ) {
+            Scan(dir: explicitDir);
+            return loaded;
+        }
+
+        var localDir = Path.Combine(
+            path1: Directory.GetCurrentDirectory(),
+            path2: "extensions"
+        );
+
+        if (Directory.Exists(path: localDir)) {
+            Scan(dir: localDir);
+        }
+
+        var appDir = Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "extensions"
+        );
+
+        if (
+            Directory.Exists(path: appDir) &&
+            !string.Equals(
+            a: localDir,
+            b: appDir,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+        ) {
+            Scan(dir: appDir);
+        }
+
+        return loaded;
+    }
+
     /// <summary>Runs the ordinary silo with dynamic extensions loaded from --extensions-dir.</summary>
     /// <param name="args">The silo's ordinary command-line arguments.</param>
     /// <param name="cancellationToken">Stops the host through its normal lifecycle.</param>
@@ -36,13 +100,15 @@ public static class WorldSiloApplication {
             siloOption,
         };
         var parseResult = launchCommand.Parse(args);
+
         if (parseResult.GetValue(option: siloOption) is not { Length: > 0 } siloPath) {
             Console.Error.WriteLine(value: "--silo <path> is required.");
-        
+
             return 1;
         }
         var loadedExtensions = LoadDynamicExtensions(explicitDir: parseResult.GetValue(option: extensionsDirOption));
         var machineCatalog = loadedExtensions.Machines.Build();
+
         if (!WorldSiloDefinitionSerialization.TryLoadFile(
             clusteringKinds: WorldSiloExtensions.ClusteringKinds,
             definition: out var definition,
@@ -50,18 +116,27 @@ public static class WorldSiloApplication {
             reason: out var loadReason
         )) {
             Console.Error.WriteLine(value: $"--silo could not be read: {loadReason}");
-        
+
             return 1;
         }
         var builder = Host.CreateApplicationBuilder(args: args);
         // Orleans' own INFO-level startup narration (cluster config dumps, membership chatter) would otherwise bury the
         // engine's own [world.listen: bound …]/[silo.*] lines a driving script polls for.
-        builder.Logging.AddFilter(category: "Orleans", level: LogLevel.Warning);
-        builder.Logging.AddFilter(category: "Microsoft.Orleans", level: LogLevel.Warning);
+        builder.Logging.AddFilter(
+            category: "Orleans",
+            level: LogLevel.Warning
+        );
+        builder.Logging.AddFilter(
+            category: "Microsoft.Orleans",
+            level: LogLevel.Warning
+        );
         builder.Services.AddSingleton(implementationInstance: definition!);
-        builder.Services.AddSingleton(machineCatalog);
+        builder.Services.AddSingleton(implementationInstance: machineCatalog);
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: builder.Services);
-        WorldSiloExtensions.Add(builder.Services, definition!);
+        WorldSiloExtensions.Add(
+            builder.Services,
+            definition!
+        );
         builder.Services.AddSingleton<SiloConsoleTagging>();
         // Registered ahead of AddLauncherHeadlessTerminal's own TryAddSingleton<TextCommandSource> below, so this — every
         // line tagged '[silo] ' — is the one that wins; the desktop's own registration (untagged, tape-recording) is
@@ -118,9 +193,12 @@ public static class WorldSiloApplication {
             host: sp.GetRequiredService<WorldSiloHost>(),
             routing: sp.GetRequiredService<SiloConsoleRouting>()
         ));
-        builder.UseOrleans(configureDelegate: siloBuilder => WorldSiloExtensions.ConfigureClustering(builder: siloBuilder, definition: definition!));
+        builder.UseOrleans(configureDelegate: siloBuilder => WorldSiloExtensions.ConfigureClustering(
+            builder: siloBuilder,
+            definition: definition!
+        ));
         if (definition!.Lifecycle is { } lifecycle) {
-            builder.Services.Configure<HostOptions>(configureOptions: options => options.ShutdownTimeout = TimeSpan.FromSeconds((lifecycle.ShutdownSeconds + 5)));
+            builder.Services.Configure<HostOptions>(configureOptions: options => options.ShutdownTimeout = TimeSpan.FromSeconds(seconds: (lifecycle.ShutdownSeconds + 5)));
             builder.Services.AddHostedService<WorldSiloLifecycleService>();
         }
         // Every stdout/stderr line a silo run writes from here on carries a '[<row>] '/'[silo] ' prefix (SiloConsoleTagging
@@ -133,12 +211,18 @@ public static class WorldSiloApplication {
             } else {
                 foreach (var controlExt in loadedExtensions.ControlExtensions) {
                     var controlRegistry = new SiloControlExtensionRegistry();
+
                     controlExt.Register(registry: controlRegistry);
                     if (controlRegistry.HostedControlFactory is { } factory) {
                         builder.Services.AddSingleton<IHostedService>(implementationFactory: sp => {
                             var controlHost = sp.GetRequiredService<IControlSessionHost>();
-                            var service = factory(sp, controlHost, mcpConfigPath);
-                            return AdaptHostedService(service);
+                            var service = factory(
+                                sp,
+                                controlHost,
+                                mcpConfigPath
+                            );
+
+                            return AdaptHostedService(service: service);
                         });
                     }
                 }
@@ -146,11 +230,13 @@ public static class WorldSiloApplication {
         }
         foreach (var agentExt in loadedExtensions.AgentExtensions) {
             var agentRegistry = new SiloWorldAgentExtensionRegistry();
+
             agentExt.Register(registry: agentRegistry);
             if (agentRegistry.AgentRunnerFactory is { } factory) {
                 builder.Services.AddSingleton<IHostedService>(implementationFactory: sp => {
                     var service = factory(sp);
-                    return AdaptHostedService(service);
+
+                    return AdaptHostedService(service: service);
                 });
             }
         }
@@ -160,15 +246,19 @@ public static class WorldSiloApplication {
         // still narrates unbound (a row activates well after this point; see WorldGrain).
         host.Services.GetRequiredService<WorldSiloHost>().Instances.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
         var backgroundServices = host.Services.GetServices<IHostedService>().OfType<BackgroundService>().ToArray();
+
         try {
-            await host.RunAsync(cancellationToken);
+            await host.RunAsync(token: cancellationToken);
         } catch (Orleans.Runtime.OrleansLifecycleCanceledException) {
             // A quit that lands before Orleans' own startup lifecycle finishes cancels that lifecycle — an ordinary
             // shutdown race, not a fault; every terminal command already ran on the tick thread before this unwound.
         }
         // StopHost supervises background failures but does not set the process exit code. A failed configured
         // service must remain a failed worker to Docker/systemd even when shutdown itself drains successfully.
-        return backgroundServices.Any(service => service.ExecuteTask?.IsFaulted == true) ? 1 : Environment.ExitCode;
+        return (backgroundServices.Any(predicate: service => (service.ExecuteTask?.IsFaulted == true))
+            ? 1
+            : Environment.ExitCode
+        );
     }
 
     private sealed class LoadedExtensions {
@@ -176,71 +266,22 @@ public static class WorldSiloApplication {
         public List<IControlExtension> ControlExtensions { get; } = [];
         public List<Puck.World.Protocol.IWorldAgentExtension> AgentExtensions { get; } = [];
     }
-
-    // Preserve BackgroundService supervision and IHostedLifecycleService callbacks when an extension uses
-    // the .NET hosting contract. A forwarding-only wrapper hides its execution task and startup failures.
-    private static IHostedService AdaptHostedService(Puck.Abstractions.IPuckHostedService service) =>
-        service as IHostedService ?? new SiloHostedServiceAdapter(service);
-
     private sealed class SiloHostedServiceAdapter(Puck.Abstractions.IPuckHostedService service) : IHostedService {
         public Task StartAsync(CancellationToken cancellationToken) => service.StartAsync(cancellationToken: cancellationToken);
         public Task StopAsync(CancellationToken cancellationToken) => service.StopAsync(cancellationToken: cancellationToken);
     }
-
     private sealed class SiloControlExtensionRegistry : IControlExtensionRegistry {
         public Func<IServiceProvider, IControlSessionHost, string, Puck.Abstractions.IPuckHostedService>? HostedControlFactory { get; private set; }
+
         public void RegisterHostedControl(Func<IServiceProvider, IControlSessionHost, string, Puck.Abstractions.IPuckHostedService> factory) {
             HostedControlFactory = factory;
         }
     }
-
     private sealed class SiloWorldAgentExtensionRegistry : Puck.World.Protocol.IWorldAgentExtensionRegistry {
         public Func<IServiceProvider, Puck.Abstractions.IPuckHostedService>? AgentRunnerFactory { get; private set; }
+
         public void RegisterAgentRunner(Func<IServiceProvider, Puck.Abstractions.IPuckHostedService> factory) {
             AgentRunnerFactory = factory;
         }
-    }
-
-    private static LoadedExtensions LoadDynamicExtensions(string? explicitDir) {
-        var serverRegistry = new WorldSiloExtensions.Registry();
-        var loaded = new LoadedExtensions();
-        var machineRegistry = loaded.Machines;
-
-        void Scan(string dir) {
-            WorldExtensionLoader.LoadFromDirectory(
-                directoryPath: dir,
-                serverRegistry: serverRegistry,
-                onExtensionLoaded: ext => {
-                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
-                        brickExtension.Initialize(registry: machineRegistry);
-                    }
-                    if (ext is IControlExtension controlExtension) {
-                        loaded.ControlExtensions.Add(item: controlExtension);
-                    }
-                    if (ext is Puck.World.Protocol.IWorldAgentExtension agentExtension) {
-                        loaded.AgentExtensions.Add(item: agentExtension);
-                    }
-                },
-                log: static msg => Console.WriteLine(value: msg));
-        }
-
-        if (!string.IsNullOrWhiteSpace(value: explicitDir) && Directory.Exists(path: explicitDir)) {
-            Scan(dir: explicitDir);
-            return loaded;
-        }
-
-        var localDir = Path.Combine(Directory.GetCurrentDirectory(), "extensions");
-
-        if (Directory.Exists(path: localDir)) {
-            Scan(dir: localDir);
-        }
-
-        var appDir = Path.Combine(AppContext.BaseDirectory, "extensions");
-
-        if (Directory.Exists(path: appDir) && !string.Equals(a: localDir, b: appDir, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            Scan(dir: appDir);
-        }
-
-        return loaded;
     }
 }

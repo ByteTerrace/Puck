@@ -31,33 +31,33 @@ namespace Puck.HumbleGamingBrick.Timing;
 /// </para>
 /// </summary>
 public sealed class ComponentClock {
-    private readonly MasterClock m_clock;
-    private readonly TimerComponent m_timer;
-    private readonly Key1Component m_key1;
-    private readonly SerialComponent m_serial;
     private readonly ApuComponent m_apu;
     private readonly ApuGeneratorClock m_apuGeneratorClock;
     private readonly AudioOutputComponent m_audioOutput;
-    private readonly OamDmaController m_oamDma;
-    private readonly HdmaController m_hdma;
     private readonly IClockedComponent? m_cartridgeClock;
+    private readonly MasterClock m_clock;
+    private readonly HdmaController m_hdma;
+    private readonly Key1Component m_key1;
+    private readonly OamDmaController m_oamDma;
     private readonly Ppu m_ppu;
+    private readonly SerialComponent m_serial;
+    private readonly TimerComponent m_timer;
 
-    private bool m_isDoubleSpeed;
     // Whether a stretch may be absorbed at all: normal speed, and no timed cartridge to tick per dot.
     private bool m_canAbsorb;
-    // The clock's whole-dot count when the components were last settled; the dots a settle must move the display.
-    private ulong m_settledCycleCount;
-    // Cycles every component has agreed to absorb as plain counting, not yet spent. Valid only until some component's
-    // state changes by a path other than absorbing: a register write into any component, a restore, or a ticked
-    // cycle, each of which clears it.
-    private int m_quietRemaining;
+    private bool m_isDoubleSpeed;
     // Cycles every CPU-domain component has agreed to absorb, not yet spent — the display judged separately, so a
     // drawing stretch can still tick the display alone over them. Cleared with the whole agreement.
     private int m_othersRemaining;
     // Cycles of an agreed stretch the clock has already advanced through but the components have not: applied to
     // them by Settle before anything reads or ticks them.
     private int m_pendingAbsorb;
+    // Cycles every component has agreed to absorb as plain counting, not yet spent. Valid only until some component's
+    // state changes by a path other than absorbing: a register write into any component, a restore, or a ticked
+    // cycle, each of which clears it.
+    private int m_quietRemaining;
+    // The clock's whole-dot count when the components were last settled; the dots a settle must move the display.
+    private ulong m_settledCycleCount;
 
     /// <summary>Builds the driver over a clock and the machine's timed components, wiring each into its hard-coded
     /// domain slot and verifying the slot against the component's declared <see cref="IClockedComponent.Domain"/>.</summary>
@@ -160,6 +160,13 @@ public sealed class ComponentClock {
         m_ppu = ppu;
     }
 
+    // Whether the clock stands half a dot past a dot boundary, which only double speed produces.
+    private int SubCyclePhase =>
+        ((m_clock.Now.SubCyclePhase != UFixedQ4816.Zero)
+            ? 1
+            : 0
+        );
+
     /// <summary>Gets the master clock this driver advances.</summary>
     public MasterClock Clock =>
         m_clock;
@@ -176,102 +183,26 @@ public sealed class ComponentClock {
         }
     }
 
-    /// <summary>Advances the machine by exactly one CPU T-cycle: moves the master clock forward (a whole dot at normal
-    /// speed, half a dot under double-speed), ticks every CPU-domain component once, and ticks every LCD-domain
-    /// component once for each whole dot the advance crossed.</summary>
-    public void AdvanceCpuTCycle() {
-        Settle();
-        m_quietRemaining = 0;
-
-        // Double-speed advances only half a dot per CPU T-cycle, so the whole-dot boundary that makes the LCD-domain
-        // components due is crossed on every other call; that bookkeeping lives in the cold path. At normal speed — the
-        // overwhelmingly common case — one CPU T-cycle is exactly one whole dot, so the CPU- and LCD-domain components
-        // each tick exactly once and there is no boundary to recompute.
-        if (m_isDoubleSpeed) {
-            AdvanceDoubleSpeedTCycle();
-        } else {
-            m_clock.AdvanceCycles(cycles: 1UL);
-            TickCpuDomain();
-            TickLcdDomain();
-        }
-
-        m_settledCycleCount = m_clock.CycleCount;
-    }
-
-    /// <summary>Advances the machine by <paramref name="count"/> CPU T-cycles. With no timed cartridge, a stretch on
-    /// which every component reports it would only count is absorbed at once — the clock moves, and the counters and
-    /// the display's dot catch up when something next reads them — and only the cycle on which some component has an
-    /// event is ticked one by one. The result is bit-identical to ticking every cycle.</summary>
-    /// <param name="count">The T-cycles to advance.</param>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public void AdvanceCpuTCycles(int count) {
-        if (
-            m_canAbsorb &&
-            (m_othersRemaining >= count)
-        ) {
-            if (m_quietRemaining >= count) {
-                m_quietRemaining -= count;
-                m_othersRemaining -= count;
-                m_pendingAbsorb += count;
-                AdvanceClock(cycles: count);
-
-                return;
-            }
-
-            if (
-                !m_isDoubleSpeed &&
-                m_hdma.IsIdle
-            ) {
-                m_quietRemaining = 0;
-                m_othersRemaining -= count;
-                m_pendingAbsorb += count;
-                TickDisplayAlone(cycles: count);
-
-                return;
-            }
-        }
-
-        AdvanceCpuTCyclesSlow(count: count);
-    }
-    /// <summary>Forgets the agreed quiet stretch, settling the components first. Every path that changes a component's
-    /// state other than absorbing cycles — a register write into any component, a snapshot restore — calls this
-    /// before the next advance.</summary>
-    public void Invalidate() {
-        Settle();
-        m_quietRemaining = 0;
-        m_othersRemaining = 0;
-    }
-    /// <summary>Applies the cycles the clock has advanced through to the components, so their state is current.
-    /// Every read of a component's state from outside a tick — a bus access to a register or to display memory, a
-    /// snapshot, a host peek — settles first.</summary>
-    public void Settle() {
-        var now = m_clock.CycleCount;
-        var pending = m_pendingAbsorb;
-
-        if (pending == 0) {
-            m_settledCycleCount = now;
-
-            return;
-        }
-
-        var dots = ((int)(now - m_settledCycleCount));
-
-        m_pendingAbsorb = 0;
-        m_settledCycleCount = now;
-
-        if (dots > 0) {
-            m_hdma.SampleMode();
-            m_ppu.Skip(dots: dots);
-        }
-
-        AbsorbOthers(
-            cycles: pending,
-            generatorCalls: (m_isDoubleSpeed
-                ? (pending - dots)
-                : pending)
+    // Advances every CPU-domain component through cycles it agreed to absorb; the display has already been moved.
+    private void AbsorbOthers(int cycles, int generatorCalls) {
+        m_timer.Skip(cycles: cycles);
+        m_serial.Skip();
+        m_apu.Skip(
+            cycles: cycles,
+            generatorCalls: generatorCalls
         );
+        m_audioOutput.Skip(cycles: cycles);
+        m_oamDma.Skip(cycles: cycles);
+        m_hdma.Skip(cycles: cycles);
     }
-
+    // Moves the clock through CPU T-cycles: a whole dot each at normal speed, half a dot each under double speed.
+    private void AdvanceClock(int cycles) {
+        if (m_isDoubleSpeed) {
+            m_clock.AdvanceTicks(ticks: (((ulong)cycles) * (m_clock.Resolution.TicksPerCycle >> 1)));
+        } else {
+            m_clock.AdvanceCycles(cycles: ((ulong)cycles));
+        }
+    }
     private void AdvanceCpuTCyclesSlow(int count) {
         if (count <= 0) {
             return;
@@ -355,47 +286,19 @@ public sealed class ComponentClock {
             count -= quiet;
         }
     }
-    // Ticks the display alone through cycles every other component has agreed to absorb, at normal speed: the
-    // display first catches up on any dots owed from earlier absorbed stretches, then is ticked one dot per cycle. A
-    // tick samples the display's mode before the display's own dot on that cycle, so the transfer unit's sample is
-    // taken before the stretch's last dot.
-    private void TickDisplayAlone(int cycles) {
-        var owed = ((int)(m_clock.CycleCount - m_settledCycleCount));
+    // The double-speed CPU T-cycle: half a dot. At quarter resolution that is two quanta — an exact integer on the
+    // fixed-point grid, which is the whole reason the timeline carries sub-dot precision rather than counting whole
+    // dots. The CPU-domain components tick every call (twice per dot); the LCD-domain components tick only on the calls
+    // that cross a whole-dot boundary.
+    private void AdvanceDoubleSpeedTCycle() {
+        var dotsBefore = m_clock.CycleCount;
 
-        if (owed > 0) {
-            m_hdma.SampleMode();
-            m_ppu.Skip(dots: owed);
+        m_clock.AdvanceTicks(ticks: (m_clock.Resolution.TicksPerCycle >> 1));
+        TickCpuDomain();
+
+        for (var dot = dotsBefore; (dot < m_clock.CycleCount); ++dot) {
+            TickLcdDomain();
         }
-
-        m_clock.AdvanceCycles(cycles: ((ulong)cycles));
-
-        for (var dot = 1; (dot < cycles); ++dot) {
-            m_ppu.Tick();
-        }
-
-        m_hdma.SampleMode();
-        m_ppu.Tick();
-        m_settledCycleCount = m_clock.CycleCount;
-    }
-    // Moves the clock through CPU T-cycles: a whole dot each at normal speed, half a dot each under double speed.
-    private void AdvanceClock(int cycles) {
-        if (m_isDoubleSpeed) {
-            m_clock.AdvanceTicks(ticks: (((ulong)cycles) * (m_clock.Resolution.TicksPerCycle >> 1)));
-        } else {
-            m_clock.AdvanceCycles(cycles: ((ulong)cycles));
-        }
-    }
-    // Advances every CPU-domain component through cycles it agreed to absorb; the display has already been moved.
-    private void AbsorbOthers(int cycles, int generatorCalls) {
-        m_timer.Skip(cycles: cycles);
-        m_serial.Skip();
-        m_apu.Skip(
-            cycles: cycles,
-            generatorCalls: generatorCalls
-        );
-        m_audioOutput.Skip(cycles: cycles);
-        m_oamDma.Skip(cycles: cycles);
-        m_hdma.Skip(cycles: cycles);
     }
     // The display's agreed dots as CPU T-cycles: one each at normal speed; under double speed two per dot, plus the
     // half-dot cycle that completes a dot already begun.
@@ -410,13 +313,8 @@ public sealed class ComponentClock {
             return int.MaxValue;
         }
 
-        return ((dots << 1) + 1 - SubCyclePhase);
+        return (((dots << 1) + 1) - SubCyclePhase);
     }
-    // Whether the clock stands half a dot past a dot boundary, which only double speed produces.
-    private int SubCyclePhase =>
-        ((m_clock.Now.SubCyclePhase != UFixedQ4816.Zero)
-        ? 1
-        : 0);
     // The cycles every CPU-domain component agrees are pure counting, cheapest refusal first. The display is judged
     // separately: it may be drawing while everything else counts.
     private int OthersQuietCycles() {
@@ -451,20 +349,6 @@ public sealed class ComponentClock {
             val2: m_apu.QuietCycles(subCyclePhase: SubCyclePhase)
         );
     }
-    // The double-speed CPU T-cycle: half a dot. At quarter resolution that is two quanta — an exact integer on the
-    // fixed-point grid, which is the whole reason the timeline carries sub-dot precision rather than counting whole
-    // dots. The CPU-domain components tick every call (twice per dot); the LCD-domain components tick only on the calls
-    // that cross a whole-dot boundary.
-    private void AdvanceDoubleSpeedTCycle() {
-        var dotsBefore = m_clock.CycleCount;
-
-        m_clock.AdvanceTicks(ticks: (m_clock.Resolution.TicksPerCycle >> 1));
-        TickCpuDomain();
-
-        for (var dot = dotsBefore; (dot < m_clock.CycleCount); ++dot) {
-            TickLcdDomain();
-        }
-    }
     // Registration order, Contract §3.5: the timer ticks before serial at an equal timestamp.
     private void TickCpuDomain() {
         m_timer.Tick();
@@ -476,6 +360,28 @@ public sealed class ComponentClock {
         m_oamDma.Tick();
         m_hdma.Tick();
     }
+    // Ticks the display alone through cycles every other component has agreed to absorb, at normal speed: the
+    // display first catches up on any dots owed from earlier absorbed stretches, then is ticked one dot per cycle. A
+    // tick samples the display's mode before the display's own dot on that cycle, so the transfer unit's sample is
+    // taken before the stretch's last dot.
+    private void TickDisplayAlone(int cycles) {
+        var owed = ((int)(m_clock.CycleCount - m_settledCycleCount));
+
+        if (owed > 0) {
+            m_hdma.SampleMode();
+            m_ppu.Skip(dots: owed);
+        }
+
+        m_clock.AdvanceCycles(cycles: ((ulong)cycles));
+
+        for (var dot = 1; (dot < cycles); ++dot) {
+            m_ppu.Tick();
+        }
+
+        m_hdma.SampleMode();
+        m_ppu.Tick();
+        m_settledCycleCount = m_clock.CycleCount;
+    }
     private void TickLcdDomain() {
         m_cartridgeClock?.Tick();
         m_ppu.Tick();
@@ -484,5 +390,100 @@ public sealed class ComponentClock {
         if (component.Domain != slot) {
             throw new InvalidOperationException(message: $"{component.GetType().Name} declares domain {component.Domain} but is wired into the {slot} slot.");
         }
+    }
+
+    /// <summary>Advances the machine by exactly one CPU T-cycle: moves the master clock forward (a whole dot at normal
+    /// speed, half a dot under double-speed), ticks every CPU-domain component once, and ticks every LCD-domain
+    /// component once for each whole dot the advance crossed.</summary>
+    public void AdvanceCpuTCycle() {
+        Settle();
+        m_quietRemaining = 0;
+
+        // Double-speed advances only half a dot per CPU T-cycle, so the whole-dot boundary that makes the LCD-domain
+        // components due is crossed on every other call; that bookkeeping lives in the cold path. At normal speed — the
+        // overwhelmingly common case — one CPU T-cycle is exactly one whole dot, so the CPU- and LCD-domain components
+        // each tick exactly once and there is no boundary to recompute.
+        if (m_isDoubleSpeed) {
+            AdvanceDoubleSpeedTCycle();
+        } else {
+            m_clock.AdvanceCycles(cycles: 1UL);
+            TickCpuDomain();
+            TickLcdDomain();
+        }
+
+        m_settledCycleCount = m_clock.CycleCount;
+    }
+    /// <summary>Advances the machine by <paramref name="count"/> CPU T-cycles. With no timed cartridge, a stretch on
+    /// which every component reports it would only count is absorbed at once — the clock moves, and the counters and
+    /// the display's dot catch up when something next reads them — and only the cycle on which some component has an
+    /// event is ticked one by one. The result is bit-identical to ticking every cycle.</summary>
+    /// <param name="count">The T-cycles to advance.</param>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public void AdvanceCpuTCycles(int count) {
+        if (
+            m_canAbsorb &&
+            (m_othersRemaining >= count)
+        ) {
+            if (m_quietRemaining >= count) {
+                m_quietRemaining -= count;
+                m_othersRemaining -= count;
+                m_pendingAbsorb += count;
+                AdvanceClock(cycles: count);
+
+                return;
+            }
+
+            if (
+                !m_isDoubleSpeed &&
+                m_hdma.IsIdle
+            ) {
+                m_quietRemaining = 0;
+                m_othersRemaining -= count;
+                m_pendingAbsorb += count;
+                TickDisplayAlone(cycles: count);
+
+                return;
+            }
+        }
+
+        AdvanceCpuTCyclesSlow(count: count);
+    }
+    /// <summary>Forgets the agreed quiet stretch, settling the components first. Every path that changes a component's
+    /// state other than absorbing cycles — a register write into any component, a snapshot restore — calls this
+    /// before the next advance.</summary>
+    public void Invalidate() {
+        Settle();
+        m_quietRemaining = 0;
+        m_othersRemaining = 0;
+    }
+    /// <summary>Applies the cycles the clock has advanced through to the components, so their state is current.
+    /// Every read of a component's state from outside a tick — a bus access to a register or to display memory, a
+    /// snapshot, a host peek — settles first.</summary>
+    public void Settle() {
+        var now = m_clock.CycleCount;
+        var pending = m_pendingAbsorb;
+
+        if (pending == 0) {
+            m_settledCycleCount = now;
+
+            return;
+        }
+
+        var dots = ((int)(now - m_settledCycleCount));
+
+        m_pendingAbsorb = 0;
+        m_settledCycleCount = now;
+
+        if (dots > 0) {
+            m_hdma.SampleMode();
+            m_ppu.Skip(dots: dots);
+        }
+
+        AbsorbOthers(
+            cycles: pending,
+            generatorCalls: (m_isDoubleSpeed
+            ? (pending - dots)
+            : pending)
+        );
     }
 }

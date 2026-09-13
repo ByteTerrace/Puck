@@ -146,7 +146,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             SurfaceFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
             _ => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
         };
-        m_syncInterval = ((PresentMode.Vsync == m_presentMode) ? 1u : 0u);
+        m_syncInterval = ((PresentMode.Vsync == m_presentMode)
+            ? 1u
+            : 0u
+        );
     }
 
     /// <summary>Gets the blit pipeline layout handle (a <see cref="GCHandle"/>-as-<see cref="nint"/> token to
@@ -154,7 +157,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// build their own <see cref="DirectXDrawCommand"/> lists can reference it as the default blit pipeline.</summary>
     public nint BlitPipelineLayoutHandle => (m_blitLayoutToken.IsAllocated
         ? GCHandle.ToIntPtr(value: m_blitLayoutToken)
-        : 0);
+        : 0
+    );
     /// <summary>Gets the GPU descriptor handle (<c>D3D12_GPU_DESCRIPTOR_HANDLE.ptr</c>) for the compositor's
     /// single SRV slot; valid after <see cref="Initialize"/>. The handle points at whatever texture was last
     /// written via <see cref="Blit"/>.</summary>
@@ -318,7 +322,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             // The single SRV descriptor is consumed at command-list execution, so rewriting it while the other
             // ring slot's frame is still in flight would redirect that frame's read mid-execution.
             WaitForAllFrames();
-            WriteSrv(device: device, format: sourceFormat, resource: ((ID3D12Resource*)sourceResource));
+            WriteSrv(
+                device: device,
+                format: sourceFormat,
+                resource: ((ID3D12Resource*)sourceResource)
+            );
 
             m_lastBlitResource = sourceResource;
         }
@@ -352,11 +360,17 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var commandList = ((ID3D12GraphicsCommandList*)commandListHandle);
 
         allocator->Reset();
-        commandList->Reset(pAllocator: allocator, pInitialState: null);
+        commandList->Reset(
+            pAllocator: allocator,
+            pInitialState: null
+        );
 
         // The present-path fullscreen blit as a GPU-capture debug group (PIX event) — the Direct3D 12 peer of the
         // Vulkan "surface-blit" debug-utils label.
-        DirectXDebugLabel.Begin(commandList: commandList, label: "surface-blit");
+        DirectXDebugLabel.Begin(
+            commandList: commandList,
+            label: "surface-blit"
+        );
         m_commandListRecorder.RecordBackBuffer(
             backBufferHandle: ((nint)backBuffer),
             commandListHandle: commandListHandle,
@@ -372,15 +386,24 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var executable = ((ID3D12CommandList*)commandListHandle);
         var commandQueue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
 
-        commandQueue->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
-        swapChain->Present(Flags: ((DXGI_PRESENT)m_presentFlags), SyncInterval: m_syncInterval).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
+        commandQueue->ExecuteCommandLists(
+            NumCommandLists: 1,
+            ppCommandLists: &executable
+        );
+        swapChain->Present(
+            Flags: ((DXGI_PRESENT)m_presentFlags),
+            SyncInterval: m_syncInterval
+        ).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
         CapturePresentTiming(swapChain: swapChain);
 
         // Arm this slot's fence value AFTER the queue submit so BeginFrame's next WaitForFrameSlot on this same
         // slot (FrameCount presents from now) proves the GPU is done with the allocator/list just submitted above.
         var fenceValue = m_nextFrameFenceValue;
 
-        commandQueue->Signal(Value: fenceValue, pFence: ((ID3D12Fence*)m_frameFence));
+        commandQueue->Signal(
+            Value: fenceValue,
+            pFence: ((ID3D12Fence*)m_frameFence)
+        );
         m_frameFenceValues[frameIndex] = fenceValue;
         m_nextFrameFenceValue = (fenceValue + 1);
     }
@@ -403,8 +426,14 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var fence = ((ID3D12Fence*)m_frameFence);
 
         if (fence->GetCompletedValue() < targetValue) {
-            fence->SetEventOnCompletion(Value: targetValue, hEvent: m_frameFenceEvent);
-            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_frameFenceEvent);
+            fence->SetEventOnCompletion(
+                Value: targetValue,
+                hEvent: m_frameFenceEvent
+            );
+            _ = PInvoke.WaitForSingleObject(
+                dwMilliseconds: uint.MaxValue,
+                hHandle: m_frameFenceEvent
+            );
         }
     }
     /// <summary>Blocks until every presented frame has fully retired on the GPU — the guard for the resources the
@@ -414,15 +443,24 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private void WaitForAllFrames() {
         var lastSignaled = (m_nextFrameFenceValue - 1);
 
-        if ((m_frameFence == 0) || (lastSignaled == 0)) {
+        if (
+            (m_frameFence == 0) ||
+            (lastSignaled == 0)
+        ) {
             return;
         }
 
         var fence = ((ID3D12Fence*)m_frameFence);
 
         if (fence->GetCompletedValue() < lastSignaled) {
-            fence->SetEventOnCompletion(Value: lastSignaled, hEvent: m_frameFenceEvent);
-            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_frameFenceEvent);
+            fence->SetEventOnCompletion(
+                Value: lastSignaled,
+                hEvent: m_frameFenceEvent
+            );
+            _ = PInvoke.WaitForSingleObject(
+                dwMilliseconds: uint.MaxValue,
+                hHandle: m_frameFenceEvent
+            );
         }
     }
 
@@ -478,7 +516,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        var wait = PInvoke.WaitForSingleObject(dwMilliseconds: FrameLatencyWaitTimeoutMilliseconds, hHandle: m_frameLatencyWaitable);
+        var wait = PInvoke.WaitForSingleObject(
+            dwMilliseconds: FrameLatencyWaitTimeoutMilliseconds,
+            hHandle: m_frameLatencyWaitable
+        );
 
         // WAIT_OBJECT_0 == 0: the waitable was signaled (a present retired). Compared numerically to avoid taking a
         // dependency on the WAIT_EVENT enum's namespace, which this project does not surface from its CsWin32 reference.
@@ -544,7 +585,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         IDXGIFactory5* factory5 = null;
         var iid = IDXGIFactory5.IID_Guid;
 
-        if (((IUnknown*)factory)->QueryInterface(ppvObject: ((void**)&factory5), riid: &iid).Failed) {
+        if (((IUnknown*)factory)->QueryInterface(
+            ppvObject: ((void**)&factory5),
+            riid: &iid
+        ).Failed) {
             return false;
         }
 
@@ -640,7 +684,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 IDXGISwapChain3* sc3 = null;
                 var iid = IDXGISwapChain3.IID_Guid;
 
-                ((IUnknown*)sc1)->QueryInterface(ppvObject: ((void**)&sc3), riid: &iid)
+                ((IUnknown*)sc1)->QueryInterface(
+                    ppvObject: ((void**)&sc3),
+                    riid: &iid
+                )
                     .ThrowIfFailed(operation: "IDXGISwapChain1::QueryInterface(IDXGISwapChain3)");
                 m_swapChain = ((nint)sc3);
 
@@ -686,8 +733,16 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         for (var i = 0u; (i < FrameCount); i++) {
             void* buffer;
 
-            swapChain->GetBuffer(Buffer: i, ppSurface: &buffer, riid: &resourceIid);
-            device->CreateRenderTargetView(DestDescriptor: handle, pDesc: null, pResource: ((ID3D12Resource*)buffer));
+            swapChain->GetBuffer(
+                Buffer: i,
+                ppSurface: &buffer,
+                riid: &resourceIid
+            );
+            device->CreateRenderTargetView(
+                DestDescriptor: handle,
+                pDesc: null,
+                pResource: ((ID3D12Resource*)buffer)
+            );
             m_backBuffers[i] = ((nint)buffer);
             handle.ptr += m_rtvStride;
         }
@@ -718,8 +773,18 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_lastBlitResource = 0;
     }
     private void CreateBlitPipeline(ID3D12Device* device) {
-        BlitVertexBytecode ??= CompileShaderToBytes(entryPoint: "main", source: BlitVertexHlsl, sourceName: "blit.vs", target: "vs_5_0");
-        BlitPixelBytecode ??= CompileShaderToBytes(entryPoint: "main", source: BlitPixelHlsl, sourceName: "blit.ps", target: "ps_5_0");
+        BlitVertexBytecode ??= CompileShaderToBytes(
+            entryPoint: "main",
+            source: BlitVertexHlsl,
+            sourceName: "blit.vs",
+            target: "vs_5_0"
+        );
+        BlitPixelBytecode ??= CompileShaderToBytes(
+            entryPoint: "main",
+            source: BlitPixelHlsl,
+            sourceName: "blit.ps",
+            target: "ps_5_0"
+        );
 
         var rootSig = CreateBlitRootSignature(device: device);
         nint pso;
@@ -800,7 +865,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             pStaticSamplers = &staticSampler,
         };
 
-        return DirectXRootSignatures.Create(description: in rootSigDesc, device: device);
+        return DirectXRootSignatures.Create(
+            description: in rootSigDesc,
+            device: device
+        );
     }
     private static nint CreateBlitPso(
         ID3D12Device* device,
@@ -869,7 +937,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;
 
-        device->CreateGraphicsPipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
+        device->CreateGraphicsPipelineState(
+            pDesc: in psoDesc,
+            ppPipelineState: out pso,
+            riid: in psoIid
+        );
 
         return ((nint)pso);
     }

@@ -33,10 +33,22 @@ public sealed class BackendSwitcherTests {
         switcher.Switch();
         var secondRead = switcher.ReadSurface(surface: source);
 
-        Assert.Equal(expected: ((byte)1), actual: firstRead.Pixels.Span[0]);
-        Assert.Equal(expected: ((byte)2), actual: secondRead.Pixels.Span[0]);
-        Assert.Equal(expected: source, actual: first.LastReadSurface);
-        Assert.Equal(expected: source, actual: second.LastReadSurface);
+        Assert.Equal(
+            expected: ((byte)1),
+            actual: firstRead.Pixels.Span[0]
+        );
+        Assert.Equal(
+            expected: ((byte)2),
+            actual: secondRead.Pixels.Span[0]
+        );
+        Assert.Equal(
+            expected: source,
+            actual: first.LastReadSurface
+        );
+        Assert.Equal(
+            expected: source,
+            actual: second.LastReadSurface
+        );
     }
     [Fact]
     public void ReadbackReportsAnUnsupportedActivePresenter() {
@@ -57,7 +69,10 @@ public sealed class BackendSwitcherTests {
 
         var exception = Assert.Throws<NotSupportedException>(testCode: () => switcher.ReadSurface(surface: source));
 
-        Assert.Contains(expectedSubstring: "plain", actualString: exception.Message);
+        Assert.Contains(
+            expectedSubstring: "plain",
+            actualString: exception.Message
+        );
     }
 
     private sealed class TestPresenter(byte marker) : PresenterWithoutReadback, IPresentSurfaceReadback {
@@ -80,7 +95,7 @@ public sealed class BackendSwitcherTests {
         public void Activate(NativeSurfaceBinding binding, uint width, uint height) { }
         public void BeginFrame(uint width, uint height) { }
         public void Deactivate() { }
-        public void Present(Surface surface) { }
         public void Dispose() { }
+        public void Present(Surface surface) { }
     }
 }

@@ -19,22 +19,22 @@ public sealed class RomOnlyCartridge : CartridgeBase {
         Header.HasRam;
 
     /// <inheritdoc/>
-    public override void WriteControl(ushort address, byte value) {
-        // A flat ROM has no mapper registers; writes to the ROM region are inert.
+    protected override void LoadRegisters(StateReader reader) {
+        // No registers.
     }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        address;
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (address - MemoryMap.ExternalRamStart);
     /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        address;
+    /// <inheritdoc/>
     protected override void SaveRegisters(StateWriter writer) {
         // No registers.
     }
+
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        // No registers.
+    public override void WriteControl(ushort address, byte value) {
+        // A flat ROM has no mapper registers; writes to the ROM region are inert.
     }
 }

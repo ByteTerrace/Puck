@@ -12,14 +12,17 @@ public static partial class PuckLinter {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
-        var declaredLets = new Dictionary<string, LetNode>(StringComparer.Ordinal);
-        var declaredTemplates = new Dictionary<string, TemplateNode>(StringComparer.Ordinal);
-        var referencedIdentifiers = new HashSet<string>(StringComparer.Ordinal);
+        var declaredLets = new Dictionary<string, LetNode>(comparer: StringComparer.Ordinal);
+        var declaredTemplates = new Dictionary<string, TemplateNode>(comparer: StringComparer.Ordinal);
+        var referencedIdentifiers = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         // 1. Pass 1: Collect declarations & detect shadowing
         foreach (var statement in document.Statements) {
             if (statement is LetNode letNode) {
-                if (declaredLets.TryGetValue(letNode.Name, out var existing)) {
+                if (declaredLets.TryGetValue(
+                    key: letNode.Name,
+                    value: out var existing
+                )) {
                     diagnostics.ReportWarning(
                         code: PuckDiagnosticCodes.LintDuplicateKey,
                         message: $"Constant '{letNode.Name}' shadows a previous declaration on line {existing.Line}",
@@ -29,7 +32,10 @@ public static partial class PuckLinter {
                     declaredLets[letNode.Name] = letNode;
                 }
             } else if (statement is TemplateNode templateNode) {
-                if (declaredTemplates.TryGetValue(templateNode.Name, out var existing)) {
+                if (declaredTemplates.TryGetValue(
+                    key: templateNode.Name,
+                    value: out var existing
+                )) {
                     diagnostics.ReportWarning(
                         code: PuckDiagnosticCodes.LintDuplicateKey,
                         message: $"Template '{templateNode.Name}' shadows a previous declaration on line {existing.Line}",
@@ -43,12 +49,16 @@ public static partial class PuckLinter {
 
         // 2. Pass 2: Collect all referenced identifiers across statements and expressions
         foreach (var statement in document.Statements) {
-            CollectReferences(statement, referencedIdentifiers, diagnostics);
+            CollectReferences(
+                statement,
+                referencedIdentifiers,
+                diagnostics
+            );
         }
 
         // 3. Pass 3: Check for unused declarations
         foreach (var (name, node) in declaredLets) {
-            if (!referencedIdentifiers.Contains(name)) {
+            if (!referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Constant '{name}' is declared but its value is never used",
@@ -58,7 +68,7 @@ public static partial class PuckLinter {
         }
 
         foreach (var (name, node) in declaredTemplates) {
-            if (!referencedIdentifiers.Contains(name)) {
+            if (!referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Template '{name}' is declared but never instantiated",
@@ -71,13 +81,18 @@ public static partial class PuckLinter {
     private static void CollectReferences(SyntaxNode node, HashSet<string> references, DiagnosticBag diagnostics, bool inLet = false) {
         switch (node) {
             case IdentifierExpressionNode ident:
-                references.Add(ident.Name);
+                references.Add(item: ident.Name);
                 break;
 
             case CallExpressionNode call:
-                references.Add(call.Name);
+                references.Add(item: call.Name);
                 foreach (var arg in call.Arguments) {
-                    CollectReferences(arg.Value, references, diagnostics, inLet);
+                    CollectReferences(
+                        arg.Value,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
                 }
                 break;
 
@@ -92,7 +107,7 @@ public static partial class PuckLinter {
                 }
                 break;
 
-            case LiteralExpressionNode { Value: string strVal } lit when !inLet && strVal.StartsWith('#') && (strVal.Length == 7 || strVal.Length == 9):
+            case LiteralExpressionNode { Value: string strVal } lit when (!inLet && strVal.StartsWith(value: '#') && ((strVal.Length == 7) || (strVal.Length == 9))):
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintShadowedDeclaration,
                     message: $"Inline color literal '{strVal}' — consider declaring as a named 'let' constant",
@@ -102,10 +117,24 @@ public static partial class PuckLinter {
 
             case BlockNode block:
                 // Check host block parameters
-                if (string.Equals(block.Identifier, "host", StringComparison.OrdinalIgnoreCase)) {
+                if (string.Equals(
+                    a: block.Identifier,
+                    b: "host",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) {
                     foreach (var stmt in block.Statements) {
-                        if (stmt is PropertyNode prop && string.Equals(prop.Name, "targetHertz", StringComparison.OrdinalIgnoreCase)) {
-                            if (prop.Value is LiteralExpressionNode { Value: long hz } && hz <= 0) {
+                        if (
+                            (stmt is PropertyNode prop) &&
+                            string.Equals(
+                            a: prop.Name,
+                            b: "targetHertz",
+                            comparisonType: StringComparison.OrdinalIgnoreCase
+                        )
+                        ) {
+                            if (
+                                (prop.Value is LiteralExpressionNode { Value: long hz }) &&
+                                (hz <= 0)
+                            ) {
                                 diagnostics.ReportWarning(
                                     code: PuckDiagnosticCodes.LintEmptyBlock,
                                     message: $"Host targetHertz must be greater than 0, got {hz}",
@@ -116,92 +145,198 @@ public static partial class PuckLinter {
                     }
                 }
                 foreach (var stmt in block.Statements) {
-                    CollectReferences(stmt, references, diagnostics, inLet: false);
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
                 }
                 break;
 
             case PropertyNode prop:
-                CollectReferences(prop.Value, references, diagnostics, inLet: false);
+                CollectReferences(
+                    prop.Value,
+                    references,
+                    diagnostics,
+                    inLet: false
+                );
                 break;
 
             case LetNode letNode:
-                CollectReferences(letNode.Value, references, diagnostics, inLet: true);
+                CollectReferences(
+                    letNode.Value,
+                    references,
+                    diagnostics,
+                    inLet: true
+                );
                 break;
 
             case TemplateNode tmpl:
                 foreach (var param in tmpl.Parameters) {
                     if (param.DefaultValue is not null) {
-                        CollectReferences(param.DefaultValue, references, diagnostics, inLet: false);
+                        CollectReferences(
+                            param.DefaultValue,
+                            references,
+                            diagnostics,
+                            inLet: false
+                        );
                     }
                 }
-                CollectReferences(tmpl.Body, references, diagnostics, inLet: false);
+                CollectReferences(
+                    tmpl.Body,
+                    references,
+                    diagnostics,
+                    inLet: false
+                );
                 break;
 
             case BinaryExpressionNode bin:
-                CollectReferences(bin.Left, references, diagnostics, inLet: false);
-                CollectReferences(bin.Right, references, diagnostics, inLet: false);
+                CollectReferences(
+                    bin.Left,
+                    references,
+                    diagnostics,
+                    inLet: false
+                );
+                CollectReferences(
+                    bin.Right,
+                    references,
+                    diagnostics,
+                    inLet: false
+                );
                 break;
 
             case UnaryExpressionNode un:
-                CollectReferences(un.Operand, references, diagnostics, inLet: false);
+                CollectReferences(
+                    un.Operand,
+                    references,
+                    diagnostics,
+                    inLet: false
+                );
                 break;
 
             case ArrayExpressionNode arr:
                 foreach (var elem in arr.Elements) {
-                    CollectReferences(elem, references, diagnostics, inLet: false);
+                    CollectReferences(
+                        elem,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
                 }
                 break;
 
             case ObjectExpressionNode obj:
                 foreach (var p in obj.Properties) {
-                    CollectReferences(p.Value, references, diagnostics, inLet: false);
+                    CollectReferences(
+                        p.Value,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
                 }
                 break;
 
             case ForStatementNode loop:
-                CollectReferences(loop.Sequence, references, diagnostics, inLet);
+                CollectReferences(
+                    loop.Sequence,
+                    references,
+                    diagnostics,
+                    inLet
+                );
                 foreach (var statement in loop.Body) {
-                    CollectReferences(statement, references, diagnostics, inLet);
+                    CollectReferences(
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: statement,
+                        references: references
+                    );
                 }
                 break;
 
             case RepeatStatementNode repeat:
-                CollectReferences(repeat.Count, references, diagnostics, inLet);
+                CollectReferences(
+                    repeat.Count,
+                    references,
+                    diagnostics,
+                    inLet
+                );
                 foreach (var statement in repeat.Body) {
-                    CollectReferences(statement, references, diagnostics, inLet);
+                    CollectReferences(
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: statement,
+                        references: references
+                    );
                 }
                 break;
 
             case IndexExpressionNode index:
-                CollectReferences(index.Target, references, diagnostics, inLet);
-                CollectReferences(index.Index, references, diagnostics, inLet);
+                CollectReferences(
+                    index.Target,
+                    references,
+                    diagnostics,
+                    inLet
+                );
+                CollectReferences(
+                    index.Index,
+                    references,
+                    diagnostics,
+                    inLet
+                );
                 break;
 
             case LambdaExpressionNode lambda:
-                CollectReferences(lambda.Body, references, diagnostics, inLet);
+                CollectReferences(
+                    lambda.Body,
+                    references,
+                    diagnostics,
+                    inLet
+                );
                 break;
 
             case InterpolatedStringNode interpolated:
                 foreach (var hole in interpolated.Segments.OfType<InterpolationSegment.Hole>()) {
-                    CollectReferences(hole.Expression, references, diagnostics, inLet);
+                    CollectReferences(
+                        hole.Expression,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
                 }
                 break;
 
             case ExportNode export:
-                references.UnionWith(export.Names);
+                references.UnionWith(other: export.Names);
                 break;
 
             case MemberAccessExpressionNode member:
-                CollectReferences(member.Target, references, diagnostics);
+                CollectReferences(
+                    member.Target,
+                    references,
+                    diagnostics
+                );
                 break;
 
             case RangeExpressionNode range:
-                CollectReferences(range.Start, references, diagnostics);
-                CollectReferences(range.End, references, diagnostics);
+                CollectReferences(
+                    range.Start,
+                    references,
+                    diagnostics
+                );
+                CollectReferences(
+                    range.End,
+                    references,
+                    diagnostics
+                );
                 break;
 
             case ExpressionStatementNode exprStmt:
-                CollectReferences(exprStmt.Expression, references, diagnostics);
+                CollectReferences(
+                    exprStmt.Expression,
+                    references,
+                    diagnostics
+                );
                 break;
         }
     }

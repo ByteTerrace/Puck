@@ -16,15 +16,34 @@ public sealed partial class WorldServer {
     private StateFrame EnsureRuleFrame() {
         var rows = m_definition.State;
 
-        if (ReferenceEquals(objA: rows, objB: m_ruleFrameFitRows)) {
+        if (ReferenceEquals(
+            objA: rows,
+            objB: m_ruleFrameFitRows
+        )) {
             return m_ruleFrame!;
         }
 
         var catalog = RuleReadCatalog;
 
-        if ((m_ruleFrameLayout is null) || !m_ruleFrameLayout.Fits(rows: rows) || !ReferenceEquals(objA: m_ruleFrameCatalog, objB: catalog)) {
-            m_ruleFrameLayout = new FrameLayout(rows: rows, topology: name => WorldTopologyCompilation.Find(m_definition, name));
-            m_ruleFrame = new StateFrame(layout: m_ruleFrameLayout, rows: rows);
+        if (
+            (m_ruleFrameLayout is null) ||
+            !m_ruleFrameLayout.Fits(rows: rows) ||
+            !ReferenceEquals(
+            objA: m_ruleFrameCatalog,
+            objB: catalog
+        )
+        ) {
+            m_ruleFrameLayout = new FrameLayout(
+                rows: rows,
+                topology: name => WorldTopologyCompilation.Find(
+                    definition: m_definition,
+                    name: name
+                )
+            );
+            m_ruleFrame = new StateFrame(
+                layout: m_ruleFrameLayout,
+                rows: rows
+            );
             m_ruleFrameCatalog = catalog;
         } else {
             m_ruleFrame!.Rebind(rows: rows);
@@ -58,7 +77,10 @@ public sealed partial class WorldServer {
         var reloadMark = m_ruleFrameReloadMarks.Pop();
 
         EndIdentityFactScope();
-        m_ruleFrameMutations.RemoveRange(index: mutationMark, count: (m_ruleFrameMutations.Count - mutationMark));
+        m_ruleFrameMutations.RemoveRange(
+            index: mutationMark,
+            count: (m_ruleFrameMutations.Count - mutationMark)
+        );
 
         // A cross-row mutation (TryApplyCrossRowStateMutation) reloaded the frame from a candidate this scope is
         // now discarding — that reload bypassed the journal, so rewinding it cannot undo the reload; the frame is
@@ -66,8 +88,13 @@ public sealed partial class WorldServer {
         if (m_ruleFrameReloadStamp != reloadMark) {
             // The restored document may predate fast numeric writes before this scope. Replaying the retained
             // queue restores those values too, without retaining any speculative document or text write.
-            if (!TryComposeRuleFrameCandidate(next: null, tick: m_evaluator.Tick, candidate: out var restored, reason: out var reason)) {
-                throw new InvalidOperationException($"The retained rule prefix could not be restored: {reason}");
+            if (!TryComposeRuleFrameCandidate(
+                next: null,
+                tick: m_evaluator.Tick,
+                candidate: out var restored,
+                reason: out var reason
+            )) {
+                throw new InvalidOperationException(message: $"The retained rule prefix could not be restored: {reason}");
             }
             m_definition = restored;
             ReloadRuleFrame(extraScopesToClose: 1);
@@ -99,13 +126,13 @@ public sealed partial class WorldServer {
     // still open are committed, then every remaining one reopens, fresh, right after — every mark becomes the
     // frame's post-load journal length (0) either way, so reopening needs no per-scope bookkeeping beyond the count.
     private void ReloadRuleFrame(int extraScopesToClose) {
-        for (var index = 0; index < extraScopesToClose; index++) {
+        for (var index = 0; (index < extraScopesToClose); index++) {
             m_ruleFrame!.CommitJournalScope();
         }
 
         var depth = m_ruleFrameJournalMarks.Count;
 
-        for (var index = 0; index < depth; index++) {
+        for (var index = 0; (index < depth); index++) {
             m_ruleFrame!.CommitJournalScope();
         }
 
@@ -114,7 +141,7 @@ public sealed partial class WorldServer {
         m_ruleFrame!.Load(source: m_ruleFrameStore);
         m_ruleFrameJournalMarks.Clear();
 
-        for (var index = 0; index < depth; index++) {
+        for (var index = 0; (index < depth); index++) {
             m_ruleFrameJournalMarks.Push(item: m_ruleFrame!.BeginJournalScope());
         }
 
@@ -125,22 +152,36 @@ public sealed partial class WorldServer {
     // path below queue the same replay-ready shape.
     private static WorldMutation MapStateMutation(StateMutation mutation) => mutation switch {
         StateMutation.UpsertCell cell => new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.World,
-            Row: cell.Row,
-            Key: cell.Key,
-            Value: cell.Value,
-            Kind: ((cell.Write == StateWriteKind.Add) ? WorldDocumentWriteKind.Add : WorldDocumentWriteKind.Set),
-            Text: cell.Text
-        ),
-        StateMutation.RemoveCell cell => new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: cell.Row, Key: cell.Key),
-        StateMutation.Generate generate => new WorldMutation.Generate(Principal: WorldPrincipal.World, Row: generate.Row),
-        StateMutation.Apply apply => new WorldMutation.TransformState(WorldPrincipal.World, apply.Transform),
+        Principal: WorldPrincipal.World,
+        Row: cell.Row,
+        Key: cell.Key,
+        Value: cell.Value,
+        Kind: ((cell.Write == StateWriteKind.Add)
+        ? WorldDocumentWriteKind.Add
+        : WorldDocumentWriteKind.Set),
+        Text: cell.Text
+    ),
+        StateMutation.RemoveCell cell => new WorldMutation.RemoveStateCell(
+        Principal: WorldPrincipal.World,
+        Row: cell.Row,
+        Key: cell.Key
+    ),
+        StateMutation.Generate generate => new WorldMutation.Generate(
+        Principal: WorldPrincipal.World,
+        Row: generate.Row
+    ),
+        StateMutation.Apply apply => new WorldMutation.TransformState(
+        WorldPrincipal.World,
+        apply.Transform
+    ),
         _ => throw new InvalidOperationException(message: $"state mutation '{mutation.GetType().Name}' has no world mapping."),
     };
+
     // Scratch for TryComposeRuleFrameCandidate's own combined member list — cleared and refilled on every call
     // rather than allocated fresh, so a tick with many cross-row writes (a Klondike deal) pays for the list once
     // per call, never once per member replayed.
     private readonly List<WorldMutation> m_ruleFrameReplayScratch = [];
+
     // Replays the one authored rule queue from the clean tick baseline through TryComposeBatch — the same vehicle
     // an externally submitted WorldMutation.Batch composes through, which guarantees the document it hands back is
     // byte-identical to composing the same members one by one (TryComposeBatch's own contract). `next` is appended
@@ -151,7 +192,10 @@ public sealed partial class WorldServer {
 
         reason = string.Empty;
 
-        if ((m_ruleFrameMutations.Count == 0) && (next is null)) {
+        if (
+            (m_ruleFrameMutations.Count == 0) &&
+            (next is null)
+        ) {
             candidate = baseline;
 
             return true;
@@ -169,7 +213,10 @@ public sealed partial class WorldServer {
         }
 
         return TryComposeBatch(
-            batch: new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: members),
+            batch: new WorldMutation.Batch(
+                Principal: WorldPrincipal.World,
+                Mutations: members
+            ),
             candidate: out candidate,
             current: baseline,
             evictedKey: out _,
@@ -189,7 +236,12 @@ public sealed partial class WorldServer {
     // call resyncs the frame back to whatever m_definition it restores, rather than trusting a journal rewind the
     // reload already bypassed (EndRuleFrameScope/CommitRuleFrameScope).
     private bool TryApplyCrossRowStateMutation(WorldMutation mapped, ulong tick, out string reason) {
-        if (!TryComposeRuleFrameCandidate(next: mapped, tick: tick, candidate: out var candidate, reason: out reason)) {
+        if (!TryComposeRuleFrameCandidate(
+            candidate: out var candidate,
+            next: mapped,
+            reason: out reason,
+            tick: tick
+        )) {
             return false;
         }
 
@@ -212,12 +264,24 @@ public sealed partial class WorldServer {
 
         var mutation = ((m_ruleFrameMutations.Count == 1)
             ? m_ruleFrameMutations[0]
-            : new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: m_ruleFrameMutations)
+            : new WorldMutation.Batch(
+                Principal: WorldPrincipal.World,
+                Mutations: m_ruleFrameMutations
+            )
         );
 
-        if (!TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
+        if (!TryApplyMutation(
+            connectionId: SubmissionEnvelope.LocalConnectionId,
+            correlationId: 0,
+            mutation: mutation,
+            preMetered: false,
+            tick: tick
+        )) {
             if (m_output.HasNarrationSink) {
-                m_output.Narrate(channel: "world.rule", text: $"[world.rule: this tick's {m_ruleFrameMutations.Count} rule-written mutations were refused as one; the document stays at its prior tick]");
+                m_output.Narrate(
+                    channel: "world.rule",
+                    text: $"[world.rule: this tick's {m_ruleFrameMutations.Count} rule-written mutations were refused as one; the document stays at its prior tick]"
+                );
             }
         }
 

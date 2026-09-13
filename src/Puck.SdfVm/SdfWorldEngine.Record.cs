@@ -424,9 +424,27 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
 
-            RecordHitPass(commandBuffer: commandBuffer, timingPool: timingPool, pipeline: m_primaryPipeline, label: "primary", timingMark: 6);
-            RecordHitPass(commandBuffer: commandBuffer, timingPool: timingPool, pipeline: m_surfacePipeline, label: "surface", timingMark: 7);
-            RecordHitPass(commandBuffer: commandBuffer, timingPool: timingPool, pipeline: m_ambientPipeline, label: "ambient", timingMark: 8);
+            RecordHitPass(
+                commandBuffer: commandBuffer,
+                label: "primary",
+                pipeline: m_primaryPipeline,
+                timingMark: 6,
+                timingPool: timingPool
+            );
+            RecordHitPass(
+                commandBuffer: commandBuffer,
+                label: "surface",
+                pipeline: m_surfacePipeline,
+                timingMark: 7,
+                timingPool: timingPool
+            );
+            RecordHitPass(
+                commandBuffer: commandBuffer,
+                label: "ambient",
+                pipeline: m_ambientPipeline,
+                timingMark: 8,
+                timingPool: timingPool
+            );
 
             // Stage 1: shade each viewport's primary hits into its own source texture — dispatched INDIRECTLY from the
             // GPU-computed surviving-tile bbox; the all-empty margins are never dispatched; the kernel offsets each
@@ -527,8 +545,16 @@ public sealed partial class SdfWorldEngine {
                 queryIndex: 7,
                 timingPool: timingPool
             ); // close: surface evaluation (skipped)
-            WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 8, timingPool: timingPool); // ambient (skipped)
-            WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 9, timingPool: timingPool); // views (skipped)
+            WriteTimingMark(
+                commandBuffer: commandBuffer,
+                queryIndex: 8,
+                timingPool: timingPool
+            ); // ambient (skipped)
+            WriteTimingMark(
+                commandBuffer: commandBuffer,
+                queryIndex: 9,
+                timingPool: timingPool
+            ); // views (skipped)
         }
 
         recorder.TransitionImageLayout(

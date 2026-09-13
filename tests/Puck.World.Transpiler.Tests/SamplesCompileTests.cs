@@ -15,51 +15,85 @@ public class SamplesCompileTests {
 
     private static string FindSamplesDirectory() {
         var dir = AppContext.BaseDirectory;
+
         while (dir is not null) {
-            var candidate = Path.Combine(dir, "src", "Puck.World.Transpiler", "Samples");
-            if (Directory.Exists(candidate)) {
+            var candidate = Path.Combine(
+                path1: dir,
+                path2: "src",
+                path3: "Puck.World.Transpiler",
+                path4: "Samples"
+            );
+
+            if (Directory.Exists(path: candidate)) {
                 return candidate;
             }
-            dir = Path.GetDirectoryName(dir);
+            dir = Path.GetDirectoryName(path: dir);
         }
-        throw new DirectoryNotFoundException("Could not locate src/Puck.World.Transpiler/Samples from the test runner.");
+        throw new DirectoryNotFoundException(message: "Could not locate src/Puck.World.Transpiler/Samples from the test runner.");
     }
 
-    public static TheoryData<string> SampleFiles() {
-        var data = new TheoryData<string>();
-        foreach (var file in Directory.GetFiles(FindSamplesDirectory(), "*.puck")) {
-            data.Add(Path.GetFileName(file));
-        }
-        return data;
-    }
-
-    [Theory]
     [MemberData(nameof(SampleFiles))]
+    [Theory]
     public void SampleCompilesWithoutDiagnosticErrors(string fileName) {
-        var path = Path.Combine(FindSamplesDirectory(), fileName);
-        var source = File.ReadAllText(path);
+        var path = Path.Combine(
+            path1: FindSamplesDirectory(),
+            path2: fileName
+        );
+        var source = File.ReadAllText(path: path);
 
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);
-        Assert.NotNull(parseResult.Value);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source,
+            diagnostics: diagnostics
+        );
 
-        ModuleResolver.ValidateImportGraph(diagnostics: diagnostics, rootDoc: parseResult.Value, rootPath: path);
+        Assert.NotNull(@object: parseResult.Value);
+
+        ModuleResolver.ValidateImportGraph(
+            diagnostics: diagnostics,
+            rootDoc: parseResult.Value,
+            rootPath: path
+        );
 
         WorldDocumentEmitter.LowerWithDiagnostics(
             parseResult.Value,
-            basePath: Path.GetDirectoryName(path),
-            diagnostics: diagnostics
-        , cancellationToken: TestContext.Current.CancellationToken);
+            basePath: Path.GetDirectoryName(path: path),
+            diagnostics: diagnostics,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(sourceText: source, filePath: path));
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: diagnostics.FormatReport(
+                filePath: path,
+                sourceText: source
+            )
+        );
     }
+    public static TheoryData<string> SampleFiles() {
+        var data = new TheoryData<string>();
 
+        foreach (var file in Directory.GetFiles(
+            path: FindSamplesDirectory(),
+            searchPattern: "*.puck"
+        )) {
+            data.Add(row: Path.GetFileName(path: file));
+        }
+        return data;
+    }
     [Fact]
     public void TheComprehensiveSampleExercisesTheStatementSugar() {
-        var source = File.ReadAllText(Path.Combine(FindSamplesDirectory(), "comprehensive.synthetic.world.puck"));
+        var source = File.ReadAllText(path: Path.Combine(
+            path1: FindSamplesDirectory(),
+            path2: "comprehensive.synthetic.world.puck"
+        ));
 
         foreach (var keyword in SugarKeywords) {
-            Assert.Contains(keyword, source, StringComparison.Ordinal);
+            Assert.Contains(
+                actualString: source,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: keyword
+            );
         }
     }
 }

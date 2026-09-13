@@ -94,16 +94,29 @@ public sealed class PersistentRequestLaneLawTests {
     // The lane is transport-neutral. This fixture deliberately injects a socket stream to isolate retry and
     // deadline behavior; production World callers inject the shared authenticated QUIC peer network.
     private static async ValueTask<Stream> ConnectTestStreamAsync(EndPoint endpoint, CancellationToken ct) {
-        if (endpoint is IPEndPoint { Port: 0 }) { throw new SocketException((int)SocketError.ConnectionRefused); }
-        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        if (endpoint is IPEndPoint { Port: 0 }) { throw new SocketException(errorCode: ((int)SocketError.ConnectionRefused)); }
+        var socket = new Socket(
+            protocolType: ProtocolType.Tcp,
+            socketType: SocketType.Stream
+        ) { NoDelay = true };
+
         try {
-            await socket.ConnectAsync(endpoint, ct);
-            return new NetworkStream(socket, ownsSocket: true);
+            await socket.ConnectAsync(
+                cancellationToken: ct,
+                remoteEP: endpoint
+            );
+            return new NetworkStream(
+                socket,
+                ownsSocket: true
+            );
         } catch { socket.Dispose(); throw; }
     }
     // Port zero is a fixture marker, never dialed. Refuse through the same transport seam without waiting
     // for the OS's SYN retry policy, or racing another test for a recently released ephemeral port.
-    private static IPEndPoint UnreachableEndpoint() => new(IPAddress.Loopback, 0);
+    private static IPEndPoint UnreachableEndpoint() => new(
+        address: IPAddress.Loopback,
+        port: 0
+    );
 
     /// <summary>A break on an already-established connection reconnects and re-sends exactly once, without ever
     /// calling the lane unreachable. Falsifier: dropping the <c>hadConnection</c> branch (always taking the
@@ -1234,7 +1247,7 @@ public sealed class PersistentRequestLaneLawTests {
         listener.Start();
 
         var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-        const int requestCount = 16;
+        const int RequestCount = 16;
         var observedOrder = new List<int>();
 
         using var deadline = Laws.SocketDeadline();
@@ -1249,7 +1262,7 @@ public sealed class PersistentRequestLaneLawTests {
                     stream: stream
                 );
 
-                for (var index = 0; (index < requestCount); index++) {
+                for (var index = 0; (index < RequestCount); index++) {
                     var request = await WireFrame.ReadAsync(
                         stream: stream,
                         maxFrameBytes: 4096,
@@ -1282,9 +1295,9 @@ public sealed class PersistentRequestLaneLawTests {
             unavailableBackoff: TimeSpan.FromSeconds(value: 30)
         );
 
-        var pending = new Task<LaneResponse<FakeResponseKind>>[requestCount];
+        var pending = new Task<LaneResponse<FakeResponseKind>>[RequestCount];
 
-        for (var index = 0; (index < requestCount); index++) {
+        for (var index = 0; (index < RequestCount); index++) {
             pending[index] = lane.Enqueue(
                 body: [((byte)index)],
                 kind: FakeRequestKind.Ping
@@ -1295,7 +1308,7 @@ public sealed class PersistentRequestLaneLawTests {
 
         await serverTask;
 
-        for (var index = 0; (index < requestCount); index++) {
+        for (var index = 0; (index < RequestCount); index++) {
             Assert.True(
                 condition: results[index].Ok,
                 userMessage: results[index].Failure.ToString()
@@ -1308,7 +1321,7 @@ public sealed class PersistentRequestLaneLawTests {
 
         Assert.Equal(
             expected: Enumerable.Range(
-                count: requestCount,
+                count: RequestCount,
                 start: 0
             ),
             actual: observedOrder

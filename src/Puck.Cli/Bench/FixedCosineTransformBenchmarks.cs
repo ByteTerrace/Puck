@@ -37,7 +37,7 @@ public class DctForwardVsDirectSum {
             var sum = FixedQ4816.Zero;
 
             for (var n = 0; (n < Length); ++n) {
-                sum += (m_input[n] * FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: ((Math.PI * ((2 * n) + 1) * k) / (2.0 * Length)))));
+                sum += (m_input[n] * FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: (((Math.PI * ((2 * n) + 1)) * k) / (2.0 * Length)))));
             }
 
             sink ^= sum.Value;
@@ -47,8 +47,15 @@ public class DctForwardVsDirectSum {
     }
     [Benchmark]
     public FixedQ4816 FourierRoute() {
-        m_input.CopyTo(array: m_scratch, index: 0);
-        FixedCosineTransform.Forward(plan: m_plan, scratch: m_complexScratch, values: m_scratch);
+        m_input.CopyTo(
+            array: m_scratch,
+            index: 0
+        );
+        FixedCosineTransform.Forward(
+            plan: m_plan,
+            scratch: m_complexScratch,
+            values: m_scratch
+        );
 
         return m_scratch[0];
     }
@@ -87,38 +94,74 @@ public class DctForwardInverse {
 
         m_smallInverseInput = ((FixedQ4816[])m_smallForwardInput.Clone());
         m_largeInverseInput = ((FixedQ4816[])m_largeForwardInput.Clone());
-        FixedCosineTransform.Forward(plan: m_smallPlan, scratch: m_smallScratch, values: m_smallInverseInput);
-        FixedCosineTransform.Forward(plan: m_largePlan, scratch: m_largeScratch, values: m_largeInverseInput);
+        FixedCosineTransform.Forward(
+            plan: m_smallPlan,
+            scratch: m_smallScratch,
+            values: m_smallInverseInput
+        );
+        FixedCosineTransform.Forward(
+            plan: m_largePlan,
+            scratch: m_largeScratch,
+            values: m_largeInverseInput
+        );
     }
     [IterationSetup(Target = nameof(ForwardSmall))]
-    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseSmall))]
-    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(ForwardLarge))]
-    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseLarge))]
-    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [Benchmark]
     public FixedQ4816 ForwardSmall() {
-        FixedCosineTransform.Forward(plan: m_smallPlan, scratch: m_smallScratch, values: m_smallValues);
+        FixedCosineTransform.Forward(
+            plan: m_smallPlan,
+            scratch: m_smallScratch,
+            values: m_smallValues
+        );
 
         return m_smallValues[0];
     }
     [Benchmark]
     public FixedQ4816 InverseSmall() {
-        FixedCosineTransform.Inverse(plan: m_smallPlan, scratch: m_smallScratch, values: m_smallValues);
+        FixedCosineTransform.Inverse(
+            plan: m_smallPlan,
+            scratch: m_smallScratch,
+            values: m_smallValues
+        );
 
         return m_smallValues[0];
     }
     [Benchmark]
     public FixedQ4816 ForwardLarge() {
-        FixedCosineTransform.Forward(plan: m_largePlan, scratch: m_largeScratch, values: m_largeValues);
+        FixedCosineTransform.Forward(
+            plan: m_largePlan,
+            scratch: m_largeScratch,
+            values: m_largeValues
+        );
 
         return m_largeValues[0];
     }
     [Benchmark]
     public FixedQ4816 InverseLarge() {
-        FixedCosineTransform.Inverse(plan: m_largePlan, scratch: m_largeScratch, values: m_largeValues);
+        FixedCosineTransform.Inverse(
+            plan: m_largePlan,
+            scratch: m_largeScratch,
+            values: m_largeValues
+        );
 
         return m_largeValues[0];
     }

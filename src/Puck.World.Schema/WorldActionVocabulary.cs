@@ -25,7 +25,6 @@ public static class WorldPredicate {
     /// <param name="Channel">The declared composition channel name.</param>
     public sealed record Held(string Channel) : ActionPredicate;
 }
-
 /// <summary>The effect arms the world adds to <see cref="ActionEffect"/>, registered by
 /// <see cref="WorldRuleVocabulary"/>. The body-program arms (vertical velocity, planar impulse, timers, designation
 /// by <see cref="ActionTarget"/>) belong to a kit's action programs and refuse in a world rule; the body-keyed,
@@ -134,7 +133,6 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f
     ) : ActionEffect;
 }
-
 /// <summary>How a rule-triggered body designation chooses its target.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldBodyDesignationKind>))]
 public enum WorldBodyDesignationKind : byte {
@@ -143,7 +141,6 @@ public enum WorldBodyDesignationKind : byte {
     /// <summary>Clear the register.</summary>
     Clear,
 }
-
 /// <summary>One deterministic presentation-neutral cue emitted by an authored rule.</summary>
 /// <param name="Name">The cue's stable authored identifier.</param>
 /// <param name="Payload">An optional bounded payload interpreted by the consumer.</param>
@@ -178,7 +175,6 @@ public readonly record struct WorldGameplayCue(string Name, string? Payload, int
         return true;
     }
 }
-
 /// <summary>One trigger of a kit's action program: the effects that fire, the gate that must hold, and the latch
 /// that keeps a press armed while the gate is closed.</summary>
 /// <param name="Effects">The effects applied in order.</param>

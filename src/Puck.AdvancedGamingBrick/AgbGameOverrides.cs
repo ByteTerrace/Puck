@@ -31,6 +31,8 @@ public static class AgbGameOverrides {
     // Game-code strings are 4 ASCII chars (AXXY: title code + region). Packed big-endian into a uint key.
     private static readonly FrozenDictionary<uint, AgbGameOverride> OverrideTable = Build();
 
+    private static void Add(Dictionary<uint, AgbGameOverride> table, string code, AgbGameOverride entry) =>
+        table[Key(code: code)] = entry;
     private static FrozenDictionary<uint, AgbGameOverride> Build() {
         var table = new Dictionary<uint, AgbGameOverride>();
 
@@ -149,8 +151,6 @@ public static class AgbGameOverrides {
 
         return table.ToFrozenDictionary();
     }
-    private static void Add(Dictionary<uint, AgbGameOverride> table, string code, AgbGameOverride entry) =>
-        table[Key(code: code)] = entry;
     private static uint Key(string code) =>
         (((uint)((byte)code[0])) << 24) | (((uint)((byte)code[1])) << 16) | (((uint)((byte)code[2])) << 8) | ((byte)code[3]);
 

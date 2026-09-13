@@ -24,29 +24,29 @@ public readonly record struct Tick(UFixedQ4816 Value)
       ISubtractionOperators<Tick, Tick, Tick>,
       IAdditiveIdentity<Tick, Tick>,
       IMinMaxValue<Tick> {
-    /// <summary>The zero instant — the start of the timeline, and the additive identity for durations.</summary>
-    public static Tick Zero => default;
     /// <summary>The additive identity, <see cref="Zero"/>.</summary>
     public static Tick AdditiveIdentity => default;
-    /// <summary>The earliest representable instant, <see cref="Zero"/>.</summary>
-    public static Tick MinValue => default;
     /// <summary>The latest representable instant.</summary>
     public static Tick MaxValue => new(Value: UFixedQ4816.MaxValue);
+    /// <summary>The earliest representable instant, <see cref="Zero"/>.</summary>
+    public static Tick MinValue => default;
     /// <summary>Gets the fundamental tick: the raw <c>ulong</c> storage, the represented T-cycle count scaled by
     /// <c>2¹⁶</c>.</summary>
     public ulong RawBits {
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
         get => Value.Value;
     }
+    /// <summary>Gets the sub-cycle phase within the current T-cycle, a fraction in <c>[0, 1)</c> of a T-cycle.</summary>
+    public UFixedQ4816 SubCyclePhase =>
+        UFixedQ4816.Fractional(value: Value);
     /// <summary>Gets the number of whole T-cycles (LCD dots) at or before this instant, discarding the sub-cycle
     /// phase.</summary>
     public ulong WholeCycles {
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
         get => (Value.Value >> UFixedQ4816.FractionBitCount);
     }
-    /// <summary>Gets the sub-cycle phase within the current T-cycle, a fraction in <c>[0, 1)</c> of a T-cycle.</summary>
-    public UFixedQ4816 SubCyclePhase =>
-        UFixedQ4816.Fractional(value: Value);
+    /// <summary>The zero instant — the start of the timeline, and the additive identity for durations.</summary>
+    public static Tick Zero => default;
 
     /// <summary>Adds two ticks (instant plus duration, or duration plus duration).</summary>
     /// <param name="left">The first operand.</param>
@@ -99,52 +99,6 @@ public readonly record struct Tick(UFixedQ4816 Value)
     public static bool operator >=(Tick left, Tick right) =>
         (left.Value >= right.Value);
 
-    /// <summary>Creates a tick from a whole number of T-cycles (LCD dots).</summary>
-    /// <param name="cycles">The T-cycle count.</param>
-    /// <returns>The instant or duration of exactly <paramref name="cycles"/> T-cycles.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static Tick FromCycles(ulong cycles) =>
-        new(Value: UFixedQ4816.FromInteger(value: cycles));
-    /// <summary>Creates a tick directly from the fundamental tick: the raw fixed-point storage bits.</summary>
-    /// <param name="rawBits">The raw <see cref="UFixedQ4816"/> storage, a T-cycle count scaled by <c>2¹⁶</c>.</param>
-    /// <returns>The instant or duration whose <see cref="RawBits"/> equal <paramref name="rawBits"/>.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static Tick FromRawBits(ulong rawBits) =>
-        new(Value: UFixedQ4816.FromRawBits(value: rawBits));
-    /// <summary>Creates a tick from a count of fundamental ticks at a given resolution.</summary>
-    /// <param name="quanta">The number of fundamental ticks.</param>
-    /// <param name="resolution">The resolution whose <see cref="TickResolution.Quantum"/> each tick represents.</param>
-    /// <returns>The duration of <paramref name="quanta"/> fundamental ticks.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static Tick FromQuanta(ulong quanta, TickResolution resolution) =>
-        new(Value: UFixedQ4816.FromRawBits(value: unchecked((quanta * resolution.QuantumRawBits))));
-    /// <summary>Returns the earlier of two instants.</summary>
-    /// <param name="left">The first instant.</param>
-    /// <param name="right">The second instant.</param>
-    /// <returns>Whichever instant is earlier.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static Tick Min(Tick left, Tick right) =>
-        new(Value: UFixedQ4816.Min(
-        x: left.Value,
-        y: right.Value
-    ));
-    /// <summary>Returns the later of two instants.</summary>
-    /// <param name="left">The first instant.</param>
-    /// <param name="right">The second instant.</param>
-    /// <returns>Whichever instant is later.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static Tick Max(Tick left, Tick right) =>
-        new(Value: UFixedQ4816.Max(
-        x: left.Value,
-        y: right.Value
-    ));
-    /// <summary>Counts how many whole fundamental ticks of <paramref name="resolution"/> have elapsed at this instant,
-    /// flooring any finer sub-cycle remainder.</summary>
-    /// <param name="resolution">The resolution whose <see cref="TickResolution.Quantum"/> to count in.</param>
-    /// <returns>The number of fundamental ticks at or before this instant.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public ulong ToQuanta(TickResolution resolution) =>
-        (Value.Value >> (UFixedQ4816.FractionBitCount - resolution.SubdivisionLog2));
     /// <summary>Compares this instant with a boxed <see cref="Tick"/>.</summary>
     /// <param name="obj">The object to compare with, or <see langword="null"/>.</param>
     /// <returns>A negative value, zero, or a positive value as this instant precedes, equals, or follows
@@ -167,4 +121,50 @@ public readonly record struct Tick(UFixedQ4816 Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public int CompareTo(Tick other) =>
         Value.CompareTo(other: other.Value);
+    /// <summary>Creates a tick from a whole number of T-cycles (LCD dots).</summary>
+    /// <param name="cycles">The T-cycle count.</param>
+    /// <returns>The instant or duration of exactly <paramref name="cycles"/> T-cycles.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static Tick FromCycles(ulong cycles) =>
+        new(Value: UFixedQ4816.FromInteger(value: cycles));
+    /// <summary>Creates a tick from a count of fundamental ticks at a given resolution.</summary>
+    /// <param name="quanta">The number of fundamental ticks.</param>
+    /// <param name="resolution">The resolution whose <see cref="TickResolution.Quantum"/> each tick represents.</param>
+    /// <returns>The duration of <paramref name="quanta"/> fundamental ticks.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static Tick FromQuanta(ulong quanta, TickResolution resolution) =>
+        new(Value: UFixedQ4816.FromRawBits(value: unchecked((quanta * resolution.QuantumRawBits))));
+    /// <summary>Creates a tick directly from the fundamental tick: the raw fixed-point storage bits.</summary>
+    /// <param name="rawBits">The raw <see cref="UFixedQ4816"/> storage, a T-cycle count scaled by <c>2¹⁶</c>.</param>
+    /// <returns>The instant or duration whose <see cref="RawBits"/> equal <paramref name="rawBits"/>.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static Tick FromRawBits(ulong rawBits) =>
+        new(Value: UFixedQ4816.FromRawBits(value: rawBits));
+    /// <summary>Returns the later of two instants.</summary>
+    /// <param name="left">The first instant.</param>
+    /// <param name="right">The second instant.</param>
+    /// <returns>Whichever instant is later.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static Tick Max(Tick left, Tick right) =>
+        new(Value: UFixedQ4816.Max(
+            x: left.Value,
+            y: right.Value
+        ));
+    /// <summary>Returns the earlier of two instants.</summary>
+    /// <param name="left">The first instant.</param>
+    /// <param name="right">The second instant.</param>
+    /// <returns>Whichever instant is earlier.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static Tick Min(Tick left, Tick right) =>
+        new(Value: UFixedQ4816.Min(
+            x: left.Value,
+            y: right.Value
+        ));
+    /// <summary>Counts how many whole fundamental ticks of <paramref name="resolution"/> have elapsed at this instant,
+    /// flooring any finer sub-cycle remainder.</summary>
+    /// <param name="resolution">The resolution whose <see cref="TickResolution.Quantum"/> to count in.</param>
+    /// <returns>The number of fundamental ticks at or before this instant.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public ulong ToQuanta(TickResolution resolution) =>
+        (Value.Value >> (UFixedQ4816.FractionBitCount - resolution.SubdivisionLog2));
 }

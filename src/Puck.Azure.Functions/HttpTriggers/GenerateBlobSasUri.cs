@@ -9,8 +9,7 @@ namespace Puck.Azure.Functions.HttpTriggers;
 public sealed class GenerateBlobSasUri(
     IBlobSasUriService blobSasUriService,
     IUserCredentialContext userCredentialContext
-)
-{
+) {
     [FeatureGate(features: nameof(GenerateBlobSasUri))]
     [Function(name: nameof(GenerateBlobSasUri))]
     public async Task<IActionResult> Run(
@@ -35,10 +34,10 @@ public sealed class GenerateBlobSasUri(
         return new OkObjectResult(value: new {
             SasUri = (await blobSasUriService
                 .GenerateAsync(
-                    cancellationToken: cancellationToken,
-                    request: request,
-                    tokenCredential: userCredentialContext.UserContext
-                ))
+            cancellationToken: cancellationToken,
+            request: request,
+            tokenCredential: userCredentialContext.UserContext
+        ))
                 .ToString(),
         });
     }

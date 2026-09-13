@@ -38,16 +38,16 @@ namespace Puck.World.Client;
 /// (<c>WorldAdjacencyBands.ProjectionCapacity</c>), so the reservation grows quadratically in authored edges.</para>
 /// </remarks>
 public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
+    // The moving half of the same per-band reservation. KEEP IN SYNC: the probe branch reserves exactly this many
+    // worst-case rigs per band and EmitEntities selects at most this many delivered bodies, so a live band can never
+    // outgrow the envelope SdfWorldEngine.UploadProgram freezes.
+    internal const int MaxEntitiesPerBand = WorldAdjacencyGeometry.MaximumEntitiesPerBand;
     // The per-face worst-case reservation: generous for the shipped quilt's own solid census (ground + two walls +
     // a corner post) with headroom for a live-edited neighbour, without letting one border's content spend the whole
     // program's word budget. A capacity constant, not a world-tunable — see this
     // emitter's own remarks and CLAUDE.md's authored-vs-constant rule: every world wants THE SAME adjacency-instance
     // ceiling, because it sizes the reservation this emitter itself declares, never gameplay feel.
     internal const int MaxInstancesPerBand = WorldAdjacencyGeometry.MaximumPlacementsPerBand;
-    // The moving half of the same per-band reservation. KEEP IN SYNC: the probe branch reserves exactly this many
-    // worst-case rigs per band and EmitEntities selects at most this many delivered bodies, so a live band can never
-    // outgrow the envelope SdfWorldEngine.UploadProgram freezes.
-    internal const int MaxEntitiesPerBand = WorldAdjacencyGeometry.MaximumEntitiesPerBand;
 
     private readonly int m_bandCount;
     private readonly Func<WorldDefinition> m_definition;
@@ -138,148 +138,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// happened to force a rebuild.</remarks>
     public int RevisionComponentCount => 2;
 
-    /// <summary>Emits the whole per-band reservation — the one declaration of what adjacency composition may spend,
-    /// shared by this emitter's own construction probe and by the candidate measurer the render-capacity oracle
-    /// admits scene mutations against, so the two can never disagree about the room a border holds.</summary>
-    /// <param name="builder">The shared program builder under construction.</param>
-    /// <param name="bandCount">The projections to reserve for
-    /// (<see cref="WorldAdjacencyBands.ProjectionCapacity(WorldDefinition)"/>).</param>
-    /// <param name="slotBase">The owning emitter's first dynamic-transform slot.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
-    public static void EmitReservation(SdfProgramBuilder builder, int bandCount, int slotBase) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        WorldPlacementStamper.EmitProbe(
-            builder: builder,
-            reservedCount: (bandCount * MaxInstancesPerBand)
-        );
-
-        for (var band = 0; (band < bandCount); band++) {
-            var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-            var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-
-            // The palette a live band adds — one body plus one accent per rendered body. Reserved because AddMaterial
-            // never dedupes, so an unreserved live palette would spend program words nothing measured.
-            for (var entity = 0; (entity < MaxEntitiesPerBand); entity++) {
-                bodyMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-                accentMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-            }
-
-            WorldRigCatalog.Emit(
-                builder: builder,
-                isActive: static _ => true,
-                bodyMaterials: bodyMaterials,
-                accentMaterials: accentMaterials,
-                probeAvatarLimit: MaxEntitiesPerBand,
-                probeWorstCase: true,
-                slotBase: (slotBase + (band * WorldRigCatalog.DynamicTransformCapacity))
-            );
-        }
-    }
-    /// <summary>Emits the currently reachable live adjacency geometry without the capacity-probe branch. Camera
-    /// clearance uses this to evaluate the same static strip the renderer composes.</summary>
-    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
-        // an indexer read costs no enumerator where a foreach over it would allocate one.
-        var projections = m_source.Visuals();
-        var bandLimit = Math.Min(
-            val1: projections.Count,
-            val2: m_bandCount
-        );
-
-        if (includeEntities) {
-            // m_emittedProjections stays a bare array — PackDynamicTransforms foreach's it every produced frame, and
-            // an array foreach costs no enumerator where an IReadOnlyList foreach would. Visuals()'s own concrete
-            // return is already a freshly-built array for this tick, so the untruncated case stores it directly
-            // rather than copying; only an over-authored live band (more than this composition reserved at boot)
-            // pays for a copy, bounded to what actually fits.
-            m_emittedProjections = ((projections.Count > m_bandCount)
-                ? CopyProjections(
-                    count: bandLimit,
-                    source: projections
-                )
-                : ((projections is WorldAdjacencyProjection[] array)
-                    ? array
-                    : CopyProjections(
-                        count: projections.Count,
-                        source: projections
-                    )
-                )
-            );
-        }
-
-        for (var bandIndex = 0; (bandIndex < projections.Count); bandIndex++) {
-            var projection = projections[bandIndex];
-
-            // The per-band appearance arrays and the frozen instance reservation are both sized from the BOOT
-            // document's projection capacity. A live mutation that authors another adjacency row can outrun both, so
-            // the extra band is dropped by name rather than indexed past the arrays it has no room in.
-            if (bandIndex >= m_bandCount) {
-                if (m_truncationNarrated.Add(item: projection.Name)) {
-                    Console.Error.WriteLine(value: $"[world.adjacency: '{projection.Name}' is beyond the {m_bandCount} band(s) this render composition reserved at boot; its border renders nothing until the world reloads]");
-                }
-
-                break;
-            }
-
-            var neighbour = projection.Neighbour;
-            var selection = WorldAdjacencyGeometry.Select(
-                definition: neighbour.Definition,
-                frame: projection.Path[0].Neighbour,
-                overlapDepth: projection.OverlapDepth
-            );
-            var placements = selection.Placements;
-            var mappedCount = placements.Count;
-
-            for (var index = 0; (index < mappedCount); index++) {
-                m_mappedPlacements[index] = MapIntoSource(
-                    placement: placements[index],
-                    path: projection.Path
-                );
-            }
-
-            if (mappedCount > 0) {
-                // Adjacency delivery currently carries the neighbouring document, not its hash-pinned font asset
-                // bytes. Emit its ordinary geometry but omit creation text until federation owns asset transport and
-                // the local renderer can merge remote catalogs into its one glyph binding.
-                WorldPlacementStamper.EmitStatic(
-                    builder: builder,
-                    definition: neighbour.Definition,
-                    creations: neighbour.Definition.Creations,
-                    placements: new ArraySegment<WorldPlacement>(
-                        array: m_mappedPlacements,
-                        count: mappedCount,
-                        offset: 0
-                    )
-                );
-            }
-
-            if (includeEntities) {
-                EmitEntities(
-                    builder: builder,
-                    projection: projection,
-                    bandIndex: bandIndex,
-                    slotBase: (slotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity))
-                );
-            }
-        }
-    }
-
-    // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
-    // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
-    // composition reserved at boot.
-    private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
-        var copy = new WorldAdjacencyProjection[count];
-
-        for (var index = 0; (index < count); index++) {
-            copy[index] = source[index];
-        }
-
-        return copy;
-    }
-
     internal static (Vector3 Position, Quaternion Orientation) MapPoseIntoSource(Vector3 position, Quaternion orientation, IReadOnlyList<WorldAdjacencyFramePair> path) {
         var mappedPosition = position;
         var mappedOrientation = orientation;
@@ -295,6 +153,18 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         return (mappedPosition, mappedOrientation);
     }
 
+    // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
+    // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
+    // composition reserved at boot.
+    private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
+        var copy = new WorldAdjacencyProjection[count];
+
+        for (var index = 0; (index < count); index++) {
+            copy[index] = source[index];
+        }
+
+        return copy;
+    }
     // Selects and emits the delivered bodies this band actually renders. Two bounds, both load-bearing:
     //   - the neighbour's OWN delivered table width, never the engine-wide body ceiling (the bound contact
     //     resolution and PackDynamicTransforms already walk);
@@ -359,53 +229,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     }
     private bool IsSuppressed(IWorldAdjacencyNeighbour neighbour, int index) =>
         ((m_suppressEntity is { } suppress) && suppress(neighbour.EntityAddress(index: index)));
-    // The ONE selection rule, read by emission and by the rebuild watch alike so the program and the counter that
-    // decides whether to rebuild it can never disagree about which bodies a band renders.
-    private bool SelectBand(WorldAdjacencyProjection projection, Span<bool> destination) {
-        destination.Clear();
-
-        var neighbour = projection.Neighbour;
-        var frame = projection.Path[0].Neighbour;
-        var overlapDepth = ((float)((double)projection.OverlapDepth));
-        var bound = Math.Min(
-            val1: neighbour.EntityCapacity,
-            val2: destination.Length
-        );
-        var selected = 0;
-        var truncated = false;
-
-        for (var index = 0; (index < bound); index++) {
-            if (
-                !neighbour.IsEntityActive(index: index) ||
-                IsSuppressed(
-                index: index,
-                neighbour: neighbour
-            ) ||
-                !WorldAdjacencyGeometry.IsWithinBand(
-                frame: frame,
-                overlapDepth: overlapDepth,
-                position: neighbour.CurrentPosition(index: index),
-                reach: (WorldRigCatalog.Reach * MathF.Max(
-                    x: neighbour.Look(index: index).Scale,
-                    y: 1f
-                ))
-            )
-            ) {
-                continue;
-            }
-
-            if (selected >= MaxEntitiesPerBand) {
-                truncated = true;
-
-                continue;
-            }
-
-            selected++;
-            destination[index] = true;
-        }
-
-        return truncated;
-    }
     // Maps a neighbour placement's authored transform into the SOURCE side's own coordinates through the EXACT SAME
     // isometry Server.WorldPortalArrivalMath uses for a crossing traveler's arrival, anchored at the two faces' own
     // frames (never a crossing's swept seam — this maps arbitrary geometry, not one traveler's own crossing point).
@@ -462,6 +285,53 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
         return (mappedPosition.ToVector3(), Quaternion.Normalize(value: (rotation * orientation)));
     }
+    // The ONE selection rule, read by emission and by the rebuild watch alike so the program and the counter that
+    // decides whether to rebuild it can never disagree about which bodies a band renders.
+    private bool SelectBand(WorldAdjacencyProjection projection, Span<bool> destination) {
+        destination.Clear();
+
+        var neighbour = projection.Neighbour;
+        var frame = projection.Path[0].Neighbour;
+        var overlapDepth = ((float)((double)projection.OverlapDepth));
+        var bound = Math.Min(
+            val1: neighbour.EntityCapacity,
+            val2: destination.Length
+        );
+        var selected = 0;
+        var truncated = false;
+
+        for (var index = 0; (index < bound); index++) {
+            if (
+                !neighbour.IsEntityActive(index: index) ||
+                IsSuppressed(
+                index: index,
+                neighbour: neighbour
+            ) ||
+                !WorldAdjacencyGeometry.IsWithinBand(
+                frame: frame,
+                overlapDepth: overlapDepth,
+                position: neighbour.CurrentPosition(index: index),
+                reach: (WorldRigCatalog.Reach * MathF.Max(
+                    x: neighbour.Look(index: index).Scale,
+                    y: 1f
+                ))
+            )
+            ) {
+                continue;
+            }
+
+            if (selected >= MaxEntitiesPerBand) {
+                truncated = true;
+
+                continue;
+            }
+
+            selected++;
+            destination[index] = true;
+        }
+
+        return truncated;
+    }
 
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
@@ -482,6 +352,133 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             slotBase: context.SlotBase,
             includeEntities: true
         );
+    }
+    /// <summary>Emits the currently reachable live adjacency geometry without the capacity-probe branch. Camera
+    /// clearance uses this to evaluate the same static strip the renderer composes.</summary>
+    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
+        // an indexer read costs no enumerator where a foreach over it would allocate one.
+        var projections = m_source.Visuals();
+        var bandLimit = Math.Min(
+            val1: projections.Count,
+            val2: m_bandCount
+        );
+
+        if (includeEntities) {
+            // m_emittedProjections stays a bare array — PackDynamicTransforms foreach's it every produced frame, and
+            // an array foreach costs no enumerator where an IReadOnlyList foreach would. Visuals()'s own concrete
+            // return is already a freshly-built array for this tick, so the untruncated case stores it directly
+            // rather than copying; only an over-authored live band (more than this composition reserved at boot)
+            // pays for a copy, bounded to what actually fits.
+            m_emittedProjections = ((projections.Count > m_bandCount)
+                ? CopyProjections(
+                    count: bandLimit,
+                    source: projections
+                )
+                : ((projections is WorldAdjacencyProjection[] array)
+                    ? array
+                    : CopyProjections(
+                        count: projections.Count,
+                        source: projections
+                    )
+            ));
+        }
+
+        for (var bandIndex = 0; (bandIndex < projections.Count); bandIndex++) {
+            var projection = projections[bandIndex];
+
+            // The per-band appearance arrays and the frozen instance reservation are both sized from the BOOT
+            // document's projection capacity. A live mutation that authors another adjacency row can outrun both, so
+            // the extra band is dropped by name rather than indexed past the arrays it has no room in.
+            if (bandIndex >= m_bandCount) {
+                if (m_truncationNarrated.Add(item: projection.Name)) {
+                    Console.Error.WriteLine(value: $"[world.adjacency: '{projection.Name}' is beyond the {m_bandCount} band(s) this render composition reserved at boot; its border renders nothing until the world reloads]");
+                }
+
+                break;
+            }
+
+            var neighbour = projection.Neighbour;
+            var selection = WorldAdjacencyGeometry.Select(
+                definition: neighbour.Definition,
+                frame: projection.Path[0].Neighbour,
+                overlapDepth: projection.OverlapDepth
+            );
+            var placements = selection.Placements;
+            var mappedCount = placements.Count;
+
+            for (var index = 0; (index < mappedCount); index++) {
+                m_mappedPlacements[index] = MapIntoSource(
+                    placement: placements[index],
+                    path: projection.Path
+                );
+            }
+
+            if (mappedCount > 0) {
+                // Adjacency delivery currently carries the neighbouring document, not its hash-pinned font asset
+                // bytes. Emit its ordinary geometry but omit creation text until federation owns asset transport and
+                // the local renderer can merge remote catalogs into its one glyph binding.
+                WorldPlacementStamper.EmitStatic(
+                    builder: builder,
+                    definition: neighbour.Definition,
+                    creations: neighbour.Definition.Creations,
+                    placements: new ArraySegment<WorldPlacement>(
+                        array: m_mappedPlacements,
+                        count: mappedCount,
+                        offset: 0
+                    )
+                );
+            }
+
+            if (includeEntities) {
+                EmitEntities(
+                    builder: builder,
+                    projection: projection,
+                    bandIndex: bandIndex,
+                    slotBase: (slotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity))
+                );
+            }
+        }
+    }
+    /// <summary>Emits the whole per-band reservation — the one declaration of what adjacency composition may spend,
+    /// shared by this emitter's own construction probe and by the candidate measurer the render-capacity oracle
+    /// admits scene mutations against, so the two can never disagree about the room a border holds.</summary>
+    /// <param name="builder">The shared program builder under construction.</param>
+    /// <param name="bandCount">The projections to reserve for
+    /// (<see cref="WorldAdjacencyBands.ProjectionCapacity(WorldDefinition)"/>).</param>
+    /// <param name="slotBase">The owning emitter's first dynamic-transform slot.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
+    public static void EmitReservation(SdfProgramBuilder builder, int bandCount, int slotBase) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        WorldPlacementStamper.EmitProbe(
+            builder: builder,
+            reservedCount: (bandCount * MaxInstancesPerBand)
+        );
+
+        for (var band = 0; (band < bandCount); band++) {
+            var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+            var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+
+            // The palette a live band adds — one body plus one accent per rendered body. Reserved because AddMaterial
+            // never dedupes, so an unreserved live palette would spend program words nothing measured.
+            for (var entity = 0; (entity < MaxEntitiesPerBand); entity++) {
+                bodyMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+                accentMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+            }
+
+            WorldRigCatalog.Emit(
+                builder: builder,
+                isActive: static _ => true,
+                bodyMaterials: bodyMaterials,
+                accentMaterials: accentMaterials,
+                probeAvatarLimit: MaxEntitiesPerBand,
+                probeWorstCase: true,
+                slotBase: (slotBase + (band * WorldRigCatalog.DynamicTransformCapacity))
+            );
+        }
     }
     /// <inheritdoc/>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {

@@ -27,15 +27,15 @@ public sealed class ToastWriter {
     /// <summary>The wrapped lines the chip grows to.</summary>
     public const int MaxMessageLines = 4;
 
-    private readonly OverlayThemeStore m_theme;
-    private readonly IOverlayToastSource m_source;
-
-    private ulong m_firstTicks;
-    private int m_sequenceSeen;
-
     // Lifetime in DETERMINISTIC engine ticks (content tick, never wall clock); the fade window rides the live
     // theme's dur.med, so it recomputes from m_theme.Current per Emit rather than latching once.
     private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
+
+    private readonly IOverlayToastSource m_source;
+    private readonly OverlayThemeStore m_theme;
+
+    private ulong m_firstTicks;
+    private int m_sequenceSeen;
 
     static ToastWriter() {
         System.Diagnostics.Debug.Assert(
@@ -150,8 +150,8 @@ public sealed class ToastWriter {
             ? 1f
             : ((fadeTicks == 0UL)
                 ? 0f
-                : (((float)remaining) / fadeTicks))
-        );
+                : (((float)remaining) / fadeTicks)
+        ));
         var stateRole = (toast.IsError
             ? OverlayColorRole.Danger
             : OverlayColorRole.Positive

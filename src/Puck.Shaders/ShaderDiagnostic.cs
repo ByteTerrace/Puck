@@ -7,8 +7,12 @@ public readonly record struct ShaderDiagnostic(
     string Message,
     bool IsError,
     ShaderStage? Stage = null,
-    string? Path = null)
-{
+    string? Path = null) {
     public ShaderDiagnostic(int line, string message, bool isError)
-        : this(line, 0, message, isError) { }
+        : this(
+        line,
+        0,
+        message,
+        isError
+    ) { }
 }

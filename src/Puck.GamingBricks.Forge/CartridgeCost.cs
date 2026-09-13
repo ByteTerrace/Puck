@@ -29,105 +29,295 @@ namespace Puck.GamingBricks.Forge;
 /// </para>
 /// </remarks>
 public static class CartridgeCost {
-    /// <summary>Calculates the worst-case work a document's rules and sprites spend in one frame.</summary>
-    /// <param name="document">The authored source.</param>
-    /// <param name="profile">The machine's weights.</param>
-    /// <returns>The bound, or an unmodeled result naming the first primitive without a measured weight.</returns>
-    public static CostBound Frame(CartridgeDocument document, CartridgeCostProfile profile) {
-        ArgumentNullException.ThrowIfNull(argument: document);
+    // An operation's weight is the same whether it combines into a destination or sits inside an expression: it is the
+    // same emitted helper either way, measured once. Pricing a nested operation at its combining weight charges one
+    // store the expression does not perform, so an expression is priced as the sequence of single steps it replaces —
+    // never under it, which is the safe direction for a number that only ever advises.
+    // A write admits the ten combining operations; an expression admits a wider set. Both price from one table.
+    private static CostBound Combine(ExpressionOp? operation, CartridgeCostProfile profile) =>
+        (CartridgeOperations.AdmitsCombine(operation: operation)
+            ? Weight(
+                operation: operation,
+                profile: profile
+            )
+            : CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation!.Value)}' has no sixteen-bit combining form.")
+        );
+    private static CostBound Composite(IReadOnlyList<ActionPredicate> predicates, CartridgeCostProfile profile) {
+        var total = CostBound.Zero;
 
-        var cells = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
-        foreach (var screen in document.Screens ?? []) {
-            if (screen is not null) {
-                cells[key: screen.Name] = screen.Tiles?.Length ?? 0;
-            }
-        }
-
-        var payload = 0L;
-        if (document.Save is { } save) {
-            foreach (var name in save.Variables ?? []) {
-                payload += document.Variables?.FirstOrDefault(variable => variable?.Name == name)?.Width ?? 0;
-            }
-            foreach (var name in save.Arrays ?? []) {
-                payload += document.Arrays?.FirstOrDefault(predicate: array => array?.Name == name)?.Initial?.Length ?? 0;
-            }
-        }
-
-        // A layer costs its visibility test and, when drawn, two scroll writes — the shape of an ordinary step. A
-        // raster row costs far more, because the advanced machine republishes a whole scanline table for each band.
-        var total = CostBound.Known(cycles:
-            ((document.Sprites?.Length ?? 0) * profile.Sprite)
-            + ((document.Layers?.Length ?? 0) * profile.StepSet * 3)
-            + ((document.Raster?.Length ?? 0) == 0 ? 0L : profile.RasterSetup + ((document.Raster?.Length ?? 0) * profile.RasterRow))
-            + ((document.Sounds?.Length ?? 0) == 0 ? 0L : profile.Sound));
-        // A guard is tested whether or not it holds, so every rule's conditions are charged.
-        var rules = document.Rules ?? [];
-        foreach (var rule in rules) {
-            total = CostBound.Add(left: total, right: Conditions(gate: rule?.When, profile: profile));
-        }
-
-        var bodies = new CostBound[rules.Length];
-        for (var index = 0; index < rules.Length; ++index) {
-            bodies[index] = Statements(statements: rules[index]?.Body, cells: cells, payload: payload, profile: profile);
-        }
-
-        var guards = new (string? Name, int Value)[rules.Length];
-        for (var index = 0; index < rules.Length; ++index) {
-            guards[index] = Guard(rule: rules[index]);
-        }
-
-        var exclusive = ExclusiveGuards(rules: rules, guards: guards, scene: document.Scene, document: document);
-        var armsByGuard = new Dictionary<string, Dictionary<int, CostBound>>(comparer: StringComparer.Ordinal);
-        for (var index = 0; index < rules.Length; ++index) {
-            if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
-                total = CostBound.Add(left: total, right: bodies[index]);
-                continue;
-            }
-
-            if (!armsByGuard.TryGetValue(key: name, value: out var arms)) {
-                arms = [];
-                armsByGuard[key: name] = arms;
-            }
-
-            var value = guards[index].Value;
-            arms[key: value] = arms.TryGetValue(key: value, value: out var running)
-                ? CostBound.Add(left: running, right: bodies[index])
-                : bodies[index];
-        }
-
-        // Each settled guard contributes only its dearest arm: one value of the variable holds for the whole frame,
-        // so the rules keyed to the other values cannot run.
-        foreach (var name in exclusive) {
-            var dearest = CostBound.Zero;
-            foreach (var arm in armsByGuard[name].Values) {
-                dearest = CostBound.Max(left: dearest, right: arm);
-            }
-
-            total = CostBound.Add(left: total, right: dearest);
+        foreach (var predicate in predicates) {
+            total = CostBound.Add(
+                left: total,
+                right: Conditions(
+                    gate: predicate,
+                    profile: profile
+                )
+            );
         }
 
         return total;
     }
+    // A gate prices as the comparisons it reaches. Composition costs nothing of its own: all and any are the branch
+    // structure the arms were already charged for, and not swaps a branch condition rather than adding work.
+    private static CostBound Conditions(ActionPredicate? gate, CartridgeCostProfile profile) => (gate switch {
+        null => CostBound.Zero,
+        ActionPredicate.All all => Composite(
+        predicates: all.Predicates,
+        profile: profile
+    ),
+        ActionPredicate.Any any => Composite(
+        predicates: any.Predicates,
+        profile: profile
+    ),
+        ActionPredicate.Not not => Conditions(
+        gate: not.Predicate,
+        profile: profile
+    ),
+        ActionPredicate.CompareValue compare => CostBound.Add(
+        left: CostBound.Known(cycles: profile.ConditionCompare),
+        right: CostBound.Add(
+            left: Operand(
+                expression: compare.Left,
+                profile: profile
+            ),
+            right: Operand(
+                expression: compare.Right,
+                profile: profile
+            )
+        )
+    ),
+        _ => CostBound.Unmodeled(reason: $"Gate '{gate.GetType().Name}' has no measured weight."),
+    });
+    private static CostBound Evaluate(ExpressionOp operation, CartridgeCostProfile profile) =>
+        (CartridgeExpressions.Admits(operation: operation)
+            ? Weight(
+                operation: operation,
+                profile: profile
+            )
+            : CostBound.Unmodeled(reason: $"The rule language evaluates '{ExpressionVocabulary.Spelling(operation: operation)}'; a cartridge does not.")
+        );
+    private static CostBound Operand(ValueExpression? expression, CartridgeCostProfile profile) {
+        if (expression is null) {
+            return CostBound.Zero;
+        }
 
-    /// <summary>Returns the guard a rule is keyed to: one equality against a constant, or none.</summary>
-    /// <param name="rule">The rule to read.</param>
-    /// <returns>The guard variable's name and the value it must hold, or a null name.</returns>
-    /// <remarks>The shape a phase machine's rules take.</remarks>
-    public static (string? Name, int Value) Guard(CartridgeRule? rule) =>
-        ((rule?.When is ActionPredicate.CompareValue { Comparison: ActionStateComparison.Equal } compare)
-            && (Slot(expression: compare.Left) is { } name)
-            && (Whole(expression: compare.Right) is { } value))
-                ? (name, value)
-                : (null, 0);
+        var total = CostBound.Zero;
 
+        foreach (var token in expression.Tokens) {
+            total = CostBound.Add(
+                left: total,
+                right: token switch {
+                ValueToken.Constant => CostBound.Zero,
+                ValueToken.State state => Read(
+                    profile: profile,
+                    state: state
+                ),
+                _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
+                ? Evaluate(
+                        operation: operation,
+                        profile: profile
+                    )
+                : CostBound.Unmodeled(reason: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates.")),
+            }
+            );
+        }
+
+        return total;
+    }
+    // A key on a read is an element index, which is the one read that carries its own inner expression.
+    private static CostBound Read(ValueToken.State state, CartridgeCostProfile profile) =>
+        ((CartridgeExpressions.Index(key: state.Key) is { } index)
+            ? CostBound.Add(
+                left: CostBound.Known(cycles: profile.OperandArray),
+                right: Operand(
+                    expression: index,
+                    profile: profile
+                )
+            )
+            : CostBound.Known(cycles: (CartridgeExpressions.TryKey(
+                name: state.Name,
+                button: out _,
+                mode: out _
+            )
+                ? profile.ConditionKey
+                : profile.OperandVariable))
+        );
     // The one-token forms a guard is recognised by: a bare slot read on the left, a bare literal on the right.
     private static string? Slot(ValueExpression expression) =>
-        ((expression.Tokens is [ValueToken.State { Key: null } state]) ? state.Name : null);
+        ((expression.Tokens is [ValueToken.State { Key: null } state])
+            ? state.Name
+            : null
+        );
+    // A branch costs its conditions plus its costlier arm; a loop multiplies its body by the literal count, which is
+    // why a repeat's count may not be a variable.
+    private static CostBound Statements(CartridgeStatement[]? statements, IReadOnlyDictionary<string, long> cells, long payload, CartridgeCostProfile profile) {
+        var total = CostBound.Zero;
 
+        foreach (var statement in (statements ?? [])) {
+            total = CostBound.Add(
+                left: total,
+                right: statement?.Kind switch {
+                "set" => Step(
+                    profile: profile,
+                    statement: statement
+                ),
+                "if" => CostBound.Add(
+                    left: Conditions(
+                        gate: statement.When,
+                        profile: profile
+                    ),
+                    right: CostBound.Max(
+                        left: Statements(
+                            statements: statement.Then,
+                            cells: cells,
+                            payload: payload,
+                            profile: profile
+                        ),
+                        right: Statements(
+                            statements: statement.Else,
+                            cells: cells,
+                            payload: payload,
+                            profile: profile
+                        )
+                    )
+                ),
+                "repeat" => CostBound.Add(
+                    left: CostBound.Known(cycles: profile.LoopSetup),
+                    right: CostBound.Multiply(
+                        bound: CostBound.Add(
+                            left: CostBound.Known(cycles: profile.LoopStep),
+                            right: Statements(
+                                statements: statement.Body,
+                                cells: cells,
+                                payload: payload,
+                                profile: profile
+                            )
+                        ),
+                        multiplier: (statement.Count ?? 0)
+                    )
+                ),
+                // A break emits one jump, strictly less than the load, modify and store a set emits, so a set's weight bounds it.
+                "break" => CostBound.Known(cycles: profile.StepSet),
+                // Both steps walk the payload: a gather or scatter, plus the module's checksum pass over it.
+                // A play, a stop and the per-frame sequencer tick were measured together at this cost; charging the
+                // whole of it to each rather than apportioning it keeps every part an upper bound.
+                "clock" => CostBound.Known(cycles: profile.SaveFixed),
+                // A fade republishes every palette, which is the same shape of work as a save's payload walk.
+                // A plot bounds two coordinates, multiplies, and rebuilds one halfword of video memory.
+                "plot" => CostBound.Add(
+                    left: CostBound.Known(cycles: (profile.StepMultiply + (profile.StepArithmetic * 3))),
+                    right: CostBound.Add(
+                        left: Operand(
+                            expression: statement.Row,
+                            profile: profile
+                        ),
+                        right: CostBound.Add(
+                            left: Operand(
+                                expression: statement.Column,
+                                profile: profile
+                            ),
+                            right: Operand(
+                                expression: statement.Colour,
+                                profile: profile
+                            )
+                        )
+                    )
+                ),
+                // A blend is two register writes and a clamp, so it costs what an arithmetic step does.
+                "blend" => CostBound.Add(
+                    left: CostBound.Known(cycles: profile.StepArithmetic),
+                    right: Operand(
+                        expression: statement.Weight,
+                        profile: profile
+                    )
+                ),
+                "fade" => CostBound.Add(
+                    left: CostBound.Known(cycles: profile.SaveFixed),
+                    right: Operand(
+                        expression: statement.Amount,
+                        profile: profile
+                    )
+                ),
+                "play" or "stop" => CostBound.Known(cycles: profile.Sound),
+                "save" or "load" => CostBound.Known(cycles: (profile.SaveFixed + (profile.SaveByte * payload))),
+                "map" => CostBound.Add(
+                    left: CostBound.Known(cycles: profile.MapWrite),
+                    right: CostBound.Add(
+                        left: Operand(
+                            expression: statement.Row,
+                            profile: profile
+                        ),
+                        right: CostBound.Add(
+                            left: Operand(
+                                expression: statement.Column,
+                                profile: profile
+                            ),
+                            right: Operand(
+                                expression: statement.Tile,
+                                profile: profile
+                            )
+                        )
+                    )
+                ),
+                // Measurement puts a small blit near a fixed 600 units but a full-screen one past a whole frame, with
+                // no model spanning both, so it carries no weight and a document using one is refused.
+                // Flat to the cell cap: what a blit costs is the display-off window, not the cells copied.
+                "blit" => CostBound.Known(cycles: profile.Blit),
+                _ => CostBound.Unmodeled(reason: $"Step kind '{statement?.Kind}' has no measured weight."),
+            }
+            );
+        }
+
+        return total;
+    }
+    private static CostBound Step(CartridgeStatement statement, CartridgeCostProfile profile) =>
+        CostBound.Add(
+            left: Combine(
+                operation: statement.Operation,
+                profile: profile
+            ),
+            right: CostBound.Add(
+                left: Operand(
+                    expression: statement.Value,
+                    profile: profile
+                ),
+                right: Target(
+                    target: statement.Target,
+                    profile: profile
+                )
+            )
+        );
+    private static CostBound Target(CartridgeTarget? target, CartridgeCostProfile profile) =>
+        ((CartridgeExpressions.Index(key: target?.Key) is { } index)
+            ? CostBound.Add(
+                left: CostBound.Known(cycles: profile.TargetArray),
+                right: Operand(
+                    expression: index,
+                    profile: profile
+                )
+            )
+            : CostBound.Zero
+        );
+    private static CostBound Weight(ExpressionOp? operation, CartridgeCostProfile profile) => (operation switch {
+        null => CostBound.Known(cycles: profile.StepSet),
+        ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor
+            or ExpressionOp.BitNot or ExpressionOp.Negate => CostBound.Known(cycles: profile.StepArithmetic),
+        ExpressionOp.Multiply => CostBound.Known(cycles: profile.StepMultiply),
+        ExpressionOp.Divide or ExpressionOp.Modulo => CostBound.Known(cycles: profile.StepDivide),
+        ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight => CostBound.Known(cycles: profile.StepShift),
+        // A comparison, a bound and a choice are each a compare and a branch, which is what a gate's comparison was
+        // measured at.
+        ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual
+            or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual or ExpressionOp.Minimum or ExpressionOp.Maximum
+            or ExpressionOp.Select or ExpressionOp.Sign => CostBound.Known(cycles: profile.ConditionCompare),
+        ExpressionOp.Clamp => CostBound.Known(cycles: (profile.ConditionCompare * 2L)),
+        _ => CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation.Value)}' has no measured weight."),
+    });
     private static int? Whole(ValueExpression expression) =>
-        ((expression.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value)
+        (((expression.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value))
             ? (int)constant.Value
-            : null);
+            : null
+        );
 
     /// <summary>Returns the guard variables whose values genuinely partition a frame.</summary>
     /// <param name="rules">The document's rules, in evaluation order.</param>
@@ -145,177 +335,208 @@ public static class CartridgeCost {
     public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards, string? scene = null, CartridgeDocument? document = null) {
         var candidates = new HashSet<string>(comparer: StringComparer.Ordinal);
         var intervals = new Dictionary<string, (int First, int Last)>(comparer: StringComparer.Ordinal);
-        for (var index = 0; index < guards.Length; index++) {
+
+        for (var index = 0; (index < guards.Length); index++) {
             if (guards[index].Name is { } name) {
                 candidates.Add(item: name);
                 if (name != scene) {
-                    intervals[name] = (intervals.TryGetValue(name, out var interval) ? interval.First : index, index);
+                    intervals[name] = ((intervals.TryGetValue(
+                        key: name,
+                        value: out var interval
+                    )
+                        ? interval.First
+                        : index), index);
                 }
             }
         }
 
         if (intervals.Count == 0) { return candidates; }
-        var first = intervals.Values.Min(static interval => interval.First);
-        var last = intervals.Values.Max(static interval => interval.Last);
-        var coverage = new int[guards.Length + 1];
+        var first = intervals.Values.Min(selector: static interval => interval.First);
+        var last = intervals.Values.Max(selector: static interval => interval.Last);
+        var coverage = new int[(guards.Length + 1)];
+
         foreach (var interval in intervals.Values) {
             coverage[interval.First]++;
-            coverage[interval.Last + 1]--;
+            coverage[(interval.Last + 1)]--;
         }
         var active = 0;
-        var retainedScene = scene is not null && candidates.Contains(scene) ? 1 : 0;
+        var retainedScene = (((scene is not null) && candidates.Contains(item: scene))
+            ? 1
+            : 0
+        );
         // Walk each relevant body once, testing its writes against the guard's inclusive interval. The declared
         // scene has no interval because its snapshotted value remains exclusive regardless of mid-frame writes.
-        for (var index = first; index <= last; index++) {
+        for (var index = first; (index <= last); index++) {
             active += coverage[index];
             if (active == 0) { continue; }
             bool Disqualify(string name) {
-                if (intervals.TryGetValue(name, out var interval) && index >= interval.First && index <= interval.Last) {
-                    candidates.Remove(name);
+                if (
+                    intervals.TryGetValue(
+                    key: name,
+                    value: out var interval
+                ) &&
+                    (index >= interval.First) &&
+                    (index <= interval.Last)
+                ) {
+                    candidates.Remove(item: name);
                 }
                 return false;
             }
-            if (CartridgeEffects.VisitWrites(statements: rules[index]?.Body, visit: Disqualify, document: document)) {
+            if (CartridgeEffects.VisitWrites(
+                statements: rules[index]?.Body,
+                visit: Disqualify,
+                document: document
+            )) {
                 // With no document, load and clock conservatively write every variable active at this point.
-                candidates.RemoveWhere(name => intervals.TryGetValue(name, out var interval) && index >= interval.First && index <= interval.Last);
+                candidates.RemoveWhere(match: name => (intervals.TryGetValue(
+                    key: name,
+                    value: out var interval
+                ) && (index >= interval.First) && (index <= interval.Last)));
             }
             if (candidates.Count == retainedScene) { break; }
         }
 
         return candidates;
     }
+    /// <summary>Calculates the worst-case work a document's rules and sprites spend in one frame.</summary>
+    /// <param name="document">The authored source.</param>
+    /// <param name="profile">The machine's weights.</param>
+    /// <returns>The bound, or an unmodeled result naming the first primitive without a measured weight.</returns>
+    public static CostBound Frame(CartridgeDocument document, CartridgeCostProfile profile) {
+        ArgumentNullException.ThrowIfNull(argument: document);
 
-    // A gate prices as the comparisons it reaches. Composition costs nothing of its own: all and any are the branch
-    // structure the arms were already charged for, and not swaps a branch condition rather than adding work.
-    private static CostBound Conditions(ActionPredicate? gate, CartridgeCostProfile profile) => (gate switch {
-        null => CostBound.Zero,
-        ActionPredicate.All all => Composite(predicates: all.Predicates, profile: profile),
-        ActionPredicate.Any any => Composite(predicates: any.Predicates, profile: profile),
-        ActionPredicate.Not not => Conditions(gate: not.Predicate, profile: profile),
-        ActionPredicate.CompareValue compare => CostBound.Add(
-            left: CostBound.Known(cycles: profile.ConditionCompare),
-            right: CostBound.Add(left: Operand(expression: compare.Left, profile: profile), right: Operand(expression: compare.Right, profile: profile))),
-        _ => CostBound.Unmodeled(reason: $"Gate '{gate.GetType().Name}' has no measured weight."),
-    });
+        var cells = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
 
-    private static CostBound Composite(IReadOnlyList<ActionPredicate> predicates, CartridgeCostProfile profile) {
-        var total = CostBound.Zero;
+        foreach (var screen in (document.Screens ?? [])) {
+            if (screen is not null) {
+                cells[key: screen.Name] = (screen.Tiles?.Length ?? 0);
+            }
+        }
 
-        foreach (var predicate in predicates) {
-            total = CostBound.Add(left: total, right: Conditions(gate: predicate, profile: profile));
+        var payload = 0L;
+
+        if (document.Save is { } save) {
+            foreach (var name in (save.Variables ?? [])) {
+                payload += (document.Variables?.FirstOrDefault(predicate: variable => (variable?.Name == name))?.Width ?? 0);
+            }
+            foreach (var name in (save.Arrays ?? [])) {
+                payload += (document.Arrays?.FirstOrDefault(predicate: array => (array?.Name == name))?.Initial?.Length ?? 0);
+            }
+        }
+
+        // A layer costs its visibility test and, when drawn, two scroll writes — the shape of an ordinary step. A
+        // raster row costs far more, because the advanced machine republishes a whole scanline table for each band.
+        var total = CostBound.Known(cycles:
+            (((((document.Sprites?.Length ?? 0) * profile.Sprite)
+            + (((document.Layers?.Length ?? 0) * profile.StepSet) * 3))
+            + (((document.Raster?.Length ?? 0) == 0)
+            ? 0L
+            : (profile.RasterSetup + ((document.Raster?.Length ?? 0) * profile.RasterRow))))
+            + (((document.Sounds?.Length ?? 0) == 0)
+            ? 0L
+            : profile.Sound)));
+        // A guard is tested whether or not it holds, so every rule's conditions are charged.
+        var rules = (document.Rules ?? []);
+
+        foreach (var rule in rules) {
+            total = CostBound.Add(
+                left: total,
+                right: Conditions(
+                    gate: rule?.When,
+                    profile: profile
+                )
+            );
+        }
+
+        var bodies = new CostBound[rules.Length];
+
+        for (var index = 0; (index < rules.Length); ++index) {
+            bodies[index] = Statements(
+                statements: rules[index]?.Body,
+                cells: cells,
+                payload: payload,
+                profile: profile
+            );
+        }
+
+        var guards = new (string? Name, int Value)[rules.Length];
+
+        for (var index = 0; (index < rules.Length); ++index) {
+            guards[index] = Guard(rule: rules[index]);
+        }
+
+        var exclusive = ExclusiveGuards(
+            rules: rules,
+            guards: guards,
+            scene: document.Scene,
+            document: document
+        );
+        var armsByGuard = new Dictionary<string, Dictionary<int, CostBound>>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < rules.Length); ++index) {
+            if (
+                (guards[index].Name is not { } name) ||
+                !exclusive.Contains(item: name)
+            ) {
+                total = CostBound.Add(
+                    left: total,
+                    right: bodies[index]
+                );
+                continue;
+            }
+
+            if (!armsByGuard.TryGetValue(
+                key: name,
+                value: out var arms
+            )) {
+                arms = [];
+                armsByGuard[key: name] = arms;
+            }
+
+            var value = guards[index].Value;
+
+            arms[key: value] = (arms.TryGetValue(
+                key: value,
+                value: out var running
+            )
+                ? CostBound.Add(
+                    left: running,
+                    right: bodies[index]
+                )
+                : bodies[index]
+            );
+        }
+
+        // Each settled guard contributes only its dearest arm: one value of the variable holds for the whole frame,
+        // so the rules keyed to the other values cannot run.
+        foreach (var name in exclusive) {
+            var dearest = CostBound.Zero;
+
+            foreach (var arm in armsByGuard[name].Values) {
+                dearest = CostBound.Max(
+                    left: dearest,
+                    right: arm
+                );
+            }
+
+            total = CostBound.Add(
+                left: total,
+                right: dearest
+            );
         }
 
         return total;
     }
-
-    // A branch costs its conditions plus its costlier arm; a loop multiplies its body by the literal count, which is
-    // why a repeat's count may not be a variable.
-    private static CostBound Statements(CartridgeStatement[]? statements, IReadOnlyDictionary<string, long> cells, long payload, CartridgeCostProfile profile) {
-        var total = CostBound.Zero;
-        foreach (var statement in statements ?? []) {
-            total = CostBound.Add(left: total, right: statement?.Kind switch {
-                "set" => Step(statement: statement, profile: profile),
-                "if" => CostBound.Add(
-                    left: Conditions(gate: statement.When, profile: profile),
-                    right: CostBound.Max(left: Statements(statements: statement.Then, cells: cells, payload: payload, profile: profile), right: Statements(statements: statement.Else, cells: cells, payload: payload, profile: profile))),
-                "repeat" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.LoopSetup),
-                    right: CostBound.Multiply(bound: CostBound.Add(left: CostBound.Known(cycles: profile.LoopStep), right: Statements(statements: statement.Body, cells: cells, payload: payload, profile: profile)), multiplier: statement.Count ?? 0)),
-                // A break emits one jump, strictly less than the load, modify and store a set emits, so a set's weight bounds it.
-                "break" => CostBound.Known(cycles: profile.StepSet),
-                // Both steps walk the payload: a gather or scatter, plus the module's checksum pass over it.
-                // A play, a stop and the per-frame sequencer tick were measured together at this cost; charging the
-                // whole of it to each rather than apportioning it keeps every part an upper bound.
-                "clock" => CostBound.Known(cycles: profile.SaveFixed),
-                // A fade republishes every palette, which is the same shape of work as a save's payload walk.
-                // A plot bounds two coordinates, multiplies, and rebuilds one halfword of video memory.
-                "plot" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.StepMultiply + (profile.StepArithmetic * 3)),
-                    right: CostBound.Add(left: Operand(expression: statement.Row, profile: profile), right: CostBound.Add(left: Operand(expression: statement.Column, profile: profile), right: Operand(expression: statement.Colour, profile: profile)))),
-                // A blend is two register writes and a clamp, so it costs what an arithmetic step does.
-                "blend" => CostBound.Add(left: CostBound.Known(cycles: profile.StepArithmetic), right: Operand(expression: statement.Weight, profile: profile)),
-                "fade" => CostBound.Add(left: CostBound.Known(cycles: profile.SaveFixed), right: Operand(expression: statement.Amount, profile: profile)),
-                "play" or "stop" => CostBound.Known(cycles: profile.Sound),
-                "save" or "load" => CostBound.Known(cycles: profile.SaveFixed + (profile.SaveByte * payload)),
-                "map" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.MapWrite),
-                    right: CostBound.Add(left: Operand(expression: statement.Row, profile: profile), right: CostBound.Add(left: Operand(expression: statement.Column, profile: profile), right: Operand(expression: statement.Tile, profile: profile)))),
-                // Measurement puts a small blit near a fixed 600 units but a full-screen one past a whole frame, with
-                // no model spanning both, so it carries no weight and a document using one is refused.
-                // Flat to the cell cap: what a blit costs is the display-off window, not the cells copied.
-                "blit" => CostBound.Known(cycles: profile.Blit),
-                _ => CostBound.Unmodeled(reason: $"Step kind '{statement?.Kind}' has no measured weight."),
-            });
-        }
-
-        return total;
-    }
-
-    private static CostBound Step(CartridgeStatement statement, CartridgeCostProfile profile) =>
-        CostBound.Add(
-            left: Combine(operation: statement.Operation, profile: profile),
-            right: CostBound.Add(left: Operand(expression: statement.Value, profile: profile), right: Target(target: statement.Target, profile: profile)));
-
-    // An operation's weight is the same whether it combines into a destination or sits inside an expression: it is the
-    // same emitted helper either way, measured once. Pricing a nested operation at its combining weight charges one
-    // store the expression does not perform, so an expression is priced as the sequence of single steps it replaces —
-    // never under it, which is the safe direction for a number that only ever advises.
-    // A write admits the ten combining operations; an expression admits a wider set. Both price from one table.
-    private static CostBound Combine(ExpressionOp? operation, CartridgeCostProfile profile) =>
-        (CartridgeOperations.AdmitsCombine(operation: operation)
-            ? Weight(operation: operation, profile: profile)
-            : CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation!.Value)}' has no sixteen-bit combining form."));
-
-    private static CostBound Evaluate(ExpressionOp operation, CartridgeCostProfile profile) =>
-        (CartridgeExpressions.Admits(operation: operation)
-            ? Weight(operation: operation, profile: profile)
-            : CostBound.Unmodeled(reason: $"The rule language evaluates '{ExpressionVocabulary.Spelling(operation: operation)}'; a cartridge does not."));
-
-    private static CostBound Weight(ExpressionOp? operation, CartridgeCostProfile profile) => (operation switch {
-        null => CostBound.Known(cycles: profile.StepSet),
-        ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor
-            or ExpressionOp.BitNot or ExpressionOp.Negate => CostBound.Known(cycles: profile.StepArithmetic),
-        ExpressionOp.Multiply => CostBound.Known(cycles: profile.StepMultiply),
-        ExpressionOp.Divide or ExpressionOp.Modulo => CostBound.Known(cycles: profile.StepDivide),
-        ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight => CostBound.Known(cycles: profile.StepShift),
-        // A comparison, a bound and a choice are each a compare and a branch, which is what a gate's comparison was
-        // measured at.
-        ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual
-            or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual or ExpressionOp.Minimum or ExpressionOp.Maximum
-            or ExpressionOp.Select or ExpressionOp.Sign => CostBound.Known(cycles: profile.ConditionCompare),
-        ExpressionOp.Clamp => CostBound.Known(cycles: (profile.ConditionCompare * 2L)),
-        _ => CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation.Value)}' has no measured weight."),
-    });
-
-    private static CostBound Operand(ValueExpression? expression, CartridgeCostProfile profile) {
-        if (expression is null) {
-            return CostBound.Zero;
-        }
-
-        var total = CostBound.Zero;
-
-        foreach (var token in expression.Tokens) {
-            total = CostBound.Add(left: total, right: token switch {
-                ValueToken.Constant => CostBound.Zero,
-                ValueToken.State state => Read(state: state, profile: profile),
-                _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
-                    ? Evaluate(operation: operation, profile: profile)
-                    : CostBound.Unmodeled(reason: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates.")),
-            });
-        }
-
-        return total;
-    }
-
-    // A key on a read is an element index, which is the one read that carries its own inner expression.
-    private static CostBound Read(ValueToken.State state, CartridgeCostProfile profile) =>
-        ((CartridgeExpressions.Index(key: state.Key) is { } index)
-            ? CostBound.Add(left: CostBound.Known(cycles: profile.OperandArray), right: Operand(expression: index, profile: profile))
-            : CostBound.Known(cycles: (CartridgeExpressions.TryKey(name: state.Name, button: out _, mode: out _) ? profile.ConditionKey : profile.OperandVariable)));
-
-    private static CostBound Target(CartridgeTarget? target, CartridgeCostProfile profile) =>
-        ((CartridgeExpressions.Index(key: target?.Key) is { } index)
-            ? CostBound.Add(left: CostBound.Known(cycles: profile.TargetArray), right: Operand(expression: index, profile: profile))
-            : CostBound.Zero);
+    /// <summary>Returns the guard a rule is keyed to: one equality against a constant, or none.</summary>
+    /// <param name="rule">The rule to read.</param>
+    /// <returns>The guard variable's name and the value it must hold, or a null name.</returns>
+    /// <remarks>The shape a phase machine's rules take.</remarks>
+    public static (string? Name, int Value) Guard(CartridgeRule? rule) =>
+        (((rule?.When is ActionPredicate.CompareValue { Comparison: ActionStateComparison.Equal } compare)
+            && (Slot(expression: compare.Left) is { } name)
+            && (Whole(expression: compare.Right) is { } value))
+            ? (name, value)
+            : (null, 0)
+        );
 
 }

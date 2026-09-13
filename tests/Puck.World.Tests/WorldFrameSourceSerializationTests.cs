@@ -36,8 +36,14 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped);
 
-        Assert.Equal(expected: WorldCameraSensor.Infrared, actual: camera.Sensor);
-        Assert.Equal(expected: WorldFeedProfile.Default, actual: camera.Profile);
+        Assert.Equal(
+            expected: WorldCameraSensor.Infrared,
+            actual: camera.Sensor
+        );
+        Assert.Equal(
+            expected: WorldFeedProfile.Default,
+            actual: camera.Profile
+        );
         Assert.Null(@object: camera.Seat);
     }
     [Fact]
@@ -54,33 +60,10 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped);
 
-        Assert.Equal(expected: 2, actual: camera.Seat);
-    }
-    [Fact]
-    public void AViewFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.View(CameraName: "gallery");
-
-        var roundTripped = RoundTrip(
-            typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
+        Assert.Equal(
+            expected: 2,
+            actual: camera.Seat
         );
-
-        var view = Assert.IsType<WorldScreenSource.View>(@object: roundTripped);
-
-        Assert.Equal(expected: "gallery", actual: view.CameraName);
-    }
-    [Fact]
-    public void AProbeFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.Probe(Id: "faerie");
-
-        var roundTripped = RoundTrip(
-            typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
-        );
-
-        var probe = Assert.IsType<WorldScreenSource.Probe>(@object: roundTripped);
-
-        Assert.Equal(expected: "faerie", actual: probe.Id);
     }
     [Fact]
     public void ACaptureFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
@@ -97,8 +80,27 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var capture = Assert.IsType<WorldScreenSource.Capture>(@object: roundTripped);
 
-        Assert.Equal(expected: "OBS", actual: capture.WindowTitle);
+        Assert.Equal(
+            expected: "OBS",
+            actual: capture.WindowTitle
+        );
         Assert.Null(@object: capture.MonitorIndex);
+    }
+    [Fact]
+    public void AProbeFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
+        var source = new WorldScreenSource.Probe(Id: "faerie");
+
+        var roundTripped = RoundTrip(
+            typeInfo: WorldJsonContext.Default.WorldFrameSource,
+            value: ((WorldFrameSource)source)
+        );
+
+        var probe = Assert.IsType<WorldScreenSource.Probe>(@object: roundTripped);
+
+        Assert.Equal(
+            expected: "faerie",
+            actual: probe.Id
+        );
     }
     // A screen row's own Source is typed WorldScreenSource, the wider union — this proves the narrower
     // WorldFrameSource discriminator set carved out above changed nothing about what a full screen row writes/reads.
@@ -106,14 +108,29 @@ public sealed class WorldFrameSourceSerializationTests {
     public void AScreenRowCarryingACameraSourceRoundTripsUnchanged() {
         var screen = new WorldScreen(
             Index: 0,
-            Origin: new Vector3(x: 0f, y: 1f, z: 0f),
-            Right: new Vector3(x: 1f, y: 0f, z: 0f),
-            Up: new Vector3(x: 0f, y: 1f, z: 0f),
+            Origin: new Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
+            Right: new Vector3(
+                x: 1f,
+                y: 0f,
+                z: 0f
+            ),
+            Up: new Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
             HalfWidth: 1f,
             HalfHeight: 1f,
             HalfDepth: 0.1f,
             Round: 0f,
-            Source: new WorldScreenSource.Camera(Profile: WorldFeedProfile.Default, Sensor: WorldCameraSensor.Color),
+            Source: new WorldScreenSource.Camera(
+                Profile: WorldFeedProfile.Default,
+                Sensor: WorldCameraSensor.Color
+            ),
             Route: WorldScreenRoute.Passive
         );
 
@@ -122,10 +139,32 @@ public sealed class WorldFrameSourceSerializationTests {
             value: screen
         );
 
-        Assert.Equal(expected: screen.Index, actual: roundTripped.Index);
+        Assert.Equal(
+            expected: screen.Index,
+            actual: roundTripped.Index
+        );
 
         var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped.Source);
 
-        Assert.Equal(expected: WorldCameraSensor.Color, actual: camera.Sensor);
+        Assert.Equal(
+            expected: WorldCameraSensor.Color,
+            actual: camera.Sensor
+        );
+    }
+    [Fact]
+    public void AViewFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
+        var source = new WorldScreenSource.View(CameraName: "gallery");
+
+        var roundTripped = RoundTrip(
+            typeInfo: WorldJsonContext.Default.WorldFrameSource,
+            value: ((WorldFrameSource)source)
+        );
+
+        var view = Assert.IsType<WorldScreenSource.View>(@object: roundTripped);
+
+        Assert.Equal(
+            expected: "gallery",
+            actual: view.CameraName
+        );
     }
 }

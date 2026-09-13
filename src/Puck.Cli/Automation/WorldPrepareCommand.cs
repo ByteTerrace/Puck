@@ -5,42 +5,58 @@ using Puck.World;
 namespace Puck.Cli.Automation;
 
 internal static class WorldPrepareCommand {
-    public static Command Create() {
-        var worldsArgument = new Argument<string>(name: "worlds-directory") { Description = "The directory of authored *.world.json documents." };
-        var outputArgument = new Argument<string>(name: "output-directory") { Description = "Where the composed hosted documents are written, one per canonical world name." };
-        var command = new Command(description: "Compose the primary world and its referenced neighbours with the engine's own composer.", name: "prepare") { worldsArgument, outputArgument };
-
-        command.SetAction(action: parseResult => Run(output: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: outputArgument)), root: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: worldsArgument))));
-        return command;
-    }
-
     // Hosted storage addresses worlds by canonical file name, independently of repository directories.
     private static int Run(string output, string root) {
 
         var machines = CliWorldVocabulary.EnsureInstalled();
-        var catalogFingerprint = CliWorldVocabulary.Fingerprint(machines);
+        var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machines);
+
         Directory.CreateDirectory(path: output);
         var pending = new Queue<string>();
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
         var names = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        pending.Enqueue(item: Path.Combine(path1: root, path2: "puck.world.json"));
+        pending.Enqueue(item: Path.Combine(
+            path1: root,
+            path2: "puck.world.json"
+        ));
         while (pending.TryDequeue(result: out var path)) {
             if (!visited.Add(item: path)) {
                 continue;
             }
-            var relative = Path.GetRelativePath(path: path, relativeTo: root);
+            var relative = Path.GetRelativePath(
+                path: path,
+                relativeTo: root
+            );
 
-            if (relative.StartsWith(comparisonType: StringComparison.Ordinal, value: "..") || Path.IsPathRooted(path: relative)) {
+            if (
+                relative.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".."
+            ) ||
+                Path.IsPathRooted(path: relative)
+            ) {
                 throw new InvalidDataException(message: $"World reference escapes the authored worlds directory: {relative}");
             }
             var name = Path.GetFileName(path: path);
 
-            if (names.TryGetValue(key: name, value: out var previous) && (previous != path)) {
+            if (
+                names.TryGetValue(
+                key: name,
+                value: out var previous
+            ) &&
+                (previous != path)
+            ) {
                 throw new InvalidDataException(message: $"Hosted world name collision: {previous} and {path}");
             }
             names[name] = path;
-            if (!WorldDefinitionFileSource.TryComposeDocumentTree(path: path, reason: out var reason, tree: out var tree, catalogFingerprint: catalogFingerprint, catalog: machines)) {
+            if (!WorldDefinitionFileSource.TryComposeDocumentTree(
+                catalog: machines,
+                catalogFingerprint: catalogFingerprint,
+                path: path,
+                reason: out var reason,
+                tree: out var tree
+            )) {
                 throw new InvalidDataException(message: $"Cannot compose {relative}: {reason}");
             }
             if (tree!["references"] is JsonArray references) {
@@ -48,7 +64,10 @@ internal static class WorldPrepareCommand {
                     if (reference?["document"]?.GetValue<string>() is not { Length: > 0 } document) {
                         continue;
                     }
-                    var neighbour = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: document));
+                    var neighbour = Path.GetFullPath(path: Path.Combine(
+                        path1: Path.GetDirectoryName(path: path)!,
+                        path2: document
+                    ));
 
                     pending.Enqueue(item: neighbour);
                     reference["document"] = Path.GetFileName(path: neighbour);
@@ -56,21 +75,60 @@ internal static class WorldPrepareCommand {
             }
             // Every hosted document moves to the root of the world's asset layout. Rebase provider-declared
             // asset paths from nested source directories before discarding their document origins.
-            if (!WorldModuleNamespace.TryRelocateConfigurationAssets(tree, machines, path, Path.Combine(root, name), out reason)) {
+            if (!WorldModuleNamespace.TryRelocateConfigurationAssets(
+                tree,
+                machines,
+                path,
+                Path.Combine(
+                    path1: root,
+                    path2: name
+                ),
+                out reason
+            )) {
                 throw new InvalidDataException(message: $"Cannot relocate {relative}: {reason}");
             }
             if (!WorldDefinitionFileSource.TryParseComposed(
-                definition: out var definition, json: tree.ToJsonString(), neighbours: null,
-                reason: out reason, sourceName: path, validateAdjacencyClaims: false, catalog: machines
+                definition: out var definition,
+                json: tree.ToJsonString(),
+                neighbours: null,
+                reason: out reason,
+                sourceName: path,
+                validateAdjacencyClaims: false,
+                catalog: machines
             )) {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }
-            if (!WorldDefinitionValidator.TryValidateLocally(definition!, machines, out reason)) {
+            if (!WorldDefinitionValidator.TryValidateLocally(
+                definition: definition!,
+                machines: machines,
+                reason: out reason
+            )) {
                 throw new InvalidDataException(message: $"Cannot admit machines in {relative}: {reason}");
             }
-            File.WriteAllBytes(Path.Combine(path1: output, path2: name), WorldDefinitionSerialization.Serialize(definition: definition!));
+            File.WriteAllBytes(
+                Path.Combine(
+                    path1: output,
+                    path2: name
+                ),
+                WorldDefinitionSerialization.Serialize(definition: definition!)
+            );
         }
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with Puck as the primary world.");
         return 0;
+    }
+
+    public static Command Create() {
+        var worldsArgument = new Argument<string>(name: "worlds-directory") { Description = "The directory of authored *.world.json documents." };
+        var outputArgument = new Argument<string>(name: "output-directory") { Description = "Where the composed hosted documents are written, one per canonical world name." };
+        var command = new Command(
+            description: "Compose the primary world and its referenced neighbours with the engine's own composer.",
+            name: "prepare"
+        ) { worldsArgument, outputArgument };
+
+        command.SetAction(action: parseResult => Run(
+            output: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: outputArgument)),
+            root: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: worldsArgument))
+        ));
+        return command;
     }
 }

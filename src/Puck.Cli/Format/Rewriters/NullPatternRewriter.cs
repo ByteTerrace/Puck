@@ -36,32 +36,47 @@ internal sealed class NullPatternRewriter : CSharpSyntaxRewriter {
         // GetOperation returns IBinaryOperation for built-in and user-defined statically bound
         // comparisons. Dynamic/error-bound expressions produce another operation shape (or none) and
         // are conservatively left alone. OperatorMethod identifies the overloaded-equality case.
-        if ((m_model.GetOperation(node: node) is not IBinaryOperation operation)
-            || (operation.OperatorMethod is not null)) {
+        if (
+            (m_model.GetOperation(node: node) is not IBinaryOperation operation) ||
+            (operation.OperatorMethod is not null)
+        ) {
             return visited;
         }
 
-        var subjectOperation = (rightIsNull ? operation.LeftOperand : operation.RightOperand);
+        var subjectOperation = (rightIsNull
+            ? operation.LeftOperand
+            : operation.RightOperand
+        );
 
-        if ((subjectOperation.Type is null)
-            || (subjectOperation.Type.TypeKind is TypeKind.Pointer or TypeKind.Dynamic or TypeKind.Error)) {
+        if (
+            (subjectOperation.Type is null) ||
+            (subjectOperation.Type.TypeKind is TypeKind.Pointer or TypeKind.Dynamic or TypeKind.Error)
+        ) {
             return visited;
         }
 
-        var subject = (rightIsNull ? visited.Left : visited.Right);
+        var subject = (rightIsNull
+            ? visited.Left
+            : visited.Right
+        );
         PatternSyntax pattern = SyntaxFactory.ConstantPattern(expression: SyntaxFactory.LiteralExpression(kind: SyntaxKind.NullLiteralExpression));
 
         if (kind is SyntaxKind.NotEqualsExpression) {
             pattern = SyntaxFactory.UnaryPattern(
                 operatorToken: SyntaxFactory.Token(kind: SyntaxKind.NotKeyword).WithTrailingTrivia(trivia: SyntaxFactory.Space),
-                pattern: pattern);
+                pattern: pattern
+            );
         }
 
         var isToken = SyntaxFactory.Token(kind: SyntaxKind.IsKeyword)
             .WithLeadingTrivia(trivia: SyntaxFactory.Space)
             .WithTrailingTrivia(trivia: SyntaxFactory.Space);
 
-        return SyntaxFactory.IsPatternExpression(expression: subject.WithoutTrivia(), isKeyword: isToken, pattern: pattern)
+        return SyntaxFactory.IsPatternExpression(
+            expression: subject.WithoutTrivia(),
+            isKeyword: isToken,
+            pattern: pattern
+        )
             .WithLeadingTrivia(trivia: visited.GetLeadingTrivia())
             .WithTrailingTrivia(trivia: visited.GetTrailingTrivia());
     }

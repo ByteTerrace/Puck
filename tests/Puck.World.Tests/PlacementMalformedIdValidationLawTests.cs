@@ -17,12 +17,12 @@ public sealed class PlacementMalformedIdValidationLawTests {
         document = (document with {
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: "row",
-                    PrototypeId: null!,
-                    Position: new DocumentVector3(value: Vector3.Zero),
-                    YawDegrees: 0f,
-                    Scale: 1f
-                ),
+                Id: "row",
+                PrototypeId: null!,
+                Position: new DocumentVector3(value: Vector3.Zero),
+                YawDegrees: 0f,
+                Scale: 1f
+            ),
             ],
         });
 

@@ -58,6 +58,15 @@ public interface ISdfFrameDresser {
 /// aggregate would just relocate the same cancellation one level down, where the host cannot see it.
 /// </para></summary>
 public sealed class SdfCompositionFrameSource : ISdfFrameSource {
+    /// <summary>Gets the generic "far below anything" fallback park position — a host that needs a matching literal
+    /// outside a live <see cref="SdfEmitContext"/> (a construction-time capacity probe, say) reads this rather than
+    /// carrying its own copy.</summary>
+    public static readonly Vector3 DefaultParkPosition = new(
+        x: 0f,
+        y: -1000f,
+        z: 0f
+    );
+
     // The components as they stood when the program currently held in m_program was built. No sentinel is needed:
     // m_program is null until the first build, and that null is what forces it.
     private readonly int[] m_builtRevisions;
@@ -148,15 +157,6 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         WorstCaseInstanceCapacity = probe.Instances.Count;
         WorstCaseDynamicTransformCapacity = m_transforms.Length;
     }
-
-    /// <summary>Gets the generic "far below anything" fallback park position — a host that needs a matching literal
-    /// outside a live <see cref="SdfEmitContext"/> (a construction-time capacity probe, say) reads this rather than
-    /// carrying its own copy.</summary>
-    public static readonly Vector3 DefaultParkPosition = new(
-        x: 0f,
-        y: -1000f,
-        z: 0f
-    );
 
     /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
     /// — settable so a host can move it to sit well outside its own world's camera/tile-cull reach. Changing this does

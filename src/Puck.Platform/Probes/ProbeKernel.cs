@@ -15,7 +15,10 @@ public abstract record ProbeKernelInput {
         var count = 0;
 
         for (var index = 0; (index < inputs.Count); index++) {
-            count += ((inputs[index] is StrobePair) ? 2 : 1);
+            count += ((inputs[index] is StrobePair)
+                ? 2
+                : 1
+            );
         }
 
         return count;

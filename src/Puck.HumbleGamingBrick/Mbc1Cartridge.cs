@@ -49,6 +49,77 @@ public sealed class Mbc1Cartridge : CartridgeBase {
     protected override bool RamAccessible =>
         (Header.HasRam && m_ramEnabled);
 
+    private static bool DetectMulticart(byte[] rom) {
+        if (rom.Length != MulticartByteCount) {
+            return false;
+        }
+
+        foreach (var bank in MulticartLogoBanks) {
+            var offset = ((bank * RomBankSize) + CartridgeHeader.LogoOffset);
+
+            if (!rom.AsSpan(
+                start: offset,
+                length: CartridgeHeader.Logo.Length
+            ).SequenceEqual(other: CartridgeHeader.Logo)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        m_advancedMode = reader.ReadBoolean();
+        m_primaryBank = reader.ReadInt32();
+        m_ramEnabled = reader.ReadBoolean();
+        m_secondaryBank = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) {
+        // A bank the physical RAM chip does not have wraps back onto one it does rather than reading open bus.
+        var bank = (m_advancedMode
+            ? m_secondaryBank & m_ramBankWrapMask
+            : 0
+        );
+
+        return ((bank * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    }
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) {
+        // The multicart board leaves the primary register's top address line unconnected and moves the secondary
+        // bits down one position (bits 4-5 rather than 5-6), so only the shift and the primary mask differ.
+        var secondaryShift = (m_isMulticart
+            ? 4
+            : 5
+        );
+
+        if (address <= MemoryMap.RomBank0End) {
+            // The fixed region is bank 0 in simple mode, but tracks the secondary bits in advanced mode on large ROMs.
+            var lowBank = (m_advancedMode
+                ? (m_secondaryBank << secondaryShift)
+                : 0
+            );
+
+            return ((lowBank * RomBankSize) + address);
+        }
+
+        var primary = (m_isMulticart
+            ? m_primaryBank & 0x0F
+            : m_primaryBank
+        );
+        var highBank = (m_secondaryBank << secondaryShift) | primary;
+
+        return ((highBank * RomBankSize) + (address - MemoryMap.RomBankNStart));
+    }
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBoolean(value: m_advancedMode);
+        writer.WriteInt32(value: m_primaryBank);
+        writer.WriteBoolean(value: m_ramEnabled);
+        writer.WriteInt32(value: m_secondaryBank);
+    }
+
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
         switch (address >> 13) {
@@ -75,72 +146,5 @@ public sealed class Mbc1Cartridge : CartridgeBase {
             default:
                 break;
         }
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) {
-        // The multicart board leaves the primary register's top address line unconnected and moves the secondary
-        // bits down one position (bits 4-5 rather than 5-6), so only the shift and the primary mask differ.
-        var secondaryShift = (m_isMulticart
-            ? 4
-            : 5);
-
-        if (address <= MemoryMap.RomBank0End) {
-            // The fixed region is bank 0 in simple mode, but tracks the secondary bits in advanced mode on large ROMs.
-            var lowBank = (m_advancedMode
-                ? (m_secondaryBank << secondaryShift)
-                : 0);
-
-            return ((lowBank * RomBankSize) + address);
-        }
-
-        var primary = (m_isMulticart
-            ? (m_primaryBank & 0x0F)
-            : m_primaryBank);
-        var highBank = (m_secondaryBank << secondaryShift) | primary;
-
-        return ((highBank * RomBankSize) + (address - MemoryMap.RomBankNStart));
-    }
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) {
-        // A bank the physical RAM chip does not have wraps back onto one it does rather than reading open bus.
-        var bank = (m_advancedMode
-            ? (m_secondaryBank & m_ramBankWrapMask)
-            : 0);
-
-        return ((bank * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    }
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_advancedMode);
-        writer.WriteInt32(value: m_primaryBank);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_secondaryBank);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_advancedMode = reader.ReadBoolean();
-        m_primaryBank = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_secondaryBank = reader.ReadInt32();
-    }
-
-    private static bool DetectMulticart(byte[] rom) {
-        if (rom.Length != MulticartByteCount) {
-            return false;
-        }
-
-        foreach (var bank in MulticartLogoBanks) {
-            var offset = ((bank * RomBankSize) + CartridgeHeader.LogoOffset);
-
-            if (!rom.AsSpan(
-                start: offset,
-                length: CartridgeHeader.Logo.Length
-            ).SequenceEqual(other: CartridgeHeader.Logo)) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

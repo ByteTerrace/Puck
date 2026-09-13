@@ -46,6 +46,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     private readonly Dictionary<int, MachineSlot> m_slots = new();
     private readonly Dictionary<string, LinkEntry> m_links = new(comparer: StringComparer.Ordinal);
     private readonly List<int> m_reconcileRemovals = new();
+
     private readonly WorldOutputHub? m_narrationHub;
 
     /// <summary>Initializes the host over the world's declared screens using the registered engines.</summary>
@@ -59,9 +60,14 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <see langword="null"/> to use the local open policy.</param>
     public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null,
         IMachineContentAdmissionPolicy? contentAdmissionPolicy = null)
-        : this(screens: screens, engines: engines, compilers: null, documentPath: documentPath, narrationHub: narrationHub,
-            contentAdmissionPolicy: contentAdmissionPolicy) { }
-
+        : this(
+        screens: screens,
+        engines: engines,
+        compilers: null,
+        documentPath: documentPath,
+        narrationHub: narrationHub,
+        contentAdmissionPolicy: contentAdmissionPolicy
+    ) { }
     /// <summary>Initializes the host over the world's declared screens and the named machine catalog. Named machine
     /// rows are prepared by <see cref="TryPrepare"/>; screen consumers do not construct runtimes.</summary>
     /// <param name="screens">The world's diegetic screens, retained for temporary screen-operation forwarding.</param>
@@ -78,8 +84,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// rather than resolved last-writer-wins.</exception>
     public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, IEnumerable<IMachineContentProvider>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null,
         IMachineContentAdmissionPolicy? contentAdmissionPolicy = null)
-        : this(screens, new WorldMachineCatalog(engines, compilers), documentPath, narrationHub, contentAdmissionPolicy) { }
-
+        : this(
+        screens,
+        new WorldMachineCatalog(
+            contentProviders: compilers,
+            engines: engines
+        ),
+        documentPath,
+        narrationHub,
+        contentAdmissionPolicy
+    ) { }
     /// <summary>Initializes a host with the exact catalog selected by its composition root.</summary>
     /// <param name="screens">The authored screen declarations.</param>
     /// <param name="catalog">The immutable engine and content-provider registrations.</param>
@@ -94,7 +108,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         Catalog = catalog;
         m_narrationHub = narrationHub;
-        m_contentAdmissionPolicy = contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(MachineAssetAdmission.Allow);
+        m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
 
         m_engines = new WorldExtensionRegistry<IMachineEngine>(
             extensions: catalog.Engines.Values,
@@ -112,6 +126,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             m_slots[screen.Index] = slot;
         }
     }
+
     private static bool DeclaresIndex(IReadOnlyList<WorldScreen> screens, int index) {
         foreach (var screen in screens) {
             if (screen.Index == index) {
@@ -178,7 +193,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         foreach (var entry in m_links.Values) {
-            if (entry.Link is not { } link || !LinkCanAdvance(entry)) {
+            if (
+                (entry.Link is not { } link) ||
+                !LinkCanAdvance(entry: entry)
+            ) {
                 continue;
             }
 
@@ -199,9 +217,17 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             );
 
             foreach (var member in entry.Members) {
-                if (m_slots.TryGetValue(member, out var namedSlot) &&
-                    namedSlot.DeclaredSource is WorldScreenSource.Machine source &&
-                    m_instances.TryGetValue(source.Instance, out var instance)) {
+                if (
+                    m_slots.TryGetValue(
+                    key: member,
+                    value: out var namedSlot
+                ) &&
+                    (namedSlot.DeclaredSource is WorldScreenSource.Machine source) &&
+                    m_instances.TryGetValue(
+                    key: source.Instance,
+                    value: out var instance
+                )
+                ) {
                     instance.Lease.CompletedSteps++;
                 }
                 if (
@@ -309,12 +335,12 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         // The content is signed above as read off disk; a cartridge document compiles here, after the engine is
         // known (the forge is the engine's own), so a forge refusal still pins the source file's signature.
         if (!TryResolveContent(
-            engine: engine,
-            contentPath: contentPath,
-            content: content,
             bytes: out var bytes,
             cartridge: out var cartridge,
             compilation: out var compilation,
+            content: content,
+            contentPath: contentPath,
+            engine: engine,
             fault: out var resolveFault
         )) {
             MachineLifecycleTap?.Invoke(
@@ -374,9 +400,15 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
     // bytes and the executable image without depending on a provider's source-document or compiler types.
     private bool TryResolveContent(IMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
-        _ = m_compilers.TryGet(key: engine.Id, extension: out var compiler);
+        _ = m_compilers.TryGet(
+            key: engine.Id,
+            extension: out var compiler
+        );
 
-        if (compiler is not null && compiler.Recognizes(contentPath: contentPath)) {
+        if (
+            (compiler is not null) &&
+            compiler.Recognizes(contentPath: contentPath)
+        ) {
             try {
                 compilation = compiler.Prepare(content: content);
                 bytes = compilation.Image;
@@ -398,7 +430,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             }
         }
 
-        if (!Catalog.RequiresPreparation(contentPath)) {
+        if (!Catalog.RequiresPreparation(contentPath: contentPath)) {
             bytes = content;
             cartridge = null;
             compilation = null;
@@ -420,7 +452,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         string? engineId = null;
 
         foreach (var member in members) {
-            var (machine, id) = ResolveMachine(member);
+            var (machine, id) = ResolveMachine(screenIndex: member);
             if (machine is null) {
                 return (Link: null, Reason: $"screen {member} has no machine");
             }
@@ -462,43 +494,63 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             : (Link: null, Reason: reason)
         );
     }
-
     private (IMachineRuntime? Runtime, string? Engine) ResolveMachine(int screenIndex) {
-        if (!m_slots.TryGetValue(screenIndex, out var slot)) {
+        if (!m_slots.TryGetValue(
+            key: screenIndex,
+            value: out var slot
+        )) {
             return (null, null);
         }
         if (slot.DeclaredSource is WorldScreenSource.Machine source) {
-            return m_instances.TryGetValue(source.Instance, out var instance)
+            return (m_instances.TryGetValue(
+                key: source.Instance,
+                value: out var instance
+            )
                 ? (instance.Lease.Runtime, instance.Declaration.Engine)
-                : (null, null);
+                : (null, null)
+            );
         }
         return (slot.Machine, slot.MachineEngine);
     }
-
     private HashSet<string> LinkedInstances() {
-        var result = new HashSet<string>(StringComparer.Ordinal);
+        var result = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         foreach (var entry in m_links.Values) {
             if (entry.Link is null) {
                 continue;
             }
             foreach (var member in entry.Members) {
-                if (m_slots.TryGetValue(member, out var slot) && slot.DeclaredSource is WorldScreenSource.Machine source) {
-                    result.Add(source.Instance);
+                if (
+                    m_slots.TryGetValue(
+                    key: member,
+                    value: out var slot
+                ) &&
+                    (slot.DeclaredSource is WorldScreenSource.Machine source)
+                ) {
+                    result.Add(item: source.Instance);
                 }
             }
         }
         return result;
     }
-
     private bool TryGetLiveLinkForInstance(string instance, out string linkName) {
         foreach (var entry in m_links.Values) {
             if (entry.Link is null) {
                 continue;
             }
             foreach (var member in entry.Members) {
-                if (m_slots.TryGetValue(member, out var slot) &&
-                    slot.DeclaredSource is WorldScreenSource.Machine source &&
-                    string.Equals(source.Instance, instance, StringComparison.Ordinal)) {
+                if (
+                    m_slots.TryGetValue(
+                    key: member,
+                    value: out var slot
+                ) &&
+                    (slot.DeclaredSource is WorldScreenSource.Machine source) &&
+                    string.Equals(
+                    a: source.Instance,
+                    b: instance,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
                     linkName = entry.Name;
                     return true;
                 }
@@ -509,29 +561,43 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
     private bool LinkCanAdvance(LinkEntry entry) {
         foreach (var member in entry.Members) {
-            if (m_slots.TryGetValue(member, out var slot) &&
-                slot.DeclaredSource is WorldScreenSource.Machine source &&
-                m_instances.TryGetValue(source.Instance, out var instance) &&
-                !instance.Declaration.Running) {
+            if (
+                m_slots.TryGetValue(
+                key: member,
+                value: out var slot
+            ) &&
+                (slot.DeclaredSource is WorldScreenSource.Machine source) &&
+                m_instances.TryGetValue(
+                key: source.Instance,
+                value: out var instance
+            ) &&
+                !instance.Declaration.Running
+            ) {
                 return false;
             }
         }
         return true;
     }
-
     private (bool Ok, string Message) ValidateLinkMembers(string name, IReadOnlyList<int> members) {
-        var named = new HashSet<string>(StringComparer.Ordinal);
+        var named = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         foreach (var member in members) {
-            if (!m_slots.TryGetValue(member, out var slot)) {
+            if (!m_slots.TryGetValue(
+                key: member,
+                value: out var slot
+            )) {
                 return (false, $"no screen {member} declared");
             }
             if (slot.DeclaredSource is not WorldScreenSource.Machine source) {
                 continue;
             }
-            if (!named.Add(source.Instance)) {
+            if (!named.Add(item: source.Instance)) {
                 return (false, $"machine '{source.Instance}' is named more than once in link '{name}'");
             }
-            if (!m_instances.TryGetValue(source.Instance, out var instance)) {
+            if (!m_instances.TryGetValue(
+                key: source.Instance,
+                value: out var instance
+            )) {
                 return (false, $"machine '{source.Instance}' is not live");
             }
             if (!instance.Declaration.Running) {
@@ -631,7 +697,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             stepTicks: stepTicks,
             pads: pads.Span
         );
-        AdvanceInstances(stepTicks, pads.Span, LinkedInstances());
+        AdvanceInstances(
+            stepTicks,
+            pads.Span,
+            LinkedInstances()
+        );
 
         foreach (var slot in m_slots.Values) {
             if (slot.Machine is not { } machine) {
@@ -658,21 +728,19 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
             if (machine is IMachineInputPorts ports) {
                 if (ports.InputPorts.Count > 1) {
-                    throw new InvalidOperationException($"Screen {slot.Index} requires an explicit machine input port.");
+                    throw new InvalidOperationException(message: $"Screen {slot.Index} requires an explicit machine input port.");
                 }
                 foreach (var port in ports.InputPorts.Values) {
-                    port.SetState(in input);
+                    port.SetState(state: in input);
                 }
             }
 
             if (machine is IQueuedMachineRuntime queued) {
-                var submission = queued.Submit(
-                    deltaTicks: stepTicks
-                );
+                var submission = queued.Submit(deltaTicks: stepTicks);
 
                 if (
                     (submission == QueuedMachineSubmission.Rejected) &&
-                    machine.Status is MachineRuntimeStatus.Running or MachineRuntimeStatus.Faulted
+                    (machine.Status is MachineRuntimeStatus.Running or MachineRuntimeStatus.Faulted)
                 ) {
                     throw new InvalidOperationException(message: ($"Screen {slot.Index}'s queued machine rejected an authoritative tick/input segment" +
                                  ((queued.QueueFault is { } fault)
@@ -681,16 +749,17 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 }
 
                 slot.FramesStepped = queued.CompletedSteps;
-            } else if (machine.Advance(
-                deltaTicks: stepTicks
-            )) {
+            } else if (machine.Advance(deltaTicks: stepTicks)) {
                 ++slot.FramesStepped;
             }
         }
     }
     /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>
-        ((ResolveMachine(index).Runtime is IMachineAudioOutputs outputs) && outputs.AudioOutputs.TryGetValue("audio", out var audio)
+        (((ResolveMachine(screenIndex: index).Runtime is IMachineAudioOutputs outputs) && outputs.AudioOutputs.TryGetValue(
+            key: "audio",
+            value: out var audio
+        ))
             ? audio
             : null
         );
@@ -705,9 +774,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         );
     /// <inheritdoc/>
     public long? InstrumentTicksPerBeat(string instance) =>
-        m_instances.TryGetValue(instance, out var entry) && entry.Lease.Runtime is IInstrumentClockSource instrument && instrument.TicksPerBeat > 0
+        ((m_instances.TryGetValue(
+            key: instance,
+            value: out var entry
+        ) && (entry.Lease.Runtime is IInstrumentClockSource instrument) && (instrument.TicksPerBeat > 0))
             ? instrument.TicksPerBeat
-            : null;
+            : null
+        );
     /// <inheritdoc/>
     public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() {
         if (m_links.Count == 0) {
@@ -757,24 +830,34 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
     }
     /// <inheritdoc/>
-    public nint Handle(int index) => VideoOutput(index)?.NativeImageViewHandle ?? 0;
+    public nint Handle(int index) => (VideoOutput(index: index)?.NativeImageViewHandle ?? 0);
     /// <inheritdoc/>
     public bool HasEngine(string engineId) => m_engines.IsRegistered(key: engineId);
     /// <inheritdoc/>
-    public bool HasMachine(int index) => ResolveMachine(index).Runtime is not null;
+    public bool HasMachine(int index) => (ResolveMachine(screenIndex: index).Runtime is not null);
     /// <inheritdoc/>
-    public Vector3 Light(int index) => VideoOutput(index)?.EmittedLight ?? Vector3.Zero;
+    public Vector3 Light(int index) => (VideoOutput(index: index)?.EmittedLight ?? Vector3.Zero);
     /// <inheritdoc/>
     public IMachineVideoOutput? VideoOutput(int index) {
-        if (!m_slots.TryGetValue(index, out var slot)) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
             return null;
         }
         if (slot.DeclaredSource is WorldScreenSource.Machine source) {
-            return VideoOutput(instance: source.Instance, output: source.Output);
+            return VideoOutput(
+                instance: source.Instance,
+                output: source.Output
+            );
         }
-        return slot.Machine is IMachineVideoOutputs outputs && outputs.VideoOutputs.TryGetValue("video", out var output)
+        return (((slot.Machine is IMachineVideoOutputs outputs) && outputs.VideoOutputs.TryGetValue(
+            key: "video",
+            value: out var output
+        ))
             ? output
-            : null;
+            : null
+        );
     }
     /// <inheritdoc/>
     public string? LinkOf(int index) => (m_slots.TryGetValue(
@@ -785,7 +868,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         : null
     );
     /// <inheritdoc/>
-    public IMachineRuntime? MachineAt(int index) => ResolveMachine(index).Runtime;
+    public IMachineRuntime? MachineAt(int index) => ResolveMachine(screenIndex: index).Runtime;
     /// <summary>Reconciles the declared cable links to a mutated <c>links</c> section — two-phase, atomic per call:
     /// every stale-or-member-changed declared link tears down first, in full, before anything is (re-)established.
     /// Tearing down every stale/changed row before establishing anything means a member a changed link is
@@ -805,16 +888,23 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         foreach (var link in links) {
             _ = declaredNames.Add(item: link.Name);
-            var validation = ValidateLinkMembers(link.Name, link.Screens);
+            var validation = ValidateLinkMembers(
+                link.Name,
+                link.Screens
+            );
+
             if (!validation.Ok) {
-                refusedNames.Add(link.Name);
+                refusedNames.Add(item: link.Name);
                 if (m_narrationHub is { HasNarrationSink: true }) {
-                    m_narrationHub.Narrate(channel: "world.link", text: $"[world.link: '{link.Name}' refused — {validation.Message}]");
+                    m_narrationHub.Narrate(
+                        channel: "world.link",
+                        text: $"[world.link: '{link.Name}' refused — {validation.Message}]"
+                    );
                 }
             }
 
             if (
-                !refusedNames.Contains(link.Name) &&
+                !refusedNames.Contains(item: link.Name) &&
                 m_links.TryGetValue(
                 key: link.Name,
                 value: out var existing
@@ -841,13 +931,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         // Phase 1, complete before phase 2 starts: every stale-or-changed declared link is gone, so no established
         // link can be silently blocking a screen a phase-2 TryLink call legitimately needs.
         foreach (var name in toTeardown) {
-            if (!refusedNames.Contains(name)) {
+            if (!refusedNames.Contains(item: name)) {
                 TeardownLink(name: name);
             }
         }
 
         foreach (var link in links) {
-            if (refusedNames.Contains(link.Name)) {
+            if (refusedNames.Contains(item: link.Name)) {
                 continue;
             }
             if (
@@ -968,8 +1058,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 continue;
             }
 
-            if (slot.DeclaredSource is WorldScreenSource.Machine &&
-                !Equals(slot.DeclaredSource, screen.Source)) {
+            if (
+                (slot.DeclaredSource is WorldScreenSource.Machine) &&
+                !Equals(
+                objA: slot.DeclaredSource,
+                objB: screen.Source
+            )
+            ) {
                 // A named display retarget leaves the cable's old runtime before the new source is published.
                 LeaveLink(index: screen.Index);
             }
@@ -991,8 +1086,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                             m_narrationHub?.Narrate(
                                 channel: "world.screen",
                                 text: $"[world.screen: {(ejectOk
-                                    ? ejectMessage
-                                    : $"{screen.Index} {ejectMessage}")}]"
+                                ? ejectMessage
+                                : $"{screen.Index} {ejectMessage}")}]"
                             );
                         }
                     }
@@ -1027,22 +1122,37 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return null;
         }
 
-        if (slot.DeclaredSource is WorldScreenSource.Machine source &&
-            m_instances.TryGetValue(source.Instance, out var instance)) {
+        if (
+            (slot.DeclaredSource is WorldScreenSource.Machine source) &&
+            m_instances.TryGetValue(
+            key: source.Instance,
+            value: out var instance
+        )
+        ) {
             var lease = instance.Lease;
-            var namedQueued = lease.Runtime as IQueuedMachineRuntime;
+            var namedQueued = (lease.Runtime as IQueuedMachineRuntime);
             WorldMachineCartridge? cartridge = null;
+
             foreach (var asset in lease.Assets.Values) {
                 if (asset.PreparedContent is { } content) {
-                    cartridge = new WorldMachineCartridge(asset.Path, content.SourceHash,
-                        WorldDefinitionFileSource.ComputeContentHash(asset.Image.Span));
+                    cartridge = new WorldMachineCartridge(
+                        asset.Path,
+                        content.SourceHash,
+                        WorldDefinitionFileSource.ComputeContentHash(content: asset.Image.Span)
+                    );
                     break;
                 }
             }
-            return new WorldMachineState(true, instance.Declaration.Engine,
-                namedQueued?.CompletedSteps ?? lease.CompletedSteps, namedQueued?.PendingSteps ?? 0,
-                namedQueued?.MaximumPendingSteps ?? 0, namedQueued?.BackpressureEvents ?? 0,
-                namedQueued?.QueueFault, cartridge);
+            return new WorldMachineState(
+                true,
+                instance.Declaration.Engine,
+                (namedQueued?.CompletedSteps ?? lease.CompletedSteps),
+                (namedQueued?.PendingSteps ?? 0),
+                (namedQueued?.MaximumPendingSteps ?? 0),
+                (namedQueued?.BackpressureEvents ?? 0),
+                namedQueued?.QueueFault,
+                cartridge
+            );
         }
 
         var queued = (slot.Machine as IQueuedMachineRuntime);
@@ -1113,7 +1223,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"link '{name}' needs two or more screens");
         }
 
-        var memberValidation = ValidateLinkMembers(name, members);
+        var memberValidation = ValidateLinkMembers(
+            members: members,
+            name: name
+        );
+
         if (!memberValidation.Ok) {
             return memberValidation;
         }
@@ -1198,7 +1312,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        var machine = ResolveMachine(index).Runtime;
+        var machine = ResolveMachine(screenIndex: index).Runtime;
+
         if (machine is null) {
             return (Ok: false, Message: $"screen {index} has no machine to read");
         }
@@ -1220,7 +1335,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        var machine = ResolveMachine(index).Runtime;
+        var machine = ResolveMachine(screenIndex: index).Runtime;
+
         if (machine is null) {
             return (Ok: false, Message: $"screen {index} has no machine to write");
         }
@@ -1229,7 +1345,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: $"screen {index}'s machine does not support memory poke");
         }
 
-        peek.PokeByte(address: address, value: value);
+        peek.PokeByte(
+            address: address,
+            value: value
+        );
 
         return (Ok: true, Message: "");
     }
@@ -1385,20 +1504,40 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return (Ok: true, Message: $"link '{name}' severed");
     }
-
     /// <inheritdoc/>
     public bool TryResolveSymbol(int index, string symbol, out int address) {
-        if (m_slots.TryGetValue(key: index, value: out var slot) &&
-            slot.DeclaredSource is WorldScreenSource.Machine source &&
-            TryResolveSymbol(source.Instance, symbol, out address)) {
+        if (
+            m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        ) &&
+            (slot.DeclaredSource is WorldScreenSource.Machine source) &&
+            TryResolveSymbol(
+            source.Instance,
+            symbol,
+            out address
+        )
+        ) {
             return true;
         }
-        if (m_slots.TryGetValue(key: index, value: out slot) &&
+        if (
+            m_slots.TryGetValue(
+            key: index,
+            value: out slot
+        ) &&
             (slot.Compilation is { } comp) &&
-            comp.Symbols.TryGetValue(key: symbol, value: out var exported) &&
-            string.Equals(a: exported.Space, b: "bus", comparisonType: StringComparison.Ordinal) &&
-            exported.Address <= int.MaxValue) {
-            address = (int)exported.Address;
+            comp.Symbols.TryGetValue(
+            key: symbol,
+            value: out var exported
+        ) &&
+            string.Equals(
+            a: exported.Space,
+            b: "bus",
+            comparisonType: StringComparison.Ordinal
+        ) &&
+            (exported.Address <= int.MaxValue)
+        ) {
+            address = ((int)exported.Address);
 
             return true;
         }
@@ -1412,12 +1551,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     public sealed class PreparedMachinePlan : IWorldMachinePreparedPlan {
         internal IReadOnlyList<WorldScreen> CandidateScreens { get; }
         internal PreparedInstances Instances { get; }
+
         /// <inheritdoc/>
         public int MachineCount { get; }
 
         internal PreparedMachinePlan(IReadOnlyList<WorldScreen> candidateScreens, int machineCount, PreparedInstances instances) {
             CandidateScreens = candidateScreens;
-            MachineCount = machineCount + instances.Candidate.Count;
+            MachineCount = (machineCount + instances.Candidate.Count);
             Instances = instances;
         }
 
@@ -1429,32 +1569,43 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
 
-        if (!WorldDefinitionValidator.TryValidateLocally(candidate, Catalog, out var validationReason)) {
+        if (!WorldDefinitionValidator.TryValidateLocally(
+            definition: candidate,
+            machines: Catalog,
+            reason: out var validationReason
+        )) {
             plan = null;
             reason = validationReason;
             return false;
         }
 
-        if (!TryPrepareInstances(current, candidate, out var instances, out reason)) {
+        if (!TryPrepareInstances(
+            candidate: candidate,
+            current: current,
+            prepared: out var instances,
+            reason: out reason
+        )) {
             plan = null;
             return false;
         }
-        plan = new PreparedMachinePlan(candidateScreens: candidate.Screens, machineCount: 0, instances!);
+        plan = new PreparedMachinePlan(
+            candidateScreens: candidate.Screens,
+            machineCount: 0,
+            instances!
+        );
         reason = null;
 
         return true;
     }
-
     /// <inheritdoc/>
     public void Commit(IWorldMachinePreparedPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
         if (plan is PreparedMachinePlan prepared) {
-            CommitInstances(prepared.Instances);
+            CommitInstances(plan: prepared.Instances);
             _ = ReconcileScreens(screens: prepared.CandidateScreens);
         }
     }
-
     /// <inheritdoc/>
     public void Finish(IWorldMachinePreparedPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);
@@ -1471,7 +1622,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     public IEnumerable<int> MachineScreenIndices {
         get {
             foreach (var (index, slot) in m_slots) {
-                if (ResolveMachine(index).Runtime is not null) {
+                if (ResolveMachine(screenIndex: index).Runtime is not null) {
                     yield return index;
                 }
             }
@@ -1490,8 +1641,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     // One declared screen's machine slot: the persistent declared source (so ReconcileScreens can diff it), the
     // magazine + live selector, and at most one booted machine plus the bookkeeping world.save/screen.state need.
     private sealed class MachineSlot {
-        public PreparedMachineContent? Compilation { get; set; }
         public WorldMachineCartridge? Cartridge { get; set; }
+        public PreparedMachineContent? Compilation { get; set; }
         public string? DeclaredFault { get; set; }
         public WorldScreenSource? DeclaredSource { get; set; }
         public long FramesStepped { get; set; }

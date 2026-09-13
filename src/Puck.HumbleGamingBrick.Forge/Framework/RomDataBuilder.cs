@@ -11,10 +11,10 @@ public readonly record struct RomTable(ushort Address, int Length);
 /// <see cref="RomTable"/>s, and an overrun throws at build time instead of corrupting the image.
 /// </summary>
 public sealed class RomDataBuilder {
+    private const int Capacity = 0x4000;
+
     /// <summary>The first data address (the start of ROM bank 1).</summary>
     public const ushort BaseAddress = 0x4000;
-
-    private const int Capacity = 0x4000;
 
     private readonly List<byte> m_bytes = [];
     private readonly HashSet<string> m_names = [];
@@ -40,14 +40,20 @@ public sealed class RomDataBuilder {
         ArgumentNullException.ThrowIfNull(bytes);
 
         if (!m_names.Add(item: name)) {
-            throw new ArgumentException(message: $"A data block named '{name}' was already added.", paramName: nameof(name));
+            throw new ArgumentException(
+                message: $"A data block named '{name}' was already added.",
+                paramName: nameof(name)
+            );
         }
 
         if ((m_bytes.Count + bytes.Length) > Capacity) {
             throw new InvalidOperationException(message: $"Adding '{name}' ({bytes.Length} bytes) overruns the {Capacity}-byte data window ({m_bytes.Count} bytes already used).");
         }
 
-        var table = new RomTable(Address: ((ushort)(BaseAddress + m_bytes.Count)), Length: bytes.Length);
+        var table = new RomTable(
+            Address: ((ushort)(BaseAddress + m_bytes.Count)),
+            Length: bytes.Length
+        );
 
         m_bytes.AddRange(collection: bytes);
 
@@ -60,7 +66,10 @@ public sealed class RomDataBuilder {
     public RomTable AddText(string name, string text) {
         ArgumentNullException.ThrowIfNull(text);
 
-        return Add(name: name, bytes: [.. m_text.EncodeString(text: text), 0xFF]);
+        return Add(
+            name: name,
+            bytes: [.. m_text.EncodeString(text: text), 0xFF]
+        );
     }
     /// <summary>Returns the finished data blob (copied at <see cref="BaseAddress"/> by the cartridge assembler).</summary>
     /// <returns>The concatenated data bytes.</returns>

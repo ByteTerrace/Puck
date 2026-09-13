@@ -51,6 +51,8 @@ public static class GeneratorEngine {
     /// <summary>The largest <c>Pcg32XshRr</c> stream id a site descriptor maps onto — see this type's remarks.</summary>
     private const ulong SiteStreamIdMask = 0xFFFFUL;
 
+    private static readonly ConditionalWeakTable<StateGenerator, CompiledSource> CompiledValue = new();
+
     /// <summary>One emission's result — exactly one of <see cref="Text"/>/<see cref="Numeric"/> is set, matching the
     /// firing <see cref="StateGenerator.Source"/>.</summary>
     /// <param name="Text">The space-joined Markov emission, or <see langword="null"/> for a numeric source.</param>
@@ -78,7 +80,10 @@ public static class GeneratorEngine {
             Contexts = new EntrySet?[contexts.Count];
 
             for (var index = 0; (index < contexts.Count); index++) {
-                Ordinals.TryAdd(key: contexts[index].Key, value: index);
+                Ordinals.TryAdd(
+                    key: contexts[index].Key,
+                    value: index
+                );
 
                 var alternatives = (contexts[index].Alternatives ?? []);
                 var weights = new ulong[alternatives.Count];
@@ -89,7 +94,10 @@ public static class GeneratorEngine {
                     counts[alternative] = (alternatives[alternative].Multiplicity ?? 1);
                 }
 
-                Contexts[index] = EntrySet.TryBuild(counts: counts, weights: weights);
+                Contexts[index] = EntrySet.TryBuild(
+                    counts: counts,
+                    weights: weights
+                );
             }
 
             var outcomes = (generator.Weighted ?? []);
@@ -101,27 +109,43 @@ public static class GeneratorEngine {
                 outcomeCounts[index] = (outcomes[index].Multiplicity ?? 1);
             }
 
-            Weighted = EntrySet.TryBuild(counts: outcomeCounts, weights: outcomeWeights);
+            Weighted = EntrySet.TryBuild(
+                counts: outcomeCounts,
+                weights: outcomeWeights
+            );
 
-            if (TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _)) {
+            if (TryResolveOrbit(
+                generator: generator,
+                nodes: out var orbitNodes,
+                reason: out _
+            )) {
                 var orbitWeights = new ulong[orbitNodes.Length];
                 var orbitCounts = new int[orbitNodes.Length];
 
-                Array.Fill(array: orbitWeights, value: 1UL);
-                Array.Fill(array: orbitCounts, value: 1);
+                Array.Fill(
+                    array: orbitWeights,
+                    value: 1UL
+                );
+                Array.Fill(
+                    array: orbitCounts,
+                    value: 1
+                );
                 OrbitNodes = orbitNodes;
-                Orbit = EntrySet.TryBuild(counts: orbitCounts, weights: orbitWeights);
-            }
-            else {
+                Orbit = EntrySet.TryBuild(
+                    counts: orbitCounts,
+                    weights: orbitWeights
+                );
+            } else {
                 OrbitNodes = [];
                 Orbit = null;
             }
         }
 
         public EntrySet?[] Contexts { get; }
-        public Dictionary<CellName, int> Ordinals { get; }
+        public ref Pcg32Extended ExtendedGenerator => ref m_extendedGenerator;
         public EntrySet? Orbit { get; }
         public int[] OrbitNodes { get; }
+        public Dictionary<CellName, int> Ordinals { get; }
         public EntrySet? Weighted { get; }
 
         // The extended-generator per-tick cache: the last built Pcg32Extended, beside the (seed ladder, skip, cursor)
@@ -130,10 +154,10 @@ public static class GeneratorEngine {
         // this declared source) rebuilds once. m_extendedValid alone gates matching, since a default Pcg32Extended
         // (an unallocated table) is never itself a valid cache entry.
         private Pcg32Extended m_extendedGenerator;
-        private bool m_extendedValid;
         private ulong m_extendedSeedState;
-        private ulong m_extendedStream;
         private long m_extendedSkip;
+        private ulong m_extendedStream;
+        private bool m_extendedValid;
 
         // The cache proves its own position: the generator's base state must equal the state a fresh generator
         // seeks to for the site's recorded cursor. A pass that consumed fewer or more draws than the cursor moved (a
@@ -152,7 +176,6 @@ public static class GeneratorEngine {
             m_extendedStream = stream;
             m_extendedSkip = skip;
         }
-        public ref Pcg32Extended ExtendedGenerator => ref m_extendedGenerator;
     }
     private sealed class EntrySet {
         private EntrySet(int[] unitEntries, ulong[] unitWeights, AliasTable<int>? full, long unitCount) {
@@ -162,16 +185,16 @@ public static class GeneratorEngine {
             UnitCount = unitCount;
         }
 
+        // The alias table over every unit, or null when no unit weighs anything — the validator refuses that shape,
+        // and the firing arm refuses it by name again rather than trusting it only ever sees validated documents.
+        public AliasTable<int>? Full { get; }
+        // Kept separately from the arrays so an invalid, over-capacity declaration can be represented and refused
+        // without first attempting an attacker-sized allocation. Validated documents never take this path.
+        public long UnitCount { get; }
         // The entry ordinal each unit resolves to.
         public int[] UnitEntries { get; }
         // Each unit's weight — its entry's weight.
         public ulong[] UnitWeights { get; }
-        // Kept separately from the arrays so an invalid, over-capacity declaration can be represented and refused
-        // without first attempting an attacker-sized allocation. Validated documents never take this path.
-        public long UnitCount { get; }
-        // The alias table over every unit, or null when no unit weighs anything — the validator refuses that shape,
-        // and the firing arm refuses it by name again rather than trusting it only ever sees validated documents.
-        public AliasTable<int>? Full { get; }
 
         public static EntrySet? TryBuild(int[] counts, ulong[] weights) {
             if (weights.Length == 0) { return null; }
@@ -179,26 +202,32 @@ public static class GeneratorEngine {
             var units = 0L;
 
             for (var index = 0; (index < counts.Length); index++) {
-                units += Math.Max(val1: 1, val2: counts[index]);
+                units += Math.Max(
+                    val1: 1,
+                    val2: counts[index]
+                );
             }
 
             if (units > GeneratorCapacity.MaxEntriesPerSet) {
                 return new EntrySet(
-                    unitEntries: [],
-                    unitWeights: [],
                     full: null,
-                    unitCount: units
+                    unitCount: units,
+                    unitEntries: [],
+                    unitWeights: []
                 );
             }
 
-            var unitEntries = new int[(int)units];
-            var unitWeights = new ulong[(int)units];
-            var entries = new (int Element, ulong Weight)[(int)units];
+            var unitEntries = new int[((int)units)];
+            var unitWeights = new ulong[((int)units)];
+            var entries = new (int Element, ulong Weight)[((int)units)];
             var any = false;
             var unit = 0;
 
             for (var index = 0; (index < counts.Length); index++) {
-                for (var copy = Math.Max(val1: 1, val2: counts[index]); (copy > 0); copy--) {
+                for (var copy = Math.Max(
+                    val1: 1,
+                    val2: counts[index]
+                ); (copy > 0); copy--) {
                     unitEntries[unit] = index;
                     unitWeights[unit] = weights[index];
                     entries[unit] = (unit, weights[index]);
@@ -211,20 +240,19 @@ public static class GeneratorEngine {
             return new EntrySet(
                 unitEntries: unitEntries,
                 unitWeights: unitWeights,
-                full: (any ? WeightedSampler.Create<int>(entries: entries) : null),
+                full: (any
+                ? WeightedSampler.Create<int>(entries: entries)
+                : null),
                 unitCount: units
             );
         }
     }
 
-    private static readonly ConditionalWeakTable<StateGenerator, CompiledSource> s_compiled = new();
-
     private static CompiledSource Compiled(StateGenerator generator) =>
-        s_compiled.GetValue(
+        CompiledValue.GetValue(
             key: generator,
             createValueCallback: static (StateGenerator source) => new CompiledSource(generator: source)
         );
-
     // One draw from a unit set under a mode: the full table when nothing is drawn (or the mode never exhausts), else
     // a table over the undrawn units. An exhausted mask refuses under WithoutReplacement and clears under
     // RestartOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
@@ -239,7 +267,10 @@ public static class GeneratorEngine {
             return -1;
         }
 
-        if ((set is null) || (set.Full is null)) {
+        if (
+            (set is null) ||
+            (set.Full is null)
+        ) {
             reason = $"{what} declares no non-zero weight — nothing can be picked";
 
             return -1;
@@ -255,41 +286,56 @@ public static class GeneratorEngine {
 
         if (mask.IsEmpty) {
             picked = set.Full.Sample(generator: ref rng);
-        }
-        else {
+        } else {
             Span<(int Element, ulong Weight)> buffer = stackalloc (int, ulong)[GeneratorCapacity.MaxEntriesPerSet];
             var pooled = 0;
             var anyWeight = false;
 
             for (var unit = 0; (unit < units); unit++) {
-                if (!mask.Contains(unit)) {
+                if (!mask.Contains(index: unit)) {
                     buffer[pooled++] = (unit, set.UnitWeights[unit]);
                     anyWeight |= (set.UnitWeights[unit] != 0UL);
                 }
             }
 
-            if ((pooled == 0) || !anyWeight) {
+            if (
+                (pooled == 0) ||
+                !anyWeight
+            ) {
                 // The mask is drawn out (or only weightless units remain). What happens next is authored, never
                 // inferred.
                 if (mode == GeneratorMode.WithoutReplacement) {
                     reason = ((pooled == 0)
                         ? $"{what} is drawn out ({units} units, mode withoutReplacement) — declare mode restartOnExhaustion to draw again from the full set"
-                        : $"{what} has only zero-weight units left undrawn (mode withoutReplacement) — declare mode restartOnExhaustion or give every entry weight");
+                        : $"{what} has only zero-weight units left undrawn (mode withoutReplacement) — declare mode restartOnExhaustion or give every entry weight"
+                    );
 
                     return -1;
                 }
 
                 mask = default;
                 picked = set.Full.Sample(generator: ref rng);
-            }
-            else {
-                picked = SampleAlias(entries: buffer[..pooled], generator: ref rng);
+            } else {
+                picked = SampleAlias(
+                    entries: buffer[..pooled],
+                    generator: ref rng
+                );
             }
         }
 
-        mask = mask.Add(picked);
+        mask = mask.Add(index: picked);
 
         return set.UnitEntries[picked];
+    }
+    // Each VARIABLE-LENGTH ladder rung folds its LENGTH before its content, so two different rung sequences can never
+    // present the same byte stream to the hash; the fixed-width rungs added directly are self-delimiting (see this
+    // type's remarks).
+    private static void FoldDelimited(ref Fnv1aHash hash, string text) {
+        hash.Add(value: ((ulong)text.Length));
+
+        foreach (var ch in text) {
+            hash.Add(value: ((uint)ch));
+        }
     }
     // The exact Walker/Vose construction AliasTable<T> uses, specialized to a short-lived unit-index table backed
     // entirely by stack storage. Entry order, LIFO partition order, UQ0.32 rounding, power-of-two padding, and the
@@ -322,13 +368,15 @@ public static class GeneratorEngine {
         for (var index = 0; (index < columnCount); index++) {
             if (scaled[index] < totalWeight) {
                 small[smallCount++] = index;
-            }
-            else {
+            } else {
                 large[largeCount++] = index;
             }
         }
 
-        while ((smallCount > 0) && (largeCount > 0)) {
+        while (
+            (smallCount > 0) &&
+            (largeCount > 0)
+        ) {
             var s = small[--smallCount];
             var l = large[--largeCount];
             var threshold = ((ulong)(((scaled[s] << 32) + (totalWeight >> 1)) / totalWeight));
@@ -336,8 +384,7 @@ public static class GeneratorEngine {
             if (threshold > uint.MaxValue) {
                 aliases[s] = s;
                 thresholds[s] = uint.MaxValue;
-            }
-            else {
+            } else {
                 aliases[s] = l;
                 thresholds[s] = ((uint)threshold);
             }
@@ -346,8 +393,7 @@ public static class GeneratorEngine {
 
             if (scaled[l] < totalWeight) {
                 small[smallCount++] = l;
-            }
-            else {
+            } else {
                 large[largeCount++] = l;
             }
         }
@@ -367,9 +413,130 @@ public static class GeneratorEngine {
         }
 
         var column = ((int)(generator.NextUInt32() & ((uint)(columnCount - 1))));
-        var selected = ((generator.NextUInt32() < thresholds[column]) ? column : aliases[column]);
+        var selected = ((generator.NextUInt32() < thresholds[column])
+            ? column
+            : aliases[column]
+        );
 
         return entries[selected].Element;
+    }
+    // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
+    // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share
+    // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
+    private static bool TryDrawNumeric<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, ref ClosedBitset256 mask, out long value, out string reason) where TGenerator : struct, IDrawGenerator {
+        switch (generator.Source) {
+            case GeneratorSource.UniformRange: {
+                    var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
+                    // The raw fraction is the draw NextUnitFraction32 wraps (Value: NextUInt32()) — read directly so
+                    // this stays generic over IDrawGenerator, which exposes the raw draw and not the fraction types.
+                    var fraction = rng.NextUInt32();
+                    // Multiply-high map of a uniform fraction onto [0, span] — one fixed-cost advance, no rejection, so
+                    // cursor seeking stays exact. The at-most-n/2^32 deviation this trades for an unbiased-via-rejection
+                    // draw is the deliberate price of being seekable (see GeneratorSource.UniformRange).
+                    var offset = ((uint)(((((ulong)span) + 1UL) * fraction) >> 32));
+
+                    value = (generator.RangeMin.Value + offset);
+                    reason = string.Empty;
+
+                    return true;
+                }
+            case GeneratorSource.WeightedNumeric: {
+                    var picked = DrawEntry(
+                        mask: ref mask,
+                        mode: generator.Mode,
+                        reason: out reason,
+                        rng: ref rng,
+                        set: Compiled(generator: generator).Weighted,
+                        what: "weighted"
+                    );
+
+                    value = ((picked < 0)
+                        ? 0L
+                        : generator.Weighted![picked].Value
+                    );
+
+                    return (picked >= 0);
+                }
+            case GeneratorSource.StreamDraw:
+                value = unchecked((long)rng.NextUInt32());
+                reason = string.Empty;
+
+                return true;
+            case GeneratorSource.SymmetryOrbit: {
+                    var compiled = Compiled(generator: generator);
+                    var picked = DrawEntry(
+                        mask: ref mask,
+                        mode: generator.Mode,
+                        reason: out reason,
+                        rng: ref rng,
+                        set: compiled.Orbit,
+                        what: "orbit"
+                    );
+
+                    // A node lands in the site's displayed unit — the phase convention a cycle trait reads — so a
+                    // fixed site stores node.0 rather than node raw bits.
+                    value = ((picked < 0)
+                        ? 0L
+                        : EncodeNode(
+                            node: compiled.OrbitNodes[picked],
+                            targetKind: targetKind
+                        )
+                    );
+
+                    return (picked >= 0);
+                }
+            default:
+                value = 0L;
+                reason = $"unrecognized generator source '{generator.Source}'";
+
+                return false;
+        }
+    }
+    // The one dispatch every generator shares once it is positioned: a Markov walk, or a single numeric draw. Generic
+    // over the generator, so an extended site runs this same body rather than a second copy of it.
+    private static bool TryFireDispatch<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) where TGenerator : struct, IDrawGenerator {
+        switch (generator.Source) {
+            case GeneratorSource.Markov:
+                return TryFireMarkov(
+                    generator: generator,
+                    masks: masks,
+                    reason: out reason,
+                    result: out result,
+                    rng: ref rng
+                );
+            default: {
+                    var exhausts = (generator.Mode != GeneratorMode.WithReplacement);
+                    var mask = ((exhausts && (masks is { Count: > 0 }))
+                        ? masks[0]
+                        : default(ClosedBitset256)
+                    );
+
+                    if (!TryDrawNumeric(
+                        generator: generator,
+                        mask: ref mask,
+                        reason: out reason,
+                        rng: ref rng,
+                        targetKind: targetKind,
+                        value: out var value
+                    )) {
+                        result = default;
+
+                        return false;
+                    }
+
+                    result = new FireResult(
+                        Masks: (exhausts
+                        ? [mask]
+                        : null),
+                        Numeric: value,
+                        Samples: 1L,
+                        Text: null
+                    );
+                    reason = string.Empty;
+
+                    return true;
+                }
+        }
     }
     private static bool TryFireMarkov<TGenerator>(StateGenerator generator, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) where TGenerator : struct, IDrawGenerator {
         var contexts = generator.Contexts!;
@@ -388,7 +555,10 @@ public static class GeneratorEngine {
         }
 
         while (true) {
-            if (!compiled.Ordinals.TryGetValue(key: context, value: out var ordinal)) {
+            if (!compiled.Ordinals.TryGetValue(
+                key: context,
+                value: out var ordinal
+            )) {
                 result = default;
                 reason = $"source has no context declared for '{context}'";
 
@@ -451,113 +621,53 @@ public static class GeneratorEngine {
 
         return true;
     }
-    // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
-    // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share
-    // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
-    private static bool TryDrawNumeric<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, ref ClosedBitset256 mask, out long value, out string reason) where TGenerator : struct, IDrawGenerator {
-        switch (generator.Source) {
-            case GeneratorSource.UniformRange: {
-                    var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
-                    // The raw fraction is the draw NextUnitFraction32 wraps (Value: NextUInt32()) — read directly so
-                    // this stays generic over IDrawGenerator, which exposes the raw draw and not the fraction types.
-                    var fraction = rng.NextUInt32();
-                    // Multiply-high map of a uniform fraction onto [0, span] — one fixed-cost advance, no rejection, so
-                    // cursor seeking stays exact. The at-most-n/2^32 deviation this trades for an unbiased-via-rejection
-                    // draw is the deliberate price of being seekable (see GeneratorSource.UniformRange).
-                    var offset = ((uint)(((((ulong)span) + 1UL) * fraction) >> 32));
+    // Leaves the site's cached extended generator positioned at (skip + cursor): reused in place when its base state
+    // already equals the state a fresh seek lands on, rebuilt (one table allocation) otherwise — a reload, an undo, a
+    // checkpoint restore, a refused draw that left the generator mid-sequence, or another site sharing the source.
+    private static bool TryPositionExtended(CompiledSource compiled, StateGenerator generator, ulong seedState, ulong stream, long skip, long cursor, out string reason) {
+        var advances = unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source)));
+        var expected = Pcg32XshRr.Create(
+            state: seedState,
+            stream: stream
+        );
 
-                    value = (generator.RangeMin.Value + offset);
-                    reason = string.Empty;
+        expected.Advance(count: advances);
 
-                    return true;
-                }
-            case GeneratorSource.WeightedNumeric: {
-                    var picked = DrawEntry(
-                        mask: ref mask,
-                        mode: generator.Mode,
-                        reason: out reason,
-                        rng: ref rng,
-                        set: Compiled(generator: generator).Weighted,
-                        what: "weighted"
-                    );
-
-                    value = ((picked < 0) ? 0L : generator.Weighted![picked].Value);
-
-                    return (picked >= 0);
-                }
-            case GeneratorSource.StreamDraw:
-                value = unchecked((long)rng.NextUInt32());
-                reason = string.Empty;
-
-                return true;
-            case GeneratorSource.SymmetryOrbit: {
-                    var compiled = Compiled(generator: generator);
-                    var picked = DrawEntry(
-                        mask: ref mask,
-                        mode: generator.Mode,
-                        reason: out reason,
-                        rng: ref rng,
-                        set: compiled.Orbit,
-                        what: "orbit"
-                    );
-
-                    // A node lands in the site's displayed unit — the phase convention a cycle trait reads — so a
-                    // fixed site stores node.0 rather than node raw bits.
-                    value = ((picked < 0) ? 0L : EncodeNode(node: compiled.OrbitNodes[picked], targetKind: targetKind));
-
-                    return (picked >= 0);
-                }
-            default:
-                value = 0L;
-                reason = $"unrecognized generator source '{generator.Source}'";
-
-                return false;
-        }
-    }
-    /// <summary>Encodes a lattice node as a site of <paramref name="targetKind"/> stores it: the node itself on an
-    /// int site, the node as a whole fixed value on a fixed site.</summary>
-    /// <param name="node">The node index.</param>
-    /// <param name="targetKind">The site's declared kind.</param>
-    /// <returns>The raw cell value.</returns>
-    public static long EncodeNode(int node, CellKind targetKind) =>
-        ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
-    // Shared by an ordinary and an extended run alike: given a positioned generator (already advanced to cursor), draw
-    // sampleCount consecutive numeric samples, threading a weighted/orbit source's mask cell to cell. The one loop
-    // both TryFireBatch and TryAdvanceBatch reduce to — generic over the generator, so the extended path is this same
-    // code, never a second copy.
-    private static bool TryRunBatchCore<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) where TGenerator : struct, IDrawGenerator {
-        var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement));
-        var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
-
-        masksAfter = null;
-
-        // A pass that neither writes values nor exhausts has no output at all: its only purpose would be the tail masks,
-        // and a non-drawing source has none.
-        if (!exhausts && !writeValues) {
+        if (compiled.MatchesExtended(
+            seedState: seedState,
+            stream: stream,
+            skip: skip,
+            expectedBaseState: expected.State
+        )) {
             reason = string.Empty;
 
             return true;
         }
 
-        for (var sample = 0; (sample < sampleCount); sample++) {
-            if (!TryDrawNumeric(
-                mask: ref mask,
-                generator: generator,
-                reason: out reason,
-                rng: ref rng,
-                targetKind: targetKind,
-                value: out var value
-            )) {
-                return false;
-            }
-
-            if (writeValues) {
-                values[sample] = value;
-            }
+        if (!TryBuildExtendedTable(
+            generator: generator,
+            reason: out reason,
+            seedState: seedState,
+            skip: skip,
+            stream: stream,
+            table: out var table
+        )) {
+            return false;
         }
 
-        masksAfter = (exhausts ? [mask] : null);
-        reason = string.Empty;
+        var fresh = Pcg32Extended.CreateWithTable(
+            state: seedState,
+            stream: stream,
+            table: table
+        );
+
+        fresh.Advance(count: advances);
+        compiled.SetExtended(
+            generator: fresh,
+            seedState: seedState,
+            skip: skip,
+            stream: stream
+        );
 
         return true;
     }
@@ -651,245 +761,56 @@ public static class GeneratorEngine {
             writeValues: writeValues
         );
     }
-    /// <summary>Fills <paramref name="values"/> with consecutive samples of a numeric <paramref name="generator"/> at
-    /// a site already seeked to <paramref name="cursor"/> — the per-cell fill a lattice row's <c>draw</c> paint takes.
-    /// Cell <c>k</c> receives exactly the sample a single <see cref="TryFire"/> at <c>cursor + k</c> would draw, with a
-    /// weighted source's mask threaded from cell to cell, so one pass over a field is one run of the site's stream.</summary>
-    /// <param name="generator">The resolved source; a text source is refused.</param>
-    /// <param name="targetKind">The cells' declared kind; a mismatch refuses by name before any draw runs.</param>
-    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
-    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
-    /// <param name="cursor">The site's current sample count.</param>
-    /// <param name="masks">The site's current drawn masks (may be empty).</param>
-    /// <param name="values">Receives one raw sample per cell; its length is the sample count the cursor advances by.</param>
-    /// <param name="masksAfter">The site's drawn masks after the fill, or <see langword="null"/> when the source never exhausts.</param>
-    /// <param name="reason">Why the fill was refused, on failure.</param>
-    /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
-    /// <c>(skip + cursor)</c> samples rather than <c>cursor</c> alone.</param>
-    /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason, long skip = 0L) => TryRunBatch(
-        generator: generator,
-        targetKind: targetKind,
-        seedState: seedState,
-        stream: stream,
-        cursor: cursor,
-        masks: masks,
-        values: values,
-        sampleCount: values.Length,
-        writeValues: true,
-        masksAfter: out masksAfter,
-        reason: out reason,
-        skip: skip
-    );
-    /// <summary>Advances a numeric generator through <paramref name="sampleCount"/> consecutive samples without
-    /// materializing their values. This is the compose-side half of a whole-field redraw: it computes the pass's
-    /// final mask while the apply side later emits the same pass directly into the live field.</summary>
-    /// <param name="generator">The resolved source; a text source is refused.</param>
-    /// <param name="targetKind">The cells' declared kind.</param>
-    /// <param name="seedState">The seed-ladder fold.</param>
-    /// <param name="stream">The site's stream id.</param>
-    /// <param name="cursor">The site's current sample count.</param>
-    /// <param name="masks">The site's current drawn masks.</param>
-    /// <param name="sampleCount">How many samples to consume.</param>
-    /// <param name="masksAfter">The drawn masks after the pass, or <see langword="null"/> when the source never exhausts.</param>
-    /// <param name="reason">Why the pass was refused, on failure.</param>
-    /// <returns><see langword="true"/> when all samples were consumed.</returns>
-    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
-        generator: generator,
-        targetKind: targetKind,
-        seedState: seedState,
-        stream: stream,
-        cursor: cursor,
-        masks: masks,
-        values: Span<long>.Empty,
-        sampleCount: sampleCount,
-        writeValues: false,
-        masksAfter: out masksAfter,
-        reason: out reason
-    );
-    /// <summary>Checks whether a numeric source can complete one batch from its current drawn masks without
-    /// executing it. Only <see cref="GeneratorMode.WithoutReplacement"/> can run out mid-batch; other modes
-    /// either never exhaust or restart in the same sample.</summary>
-    /// <param name="generator">The resolved source.</param>
-    /// <param name="masks">The site's current drawn masks.</param>
-    /// <param name="sampleCount">The required batch length.</param>
-    /// <param name="reason">Why the source cannot supply the batch.</param>
-    /// <returns><see langword="true"/> when batch execution cannot exhaust the source.</returns>
-    public static bool TryCheckBatchCapacity(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks, long sampleCount, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: generator);
+    // Shared by an ordinary and an extended run alike: given a positioned generator (already advanced to cursor), draw
+    // sampleCount consecutive numeric samples, threading a weighted/orbit source's mask cell to cell. The one loop
+    // both TryFireBatch and TryAdvanceBatch reduce to — generic over the generator, so the extended path is this same
+    // code, never a second copy.
+    private static bool TryRunBatchCore<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) where TGenerator : struct, IDrawGenerator {
+        var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement));
+        var mask = ((exhausts && (masks is { Count: > 0 }))
+            ? masks[0]
+            : default(ClosedBitset256)
+        );
 
-        reason = string.Empty;
+        masksAfter = null;
 
+        // A pass that neither writes values nor exhausts has no output at all: its only purpose would be the tail masks,
+        // and a non-drawing source has none.
         if (
-            (sampleCount <= 0L) ||
-            (generator.Source is not (GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit)) ||
-            (generator.Mode != GeneratorMode.WithoutReplacement)
+            !exhausts &&
+            !writeValues
         ) {
-            return true;
-        }
-
-        var mask = ((masks is { Count: > 0 }) ? masks[0] : default(ClosedBitset256));
-        var unit = 0;
-        var available = 0L;
-
-        if (generator.Source == GeneratorSource.SymmetryOrbit) {
-            // Every orbit unit weighs one, so the undrawn count is the orbit length less the drawn bits; an
-            // unresolvable orbit is the source-shape validator's refusal, not this one's.
-            if (!TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _)) {
-                return true;
-            }
-
-            for (; (unit < orbitNodes.Length); unit++) {
-                if (!mask.Contains(unit)) {
-                    available++;
-                }
-            }
-        }
-        else {
-            var outcomes = (generator.Weighted ?? []);
-            var units = 0L;
-
-            foreach (var outcome in outcomes) {
-                if (outcome is not null) {
-                    units += Math.Max(val1: 1, val2: (outcome.Multiplicity ?? 1));
-                }
-            }
-
-            // The source-shape validator owns this earlier error. Stop here rather than attempting to enumerate an
-            // invalid oversized mask or emitting a misleading second batch-capacity diagnosis.
-            if (units > GeneratorCapacity.MaxEntriesPerSet) {
-                return true;
-            }
-
-            foreach (var outcome in outcomes) {
-                if (outcome is null) {
-                    continue;
-                }
-
-                for (var copy = Math.Max(val1: 1, val2: (outcome.Multiplicity ?? 1)); (copy > 0); copy--) {
-                    if ((outcome.Weight != 0UL) && (!mask.Contains(unit))) {
-                        available++;
-                    }
-
-                    unit++;
-                }
-            }
-        }
-
-        if (available >= sampleCount) {
-            return true;
-        }
-
-        reason = $"can supply only {available} positive-weight undrawn unit{((available == 1L) ? string.Empty : "s")} in mode=withoutReplacement, but the lattice pass requires {sampleCount} samples";
-
-        return false;
-    }
-    // Each VARIABLE-LENGTH ladder rung folds its LENGTH before its content, so two different rung sequences can never
-    // present the same byte stream to the hash; the fixed-width rungs added directly are self-delimiting (see this
-    // type's remarks).
-    private static void FoldDelimited(ref Fnv1aHash hash, string text) {
-        hash.Add(value: ((ulong)text.Length));
-
-        foreach (var ch in text) {
-            hash.Add(value: ((uint)ch));
-        }
-    }
-    /// <summary>Determines whether a source of <paramref name="source"/> shape may exhaust — carry a
-    /// <see cref="GeneratorMode"/> other than <see cref="GeneratorMode.WithReplacement"/> and persist drawn masks
-    /// on its site.</summary>
-    /// <param name="source">The source shape.</param>
-    /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="GeneratorSource.Markov"/>,
-    /// <see cref="GeneratorSource.WeightedNumeric"/> and <see cref="GeneratorSource.SymmetryOrbit"/>.</returns>
-    public static bool Exhausts(GeneratorSource source) => (source is GeneratorSource.Markov or GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit);
-    /// <summary>Resolves the units of a <see cref="GeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
-    /// in cycle order, or the orbit of its node under its word in step order.</summary>
-    /// <param name="generator">The source.</param>
-    /// <param name="nodes">The orbit's nodes, on success; empty otherwise.</param>
-    /// <param name="reason">Why the orbit could not be resolved, in the author's vocabulary, or empty on success.</param>
-    /// <returns><see langword="true"/> when the source is an orbit source whose fields name one orbit.</returns>
-    public static bool TryResolveOrbit(StateGenerator generator, out int[] nodes, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: generator);
-
-        nodes = [];
-
-        if (generator.Source != GeneratorSource.SymmetryOrbit) {
-            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} draws no symmetry orbit";
-
-            return false;
-        }
-
-        if ((generator.Ring is null) == (generator.Node is null)) {
-            reason = ((generator.Ring is null)
-                ? "declares neither 'ring' nor 'node' — an orbit source names a ring 0..7 or a node 0..239 whose orbit is the units"
-                : "declares both 'ring' and 'node' — an orbit source names one or the other");
-
-            return false;
-        }
-
-        if (generator.Ring is { } ring) {
-            if (generator.Word is not null) {
-                reason = "declares 'word' beside 'ring' — a ring is the orbit under the lattice's own cycle; author 'node' with 'word' for another generator's orbit";
-
-                return false;
-            }
-
-            if ((ring < 0) || (ring >= SymmetryLattice.RingCount)) {
-                reason = $"ring {ring} is not a symmetry-lattice ring 0..{SymmetryLattice.RingCount - 1}";
-
-                return false;
-            }
-
-            nodes = new int[SymmetryLattice.RingSize];
-
-            for (var position = 0; (position < nodes.Length); position++) {
-                nodes[position] = SymmetryLattice.RingNode(ring: ring, position: position);
-            }
-
             reason = string.Empty;
 
             return true;
         }
 
-        var seed = generator.Node!.Value;
+        for (var sample = 0; (sample < sampleCount); sample++) {
+            if (!TryDrawNumeric(
+                generator: generator,
+                mask: ref mask,
+                reason: out reason,
+                rng: ref rng,
+                targetKind: targetKind,
+                value: out var value
+            )) {
+                return false;
+            }
 
-        if ((seed < 0) || (seed >= SymmetryLattice.NodeCount)) {
-            reason = $"node {seed} is not a symmetry-lattice node 0..{SymmetryLattice.NodeCount - 1}";
-
-            return false;
+            if (writeValues) {
+                values[sample] = value;
+            }
         }
 
-        var cycle = new StateCycle(Word: generator.Word);
-
-        if (!cycle.TryResolveGenerator(generator: out var word, reason: out var wordReason)) {
-            reason = wordReason;
-
-            return false;
-        }
-
-        nodes = new int[word.OrbitLength(node: seed)];
-
-        for (var step = 0; (step < nodes.Length); step++) {
-            nodes[step] = word.Apply(node: seed, steps: step);
-        }
-
+        masksAfter = (exhausts
+            ? [mask]
+            : null
+        );
         reason = string.Empty;
 
         return true;
     }
-    /// <summary>Returns the drawn masks a site persists after an emission: the emission's own when it drew, the
-    /// site's previous masks when a drawing source drew nothing this time, and none at all for a source that never
-    /// exhausts — so a site re-authored to a non-drawing source sheds the masks its old source left behind.</summary>
-    /// <param name="generator">The site's resolved source.</param>
-    /// <param name="fired">The emission's drawn masks, or <see langword="null"/>.</param>
-    /// <param name="previous">The site's persisted masks before the emission.</param>
-    /// <returns>The masks to persist.</returns>
-    public static IReadOnlyList<ClosedBitset256>? MasksAfter(StateGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
-        ArgumentNullException.ThrowIfNull(argument: generator);
 
-        return ((Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement))
-            ? (fired ?? previous)
-            : null);
-    }
     /// <summary>Returns how many <c>Pcg32XshRr</c> advances one sample of <paramref name="source"/> costs — the fixed-cost
     /// figure cursor seeking depends on being exact.</summary>
     /// <param name="source">The source shape.</param>
@@ -946,33 +867,234 @@ public static class GeneratorEngine {
 
         return hash.Value & SiteStreamIdMask;
     }
-    /// <summary>Returns the one source-to-site kind rule, asked by every door that can reach a draw: document validation, a
-    /// rule's <c>generate</c> effect at rule-compile time, the boot resolver, and the live mutation. Stated once
-    /// because four readings of it is how they drift.</summary>
+    /// <summary>Encodes a lattice node as a site of <paramref name="targetKind"/> stores it: the node itself on an
+    /// int site, the node as a whole fixed value on a fixed site.</summary>
+    /// <param name="node">The node index.</param>
+    /// <param name="targetKind">The site's declared kind.</param>
+    /// <returns>The raw cell value.</returns>
+    public static long EncodeNode(int node, CellKind targetKind) =>
+        ((targetKind == CellKind.Fixed)
+            ? (((long)node) << FixedQ4816.FractionBitCount)
+            : node
+        );
+    /// <summary>Determines whether a source of <paramref name="source"/> shape may exhaust — carry a
+    /// <see cref="GeneratorMode"/> other than <see cref="GeneratorMode.WithReplacement"/> and persist drawn masks
+    /// on its site.</summary>
     /// <param name="source">The source shape.</param>
-    /// <param name="targetKind">The site's declared cell kind.</param>
-    /// <param name="reason">Why the pairing was refused, in the author's own vocabulary, or empty when it holds.</param>
-    /// <returns><see langword="true"/> when <paramref name="source"/> may write a <paramref name="targetKind"/> site.</returns>
-    public static bool TryCheckTargetKind(GeneratorSource source, CellKind targetKind, out string reason) {
-        if (WritesText(source: source)) {
-            if (targetKind == CellKind.Text) {
-                reason = string.Empty;
+    /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="GeneratorSource.Markov"/>,
+    /// <see cref="GeneratorSource.WeightedNumeric"/> and <see cref="GeneratorSource.SymmetryOrbit"/>.</returns>
+    public static bool Exhausts(GeneratorSource source) => (source is GeneratorSource.Markov or GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit);
+    /// <summary>Returns the drawn masks a site persists after an emission: the emission's own when it drew, the
+    /// site's previous masks when a drawing source drew nothing this time, and none at all for a source that never
+    /// exhausts — so a site re-authored to a non-drawing source sheds the masks its old source left behind.</summary>
+    /// <param name="generator">The site's resolved source.</param>
+    /// <param name="fired">The emission's drawn masks, or <see langword="null"/>.</param>
+    /// <param name="previous">The site's persisted masks before the emission.</param>
+    /// <returns>The masks to persist.</returns>
+    public static IReadOnlyList<ClosedBitset256>? MasksAfter(StateGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
 
-                return true;
-            }
+        return ((Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement))
+            ? (fired ?? previous)
+            : null
+        );
+    }
+    /// <summary>Advances a numeric generator through <paramref name="sampleCount"/> consecutive samples without
+    /// materializing their values. This is the compose-side half of a whole-field redraw: it computes the pass's
+    /// final mask while the apply side later emits the same pass directly into the live field.</summary>
+    /// <param name="generator">The resolved source; a text source is refused.</param>
+    /// <param name="targetKind">The cells' declared kind.</param>
+    /// <param name="seedState">The seed-ladder fold.</param>
+    /// <param name="stream">The site's stream id.</param>
+    /// <param name="cursor">The site's current sample count.</param>
+    /// <param name="masks">The site's current drawn masks.</param>
+    /// <param name="sampleCount">How many samples to consume.</param>
+    /// <param name="masksAfter">The drawn masks after the pass, or <see langword="null"/> when the source never exhausts.</param>
+    /// <param name="reason">Why the pass was refused, on failure.</param>
+    /// <returns><see langword="true"/> when all samples were consumed.</returns>
+    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
+        generator: generator,
+        targetKind: targetKind,
+        seedState: seedState,
+        stream: stream,
+        cursor: cursor,
+        masks: masks,
+        values: Span<long>.Empty,
+        sampleCount: sampleCount,
+        writeValues: false,
+        masksAfter: out masksAfter,
+        reason: out reason
+    );
+    /// <summary>Compiles an authored <see cref="GeneratorExtended"/> facet to a full <c>k</c>-word extension table —
+    /// the fully-authored <see cref="GeneratorExtended.Table"/> verbatim, or a self-seeded table with its first
+    /// <see cref="GeneratorExtended.Script"/>'s words overwritten so the site's first samples come out to the script,
+    /// in order (see <see cref="GeneratorExtended"/>'s remarks). O(k), run only when a rebuild is needed — the
+    /// per-tick cache (<see cref="CompiledSource"/>) never calls this on a cursor that matches its last build.</summary>
+    /// <param name="generator">The source; its <see cref="StateGenerator.Extended"/> facet must be set.</param>
+    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
+    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
+    /// <param name="skip">The site's authored seek — the script governs the draws at <c>skip, skip + 1, …</c>, not
+    /// unconditionally at <c>0, 1, …</c>.</param>
+    /// <param name="table">The compiled table, on success.</param>
+    /// <param name="reason">Why the facet was refused, on failure.</param>
+    /// <returns><see langword="true"/> when the facet compiled to a table.</returns>
+    public static bool TryBuildExtendedTable(StateGenerator generator, ulong seedState, ulong stream, long skip, out uint[] table, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
 
-            reason = $"source={StateSpelling.GeneratorSource(source: source)} writes text, but the site is kind={StateSpelling.Kind(kind: targetKind)}";
+        table = [];
+
+        if (generator.Extended is not { } extended) {
+            reason = "generator declares no extended facet";
 
             return false;
         }
 
-        if (targetKind is CellKind.Int or CellKind.Fixed) {
+        if (!TryCheckExtendedShape(
+            generator: generator,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        if (extended.Table is { } authored) {
+            table = [.. authored];
             reason = string.Empty;
 
             return true;
         }
 
-        reason = $"source={StateSpelling.GeneratorSource(source: source)} writes a numeric value, but the site is kind={StateSpelling.Kind(kind: targetKind)}";
+        var script = extended.Script!;
+        var k = extended.K;
+        // Words past the script are the self-seeded table's own.
+        var selfSeeded = Pcg32Extended.Create(
+            k: k,
+            state: seedState,
+            stream: stream
+        );
+
+        table = selfSeeded.Extension.ToArray();
+
+        // A fresh (zero-offset) probe — the same base position CreateWithTable's own generator will start from — so
+        // the index each of the first script.Count draws selects, and the base's own raw contribution to that draw,
+        // are exactly what the real generator will see.
+        var probe = Pcg32XshRr.Create(
+            state: seedState,
+            stream: stream
+        );
+
+        probe.Advance(count: unchecked((ulong)skip));
+
+        var indexMask = ((ulong)(k - 1));
+
+        for (var index = 0; (index < script.Count); index++) {
+            var tableIndex = ((int)(probe.State & indexMask));
+            var baseDraw = probe.NextUInt32();
+
+            _ = TryComputeScriptedRaw(
+                generator: generator,
+                scripted: script[index],
+                wantedRaw: out var wantedRaw,
+                reason: out _
+            );
+
+            table[tableIndex] = unchecked(wantedRaw ^ baseDraw);
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Checks whether a numeric source can complete one batch from its current drawn masks without
+    /// executing it. Only <see cref="GeneratorMode.WithoutReplacement"/> can run out mid-batch; other modes
+    /// either never exhaust or restart in the same sample.</summary>
+    /// <param name="generator">The resolved source.</param>
+    /// <param name="masks">The site's current drawn masks.</param>
+    /// <param name="sampleCount">The required batch length.</param>
+    /// <param name="reason">Why the source cannot supply the batch.</param>
+    /// <returns><see langword="true"/> when batch execution cannot exhaust the source.</returns>
+    public static bool TryCheckBatchCapacity(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks, long sampleCount, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        reason = string.Empty;
+
+        if (
+            (sampleCount <= 0L) ||
+            (generator.Source is not (GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit)) ||
+            (generator.Mode != GeneratorMode.WithoutReplacement)
+        ) {
+            return true;
+        }
+
+        var mask = ((masks is { Count: > 0 })
+            ? masks[0]
+            : default(ClosedBitset256)
+        );
+        var unit = 0;
+        var available = 0L;
+
+        if (generator.Source == GeneratorSource.SymmetryOrbit) {
+            // Every orbit unit weighs one, so the undrawn count is the orbit length less the drawn bits; an
+            // unresolvable orbit is the source-shape validator's refusal, not this one's.
+            if (!TryResolveOrbit(
+                generator: generator,
+                nodes: out var orbitNodes,
+                reason: out _
+            )) {
+                return true;
+            }
+
+            for (; (unit < orbitNodes.Length); unit++) {
+                if (!mask.Contains(index: unit)) {
+                    available++;
+                }
+            }
+        } else {
+            var outcomes = (generator.Weighted ?? []);
+            var units = 0L;
+
+            foreach (var outcome in outcomes) {
+                if (outcome is not null) {
+                    units += Math.Max(
+                        val1: 1,
+                        val2: (outcome.Multiplicity ?? 1)
+                    );
+                }
+            }
+
+            // The source-shape validator owns this earlier error. Stop here rather than attempting to enumerate an
+            // invalid oversized mask or emitting a misleading second batch-capacity diagnosis.
+            if (units > GeneratorCapacity.MaxEntriesPerSet) {
+                return true;
+            }
+
+            foreach (var outcome in outcomes) {
+                if (outcome is null) {
+                    continue;
+                }
+
+                for (var copy = Math.Max(
+                    val1: 1,
+                    val2: (outcome.Multiplicity ?? 1)
+                ); (copy > 0); copy--) {
+                    if (
+                        (outcome.Weight != 0UL) &&
+                        (!mask.Contains(index: unit))
+                    ) {
+                        available++;
+                    }
+
+                    unit++;
+                }
+            }
+        }
+
+        if (available >= sampleCount) {
+            return true;
+        }
+
+        reason = $"can supply only {available} positive-weight undrawn unit{((available == 1L)
+            ? string.Empty
+            : "s")} in mode=withoutReplacement, but the lattice pass requires {sampleCount} samples";
 
         return false;
     }
@@ -994,7 +1116,11 @@ public static class GeneratorEngine {
 
         var k = extended.K;
 
-        if ((k < GeneratorCapacity.MinExtendedTableSize) || (k > GeneratorCapacity.MaxExtendedTableSize) || ((k & (k - 1)) != 0)) {
+        if (
+            (k < GeneratorCapacity.MinExtendedTableSize) ||
+            (k > GeneratorCapacity.MaxExtendedTableSize) ||
+            ((k & (k - 1)) != 0)
+        ) {
             reason = $"extended.k {k} must be a power of two in {GeneratorCapacity.MinExtendedTableSize}..{GeneratorCapacity.MaxExtendedTableSize}";
 
             return false;
@@ -1052,6 +1178,36 @@ public static class GeneratorEngine {
 
         return true;
     }
+    /// <summary>Returns the one source-to-site kind rule, asked by every door that can reach a draw: document validation, a
+    /// rule's <c>generate</c> effect at rule-compile time, the boot resolver, and the live mutation. Stated once
+    /// because four readings of it is how they drift.</summary>
+    /// <param name="source">The source shape.</param>
+    /// <param name="targetKind">The site's declared cell kind.</param>
+    /// <param name="reason">Why the pairing was refused, in the author's own vocabulary, or empty when it holds.</param>
+    /// <returns><see langword="true"/> when <paramref name="source"/> may write a <paramref name="targetKind"/> site.</returns>
+    public static bool TryCheckTargetKind(GeneratorSource source, CellKind targetKind, out string reason) {
+        if (WritesText(source: source)) {
+            if (targetKind == CellKind.Text) {
+                reason = string.Empty;
+
+                return true;
+            }
+
+            reason = $"source={StateSpelling.GeneratorSource(source: source)} writes text, but the site is kind={StateSpelling.Kind(kind: targetKind)}";
+
+            return false;
+        }
+
+        if (targetKind is CellKind.Int or CellKind.Fixed) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        reason = $"source={StateSpelling.GeneratorSource(source: source)} writes a numeric value, but the site is kind={StateSpelling.Kind(kind: targetKind)}";
+
+        return false;
+    }
     /// <summary>Maps one scripted value, authored in <paramref name="generator"/>'s own output space, to the raw
     /// 32-bit draw that produces it — the inverse of <see cref="TryDrawNumeric{TGenerator}"/>'s own mapping for the
     /// two sources a script admits.</summary>
@@ -1067,7 +1223,10 @@ public static class GeneratorEngine {
 
         switch (generator.Source) {
             case GeneratorSource.StreamDraw:
-                if ((scripted < 0L) || (scripted > uint.MaxValue)) {
+                if (
+                    (scripted < 0L) ||
+                    (scripted > uint.MaxValue)
+                ) {
                     wantedRaw = 0U;
                     reason = $"value {scripted} is outside source=streamDraw's raw band 0..{uint.MaxValue}";
 
@@ -1082,7 +1241,10 @@ public static class GeneratorEngine {
                     var min = generator.RangeMin!.Value;
                     var max = generator.RangeMax!.Value;
 
-                    if ((scripted < min) || (scripted > max)) {
+                    if (
+                        (scripted < min) ||
+                        (scripted > max)
+                    ) {
                         wantedRaw = 0U;
                         reason = $"value {scripted} is outside source=uniformRange's declared range {min}..{max}";
 
@@ -1097,7 +1259,7 @@ public static class GeneratorEngine {
                     // never searched.
                     var numerator = (offset << 32);
 
-                    wantedRaw = unchecked((uint)((numerator + n - 1UL) / n));
+                    wantedRaw = unchecked((uint)(((numerator + n) - 1UL) / n));
                     reason = string.Empty;
 
                     return true;
@@ -1108,82 +1270,6 @@ public static class GeneratorEngine {
 
                 return false;
         }
-    }
-    /// <summary>Compiles an authored <see cref="GeneratorExtended"/> facet to a full <c>k</c>-word extension table —
-    /// the fully-authored <see cref="GeneratorExtended.Table"/> verbatim, or a self-seeded table with its first
-    /// <see cref="GeneratorExtended.Script"/>'s words overwritten so the site's first samples come out to the script,
-    /// in order (see <see cref="GeneratorExtended"/>'s remarks). O(k), run only when a rebuild is needed — the
-    /// per-tick cache (<see cref="CompiledSource"/>) never calls this on a cursor that matches its last build.</summary>
-    /// <param name="generator">The source; its <see cref="StateGenerator.Extended"/> facet must be set.</param>
-    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
-    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
-    /// <param name="skip">The site's authored seek — the script governs the draws at <c>skip, skip + 1, …</c>, not
-    /// unconditionally at <c>0, 1, …</c>.</param>
-    /// <param name="table">The compiled table, on success.</param>
-    /// <param name="reason">Why the facet was refused, on failure.</param>
-    /// <returns><see langword="true"/> when the facet compiled to a table.</returns>
-    public static bool TryBuildExtendedTable(StateGenerator generator, ulong seedState, ulong stream, long skip, out uint[] table, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: generator);
-
-        table = [];
-
-        if (generator.Extended is not { } extended) {
-            reason = "generator declares no extended facet";
-
-            return false;
-        }
-
-        if (!TryCheckExtendedShape(generator: generator, reason: out reason)) {
-            return false;
-        }
-
-        if (extended.Table is { } authored) {
-            table = [.. authored];
-            reason = string.Empty;
-
-            return true;
-        }
-
-        var script = extended.Script!;
-        var k = extended.K;
-        // Words past the script are the self-seeded table's own.
-        var selfSeeded = Pcg32Extended.Create(
-            state: seedState,
-            stream: stream,
-            k: k
-        );
-
-        table = selfSeeded.Extension.ToArray();
-
-        // A fresh (zero-offset) probe — the same base position CreateWithTable's own generator will start from — so
-        // the index each of the first script.Count draws selects, and the base's own raw contribution to that draw,
-        // are exactly what the real generator will see.
-        var probe = Pcg32XshRr.Create(
-            state: seedState,
-            stream: stream
-        );
-
-        probe.Advance(count: unchecked((ulong)skip));
-
-        var indexMask = ((ulong)(k - 1));
-
-        for (var index = 0; (index < script.Count); index++) {
-            var tableIndex = ((int)(probe.State & indexMask));
-            var baseDraw = probe.NextUInt32();
-
-            _ = TryComputeScriptedRaw(
-                generator: generator,
-                scripted: script[index],
-                wantedRaw: out var wantedRaw,
-                reason: out _
-            );
-
-            table[tableIndex] = unchecked(wantedRaw ^ baseDraw);
-        }
-
-        reason = string.Empty;
-
-        return true;
     }
     /// <summary>Fires one emission of <paramref name="generator"/> at a site already seeked to
     /// <paramref name="cursor"/>.</summary>
@@ -1231,10 +1317,25 @@ public static class GeneratorEngine {
         }
 
         if (secret is { } key) {
-            if (key.IsEmpty || generator.Source != GeneratorSource.StreamDraw || targetKind != CellKind.Int || generator.Mode != GeneratorMode.WithReplacement) {
+            if (
+                key.IsEmpty ||
+                (generator.Source != GeneratorSource.StreamDraw) ||
+                (targetKind != CellKind.Int) ||
+                (generator.Mode != GeneratorMode.WithReplacement)
+            ) {
                 reason = "secret draws require a nonzero key and an integer streamDraw source with replacement"; return false;
             }
-            result = new(null, PrivateDraw.Sample(key, seedState, stream, cursor), 1, null); reason = string.Empty; return true;
+            result = new(
+                null,
+                PrivateDraw.Sample(
+                    cursor: cursor,
+                    secret: key,
+                    seed: seedState,
+                    stream: stream
+                ),
+                1,
+                null
+            ); reason = string.Empty; return true;
         }
 
         if (generator.Extended is not null) {
@@ -1279,91 +1380,126 @@ public static class GeneratorEngine {
             targetKind: targetKind
         );
     }
-    // Leaves the site's cached extended generator positioned at (skip + cursor): reused in place when its base state
-    // already equals the state a fresh seek lands on, rebuilt (one table allocation) otherwise — a reload, an undo, a
-    // checkpoint restore, a refused draw that left the generator mid-sequence, or another site sharing the source.
-    private static bool TryPositionExtended(CompiledSource compiled, StateGenerator generator, ulong seedState, ulong stream, long skip, long cursor, out string reason) {
-        var advances = unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source)));
-        var expected = Pcg32XshRr.Create(
-            state: seedState,
-            stream: stream
-        );
+    /// <summary>Fills <paramref name="values"/> with consecutive samples of a numeric <paramref name="generator"/> at
+    /// a site already seeked to <paramref name="cursor"/> — the per-cell fill a lattice row's <c>draw</c> paint takes.
+    /// Cell <c>k</c> receives exactly the sample a single <see cref="TryFire"/> at <c>cursor + k</c> would draw, with a
+    /// weighted source's mask threaded from cell to cell, so one pass over a field is one run of the site's stream.</summary>
+    /// <param name="generator">The resolved source; a text source is refused.</param>
+    /// <param name="targetKind">The cells' declared kind; a mismatch refuses by name before any draw runs.</param>
+    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
+    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
+    /// <param name="cursor">The site's current sample count.</param>
+    /// <param name="masks">The site's current drawn masks (may be empty).</param>
+    /// <param name="values">Receives one raw sample per cell; its length is the sample count the cursor advances by.</param>
+    /// <param name="masksAfter">The site's drawn masks after the fill, or <see langword="null"/> when the source never exhausts.</param>
+    /// <param name="reason">Why the fill was refused, on failure.</param>
+    /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
+    /// <c>(skip + cursor)</c> samples rather than <c>cursor</c> alone.</param>
+    /// <returns><see langword="true"/> when every cell was filled.</returns>
+    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason, long skip = 0L) => TryRunBatch(
+        generator: generator,
+        targetKind: targetKind,
+        seedState: seedState,
+        stream: stream,
+        cursor: cursor,
+        masks: masks,
+        values: values,
+        sampleCount: values.Length,
+        writeValues: true,
+        masksAfter: out masksAfter,
+        reason: out reason,
+        skip: skip
+    );
+    /// <summary>Resolves the units of a <see cref="GeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
+    /// in cycle order, or the orbit of its node under its word in step order.</summary>
+    /// <param name="generator">The source.</param>
+    /// <param name="nodes">The orbit's nodes, on success; empty otherwise.</param>
+    /// <param name="reason">Why the orbit could not be resolved, in the author's vocabulary, or empty on success.</param>
+    /// <returns><see langword="true"/> when the source is an orbit source whose fields name one orbit.</returns>
+    public static bool TryResolveOrbit(StateGenerator generator, out int[] nodes, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
 
-        expected.Advance(count: advances);
+        nodes = [];
 
-        if (compiled.MatchesExtended(seedState: seedState, stream: stream, skip: skip, expectedBaseState: expected.State)) {
+        if (generator.Source != GeneratorSource.SymmetryOrbit) {
+            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} draws no symmetry orbit";
+
+            return false;
+        }
+
+        if ((generator.Ring is null) == (generator.Node is null)) {
+            reason = ((generator.Ring is null)
+                ? "declares neither 'ring' nor 'node' — an orbit source names a ring 0..7 or a node 0..239 whose orbit is the units"
+                : "declares both 'ring' and 'node' — an orbit source names one or the other"
+            );
+
+            return false;
+        }
+
+        if (generator.Ring is { } ring) {
+            if (generator.Word is not null) {
+                reason = "declares 'word' beside 'ring' — a ring is the orbit under the lattice's own cycle; author 'node' with 'word' for another generator's orbit";
+
+                return false;
+            }
+
+            if (
+                (ring < 0) ||
+                (ring >= SymmetryLattice.RingCount)
+            ) {
+                reason = $"ring {ring} is not a symmetry-lattice ring 0..{(SymmetryLattice.RingCount - 1)}";
+
+                return false;
+            }
+
+            nodes = new int[SymmetryLattice.RingSize];
+
+            for (var position = 0; (position < nodes.Length); position++) {
+                nodes[position] = SymmetryLattice.RingNode(
+                    position: position,
+                    ring: ring
+                );
+            }
+
             reason = string.Empty;
 
             return true;
         }
 
-        if (!TryBuildExtendedTable(
-            generator: generator,
-            seedState: seedState,
-            skip: skip,
-            stream: stream,
-            table: out var table,
-            reason: out reason
-        )) {
+        var seed = generator.Node!.Value;
+
+        if (
+            (seed < 0) ||
+            (seed >= SymmetryLattice.NodeCount)
+        ) {
+            reason = $"node {seed} is not a symmetry-lattice node 0..{(SymmetryLattice.NodeCount - 1)}";
+
             return false;
         }
 
-        var fresh = Pcg32Extended.CreateWithTable(
-            state: seedState,
-            stream: stream,
-            table: table
-        );
+        var cycle = new StateCycle(Word: generator.Word);
 
-        fresh.Advance(count: advances);
-        compiled.SetExtended(
-            generator: fresh,
-            seedState: seedState,
-            skip: skip,
-            stream: stream
-        );
+        if (!cycle.TryResolveGenerator(
+            generator: out var word,
+            reason: out var wordReason
+        )) {
+            reason = wordReason;
+
+            return false;
+        }
+
+        nodes = new int[word.OrbitLength(node: seed)];
+
+        for (var step = 0; (step < nodes.Length); step++) {
+            nodes[step] = word.Apply(
+                node: seed,
+                steps: step
+            );
+        }
+
+        reason = string.Empty;
 
         return true;
-    }
-    // The one dispatch every generator shares once it is positioned: a Markov walk, or a single numeric draw. Generic
-    // over the generator, so an extended site runs this same body rather than a second copy of it.
-    private static bool TryFireDispatch<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) where TGenerator : struct, IDrawGenerator {
-        switch (generator.Source) {
-            case GeneratorSource.Markov:
-                return TryFireMarkov(
-                    masks: masks,
-                    generator: generator,
-                    reason: out reason,
-                    result: out result,
-                    rng: ref rng
-                );
-            default: {
-                    var exhausts = (generator.Mode != GeneratorMode.WithReplacement);
-                    var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
-
-                    if (!TryDrawNumeric(
-                        mask: ref mask,
-                        generator: generator,
-                        reason: out reason,
-                        rng: ref rng,
-                        targetKind: targetKind,
-                        value: out var value
-                    )) {
-                        result = default;
-
-                        return false;
-                    }
-
-                    result = new FireResult(
-                        Text: null,
-                        Numeric: value,
-                        Samples: 1L,
-                        Masks: (exhausts ? [mask] : null)
-                    );
-                    reason = string.Empty;
-
-                    return true;
-                }
-        }
     }
     /// <summary>Resolves the source a site's facet draws from — the named row of the document's <c>generators</c>
     /// section, or the facet's own inline source. The one resolution both validation and every firing door share, so

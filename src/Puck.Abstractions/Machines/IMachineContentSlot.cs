@@ -4,6 +4,7 @@ namespace Puck.Abstractions.Machines;
 public interface IMachineContentSlot {
     /// <summary>Gets whether content is mounted.</summary>
     bool IsAssigned { get; }
+
     /// <summary>Replaces mounted content. The caller validates and prepares the image before invoking this operation.</summary>
     /// <param name="data">Prepared native content bytes.</param>
     /// <param name="savePath">Persistent save location, or null for in-memory persistence.</param>

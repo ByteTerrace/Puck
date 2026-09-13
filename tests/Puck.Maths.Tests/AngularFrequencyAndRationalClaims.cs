@@ -13,6 +13,11 @@ internal static class AngularFrequencyAndRationalClaims {
         0L, 65536L, -65536L, 131072L, 1L, -1L, 4325376L, -4325376L, long.MaxValue, long.MinValue,
     ];
 
+    private static bool CrossEqual(Rational left, Rational right) =>
+        ((left.Numerator * right.Denominator) == (right.Numerator * left.Denominator));
+    private static double ToDouble(Rational value) =>
+        (((double)value.Numerator) / ((double)value.Denominator));
+
     /// <summary>Proves <see cref="FixedQ4816.AngularFrequency"/> against its own contract (a fixed denominator, and a
     /// numerator that is exactly <c>2·PiQ61·frequencyHz.Value</c>), against a scale-invariance identity independent
     /// of the formula's shape, and — the independent leg — against a <see cref="double"/> reconstruction of
@@ -45,7 +50,10 @@ internal static class AngularFrequencyAndRationalClaims {
             // Scale invariance, checked by cross-multiplication rather than by re-deriving the formula: doubling the
             // authored frequency must double the exact rational, independent of how the numerator/denominator pair
             // is formed.
-            if ((raw > (long.MinValue / 2)) && (raw < (long.MaxValue / 2))) {
+            if (
+                (raw > (long.MinValue / 2)) &&
+                (raw < (long.MaxValue / 2))
+            ) {
                 var (doubledNumerator, doubledDenominator) = FixedQ4816.AngularFrequency(frequencyHz: FixedQ4816.FromRawBits(value: (2 * raw)));
 
                 if ((doubledNumerator * denominator) != ((2 * numerator) * doubledDenominator)) {
@@ -67,12 +75,6 @@ internal static class AngularFrequencyAndRationalClaims {
 
         return null;
     }
-
-    private static bool CrossEqual(Rational left, Rational right) =>
-        ((left.Numerator * right.Denominator) == (right.Numerator * left.Denominator));
-    private static double ToDouble(Rational value) =>
-        (((double)value.Numerator) / ((double)value.Denominator));
-
     /// <summary>Proves <see cref="Rational"/> is a valid rational representation before proving its field-axiom
     /// identities: <see langword="default"/>(<see cref="Rational"/>) reads back as the canonical <c>0/1</c> — never
     /// the invalid <c>0/0</c> its own zero-initialized storage would otherwise carry — and that reading survives
@@ -93,18 +95,32 @@ internal static class AngularFrequencyAndRationalClaims {
         // canonical reading is 0/1, not the invalid 0/0.
         var defaulted = default(Rational);
 
-        if (!defaulted.Numerator.IsZero || (defaulted.Denominator != BigInteger.One)) {
+        if (
+            !defaulted.Numerator.IsZero ||
+            (defaulted.Denominator != BigInteger.One)
+        ) {
             return $"default(Rational) read back as {defaulted.Numerator}/{defaulted.Denominator} rather than the canonical 0/1";
         }
 
-        if (!FixedPointRounding.TryRoundRational(numerator: defaulted.Numerator, denominator: defaulted.Denominator, fractionBitCount: 16, result: out var defaultedRaw) || (0L != defaultedRaw)) {
+        if (
+            !FixedPointRounding.TryRoundRational(
+            numerator: defaulted.Numerator,
+            denominator: defaulted.Denominator,
+            fractionBitCount: 16,
+            result: out var defaultedRaw
+        ) ||
+            (0L != defaultedRaw)
+        ) {
             return $"TryRoundRational on default(Rational)'s own Numerator/Denominator did not round cleanly to raw zero";
         }
 
         // A direct zero-denominator construction is refused by the ctor itself, unlike the default's own
         // zero-initialized storage, which bypasses every constructor.
         try {
-            _ = new Rational(Numerator: BigInteger.One, Denominator: BigInteger.Zero);
+            _ = new Rational(
+                Numerator: BigInteger.One,
+                Denominator: BigInteger.Zero
+            );
 
             return "new Rational(1, 0) did not refuse a zero denominator";
         } catch (ArgumentOutOfRangeException refusal) {
@@ -116,7 +132,10 @@ internal static class AngularFrequencyAndRationalClaims {
         // Division by the rational zero (a zero numerator) would otherwise manufacture a zero denominator; the
         // operator refuses it instead, for both an explicitly zero-numerator divisor and the defaulted one.
         try {
-            _ = (Rational.One / new Rational(Numerator: BigInteger.Zero, Denominator: 5));
+            _ = (Rational.One / new Rational(
+                Numerator: BigInteger.Zero,
+                Denominator: 5
+            ));
 
             return "Rational.One / (0/5) did not throw DivideByZeroException";
         } catch (DivideByZeroException) { }
@@ -127,16 +146,43 @@ internal static class AngularFrequencyAndRationalClaims {
             return "Rational.One / default(Rational) did not throw DivideByZeroException";
         } catch (DivideByZeroException) { }
 
-        var zero = new Rational(Numerator: BigInteger.Zero, Denominator: BigInteger.One);
+        var zero = new Rational(
+            Numerator: BigInteger.Zero,
+            Denominator: BigInteger.One
+        );
         var samples = new Rational[] {
-            new(Denominator: 1, Numerator: 1),
-            new(Denominator: 1, Numerator: -1),
-            new(Denominator: 7, Numerator: 3),
-            new(Denominator: 7, Numerator: -3),
-            new(Denominator: 5, Numerator: 22),
-            new(Denominator: 3, Numerator: 0),
-            new(Numerator: (BigInteger.One << 96), Denominator: (BigInteger.One << 40)),
-            new(Numerator: -(BigInteger.One << 96), Denominator: (BigInteger.One << 40)),
+            new(
+            Denominator: 1,
+            Numerator: 1
+        ),
+            new(
+            Denominator: 1,
+            Numerator: -1
+        ),
+            new(
+            Denominator: 7,
+            Numerator: 3
+        ),
+            new(
+            Denominator: 7,
+            Numerator: -3
+        ),
+            new(
+            Denominator: 5,
+            Numerator: 22
+        ),
+            new(
+            Denominator: 3,
+            Numerator: 0
+        ),
+            new(
+            Numerator: (BigInteger.One << 96),
+            Denominator: (BigInteger.One << 40)
+        ),
+            new(
+            Numerator: -(BigInteger.One << 96),
+            Denominator: (BigInteger.One << 40)
+        ),
         };
 
         // Reduction on construction: every constructed value is in lowest terms with a positive denominator, so it
@@ -151,23 +197,41 @@ internal static class AngularFrequencyAndRationalClaims {
         ];
 
         foreach (var (numerator, denominator, reducedNumerator, reducedDenominator) in reductions) {
-            var reduced = new Rational(Numerator: numerator, Denominator: denominator);
+            var reduced = new Rational(
+                Denominator: denominator,
+                Numerator: numerator
+            );
 
-            if ((reduced.Numerator != reducedNumerator) || (reduced.Denominator != reducedDenominator)) {
+            if (
+                (reduced.Numerator != reducedNumerator) ||
+                (reduced.Denominator != reducedDenominator)
+            ) {
                 return $"Rational({numerator}, {denominator}) read back {reduced.Numerator}/{reduced.Denominator} rather than {reducedNumerator}/{reducedDenominator}";
             }
-            if (new Rational(Numerator: reduced.Numerator, Denominator: reduced.Denominator) != reduced) {
+            if (new Rational(
+                Numerator: reduced.Numerator,
+                Denominator: reduced.Denominator
+            ) != reduced) {
                 return $"Rational({numerator}, {denominator}) is not a fixed point of its own reduction";
             }
         }
 
         foreach (var sample in samples) {
-            var reconstructed = new Rational(Numerator: sample.Numerator, Denominator: sample.Denominator);
+            var reconstructed = new Rational(
+                Numerator: sample.Numerator,
+                Denominator: sample.Denominator
+            );
 
             if (reconstructed != sample) {
                 return $"Rational({sample.Numerator}, {sample.Denominator}) did not read back as itself";
             }
-            if ((sample.Denominator.Sign <= 0) || !BigInteger.GreatestCommonDivisor(left: BigInteger.Abs(value: sample.Numerator), right: sample.Denominator).IsOne) {
+            if (
+                (sample.Denominator.Sign <= 0) ||
+                !BigInteger.GreatestCommonDivisor(
+                left: BigInteger.Abs(value: sample.Numerator),
+                right: sample.Denominator
+            ).IsOne
+            ) {
                 return $"{sample} is not in lowest terms with a positive denominator";
             }
 
@@ -184,11 +248,18 @@ internal static class AngularFrequencyAndRationalClaims {
             if (sample.IsZero != sample.Numerator.IsZero) { return $"IsZero({sample}) disagrees with its numerator"; }
             if (sample.IsInteger != sample.Denominator.IsOne) { return $"IsInteger({sample}) disagrees with its denominator"; }
             if (sample.Abs().Numerator != BigInteger.Abs(value: sample.Numerator)) { return $"Abs({sample}) is wrong"; }
-            if (!sample.IsZero && ((sample.Reciprocal() * sample) != Rational.One)) { return $"{sample} * Reciprocal is not one"; }
+            if (
+                !sample.IsZero &&
+                ((sample.Reciprocal() * sample) != Rational.One)
+            ) { return $"{sample} * Reciprocal is not one"; }
 
             // ToDouble is correctly rounded: the returned double is at least as close to the exact quotient as either of
             // its binary64 neighbours, decided by exact integer arithmetic.
-            if (!Oracles.IsNearestDouble(numerator: sample.Numerator, denominator: sample.Denominator, candidate: sample.ToDouble())) {
+            if (!Oracles.IsNearestDouble(
+                numerator: sample.Numerator,
+                denominator: sample.Denominator,
+                candidate: sample.ToDouble()
+            )) {
                 return $"ToDouble({sample}) = {sample.ToDouble()} is not the nearest double";
             }
 
@@ -197,17 +268,20 @@ internal static class AngularFrequencyAndRationalClaims {
                 var crossOrdered = (sample.Numerator * other.Denominator).CompareTo(other: (other.Numerator * sample.Denominator));
 
                 if (Math.Sign(value: ordered) != Math.Sign(value: crossOrdered)) { return $"CompareTo({sample}, {other}) disagrees with cross-multiplication"; }
-                if (((sample < other) != (crossOrdered < 0)) || ((sample >= other) != (crossOrdered >= 0))) { return $"the ordering operators on ({sample}, {other}) disagree with CompareTo"; }
+                if (
+                    ((sample < other) != (crossOrdered < 0)) ||
+                    ((sample >= other) != (crossOrdered >= 0))
+                ) { return $"the ordering operators on ({sample}, {other}) disagree with CompareTo"; }
             }
         }
 
         // Conversions the platform's truncating cast gets wrong, plus the overflow, underflow and tie edges.
         var conversionEdges = new (BigInteger Numerator, BigInteger Denominator)[] {
-            ((BigInteger.One << 60) + 129, BigInteger.One),
-            ((BigInteger.One << 60) + 128, BigInteger.One),
-            ((BigInteger.One << 54) + 3, BigInteger.One),
+            (((BigInteger.One << 60) + 129), BigInteger.One),
+            (((BigInteger.One << 60) + 128), BigInteger.One),
+            (((BigInteger.One << 54) + 3), BigInteger.One),
             (-((BigInteger.One << 60) + 129), BigInteger.One),
-            ((BigInteger.One << 200) + 1, (BigInteger.One << 100) + 1),
+            (((BigInteger.One << 200) + 1), ((BigInteger.One << 100) + 1)),
             (BigInteger.One, new BigInteger(value: 3)),
             (-BigInteger.One, new BigInteger(value: 3)),
             (BigInteger.One, (BigInteger.One << 1074)),
@@ -222,36 +296,82 @@ internal static class AngularFrequencyAndRationalClaims {
         };
 
         foreach (var (numerator, denominator) in conversionEdges) {
-            var edge = new Rational(Numerator: numerator, Denominator: denominator);
+            var edge = new Rational(
+                Denominator: denominator,
+                Numerator: numerator
+            );
 
-            if (!Oracles.IsNearestDouble(numerator: numerator, denominator: denominator, candidate: edge.ToDouble())) {
+            if (!Oracles.IsNearestDouble(
+                numerator: numerator,
+                denominator: denominator,
+                candidate: edge.ToDouble()
+            )) {
                 return $"ToDouble({edge}) = {edge.ToDouble()} is not the nearest double";
             }
         }
 
-        if ((Rational.Zero != new Rational(Numerator: BigInteger.Zero, Denominator: 9)) || (((Rational)new BigInteger(value: 5)) != new Rational(Numerator: 5, Denominator: 1))) {
+        if (
+            (Rational.Zero != new Rational(
+            Numerator: BigInteger.Zero,
+            Denominator: 9
+        )) ||
+            (((Rational)new BigInteger(value: 5)) != new Rational(
+            Denominator: 1,
+            Numerator: 5
+        ))
+        ) {
             return "Rational.Zero or the BigInteger widening is not the canonical value";
         }
 
-        if (!CrossEqual(left: Rational.Two, right: (Rational.One + Rational.One))) {
+        if (!CrossEqual(
+            left: Rational.Two,
+            right: (Rational.One + Rational.One)
+        )) {
             return "Rational.Two is not Rational.One + Rational.One";
         }
 
         foreach (var a in samples) {
-            if (!CrossEqual(left: (a + zero), right: a)) { return $"{a} + 0 is not {a}"; }
-            if (!CrossEqual(left: (a * Rational.One), right: a)) { return $"{a} * 1 is not {a}"; }
-            if (!CrossEqual(left: (Rational.One * a), right: a)) { return $"1 * {a} is not {a}"; }
-            if (!CrossEqual(left: (a + (-a)), right: zero)) { return $"{a} + (-{a}) is not 0"; }
-            if (!CrossEqual(left: (a - a), right: zero)) { return $"{a} - {a} is not 0"; }
+            if (!CrossEqual(
+                left: (a + zero),
+                right: a
+            )) { return $"{a} + 0 is not {a}"; }
+            if (!CrossEqual(
+                left: (a * Rational.One),
+                right: a
+            )) { return $"{a} * 1 is not {a}"; }
+            if (!CrossEqual(
+                left: (Rational.One * a),
+                right: a
+            )) { return $"1 * {a} is not {a}"; }
+            if (!CrossEqual(
+                left: (a + (-a)),
+                right: zero
+            )) { return $"{a} + (-{a}) is not 0"; }
+            if (!CrossEqual(
+                left: (a - a),
+                right: zero
+            )) { return $"{a} - {a} is not 0"; }
 
             var negatedTwice = (-(-a));
 
-            if (!CrossEqual(left: negatedTwice, right: a)) { return $"-(-{a}) is not {a}"; }
+            if (!CrossEqual(
+                left: negatedTwice,
+                right: a
+            )) { return $"-(-{a}) is not {a}"; }
 
             foreach (var b in samples) {
-                if (!CrossEqual(left: (a + b), right: (b + a))) { return $"{a} + {b} is not commutative"; }
-                if (!CrossEqual(left: (a * b), right: (b * a))) { return $"{a} * {b} is not commutative"; }
-                if (!CrossEqual(left: (a - b), right: (a + (-b)))) { return $"{a} - {b} disagrees with {a} + (-{b})"; }
+                if (!CrossEqual(
+                    left: (a + b),
+                    right: (b + a)
+                )) { return $"{a} + {b} is not commutative"; }
+                if (!CrossEqual(
+                    left: (a * b),
+                    right: (b * a)
+                )) { return $"{a} * {b} is not commutative"; }
+                if (!CrossEqual(
+                    left: (a - b),
+                    right: (a + (-b))
+                )) { return $"{a} - {b} disagrees with {a} + (-{b})"; }
 
                 var directDouble = (ToDouble(value: a) + ToDouble(value: b));
                 var exactDouble = ToDouble(value: (a + b));
@@ -265,12 +385,24 @@ internal static class AngularFrequencyAndRationalClaims {
 
                 var quotient = (a / b);
 
-                if (!CrossEqual(left: (quotient * b), right: a)) { return $"({a} / {b}) * {b} is not {a}"; }
+                if (!CrossEqual(
+                    left: (quotient * b),
+                    right: a
+                )) { return $"({a} / {b}) * {b} is not {a}"; }
 
                 foreach (var c in samples) {
-                    if (!CrossEqual(left: ((a + b) + c), right: (a + (b + c)))) { return $"({a} + {b}) + {c} is not associative"; }
-                    if (!CrossEqual(left: ((a * b) * c), right: (a * (b * c)))) { return $"({a} * {b}) * {c} is not associative"; }
-                    if (!CrossEqual(left: (a * (b + c)), right: ((a * b) + (a * c)))) { return $"{a} * ({b} + {c}) does not distribute"; }
+                    if (!CrossEqual(
+                        left: ((a + b) + c),
+                        right: (a + (b + c))
+                    )) { return $"({a} + {b}) + {c} is not associative"; }
+                    if (!CrossEqual(
+                        left: ((a * b) * c),
+                        right: (a * (b * c))
+                    )) { return $"({a} * {b}) * {c} is not associative"; }
+                    if (!CrossEqual(
+                        left: (a * (b + c)),
+                        right: ((a * b) + (a * c))
+                    )) { return $"{a} * ({b} + {c}) does not distribute"; }
                 }
             }
         }

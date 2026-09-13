@@ -47,11 +47,11 @@ public readonly record struct SdfCameraScalar {
 /// <param name="Damping">The damping ratio (dimensionless).</param>
 /// <param name="Response">The initial response (dimensionless).</param>
 public readonly record struct SdfCameraDynamics(float Frequency, float Damping, float Response) {
+    /// <summary>Gets whether this response is live (an authored positive frequency) rather than <see cref="None"/>.</summary>
+    public bool IsLive => (Frequency > 0f);
     /// <summary>Gets the "no dynamics authored" value — a program with no <see cref="SdfCameraOp.Dynamics"/> op, or a
     /// <see cref="SdfCameraOp.Blend"/> of two programs neither of which authors one.</summary>
     public static SdfCameraDynamics None => default;
-    /// <summary>Gets whether this response is live (an authored positive frequency) rather than <see cref="None"/>.</summary>
-    public bool IsLive => (Frequency > 0f);
 }
 /// <summary>
 /// One instruction of a compiled camera program — the pose algebra a rig walks in order every frame. Each op is
@@ -147,11 +147,11 @@ public readonly record struct SdfCameraSelectCase(long Value, int Program);
 /// INDEX — name resolution belongs to whatever authoring vocabulary compiled this set).</param>
 /// <param name="Operations">The ops, in evaluation order.</param>
 public sealed record SdfCameraProgram(string Name, IReadOnlyList<SdfCameraOp> Operations) {
-    /// <summary>The subject-slot value naming the externally supplied reference pose.</summary>
-    public const int ReferenceSubject = -1;
     /// <summary>The <see cref="SdfCameraOp.LookAt.SubjectSlot"/> value naming "along the current subject's own
     /// forward axis" rather than a resolved subject pose.</summary>
     public const int FacingSubject = -2;
+    /// <summary>The subject-slot value naming the externally supplied reference pose.</summary>
+    public const int ReferenceSubject = -1;
 
     private readonly IReadOnlyList<SdfCameraOp> m_operations = (Operations ?? []);
 
@@ -196,14 +196,14 @@ public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float F
 /// <summary>The per-frame inputs a program evaluates against — everything that varies while the compiled ops do
 /// not.</summary>
 public readonly ref struct SdfCameraProgramFrame {
-    /// <summary>Gets the resolved subject poses, indexed by an op's subject slot.</summary>
-    public ReadOnlySpan<SdfAnchor> Subjects { get; init; }
-    /// <summary>Gets the resolved scalars, indexed by <see cref="SdfCameraScalar.Slot"/>.</summary>
-    public ReadOnlySpan<float> Scalars { get; init; }
-    /// <summary>Gets the live look sample.</summary>
-    public SdfCameraLook Look { get; init; }
     /// <summary>Gets the presentation clocks.</summary>
     public SdfCameraClock Clock { get; init; }
+    /// <summary>Gets the live look sample.</summary>
+    public SdfCameraLook Look { get; init; }
+    /// <summary>Gets the resolved scalars, indexed by <see cref="SdfCameraScalar.Slot"/>.</summary>
+    public ReadOnlySpan<float> Scalars { get; init; }
+    /// <summary>Gets the resolved subject poses, indexed by an op's subject slot.</summary>
+    public ReadOnlySpan<SdfAnchor> Subjects { get; init; }
 }
 /// <summary>
 /// Walks a compiled <see cref="SdfCameraProgramSet"/> and produces one frame's pose. Allocation-free and stateless:
@@ -211,66 +211,38 @@ public readonly ref struct SdfCameraProgramFrame {
 /// <see cref="SdfCameraProgramSet.MaxBlendDepth"/>.
 /// </summary>
 public static class SdfCameraProgramEvaluator {
-    /// <summary>The distance ahead the aim target sits when a program authors no <see cref="SdfCameraOp.LookAt"/> —
-    /// far enough that the look direction is well conditioned, near enough to stay a plausible focus.</summary>
-    public const float DefaultFocusDistance = 6f;
-
     // The smallest focus distance a facing look-at resolves at: below this the target collapses onto the eye and the
     // look direction has no answer.
     private const float MinimumFocusDistance = 0.01f;
 
-    /// <summary>Resolves one program of a set.</summary>
-    /// <param name="programs">The compiled set.</param>
-    /// <param name="programIndex">The program to resolve (0 is the root).</param>
-    /// <param name="reference">The externally supplied reference pose — what
-    /// <see cref="SdfCameraProgram.ReferenceSubject"/> names.</param>
-    /// <param name="frame">The frame's resolved inputs.</param>
-    /// <returns>The resolved pose.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="programs"/> is <see langword="null"/>.</exception>
-    public static SdfCameraPose Evaluate(SdfCameraProgramSet programs, int programIndex, in SdfAnchor reference, in SdfCameraProgramFrame frame) {
-        ArgumentNullException.ThrowIfNull(argument: programs);
+    /// <summary>The distance ahead the aim target sits when a program authors no <see cref="SdfCameraOp.LookAt"/> —
+    /// far enough that the look direction is well conditioned, near enough to stay a plausible focus.</summary>
+    public const float DefaultFocusDistance = 6f;
 
-        return Evaluate(
-            depth: 0,
-            frame: in frame,
-            programIndex: programIndex,
-            programs: programs,
-            reference: in reference
-        );
-    }
-
-    private static SdfAnchor ResolveSubject(int slot, in SdfAnchor reference, in SdfCameraProgramFrame frame) {
-        var subjects = frame.Subjects;
-
-        return (((slot >= 0) && (slot < subjects.Length))
-            ? subjects[slot]
-            : reference
-        );
-    }
-    private static Vector3 Place(in SdfAnchor subject, Vector3 value, bool worldAxes, float scale) {
-        var scaled = (value * scale);
-
-        return (subject.Position + (worldAxes
-            ? scaled
-            : Vector3.Transform(
-                rotation: subject.Orientation,
-                value: scaled
-            )
-        ));
-    }
-    private static Vector3 Forward(Quaternion orientation) => Vector3.Transform(
-        rotation: orientation,
-        value: -Vector3.UnitZ
-    );
     // Both live: the blended response itself. One live: that one, unweighted — a blend against a program that
     // authors none has nothing to interpolate toward, so the live side stands rather than fading toward None (which
     // is not a smaller response, only an absent one). Neither live: None.
     private static SdfCameraDynamics BlendDynamics(in SdfCameraDynamics a, in SdfCameraDynamics b, float weight) {
-        if (a.IsLive && b.IsLive) {
+        if (
+            a.IsLive &&
+            b.IsLive
+        ) {
             return new SdfCameraDynamics(
-                Frequency: float.Lerp(amount: weight, value1: a.Frequency, value2: b.Frequency),
-                Damping: float.Lerp(amount: weight, value1: a.Damping, value2: b.Damping),
-                Response: float.Lerp(amount: weight, value1: a.Response, value2: b.Response)
+                Frequency: float.Lerp(
+                    amount: weight,
+                    value1: a.Frequency,
+                    value2: b.Frequency
+                ),
+                Damping: float.Lerp(
+                    amount: weight,
+                    value1: a.Damping,
+                    value2: b.Damping
+                ),
+                Response: float.Lerp(
+                    amount: weight,
+                    value1: a.Response,
+                    value2: b.Response
+                )
             );
         }
 
@@ -278,7 +250,8 @@ public static class SdfCameraProgramEvaluator {
             ? a
             : (b.IsLive
                 ? b
-                : SdfCameraDynamics.None));
+                : SdfCameraDynamics.None
+        ));
     }
     private static SdfCameraPose Evaluate(SdfCameraProgramSet programs, int programIndex, in SdfAnchor reference, in SdfCameraProgramFrame frame, int depth) {
         var table = programs.Programs;
@@ -322,7 +295,11 @@ public static class SdfCameraProgramEvaluator {
                     var (pathPosition, pathTangentYaw) = pathOp.Curve.Sample(arcLength: (pathOp.Fraction.Resolve(scalars: scalars) * pathOp.Curve.TotalLength));
 
                     subject = new SdfAnchor(
-                        Orientation: Quaternion.CreateFromYawPitchRoll(pitch: 0f, roll: 0f, yaw: pathTangentYaw),
+                        Orientation: Quaternion.CreateFromYawPitchRoll(
+                            pitch: 0f,
+                            roll: 0f,
+                            yaw: pathTangentYaw
+                        ),
                         Position: pathPosition
                     );
                     eye = subject.Position;
@@ -340,7 +317,8 @@ public static class SdfCameraProgramEvaluator {
                 case SdfCameraOp.Orbit orbit:
                     var look = (orbit.AppliesLook
                         ? frame.Look
-                        : default);
+                        : default
+                    );
                     var pitch = Math.Clamp(
                         max: pitchMax,
                         min: pitchMin,
@@ -480,8 +458,50 @@ public static class SdfCameraProgramEvaluator {
             FovRadians: fov,
             Dynamics: dynamics,
             Target: (haveTarget
-                ? target
-                : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
+            ? target
+            : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
+        );
+    }
+    private static Vector3 Forward(Quaternion orientation) => Vector3.Transform(
+        rotation: orientation,
+        value: -Vector3.UnitZ
+    );
+    private static Vector3 Place(in SdfAnchor subject, Vector3 value, bool worldAxes, float scale) {
+        var scaled = (value * scale);
+
+        return (subject.Position + (worldAxes
+            ? scaled
+            : Vector3.Transform(
+                rotation: subject.Orientation,
+                value: scaled
+            )));
+    }
+    private static SdfAnchor ResolveSubject(int slot, in SdfAnchor reference, in SdfCameraProgramFrame frame) {
+        var subjects = frame.Subjects;
+
+        return (((slot >= 0) && (slot < subjects.Length))
+            ? subjects[slot]
+            : reference
+        );
+    }
+
+    /// <summary>Resolves one program of a set.</summary>
+    /// <param name="programs">The compiled set.</param>
+    /// <param name="programIndex">The program to resolve (0 is the root).</param>
+    /// <param name="reference">The externally supplied reference pose — what
+    /// <see cref="SdfCameraProgram.ReferenceSubject"/> names.</param>
+    /// <param name="frame">The frame's resolved inputs.</param>
+    /// <returns>The resolved pose.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="programs"/> is <see langword="null"/>.</exception>
+    public static SdfCameraPose Evaluate(SdfCameraProgramSet programs, int programIndex, in SdfAnchor reference, in SdfCameraProgramFrame frame) {
+        ArgumentNullException.ThrowIfNull(argument: programs);
+
+        return Evaluate(
+            depth: 0,
+            frame: in frame,
+            programIndex: programIndex,
+            programs: programs,
+            reference: in reference
         );
     }
 }
@@ -512,17 +532,26 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
         m_subjects = new SdfAnchor[subjectCount];
     }
 
+    /// <summary>Gets the response the last <see cref="Resolve"/> reported (see <see cref="SdfCameraOp.Dynamics"/>).</summary>
+    public SdfCameraDynamics Dynamics { get; private set; }
     /// <summary>Gets the live look sample added to every <see cref="SdfCameraOp.Orbit"/> that applies it.</summary>
     public SdfCameraLook Look { get; set; }
     /// <summary>Gets the compiled set this rig resolves.</summary>
     public SdfCameraProgramSet Programs => m_programs;
-    /// <summary>Gets the response the last <see cref="Resolve"/> reported (see <see cref="SdfCameraOp.Dynamics"/>).</summary>
-    public SdfCameraDynamics Dynamics { get; private set; }
     /// <summary>Gets the per-frame scalar slots, for the host to fill before resolving.</summary>
     public Span<float> Scalars => m_scalars;
     /// <summary>Gets the per-frame subject poses, for the host to fill before resolving.</summary>
     public Span<SdfAnchor> Subjects => m_subjects;
 
+    /// <inheritdoc/>
+    public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
+        var pose = ResolvePose(
+            anchor: in anchor,
+            clock: in clock
+        );
+
+        return (pose.Eye, pose.Target, pose.FovRadians);
+    }
     /// <summary>Resolves this frame's full pose, including the reported dynamics response.</summary>
     /// <param name="anchor">The reference pose.</param>
     /// <param name="clock">The presentation clocks.</param>
@@ -544,15 +573,6 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
 
         return pose;
     }
-    /// <inheritdoc/>
-    public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
-        var pose = ResolvePose(
-            anchor: in anchor,
-            clock: in clock
-        );
-
-        return (pose.Eye, pose.Target, pose.FovRadians);
-    }
 }
 /// <summary>
 /// The pole-matched second-order boom ease an <see cref="SdfCameraOp.Dynamics"/> response drives: the eye's offset
@@ -561,9 +581,9 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
 /// <remarks>Only the boom eases. Easing absolute eye and target coordinates would give presentation a second,
 /// delayed subject trajectory that disagrees with the rendered one.</remarks>
 public sealed class SdfCameraBoomFollower {
-    private SecondOrderFollower3 m_follower;
     private SdfCameraDynamics m_cachedDynamics;
     private SecondOrderResponse m_cachedResponse;
+    private SecondOrderFollower3 m_follower;
     private bool m_hasCachedResponse;
 
     /// <summary>Gets the eased boom — the eye's offset from the target.</summary>
@@ -571,9 +591,6 @@ public sealed class SdfCameraBoomFollower {
     /// <summary>Gets whether the boom currently holds an eased value rather than needing a fresh seed.</summary>
     public bool Seeded => m_follower.Seeded;
 
-    /// <summary>Drops the eased value, so the next <see cref="Apply"/> seeds at that frame's pose — the cut a caller
-    /// wants when the framing changes discontinuously.</summary>
-    public void Reseed() => m_follower.Reseed();
     /// <summary>Eases <paramref name="eye"/> toward the boom held from earlier frames.</summary>
     /// <param name="dynamics"><see cref="SdfCameraDynamics.None"/> reseeds and passes the pose through untouched,
     /// bit for bit; a live response drives the ease.</param>
@@ -591,7 +608,10 @@ public sealed class SdfCameraBoomFollower {
             return;
         }
 
-        if (!m_hasCachedResponse || (m_cachedDynamics != dynamics)) {
+        if (
+            !m_hasCachedResponse ||
+            (m_cachedDynamics != dynamics)
+        ) {
             m_cachedResponse = SecondOrderResponse.Create(
                 dampingRatio: dynamics.Damping,
                 frequencyHz: dynamics.Frequency,
@@ -609,4 +629,7 @@ public sealed class SdfCameraBoomFollower {
 
         eye = (target + boom);
     }
+    /// <summary>Drops the eased value, so the next <see cref="Apply"/> seeds at that frame's pose — the cut a caller
+    /// wants when the framing changes discontinuously.</summary>
+    public void Reseed() => m_follower.Reseed();
 }

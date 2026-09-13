@@ -31,7 +31,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
 
         allocator->Reset();
-        commandList->Reset(pAllocator: allocator, pInitialState: null);
+        commandList->Reset(
+            pAllocator: allocator,
+            pInitialState: null
+        );
     }
     /// <inheritdoc/>
     public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
@@ -41,7 +44,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
     }
     /// <inheritdoc/>
     public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
-        DirectXDebugLabel.Begin(commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList), label: label);
+        DirectXDebugLabel.Begin(
+            commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList),
+            label: label
+        );
     /// <inheritdoc/>
     public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
         DirectXDebugLabel.End(commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList));
@@ -58,7 +64,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var renderTarget = ((ID3D12Resource*)renderPassHandle);
 
-        state.RenderTargetState = DirectXResourceStates.Get(renderPassHandle, state.RenderTargetState);
+        state.RenderTargetState = DirectXResourceStates.Get(
+            fallback: state.RenderTargetState,
+            resource: renderPassHandle
+        );
         if (D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET != state.RenderTargetState) {
             var barrier = CreateTransition(
                 after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -66,11 +75,17 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
                 resource: renderTarget
             );
 
-            commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
+            commandList->ResourceBarrier(
+                NumBarriers: 1,
+                pBarriers: &barrier
+            );
             state.RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
         }
 
-        DirectXResourceStates.Set(renderPassHandle, state.RenderTargetState);
+        DirectXResourceStates.Set(
+            resource: renderPassHandle,
+            state: state.RenderTargetState
+        );
         var rtvHandle = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = ((nuint)framebufferHandle) };
         var clearColor = stackalloc float[4] { 0f, 0f, 0f, 1f };
 
@@ -81,8 +96,17 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         // inside a render pass is disallowed anyway. Requires ID3D12GraphicsCommandList4 (Windows 10 1809+); older
         // runtimes use the OMSetRenderTargets emulation. The RENDER_TARGET state transition stays a barrier either way
         // (Direct3D 12 render passes do not transition resource state).
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)) {
-            commandList->ClearRenderTargetView(ColorRGBA: clearColor, NumRects: 0, RenderTargetView: rtvHandle, pRects: null);
+        if (OperatingSystem.IsWindowsVersionAtLeast(
+            10,
+            0,
+            17763
+        )) {
+            commandList->ClearRenderTargetView(
+                ColorRGBA: clearColor,
+                NumRects: 0,
+                RenderTargetView: rtvHandle,
+                pRects: null
+            );
 
             var renderTargetDesc = new D3D12_RENDER_PASS_RENDER_TARGET_DESC {
                 BeginningAccess = new D3D12_RENDER_PASS_BEGINNING_ACCESS {
@@ -94,10 +118,25 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
                 cpuDescriptor = rtvHandle,
             };
 
-            ((ID3D12GraphicsCommandList4*)state.CommandList)->BeginRenderPass(Flags: D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE, NumRenderTargets: 1, pDepthStencil: null, pRenderTargets: &renderTargetDesc);
+            ((ID3D12GraphicsCommandList4*)state.CommandList)->BeginRenderPass(
+                Flags: D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE,
+                NumRenderTargets: 1,
+                pDepthStencil: null,
+                pRenderTargets: &renderTargetDesc
+            );
         } else {
-            commandList->OMSetRenderTargets(NumRenderTargetDescriptors: 1, RTsSingleHandleToDescriptorRange: false, pDepthStencilDescriptor: null, pRenderTargetDescriptors: &rtvHandle);
-            commandList->ClearRenderTargetView(ColorRGBA: clearColor, NumRects: 0, RenderTargetView: rtvHandle, pRects: null);
+            commandList->OMSetRenderTargets(
+                NumRenderTargetDescriptors: 1,
+                RTsSingleHandleToDescriptorRange: false,
+                pDepthStencilDescriptor: null,
+                pRenderTargetDescriptors: &rtvHandle
+            );
+            commandList->ClearRenderTargetView(
+                ColorRGBA: clearColor,
+                NumRects: 0,
+                RenderTargetView: rtvHandle,
+                pRects: null
+            );
         }
 
         var viewport = new D3D12_VIEWPORT {
@@ -109,7 +148,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
             Width = width,
         };
 
-        commandList->RSSetViewports(NumViewports: 1, pViewports: &viewport);
+        commandList->RSSetViewports(
+            NumViewports: 1,
+            pViewports: &viewport
+        );
 
         state.CurrentRenderTargetHandle = renderPassHandle;
     }
@@ -119,7 +161,11 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
 
         // Close the render pass (the store op runs) before the read-state barrier — same OS gate as BeginRenderPass.
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)) {
+        if (OperatingSystem.IsWindowsVersionAtLeast(
+            10,
+            0,
+            17763
+        )) {
             ((ID3D12GraphicsCommandList4*)state.CommandList)->EndRenderPass();
         }
 
@@ -129,9 +175,15 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
             resource: ((ID3D12Resource*)state.CurrentRenderTargetHandle)
         );
 
-        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);
+        commandList->ResourceBarrier(
+            NumBarriers: 1,
+            pBarriers: &barrier
+        );
         state.RenderTargetState = DirectXResourceStates.ShaderRead;
-        DirectXResourceStates.Set(state.CurrentRenderTargetHandle, state.RenderTargetState);
+        DirectXResourceStates.Set(
+            resource: state.CurrentRenderTargetHandle,
+            state: state.RenderTargetState
+        );
     }
     /// <inheritdoc/>
     public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
@@ -154,7 +206,11 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
             StrideInBytes = view.StrideBytes,
         };
 
-        commandList->IASetVertexBuffers(NumViews: 1, StartSlot: 0, pViews: &vbv);
+        commandList->IASetVertexBuffers(
+            NumViews: 1,
+            StartSlot: 0,
+            pViews: &vbv
+        );
     }
     /// <inheritdoc/>
     public void BindDescriptorSet(
@@ -169,7 +225,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var heap = ((ID3D12DescriptorHeap*)set.HeapHandle);
 
-        commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &heap);
+        commandList->SetDescriptorHeaps(
+            NumDescriptorHeaps: 1,
+            ppDescriptorHeaps: &heap
+        );
 
         if (0 <= layout.DescriptorTableParamIndex) {
             commandList->SetGraphicsRootDescriptorTable(
@@ -187,7 +246,11 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         uint offset,
         ReadOnlySpan<byte> data
     ) {
-        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
+        GpuPushConstantBinding.ValidateRange(
+            stageFlags: stageFlags,
+            offset: offset,
+            dataLength: data.Length
+        );
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!);
@@ -215,7 +278,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
             top = y,
         };
 
-        ((ID3D12GraphicsCommandList*)state.CommandList)->RSSetScissorRects(NumRects: 1, pRects: &scissor);
+        ((ID3D12GraphicsCommandList*)state.CommandList)->RSSetScissorRects(
+            NumRects: 1,
+            pRects: &scissor
+        );
     }
     /// <inheritdoc/>
     public void Draw(

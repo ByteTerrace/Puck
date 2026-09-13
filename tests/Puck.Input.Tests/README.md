@@ -12,6 +12,24 @@ does not claim live hardware coverage.
 dotnet test tests/Puck.Input.Tests/Puck.Input.Tests.csproj -c Release
 ```
 
+## Coverage and integration checks
+
+The suite also checks parser report bounds and output-buffer floors, bounded
+output, rumble stop semantics, scheduled effects during input silence, receiver
+parking and state reset, disposal ordering, touch release, deterministic player
+ordering, and empty LampArray behavior.
+
+After changing the transport seam, build both the neutral library and the Windows
+implementation from the repository root:
+
+```powershell
+dotnet build src/Puck.Input/Puck.Input.csproj -c Release
+dotnet build src/Puck.Platform.Windows/Puck.Platform.Windows.csproj -c Release
+```
+
+Use [Device input](../../docs/reference/input.md#quick-start) for live hardware
+inspection; transport-fake tests do not establish hardware compatibility.
+
 ## Documentation
 
-📚 [Puck.Input](../../src/Puck.Input/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)
+📚 [Device input](../../docs/reference/input.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

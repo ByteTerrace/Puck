@@ -78,6 +78,28 @@ public static class WorldQueryDriftInstrument {
     /// regression from the console line without the histogram growing unboundedly on a badly broken run.</summary>
     public const int MaxRecordedDisagreements = 16;
 
+    // Each cell is authored to the baker as a float point inside it, so the float grid has to resolve one cell from
+    // the next: once a coordinate's ULP reaches the cell size, that point rounds onto or across its own cell boundary
+    // and the bake marks a neighbour or nothing at all. Refused rather than answered with an artifact that silently
+    // disagrees with the evaluator it was sampled from.
+    private static void RequireFloatAddressableCells(long originRaw, long cellSizeRaw, int cellCount, string paramName) {
+        var cellSize = ((double)FixedQ4816.FromRawBits(value: cellSizeRaw));
+        var origin = ((double)FixedQ4816.FromRawBits(value: originRaw));
+        var farEdge = (origin + (cellCount * cellSize));
+        var magnitude = ((float)double.Max(
+            x: double.Abs(value: origin),
+            y: double.Abs(value: farEdge)
+        ));
+        var ulp = (MathF.BitIncrement(x: magnitude) - magnitude);
+
+        if (((double)ulp) >= cellSize) {
+            throw new ArgumentException(
+                message: $"The grid reaches coordinate {magnitude}, where one float step is {ulp} — at or above the {cellSize} cell size, so a per-cell sample cannot address its own cell.",
+                paramName: paramName
+            );
+        }
+    }
+
     /// <summary>Bakes a <see cref="WorldQueryArtifact"/> heightfield from <paramref name="evaluator"/>'s own
     /// <see cref="SdfFieldEvaluator.TryGroundHeight"/> answers over a grid of cell centers covering
     /// <c>[minX,maxX] x [minZ,maxZ]</c> — the "evaluator-vs-baked" cross-check's baked half. Because the artifact is
@@ -184,29 +206,6 @@ public static class WorldQueryDriftInstrument {
             terrain: terrain
         );
     }
-
-    // Each cell is authored to the baker as a float point inside it, so the float grid has to resolve one cell from
-    // the next: once a coordinate's ULP reaches the cell size, that point rounds onto or across its own cell boundary
-    // and the bake marks a neighbour or nothing at all. Refused rather than answered with an artifact that silently
-    // disagrees with the evaluator it was sampled from.
-    private static void RequireFloatAddressableCells(long originRaw, long cellSizeRaw, int cellCount, string paramName) {
-        var cellSize = ((double)FixedQ4816.FromRawBits(value: cellSizeRaw));
-        var origin = ((double)FixedQ4816.FromRawBits(value: originRaw));
-        var farEdge = (origin + (cellCount * cellSize));
-        var magnitude = ((float)double.Max(
-            x: double.Abs(value: origin),
-            y: double.Abs(value: farEdge)
-        ));
-        var ulp = (MathF.BitIncrement(x: magnitude) - magnitude);
-
-        if (((double)ulp) >= cellSize) {
-            throw new ArgumentException(
-                message: $"The grid reaches coordinate {magnitude}, where one float step is {ulp} — at or above the {cellSize} cell size, so a per-cell sample cannot address its own cell.",
-                paramName: paramName
-            );
-        }
-    }
-
     /// <summary>Runs the drift comparison over <paramref name="points"/>: excludes anything inside
     /// <paramref name="epsilonShell"/> of the evaluator's own zero set, then compares the sign each remaining point
     /// resolves to against <paramref name="gpuInsideOrNear"/> (when supplied) and the ground-height agreement

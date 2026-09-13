@@ -167,36 +167,41 @@ public record StateRow(
     /// <see cref="CellName"/> like any other.</summary>
     public static readonly CellName SlotKey = CellName.Parse(candidate: "$value");
 
+    /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
+    /// <see cref="StateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
+    public int CellCeiling => EffectiveDomain switch {
+        StateDomain.Ring ring => Math.Clamp(
+        ring.Capacity,
+        1,
+        StateCapacity.MaxCellsPerRow
+    ),
+        StateDomain.KeysOf or StateDomain.CellsOf => ((Capacity is { } linked)
+        ? Math.Clamp(
+            max: StateCapacity.MaxCellsPerRow,
+            min: 1,
+            value: linked
+        )
+        : StateCapacity.MaxCellsPerRow),
+        _ => ((Capacity is { } capacity)
+        ? Math.Clamp(
+            max: StateCapacity.MaxCellsPerRow,
+            min: 1,
+            value: capacity
+        )
+        : StateCapacity.DefaultCellRoom),
+    };
     /// <summary>Gets the effective domain: the authored <see cref="Domain"/>, or <see cref="InferDomain"/>'s answer
     /// when unauthored.</summary>
     [JsonIgnore]
     public StateDomain EffectiveDomain => (Domain ?? InferDomain());
-    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
-    /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
-    /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
-    /// single cell under an author-chosen key, or a declared <see cref="Phase"/> trait is <see cref="StateDomain.Keys"/>
-    /// — a phase row has no single value to read even before its first participant is admitted; anything else (no
-    /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="StateDomain.Slot"/>. A plain row
-    /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
-    public StateDomain InferDomain() =>
-        ((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey))
-            ? StateDomain.Keys.Instance
-            : StateDomain.Slot.Instance);
-    /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
-    /// <see cref="StateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
-    public int CellCeiling => EffectiveDomain switch {
-        StateDomain.Ring ring => Math.Clamp(ring.Capacity, 1, StateCapacity.MaxCellsPerRow),
-        StateDomain.KeysOf or StateDomain.CellsOf => (Capacity is { } linked ? Math.Clamp(linked, 1, StateCapacity.MaxCellsPerRow) : StateCapacity.MaxCellsPerRow),
-        _ => (Capacity is { } capacity ? Math.Clamp(capacity, 1, StateCapacity.MaxCellsPerRow) : StateCapacity.DefaultCellRoom),
-    };
     /// <summary>Gets whether the row accumulates continuously.</summary>
     public bool IsAdvancing => (Advance is not null);
-    /// <summary>Gets a value indicating whether this row declares a <see cref="StateDynamics"/> easing trait.</summary>
-    public bool IsEasing => (Dynamics is not null);
     /// <summary>Gets a value indicating whether the row's slot cell turns with the tick through a <see cref="StateCycle"/> trait.</summary>
     public bool IsCycling => (Cycle is not null);
     /// <summary>Gets a value indicating whether this row declares a <see cref="Draw"/> — whether it is a draw site.</summary>
     public bool IsDraw => (Draw is not null);
+    /// <summary>Gets a value indicating whether this row declares a <see cref="StateDynamics"/> easing trait.</summary>
+    public bool IsEasing => (Dynamics is not null);
     /// <summary>Gets a value indicating whether this row is keyed — its domain is anything but
     /// <see cref="StateDomain.Slot"/>. Such a row has no single cell, so an omitted key beside it addresses
     /// nothing: a world rule's <c>compareState</c>/<c>setState</c>/<c>addState</c>, a <c>generate</c> effect's
@@ -259,6 +264,18 @@ public record StateRow(
         cells: Cells,
         key: cellKey
     ) is not null));
+    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
+    /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
+    /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
+    /// single cell under an author-chosen key, or a declared <see cref="Phase"/> trait is <see cref="StateDomain.Keys"/>
+    /// — a phase row has no single value to read even before its first participant is admitted; anything else (no
+    /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="StateDomain.Slot"/>. A plain row
+    /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
+    public StateDomain InferDomain() =>
+        (((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)))
+            ? StateDomain.Keys.Instance
+            : StateDomain.Slot.Instance
+        );
 }
 /// <summary>
 /// The rule for a <see cref="StateRow.ReservedNamePrefix"/>-prefixed cell: which reserved keys a row's shape
@@ -307,21 +324,18 @@ public static class StateReservedCells {
 /// all), or to a keyed row (no single value to show) draws empty at render time rather than failing validation.
 /// </remarks>
 public static class StateCapacity {
+    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
+    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
+    public const int DefaultCellRoom = 128;
     /// <summary>The combined body- and identity-state slot ceiling. Compilation allocates fixed parallel arrays of
     /// this authored length per body, so the document gate bounds both memory and checkpoint width before runtime.</summary>
     public const int MaxBodySlots = 128;
-    /// <summary>The most attribute keys one zone sort orders by — each key names a declared state row, so a sort
-    /// can never carry more keys than <see cref="MaxRows"/> the section holds.</summary>
-    public const int MaxSortKeys = MaxRows;
     /// <summary>The implicit per-row cell-count ceiling — applies to every <see cref="StateRow.Cells"/>,
     /// slot-shaped or keyed alike (a slot never approaches it: exactly one cell), even when the author omits
     /// <see cref="StateRow.Capacity"/>, so a row can never state no bound at all (unbounded growth is refused by
     /// construction, never by author diligence). An authored <see cref="StateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
     public const int MaxCellsPerRow = TopologyCompilation.MaxCells;
-    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
-    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
-    public const int DefaultCellRoom = 128;
     /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
@@ -329,6 +343,9 @@ public static class StateCapacity {
     /// <summary>The section's row-count ceiling — a pure capacity bound on document size and per-tick iteration
     /// cost, never a fixed-size stack buffer or a per-world tunable.</summary>
     public const int MaxRows = 256;
+    /// <summary>The most attribute keys one zone sort orders by — each key names a declared state row, so a sort
+    /// can never carry more keys than <see cref="MaxRows"/> the section holds.</summary>
+    public const int MaxSortKeys = MaxRows;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
 }

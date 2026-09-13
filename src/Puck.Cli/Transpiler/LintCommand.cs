@@ -9,114 +9,167 @@ namespace Puck.Cli.Transpiler;
 
 /// <summary><c>puck lint</c> — runs static analysis and semantic linting over Puck DSL files.</summary>
 internal static class LintCommand {
-    public static Command Create() {
-        var pathArgument = new Argument<string>(
-            name: "path"
-        ) {
-            Description = "The .puck file or directory to lint."
-        };
-
-        var strictOption = new Option<bool>(
-            name: "--strict",
-            aliases: ["-s"]
-        ) {
-            Description = "Treat warnings as errors (exit code 1)."
-        };
-
-        var command = new Command(
-            name: "lint",
-            description: "Run static analysis and semantic linting on Puck source files (.puck)."
-        ) {
-            pathArgument,
-            strictOption
-        };
-
-        command.SetAction(parseResult => {
-            var path = parseResult.GetValue(pathArgument)!;
-            var strict = parseResult.GetValue(strictOption);
-
-            return Execute(path: path, strict: strict);
-        });
-
-        return command;
-    }
-
-    public static int Execute(string path, bool strict) {
-        var machines = CliWorldVocabulary.EnsureInstalled();
-        var fullPath = Path.GetFullPath(path);
-
-        if (Directory.Exists(fullPath)) {
-            var files = Directory.GetFiles(fullPath, "*.puck", SearchOption.AllDirectories);
-            var failureCount = 0;
-
-            foreach (var file in files) {
-                var code = LintFile(file, strict, machines);
-                if (code != 0) {
-                    failureCount++;
-                }
-            }
-
-            return failureCount > 0 ? 1 : 0;
-        }
-
-        if (File.Exists(fullPath)) {
-            return LintFile(fullPath, strict, machines);
-        }
-
-        Console.Error.WriteLine($"error: Path '{path}' not found.");
-        return 2;
-    }
-
     private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines) {
-        var catalogFingerprint = Puck.Cli.CliWorldVocabulary.Fingerprint(machines);
+        var catalogFingerprint = Puck.Cli.CliWorldVocabulary.Fingerprint(catalog: machines);
         string sourceText;
+
         try {
-            sourceText = File.ReadAllText(filePath);
+            sourceText = File.ReadAllText(path: filePath);
         } catch (Exception ex) {
-            Console.Error.WriteLine($"error: Could not read file '{filePath}': {ex.Message}");
+            Console.Error.WriteLine(value: $"error: Could not read file '{filePath}': {ex.Message}");
             return 2;
         }
 
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(sourceText, diagnostics: diagnostics);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            sourceText,
+            diagnostics: diagnostics
+        );
         var documentNode = parseResult.Value;
 
-        if (documentNode is not null && !Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose(documentNode, filePath, diagnostics)) {
-            PuckLinter.Lint(documentNode, diagnostics);
+        if (
+            (documentNode is not null) &&
+            !Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose(
+            diagnostics: diagnostics,
+            document: documentNode,
+            sourcePath: filePath
+        )
+        ) {
+            PuckLinter.Lint(
+                diagnostics: diagnostics,
+                document: documentNode
+            );
 
             // Attempt lowering for semantic check
             var loweringDiags = new DiagnosticBag();
             var sourceMap = new SourceMap();
             var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
                 document: documentNode,
-                basePath: Path.GetDirectoryName(filePath),
+                basePath: Path.GetDirectoryName(path: filePath),
                 sourceMap: sourceMap,
                 diagnostics: loweringDiags
             );
 
-            diagnostics.AddRange(loweringDiags);
+            diagnostics.AddRange(diagnostics: loweringDiags);
 
-            if (loweringResult.Value is not null && !diagnostics.HasErrors) {
+            if (
+                (loweringResult.Value is not null) &&
+                !diagnostics.HasErrors
+            ) {
                 // Only a root composes to a full engine schema; validating a module as one reports as missing
                 // every field whichever root imports it supplies.
-                if (WorldSemanticValidator.IsRootDocument(loweringResult.Value)) {
-                    WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath, machines: machines, catalogFingerprint: catalogFingerprint);
+                if (WorldSemanticValidator.IsRootDocument(loweredJson: loweringResult.Value)) {
+                    WorldSemanticValidator.ValidateComposedWorld(
+                        loweringResult.Value,
+                        sourceMap,
+                        diagnostics,
+                        sourcePath: filePath,
+                        machines: machines,
+                        catalogFingerprint: catalogFingerprint
+                    );
                 }
-                PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath, catalogFingerprint: catalogFingerprint, machines: machines);
+                PuckLinter.LintReferences(
+                    loweringResult.Value,
+                    sourceMap,
+                    diagnostics,
+                    sourcePath: filePath,
+                    catalogFingerprint: catalogFingerprint,
+                    machines: machines
+                );
             }
         }
 
         if (diagnostics.Count > 0) {
-            Console.WriteLine(diagnostics.FormatReport(sourceText, filePath));
+            Console.WriteLine(value: diagnostics.FormatReport(
+                filePath: filePath,
+                sourceText: sourceText
+            ));
         }
 
         var hasErrors = diagnostics.HasErrors;
         var hasWarnings = diagnostics.HasWarnings;
 
-        if (hasErrors || (strict && hasWarnings)) {
+        if (
+            hasErrors ||
+            (strict && hasWarnings)
+        ) {
             return 1;
         }
 
         return 0;
+    }
+
+    public static Command Create() {
+        var pathArgument = new Argument<string>(name: "path") {
+            Description = "The .puck file or directory to lint.",
+        };
+
+        var strictOption = new Option<bool>(
+            name: "--strict",
+            aliases: ["-s"]
+        ) {
+            Description = "Treat warnings as errors (exit code 1).",
+        };
+
+        var command = new Command(
+            description: "Run static analysis and semantic linting on Puck source files (.puck).",
+            name: "lint"
+        ) {
+            pathArgument,
+            strictOption,
+        };
+
+        command.SetAction(action: parseResult => {
+            var path = parseResult.GetValue(argument: pathArgument)!;
+            var strict = parseResult.GetValue(option: strictOption);
+
+            return Execute(
+                path: path,
+                strict: strict
+            );
+        });
+
+        return command;
+    }
+    public static int Execute(string path, bool strict) {
+        var machines = CliWorldVocabulary.EnsureInstalled();
+        var fullPath = Path.GetFullPath(path: path);
+
+        if (Directory.Exists(path: fullPath)) {
+            var files = Directory.GetFiles(
+                path: fullPath,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.puck"
+            );
+            var failureCount = 0;
+
+            foreach (var file in files) {
+                var code = LintFile(
+                    filePath: file,
+                    machines: machines,
+                    strict: strict
+                );
+
+                if (code != 0) {
+                    failureCount++;
+                }
+            }
+
+            return ((failureCount > 0)
+                ? 1
+                : 0
+            );
+        }
+
+        if (File.Exists(path: fullPath)) {
+            return LintFile(
+                filePath: fullPath,
+                machines: machines,
+                strict: strict
+            );
+        }
+
+        Console.Error.WriteLine(value: $"error: Path '{path}' not found.");
+        return 2;
     }
 }

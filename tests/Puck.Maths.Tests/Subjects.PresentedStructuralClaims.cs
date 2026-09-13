@@ -1016,29 +1016,29 @@ internal static partial class Subjects {
                     generators: SingleColourBasis(count: 2),
                     rules: [
                         new(
-                        kind: RuleKind.Reassociate,
-                        pattern: ReadOnlyMemory<int>.Empty,
-                        replacement: ReadOnlyMemory<int>.Empty,
-                        charges: charges
-                    ),
+                            kind: RuleKind.Reassociate,
+                            pattern: ReadOnlyMemory<int>.Empty,
+                            replacement: ReadOnlyMemory<int>.Empty,
+                            charges: charges
+                        ),
                     new(
-                        kind: RuleKind.Reduce,
-                        pattern: new[] { 0, 0 },
-                        replacement: RewriteRule<BigInteger>.PackReplacement(terms: [[]]),
-                        charges: new[] { BigInteger.One }
-                    ),
+                            kind: RuleKind.Reduce,
+                            pattern: new[] { 0, 0 },
+                            replacement: RewriteRule<BigInteger>.PackReplacement(terms: [[]]),
+                            charges: new[] { BigInteger.One }
+                        ),
                     new(
-                        kind: RuleKind.Reduce,
-                        pattern: new[] { 1, 1 },
-                        replacement: RewriteRule<BigInteger>.PackReplacement(terms: [[]]),
-                        charges: new[] { BigInteger.One }
-                    ),
+                            kind: RuleKind.Reduce,
+                            pattern: new[] { 1, 1 },
+                            replacement: RewriteRule<BigInteger>.PackReplacement(terms: [[]]),
+                            charges: new[] { BigInteger.One }
+                        ),
                     new(
-                        kind: RuleKind.Swap,
-                        pattern: new[] { 1, 0 },
-                        replacement: RewriteRule<BigInteger>.PackReplacement(terms: [[0, 1]]),
-                        charges: new[] { BigInteger.MinusOne }
-                    ),
+                            kind: RuleKind.Swap,
+                            pattern: new[] { 1, 0 },
+                            replacement: RewriteRule<BigInteger>.PackReplacement(terms: [[0, 1]]),
+                            charges: new[] { BigInteger.MinusOne }
+                        ),
                     ],
                     material: default
                 );
@@ -1049,11 +1049,11 @@ internal static partial class Subjects {
                 _ = ChargedPresentation<BigInteger, IntegerMaterial>.Create(
                     generators: SingleColourBasis(count: 1),
                     rules: [new(
-                        kind: RuleKind.Reassociate,
-                        pattern: ReadOnlyMemory<int>.Empty,
-                        replacement: ReadOnlyMemory<int>.Empty,
-                        charges: new[] { BigInteger.One, BigInteger.One }
-                    )],
+                            kind: RuleKind.Reassociate,
+                            pattern: ReadOnlyMemory<int>.Empty,
+                            replacement: ReadOnlyMemory<int>.Empty,
+                            charges: new[] { BigInteger.One, BigInteger.One }
+                        )],
                     material: default
                 );
             }
@@ -1522,9 +1522,9 @@ internal static partial class Subjects {
 
             for (var node = 0; (node < nodes); ++node) {
                 image[node] = system.Apply(
-                word: coxeter,
-                node: image[node]
-            );
+                    word: coxeter,
+                    node: image[node]
+                );
             }
         }
 
@@ -1601,9 +1601,9 @@ internal static partial class Subjects {
 
                 if (reached[moved]) {
                     return $"the word [{string.Join(
-                    separator: ',',
-                    values: word
-                )}] sends two nodes to {moved}, so it does not act by a permutation";
+                        separator: ',',
+                        values: word
+                    )}] sends two nodes to {moved}, so it does not act by a permutation";
                 }
 
                 reached[moved] = true;
@@ -1767,9 +1767,9 @@ internal static partial class Subjects {
 
         foreach (var letter in word) {
             element = chainAlgebra.Multiply(
-            left: element,
-            right: chainAlgebra.Generator(symbol: letter)
-        );
+                left: element,
+                right: chainAlgebra.Generator(symbol: letter)
+            );
         }
 
         for (var node = 0; (node < nodes); ++node) {

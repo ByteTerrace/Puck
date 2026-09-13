@@ -32,7 +32,8 @@ internal sealed partial class Diagnostics {
             value: "--"
         ))
             ? args[(hashDivergenceIndex + 1)]
-            : null);
+            : null
+        );
 
         if (romAPath is null) {
             Console.WriteLine(value: "  [SKIP] --hash-divergence: no ROM path supplied");
@@ -46,7 +47,8 @@ internal sealed partial class Diagnostics {
             value: "--"
         ))
             ? args[(hashDivergenceIndex + 2)]
-            : null);
+            : null
+        );
 
         var fine = (Array.IndexOf(
             array: args,
@@ -58,14 +60,16 @@ internal sealed partial class Diagnostics {
         );
         var frames = ((framesArg is not null)
             ? int.Parse(s: framesArg)
-            : 600);
+            : 600
+        );
         var perturbArg = CommandLineArguments.Value(
             args: args,
             name: "--perturb-at"
         );
         var perturbAtFrame = ((perturbArg is not null)
             ? int.Parse(s: perturbArg)
-            : (int?)null);
+            : (int?)null
+        );
 
         exitCode = HashDivergenceProbe.Run(
             romAPath: romAPath,

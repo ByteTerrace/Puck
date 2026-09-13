@@ -14,7 +14,10 @@ public static class TuneRom {
     /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
     /// <param name="title">The cartridge header title.</param>
     /// <returns>The 32 KiB ROM image.</returns>
-    public static byte[] Build(AudioDocument document, string title = "PUCKTUNE") => TuneGame.Build(document: document, title: title);
+    public static byte[] Build(AudioDocument document, string title = "PUCKTUNE") => TuneGame.Build(
+        document: document,
+        title: title
+    );
     /// <summary>Boots the ROM on a real Humble machine and asserts the state machine runs and START toggles
     /// play/stop. Throws on any violation (the forge's "verify by running" gate).</summary>
     /// <param name="rom">The ROM image to verify.</param>

@@ -16,7 +16,13 @@ public sealed class ValidatorMessagePathRatchetTests {
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
 
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
             directory = directory.Parent;
         }
 
@@ -24,36 +30,77 @@ public sealed class ValidatorMessagePathRatchetTests {
 
         return directory!.FullName;
     }
-    private static IReadOnlyList<BrowserErrorPath> ValidateAndSplitErrors(byte[] utf8Json) {
-        var errors = new List<string>();
-        var deferred = new List<string>();
-
-        BrowserParser.TryParseAndValidate(utf8Json: utf8Json, errors: errors, deferred: deferred, definition: out _, compilation: out _);
-
-        return [.. errors.Select(selector: BrowserErrorPaths.Split)];
-    }
     private static IReadOnlyList<BrowserErrorPath> ValidateAndSplitDeferred(byte[] utf8Json) {
         var errors = new List<string>();
         var deferred = new List<string>();
 
-        Assert.True(condition: BrowserParser.TryParseAndValidate(utf8Json: utf8Json, errors: errors, deferred: deferred, definition: out _, compilation: out _), userMessage: string.Join(separator: "; ", values: errors));
+        Assert.True(
+            condition: BrowserParser.TryParseAndValidate(
+                utf8Json: utf8Json,
+                errors: errors,
+                deferred: deferred,
+                definition: out _,
+                compilation: out _
+            ),
+            userMessage: string.Join(
+                separator: "; ",
+                values: errors
+            )
+        );
 
         return [.. deferred.Select(selector: BrowserErrorPaths.Split)];
+    }
+    private static IReadOnlyList<BrowserErrorPath> ValidateAndSplitErrors(byte[] utf8Json) {
+        var errors = new List<string>();
+        var deferred = new List<string>();
+
+        BrowserParser.TryParseAndValidate(
+            utf8Json: utf8Json,
+            errors: errors,
+            deferred: deferred,
+            definition: out _,
+            compilation: out _
+        );
+
+        return [.. errors.Select(selector: BrowserErrorPaths.Split)];
     }
 
     [Fact]
     public void Composed_puck_world_admits_and_defers_a_path_on_every_machine_engine_message() {
-        var path = Path.Combine(RepositoryRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json");
+        var path = Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "Puck.World",
+            "Assets",
+            "worlds",
+            "puck.world.json"
+        );
 
-        Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(path: path, tree: out var tree, reason: out var reason), userMessage: reason);
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
+                path: path,
+                tree: out var tree,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
 
         var split = ValidateAndSplitDeferred(utf8Json: Encoding.UTF8.GetBytes(s: tree!.ToJsonString()));
         var machines = tree["machines"]!.AsArray().Count;
-        var machineScreens = tree["screens"]!.AsArray().Count(predicate: screen => ((string?)screen?["source"]?["$type"] == "machine"));
+        var machineScreens = tree["screens"]!.AsArray().Count(predicate: screen => (((string?)screen?["source"]?["$type"]) == "machine"));
 
-        Assert.NotEqual(expected: 0, actual: machines);
-        Assert.Equal(expected: (machines + machineScreens), actual: split.Count);
-        Assert.All(collection: split, action: error => Assert.NotNull(@object: error.Path));
+        Assert.NotEqual(
+            actual: machines,
+            expected: 0
+        );
+        Assert.Equal(
+            expected: (machines + machineScreens),
+            actual: split.Count
+        );
+        Assert.All(
+            collection: split,
+            action: error => Assert.NotNull(@object: error.Path)
+        );
     }
     [Fact]
     public void Nameless_addon_refusal_carries_no_path() {
@@ -66,6 +113,9 @@ public sealed class ValidatorMessagePathRatchetTests {
         var error = Assert.Single(collection: split);
 
         Assert.Null(@object: error.Path);
-        Assert.Equal(expected: "an addon requires a name.", actual: error.Message);
+        Assert.Equal(
+            expected: "an addon requires a name.",
+            actual: error.Message
+        );
     }
 }

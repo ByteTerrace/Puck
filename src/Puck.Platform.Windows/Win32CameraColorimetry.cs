@@ -13,10 +13,43 @@ public readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRa
     private static readonly Guid ChromaSitingAttribute = new(g: "65df2370-c773-4c33-aa64-843e068efb0c");
 
     [SupportedOSPlatform("windows10.0.14393")]
+    private static uint ReadUInt32(MediaFrameFormat format, Guid key) {
+        try {
+            if (!format.Properties.TryGetValue(
+                key: key,
+                value: out var value
+            )) {
+                return 0u;
+            }
+
+            return (value switch {
+                byte byteValue => byteValue,
+                ushort ushortValue => ushortValue,
+                uint uintValue => uintValue,
+                int intValue when (intValue >= 0) => checked((uint)intValue),
+                _ => InvalidAttribute,
+            });
+        } catch {
+            // Malformed projected metadata must not prevent the CPU graph from opening. The GPU converter rejects the
+            // sentinel later, which routes the pair through the existing CPU fallback.
+            return InvalidAttribute;
+        }
+    }
+
+    [SupportedOSPlatform("windows10.0.14393")]
     public static Win32CameraColorimetry From(MediaFrameFormat format) => new(
-        ChromaSiting: ReadUInt32(format: format, key: ChromaSitingAttribute),
-        Matrix: ReadUInt32(format: format, key: YuvMatrixAttribute),
-        NominalRange: ReadUInt32(format: format, key: NominalRangeAttribute)
+        ChromaSiting: ReadUInt32(
+            format: format,
+            key: ChromaSitingAttribute
+        ),
+        Matrix: ReadUInt32(
+            format: format,
+            key: YuvMatrixAttribute
+        ),
+        NominalRange: ReadUInt32(
+            format: format,
+            key: NominalRangeAttribute
+        )
     );
     public Win32YuvConversion Resolve() {
         var matrix = (Matrix switch {
@@ -40,27 +73,6 @@ public readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRa
             Matrix: matrix,
             Range: range
         );
-    }
-
-    [SupportedOSPlatform("windows10.0.14393")]
-    private static uint ReadUInt32(MediaFrameFormat format, Guid key) {
-        try {
-            if (!format.Properties.TryGetValue(key: key, value: out var value)) {
-                return 0u;
-            }
-
-            return (value switch {
-                byte byteValue => byteValue,
-                ushort ushortValue => ushortValue,
-                uint uintValue => uintValue,
-                int intValue when (intValue >= 0) => checked((uint)intValue),
-                _ => InvalidAttribute,
-            });
-        } catch {
-            // Malformed projected metadata must not prevent the CPU graph from opening. The GPU converter rejects the
-            // sentinel later, which routes the pair through the existing CPU fallback.
-            return InvalidAttribute;
-        }
     }
 }
 public enum Win32YuvMatrix {

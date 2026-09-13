@@ -21,9 +21,15 @@ public sealed class TerminalCommandTests {
         var explicitTarget = registry.Submit(line: "console on 2");
 
         Assert.True(condition: implicitTarget.IsError);
-        Assert.Contains(expectedSubstring: "explicit player", actualString: implicitTarget.Output);
+        Assert.Contains(
+            expectedSubstring: "explicit player",
+            actualString: implicitTarget.Output
+        );
         Assert.False(condition: explicitTarget.IsError);
-        Assert.Equal(expected: 1, actual: sessions.LastSlot);
+        Assert.Equal(
+            expected: 1,
+            actual: sessions.LastSlot
+        );
         Assert.True(condition: sessions.LastVisible);
     }
     [Fact]
@@ -43,15 +49,27 @@ public sealed class TerminalCommandTests {
         source.Enqueue(line: "probe");
         source.Collect();
 
-        Assert.Equal(actual: invocations, expected: 0);
+        Assert.Equal(
+            actual: invocations,
+            expected: 0
+        );
 
         gate.Holding = false;
         source.Collect();
 
-        Assert.Equal(actual: invocations, expected: 1);
+        Assert.Equal(
+            actual: invocations,
+            expected: 1
+        );
         Assert.True(condition: terminalSessions.OperatorStore.TrySnapshot(frame: out var frame));
-        Assert.Contains(collection: frame.Lines, filter: static line => (line.Text == "> probe"));
-        Assert.Contains(collection: frame.Lines, filter: static line => (line.Text == "[probe: ok]"));
+        Assert.Contains(
+            collection: frame.Lines,
+            filter: static line => (line.Text == "> probe")
+        );
+        Assert.Contains(
+            collection: frame.Lines,
+            filter: static line => (line.Text == "[probe: ok]")
+        );
     }
 
     private sealed class TestHoldGate : ITextCommandHoldGate {

@@ -12,11 +12,10 @@ namespace Puck.Platform.Probes;
 public sealed class ProbeReadingRing {
     private const int SlotCount = 3;
 
-    private readonly long[] m_sequences = new long[SlotCount];
-    private readonly ProbeReading[] m_slots = new ProbeReading[SlotCount];
-
     private long m_publishCount;
 
+    private readonly long[] m_sequences = new long[SlotCount];
+    private readonly ProbeReading[] m_slots = new ProbeReading[SlotCount];
     private volatile int m_latestSlot = -1;
 
     /// <summary>Gets the number of publications so far.</summary>
@@ -29,9 +28,15 @@ public sealed class ProbeReadingRing {
 
         ref var sequence = ref m_sequences[writeSlot];
 
-        Volatile.Write(location: ref sequence, value: (Volatile.Read(location: ref sequence) + 1L));
+        Volatile.Write(
+            location: ref sequence,
+            value: (Volatile.Read(location: ref sequence) + 1L)
+        );
         m_slots[writeSlot] = reading;
-        Volatile.Write(location: ref sequence, value: (sequence + 1L));
+        Volatile.Write(
+            location: ref sequence,
+            value: (sequence + 1L)
+        );
         m_latestSlot = writeSlot;
         _ = Interlocked.Increment(location: ref m_publishCount);
     }

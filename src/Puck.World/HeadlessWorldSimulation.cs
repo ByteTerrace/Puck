@@ -34,7 +34,7 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
 
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) => m_step.Step(
-        context: in context,
-        afterInstances: null
+        afterInstances: null,
+        context: in context
     );
 }

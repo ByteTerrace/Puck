@@ -144,9 +144,10 @@ public static class PngDecoder {
         var previousRow = new byte[stride];
         var currentRow = new byte[stride];
         var sourceOffset = 0;
-        var maxSample = (bitDepth < 8
+        var maxSample = ((bitDepth < 8)
             ? ((1 << bitDepth) - 1)
-            : 255);
+            : 255
+        );
 
         for (var rowIndex = 0; (rowIndex < height); rowIndex++) {
             var filterType = decodedBytes[sourceOffset++];
@@ -310,10 +311,10 @@ public static class PngDecoder {
     // single byte holds (8 / bitDepth) consecutive samples.
     private static int ReadPackedSample(ReadOnlySpan<byte> row, int pixelIndex, int bitDepth) {
         var bitOffset = (pixelIndex * bitDepth);
-        var shift = (8 - bitDepth - (bitOffset % 8));
+        var shift = ((8 - bitDepth) - (bitOffset % 8));
         var mask = ((1 << bitDepth) - 1);
 
-        return ((row[(bitOffset / 8)] >> shift) & mask);
+        return (row[(bitOffset / 8)] >> shift) & mask;
     }
     private static bool TryReadChunk(ReadOnlySpan<byte> pngBytes, ref int offset, out string chunkType, out ReadOnlySpan<byte> chunkData) {
         chunkType = string.Empty;

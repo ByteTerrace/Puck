@@ -7,7 +7,7 @@ runtime hosts can observe.
 Expression-key binding reuse, shared board combination, one transaction effect
 vocabulary, operator metadata, effect source reads, reduction accumulation,
 trait field validation, and validation-to-install compilation reuse now live in the owning
-[State](../../src/Puck.State/README.md) and
+[State](../reference/state.md) and
 [World Schema](../../src/Puck.World.Schema/README.md) implementations.
 The remaining proposals preserve author expression, deterministic evaluation,
 and authority and transaction boundaries.

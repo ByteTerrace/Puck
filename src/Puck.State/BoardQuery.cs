@@ -41,7 +41,6 @@ public enum BoardQueryKind : byte {
     /// <summary>A query a document project declares — evaluated by its own case type, never by this library.</summary>
     Custom,
 }
-
 /// <summary>The abstract case-type base for a bounded board query — one sealed class per
 /// <see cref="BoardQueryKind"/>, each carrying only the arguments its own evaluation reads. A class, for the same
 /// reason <see cref="OperandFact"/>'s cases are: nothing at runtime compares two queries for equality or identity.</summary>
@@ -58,11 +57,9 @@ public abstract class BoardQuery {
     public BoardQueryKind Kind { get; }
     /// <summary>Gets the immutable adjacency table.</summary>
     public CompiledTopology Topology { get; }
-
     /// <summary>Returns the conservative visit count one evaluation costs, beyond reading the board itself.</summary>
     public virtual long Visits => Topology.CellCount;
 }
-
 /// <summary>The adjacent cell in a topology-specific direction (<see cref="BoardQueryKind.Neighbour"/>) — also
 /// the carrier for a <c>BoardShift</c>/<c>BoardImage</c> expression token and a pattern's board-ray source, both of
 /// which read only <see cref="Direction"/> (a symmetry element ordinal for <c>BoardImage</c>, or -1 meaning "every
@@ -70,12 +67,14 @@ public abstract class BoardQuery {
 public sealed class BoardNeighbourQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="direction">The topology-specific direction (or symmetry element) ordinal.</param>
-    public BoardNeighbourQuery(CompiledTopology topology, int direction) : base(BoardQueryKind.Neighbour, topology) => Direction = direction;
+    public BoardNeighbourQuery(CompiledTopology topology, int direction) : base(
+        BoardQueryKind.Neighbour,
+        topology
+    ) => Direction = direction;
 
     /// <summary>Gets the topology-specific direction (or symmetry element) ordinal.</summary>
     public int Direction { get; }
 }
-
 /// <summary>Minimum nonnegative entry cost to a target cell (<see cref="BoardQueryKind.PathCost"/>).</summary>
 public sealed class BoardPathCostQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
@@ -86,26 +85,28 @@ public sealed class BoardPathCostQuery : BoardQuery {
     /// <param name="targetFrom">A live indirection naming another declared row's cell whose integer value is the
     /// destination ordinal at evaluation time, or <see langword="null"/> for the compile-time literal
     /// <paramref name="target"/> — the same (row, key) cell-indirection every other dynamic key resolves through.</param>
-    public BoardPathCostQuery(CompiledTopology topology, int target, long maxCost, int maxVisits, CompiledCellRef? targetFrom = null) : base(BoardQueryKind.PathCost, topology) {
+    public BoardPathCostQuery(CompiledTopology topology, int target, long maxCost, int maxVisits, CompiledCellRef? targetFrom = null) : base(
+        BoardQueryKind.PathCost,
+        topology
+    ) {
         Target = target;
         MaxCost = maxCost;
         MaxVisits = maxVisits;
         TargetFrom = targetFrom;
     }
 
-    /// <summary>Gets the path destination ordinal, when <see cref="TargetFrom"/> is <see langword="null"/>.</summary>
-    public int Target { get; }
     /// <summary>Gets the greatest admitted path cost.</summary>
     public long MaxCost { get; }
     /// <summary>Gets the greatest settled nodes in one search.</summary>
     public int MaxVisits { get; }
+    /// <summary>Gets the path destination ordinal, when <see cref="TargetFrom"/> is <see langword="null"/>.</summary>
+    public int Target { get; }
     /// <summary>Gets the live indirection naming another declared row's cell whose integer value is the destination
     /// ordinal at evaluation time, or <see langword="null"/> for the compile-time literal <see cref="Target"/>.</summary>
     public CompiledCellRef? TargetFrom { get; }
     /// <inheritdoc/>
-    public override long Visits => ((long)(MaxVisits + 1) * (Topology.CellCount + Topology.DirectionCount));
+    public override long Visits => (((long)(MaxVisits + 1)) * (Topology.CellCount + Topology.DirectionCount));
 }
-
 /// <summary>The connected component of cells whose value lies in an inclusive range, grown from the key cell along the
 /// topology's directions under a visit budget (<see cref="BoardQueryKind.Component"/>), or the distinct cells adjacent
 /// to that component whose value lies in a second inclusive range (<see cref="BoardQueryKind.Boundary"/>). A key cell
@@ -120,9 +121,18 @@ public sealed class BoardComponentQuery : BoardQuery {
     /// <param name="boundaryUpper">The inclusive upper bound of a boundary cell's value.</param>
     /// <param name="boundary">Whether the query counts boundary rather than members.</param>
     public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long boundaryLower, long boundaryUpper, bool boundary)
-        : this(topology, lower, upper, maxVisits, boundaryLower, boundaryUpper, boundary ? BoardQueryKind.Boundary : BoardQueryKind.Component) {
+        : this(
+        topology,
+        lower,
+        upper,
+        maxVisits,
+        boundaryLower,
+        boundaryUpper,
+        (boundary
+        ? BoardQueryKind.Boundary
+        : BoardQueryKind.Component)
+    ) {
     }
-
     /// <summary>Initializes the query for any of its four kinds; the placement kinds (<see cref="BoardQueryKind.BoundaryAt"/>,
     /// <see cref="BoardQueryKind.EnclosedAt"/>) read the key cell as the empty cell a value would land on.</summary>
     /// <param name="topology">The compiled topology.</param>
@@ -133,7 +143,10 @@ public sealed class BoardComponentQuery : BoardQuery {
     /// <param name="boundaryUpper">The inclusive upper bound of a boundary cell's value.</param>
     /// <param name="kind">The query kind.</param>
     public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long boundaryLower, long boundaryUpper, BoardQueryKind kind)
-        : base(kind, topology) {
+        : base(
+        kind,
+        topology
+    ) {
         Lower = lower;
         Upper = upper;
         MaxVisits = maxVisits;
@@ -141,26 +154,28 @@ public sealed class BoardComponentQuery : BoardQuery {
         BoundaryUpper = boundaryUpper;
     }
 
-    /// <summary>Gets the inclusive lower bound of a member's value.</summary>
-    public long Lower { get; }
-    /// <summary>Gets the inclusive upper bound of a member's value.</summary>
-    public long Upper { get; }
-    /// <summary>Gets the most component cells the flood may settle.</summary>
-    public int MaxVisits { get; }
     /// <summary>Gets the inclusive lower bound of a boundary cell's value.</summary>
     public long BoundaryLower { get; }
     /// <summary>Gets the inclusive upper bound of a boundary cell's value.</summary>
     public long BoundaryUpper { get; }
+    /// <summary>Gets the inclusive lower bound of a member's value.</summary>
+    public long Lower { get; }
+    /// <summary>Gets the most component cells the flood may settle.</summary>
+    public int MaxVisits { get; }
+    /// <summary>Gets the inclusive upper bound of a member's value.</summary>
+    public long Upper { get; }
     /// <inheritdoc/>
-    public override long Visits => (((long)(MaxVisits + 1) * Topology.DirectionCount) + Topology.CellCount);
+    public override long Visits => ((((long)(MaxVisits + 1)) * Topology.DirectionCount) + Topology.CellCount);
 }
-
 /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range (<see cref="BoardQueryKind.Mask"/>).</summary>
 public sealed class BoardMaskQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="lower">The inclusive range lower bound.</param>
     /// <param name="upper">The inclusive range upper bound.</param>
-    public BoardMaskQuery(CompiledTopology topology, long lower, long upper) : base(BoardQueryKind.Mask, topology) {
+    public BoardMaskQuery(CompiledTopology topology, long lower, long upper) : base(
+        BoardQueryKind.Mask,
+        topology
+    ) {
         Lower = lower;
         Upper = upper;
     }
@@ -170,21 +185,26 @@ public sealed class BoardMaskQuery : BoardQuery {
     /// <summary>Gets the inclusive range upper bound.</summary>
     public long Upper { get; }
 }
-
 /// <summary>The least 64-bit fingerprint of the board's values over every point-group element (<see cref="BoardQueryKind.Canonical"/>).</summary>
 public sealed class BoardCanonicalQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
-    public BoardCanonicalQuery(CompiledTopology topology) : base(BoardQueryKind.Canonical, topology) { }
-    /// <inheritdoc/>
-    public override long Visits => ((long)Topology.CellCount * Topology.ElementCount);
-}
+    public BoardCanonicalQuery(CompiledTopology topology) : base(
+        BoardQueryKind.Canonical,
+        topology
+    ) { }
 
+    /// <inheritdoc/>
+    public override long Visits => (((long)Topology.CellCount) * Topology.ElementCount);
+}
 /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell (<see cref="BoardQueryKind.Offset"/>).</summary>
 public sealed class BoardOffsetQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="dx">The signed +X grid step.</param>
     /// <param name="dz">The signed +Z grid step.</param>
-    public BoardOffsetQuery(CompiledTopology topology, int dx, int dz) : base(BoardQueryKind.Offset, topology) {
+    public BoardOffsetQuery(CompiledTopology topology, int dx, int dz) : base(
+        BoardQueryKind.Offset,
+        topology
+    ) {
         Dx = dx;
         Dz = dz;
     }
@@ -194,7 +214,6 @@ public sealed class BoardOffsetQuery : BoardQuery {
     /// <summary>Gets the signed +Z grid step.</summary>
     public int Dz { get; }
 }
-
 /// <summary>Whether the key cell is attacked along any of a short authored direction list (<see cref="BoardQueryKind.Attacks"/>).</summary>
 public sealed class BoardAttacksQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
@@ -202,22 +221,24 @@ public sealed class BoardAttacksQuery : BoardQuery {
     /// <param name="upper">The inclusive range upper bound.</param>
     /// <param name="directions">The 1..4 direction ordinals walked — a concrete array so the per-evaluation walk
     /// indexes it directly rather than boxing an interface enumerator.</param>
-    public BoardAttacksQuery(CompiledTopology topology, long lower, long upper, int[] directions) : base(BoardQueryKind.Attacks, topology) {
+    public BoardAttacksQuery(CompiledTopology topology, long lower, long upper, int[] directions) : base(
+        BoardQueryKind.Attacks,
+        topology
+    ) {
         Lower = lower;
         Upper = upper;
         Directions = directions;
     }
 
+    /// <summary>Gets the 1..4 direction ordinals walked.</summary>
+    public int[] Directions { get; }
     /// <summary>Gets the inclusive range lower bound.</summary>
     public long Lower { get; }
     /// <summary>Gets the inclusive range upper bound.</summary>
     public long Upper { get; }
-    /// <summary>Gets the 1..4 direction ordinals walked.</summary>
-    public int[] Directions { get; }
     /// <inheritdoc/>
-    public override long Visits => ((long)Topology.CellCount * Directions.Length);
+    public override long Visits => (((long)Topology.CellCount) * Directions.Length);
 }
-
 /// <summary>The most cells a board may hold for its occupancy to read as one 64-bit mask.</summary>
 public static class BoardMask {
     /// <summary>Cell ordinals 0..63 map to bits 0..63.</summary>

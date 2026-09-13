@@ -210,9 +210,17 @@ public sealed partial class WorldServer {
                 }
             }
 
-            if (!m_machines.TryPrepare(m_definition, candidate, out machinePlan, out var machineReason)) {
-                return RefuseUndo(connectionId: connectionId, correlationId: correlationId,
-                    refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}");
+            if (!m_machines.TryPrepare(
+                candidate: candidate,
+                current: m_definition,
+                plan: out machinePlan,
+                reason: out var machineReason
+            )) {
+                return RefuseUndo(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}"
+                );
             }
 
             var previousDefinition = m_definition;
@@ -223,12 +231,12 @@ public sealed partial class WorldServer {
                 rebuildPopulation: true
             );
             RepaintChangedLatticeDraws(
-                previous: previousDefinition,
-                current: candidate
+                current: candidate,
+                previous: previousDefinition
             );
 
-            m_machines.Commit(machinePlan!);
-            m_machines.Finish(machinePlan!);
+            m_machines.Commit(plan: machinePlan!);
+            m_machines.Finish(plan: machinePlan!);
 
             if (addonPlan is not null) {
                 m_addons!.Commit(plan: addonPlan);
@@ -325,7 +333,6 @@ public sealed partial class WorldServer {
             Principal: principal
         ));
     }
-
     /// <summary>Bounds the journal to at most <c>host.journalDepth</c> trailing entries (0 = unbounded, the default —
     /// a no-op). The oldest entries past the horizon fold forward, in order, into the base the journal already
     /// keeps — the same per-entry compose-and-rebase <see cref="ApplyUndo"/>'s own replay performs, run forward
@@ -374,7 +381,10 @@ public sealed partial class WorldServer {
 
             m_base = candidate;
             m_baseOrigin = $"the journal depth horizon (host.journalDepth {depth})";
-            m_journal.RemoveRange(index: 0, count: excess);
+            m_journal.RemoveRange(
+                count: excess,
+                index: 0
+            );
         }
     }
 
@@ -411,7 +421,7 @@ public sealed partial class WorldServer {
     /// against state this record graph cannot represent — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
     private bool AnyUncapturableStateEverLatched() => (AnyAddonEverPumped ||
-        (AnyMachineEverPumped && m_machines is not IWorldMachineCheckpointHost) || AnyScreenOpEverApplied);
+        (AnyMachineEverPumped && (m_machines is not IWorldMachineCheckpointHost)) || AnyScreenOpEverApplied);
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
     /// <see cref="WorldReplaySnapshot.Drive"/> already follows for an offline rehydration (population, machine
@@ -469,7 +479,10 @@ public sealed partial class WorldServer {
 
                 return false;
             }
-            if (m_pending.Count != 0 || m_recordedContributions.Count != 0) {
+            if (
+                (m_pending.Count != 0) ||
+                (m_recordedContributions.Count != 0)
+            ) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture while a buffered live-edit op is pending drain — retry at the next master boundary";
 
@@ -485,9 +498,9 @@ public sealed partial class WorldServer {
             m_engagement.AssertCheckpointQuiescent();
 
             WorldMachineHostCheckpoint? machines = null;
+
             if (m_machines is IWorldMachineCheckpointHost machineHost) {
-                try { machines = machineHost.CaptureCheckpoint(); }
-                catch (Exception error) when (error is InvalidOperationException or IOException or ArgumentException) {
+                try { machines = machineHost.CaptureCheckpoint(); } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException)) {
                     checkpoint = null;
                     reason = $"machine checkpoint refused: {error.Message}";
                     return false;
@@ -572,14 +585,22 @@ public sealed partial class WorldServer {
         m_population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
-        m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
-        ValidateDecisionCheckpoint(server, restoredDefinition);
 
-        var machineCheckpoint = checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty;
+        m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
+        ValidateDecisionCheckpoint(
+            checkpoint: server,
+            definition: restoredDefinition
+        );
+
+        var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
+
         if (m_machines is IWorldMachineCheckpointHost machineHost) {
-            machineHost.RestoreCheckpoint(machineCheckpoint);
-        } else if (machineCheckpoint.Instances.Count != 0 || machineCheckpoint.AnyEverPumped) {
-            throw new InvalidOperationException("checkpoint contains machine state that this host cannot restore");
+            machineHost.RestoreCheckpoint(checkpoint: machineCheckpoint);
+        } else if (
+            (machineCheckpoint.Instances.Count != 0) ||
+            machineCheckpoint.AnyEverPumped
+        ) {
+            throw new InvalidOperationException(message: "checkpoint contains machine state that this host cannot restore");
         }
 
         m_definition = restoredDefinition;
@@ -687,7 +708,7 @@ public sealed partial class WorldServer {
         m_events.Restore(checkpoint: checkpoint.EventFeed);
         m_profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         RecompileRules(definition: m_definition);
-        RestoreDecisions(server.Decisions);
+        RestoreDecisions(rows: server.Decisions);
         m_search.Restore(checkpoint: (checkpoint.Search ?? SearchCheckpoint.Empty));
         RestoreBoardEnforcement(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
     }

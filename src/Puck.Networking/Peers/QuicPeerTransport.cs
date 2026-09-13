@@ -184,12 +184,12 @@ public sealed class QuicPeerTransport : IPeerTransport {
                 return null;
             }
         }
+        public ValueTask DisposeAsync() => m_connection.DisposeAsync();
         public async ValueTask<Stream> OpenStreamAsync(CancellationToken ct = default) => await m_connection.OpenOutboundStreamAsync(
             cancellationToken: ct,
             type: QuicStreamType.Bidirectional
         ).ConfigureAwait(continueOnCapturedContext: false);
         public ValueTask<ReadOnlyMemory<byte>?> ReceiveDatagramAsync(CancellationToken ct = default) => throw new NotSupportedException(message: "this QUIC surface carries no datagrams");
         public ValueTask SendDatagramAsync(ReadOnlyMemory<byte> datagram, CancellationToken ct = default) => throw new NotSupportedException(message: "this QUIC surface carries no datagrams");
-        public ValueTask DisposeAsync() => m_connection.DisposeAsync();
     }
 }

@@ -14,4 +14,4 @@ dotnet test tests/Puck.State.Tests/Puck.State.Tests.csproj -c Release
 
 ## Documentation
 
-📚 [Puck.State](../../src/Puck.State/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)
+📚 [State and rules](../../docs/reference/state.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

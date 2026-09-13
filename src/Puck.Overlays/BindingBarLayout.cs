@@ -56,10 +56,22 @@ public static class BindingBarLayout {
     /// <returns>The anchor point.</returns>
     public static Vector2 BarAnchor(float aspect, BindingBarEdge edge, float inset) =>
         edge switch {
-            BindingBarEdge.Top => new Vector2(x: (aspect * 0.5f), y: inset),
-            BindingBarEdge.Left => new Vector2(x: inset, y: 0.5f),
-            BindingBarEdge.Right => new Vector2(x: (aspect - inset), y: 0.5f),
-            _ => new Vector2(x: (aspect * 0.5f), y: (1f - inset)),
+            BindingBarEdge.Top => new Vector2(
+            x: (aspect * 0.5f),
+            y: inset
+        ),
+            BindingBarEdge.Left => new Vector2(
+            x: inset,
+            y: 0.5f
+        ),
+            BindingBarEdge.Right => new Vector2(
+            x: (aspect - inset),
+            y: 0.5f
+        ),
+            _ => new Vector2(
+            x: (aspect * 0.5f),
+            y: (1f - inset)
+        ),
         };
     /// <summary>A plate's center from its normalized pitches: the anchor, plus half a plate so the pitch-0 plate's
     /// edge sits on the inset line, plus the pitches scaled to the button size — x right, y up, in the overlay's
@@ -72,9 +84,21 @@ public static class BindingBarLayout {
     /// <returns>The plate center, region-height units.</returns>
     public static Vector2 PlateCenter(Vector2 anchor, BindingBarEdge edge, float pitchX, float pitchY, float buttonSize) =>
         edge switch {
-            BindingBarEdge.Top => new Vector2(x: (anchor.X + (pitchX * buttonSize)), y: (anchor.Y + ((0.5f - pitchY) * buttonSize))),
-            BindingBarEdge.Left => new Vector2(x: (anchor.X + ((0.5f + pitchX) * buttonSize)), y: (anchor.Y - (pitchY * buttonSize))),
-            BindingBarEdge.Right => new Vector2(x: (anchor.X - ((0.5f - pitchX) * buttonSize)), y: (anchor.Y - (pitchY * buttonSize))),
-            _ => new Vector2(x: (anchor.X + (pitchX * buttonSize)), y: (anchor.Y - ((0.5f + pitchY) * buttonSize))),
+            BindingBarEdge.Top => new Vector2(
+            x: (anchor.X + (pitchX * buttonSize)),
+            y: (anchor.Y + ((0.5f - pitchY) * buttonSize))
+        ),
+            BindingBarEdge.Left => new Vector2(
+            x: (anchor.X + ((0.5f + pitchX) * buttonSize)),
+            y: (anchor.Y - (pitchY * buttonSize))
+        ),
+            BindingBarEdge.Right => new Vector2(
+            x: (anchor.X - ((0.5f - pitchX) * buttonSize)),
+            y: (anchor.Y - (pitchY * buttonSize))
+        ),
+            _ => new Vector2(
+            x: (anchor.X + (pitchX * buttonSize)),
+            y: (anchor.Y - ((0.5f + pitchY) * buttonSize))
+        ),
         };
 }

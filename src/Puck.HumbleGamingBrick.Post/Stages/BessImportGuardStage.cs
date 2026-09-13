@@ -33,14 +33,14 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
     private const int ExportFrames = 8;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "bess-import-guard";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -132,7 +132,8 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
                 var actual = fillBus.ReadByte(address: ((ushort)(shapeCase.DestinationStart + index)));
                 var expected = ((index < shapeCase.ImportedBytes.Length)
                     ? shapeCase.ImportedBytes[index]
-                    : (byte)0);
+                    : (byte)0
+                );
 
                 if (actual != expected) {
                     failures.Add(item: $"\"{shapeCase.Label}\": destination byte {index} is 0x{actual:X2}, expected 0x{expected:X2} (imported span or spec zero-fill)");
@@ -184,8 +185,9 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{caseCount} malformed BESS cases (truncation/out-of-bounds-offset/undersized-CORE/garbage-footer/missing-END/nonzero-or-non-final-END/oversized work-RAM+video-RAM+palette destinations/undersized palette+OAM+HRAM/trailing-fragment+out-of-domain-address MBC/incompatible-CORE-major-version/duplicate-CORE/MBC-before-CORE) all rejected with InvalidDataException, probe machine untouched every time; {gracefulCaseCount} legal cases accepted (zero-filled undersized work-RAM+video-RAM, extended-CORE with matching modeled state)")
             : PostStageOutcome.Fail(detail: string.Join(
-            separator: "; ",
-            values: failures
-        )));
+                separator: "; ",
+                values: failures
+            ))
+        );
     }
 }

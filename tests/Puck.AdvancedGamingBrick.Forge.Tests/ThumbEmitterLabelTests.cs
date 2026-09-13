@@ -4,17 +4,16 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 /// family refusing an unbound target under its own mnemonic rather than patching a zero displacement.</summary>
 public sealed class ThumbEmitterLabelTests {
     [Fact]
-    public void LabelsAreAllocatedInOrder() {
+    public void AnUnboundCallTargetIsRefusedByMnemonic() {
         var emitter = new ThumbEmitter();
-        var first = emitter.NewLabel();
+
+        emitter.Call(label: emitter.NewLabel());
+
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray(baseAddress: 0x08000000u));
 
         Assert.Equal(
-            actual: emitter.NewLabel(),
-            expected: (first + 1)
-        );
-        Assert.Equal(
-            actual: emitter.NewLabel(),
-            expected: (first + 2)
+            actual: refusal.Message,
+            expected: "bl targets an unbound label 0."
         );
     }
     [Fact]
@@ -47,16 +46,17 @@ public sealed class ThumbEmitterLabelTests {
         );
     }
     [Fact]
-    public void AnUnboundCallTargetIsRefusedByMnemonic() {
+    public void LabelsAreAllocatedInOrder() {
         var emitter = new ThumbEmitter();
-
-        emitter.Call(label: emitter.NewLabel());
-
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray(baseAddress: 0x08000000u));
+        var first = emitter.NewLabel();
 
         Assert.Equal(
-            actual: refusal.Message,
-            expected: "bl targets an unbound label 0."
+            actual: emitter.NewLabel(),
+            expected: (first + 1)
+        );
+        Assert.Equal(
+            actual: emitter.NewLabel(),
+            expected: (first + 2)
         );
     }
 }

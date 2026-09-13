@@ -25,18 +25,15 @@ public sealed class FormatLineEndingTests {
     /// </summary>
     private const string WrapFixture = "namespace Fixture;\n\ninternal sealed class Wrapped {\n    public int Pick(int left, int right) {\n        if ((left > 0) && (right > 0)) {\n            return (left + right);\n        }\n\n        var chosen = ((left > right) ? left : right);\n\n        return chosen;\n    }\n}\n";
 
-    /// <summary>
-    /// Every syntactic pass in the bare-<c>format</c> selection, run as one pipeline exactly as the disk phase runs
-    /// it, must leave an LF file free of carriage returns — and must actually have rewritten something, so the
-    /// assertion cannot pass vacuously.
-    /// </summary>
-    [Fact]
-    public void TheDefaultPipelineLeavesAnLfFileFreeOfCarriageReturns() {
-        var rewritten = ApplyAll(passes: FormatPasses.All.Where(predicate: static pass => (pass.Default && !pass.Semantic)).ToList(), text: LineFeedFixture);
+    // The disk phase's pipeline: apply each pass in order, re-parsing between them, and take the full text back.
+    private static string ApplyAll(string text, IReadOnlyList<FormatPass> passes) {
+        foreach (var pass in passes) {
+            text = pass.Apply!(arg: CSharpSyntaxTree.ParseText(text: text).GetRoot()).ToFullString();
+        }
 
-        Assert.NotEqual(actual: rewritten, expected: LineFeedFixture);
-        Assert.DoesNotContain(actualString: rewritten, expectedSubstring: "\r");
+        return text;
     }
+
     /// <summary>
     /// Each pass that synthesizes a line break, on its own, over a fixture it is known to rewrite. Naming them one
     /// by one is what makes a regression point at the rewriter that reintroduced <c>\r\n</c>.
@@ -48,20 +45,44 @@ public sealed class FormatLineEndingTests {
     [InlineData("logical-lines", true)]
     [InlineData("ternary-lines", true)]
     public void APassThatSynthesizesALineBreakSynthesizesALineFeed(string name, bool useWrapFixture) {
-        var source = (useWrapFixture ? WrapFixture : LineFeedFixture);
+        var source = (useWrapFixture
+            ? WrapFixture
+            : LineFeedFixture
+        );
         var pass = FormatPasses.All.Single(predicate: candidate => (candidate.Name == name));
-        var rewritten = ApplyAll(passes: [pass], text: source);
+        var rewritten = ApplyAll(
+            passes: [pass],
+            text: source
+        );
 
-        Assert.NotEqual(actual: rewritten, expected: source);
-        Assert.DoesNotContain(actualString: rewritten, expectedSubstring: "\r");
+        Assert.NotEqual(
+            actual: rewritten,
+            expected: source
+        );
+        Assert.DoesNotContain(
+            actualString: rewritten,
+            expectedSubstring: "\r"
+        );
     }
+    /// <summary>
+    /// Every syntactic pass in the bare-<c>format</c> selection, run as one pipeline exactly as the disk phase runs
+    /// it, must leave an LF file free of carriage returns — and must actually have rewritten something, so the
+    /// assertion cannot pass vacuously.
+    /// </summary>
+    [Fact]
+    public void TheDefaultPipelineLeavesAnLfFileFreeOfCarriageReturns() {
+        var rewritten = ApplyAll(
+            passes: FormatPasses.All.Where(predicate: static pass => (pass.Default && !pass.Semantic)).ToList(),
+            text: LineFeedFixture
+        );
 
-    // The disk phase's pipeline: apply each pass in order, re-parsing between them, and take the full text back.
-    private static string ApplyAll(string text, IReadOnlyList<FormatPass> passes) {
-        foreach (var pass in passes) {
-            text = pass.Apply!(arg: CSharpSyntaxTree.ParseText(text: text).GetRoot()).ToFullString();
-        }
-
-        return text;
+        Assert.NotEqual(
+            actual: rewritten,
+            expected: LineFeedFixture
+        );
+        Assert.DoesNotContain(
+            actualString: rewritten,
+            expectedSubstring: "\r"
+        );
     }
 }

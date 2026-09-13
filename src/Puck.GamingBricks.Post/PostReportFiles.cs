@@ -11,29 +11,28 @@ namespace Puck.GamingBricks.Post;
 public static partial class PostReportFiles {
     private sealed class SummaryDto {
         public required string Banner { get; init; }
-        public required int ExitCode { get; init; }
         public required double DurationSeconds { get; init; }
+        public required int ExitCode { get; init; }
         public required StageDto[] Stages { get; init; }
     }
     private sealed class StageDto {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CaseCountsDto? Cases { get; init; }
+        public required string Detail { get; init; }
+        public required double DurationSeconds { get; init; }
         public required string Name { get; init; }
         public required string Tier { get; init; }
         public required string Verdict { get; init; }
-        public required double DurationSeconds { get; init; }
-        public required string Detail { get; init; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public CaseCountsDto? Cases { get; init; }
     }
     private sealed class CaseCountsDto {
-        public required int Pass { get; init; }
-        public required int ExpectedFail { get; init; }
-        public required int Skip { get; init; }
-        public required int Mismatch { get; init; }
         public required int Error { get; init; }
+        public required int ExpectedFail { get; init; }
+        public required int Mismatch { get; init; }
+        public required int Pass { get; init; }
+        public required int Skip { get; init; }
     }
-
-    [JsonSourceGenerationOptions(WriteIndented = true)]
     [JsonSerializable(typeof(SummaryDto))]
+    [JsonSourceGenerationOptions(WriteIndented = true)]
     private sealed partial class SummaryJsonContext : JsonSerializerContext;
 
     /// <summary>Writes <c>summary.json</c>.</summary>
@@ -45,41 +44,41 @@ public static partial class PostReportFiles {
         var summary = new SummaryDto {
             Banner = report.Banner,
             DurationSeconds = Math.Round(
-                digits: 3,
-                value: report.Duration.TotalSeconds
-            ),
+            digits: 3,
+            value: report.Duration.TotalSeconds
+        ),
             ExitCode = report.ExitCode,
             Stages = report.Results
                 .Select(selector: static result => new StageDto {
                     Cases = ((result.Outcome.Cases is null)
-                        ? null
-                        : new CaseCountsDto {
+            ? null
+            : new CaseCountsDto {
                             Error = Count(
-                                cases: result.Outcome.Cases,
-                                verdict: PostCaseVerdict.Error
-                            ),
+                cases: result.Outcome.Cases,
+                verdict: PostCaseVerdict.Error
+            ),
                             ExpectedFail = Count(
-                                cases: result.Outcome.Cases,
-                                verdict: PostCaseVerdict.ExpectedFail
-                            ),
+                cases: result.Outcome.Cases,
+                verdict: PostCaseVerdict.ExpectedFail
+            ),
                             Mismatch = Count(
-                                cases: result.Outcome.Cases,
-                                verdict: PostCaseVerdict.Mismatch
-                            ),
+                cases: result.Outcome.Cases,
+                verdict: PostCaseVerdict.Mismatch
+            ),
                             Pass = Count(
-                                cases: result.Outcome.Cases,
-                                verdict: PostCaseVerdict.Pass
-                            ),
+                cases: result.Outcome.Cases,
+                verdict: PostCaseVerdict.Pass
+            ),
                             Skip = Count(
-                                cases: result.Outcome.Cases,
-                                verdict: PostCaseVerdict.Skip
-                            ),
+                cases: result.Outcome.Cases,
+                verdict: PostCaseVerdict.Skip
+            ),
                         }),
                     Detail = result.Outcome.Detail,
                     DurationSeconds = Math.Round(
-                        digits: 3,
-                        value: result.Duration.TotalSeconds
-                    ),
+            digits: 3,
+            value: result.Duration.TotalSeconds
+        ),
                     Name = result.Name,
                     Tier = result.Tier.ToString(),
                     Verdict = result.Outcome.Verdict.ToString(),
@@ -144,9 +143,9 @@ public static partial class PostReportFiles {
         cases.Count(predicate: result => (result.Verdict == verdict));
     private static string Seconds(TimeSpan duration) =>
         duration.TotalSeconds.ToString(
-        format: "0.000",
-        provider: CultureInfo.InvariantCulture
-    );
+            format: "0.000",
+            provider: CultureInfo.InvariantCulture
+        );
     private static void WriteAttribute(XmlWriter writer, string name, string value) =>
         writer.WriteAttributeString(
             localName: name,
@@ -236,9 +235,15 @@ public static partial class PostReportFiles {
             };
 
             WriteCounts(
-                errors: ((verdict == PostCaseVerdict.Error) ? 1 : 0),
-                failures: ((verdict == PostCaseVerdict.Mismatch) ? 1 : 0),
-                skipped: ((verdict == PostCaseVerdict.Skip) ? 1 : 0),
+                errors: ((verdict == PostCaseVerdict.Error)
+                ? 1
+                : 0),
+                failures: ((verdict == PostCaseVerdict.Mismatch)
+                ? 1
+                : 0),
+                skipped: ((verdict == PostCaseVerdict.Skip)
+                ? 1
+                : 0),
                 tests: 1,
                 writer: writer
             );

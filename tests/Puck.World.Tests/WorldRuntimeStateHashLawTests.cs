@@ -11,19 +11,43 @@ namespace Puck.World.Tests;
 /// can produce different future decisions even when its present resolved value happens to agree.</summary>
 public sealed class WorldRuntimeStateHashLawTests {
     [Fact]
+    public void AuthoritativeScope_IsStableAcrossEquivalentServers() {
+        var definition = Fixtures.BuildDocument();
+
+        using var left = Fixtures.FreshServer(definition: definition);
+        using var right = Fixtures.FreshServer(definition: definition);
+
+        Assert.Equal(
+            expected: WorldRuntimeStateHash.HashAuthoritative(
+                server: left.Server,
+                tick: 0UL
+            ),
+            actual: WorldRuntimeStateHash.HashAuthoritative(
+                server: right.Server,
+                tick: 0UL
+            )
+        );
+    }
+    [Fact]
     public void CaptureScope_PreservesTheHistoricalPoseThenWorldValueFold() {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: CellName.Parse(candidate: "count"),
-                    Kind: CellKind.Int,
-                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 17L)]
-                ),
+                Name: CellName.Parse(candidate: "count"),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 17L
+                    )]
+            ),
                 new WorldStateRow(
-                    Name: CellName.Parse(candidate: "label"),
-                    Kind: CellKind.Text,
-                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Text: "café")]
-                ),
+                Name: CellName.Parse(candidate: "label"),
+                Kind: CellKind.Text,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Text: "café"
+                    )]
+            ),
             ]),
         };
 
@@ -44,7 +68,6 @@ public sealed class WorldRuntimeStateHashLawTests {
             )
         );
     }
-
     [Fact]
     public void PoseScope_IsTheReplayPoseDigest() {
         using var fixture = Fixtures.FreshServer();
@@ -58,35 +81,6 @@ public sealed class WorldRuntimeStateHashLawTests {
             )
         );
     }
-
-    [Fact]
-    public void WorldScope_DistinguishesStoredAdvanceTraitsWithTheSameCurrentValue() {
-        var name = CellName.Parse(candidate: "future-state");
-        var plain = Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(
-                Name: name,
-                Kind: CellKind.Int,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)]
-            )]),
-        };
-        var advancing = plain with {
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(
-                Name: name,
-                Kind: CellKind.Int,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)],
-                Advance: new StateAdvance(RateNumerator: 1L, RateDenominator: 1L, EpochTick: 0L)
-            )]),
-        };
-
-        using var plainFixture = Fixtures.FreshServer(definition: plain);
-        using var advancingFixture = Fixtures.FreshServer(definition: advancing);
-
-        Assert.NotEqual(
-            expected: WorldRuntimeStateHash.HashWorld(server: plainFixture.Server, tick: 0UL),
-            actual: WorldRuntimeStateHash.HashWorld(server: advancingFixture.Server, tick: 0UL)
-        );
-    }
-
     [Fact]
     public void WorldScope_DistinguishesDrawTraitsWithTheSameCurrentValue() {
         var name = CellName.Parse(candidate: "future-draw");
@@ -94,14 +88,20 @@ public sealed class WorldRuntimeStateHashLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)]
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 5L
+                    )]
             )]),
         };
         var drawn = plain with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)],
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 5L
+                    )],
                 Draw: new Draw(
                     Generator: new StateGenerator(
                         Source: GeneratorSource.UniformRange,
@@ -117,21 +117,34 @@ public sealed class WorldRuntimeStateHashLawTests {
         using var drawnFixture = Fixtures.FreshServer(definition: drawn);
 
         Assert.NotEqual(
-            expected: WorldRuntimeStateHash.HashWorld(server: plainFixture.Server, tick: 0UL),
-            actual: WorldRuntimeStateHash.HashWorld(server: drawnFixture.Server, tick: 0UL)
+            expected: WorldRuntimeStateHash.HashWorld(
+                server: plainFixture.Server,
+                tick: 0UL
+            ),
+            actual: WorldRuntimeStateHash.HashWorld(
+                server: drawnFixture.Server,
+                tick: 0UL
+            )
         );
     }
-
     [Fact]
     public void WorldScope_DistinguishesLiveLatticeCells() {
         var fields = new WorldFieldsSection(
             Lattice: new WorldFieldLatticeDefinition(
-                Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+                Origin: new DocumentVector3(
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                ),
                 CellSize: 1f,
                 Width: 1,
                 Depth: 1
             ),
-            Fields: [new WorldFieldRow(Name: "heat", Min: 0f, Max: 10f)]
+            Fields: [new WorldFieldRow(
+                    Name: "heat",
+                    Min: 0f,
+                    Max: 10f
+                )]
         );
         var definition = Fixtures.WithLattice(
             definition: Fixtures.BuildDocument(),
@@ -141,26 +154,60 @@ public sealed class WorldRuntimeStateHashLawTests {
         using var left = Fixtures.FreshServer(definition: definition);
         using var right = Fixtures.FreshServer(definition: definition);
 
-        Assert.IsType<FieldLattice>(@object: right.Server.Population.Fields).Restore(
-            checkpoint: new FieldLattice.Checkpoint(Raw: [[FixedQ4816.One.Value]])
-        );
+        Assert.IsType<FieldLattice>(@object: right.Server.Population.Fields).Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [[FixedQ4816.One.Value]]));
 
         Assert.NotEqual(
-            expected: WorldRuntimeStateHash.HashWorld(server: left.Server, tick: 0UL),
-            actual: WorldRuntimeStateHash.HashWorld(server: right.Server, tick: 0UL)
+            expected: WorldRuntimeStateHash.HashWorld(
+                server: left.Server,
+                tick: 0UL
+            ),
+            actual: WorldRuntimeStateHash.HashWorld(
+                server: right.Server,
+                tick: 0UL
+            )
         );
     }
-
     [Fact]
-    public void AuthoritativeScope_IsStableAcrossEquivalentServers() {
-        var definition = Fixtures.BuildDocument();
+    public void WorldScope_DistinguishesStoredAdvanceTraitsWithTheSameCurrentValue() {
+        var name = CellName.Parse(candidate: "future-state");
+        var plain = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                Name: name,
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 5L
+                    )]
+            )]),
+        };
+        var advancing = plain with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                Name: name,
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: 5L
+                    )],
+                Advance: new StateAdvance(
+                    EpochTick: 0L,
+                    RateDenominator: 1L,
+                    RateNumerator: 1L
+                )
+            )]),
+        };
 
-        using var left = Fixtures.FreshServer(definition: definition);
-        using var right = Fixtures.FreshServer(definition: definition);
+        using var plainFixture = Fixtures.FreshServer(definition: plain);
+        using var advancingFixture = Fixtures.FreshServer(definition: advancing);
 
-        Assert.Equal(
-            expected: WorldRuntimeStateHash.HashAuthoritative(server: left.Server, tick: 0UL),
-            actual: WorldRuntimeStateHash.HashAuthoritative(server: right.Server, tick: 0UL)
+        Assert.NotEqual(
+            expected: WorldRuntimeStateHash.HashWorld(
+                server: plainFixture.Server,
+                tick: 0UL
+            ),
+            actual: WorldRuntimeStateHash.HashWorld(
+                server: advancingFixture.Server,
+                tick: 0UL
+            )
         );
     }
 }

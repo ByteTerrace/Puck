@@ -4,6 +4,304 @@ namespace Puck.Physics;
 
 /// <summary>Deterministic compound convex-body overlap and depenetration geometry.</summary>
 public static class FixedDynamicBodyContacts {
+    private static bool IsSupported(FixedBodyColliderKind kind) =>
+        (kind is FixedBodyColliderKind.Sphere or FixedBodyColliderKind.Capsule or FixedBodyColliderKind.Box);
+    private static (FixedVector3 Start, FixedVector3 End) Segment(FixedVector3 position, FixedQuaternion orientation, in FixedBodyColliderVolume volume) {
+        var start = (position + orientation.Rotate(vector: volume.Center));
+        var end = ((volume.Kind == FixedBodyColliderKind.Capsule)
+            ? (position + orientation.Rotate(vector: volume.Endpoint))
+            : start
+        );
+
+        return (start, end);
+    }
+    /// <summary>Depenetrates two oriented boxes by separating-axis test over the 9 candidate axes that matter for a
+    /// pair of boxes — the world X/Y/Z axes (so an axis-aligned pair costs nothing extra over the world-bounds
+    /// approximation) plus each box's own three face axes, which the world-bounds path never tests and a tilted or
+    /// tumbling box needs: its true footprint is narrower along its own axes than along world axes, so world-axis-only
+    /// overlap systematically OVERSTATES the penetration of anything but an axis-aligned box, and the resulting
+    /// correction can be pointed nowhere near the box's actual touching face. Face-normal SAT alone (no edge-edge
+    /// cross-product axes) is not the complete 15-axis OBB test, so a pure edge-edge contact can still read a larger
+    /// depth than its true minimum — a bound on the remaining error, not an exact witness.</summary>
+    /// <param name="leftPosition">The left box's world position.</param>
+    /// <param name="leftOrientation">The left box's world orientation.</param>
+    /// <param name="left">The left body-local box volume.</param>
+    /// <param name="rightPosition">The right box's world position.</param>
+    /// <param name="rightOrientation">The right box's world orientation.</param>
+    /// <param name="right">The right body-local box volume.</param>
+    /// <param name="tieBreaker">Selects a correction sign only when the winning axis reads exactly coincident
+    /// centers along it.</param>
+    /// <param name="correction">The chosen axis scaled by its overlap depth, directed from <paramref name="right"/>
+    /// toward <paramref name="left"/> — the same convention every other branch here returns.</param>
+    /// <returns><see langword="true"/> when every one of the 9 axes reads a positive overlap (so the boxes truly
+    /// overlap on the axes tested); <see langword="false"/> the moment any axis proves separation.</returns>
+    private static bool TryBoxBoxCorrection(
+        FixedVector3 leftPosition,
+        FixedQuaternion leftOrientation,
+        in FixedBodyColliderVolume left,
+        FixedVector3 rightPosition,
+        FixedQuaternion rightOrientation,
+        in FixedBodyColliderVolume right,
+        int tieBreaker,
+        out FixedVector3 correction
+    ) {
+        var (leftCenter, leftAxisX, leftAxisY, leftAxisZ, leftHalf) = FixedColliderBounds.BoxAxes(
+            orientation: leftOrientation,
+            position: leftPosition,
+            volume: in left
+        );
+        var (rightCenter, rightAxisX, rightAxisY, rightAxisZ, rightHalf) = FixedColliderBounds.BoxAxes(
+            orientation: rightOrientation,
+            position: rightPosition,
+            volume: in right
+        );
+        var delta = (leftCenter - rightCenter);
+
+        Span<FixedVector3> axes = [
+            FixedAxisMath.UnitX, FixedAxisMath.UnitY, FixedAxisMath.UnitZ,
+            leftAxisX, leftAxisY, leftAxisZ,
+            rightAxisX, rightAxisY, rightAxisZ,
+        ];
+        var bestOverlap = FixedQ4816.MaxValue;
+        var bestAxis = FixedVector3.Zero;
+        var bestCenterDistance = FixedQ4816.Zero;
+
+        foreach (var axis in axes) {
+            var leftProjection = (
+                ((FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: leftAxisX,
+                right: axis
+            )) * leftHalf.X) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: leftAxisY,
+                right: axis
+            )) * leftHalf.Y)) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: leftAxisZ,
+                right: axis
+            )) * leftHalf.Z)
+            );
+            var rightProjection = (
+                ((FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: rightAxisX,
+                right: axis
+            )) * rightHalf.X) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: rightAxisY,
+                right: axis
+            )) * rightHalf.Y)) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(
+                left: rightAxisZ,
+                right: axis
+            )) * rightHalf.Z)
+            );
+            var centerDistance = FixedVector3.Dot(
+                left: delta,
+                right: axis
+            );
+            var overlap = ((leftProjection + rightProjection) - FixedQ4816.Abs(value: centerDistance));
+
+            if (overlap <= FixedQ4816.Zero) {
+                correction = default;
+                return false;
+            }
+
+            if (overlap < bestOverlap) {
+                bestOverlap = overlap;
+                bestAxis = axis;
+                bestCenterDistance = centerDistance;
+            }
+        }
+
+        var sign = ((bestCenterDistance == FixedQ4816.Zero)
+            ? (((tieBreaker & 1) == 0)
+                ? FixedQ4816.One
+                : -FixedQ4816.One)
+            : ((bestCenterDistance > FixedQ4816.Zero)
+                ? FixedQ4816.One
+                : -FixedQ4816.One
+        ));
+
+        correction = (bestAxis * (bestOverlap * sign));
+        return true;
+    }
+    private static bool TryVolumeCorrection(
+        FixedVector3 leftPosition,
+        FixedQuaternion leftOrientation,
+        in FixedBodyColliderVolume left,
+        FixedVector3 rightPosition,
+        FixedQuaternion rightOrientation,
+        in FixedBodyColliderVolume right,
+        int tieBreaker,
+        out FixedVector3 correction
+    ) {
+        if (
+            !IsSupported(kind: left.Kind) ||
+            !IsSupported(kind: right.Kind)
+        ) {
+            throw new InvalidOperationException(message: $"Unknown body collider pair {left.Kind}/{right.Kind}.");
+        }
+
+        if (
+            (left.Kind != FixedBodyColliderKind.Box) &&
+            (right.Kind != FixedBodyColliderKind.Box)
+        ) {
+            var (leftStart, leftEnd) = Segment(
+                orientation: leftOrientation,
+                position: leftPosition,
+                volume: in left
+            );
+            var (rightStart, rightEnd) = Segment(
+                orientation: rightOrientation,
+                position: rightPosition,
+                volume: in right
+            );
+            var delta = ClosestDelta(
+                p1: leftStart,
+                p2: rightStart,
+                q1: leftEnd,
+                q2: rightEnd
+            );
+            var distanceSquared = delta.LengthSquared;
+            var radius = (left.Radius + right.Radius);
+
+            if (distanceSquared >= (radius * radius)) {
+                correction = default;
+                return false;
+            }
+
+            if (distanceSquared <= FixedQ4816.Zero) {
+                var sign = (((tieBreaker & 1) == 0)
+                    ? FixedQ4816.One
+                    : -FixedQ4816.One
+                );
+
+                correction = new FixedVector3(
+                    X: (radius * sign),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                );
+                return true;
+            }
+
+            var distance = FixedQ4816.Sqrt(value: distanceSquared);
+
+            correction = (delta * ((radius - distance) / distance));
+            return true;
+        }
+
+        if (
+            (left.Kind == FixedBodyColliderKind.Box) &&
+            (right.Kind == FixedBodyColliderKind.Box)
+        ) {
+            return TryBoxBoxCorrection(
+                correction: out correction,
+                left: in left,
+                leftOrientation: leftOrientation,
+                leftPosition: leftPosition,
+                right: in right,
+                rightOrientation: rightOrientation,
+                rightPosition: rightPosition,
+                tieBreaker: tieBreaker
+            );
+        }
+
+        var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
+            orientation: leftOrientation,
+            position: leftPosition,
+            volume: in left
+        );
+        var (rightCenter, rightExtent) = FixedColliderBounds.WorldBounds(
+            orientation: rightOrientation,
+            position: rightPosition,
+            volume: in right
+        );
+        var deltaCenter = (leftCenter - rightCenter);
+        var overlapX = ((leftExtent.X + rightExtent.X) - FixedQ4816.Abs(value: deltaCenter.X));
+        var overlapY = ((leftExtent.Y + rightExtent.Y) - FixedQ4816.Abs(value: deltaCenter.Y));
+        var overlapZ = ((leftExtent.Z + rightExtent.Z) - FixedQ4816.Abs(value: deltaCenter.Z));
+
+        if (
+            (overlapX <= FixedQ4816.Zero) ||
+            (overlapY <= FixedQ4816.Zero) ||
+            (overlapZ <= FixedQ4816.Zero)
+        ) {
+            correction = default;
+            return false;
+        }
+
+        if (
+            (overlapX <= overlapY) &&
+            (overlapX <= overlapZ)
+        ) {
+            var sign = ((deltaCenter.X == FixedQ4816.Zero)
+                ? (((tieBreaker & 1) == 0)
+                    ? FixedQ4816.One
+                    : -FixedQ4816.One)
+                : ((deltaCenter.X > FixedQ4816.Zero)
+                    ? FixedQ4816.One
+                    : -FixedQ4816.One
+            ));
+
+            correction = new FixedVector3(
+                X: (overlapX * sign),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            );
+        } else if (overlapY <= overlapZ) {
+            var sign = ((deltaCenter.Y >= FixedQ4816.Zero)
+                ? FixedQ4816.One
+                : -FixedQ4816.One
+            );
+
+            correction = new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: (overlapY * sign),
+                Z: FixedQ4816.Zero
+            );
+        } else {
+            var sign = ((deltaCenter.Z == FixedQ4816.Zero)
+                ? (((tieBreaker & 1) == 0)
+                    ? FixedQ4816.One
+                    : -FixedQ4816.One)
+                : ((deltaCenter.Z > FixedQ4816.Zero)
+                    ? FixedQ4816.One
+                    : -FixedQ4816.One
+            ));
+
+            correction = new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.Zero,
+                Z: (overlapZ * sign)
+            );
+        }
+        return true;
+    }
+
+    /// <summary>Returns a rotation-independent sphere enclosing every supplied local volume.</summary>
+    /// <param name="volumes">The compound collider's local volumes.</param>
+    /// <returns>A conservative broadphase radius.</returns>
+    public static FixedQ4816 BroadphaseRadius(ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        var radius = FixedQ4816.Zero;
+
+        foreach (ref readonly var volume in volumes) {
+            var extent = volume.Kind switch {
+                FixedBodyColliderKind.Sphere => (volume.Center.Length + volume.Radius),
+                FixedBodyColliderKind.Capsule => (FixedQ4816.Max(
+                x: volume.Center.Length,
+                y: volume.Endpoint.Length
+            ) + volume.Radius),
+                FixedBodyColliderKind.Box => (volume.Center.Length + volume.HalfExtents.Length),
+                _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
+            };
+
+            radius = FixedQ4816.Max(
+                x: radius,
+                y: extent
+            );
+        }
+        return radius;
+    }
     /// <summary>Computes the vector from segment <c>[p2, q2]</c>'s closest point to segment <c>[p1, q1]</c>'s — the
     /// one deterministic segment-to-segment witness every capsule/sphere pair test (the contact solver here, the
     /// event feed's overlap sense) measures through, so no consumer carries a second clamp order.</summary>
@@ -91,283 +389,6 @@ public static class FixedDynamicBodyContacts {
             }
         }
         return ((p1 + (d1 * s)) - (p2 + (d2 * t)));
-    }
-    private static bool IsSupported(FixedBodyColliderKind kind) =>
-        (kind is FixedBodyColliderKind.Sphere or FixedBodyColliderKind.Capsule or FixedBodyColliderKind.Box);
-    private static (FixedVector3 Start, FixedVector3 End) Segment(FixedVector3 position, FixedQuaternion orientation, in FixedBodyColliderVolume volume) {
-        var start = (position + orientation.Rotate(vector: volume.Center));
-        var end = ((volume.Kind == FixedBodyColliderKind.Capsule)
-            ? (position + orientation.Rotate(vector: volume.Endpoint))
-            : start
-        );
-
-        return (start, end);
-    }
-    private static bool TryVolumeCorrection(
-        FixedVector3 leftPosition,
-        FixedQuaternion leftOrientation,
-        in FixedBodyColliderVolume left,
-        FixedVector3 rightPosition,
-        FixedQuaternion rightOrientation,
-        in FixedBodyColliderVolume right,
-        int tieBreaker,
-        out FixedVector3 correction
-    ) {
-        if (
-            !IsSupported(kind: left.Kind) ||
-            !IsSupported(kind: right.Kind)
-        ) {
-            throw new InvalidOperationException(message: $"Unknown body collider pair {left.Kind}/{right.Kind}.");
-        }
-
-        if (
-            (left.Kind != FixedBodyColliderKind.Box) &&
-            (right.Kind != FixedBodyColliderKind.Box)
-        ) {
-            var (leftStart, leftEnd) = Segment(
-                orientation: leftOrientation,
-                position: leftPosition,
-                volume: in left
-            );
-            var (rightStart, rightEnd) = Segment(
-                orientation: rightOrientation,
-                position: rightPosition,
-                volume: in right
-            );
-            var delta = ClosestDelta(
-                p1: leftStart,
-                p2: rightStart,
-                q1: leftEnd,
-                q2: rightEnd
-            );
-            var distanceSquared = delta.LengthSquared;
-            var radius = (left.Radius + right.Radius);
-
-            if (distanceSquared >= (radius * radius)) {
-                correction = default;
-                return false;
-            }
-
-            if (distanceSquared <= FixedQ4816.Zero) {
-                var sign = (((tieBreaker & 1) == 0)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One
-                );
-
-                correction = new FixedVector3(
-                    X: (radius * sign),
-                    Y: FixedQ4816.Zero,
-                    Z: FixedQ4816.Zero
-                );
-                return true;
-            }
-
-            var distance = FixedQ4816.Sqrt(value: distanceSquared);
-
-            correction = (delta * ((radius - distance) / distance));
-            return true;
-        }
-
-        if (
-            (left.Kind == FixedBodyColliderKind.Box) &&
-            (right.Kind == FixedBodyColliderKind.Box)
-        ) {
-            return TryBoxBoxCorrection(
-                leftPosition: leftPosition,
-                leftOrientation: leftOrientation,
-                left: in left,
-                rightPosition: rightPosition,
-                rightOrientation: rightOrientation,
-                right: in right,
-                tieBreaker: tieBreaker,
-                correction: out correction
-            );
-        }
-
-        var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
-            orientation: leftOrientation,
-            position: leftPosition,
-            volume: in left
-        );
-        var (rightCenter, rightExtent) = FixedColliderBounds.WorldBounds(
-            orientation: rightOrientation,
-            position: rightPosition,
-            volume: in right
-        );
-        var deltaCenter = (leftCenter - rightCenter);
-        var overlapX = ((leftExtent.X + rightExtent.X) - FixedQ4816.Abs(value: deltaCenter.X));
-        var overlapY = ((leftExtent.Y + rightExtent.Y) - FixedQ4816.Abs(value: deltaCenter.Y));
-        var overlapZ = ((leftExtent.Z + rightExtent.Z) - FixedQ4816.Abs(value: deltaCenter.Z));
-
-        if (
-            (overlapX <= FixedQ4816.Zero) ||
-            (overlapY <= FixedQ4816.Zero) ||
-            (overlapZ <= FixedQ4816.Zero)
-        ) {
-            correction = default;
-            return false;
-        }
-
-        if (
-            (overlapX <= overlapY) &&
-            (overlapX <= overlapZ)
-        ) {
-            var sign = ((deltaCenter.X == FixedQ4816.Zero)
-                ? (((tieBreaker & 1) == 0)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One)
-                : ((deltaCenter.X > FixedQ4816.Zero)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One
-            ));
-
-            correction = new FixedVector3(
-                X: (overlapX * sign),
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.Zero
-            );
-        } else if (overlapY <= overlapZ) {
-            var sign = ((deltaCenter.Y >= FixedQ4816.Zero)
-                ? FixedQ4816.One
-                : -FixedQ4816.One
-            );
-
-            correction = new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: (overlapY * sign),
-                Z: FixedQ4816.Zero
-            );
-        } else {
-            var sign = ((deltaCenter.Z == FixedQ4816.Zero)
-                ? (((tieBreaker & 1) == 0)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One)
-                : ((deltaCenter.Z > FixedQ4816.Zero)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One
-            ));
-
-            correction = new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: FixedQ4816.Zero,
-                Z: (overlapZ * sign)
-            );
-        }
-        return true;
-    }
-    /// <summary>Depenetrates two oriented boxes by separating-axis test over the 9 candidate axes that matter for a
-    /// pair of boxes — the world X/Y/Z axes (so an axis-aligned pair costs nothing extra over the world-bounds
-    /// approximation) plus each box's own three face axes, which the world-bounds path never tests and a tilted or
-    /// tumbling box needs: its true footprint is narrower along its own axes than along world axes, so world-axis-only
-    /// overlap systematically OVERSTATES the penetration of anything but an axis-aligned box, and the resulting
-    /// correction can be pointed nowhere near the box's actual touching face. Face-normal SAT alone (no edge-edge
-    /// cross-product axes) is not the complete 15-axis OBB test, so a pure edge-edge contact can still read a larger
-    /// depth than its true minimum — a bound on the remaining error, not an exact witness.</summary>
-    /// <param name="leftPosition">The left box's world position.</param>
-    /// <param name="leftOrientation">The left box's world orientation.</param>
-    /// <param name="left">The left body-local box volume.</param>
-    /// <param name="rightPosition">The right box's world position.</param>
-    /// <param name="rightOrientation">The right box's world orientation.</param>
-    /// <param name="right">The right body-local box volume.</param>
-    /// <param name="tieBreaker">Selects a correction sign only when the winning axis reads exactly coincident
-    /// centers along it.</param>
-    /// <param name="correction">The chosen axis scaled by its overlap depth, directed from <paramref name="right"/>
-    /// toward <paramref name="left"/> — the same convention every other branch here returns.</param>
-    /// <returns><see langword="true"/> when every one of the 9 axes reads a positive overlap (so the boxes truly
-    /// overlap on the axes tested); <see langword="false"/> the moment any axis proves separation.</returns>
-    private static bool TryBoxBoxCorrection(
-        FixedVector3 leftPosition,
-        FixedQuaternion leftOrientation,
-        in FixedBodyColliderVolume left,
-        FixedVector3 rightPosition,
-        FixedQuaternion rightOrientation,
-        in FixedBodyColliderVolume right,
-        int tieBreaker,
-        out FixedVector3 correction
-    ) {
-        var (leftCenter, leftAxisX, leftAxisY, leftAxisZ, leftHalf) = FixedColliderBounds.BoxAxes(
-            position: leftPosition,
-            orientation: leftOrientation,
-            volume: in left
-        );
-        var (rightCenter, rightAxisX, rightAxisY, rightAxisZ, rightHalf) = FixedColliderBounds.BoxAxes(
-            position: rightPosition,
-            orientation: rightOrientation,
-            volume: in right
-        );
-        var delta = (leftCenter - rightCenter);
-
-        Span<FixedVector3> axes = [
-            FixedAxisMath.UnitX, FixedAxisMath.UnitY, FixedAxisMath.UnitZ,
-            leftAxisX, leftAxisY, leftAxisZ,
-            rightAxisX, rightAxisY, rightAxisZ,
-        ];
-        var bestOverlap = FixedQ4816.MaxValue;
-        var bestAxis = FixedVector3.Zero;
-        var bestCenterDistance = FixedQ4816.Zero;
-
-        foreach (var axis in axes) {
-            var leftProjection = (
-                (FixedQ4816.Abs(value: FixedVector3.Dot(left: leftAxisX, right: axis)) * leftHalf.X) +
-                (FixedQ4816.Abs(value: FixedVector3.Dot(left: leftAxisY, right: axis)) * leftHalf.Y) +
-                (FixedQ4816.Abs(value: FixedVector3.Dot(left: leftAxisZ, right: axis)) * leftHalf.Z)
-            );
-            var rightProjection = (
-                (FixedQ4816.Abs(value: FixedVector3.Dot(left: rightAxisX, right: axis)) * rightHalf.X) +
-                (FixedQ4816.Abs(value: FixedVector3.Dot(left: rightAxisY, right: axis)) * rightHalf.Y) +
-                (FixedQ4816.Abs(value: FixedVector3.Dot(left: rightAxisZ, right: axis)) * rightHalf.Z)
-            );
-            var centerDistance = FixedVector3.Dot(left: delta, right: axis);
-            var overlap = ((leftProjection + rightProjection) - FixedQ4816.Abs(value: centerDistance));
-
-            if (overlap <= FixedQ4816.Zero) {
-                correction = default;
-                return false;
-            }
-
-            if (overlap < bestOverlap) {
-                bestOverlap = overlap;
-                bestAxis = axis;
-                bestCenterDistance = centerDistance;
-            }
-        }
-
-        var sign = ((bestCenterDistance == FixedQ4816.Zero)
-            ? (((tieBreaker & 1) == 0)
-                ? FixedQ4816.One
-                : -FixedQ4816.One)
-            : ((bestCenterDistance > FixedQ4816.Zero)
-                ? FixedQ4816.One
-                : -FixedQ4816.One
-        ));
-
-        correction = (bestAxis * (bestOverlap * sign));
-        return true;
-    }
-
-    /// <summary>Returns a rotation-independent sphere enclosing every supplied local volume.</summary>
-    /// <param name="volumes">The compound collider's local volumes.</param>
-    /// <returns>A conservative broadphase radius.</returns>
-    public static FixedQ4816 BroadphaseRadius(ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var radius = FixedQ4816.Zero;
-
-        foreach (ref readonly var volume in volumes) {
-            var extent = volume.Kind switch {
-                FixedBodyColliderKind.Sphere => (volume.Center.Length + volume.Radius),
-                FixedBodyColliderKind.Capsule => (FixedQ4816.Max(
-                x: volume.Center.Length,
-                y: volume.Endpoint.Length
-            ) + volume.Radius),
-                FixedBodyColliderKind.Box => (volume.Center.Length + volume.HalfExtents.Length),
-                _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
-            };
-
-            radius = FixedQ4816.Max(
-                x: radius,
-                y: extent
-            );
-        }
-        return radius;
     }
     /// <summary>Finds the deepest overlap correction from <paramref name="rightVolumes"/> to
     /// <paramref name="leftVolumes"/>.</summary>

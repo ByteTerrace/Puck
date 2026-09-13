@@ -80,7 +80,9 @@ internal static class MfInterop {
 
             throw new COMException(
                 errorCode: hr,
-                message: $"Media Foundation call failed (0x{unchecked((uint)hr):X8}){((systemMessage is null) ? "" : $": {systemMessage}")}"
+                message: $"Media Foundation call failed (0x{unchecked((uint)hr):X8}){((systemMessage is null)
+                ? ""
+                : $": {systemMessage}")}"
             );
         }
     }
@@ -101,7 +103,10 @@ internal static class MfInterop {
     /// <c>ShutdownObject()</c> on the returned activate, before either RCW is released; the caller owns that sequence.</returns>
     /// <exception cref="InvalidOperationException">No matching video capture device was found.</exception>
     public static (object MediaSource, string? Name, IMFActivate Activate) ActivateDefaultVideoSource(string? symbolicLink = null, bool infrared = false, bool extended = false) {
-        Check(hr: MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var enumConfig));
+        Check(hr: MFCreateAttributes(
+            cInitialSize: 2,
+            ppMFAttributes: out var enumConfig
+        ));
 
         uint count;
         nint devices;
@@ -110,43 +115,76 @@ internal static class MfInterop {
             var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
             var vidcap = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
 
-            Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
+            Check(hr: enumConfig.SetGUID(
+                guidKey: ref sourceTypeKey,
+                guidValue: ref vidcap
+            ));
 
             if (infrared) {
                 var categoryKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_CATEGORY;
                 var sensorCategory = KSCATEGORY_SENSOR_CAMERA;
 
-                Check(hr: enumConfig.SetGUID(guidKey: ref categoryKey, guidValue: ref sensorCategory));
+                Check(hr: enumConfig.SetGUID(
+                    guidKey: ref categoryKey,
+                    guidValue: ref sensorCategory
+                ));
             }
 
-            Check(hr: MFEnumDeviceSources(pAttributes: enumConfig, pcSourceActivate: out count, pppSourceActivate: out devices));
+            Check(hr: MFEnumDeviceSources(
+                pAttributes: enumConfig,
+                pcSourceActivate: out count,
+                pppSourceActivate: out devices
+            ));
         } finally {
             _ = Marshal.ReleaseComObject(o: enumConfig);
         }
 
-        if ((0 == count) || (0 == devices)) {
+        if (
+            (0 == count) ||
+            (0 == devices)
+        ) {
             throw new InvalidOperationException(message: (infrared
                 ? "no infrared capture device was found"
-                : "no video capture devices were found"
-            ));
+                : "no video capture devices were found"));
         }
 
         try {
-            var selectedIndex = ((symbolicLink is null) ? 0 : SelectDeviceIndex(count: count, devices: devices, symbolicLink: symbolicLink));
-            var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (selectedIndex * IntPtr.Size))));
+            var selectedIndex = ((symbolicLink is null)
+                ? 0
+                : SelectDeviceIndex(
+                    count: count,
+                    devices: devices,
+                    symbolicLink: symbolicLink
+                )
+            );
+            var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(
+                ptr: devices,
+                ofs: (selectedIndex * IntPtr.Size)
+            )));
             var retainActivate = false;
 
             try {
                 var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
-                var name = ((activate.GetAllocatedString(guidKey: ref nameKey, pcchLength: out _, ppwszValue: out var deviceName) >= 0)
+                var name = ((activate.GetAllocatedString(
+                    guidKey: ref nameKey,
+                    pcchLength: out _,
+                    ppwszValue: out var deviceName
+                ) >= 0)
                     ? deviceName
-                    : null);
+                    : null
+                );
 
                 // IMFMediaSourceEx is the capture-source activation contract that exposes non-color device streams. Asking
                 // only for IMFMediaSource can yield the ordinary video projection even when the same device has an L8 pin.
-                var sourceIid = (extended ? IID_IMFMediaSourceEx : IID_IMFMediaSource);
+                var sourceIid = (extended
+                    ? IID_IMFMediaSourceEx
+                    : IID_IMFMediaSource
+                );
 
-                Check(hr: activate.ActivateObject(ppv: out var mediaSource, riid: ref sourceIid));
+                Check(hr: activate.ActivateObject(
+                    ppv: out var mediaSource,
+                    riid: ref sourceIid
+                ));
                 retainActivate = true;
 
                 return (mediaSource, name, activate);
@@ -158,7 +196,10 @@ internal static class MfInterop {
         } finally {
             // Release every raw device pointer returned by MFEnumDeviceSources and free the array.
             for (var index = 0; (index < count); index++) {
-                _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
+                _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(
+                    ptr: devices,
+                    ofs: (index * IntPtr.Size)
+                ));
             }
 
             Marshal.FreeCoTaskMem(ptr: devices);
@@ -171,14 +212,25 @@ internal static class MfInterop {
         var linkKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK;
 
         for (var index = 0; (index < count); index++) {
-            var candidate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size))));
+            var candidate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(
+                ptr: devices,
+                ofs: (index * IntPtr.Size)
+            )));
 
             try {
-                var hasLink = (candidate.GetAllocatedString(guidKey: ref linkKey, pcchLength: out _, ppwszValue: out var candidateLink) >= 0);
+                var hasLink = (candidate.GetAllocatedString(
+                    guidKey: ref linkKey,
+                    pcchLength: out _,
+                    ppwszValue: out var candidateLink
+                ) >= 0);
 
                 if (
                     hasLink &&
-                    string.Equals(a: candidateLink, b: symbolicLink, comparisonType: StringComparison.OrdinalIgnoreCase)
+                    string.Equals(
+                    a: candidateLink,
+                    b: symbolicLink,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
                 ) {
                     return index;
                 }
@@ -225,7 +277,11 @@ internal static class MfInterop {
             }
 
             for (uint descriptorIndex = 0; (descriptorIndex < descriptorCount); descriptorIndex++) {
-                Check(hr: presentation.GetStreamDescriptorByIndex(dwIndex: descriptorIndex, pfSelected: out _, ppDescriptor: out var descriptor));
+                Check(hr: presentation.GetStreamDescriptorByIndex(
+                    dwIndex: descriptorIndex,
+                    pfSelected: out _,
+                    ppDescriptor: out var descriptor
+                ));
                 IMFMediaTypeHandler? handler = null;
 
                 try {
@@ -233,13 +289,22 @@ internal static class MfInterop {
                     Check(hr: handler.GetMediaTypeCount(pdwTypeCount: out var typeCount));
 
                     for (uint typeIndex = 0; (typeIndex < typeCount); typeIndex++) {
-                        Check(hr: handler.GetMediaTypeByIndex(dwIndex: typeIndex, ppType: out var candidate));
+                        Check(hr: handler.GetMediaTypeByIndex(
+                            dwIndex: typeIndex,
+                            ppType: out var candidate
+                        ));
                         var retainCandidate = false;
 
                         try {
                             var subTypeKey = MF_MT_SUBTYPE;
 
-                            if ((candidate.GetGUID(guidKey: ref subTypeKey, guidValue: out var subtype) < 0) || (MFVideoFormat_L8 != subtype)) {
+                            if (
+                                (candidate.GetGUID(
+                                guidKey: ref subTypeKey,
+                                guidValue: out var subtype
+                            ) < 0) ||
+                                (MFVideoFormat_L8 != subtype)
+                            ) {
                                 continue;
                             }
 

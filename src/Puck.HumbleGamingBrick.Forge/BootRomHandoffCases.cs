@@ -8,6 +8,30 @@ namespace Puck.HumbleGamingBrick.Forge;
 public static class BootRomHandoffCases {
     private const int TitleLength = 15;
 
+    private static (string Name, byte[] Rom) Case(string name, string title, byte colorFlag, byte oldLicensee, string newLicensee) =>
+        (name, BootRomProbeCartridge.Create(probe: new BootRomProbe(
+            ColorFlag: colorFlag,
+            HandoffLine: 0,
+            NewLicenseeCode: newLicensee,
+            OldLicenseeCode: oldLicensee,
+            Title: title
+        )));
+    // A title whose sixteen checksum bytes (the fifteen title bytes plus the color flag) sum to the target, so a case
+    // can name the table row it exercises instead of hoping to land on it.
+    private static string TitleWithChecksum(string prefix, byte colorFlag, byte target) {
+        var padded = prefix.PadRight(
+            paddingChar: ' ',
+            totalWidth: (TitleLength - 1)
+        );
+        var sum = colorFlag;
+
+        foreach (var character in padded) {
+            sum += ((byte)character);
+        }
+
+        return (padded + ((char)((byte)(target - sum))));
+    }
+
     /// <summary>Creates the header cases.</summary>
     /// <returns>The cases, each a name and the ROM image to boot.</returns>
     public static (string Name, byte[] Rom)[] Create() =>
@@ -99,28 +123,4 @@ public static class BootRomHandoffCases {
                 title: "PUCK CGB ONLY"
             ),
         ];
-
-    // A title whose sixteen checksum bytes (the fifteen title bytes plus the color flag) sum to the target, so a case
-    // can name the table row it exercises instead of hoping to land on it.
-    private static string TitleWithChecksum(string prefix, byte colorFlag, byte target) {
-        var padded = prefix.PadRight(
-            paddingChar: ' ',
-            totalWidth: (TitleLength - 1)
-        );
-        var sum = colorFlag;
-
-        foreach (var character in padded) {
-            sum += ((byte)character);
-        }
-
-        return (padded + ((char)((byte)(target - sum))));
-    }
-    private static (string Name, byte[] Rom) Case(string name, string title, byte colorFlag, byte oldLicensee, string newLicensee) =>
-        (name, BootRomProbeCartridge.Create(probe: new BootRomProbe(
-            ColorFlag: colorFlag,
-            HandoffLine: 0,
-            NewLicenseeCode: newLicensee,
-            OldLicenseeCode: oldLicensee,
-            Title: title
-        )));
 }

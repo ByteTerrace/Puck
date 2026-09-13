@@ -212,8 +212,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 if (!TryParseLoadArgs(
                     args: in args,
                     context: context,
-                    path: out var path,
-                    force: out var force
+                    force: out var force,
+                    path: out var path
                 )) {
                     return CommandResult.Usage(
                         form: "<path> [force]",
@@ -340,7 +340,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 // A save writes canonical JSON, and a .puck file is source whose lets, templates, and comments the
                 // document does not carry — writing over one destroys them.
-                if (target.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                if (target.EndsWith(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: ".puck"
+                )) {
                     return CommandResult.Error(output: $"[world.save: {target} is .puck source — a save writes canonical JSON and would overwrite it; name a JSON target: world.save <path>.world.json; nothing written]");
                 }
 
@@ -379,14 +382,18 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         imports: out var preservedImports,
                         note: out var note,
                         path: target,
-                        catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog),
+                        catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog),
                         catalog: machineCatalog
                     );
 
                     server.Compact();
 
                     var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
-                        ? $", basis: {(basisPath is { } ? basisPath : "none")}, imports: {(preservedImports.Count > 0 ? preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture) : "0")}"
+                        ? $", basis: {((basisPath is { })
+                            ? basisPath
+                            : "none")}, imports: {((preservedImports.Count > 0)
+                            ? preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)
+                            : "0")}"
                         : ((note.Length > 0)
                             ? $", {note}"
                             : ""
@@ -459,7 +466,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.status",
             description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), a cheap session-drift hint, dirty = journal length, and journal-depth = host.journalDepth (unbounded when 0, the default). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
             handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.status") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.status"
+                ) is { } refusal) {
                     return refusal;
                 }
 
@@ -490,7 +500,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     .Select(selector: static field => field.Name)
                     .ToArray();
                 var medium = ((mediumFieldNames.Length > 0)
-                    ? string.Join(separator: ",", values: mediumFieldNames)
+                    ? string.Join(
+                        separator: ",",
+                        values: mediumFieldNames
+                    )
                     : "none"
                 );
                 var basis = ((WorldDefinitionFileSource.TryPeekBasis(
@@ -526,7 +539,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.imports",
             description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares and, for a module that authors one, its exports record as written. A flat file (no basis, no imports) reports just itself.",
             handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.imports") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.imports"
+                ) is { } refusal) {
                     return refusal;
                 }
 
@@ -540,7 +556,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 var formatted = string.Join(
                     separator: " | ",
-                    values: layers.Select(selector: layer => $"{layer.Path}{((layer.Alias is null) ? "" : $" as {layer.Alias}")} [{string.Join(separator: ",", values: layer.Keys)}]{((layer.Exports is null) ? "" : $" exports[{layer.Exports.Describe()}]")}")
+                    values: layers.Select(selector: layer => $"{layer.Path}{((layer.Alias is null)
+                    ? ""
+                    : $" as {layer.Alias}")} [{string.Join(
+                        separator: ",",
+                        values: layer.Keys
+                    )}]{((layer.Exports is null)
+                    ? ""
+                    : $" exports[{layer.Exports.Describe()}]")}")
                 );
 
                 return new CommandResult(Output: $"[world.imports: {formatted}]");
@@ -551,7 +574,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.references",
             description: "Reads the references section back: each row's name -> document, or 'none' when the section is absent or declares zero rows. Authored data only — a row asserts nothing about the named document's existence or shape; resolving it is a future consumer's job, not this verb's.",
             handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.references") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.references"
+                ) is { } refusal) {
                     return refusal;
                 }
 
@@ -574,7 +600,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.metadata",
             description: "Reads the metadata section back: title, description, authors, tags, and the custom bag's key/byte counts, or 'none' when the section is absent. Authored data only, boot-authored, nothing here is read by the engine.",
             handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.metadata") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.metadata"
+                ) is { } refusal) {
                     return refusal;
                 }
 
@@ -618,7 +647,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.admission",
             description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can verify and no traveller can arrive). The document half of the admission decision — world.peers echoes the runtime half (which bodies were admitted under which identity).",
             handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.admission") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.admission"
+                ) is { } refusal) {
                     return refusal;
                 }
 

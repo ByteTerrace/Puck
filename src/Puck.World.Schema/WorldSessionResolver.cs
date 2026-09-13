@@ -137,9 +137,9 @@ public sealed class WorldSessionResolver {
 
             if (
                 carriesTag &&
-                group.Members.Any(member =>
-                    (member.Ref.Kind == MemberRefKind.Local) &&
-                    (member.Ref.Principal == principal))
+                group.Members.Any(predicate: member =>
+                    ((member.Ref.Kind == MemberRefKind.Local) &&
+                    (member.Ref.Principal == principal)))
             ) {
                 matches.Add(item: group.Id);
             }
@@ -157,9 +157,9 @@ public sealed class WorldSessionResolver {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                return group.Members.Any(member =>
-                    (member.Ref.Kind == MemberRefKind.Local) &&
-                    (member.Ref.Principal == principal));
+                return group.Members.Any(predicate: member =>
+                    ((member.Ref.Kind == MemberRefKind.Local) &&
+                    (member.Ref.Principal == principal)));
             }
         }
 

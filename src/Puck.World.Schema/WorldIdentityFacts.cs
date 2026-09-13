@@ -17,7 +17,6 @@ public sealed record WorldIdentityFacts(CellName State, int Capacity) {
         Capacity: 64
     );
 }
-
 /// <summary>The reserved body-scope lane a world declares when it reads facts: a keyed <see cref="CellKind.Int"/>
 /// row named <see cref="RowName"/> in <c>state.world</c>, one cell per (body, fact) keyed
 /// <c>&lt;bodyIndex&gt;-&lt;fact&gt;</c>. The server loads a body's lane from its identity when a seat binds one,
@@ -31,6 +30,14 @@ public static class WorldIdentityFactLane {
     /// <see cref="CellName"/> admits that a decimal body index never contains.</summary>
     public const char Separator = '-';
 
+    /// <summary>Returns whether a lane key belongs to <paramref name="bodyIndex"/>.</summary>
+    /// <param name="key">The lane key.</param>
+    /// <param name="bodyIndex">The body index.</param>
+    public static bool BelongsTo(ReadOnlySpan<char> key, int bodyIndex) => (TryParse(
+        bodyIndex: out var owner,
+        fact: out _,
+        key: key
+    ) && (owner == bodyIndex));
     /// <summary>Spells the lane key of one (body, fact) pair.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
     /// <param name="fact">The fact key.</param>
@@ -49,7 +56,12 @@ public static class WorldIdentityFactLane {
         if (
             (separator > 0) &&
             (separator < (key.Length - 1)) &&
-            int.TryParse(s: key[..separator], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out bodyIndex)
+            int.TryParse(
+            s: key[..separator],
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out bodyIndex
+        )
         ) {
             fact = key[(separator + 1)..];
 
@@ -61,8 +73,4 @@ public static class WorldIdentityFactLane {
 
         return false;
     }
-    /// <summary>Returns whether a lane key belongs to <paramref name="bodyIndex"/>.</summary>
-    /// <param name="key">The lane key.</param>
-    /// <param name="bodyIndex">The body index.</param>
-    public static bool BelongsTo(ReadOnlySpan<char> key, int bodyIndex) => (TryParse(key: key, bodyIndex: out var owner, fact: out _) && (owner == bodyIndex));
 }

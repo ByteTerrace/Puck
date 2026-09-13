@@ -11,15 +11,41 @@ public sealed record ShapeCellsDocument(float Frequency, float Amplitude, uint S
     [property: JsonConverter(typeof(StrictEnumConverter<SdfCellMode>))] SdfCellMode Mode, float Randomness) {
     /// <summary>The corresponding engine field parameters.</summary>
     [JsonIgnore]
-    public SdfCellDisplacement Parameters => new(Frequency, Amplitude, Seed, Mode, Randomness);
+    public SdfCellDisplacement Parameters => new(
+        Frequency,
+        Amplitude,
+        Seed,
+        Mode,
+        Randomness
+    );
+
     /// <summary>Converts the field-unit outward relief to a conservative primitive-coordinate radius.
     /// Nonuniform primitive scaling and the profile's distance correction can flatten the field.</summary>
     public float PrimitiveReachPadding(Vector3 scale, ShapeFlareDocument? flare) {
         if (Amplitude == 0f) { return 0f; }
-        var magnitude = Vector3.Abs(scale);
-        var minimum = MathF.Min(magnitude.X, MathF.Min(magnitude.Y, magnitude.Z));
-        var maximum = MathF.Max(magnitude.X, MathF.Max(magnitude.Y, magnitude.Z));
-        var ratio = MathF.Max(1f, maximum / MathF.Max(minimum, float.Epsilon));
-        return Parameters.OutwardReach * ratio * ShapeFlareDocument.ReachFactor(flare);
+        var magnitude = Vector3.Abs(value: scale);
+        var minimum = MathF.Min(
+            x: magnitude.X,
+            y: MathF.Min(
+                x: magnitude.Y,
+                y: magnitude.Z
+            )
+        );
+        var maximum = MathF.Max(
+            x: magnitude.X,
+            y: MathF.Max(
+                x: magnitude.Y,
+                y: magnitude.Z
+            )
+        );
+        var ratio = MathF.Max(
+            x: 1f,
+            y: (maximum / MathF.Max(
+                x: minimum,
+                y: float.Epsilon
+            ))
+        );
+
+        return ((Parameters.OutwardReach * ratio) * ShapeFlareDocument.ReachFactor(flare: flare));
     }
 }

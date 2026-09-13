@@ -112,35 +112,6 @@ public sealed class AudioMixer {
     private int m_rowCount;
     private int m_sourceCount;
 
-    /// <summary>Returns the attenuation, Q16, a point emitter's curve applies at exactly half its finite-support
-    /// radius — the fixed reference distance <c>world.status</c>'s half-radius-gain echo reports.</summary>
-    /// <param name="curve">The attenuation law.</param>
-    /// <returns>The attenuation at half radius, Q16.</returns>
-    public static int HalfRadiusAttenuationQ16(AudioAttenuationCurve curve) {
-        const long HalfDistanceSquaredQ16 = 16384;
-        const long UnitRadiusQ16 = 65536;
-
-        if (curve == AudioAttenuationCurve.Linear) {
-            LinearAttenuation(
-                attenuationQ16: out var linear,
-                d2Q16: HalfDistanceSquaredQ16,
-                maxRaw: UnitRadiusQ16,
-                minRaw: 0
-            );
-
-            return linear;
-        }
-
-        SmoothstepAttenuation(
-            attenuationQ16: out var smoothstep,
-            d2Q16: HalfDistanceSquaredQ16,
-            max2Q16: UnitRadiusQ16,
-            min2Q16: 0
-        );
-
-        return smoothstep;
-    }
-
     private void AccumulateEmitter(
         in AudioEmitter emitter,
         int frames,
@@ -624,6 +595,34 @@ public sealed class AudioMixer {
             divisor: simulationRateHz,
             value: SampleRate
         ));
+    }
+    /// <summary>Returns the attenuation, Q16, a point emitter's curve applies at exactly half its finite-support
+    /// radius — the fixed reference distance <c>world.status</c>'s half-radius-gain echo reports.</summary>
+    /// <param name="curve">The attenuation law.</param>
+    /// <returns>The attenuation at half radius, Q16.</returns>
+    public static int HalfRadiusAttenuationQ16(AudioAttenuationCurve curve) {
+        const long HalfDistanceSquaredQ16 = 16384;
+        const long UnitRadiusQ16 = 65536;
+
+        if (curve == AudioAttenuationCurve.Linear) {
+            LinearAttenuation(
+                attenuationQ16: out var linear,
+                d2Q16: HalfDistanceSquaredQ16,
+                maxRaw: UnitRadiusQ16,
+                minRaw: 0
+            );
+
+            return linear;
+        }
+
+        SmoothstepAttenuation(
+            attenuationQ16: out var smoothstep,
+            d2Q16: HalfDistanceSquaredQ16,
+            max2Q16: UnitRadiusQ16,
+            min2Q16: 0
+        );
+
+        return smoothstep;
     }
     /// <summary>Mixes one block from the given snapshot into interleaved stereo s16 — synchronous, pure, owning
     /// no thread. The span length fixes the block size (<c>2·frames</c> samples, frames ≤

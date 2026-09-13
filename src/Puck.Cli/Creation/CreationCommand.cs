@@ -19,14 +19,20 @@ namespace Puck.Cli.Creation;
 /// 2 a usage error (unknown sculpt/prototype name, missing file).
 /// </summary>
 internal static partial class CreationCommand {
-    public static Command Create() => new(description: "Author creations through the sculpting library — list, apply, and inspect.", name: "creation") {
+    public static Command Create() => new(
+        description: "Author creations through the sculpting library — list, apply, and inspect.",
+        name: "creation"
+    ) {
         SculptsCommand(),
         SculptCommand(),
         StatsCommand(),
     };
 
     private static Command SculptsCommand() {
-        var command = new Command(description: "Lists the registered creation sculpts.", name: "sculpts");
+        var command = new Command(
+            description: "Lists the registered creation sculpts.",
+            name: "sculpts"
+        );
 
         command.SetAction(action: _ => {
             if (CreationSculptRegistry.All.Count == 0) {
@@ -47,7 +53,10 @@ internal static partial class CreationCommand {
     private static Command SculptCommand() {
         var nameArgument = new Argument<string>(name: "name") { Description = "The registered sculpt's name." };
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to patch in place.", Required = true };
-        var command = new Command(description: "Applies a sculpt's patch to a world file on disk: validates the result before writing, and refuses (leaving the file untouched) on a validation failure.", name: "sculpt") { nameArgument, worldOption };
+        var command = new Command(
+            description: "Applies a sculpt's patch to a world file on disk: validates the result before writing, and refuses (leaving the file untouched) on a validation failure.",
+            name: "sculpt"
+        ) { nameArgument, worldOption };
 
         command.SetAction(action: parseResult => RunSculpt(
             name: parseResult.GetValue(argument: nameArgument)!,
@@ -59,7 +68,10 @@ internal static partial class CreationCommand {
     private static Command StatsCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Limit to one prototype id (default: every prototype carrying a creation document)." };
-        var command = new Command(description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps for static and pooled rest geometry. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.", name: "stats") { worldOption, prototypeOption };
+        var command = new Command(
+            description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps for static and pooled rest geometry. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.",
+            name: "stats"
+        ) { worldOption, prototypeOption };
 
         command.SetAction(action: parseResult => RunStats(
             prototypeId: parseResult.GetValue(option: prototypeOption),
@@ -68,7 +80,6 @@ internal static partial class CreationCommand {
 
         return command;
     }
-
     private static int RunSculpt(string name, string worldPath) {
         if (!CreationSculptRegistry.TryGet(
             name: name,
@@ -91,7 +102,7 @@ internal static partial class CreationCommand {
 
         try {
             document = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: fullPath))!.AsObject();
-        } catch (Exception exception) when (exception is JsonException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is JsonException or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"creation sculpt: '{fullPath}' is not a valid JSON object: {exception.Message}");
 
             return 1;
@@ -103,7 +114,7 @@ internal static partial class CreationCommand {
 
         try {
             results = sculpt.Sculpt(context: context).Apply(document: working);
-        } catch (Exception exception) when (exception is InvalidOperationException or FormatException or ArgumentException or JsonException) {
+        } catch (Exception exception) when ((exception is InvalidOperationException or FormatException or ArgumentException or JsonException)) {
             Console.Error.WriteLine(value: $"creation sculpt: refused — patch fault: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return 1;
@@ -117,7 +128,7 @@ internal static partial class CreationCommand {
 
         try {
             definition = WorldDefinitionSerialization.Deserialize(utf8Json: JsonSerializer.SerializeToUtf8Bytes(value: working));
-        } catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is InvalidDataException or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"creation sculpt: refused — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return 1;
@@ -132,11 +143,16 @@ internal static partial class CreationCommand {
         return 0;
     }
     private static string KnownSculpts() {
-        var names = string.Join(separator: ", ", values: CreationSculptRegistry.All.Select(selector: static s => s.Name));
+        var names = string.Join(
+            separator: ", ",
+            values: CreationSculptRegistry.All.Select(selector: static s => s.Name)
+        );
 
-        return ((names.Length > 0) ? names : "none registered");
+        return ((names.Length > 0)
+            ? names
+            : "none registered"
+        );
     }
-
     private static int RunStats(string worldPath, string? prototypeId) {
         var fullPath = Path.GetFullPath(path: worldPath);
 
@@ -153,13 +169,17 @@ internal static partial class CreationCommand {
 
         var prototypes = definition!.Creations
             .Where(predicate: p => (p.Document is not null))
-            .Where(predicate: p => ((prototypeId is null) || string.Equals(a: p.Id, b: prototypeId, comparisonType: StringComparison.Ordinal)))
+            .Where(predicate: p => ((prototypeId is null) || string.Equals(
+            a: p.Id,
+            b: prototypeId,
+            comparisonType: StringComparison.Ordinal
+        )))
             .ToList();
 
         if (prototypes.Count == 0) {
-            Console.Error.WriteLine(value: (prototypeId is null)
+            Console.Error.WriteLine(value: ((prototypeId is null)
                 ? $"creation stats: '{fullPath}' declares no prototype carrying a creation document."
-                : $"creation stats: '{fullPath}' names no prototype '{prototypeId}' with a creation document.");
+                : $"creation stats: '{fullPath}' names no prototype '{prototypeId}' with a creation document."));
 
             return 2;
         }
@@ -170,24 +190,31 @@ internal static partial class CreationCommand {
                 id: prototype.Id
             );
             try {
-                ReportStepClamps(definition, prototype);
-            } catch (Exception exception) when (exception is InvalidOperationException or ArgumentException) {
-                Console.Error.WriteLine($"creation stats: '{prototype.Id}' step-clamp inspection failed — {exception.Message.ReplaceLineEndings(" ")}");
+                ReportStepClamps(
+                    definition: definition,
+                    prototype: prototype
+                );
+            } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException)) {
+                Console.Error.WriteLine(value: $"creation stats: '{prototype.Id}' step-clamp inspection failed — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
                 return 1;
             }
         }
 
         try {
-            if (!WorldSolidField.TryBuild(definition, out _, out var contactReason)) {
-                Console.Error.WriteLine($"creation stats: contact inspection failed — {contactReason}");
+            if (!WorldSolidField.TryBuild(
+                definition,
+                out _,
+                out var contactReason
+            )) {
+                Console.Error.WriteLine(value: $"creation stats: contact inspection failed — {contactReason}");
                 return 1;
             }
-        } catch (Exception exception) when (exception is InvalidOperationException or ArgumentException) {
-            Console.Error.WriteLine($"creation stats: contact inspection failed — {exception.Message.ReplaceLineEndings(" ")}");
+        } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException)) {
+            Console.Error.WriteLine(value: $"creation stats: contact inspection failed — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             return 1;
         }
 
-        Console.Out.WriteLine("  contact: accepted — the world's deterministic field compiled, including solid placements and screens; render-only facets remain omitted.");
+        Console.Out.WriteLine(value: "  contact: accepted — the world's deterministic field compiled, including solid placements and screens; render-only facets remain omitted.");
         return 0;
     }
     private static void ReportPrototype(string id, CreationDocument document) {
@@ -208,13 +235,17 @@ internal static partial class CreationCommand {
 
         foreach (var shape in shapes) {
             List<string> facets = [];
-            if (shape.Flare is not null) { facets.Add("flare"); }
-            if (shape.Shear is not null) { facets.Add("shear"); }
-            if (shape.Bumps is { Count: > 0 }) { facets.Add("bumps"); }
-            if (shape.Erode is not null) { facets.Add("erode"); }
-            if (shape.Cells is not null) { facets.Add("cells"); }
+
+            if (shape.Flare is not null) { facets.Add(item: "flare"); }
+            if (shape.Shear is not null) { facets.Add(item: "shear"); }
+            if (shape.Bumps is { Count: > 0 }) { facets.Add(item: "bumps"); }
+            if (shape.Erode is not null) { facets.Add(item: "erode"); }
+            if (shape.Cells is not null) { facets.Add(item: "cells"); }
             if (facets.Count > 0) {
-                Console.Out.WriteLine($"  shape {shape.Id} ({shape.Name?.Value ?? shape.Type.ToString()}): {string.Join(", ", facets)}");
+                Console.Out.WriteLine(value: $"  shape {shape.Id} ({(shape.Name?.Value ?? shape.Type.ToString())}): {string.Join(
+                    separator: ", ",
+                    values: facets
+                )}");
             }
         }
 
@@ -222,12 +253,19 @@ internal static partial class CreationCommand {
             var usage = new int[palette.Count];
 
             foreach (var shape in shapes) {
-                if ((shape.Material is { } slot) && (slot >= 0) && (slot < usage.Length)) {
+                if (
+                    (shape.Material is { } slot) &&
+                    (slot >= 0) &&
+                    (slot < usage.Length)
+                ) {
                     usage[slot]++;
                 }
             }
 
-            Console.Out.WriteLine(value: $"  palette: {string.Join(separator: ", ", values: usage.Select(selector: (count, index) => $"{index}={count}"))}");
+            Console.Out.WriteLine(value: $"  palette: {string.Join(
+                separator: ", ",
+                values: usage.Select(selector: (count, index) => $"{index}={count}")
+            )}");
         }
     }
     private static void WriteHistogram(string label, IEnumerable<string> values) {
@@ -236,6 +274,9 @@ internal static partial class CreationCommand {
             .OrderByDescending(keySelector: static g => g.Count())
             .Select(selector: g => $"{g.Key}={g.Count()}");
 
-        Console.Out.WriteLine(value: $"  {label}: {string.Join(separator: ", ", values: counts)}");
+        Console.Out.WriteLine(value: $"  {label}: {string.Join(
+            separator: ", ",
+            values: counts
+        )}");
     }
 }

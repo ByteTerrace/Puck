@@ -52,15 +52,18 @@ public sealed partial class ApuWaveChannel {
             // 64-sample position spans both banks starting at the selected one.
             var pos = (m_twoBank
                 ? m_samplePosition
-                : ((m_bank * 32) + m_samplePosition));
+                : ((m_bank * 32) + m_samplePosition)
+            );
             var packed = m_waveRam[(pos >> 1) & 0x1F];
             var nibble = (((pos & 1) == 0)
                 ? (packed >> 4)
-                : packed & 0xF);
+                : packed & 0xF
+            );
 
             return (m_forceVolume75
                 ? ((nibble * 3) >> 2)
-                : (nibble >> m_volumeShift));
+                : (nibble >> m_volumeShift)
+            );
         }
     }
 
@@ -74,7 +77,8 @@ public sealed partial class ApuWaveChannel {
 
             var limit = (m_twoBank
                 ? 64
-                : 32);
+                : 32
+            );
 
             if (++m_samplePosition >= limit) {
                 m_samplePosition = 0;

@@ -37,8 +37,11 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
         var median = samples[(samples.Length / 2)];
         var widest = samples[^1];
 
-        output.WriteLine($"shipped world idle: median {median:N0} bytes/tick, widest {widest:N0} bytes/tick");
+        output.WriteLine(message: $"shipped world idle: median {median:N0} bytes/tick, widest {widest:N0} bytes/tick");
 
-        Assert.True(median < (8L * 1024L), $"expected a quiet idle tick under 8 KiB, measured a median of {median:N0} bytes");
+        Assert.True(
+            condition: (median < (8L * 1024L)),
+            userMessage: $"expected a quiet idle tick under 8 KiB, measured a median of {median:N0} bytes"
+        );
     }
 }

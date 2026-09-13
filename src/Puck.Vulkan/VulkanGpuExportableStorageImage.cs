@@ -77,7 +77,10 @@ public sealed partial class VulkanGpuExportableStorageImage : IGpuExportableStor
 
     /// <inheritdoc/>
     public void FinalizeForExport() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         // The producer already recorded the GENERAL handoff transition and submitted; drain the device so the
         // importing instance samples completed writes. Drains on EVERY call (NOT once-only): a per-frame producer

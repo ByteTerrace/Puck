@@ -667,8 +667,8 @@ internal static partial class Subjects {
 
             if (refused == unit) {
                 return $"dividing by ({u},{v}) {(refused
-                ? "was"
-                : "was not")} refused, but IsUnit reports {unit}";
+                    ? "was"
+                    : "was not")} refused, but IsUnit reports {unit}";
             }
 
             return null;
@@ -1280,9 +1280,9 @@ internal static partial class Subjects {
             right: b
         ).Value != expected) {
             return $"the dot product is {FixedQuaternion.Dot(
-            left: a,
-            right: b
-        ).Value}, expected {expected}";
+                left: a,
+                right: b
+            ).Value}, expected {expected}";
         }
         if (FixedQuaternion.Dot(
             left: b,
@@ -1293,9 +1293,9 @@ internal static partial class Subjects {
             right: FixedQuaternion.Identity
         ).Value != left[3]) {
             return $"dotting against the identity gave {FixedQuaternion.Dot(
-            left: a,
-            right: FixedQuaternion.Identity
-        ).Value}, not the scalar lane {left[3]}";
+                left: a,
+                right: FixedQuaternion.Identity
+            ).Value}, not the scalar lane {left[3]}";
         }
 
         return null;
@@ -1516,9 +1516,9 @@ internal static partial class Subjects {
 
             if (exact.IsZero) {
                 return ((inverse == FixedQuaternion.Identity)
-                ? null
-                : "the zero quaternion did not invert to the identity"
-            );
+                    ? null
+                    : "the zero quaternion did not invert to the identity"
+                );
             }
 
             // No early-out at an overflowing four-square sum: the oracle divides in BigInteger, where S ≥ 2¹²⁸ makes

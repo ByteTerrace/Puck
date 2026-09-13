@@ -18,16 +18,16 @@ public abstract class TryParseStringJsonConverter<T> : JsonConverter<T>, IJsonSc
     /// <inheritdoc/>
     public IReadOnlyList<string>? SchemaTokens => null;
 
+    /// <summary>The validated string <paramref name="value"/> writes back as.</summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The string form.</returns>
+    protected abstract string ToValue(T value);
     /// <summary>Parses <paramref name="candidate"/>, or names why it is refused.</summary>
     /// <param name="candidate">The read token, or <see langword="null"/> when the JSON value was not a string.</param>
     /// <param name="value">The parsed value.</param>
     /// <param name="reason">Why the candidate was refused.</param>
     /// <returns><see langword="true"/> when the candidate parsed.</returns>
     protected abstract bool TryParse(string? candidate, out T value, out string reason);
-    /// <summary>The validated string <paramref name="value"/> writes back as.</summary>
-    /// <param name="value">The value.</param>
-    /// <returns>The string form.</returns>
-    protected abstract string ToValue(T value);
 
     /// <inheritdoc/>
     public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {

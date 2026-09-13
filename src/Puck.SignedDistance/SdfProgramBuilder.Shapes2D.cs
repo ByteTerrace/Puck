@@ -99,18 +99,18 @@ public sealed partial class SdfProgramBuilder {
             ) - 1e-4f)
         );
         var round = ClampRounding(
-            rounding: rounding,
-            profileInradius: profileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: profileInradius,
+            rounding: rounding
         );
         // Shares round's ceiling rather than eroding the profile — a cap chamfer bevels the extrude's Z-seam only,
         // so it needs no offset-back-out trick and cannot itself change ea/eb/clampedLift.
         var clampedCapChamfer = ClampRounding(
-            rounding: capChamfer,
-            profileInradius: profileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: profileInradius,
+            rounding: capChamfer
         );
 
         if (round > 0f) {
@@ -202,10 +202,10 @@ public sealed partial class SdfProgramBuilder {
         // circumradius R − r/cos(π/n).
         var apothemRatio = MathF.Cos(x: (MathF.PI / n));
         var round = ClampRounding(
-            rounding: rounding,
-            profileInradius: (absRadius * apothemRatio),
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: (absRadius * apothemRatio),
+            rounding: rounding
         );
 
         if (round > 0f) {
@@ -330,17 +330,17 @@ public sealed partial class SdfProgramBuilder {
             y: hh
         );
         var round = ClampRounding(
-            rounding: rounding,
-            profileInradius: profileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: profileInradius,
+            rounding: rounding
         );
         // Shares round's ceiling rather than eroding the profile — a cap chamfer bevels the extrude's Z-seam only.
         var clampedCapChamfer = ClampRounding(
-            rounding: capChamfer,
-            profileInradius: profileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: profileInradius,
+            rounding: capChamfer
         );
 
         if (round > 0f) {
@@ -565,14 +565,14 @@ public sealed partial class SdfProgramBuilder {
         // zero (KEEP IN SYNC with SdfSolidGeometry.MaxRounding, the authoring door's ceiling).
         var trapezoidProfileInradius = TrapezoidRoundingCeiling(
             bottomHalfWidth: bottomAbs,
-            topHalfWidth: topAbs,
-            halfHeight: heightAbs
+            halfHeight: heightAbs,
+            topHalfWidth: topAbs
         );
         var round = ClampRounding(
-            rounding: rounding,
-            profileInradius: trapezoidProfileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: trapezoidProfileInradius,
+            rounding: rounding
         );
         // A cap chamfer never erodes the profile (it bevels the extrude's Z-seam only), so it is bounded by the
         // profile's TRUE inradius — the cap face survives while the bevel stays under it — not by the rounding lane's
@@ -581,8 +581,8 @@ public sealed partial class SdfProgramBuilder {
             rounding: capChamfer,
             profileInradius: TrapezoidInradius(
                 bottomHalfWidth: bottomAbs,
-                topHalfWidth: topAbs,
-                halfHeight: heightAbs
+                halfHeight: heightAbs,
+                topHalfWidth: topAbs
             ),
             lift: lift,
             liftAmount: clampedLift
@@ -715,8 +715,8 @@ public sealed partial class SdfProgramBuilder {
         );
         var c = ClampChamfer(
             chamfer: chamfer,
-            halfWidth: hw,
             halfHeight: hh,
+            halfWidth: hw,
             lift: lift,
             liftAmount: clampedLift
         );
@@ -734,9 +734,9 @@ public sealed partial class SdfProgramBuilder {
         var round = ClampRounding(
             rounding: rounding,
             profileInradius: ChamferedRectangleInradius(
-                halfWidth: hw,
+                chamfer: c,
                 halfHeight: hh,
-                chamfer: c
+                halfWidth: hw
             ),
             lift: lift,
             liftAmount: clampedLift
@@ -848,28 +848,28 @@ public sealed partial class SdfProgramBuilder {
         );
 
         RequireFiniteLiftedReach(
-            radius2D: radius2D,
-            liftAmount: clampedLift,
             lift: lift,
+            liftAmount: clampedLift,
+            radius2D: radius2D,
             shapeName: "convex polygon"
         );
 
         var profileInradius = ConvexPolygonInradius(vertices: vertices);
         var round = ClampRounding(
-            rounding: cornerRadius,
-            profileInradius: profileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: profileInradius,
+            rounding: cornerRadius
         );
         var clampedCapChamfer = ClampRounding(
-            rounding: capChamfer,
-            profileInradius: profileInradius,
             lift: lift,
-            liftAmount: clampedLift
+            liftAmount: clampedLift,
+            profileInradius: profileInradius,
+            rounding: capChamfer
         );
         var emittedVertices = InsetConvexPolygon(
-            vertices: vertices,
-            round: round
+            round: round,
+            vertices: vertices
         );
 
         if (round > 0f) {

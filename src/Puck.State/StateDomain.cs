@@ -38,7 +38,6 @@ public abstract record StateDomain {
         /// <summary>The shared instance every inferred slot row answers with.</summary>
         public static readonly Slot Instance = new();
     }
-
     /// <summary>Explicit author-keyed cells (<c>StateRow.Capacity</c> and <c>Cells</c> carry the shape); no
     /// omitted-key address exists. The token-domain declaration row (the old dedicated <c>tokens</c> facet) is simply
     /// a row of this case whose <see cref="StateRow.Capacity"/> is the domain's token-count ceiling — other rows
@@ -50,7 +49,6 @@ public abstract record StateDomain {
         /// <summary>The shared instance every inferred keyed row answers with.</summary>
         public static readonly Keys Instance = new();
     }
-
     /// <summary>The row's key domain is another row's keys (see <see cref="Keys"/>). <see cref="Ordered"/> true gives
     /// the old <c>zone</c> semantics — cell order is pile order, first/last selection has gameplay meaning — while
     /// false gives the old plain <c>keysFrom</c> attribute-row semantics (a numeric fact per token, no pile order).
@@ -59,7 +57,6 @@ public abstract record StateDomain {
     /// <param name="Ordered">Whether cell order carries gameplay meaning (a pile) rather than being incidental.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record KeysOf(CellName Row, bool Ordered = false) : StateDomain;
-
     /// <summary>One value per cell of a named <c>state.lattices</c> topology — the old <c>board</c> and <c>lattice</c>
     /// facets' shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying
     /// <see cref="Empty"/>, or the dense physical-field composite) is an implementation choice keyed on the row's own
@@ -71,7 +68,6 @@ public abstract record StateDomain {
     /// physical-field case, whose unwritten value is the field trait's own initial instead.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record CellsOf(string Topology, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long Empty = 0) : StateDomain;
-
     /// <summary>The history ring: the row keeps the last <see cref="Capacity"/> pushed values in slots keyed
     /// <c>0..Capacity-1</c>, oldest overwritten first — the old <c>history</c> facet.</summary>
     /// <param name="Capacity">How many pushes the ring keeps, 1..128.</param>

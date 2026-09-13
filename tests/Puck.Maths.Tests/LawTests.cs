@@ -16,7 +16,10 @@ public sealed class LawTests {
     public static IEnumerable<ITheoryDataRow> Cases() =>
         LawRegistry.All.Select(selector: static lawCase =>
             new TheoryDataRow<string>(p1: lawCase.Id)
-                .WithTrait(name: "tier", value: lawCase.Tier.ToString())
+                .WithTrait(
+            name: "tier",
+            value: lawCase.Tier.ToString()
+        )
                 .WithTestDisplayName(testDisplayName: lawCase.Id));
     [MemberData(nameof(Cases))]
     [Theory]
@@ -33,7 +36,16 @@ public sealed class LawTests {
             // check cannot be made vacuous by ordering or by xUnit parallelism.
             var observed = LawShapes.Observe(run: lawCase.Run);
 
-            Assert.True(condition: (LegLedger.ShapeViolation(lawCase: lawCase, observed: observed) is null), userMessage: $"{id} {LegLedger.ShapeViolation(lawCase: lawCase, observed: observed)}");
+            Assert.True(
+                condition: (LegLedger.ShapeViolation(
+                    lawCase: lawCase,
+                    observed: observed
+                ) is null),
+                userMessage: $"{id} {LegLedger.ShapeViolation(
+                    lawCase: lawCase,
+                    observed: observed
+                )}"
+            );
         } catch (Exception exception) when ((exception is not Xunit.Sdk.SkipException)) {
             LedgerState.RecordLawFailure();
 

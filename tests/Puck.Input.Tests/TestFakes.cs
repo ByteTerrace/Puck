@@ -22,62 +22,38 @@ internal sealed class EmptyHidDeviceSource : IHidDeviceSource {
 internal sealed class TestHidDevice : IHidDevice {
     private readonly TaskCompletionSource m_disposedSignal = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentQueue<byte[]> m_reports = new();
+    private TaskCompletionSource m_reportArrived = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public string DevicePath { get; init; } = "test:hid";
+    public ushort UsagePage { get; init; } = 1;
+    public ushort Usage { get; init; } = 5;
+    public HidTransport Transport { get; init; } = HidTransport.Usb;
+    public TaskCompletionSource ReadEntered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    public List<byte[]> Writes { get; } = [];
+    public List<byte[]> FeatureWrites { get; } = [];
 
     private int m_activeReads;
     private bool m_disposed;
     private TaskCompletionSource? m_readTimeoutHold;
 
-    private TaskCompletionSource m_reportArrived = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public string DevicePath { get; init; } = "test:hid";
-
-    public ushort ProductId { get; init; }
-    public ushort VendorId { get; init; }
-
-    public ushort UsagePage { get; init; } = 1;
-    public ushort Usage { get; init; } = 5;
-    public HidTransport Transport { get; init; } = HidTransport.Usb;
-
     public bool BlockReadUntilDisposed { get; init; }
     public bool DisposedWhileReading { get; private set; }
     public int FeatureReportByteLength { get; init; }
     public int InputReportByteLength { get; init; }
+    public bool IsDisposed => m_disposed;
     public int OutputReportByteLength { get; init; }
-
-    public TaskCompletionSource ReadEntered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-    public List<byte[]> Writes { get; } = [];
-    public List<byte[]> FeatureWrites { get; } = [];
-
-    public void EnqueueReport(params byte[] report) {
-        m_reports.Enqueue(item: report);
-        // Publish the arrival after the enqueue: a reader that snapshotted the previous pulse before probing the
-        // queue either dequeues this report or is woken by this completion, never neither.
-        _ = Interlocked.Exchange(
-            location1: ref m_reportArrived,
-            value: new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)
-        ).TrySetResult();
-    }
-    /// <summary>Keeps timed reads pending until a report arrives or <see cref="ReleaseReadTimeouts"/> runs.</summary>
-    public void HoldReadTimeouts() =>
-        m_readTimeoutHold ??= new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-    /// <summary>Lets pending and future timed reads expire after their timeout again.</summary>
-    public void ReleaseReadTimeouts() =>
-        _ = Interlocked.Exchange(location1: ref m_readTimeoutHold, value: null)?.TrySetResult();
-    public ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
-        ReadCoreAsync(buffer: buffer, cancellationToken: cancellationToken, timeoutInMilliseconds: null);
-    public ValueTask<int> ReadAsync(
-        Memory<byte> buffer,
-        bool throwOnTimeout = false,
-        int timeoutInMilliseconds = 120,
-        CancellationToken cancellationToken = default
-    ) => ReadCoreAsync(buffer: buffer, cancellationToken: cancellationToken, timeoutInMilliseconds: timeoutInMilliseconds);
+    public ushort ProductId { get; init; }
+    public ushort VendorId { get; init; }
 
     private async Task ExpireAsync(int timeoutInMilliseconds, CancellationToken cancellationToken) {
         if (Volatile.Read(location: ref m_readTimeoutHold) is { } hold) {
             await hold.Task.WaitAsync(cancellationToken: cancellationToken);
         }
 
-        await Task.Delay(cancellationToken: cancellationToken, millisecondsDelay: timeoutInMilliseconds);
+        await Task.Delay(
+            cancellationToken: cancellationToken,
+            millisecondsDelay: timeoutInMilliseconds
+        );
     }
     private async ValueTask<int> ReadCoreAsync(Memory<byte> buffer, int? timeoutInMilliseconds, CancellationToken cancellationToken) {
         _ = Interlocked.Increment(location: ref m_activeReads);
@@ -91,7 +67,10 @@ internal sealed class TestHidDevice : IHidDevice {
             }
 
             var expiry = ((timeoutInMilliseconds is { } timeout)
-                ? ExpireAsync(cancellationToken: cancellationToken, timeoutInMilliseconds: timeout)
+                ? ExpireAsync(
+                    cancellationToken: cancellationToken,
+                    timeoutInMilliseconds: timeout
+                )
                 : null
             );
 
@@ -108,7 +87,10 @@ internal sealed class TestHidDevice : IHidDevice {
 
                 if (expiry is null) {
                     await arrival.WaitAsync(cancellationToken: cancellationToken);
-                } else if (expiry == await Task.WhenAny(task1: arrival, task2: expiry)) {
+                } else if (expiry == await Task.WhenAny(
+                    task1: arrival,
+                    task2: expiry
+                )) {
                     // Propagates cancellation the way a timed delay does.
                     await expiry;
 
@@ -120,21 +102,6 @@ internal sealed class TestHidDevice : IHidDevice {
         }
     }
 
-    public ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
-        lock (Writes) {
-            Writes.Add(item: buffer.ToArray());
-        }
-
-        return ValueTask.CompletedTask;
-    }
-    public bool TryGetFeatureReport(Span<byte> buffer) => false;
-    public bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
-        lock (FeatureWrites) {
-            FeatureWrites.Add(item: buffer.ToArray());
-        }
-
-        return true;
-    }
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -144,11 +111,61 @@ internal sealed class TestHidDevice : IHidDevice {
         m_disposed = true;
         _ = m_disposedSignal.TrySetResult();
     }
+    public void EnqueueReport(params byte[] report) {
+        m_reports.Enqueue(item: report);
+        // Publish the arrival after the enqueue: a reader that snapshotted the previous pulse before probing the
+        // queue either dequeues this report or is woken by this completion, never neither.
+        _ = Interlocked.Exchange(
+            location1: ref m_reportArrived,
+            value: new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)
+        ).TrySetResult();
+    }
+    /// <summary>Keeps timed reads pending until a report arrives or <see cref="ReleaseReadTimeouts"/> runs.</summary>
+    public void HoldReadTimeouts() =>
+        m_readTimeoutHold ??= new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    public ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
+        ReadCoreAsync(
+            buffer: buffer,
+            cancellationToken: cancellationToken,
+            timeoutInMilliseconds: null
+        );
+    public ValueTask<int> ReadAsync(
+        Memory<byte> buffer,
+        bool throwOnTimeout = false,
+        int timeoutInMilliseconds = 120,
+        CancellationToken cancellationToken = default
+    ) => ReadCoreAsync(
+        buffer: buffer,
+        cancellationToken: cancellationToken,
+        timeoutInMilliseconds: timeoutInMilliseconds
+    );
+    /// <summary>Lets pending and future timed reads expire after their timeout again.</summary>
+    public void ReleaseReadTimeouts() =>
+        _ = Interlocked.Exchange(
+            location1: ref m_readTimeoutHold,
+            value: null
+        )?.TrySetResult();
+    public bool TryGetFeatureReport(Span<byte> buffer) => false;
+    public bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
+        lock (FeatureWrites) {
+            FeatureWrites.Add(item: buffer.ToArray());
+        }
 
-    public bool IsDisposed => m_disposed;
+        return true;
+    }
+    public ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
+        lock (Writes) {
+            Writes.Add(item: buffer.ToArray());
+        }
+
+        return ValueTask.CompletedTask;
+    }
 }
 internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
     private readonly Lock m_gate = new();
+
+    public List<(float Low, float High)> RumbleWrites { get; } = [];
+    public List<(TriggerEffectSpec Left, TriggerEffectSpec Right)> TriggerWrites { get; } = [];
 
     public int DisposeCount { get; private set; }
     public int InitializeCount { get; private set; }
@@ -156,9 +173,18 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public int ResetCount { get; private set; }
     public GamepadType Type => GamepadType.Unknown;
 
-    public List<(float Low, float High)> RumbleWrites { get; } = [];
-    public List<(TriggerEffectSpec Left, TriggerEffectSpec Right)> TriggerWrites { get; } = [];
-
+    public WirelessSlotEvent ClassifySlotEvent(ReadOnlySpan<byte> report) =>
+        ((!report.IsEmpty && (report[0] == 2))
+            ? WirelessSlotEvent.Connected
+            : ((!report.IsEmpty && (report[0] == 3))
+                ? WirelessSlotEvent.Disconnected
+                : WirelessSlotEvent.None
+        ));
+    public void Dispose() {
+        lock (m_gate) {
+            ++DisposeCount;
+        }
+    }
     public ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
         lock (m_gate) {
             ++InitializeCount;
@@ -166,23 +192,11 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
 
         return ValueTask.CompletedTask;
     }
-    public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
-        if (!report.IsEmpty && (report[0] == 1)) {
-            state = GamepadState.Neutral with {
-                Buttons = ((report.Length > 1) ? (GamepadButtons)report[1] : GamepadButtons.None),
-            };
-
-            return true;
+    public void ResetStreamState() {
+        lock (m_gate) {
+            ++ResetCount;
         }
-
-        state = GamepadState.Neutral;
-
-        return false;
     }
-    public WirelessSlotEvent ClassifySlotEvent(ReadOnlySpan<byte> report) =>
-        ((!report.IsEmpty && (report[0] == 2)) ? WirelessSlotEvent.Connected
-            : ((!report.IsEmpty && (report[0] == 3)) ? WirelessSlotEvent.Disconnected
-            : WirelessSlotEvent.None));
     public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
         lock (m_gate) {
             RumbleWrites.Add(item: (lowFrequency, highFrequency));
@@ -197,15 +211,23 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
 
         return ValueTask.CompletedTask;
     }
-    public void ResetStreamState() {
-        lock (m_gate) {
-            ++ResetCount;
+    public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
+        if (
+            !report.IsEmpty &&
+            (report[0] == 1)
+        ) {
+            state = GamepadState.Neutral with {
+                Buttons = ((report.Length > 1)
+                ? (GamepadButtons)report[1]
+                : GamepadButtons.None),
+            };
+
+            return true;
         }
-    }
-    public void Dispose() {
-        lock (m_gate) {
-            ++DisposeCount;
-        }
+
+        state = GamepadState.Neutral;
+
+        return false;
     }
 }
 internal static class TestWait {
@@ -213,7 +235,10 @@ internal static class TestWait {
         using var cancellation = new CancellationTokenSource(millisecondsDelay: timeoutMilliseconds);
 
         while (!condition()) {
-            await Task.Delay(millisecondsDelay: 5, cancellationToken: cancellation.Token);
+            await Task.Delay(
+                millisecondsDelay: 5,
+                cancellationToken: cancellation.Token
+            );
         }
     }
 }

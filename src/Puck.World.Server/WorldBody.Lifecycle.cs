@@ -179,7 +179,10 @@ public sealed partial class WorldBody {
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
         var scale = ((double)m_scale);
-        var com = (IsRigid ? RigidCenterOfMass.ToVector3() : default);
+        var com = (IsRigid
+            ? RigidCenterOfMass.ToVector3()
+            : default
+        );
         var comSuffix = (IsRigid
             ? string.Create(
                 provider: CultureInfo.InvariantCulture,
@@ -188,8 +191,12 @@ public sealed partial class WorldBody {
             : string.Empty
         );
         var carrySuffix = string.Concat(
-            (Carrying is { } carrying ? $" carrying={carrying}" : string.Empty),
-            (CarriedBy is { } carriedBy ? $" carriedBy={carriedBy}" : string.Empty)
+            str0: ((Carrying is { } carrying)
+            ? $" carrying={carrying}"
+            : string.Empty),
+            str1: ((CarriedBy is { } carriedBy)
+            ? $" carriedBy={carriedBy}"
+            : string.Empty)
         );
         var tetherSuffix = ((TetherLength is { } ropeLength)
             ? string.Create(
@@ -198,7 +205,10 @@ public sealed partial class WorldBody {
             )
             : string.Empty
         );
-        var asleepSuffix = (Asleep ? $" asleep={AsleepSinceTick}" : string.Empty);
+        var asleepSuffix = (Asleep
+            ? $" asleep={AsleepSinceTick}"
+            : string.Empty
+        );
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
@@ -495,16 +505,16 @@ public sealed partial class WorldBody {
         // alone would miss it, leaving the old FixedTetherConstraint and edge bits standing against the new facet.
         // ModeState is excluded because it is orthogonal bookkeeping (cleared/republished on its own ordinal below);
         // a retune changing only the modeState slot keeps a live attach rather than dropping it needlessly.
-        static FixedWorldTether? WithoutModeState(FixedWorldTether? facet) => (facet is { } value
+        static FixedWorldTether? WithoutModeState(FixedWorldTether? facet) => ((facet is { } value)
             ? (value with { ModeStateOrdinal = -1 })
             : null
         );
         var tetherFacetChanged = (WithoutModeState(facet: previousTetherFacet) != WithoutModeState(facet: tether));
         var tetherEdgeBindingChanged = (
-            (previousTetherFacet?.AttachChannelOrdinal ?? -1) != (tether?.AttachChannelOrdinal ?? -1) ||
-            (previousTetherFacet?.AttachThreshold ?? FixedQ4816.Zero) != (tether?.AttachThreshold ?? FixedQ4816.Zero) ||
-            (previousTetherFacet?.DetachChannelOrdinal ?? -1) != (tether?.DetachChannelOrdinal ?? -1) ||
-            (previousTetherFacet?.DetachThreshold ?? FixedQ4816.Zero) != (tether?.DetachThreshold ?? FixedQ4816.Zero)
+            ((previousTetherFacet?.AttachChannelOrdinal ?? -1) != (tether?.AttachChannelOrdinal ?? -1)) ||
+            ((previousTetherFacet?.AttachThreshold ?? FixedQ4816.Zero) != (tether?.AttachThreshold ?? FixedQ4816.Zero)) ||
+            ((previousTetherFacet?.DetachChannelOrdinal ?? -1) != (tether?.DetachChannelOrdinal ?? -1)) ||
+            ((previousTetherFacet?.DetachThreshold ?? FixedQ4816.Zero) != (tether?.DetachThreshold ?? FixedQ4816.Zero))
         );
         var previousModeStateOrdinal = (previousTetherFacet?.ModeStateOrdinal ?? -1);
         var modeStateOrdinal = (tether?.ModeStateOrdinal ?? -1);
@@ -654,9 +664,9 @@ public sealed partial class WorldBody {
         if (
             (m_rigid is not null) &&
             !ReferenceEquals(
-                objA: m_contactField,
-                objB: field
-            )
+            objA: m_contactField,
+            objB: field
+        )
         ) {
             m_resting = false;
             m_restingHoldTicks = 0UL;
@@ -664,6 +674,7 @@ public sealed partial class WorldBody {
 
         m_contactField = field;
     }
+
     /// <summary>Sets the contact field together with the body-frame policy compiled from the same live definition.
     /// This is the population's activation/rebuild seam; keeping the policy out of <see cref="IContactField"/> leaves
     /// that public physics abstraction provider-neutral.</summary>
@@ -685,6 +696,7 @@ public sealed partial class WorldBody {
 
         m_upPolicy = upPolicy;
     }
+
     /// <summary>Sets (or clears) the world gravity field this body reads its solved acceleration and ambient up axis
     /// from — the population hands it the live field on activation and every rebuild.</summary>
     /// <param name="field">The world gravity field, or <see langword="null"/> for a world authoring none.</param>
@@ -834,6 +846,7 @@ public sealed partial class WorldBody {
         m_ordinaryAdvanceAdmitted = true;
         return true;
     }
+
     /// <summary>Marks this body as deliberately deferred by its authored autonomous cadence. Late population passes
     /// must not mistake a prior tick's admission latch for an advance on this tick.</summary>
     internal void DeferOrdinaryAdvance() => m_ordinaryAdvanceAdmitted = false;
@@ -844,12 +857,18 @@ public sealed partial class WorldBody {
     /// producer motion.</summary>
     internal bool RequiresFullRateAutonomy {
         get {
-            if (m_hasSubmittedIntent || m_hasTransferHeldChannels) {
+            if (
+                m_hasSubmittedIntent ||
+                m_hasTransferHeldChannels
+            ) {
                 return true;
             }
 
-            for (var ordinal = 0; ordinal < m_pendingDefaultChannelPress.Length; ordinal++) {
-                if (m_pendingDefaultChannelPress[ordinal] || (m_laneTimers[ordinal] > 0UL)) {
+            for (var ordinal = 0; (ordinal < m_pendingDefaultChannelPress.Length); ordinal++) {
+                if (
+                    m_pendingDefaultChannelPress[ordinal] ||
+                    (m_laneTimers[ordinal] > 0UL)
+                ) {
                     return true;
                 }
             }
@@ -857,7 +876,6 @@ public sealed partial class WorldBody {
             return false;
         }
     }
-
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
 
@@ -975,11 +993,13 @@ public sealed partial class WorldBody {
     /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
+
     /// <summary>Gets whether a scripted tape currently owns or awaits motion. Tapes retain full authority cadence even
     /// on an autonomously throttled kit because one batched advance consumes only one segment.</summary>
     internal bool HasMotionTape => (m_tapeCount > 0);
     /// <summary>Gets the most recently staged producer image for population-owned cadence reuse.</summary>
     internal PlayerIntent StagedProducerIntent => m_producerIntent;
+
     /// <summary>Gets a value indicating whether the body's origin sits below the medium's free surface, along
     /// its own resolved gravity-up, as of the medium hold's last evaluation — the <c>world.contacts</c> read-back's
     /// medium witness. Always <see langword="false"/> for a kit authoring no medium hold.</summary>

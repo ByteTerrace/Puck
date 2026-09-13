@@ -1965,9 +1965,9 @@ internal static partial class Subjects {
 
             for (var index = 0; (index < length); ++index) {
                 quotients[index] = (1L + rng.NextUInt32(
-                maximum: 8U,
-                minimum: 0U
-            ));
+                    maximum: 8U,
+                    minimum: 0U
+                ));
             }
 
             // The shared-nothing convergent recurrence: h_k = a_k·h_{k−1} + h_{k−2}, seeded (1, 0) and (0, 1).

@@ -4,129 +4,255 @@ namespace Puck.State.Tests;
 
 /// <summary>Range reductions read live values, preserve kinds, intersect keyed filters, and account for their reads.</summary>
 public sealed class ReductionRangeLawTests {
-    private static CellName Name(string text) => CellName.Parse(text);
-    private static StateRow Row(string name, params long[] values) => new(Name(name), CellKind.Int, Capacity: Math.Max(1, values.Length),
-        Cells: values.Select((value, index) => new StateCell(Name(index.ToString()), value)).ToArray());
-
-    private sealed class Reader : IRuleReader, IStateSection {
-        public Reader(params StateRow[] rows) { Rows = rows; Catalog = StateCatalog.Compile(this); Store = new RowStore(rows); }
-        public IReadOnlyList<StateRow> Rows { get; }
-        public IReadOnlyList<LatticeTopology>? Lattices => null;
-        public IReadOnlyList<IStateSlot>? ParticipantSlots => null;
-        public IReadOnlyList<IStateSlot>? IdentitySlots => null;
-        public StateStore Store { get; set; }
-        public StateCatalog Catalog { get; }
-        public ulong Tick { get; set; }
-        public CompiledPatterns Patterns => CompiledPatterns.Empty;
-        public string? BoundEachKey => null;
-        public string? BoundTokenKey { get; set; }
-        public string? BoundPreviousKey { get; set; }
-        public bool TableKeyMissing { get; set; }
-        public Span<long> PatternWord => [];
-        public int BoundIndex(BoundKey key) => -1;
-        public long BindingValue(int ordinal) => 0;
-        public CompiledTable Table(int ordinal) => throw new InvalidOperationException();
-        public void ReportTableKeyMissing(string table, long key) => TableKeyMissing = true;
-        public Span<long> BoardScratch(int cells) => new long[cells];
-        public RuleCompileContext Context => new(this, Catalog, null, null, null, 240, RuleVocabulary.Core);
-        public CompiledExpressionToken[] Compile(string text, CellKind kind = CellKind.Int) =>
-            RuleCompiler.CompileExpression(ValueExpression.Parse(text), kind, "range-law", "range-law", Context);
-        public long Evaluate(string text, CellKind kind = CellKind.Int) {
-            Assert.True(RuleEvaluation.TryEvaluateExpression(this, Compile(text, kind), kind, out var value));
-            return value;
-        }
-    }
-
-    private sealed class CountedCells(StateCell[] cells) : IReadOnlyList<StateCell> {
-        public int Reads { get; set; }
-        public int Count => cells.Length;
-        public StateCell this[int index] { get { Reads++; return cells[index]; } }
-        public IEnumerator<StateCell> GetEnumerator() => ((IEnumerable<StateCell>)cells).GetEnumerator();
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-    }
+    private static CellName Name(string text) => CellName.Parse(candidate: text);
+    private static StateRow Row(string name, params long[] values) => new(
+        Name(text: name),
+        CellKind.Int,
+        Capacity: Math.Max(
+            val1: 1,
+            val2: values.Length
+        ),
+        Cells: values.Select(selector: (value, index) => new StateCell(
+            Name(text: index.ToString()),
+            value
+        )).ToArray()
+    );
 
     [Fact]
     public void AKeyedReadResolvesValueAndAdvancingMetadataInOneWalk() {
-        var cells = new CountedCells([.. Enumerable.Range(0, 32).Select(index => new StateCell(Name(index.ToString()), index, Advance: new StateAdvance(2, 1)))]);
+        var cells = new CountedCells(cells: [.. Enumerable.Range(
+                count: 32,
+                start: 0
+            ).Select(selector: index => new StateCell(
+                Name(text: index.ToString()),
+                index,
+                Advance: new StateAdvance(
+                    2,
+                    1
+                )
+            ))]);
         var row = Row("values") with { Cells = cells };
-        StateReader.ReadCell(new RowStore([row]), row, "31", 3, out var value, out _);
-        Assert.Equal(37, value);
-        Assert.Equal(32, cells.Reads);
-    }
 
+        StateReader.ReadCell(
+            new RowStore(rows: [row]),
+            row,
+            "31",
+            3,
+            out var value,
+            out _
+        );
+        Assert.Equal(
+            actual: value,
+            expected: 37
+        );
+        Assert.Equal(
+            32,
+            cells.Reads
+        );
+    }
+    [Fact]
+    public void BothFiltersIntersectInEitherOrderAndDeclareBothReadDependencies() {
+        var reader = new Reader(
+            Row(
+                "values",
+                -1,
+                0,
+                1,
+                63,
+                64
+            ),
+            Row(
+                "eligible",
+                1,
+                1,
+                0,
+                1
+            )
+        );
+        const string Expression = "$reduce:sum:values:between:0:63:where:eligible";
+
+        Assert.Equal(
+            63,
+            reader.Evaluate(Expression)
+        );
+        Assert.Equal(
+            63,
+            reader.Evaluate("$reduce:sum:values:where:eligible:between:0:63")
+        );
+        Assert.Equal(
+            2,
+            reader.Evaluate("$reduce:count:values:where:eligible:between:0:63")
+        );
+        var operand = Assert.IsType<ReductionOperand>(@object: Assert.Single(collection: reader.Compile(Expression)).Operand);
+        List<RuleAccess> reads = [];
+
+        operand.CollectReads(into: reads);
+        Assert.Contains(
+            new RuleAccess(
+                "values",
+                null
+            ),
+            reads
+        );
+        Assert.Contains(
+            new RuleAccess(
+                "eligible",
+                null
+            ),
+            reads
+        );
+        Assert.Equal(
+            15,
+            operand.Cost(context: reader.Context)
+        );
+    }
     [Fact]
     public void FilterLookupsAvoidRepeatedFullScansAndObserveInPlaceReplacement() {
-        const int count = 512;
-        var values = Row("values", [.. Enumerable.Repeat(2L, count)]);
-        var members = Row("eligible", [.. Enumerable.Repeat(1L, count)]).Cells!.ToArray();
-        var cells = new CountedCells(members);
+        const int Count = 512;
+        var values = Row(
+            "values",
+            [.. Enumerable.Repeat(
+                    count: Count,
+                    element: 2L
+                )]
+        );
+        var members = Row(
+            "eligible",
+            [.. Enumerable.Repeat(
+                    count: Count,
+                    element: 1L
+                )]
+        ).Cells!.ToArray();
+        var cells = new CountedCells(cells: members);
         var filter = Row("eligible") with { Cells = cells };
-        var store = new RowStore([values, filter]);
-        Assert.Equal(2 * count, StateReader.ReduceRaw(store, values, StateReduceOp.Sum, 0, filter, null));
-        // Allow hash collisions, but rule out the former two full key scans per source cell (over 260,000 reads).
-        Assert.InRange(cells.Reads, count, 32 * count);
-        Array.Reverse(members);
-        members[0] = new StateCell(Name("outside"), 1);
-        members[1] = members[1] with { Value = 0, Advance = new StateAdvance(1, 1) };
-        Assert.Equal(2 * (count - 2), StateReader.ReduceRaw(store, values, StateReduceOp.Sum, 0, filter, null));
-        Assert.Equal(2 * (count - 1), StateReader.ReduceRaw(store, values, StateReduceOp.Sum, 1, filter, null));
-        Assert.Equal(count, StateReader.ReduceRaw(store, values, StateReduceOp.Count, 1));
-    }
+        var store = new RowStore(rows: [values, filter]);
 
-    [Theory]
+        Assert.Equal(
+            (2 * Count),
+            StateReader.ReduceRaw(
+                filter: filter,
+                op: StateReduceOp.Sum,
+                range: null,
+                row: values,
+                store: store,
+                tick: 0
+            )
+        );
+        // Allow hash collisions, but rule out the former two full key scans per source cell (over 260,000 reads).
+        Assert.InRange(
+            cells.Reads,
+            Count,
+            (32 * Count)
+        );
+        Array.Reverse(array: members);
+        members[0] = new StateCell(
+            Name(text: "outside"),
+            1
+        );
+        members[1] = members[1] with { Value = 0, Advance = new StateAdvance(
+            1,
+            1
+        ) };
+        Assert.Equal(
+            (2 * (Count - 2)),
+            StateReader.ReduceRaw(
+                filter: filter,
+                op: StateReduceOp.Sum,
+                range: null,
+                row: values,
+                store: store,
+                tick: 0
+            )
+        );
+        Assert.Equal(
+            (2 * (Count - 1)),
+            StateReader.ReduceRaw(
+                filter: filter,
+                op: StateReduceOp.Sum,
+                range: null,
+                row: values,
+                store: store,
+                tick: 1
+            )
+        );
+        Assert.Equal(
+            Count,
+            StateReader.ReduceRaw(
+                op: StateReduceOp.Count,
+                row: values,
+                store: store,
+                tick: 1
+            )
+        );
+    }
+    [Fact]
+    public void FixedBoundsUseSourceUnitsAndAdvancingValuesAreReadAtTheCurrentTick() {
+        var row = Row(
+            "values",
+            -65536,
+            0,
+            65536
+        ) with { Kind = CellKind.Fixed };
+
+        row = row with { Cells = row.Cells!.Select(selector: cell => cell with { Advance = new StateAdvance(
+            1,
+            2
+        ) }).ToArray() };
+        var reader = new Reader(row) { Tick = 1 };
+
+        Assert.Equal(
+            2,
+            reader.Evaluate("$reduce:count:values:between:0.5:1.5")
+        );
+        Assert.Equal(
+            131072,
+            reader.Evaluate(
+                kind: CellKind.Fixed,
+                text: "$reduce:sum:values:between:0.5:1.5"
+            )
+        );
+        reader.Tick = 5;
+        Assert.Equal(
+            1,
+            reader.Evaluate("$reduce:count:values:between:0.5:1.5")
+        );
+        Assert.Equal(
+            3,
+            reader.Evaluate("$reduce:count:values")
+        );
+    }
     [InlineData("count", 3)]
     [InlineData("sum", 64)]
     [InlineData("min", 0)]
     [InlineData("max", 63)]
-    public void InclusiveRangeFiltersEveryAggregateAndEmptyIsZero(string op, long expected) {
-        var reader = new Reader(Row("values", -1, 0, 1, 63, 64));
-        Assert.Equal(expected, reader.Evaluate($"$reduce:{op}:values:between:0:63"));
-        Assert.Equal(0, reader.Evaluate($"$reduce:{op}:values:between:2:62"));
-        Assert.Equal(0, new Reader(Row("values")).Evaluate($"$reduce:{op}:values:between:0:63"));
-        Assert.Equal(5, reader.Evaluate("$reduce:count:values"));
-    }
-
-    [Fact]
-    public void BothFiltersIntersectInEitherOrderAndDeclareBothReadDependencies() {
-        var reader = new Reader(Row("values", -1, 0, 1, 63, 64), Row("eligible", 1, 1, 0, 1));
-        const string expression = "$reduce:sum:values:between:0:63:where:eligible";
-        Assert.Equal(63, reader.Evaluate(expression));
-        Assert.Equal(63, reader.Evaluate("$reduce:sum:values:where:eligible:between:0:63"));
-        Assert.Equal(2, reader.Evaluate("$reduce:count:values:where:eligible:between:0:63"));
-        var operand = Assert.IsType<ReductionOperand>(Assert.Single(reader.Compile(expression)).Operand);
-        List<RuleAccess> reads = [];
-        operand.CollectReads(reads);
-        Assert.Contains(new RuleAccess("values", null), reads);
-        Assert.Contains(new RuleAccess("eligible", null), reads);
-        Assert.Equal(15, operand.Cost(reader.Context));
-    }
-
-    [Fact]
-    public void FixedBoundsUseSourceUnitsAndAdvancingValuesAreReadAtTheCurrentTick() {
-        var row = Row("values", -65536, 0, 65536) with { Kind = CellKind.Fixed };
-        row = row with { Cells = row.Cells!.Select(cell => cell with { Advance = new StateAdvance(1, 2) }).ToArray() };
-        var reader = new Reader(row) { Tick = 1 };
-        Assert.Equal(2, reader.Evaluate("$reduce:count:values:between:0.5:1.5"));
-        Assert.Equal(131072, reader.Evaluate("$reduce:sum:values:between:0.5:1.5", CellKind.Fixed));
-        reader.Tick = 5;
-        Assert.Equal(1, reader.Evaluate("$reduce:count:values:between:0.5:1.5"));
-        Assert.Equal(3, reader.Evaluate("$reduce:count:values"));
-    }
-
-    [Fact]
-    public void ScratchFrameWritesChangeTheRangeResultWithoutChangingTheSourceRows() {
-        var row = Row("values", -1, 0, 63);
-        var reader = new Reader(row);
-        var frame = new StateFrame(new FrameLayout(reader.Rows, _ => null), reader.Rows);
-        frame.Load(reader.Store);
-        Assert.True(frame.TryWrite(row, Name("0"), 1, StateWriteKind.Set, out _));
-        Assert.Equal(2, reader.Evaluate("$reduce:count:values:between:0:63"));
-        reader.Store = frame;
-        Assert.Equal(3, reader.Evaluate("$reduce:count:values:between:0:63"));
-        Assert.Equal(-1, row.Cells![0].Value);
-    }
-
     [Theory]
+    public void InclusiveRangeFiltersEveryAggregateAndEmptyIsZero(string op, long expected) {
+        var reader = new Reader(Row(
+            "values",
+            -1,
+            0,
+            1,
+            63,
+            64
+        ));
+
+        Assert.Equal(
+            expected,
+            reader.Evaluate($"$reduce:{op}:values:between:0:63")
+        );
+        Assert.Equal(
+            0,
+            reader.Evaluate($"$reduce:{op}:values:between:2:62")
+        );
+        Assert.Equal(
+            0,
+            new Reader(Row("values")).Evaluate($"$reduce:{op}:values:between:0:63")
+        );
+        Assert.Equal(
+            5,
+            reader.Evaluate("$reduce:count:values")
+        );
+    }
     [InlineData("$reduce:count:values:between:63:0")]
     [InlineData("$reduce:count:values:between:0")]
     [InlineData("$reduce:count:values:between:x:2")]
@@ -137,10 +263,121 @@ public sealed class ReductionRangeLawTests {
     [InlineData("$reduce:count:values:between:0:9223372036854775808")]
     [InlineData("$reduce:count:missing:between:0:1")]
     [InlineData("$reduce:arrangementRank:values:between:0:1")]
+    [Theory]
     public void MalformedRangesAndIncompatibleRanksRefuse(string expression) {
-        var reader = new Reader(Row("values", 0));
+        var reader = new Reader(Row(
+            "values",
+            0
+        ));
         // A token name also covers malformed suffixes that the human expression lexer would reject first.
-        Assert.Throws<RuleException>(() => RuleCompiler.CompileExpression(new ValueExpression([new ValueToken.State(expression)]),
-            CellKind.Int, "range-law", "range-law", reader.Context));
+        Assert.Throws<RuleException>(testCode: () => RuleCompiler.CompileExpression(
+            new ValueExpression(Tokens: [new ValueToken.State(expression)]),
+            CellKind.Int,
+            "range-law",
+            "range-law",
+            reader.Context
+        ));
+    }
+    [Fact]
+    public void ScratchFrameWritesChangeTheRangeResultWithoutChangingTheSourceRows() {
+        var row = Row(
+            "values",
+            -1,
+            0,
+            63
+        );
+        var reader = new Reader(row);
+        var frame = new StateFrame(
+            layout: new FrameLayout(
+                rows: reader.Rows,
+                topology: _ => null
+            ),
+            rows: reader.Rows
+        );
+
+        frame.Load(source: reader.Store);
+        Assert.True(condition: frame.TryWrite(
+            row,
+            Name(text: "0"),
+            1,
+            StateWriteKind.Set,
+            out _
+        ));
+        Assert.Equal(
+            2,
+            reader.Evaluate("$reduce:count:values:between:0:63")
+        );
+        reader.Store = frame;
+        Assert.Equal(
+            3,
+            reader.Evaluate("$reduce:count:values:between:0:63")
+        );
+        Assert.Equal(
+            -1,
+            row.Cells![0].Value
+        );
+    }
+
+    private sealed class Reader : IRuleReader, IStateSection {
+        public Reader(params StateRow[] rows) { Rows = rows; Catalog = StateCatalog.Compile(section: this); Store = new RowStore(rows: rows); }
+
+        public string? BoundEachKey => null;
+        public string? BoundPreviousKey { get; set; }
+        public string? BoundTokenKey { get; set; }
+        public StateCatalog Catalog { get; }
+        public RuleCompileContext Context => new(
+            this,
+            Catalog,
+            null,
+            null,
+            null,
+            240,
+            RuleVocabulary.Core
+        );
+        public IReadOnlyList<IStateSlot>? IdentitySlots => null;
+        public IReadOnlyList<LatticeTopology>? Lattices => null;
+        public IReadOnlyList<IStateSlot>? ParticipantSlots => null;
+        public Span<long> PatternWord => [];
+        public CompiledPatterns Patterns => CompiledPatterns.Empty;
+        public IReadOnlyList<StateRow> Rows { get; }
+        public StateStore Store { get; set; }
+        public bool TableKeyMissing { get; set; }
+        public ulong Tick { get; set; }
+
+        public long BindingValue(int ordinal) => 0;
+        public Span<long> BoardScratch(int cells) => new long[cells];
+        public int BoundIndex(BoundKey key) => -1;
+        public CompiledExpressionToken[] Compile(string text, CellKind kind = CellKind.Int) =>
+            RuleCompiler.CompileExpression(
+                ValueExpression.Parse(text: text),
+                kind,
+                "range-law",
+                "range-law",
+                Context
+            );
+        public long Evaluate(string text, CellKind kind = CellKind.Int) {
+            Assert.True(condition: RuleEvaluation.TryEvaluateExpression(
+                this,
+                Compile(
+                    kind: kind,
+                    text: text
+                ),
+                kind,
+                out var value
+            ));
+            return value;
+        }
+        public void ReportTableKeyMissing(string table, long key) => TableKeyMissing = true;
+        public CompiledTable Table(int ordinal) => throw new InvalidOperationException();
+    }
+    private sealed class CountedCells(StateCell[] cells) : IReadOnlyList<StateCell> {
+        public int Count => cells.Length;
+        public int Reads { get; set; }
+
+        public StateCell this[int index] { get { Reads++; return cells[index]; } }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public IEnumerator<StateCell> GetEnumerator() => ((IEnumerable<StateCell>)cells).GetEnumerator();
     }
 }

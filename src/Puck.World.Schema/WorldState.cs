@@ -25,20 +25,20 @@ public sealed record WorldStateSection(
 ) : IStateSection {
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(value); } = Freeze(World);
+    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(items: value); } = Freeze(items: World);
     /// <inheritdoc cref="Body"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(value); } = Freeze(Body);
+    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(items: value); } = Freeze(items: Body);
     /// <inheritdoc cref="Identity"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = Freeze(value); } = Freeze(Identity);
+    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = Freeze(items: value); } = Freeze(items: Identity);
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(value); } = Freeze(Lattices);
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
 
-    IReadOnlyList<StateRow>? IStateSection.Rows => World;
-    IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => Identity;
+    IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
+    IReadOnlyList<StateRow>? IStateSection.Rows => World;
 
     // The one freeze site every construction and every `with` routes through — a section can never expose a list
     // the caller still holds a live, writable reference to. A list that is already an immutable array is handed
@@ -111,7 +111,30 @@ public sealed record WorldStateRow(
     StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
     long HistoryCursor = 0
-) : StateRow(Name, Kind, Min, Max, Capacity, NonNegative, Evicts, Cells, Advance, Draw, DrawCursor, DrawnMasks, Dynamics, Cycle, Domain, ValuesFrom, Inverse, Phase, Visibility, Knowledge, PhaseOf, HistoryCursor) {
+) : StateRow(
+    Name,
+    Kind,
+    Min,
+    Max,
+    Capacity,
+    NonNegative,
+    Evicts,
+    Cells,
+    Advance,
+    Draw,
+    DrawCursor,
+    DrawnMasks,
+    Dynamics,
+    Cycle,
+    Domain,
+    ValuesFrom,
+    Inverse,
+    Phase,
+    Visibility,
+    Knowledge,
+    PhaseOf,
+    HistoryCursor
+) {
     /// <summary>Initializes a document row over an engine row, adding the two world-only traits.</summary>
     /// <param name="row">The engine row.</param>
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>

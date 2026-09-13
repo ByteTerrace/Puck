@@ -37,12 +37,6 @@ public sealed class DefaultPartitionResolver(
     public int PartitionCount => partitioningOptions.CurrentValue.Count;
 
     /// <inheritdoc />
-    public int GetPartition(Guid userObjectId) =>
-        MonotonicPartitioner.GetBucketId(
-            bucketCount: partitioningOptions.CurrentValue.Count,
-            value: userObjectId
-        );
-    /// <inheritdoc />
     public Uri GetBlobEndpoint(Guid userObjectId) =>
         GetBlobEndpoint(partition: GetPartition(userObjectId: userObjectId));
     /// <inheritdoc />
@@ -51,4 +45,10 @@ public sealed class DefaultPartitionResolver(
 
         return options.BlobEndpointForAccountIndex(accountIndex: (partition + options.AccountIndexOffset));
     }
+    /// <inheritdoc />
+    public int GetPartition(Guid userObjectId) =>
+        MonotonicPartitioner.GetBucketId(
+            bucketCount: partitioningOptions.CurrentValue.Count,
+            value: userObjectId
+        );
 }

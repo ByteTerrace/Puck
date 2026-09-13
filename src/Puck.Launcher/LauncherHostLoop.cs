@@ -4,6 +4,12 @@ using Puck.Abstractions.Pacing;
 namespace Puck.Launcher;
 
 internal static class LauncherHostLoop {
+    // Deliberate busy waiting is limited to the final 100 us. The previous 2 ms threshold burned roughly 120 ms of
+    // one CPU core per second at 60 Hz before doing useful work, which is especially costly when a laptop CPU and
+    // integrated GPU share the same thermal/power envelope. The precision waiter handles the bulk of the interval;
+    // this small tail only absorbs scheduler/timer granularity without becoming a standing frame tax.
+    private const long SpinThresholdMicroseconds = 100L;
+
     /// <summary>The host's OWN pacing default — used when no <see cref="Puck.Hosting.IFixedStepSimulation"/> is
     /// registered (a composition root that drives no fixed-step sim at all, so nothing declares a rate via
     /// <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/>), AND as the fixed-step pump's own calling
@@ -17,16 +23,6 @@ internal static class LauncherHostLoop {
     /// one (the registered simulation still gates its OWN actual stepping internally).</summary>
     public const uint DefaultUpdateRate = 240U;
 
-    // Deliberate busy waiting is limited to the final 100 us. The previous 2 ms threshold burned roughly 120 ms of
-    // one CPU core per second at 60 Hz before doing useful work, which is especially costly when a laptop CPU and
-    // integrated GPU share the same thermal/power envelope. The precision waiter handles the bulk of the interval;
-    // this small tail only absorbs scheduler/timer granularity without becoming a standing frame tax.
-    private const long SpinThresholdMicroseconds = 100L;
-
-    public static long SpinThreshold(long frequency) => Math.Max(
-        val1: 1L,
-        val2: ((frequency * SpinThresholdMicroseconds) / 1_000_000L)
-    );
     public static T? SingleOrDefault<T>(IEnumerable<T> items, string name, string hostDescription)
         where T : class {
         using var enumerator = items.GetEnumerator();
@@ -43,6 +39,10 @@ internal static class LauncherHostLoop {
 
         return item;
     }
+    public static long SpinThreshold(long frequency) => Math.Max(
+        val1: 1L,
+        val2: ((frequency * SpinThresholdMicroseconds) / 1_000_000L)
+    );
     public static void WaitUntil(long deadlineTimestamp, long frequency, long spinThreshold, IPrecisionWaiter? precisionWaiter) {
         while (true) {
             var remaining = (deadlineTimestamp - Stopwatch.GetTimestamp());

@@ -30,7 +30,7 @@ Simulation uses defined numeric semantics and reproducible random streams.
 External observations must enter at an ordered, recorded boundary. Presentation
 may interpolate and use floating-point arithmetic without changing authoritative
 state. See the [architecture](../architecture/README.md) and
-[Maths guide](../../src/Puck.Maths/README.md) for implementation details.
+[Maths guide](../reference/maths.md) for implementation details.
 
 A correction can intentionally change results across code versions. Update any
 affected fixtures and replay expectations with evidence that the corrected

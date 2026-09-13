@@ -37,21 +37,36 @@ internal static class FixedAxisMath {
         var gapY = (halfExtents.Y - FixedQ4816.Abs(value: local.Y));
         var gapZ = (halfExtents.Z - FixedQ4816.Abs(value: local.Z));
 
-        if ((gapX <= gapY) && (gapX <= gapZ)) {
+        if (
+            (gapX <= gapY) &&
+            (gapX <= gapZ)
+        ) {
             var axisSign = Sign(value: local.X);
 
-            return (Normal: (UnitX * axisSign), SurfaceLocal: new FixedVector3(X: (halfExtents.X * axisSign), Y: local.Y, Z: local.Z), Gap: gapX);
+            return (Normal: (UnitX * axisSign), SurfaceLocal: new FixedVector3(
+                X: (halfExtents.X * axisSign),
+                Y: local.Y,
+                Z: local.Z
+            ), Gap: gapX);
         }
 
         if (gapY <= gapZ) {
             var axisSign = Sign(value: local.Y);
 
-            return (Normal: (UnitY * axisSign), SurfaceLocal: new FixedVector3(X: local.X, Y: (halfExtents.Y * axisSign), Z: local.Z), Gap: gapY);
+            return (Normal: (UnitY * axisSign), SurfaceLocal: new FixedVector3(
+                X: local.X,
+                Y: (halfExtents.Y * axisSign),
+                Z: local.Z
+            ), Gap: gapY);
         }
 
         var signZ = Sign(value: local.Z);
 
-        return (Normal: (UnitZ * signZ), SurfaceLocal: new FixedVector3(X: local.X, Y: local.Y, Z: (halfExtents.Z * signZ)), Gap: gapZ);
+        return (Normal: (UnitZ * signZ), SurfaceLocal: new FixedVector3(
+            X: local.X,
+            Y: local.Y,
+            Z: (halfExtents.Z * signZ)
+        ), Gap: gapZ);
     }
     /// <summary>Maps a value to its axis sign: negative to <c>-1</c>, zero and positive to <c>+1</c> — never zero,
     /// so the result always scales a unit axis to a usable direction.</summary>

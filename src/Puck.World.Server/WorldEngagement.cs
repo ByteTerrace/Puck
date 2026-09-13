@@ -59,6 +59,7 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// launcher's window-pump thread, so no lock guards this state.</para>
 /// </remarks>
 public sealed class WorldEngagement {
+    private readonly WorldPadElement?[] m_defaultPad;
     private readonly IWorldGrantsView m_grants;
     private readonly WorldPopulation m_population;
 
@@ -67,9 +68,6 @@ public sealed class WorldEngagement {
     // kit falls back to. An application's Kit names a row here; a null Kit on a screen target reads the default,
     // and a null Kit on a body target never reaches a pad at all (pure passthrough).
     private readonly Dictionary<string, WorldPadElement?[]> m_kitPads = new(comparer: StringComparer.Ordinal);
-
-    private readonly WorldPadElement?[] m_defaultPad;
-
     // Per-screen authored reach mask and pad-kit name, resolved ONCE at construction from each screen's
     // WorldScreenRoute — what Compose stamps onto a screen application.
     private readonly Dictionary<int, ChannelReachMask> m_screenReach = new();
@@ -93,56 +91,6 @@ public sealed class WorldEngagement {
     // WorldServer.Step right after FoldTick returns (queued for the NEXT tick's intent drain through the ordinary
     // co-drive/StageContribution path; see the class remarks on replay visibility for why this is never taped here).
     private readonly List<BodyRouteContribution> m_bodyContributions = new();
-
-    /// <summary>Asserts this fold carries no state a checkpoint would need to capture — every application set lives
-    /// in the grant table (already captured there), the per-kit pad tables and per-screen policy are boot-compiled
-    /// (re-derived identically from the definition), and the pad snapshot/body-contribution buffers are per-tick
-    /// scratch fully overwritten by the next <see cref="FoldTick"/> before anything reads them — so this asserts the
-    /// one buffer (<see cref="m_bodyContributions"/>) that is supposed to be empty at a master boundary rather than
-    /// silently assuming it.</summary>
-    /// <exception cref="InvalidOperationException"><see cref="m_bodyContributions"/> is non-empty.</exception>
-    public void AssertCheckpointQuiescent() {
-        if (m_bodyContributions.Count != 0) {
-            throw new InvalidOperationException(message: "a checkpoint requires the engagement fold's body-contribution buffer to be empty — capture only between a completed Step and the next StepInstances.");
-        }
-    }
-
-    /// <summary>Initializes the application fold over the population (up to bodies 0..4095) and the one grant table the
-    /// sets live in.</summary>
-    /// <param name="population">The entity table.</param>
-    /// <param name="grants">The capability table's view (application set reads/writes plus the Control-over-target check).</param>
-    /// <param name="definition">The world definition, read once for its boot-fixed channel table, each kit's pad
-    /// map, and each screen's authored application policy (channel reach, pad kit).</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldEngagement(WorldPopulation population, IWorldGrantsView grants, WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: population);
-        ArgumentNullException.ThrowIfNull(argument: grants);
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        m_population = population;
-        m_grants = grants;
-
-        var channels = WorldChannelTable.Compile(channels: definition.Channels);
-
-        m_defaultPad = CompileDefaultPad();
-
-        foreach (var kit in definition.Kits) {
-            if (kit.PadRaw is { Count: > 0 }) {
-                m_kitPads[kit.Name] = CompilePad(
-                    channels: channels,
-                    pad: kit.Pad
-                );
-            }
-        }
-
-        foreach (var screen in definition.Screens) {
-            m_screenKit[screen.Index] = screen.Route.Kit;
-            m_screenReach[screen.Index] = CompileReach(
-                channels: channels,
-                names: screen.Route.Channels
-            );
-        }
-    }
 
     // Zeroes every ordinal the mask does not reach — the application's reach, applied once before an intent reaches
     // ITS TARGET (never applied to the source body's own integration, which always sees the full unmasked intent).
@@ -257,6 +205,46 @@ public sealed class WorldEngagement {
 
         m_staleScratch.Clear();
     }
+    // The shared check-then-mutate decision Dissolve applies and PeekDissolve reports. Every dissolved target is
+    // Control-checked against the actor — the identical pair composing it required — before anything is written.
+    private ControlOutcome ResolveDissolve(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal, bool apply) {
+        if (Body(index: entityIndex) is null) {
+            return ControlOutcome.NotApplied;
+        }
+
+        var applications = m_grants.Applications(principal: targetPrincipal);
+        var own = GrantSubject.Body(index: targetPrincipal.Index);
+        var composed = false;
+
+        for (var index = 0; (index < applications.Count); index++) {
+            if (applications[index].Target == own) {
+                continue;
+            }
+
+            composed = true;
+
+            if (!CheckEngage(
+                actingPrincipal: actingPrincipal,
+                target: applications[index].Target
+            ).IsAllowed) {
+                return ControlOutcome.Denied;
+            }
+        }
+
+        if (!composed) {
+            return ControlOutcome.NotApplied;
+        }
+
+        if (apply) {
+            _ = m_grants.ClearApplications(principal: targetPrincipal);
+            SyncLatch(
+                applications: m_grants.Applications(principal: targetPrincipal),
+                principal: targetPrincipal
+            );
+        }
+
+        return ControlOutcome.Dissolved;
+    }
     // Canonicalize in the deterministic fixed-point domain before narrowing to the presentation-facing pad float.
     // A channel's authored shape does not constrain which pad element an application may target, and raw
     // programmatic intents can exceed either normalized domain, so the destination element owns the final bound.
@@ -284,6 +272,18 @@ public sealed class WorldEngagement {
         maximum: FixedQ4816.One
     )));
 
+    /// <summary>Asserts this fold carries no state a checkpoint would need to capture — every application set lives
+    /// in the grant table (already captured there), the per-kit pad tables and per-screen policy are boot-compiled
+    /// (re-derived identically from the definition), and the pad snapshot/body-contribution buffers are per-tick
+    /// scratch fully overwritten by the next <see cref="FoldTick"/> before anything reads them — so this asserts the
+    /// one buffer (<see cref="m_bodyContributions"/>) that is supposed to be empty at a master boundary rather than
+    /// silently assuming it.</summary>
+    /// <exception cref="InvalidOperationException"><see cref="m_bodyContributions"/> is non-empty.</exception>
+    public void AssertCheckpointQuiescent() {
+        if (m_bodyContributions.Count != 0) {
+            throw new InvalidOperationException(message: "a checkpoint requires the engagement fold's body-contribution buffer to be empty — capture only between a completed Step and the next StepInstances.");
+        }
+    }
     /// <summary>Returns this tick's per-screen merged pad lane, sliced from a reused backing array — read directly by
     /// <see cref="IWorldMachineHost.Advance"/> from inside <see cref="WorldServer.Step"/>, in-process. Must be read
     /// (or copied) before the next <see cref="FoldTick"/> call, exactly like <c>WorldServer.BuildSnapshot</c>'s own
@@ -393,9 +393,9 @@ public sealed class WorldEngagement {
             : null),
             Reach: ((target.Kind == GrantSubjectKind.Screen)
             ? (m_screenReach.TryGetValue(
-                key: target.Value,
-                value: out var reach
-            )
+                    key: target.Value,
+                    value: out var reach
+                )
                 ? reach
                 : ChannelReachMask.All)
             : ChannelReachMask.All),
@@ -643,45 +643,41 @@ public sealed class WorldEngagement {
         );
     }
 
-    // The shared check-then-mutate decision Dissolve applies and PeekDissolve reports. Every dissolved target is
-    // Control-checked against the actor — the identical pair composing it required — before anything is written.
-    private ControlOutcome ResolveDissolve(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal, bool apply) {
-        if (Body(index: entityIndex) is null) {
-            return ControlOutcome.NotApplied;
-        }
+    /// <summary>Initializes the application fold over the population (up to bodies 0..4095) and the one grant table the
+    /// sets live in.</summary>
+    /// <param name="population">The entity table.</param>
+    /// <param name="grants">The capability table's view (application set reads/writes plus the Control-over-target check).</param>
+    /// <param name="definition">The world definition, read once for its boot-fixed channel table, each kit's pad
+    /// map, and each screen's authored application policy (channel reach, pad kit).</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldEngagement(WorldPopulation population, IWorldGrantsView grants, WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: population);
+        ArgumentNullException.ThrowIfNull(argument: grants);
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var applications = m_grants.Applications(principal: targetPrincipal);
-        var own = GrantSubject.Body(index: targetPrincipal.Index);
-        var composed = false;
+        m_population = population;
+        m_grants = grants;
 
-        for (var index = 0; (index < applications.Count); index++) {
-            if (applications[index].Target == own) {
-                continue;
+        var channels = WorldChannelTable.Compile(channels: definition.Channels);
+
+        m_defaultPad = CompileDefaultPad();
+
+        foreach (var kit in definition.Kits) {
+            if (kit.PadRaw is { Count: > 0 }) {
+                m_kitPads[kit.Name] = CompilePad(
+                    channels: channels,
+                    pad: kit.Pad
+                );
             }
-
-            composed = true;
-
-            if (!CheckEngage(
-                actingPrincipal: actingPrincipal,
-                target: applications[index].Target
-            ).IsAllowed) {
-                return ControlOutcome.Denied;
-            }
         }
 
-        if (!composed) {
-            return ControlOutcome.NotApplied;
-        }
-
-        if (apply) {
-            _ = m_grants.ClearApplications(principal: targetPrincipal);
-            SyncLatch(
-                applications: m_grants.Applications(principal: targetPrincipal),
-                principal: targetPrincipal
+        foreach (var screen in definition.Screens) {
+            m_screenKit[screen.Index] = screen.Route.Kit;
+            m_screenReach[screen.Index] = CompileReach(
+                channels: channels,
+                names: screen.Route.Channels
             );
         }
-
-        return ControlOutcome.Dissolved;
     }
 
     /// <summary>Gets this tick's body-target contributions — <see cref="WorldServer.Step"/> drains this right after

@@ -67,7 +67,13 @@ internal static class Wasapi {
         var enumeratorClsid = CLSID_MMDeviceEnumerator;
         var enumeratorIid = IID_IMMDeviceEnumerator;
 
-        Check(hr: CoCreateInstance(dwClsContext: ClsCtxAll, pUnkOuter: 0, ppv: out var enumeratorObject, rclsid: ref enumeratorClsid, riid: ref enumeratorIid));
+        Check(hr: CoCreateInstance(
+            dwClsContext: ClsCtxAll,
+            pUnkOuter: 0,
+            ppv: out var enumeratorObject,
+            rclsid: ref enumeratorClsid,
+            riid: ref enumeratorIid
+        ));
 
         var enumerator = ((IMMDeviceEnumerator)Marshal.GetObjectForIUnknown(pUnk: enumeratorObject));
 
@@ -77,15 +83,27 @@ internal static class Wasapi {
             IMMDevice device;
 
             if (deviceId is not null) {
-                Check(hr: enumerator.GetDevice(ppDevice: out device, pwstrId: deviceId));
+                Check(hr: enumerator.GetDevice(
+                    ppDevice: out device,
+                    pwstrId: deviceId
+                ));
             } else {
-                Check(hr: enumerator.GetDefaultAudioEndpoint(dataFlow: dataFlow, ppDevice: out device, role: RoleConsole));
+                Check(hr: enumerator.GetDefaultAudioEndpoint(
+                    dataFlow: dataFlow,
+                    ppDevice: out device,
+                    role: RoleConsole
+                ));
             }
 
             try {
                 var audioClientIid = IID_IAudioClient;
 
-                Check(hr: device.Activate(dwClsCtx: ClsCtxAll, iid: ref audioClientIid, pActivationParams: 0, ppInterface: out var audioClientObject));
+                Check(hr: device.Activate(
+                    dwClsCtx: ClsCtxAll,
+                    iid: ref audioClientIid,
+                    pActivationParams: 0,
+                    ppInterface: out var audioClientObject
+                ));
 
                 return ((IAudioClient)audioClientObject);
             } finally {
@@ -111,7 +129,10 @@ internal static class Wasapi {
     /// <summary>Throws if a WASAPI HRESULT indicates failure.</summary>
     public static void Check(int hr) {
         if (hr < 0) {
-            throw new COMException(errorCode: hr, message: "a WASAPI call failed");
+            throw new COMException(
+                errorCode: hr,
+                message: "a WASAPI call failed"
+            );
         }
     }
 }

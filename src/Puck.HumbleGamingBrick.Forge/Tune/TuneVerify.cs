@@ -9,36 +9,73 @@ namespace Puck.HumbleGamingBrick.Forge.Tune;
 /// the state graph here.
 /// </summary>
 public static class TuneVerify {
+    private static void Assert(bool condition, string message) =>
+        VerifyMachineDriver.Assert(
+            condition: condition,
+            label: "tune",
+            message: message
+        );
+
     /// <summary>Runs the whole battery.</summary>
     /// <param name="rom">The ROM image.</param>
     public static void Run(byte[] rom) {
         ArgumentNullException.ThrowIfNull(rom);
 
-        using var driver = new VerifyMachineDriver(label: "tune", rom: rom);
+        using var driver = new VerifyMachineDriver(
+            label: "tune",
+            rom: rom
+        );
 
         // Boot: the machine reaches the (only) play state within a few frames, with the VBlank handler alive and
         // the loop marked playing.
-        driver.RunFrames(buttons: JoypadButtons.None, frames: 8);
-        Assert(condition: (driver.Read(address: FrameworkMemoryMap.GameState) == TuneProtocol.StatePlay), message: $"boot did not land on the play state (state {driver.Read(address: FrameworkMemoryMap.GameState)})");
-        Assert(condition: (driver.Read(address: FrameworkMemoryMap.PendingState) == 0xFF), message: "the boot state request was never consumed (the frame dispatch is not running)");
-        Assert(condition: (driver.ReadWide(address: FrameworkMemoryMap.FrameCounter) > 0), message: "the frame counter never advanced (the VBlank handler is not firing)");
-        Assert(condition: (driver.Read(address: TuneProtocol.PlayingFlag) != 0), message: "the loop was not marked playing on boot");
-        Assert(condition: (driver.Read(address: (ushort)(FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset + 1)) != 0), message: "the music sequencer never started (pointer high byte still idle after boot)");
+        driver.RunFrames(
+            buttons: JoypadButtons.None,
+            frames: 8
+        );
+        Assert(
+            condition: (driver.Read(address: FrameworkMemoryMap.GameState) == TuneProtocol.StatePlay),
+            message: $"boot did not land on the play state (state {driver.Read(address: FrameworkMemoryMap.GameState)})"
+        );
+        Assert(
+            condition: (driver.Read(address: FrameworkMemoryMap.PendingState) == 0xFF),
+            message: "the boot state request was never consumed (the frame dispatch is not running)"
+        );
+        Assert(
+            condition: (driver.ReadWide(address: FrameworkMemoryMap.FrameCounter) > 0),
+            message: "the frame counter never advanced (the VBlank handler is not firing)"
+        );
+        Assert(
+            condition: (driver.Read(address: TuneProtocol.PlayingFlag) != 0),
+            message: "the loop was not marked playing on boot"
+        );
+        Assert(
+            condition: (driver.Read(address: ((ushort)((FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset) + 1))) != 0),
+            message: "the music sequencer never started (pointer high byte still idle after boot)"
+        );
 
         // START stops the loop. The driver's idle convention is the POINTER HIGH BYTE being zero (the sequencer
         // tick's own "Idle?" check), not the whole pointer — MusicStop deliberately leaves the low byte alone.
         driver.Press(buttons: JoypadButtons.Start);
-        Assert(condition: (driver.Read(address: TuneProtocol.PlayingFlag) == 0), message: "START did not stop the loop (the playing flag is still set)");
-        Assert(condition: (driver.Read(address: (ushort)(FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset + 1)) == 0), message: "START did not silence the music sequencer (the pointer high byte is still live)");
+        Assert(
+            condition: (driver.Read(address: TuneProtocol.PlayingFlag) == 0),
+            message: "START did not stop the loop (the playing flag is still set)"
+        );
+        Assert(
+            condition: (driver.Read(address: ((ushort)((FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset) + 1))) == 0),
+            message: "START did not silence the music sequencer (the pointer high byte is still live)"
+        );
 
         // START again restarts it.
         driver.Press(buttons: JoypadButtons.Start);
-        Assert(condition: (driver.Read(address: TuneProtocol.PlayingFlag) != 0), message: "the second START did not restart the loop");
-        Assert(condition: (driver.Read(address: (ushort)(FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset + 1)) != 0), message: "the second START did not restart the music sequencer");
+        Assert(
+            condition: (driver.Read(address: TuneProtocol.PlayingFlag) != 0),
+            message: "the second START did not restart the loop"
+        );
+        Assert(
+            condition: (driver.Read(address: ((ushort)((FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset) + 1))) != 0),
+            message: "the second START did not restart the music sequencer"
+        );
 
         Console.WriteLine(value: "tune verify | boot→play (loop running) | START stops | START restarts");
     }
-
-    private static void Assert(bool condition, string message) =>
-        VerifyMachineDriver.Assert(condition: condition, label: "tune", message: message);
 }

@@ -21,50 +21,40 @@ public sealed class DerivedFaceReservationLawTests {
     // is what leaves a raise that only the boot-frozen gate can refuse.
     private const int BootReservation = 2;
 
+    // Submits the authoring row and reports whether the live document actually moved — the same
+    // observe-the-document-not-the-reply shape MutationAllOrNothingLawTests uses.
+    private static bool ApplyAndObserveChange(WorldFixture fixture, int derivedFaceScreens) {
+        var before = fixture.DefinitionBytes();
+        var authoring = (fixture.Server.Definition.Authoring with { DerivedFaceScreens = derivedFaceScreens });
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetAuthoringDefaults(
+            Principal: WorldPrincipal.Console,
+            Authoring: authoring
+        ));
+        fixture.Step();
+
+        return !before.AsSpan().SequenceEqual(other: fixture.DefinitionBytes());
+    }
     private static WorldFixture FreshServer() =>
         Fixtures.FreshServer(definition: (Fixtures.BuildDocument() with {
             AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = BootReservation }),
         }));
 
     [Fact]
-    public void TheFixtureLeavesHeadroomAboveItsBootReservation() {
-        // The instrument check: the raise below must be one the STATIC range admits, or the law proves nothing about
-        // the boot-frozen gate.
-        using var fixture = FreshServer();
-
-        Assert.Equal(expected: BootReservation, actual: fixture.Server.BootDerivedFaceScreens);
-        Assert.True(condition: ((BootReservation + 1) <= WorldPlacementPolicy.MaxDerivedFaceScreens), userMessage: "the raise under test must sit inside the static derivedFaceScreens range");
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(
-            definition: (Fixtures.BuildDocument() with { AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = (BootReservation + 1) }) }),
-            reason: out var reason,
-            neighbours: null), userMessage: reason);
-    }
-    [Fact]
     public void RaisingTheReservationPastBoot_RefusesByName_LoweringItApplies() {
         using var fixture = FreshServer();
 
         Laws.RefusalWithControl(
             lawId: "derived-face-reservation.raise-past-boot",
-            deniedOutcome: () => ApplyAndObserveChange(derivedFaceScreens: (BootReservation + 1), fixture: fixture),
-            controlOutcome: () => ApplyAndObserveChange(derivedFaceScreens: (BootReservation - 1), fixture: fixture));
-    }
-    [Fact]
-    public void TheRefusalNamesTheBandAndTheAskedForWidth() {
-        using var fixture = FreshServer();
-        var refusals = new List<string>();
-
-        fixture.Server.EchoTap = echo => {
-            if (echo.Rejected) {
-                refusals.Add(item: echo.Message);
-            }
-        };
-
-        _ = ApplyAndObserveChange(derivedFaceScreens: (BootReservation + 1), fixture: fixture);
-
-        Assert.Contains(collection: refusals, filter: reason =>
-            (reason.Contains(comparisonType: StringComparison.Ordinal, value: "derivedFaceScreens") &&
-            reason.Contains(value: (BootReservation + 1).ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal) &&
-            reason.Contains(value: BootReservation.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal)));
+            deniedOutcome: () => ApplyAndObserveChange(
+                derivedFaceScreens: (BootReservation + 1),
+                fixture: fixture
+            ),
+            controlOutcome: () => ApplyAndObserveChange(
+                derivedFaceScreens: (BootReservation - 1),
+                fixture: fixture
+            )
+        );
     }
     [Fact]
     public void SettingTheReservationToExactlyTheBootBandIsNotRefused() {
@@ -80,20 +70,67 @@ public sealed class DerivedFaceReservationLawTests {
             }
         };
 
-        _ = ApplyAndObserveChange(derivedFaceScreens: BootReservation, fixture: fixture);
+        _ = ApplyAndObserveChange(
+            derivedFaceScreens: BootReservation,
+            fixture: fixture
+        );
 
         Assert.Empty(collection: refusals);
     }
+    [Fact]
+    public void TheFixtureLeavesHeadroomAboveItsBootReservation() {
+        // The instrument check: the raise below must be one the STATIC range admits, or the law proves nothing about
+        // the boot-frozen gate.
+        using var fixture = FreshServer();
 
-    // Submits the authoring row and reports whether the live document actually moved — the same
-    // observe-the-document-not-the-reply shape MutationAllOrNothingLawTests uses.
-    private static bool ApplyAndObserveChange(WorldFixture fixture, int derivedFaceScreens) {
-        var before = fixture.DefinitionBytes();
-        var authoring = (fixture.Server.Definition.Authoring with { DerivedFaceScreens = derivedFaceScreens });
+        Assert.Equal(
+            expected: BootReservation,
+            actual: fixture.Server.BootDerivedFaceScreens
+        );
+        Assert.True(
+            condition: ((BootReservation + 1) <= WorldPlacementPolicy.MaxDerivedFaceScreens),
+            userMessage: "the raise under test must sit inside the static derivedFaceScreens range"
+        );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: (Fixtures.BuildDocument() with { AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = (BootReservation + 1) }) }),
+                reason: out var reason,
+                neighbours: null
+            ),
+            userMessage: reason
+        );
+    }
+    [Fact]
+    public void TheRefusalNamesTheBandAndTheAskedForWidth() {
+        using var fixture = FreshServer();
+        var refusals = new List<string>();
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetAuthoringDefaults(Principal: WorldPrincipal.Console, Authoring: authoring));
-        fixture.Step();
+        fixture.Server.EchoTap = echo => {
+            if (echo.Rejected) {
+                refusals.Add(item: echo.Message);
+            }
+        };
 
-        return !before.AsSpan().SequenceEqual(other: fixture.DefinitionBytes());
+        _ = ApplyAndObserveChange(
+            derivedFaceScreens: (BootReservation + 1),
+            fixture: fixture
+        );
+
+        Assert.Contains(
+            collection: refusals,
+            filter: reason =>
+            (reason.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "derivedFaceScreens"
+            ) &&
+            reason.Contains(
+                value: (BootReservation + 1).ToString(provider: CultureInfo.InvariantCulture),
+                comparisonType: StringComparison.Ordinal
+            ) &&
+            reason.Contains(
+                value: BootReservation.ToString(provider: CultureInfo.InvariantCulture),
+                comparisonType: StringComparison.Ordinal
+            ))
+        );
     }
 }

@@ -91,42 +91,49 @@ shows that it is stale.
 
 ## Choose the authoritative home
 
-The manual provides a coherent learning path through the engine. A package
-README explains its own component. Those roles complement each other; they
-do not require two copies of the same contract.
+The manual owns the learning path and detailed human reference, including usage
+of individual libraries. A package README is a small entry point: it identifies
+the component and routes readers to its manual topic. Keep behavior, examples,
+and constraints in that topic so a package release does not freeze a second
+copy of the manual.
 
 | Information | Authoritative home |
 |---|---|
 | Product introduction and main routes | Root README |
 | Engine concepts and workflows across packages | Topic pages under `docs/` |
 | Shared setup, contribution, and release procedures | `docs/development/` and the getting-started guide |
-| Package purpose, local usage, boundaries, and constraints | The package README or a linked local reference |
+| Package purpose and documentation routes | The package README |
+| Library usage, boundaries, and constraints | The owning manual topic under `docs/` |
 | Member-level API details | XML comments and generated API reference |
 | Test scope and suite-specific commands | The test project's README |
 | Proposed work and consequential decisions | Plans and decision records |
 | Logos, visual tokens, and asset distribution | [Branding](../../branding/README.md) |
 | License terms and exceptions | The applicable legal files |
 
-Summarize a shared concept only far enough to make the local explanation useful,
-then link to its owner. Keep local exceptions beside the package that needs
-them. Do not copy a full setup guide, licensing policy, or architecture table
-into each README. When moving duplicated material, identify the surviving home
-and repair consumers in the same change. Generated inventories stay generated.
+Summarize a concept only far enough to identify the package, then link to its
+owner. Do not copy setup instructions, dependency inventories, release status,
+licensing policy, or API tables into package READMEs. Project declarations and
+package metadata own dependencies; release tooling owns release status; legal
+files own terms. When moving material, identify the surviving home and repair
+consumers in the same change. Generated inventories stay generated.
 
 Every active project and independently distributed package has a README.
 Nested source folders need one only when they own a useful explanation or
-navigation task. A long package reference can remain long when its detail is
-coherent; splitting it solely to shorten the README creates more ownership
-boundaries to maintain.
+navigation task. Existing specialized source references can remain the single
+home for their topic until migrated; link to them from the manual rather than
+copying them. Move a package README's detailed guidance into its owning manual
+topic before reducing it to navigation.
 
 ## Organize a README
 
 Use the exact project name as a project README's H1 and explain its purpose in
 the opening paragraph. Collection and nested pages use descriptive titles.
-Introduce the audience and boundaries before dense tables or implementation
-detail. Put usage or a local entry point next, followed by the concepts and
-contracts the package owns. Include verification when relevant, then related
-documentation. Omit sections that have nothing useful to say.
+For a package, follow the purpose with links to its manual topic, shared setup,
+test guidance, and applicable legal files. Keep the introduction short and omit
+technical inventories and examples. In the owning manual topic, introduce the
+audience and boundaries before tables, teach a small usage example, then explain
+the contracts and link to verification. Test and nested source READMEs retain
+the structure their distinct ownership needs.
 
 Use `Usage`, `Verification`, and `Documentation` for those common section roles,
 while keeping descriptive technical headings for the detailed content. Maths

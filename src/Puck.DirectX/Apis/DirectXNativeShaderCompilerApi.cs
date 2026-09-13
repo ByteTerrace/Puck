@@ -43,8 +43,8 @@ public sealed unsafe class DirectXNativeShaderCompilerApi : IDirectXShaderCompil
 
                     throw new DirectXException(
                         operation: $"D3DCompile({request.SourceName}){((diagnostics is null)
-                            ? ""
-                            : $": {diagnostics}")}",
+                        ? ""
+                        : $": {diagnostics}")}",
                         result: result.Value
                     );
                 }

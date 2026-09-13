@@ -13,6 +13,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
     /// <see cref="ClaimsMember"/>.</summary>
     /// <param name="exportType">Exports another type's schema through the same exporter.</param>
     protected virtual IReadOnlyList<SchemaClaimedMember> SchemaClaimedMembers(Func<Type, JsonNode> exportType) => [];
+
     /// <summary>Gets the claimed members that satisfy <see cref="DeclaresDrawSite"/> — admitting <c>drawCursor</c>/
     /// <c>drawnMasks</c> without an authored <c>draw</c> facet.</summary>
     protected virtual IReadOnlyList<string> SchemaDrawSiteMembers => [];
@@ -39,7 +40,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
 
     /// <inheritdoc/>
     public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
-        var claimed = SchemaClaimedMembers(exportType);
+        var claimed = SchemaClaimedMembers(exportType: exportType);
         var properties = new JsonObject {
             ["name"] = exportType(typeof(CellName)),
             ["kind"] = exportType(typeof(CellKind)),
@@ -83,11 +84,17 @@ public abstract partial class StateRowJsonConverter<TRow> {
         }
 
         foreach (var (first, second) in SharedExclusivePairs) {
-            allOf.Add(item: MutuallyExclusive(first: first, second: second));
+            allOf.Add(item: MutuallyExclusive(
+                first: first,
+                second: second
+            ));
         }
 
         foreach (var extra in SchemaCycleExclusiveMembers) {
-            allOf.Add(item: MutuallyExclusive(first: "cycle", second: extra));
+            allOf.Add(item: MutuallyExclusive(
+                first: "cycle",
+                second: extra
+            ));
         }
 
         allOf.Add(item: DrawSiteDependency());
@@ -95,11 +102,15 @@ public abstract partial class StateRowJsonConverter<TRow> {
         return new JsonObject {
             ["type"] = "object",
             ["properties"] = properties,
-            ["required"] = new JsonArray("name", "kind"),
+            ["required"] = new JsonArray(
+            "name",
+            "kind"
+        ),
             ["additionalProperties"] = false,
             ["allOf"] = allOf,
         };
     }
+
     // The four CellKind tokens, spelled as StrictEnumConverter<CellKind> reads/writes them (the exact declared
     // member name).
     private static readonly string[] KindConditions = [
@@ -108,6 +119,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
         nameof(CellKind.Bool),
         nameof(CellKind.Text),
     ];
+
     // ReadCell's own switch: Text reads/writes a string, Bool a boolean, Fixed the decimal FixedQ4816 spelling, and
     // Int (the default arm) a plain JSON integer — applied to "value" and every "cells[].value" alike, since both
     // read through the same per-kind switch.
@@ -121,7 +133,8 @@ public abstract partial class StateRowJsonConverter<TRow> {
     // Bool and Text, which never author an envelope in practice) a plain JSON integer.
     private static JsonObject EnvelopeSchemaFor(string kind) => ((kind == nameof(CellKind.Fixed))
         ? new JsonObject { ["type"] = "string", ["description"] = "The decimal FixedQ4816 spelling (e.g. \"12.5\"), never raw bits." }
-        : new JsonObject { ["type"] = "integer" });
+        : new JsonObject { ["type"] = "integer" }
+    );
     private static JsonObject KindCondition(string kind) => new() {
         ["properties"] = new JsonObject { ["kind"] = new JsonObject { ["const"] = kind } },
         ["required"] = new JsonArray("kind"),
@@ -149,16 +162,16 @@ public abstract partial class StateRowJsonConverter<TRow> {
     // enclosing row), the bare member accepts any one of the four; the row-level allOf narrows it precisely.
     private static JsonObject KindConditionalValueSchema() => new() {
         ["anyOf"] = new JsonArray(
-            new JsonObject { ["type"] = "integer" },
-            new JsonObject { ["type"] = "string" },
-            new JsonObject { ["type"] = "boolean" }
-        ),
+        new JsonObject { ["type"] = "integer" },
+        new JsonObject { ["type"] = "string" },
+        new JsonObject { ["type"] = "boolean" }
+    ),
     };
     private static JsonObject KindConditionalEnvelopeSchema() => new() {
         ["anyOf"] = new JsonArray(
-            new JsonObject { ["type"] = "integer" },
-            new JsonObject { ["type"] = "string" }
-        ),
+        new JsonObject { ["type"] = "integer" },
+        new JsonObject { ["type"] = "string" }
+    ),
     };
     // ReadDynamics' own shape: "row" and the fixed-native "y0"/"v0" (the decimal FixedQ4816 spelling regardless of
     // the carrying row's own kind) required, "epochTick" defaulting to zero when absent. Never delegated to a
@@ -174,7 +187,11 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["v0"] = new JsonObject { ["type"] = "string" },
             ["epochTick"] = new JsonObject { ["type"] = "integer" },
         },
-        ["required"] = new JsonArray("row", "y0", "v0"),
+        ["required"] = new JsonArray(
+        "row",
+        "y0",
+        "v0"
+    ),
         ["additionalProperties"] = false,
     };
     // ReadCells' own per-entry shape: "key"/"value" required, every other member optional and read through the
@@ -191,15 +208,18 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["observation"] = exportType(typeof(StateObservation)),
             ["provenance"] = new JsonObject { ["type"] = "string" },
         },
-        ["required"] = new JsonArray("key", "value"),
+        ["required"] = new JsonArray(
+        "key",
+        "value"
+    ),
         ["additionalProperties"] = false,
     };
     private static JsonObject MutuallyExclusive(string first, string second) => new() {
         ["not"] = new JsonObject {
             ["allOf"] = new JsonArray(
-                new JsonObject { ["required"] = new JsonArray(first) },
-                new JsonObject { ["required"] = new JsonArray(second) }
-            ),
+        new JsonObject { ["required"] = new JsonArray(first) },
+        new JsonObject { ["required"] = new JsonArray(second) }
+    ),
         },
     };
     // drawCursor/drawnMasks are engine bookkeeping for a draw site alone — an authored "draw" facet, or one of the
@@ -216,9 +236,9 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["then"] = new JsonObject {
                 ["not"] = new JsonObject {
                     ["anyOf"] = new JsonArray(
-                        new JsonObject { ["required"] = new JsonArray("drawCursor") },
-                        new JsonObject { ["required"] = new JsonArray("drawnMasks") }
-                    ),
+            new JsonObject { ["required"] = new JsonArray("drawCursor") },
+            new JsonObject { ["required"] = new JsonArray("drawnMasks") }
+        ),
                 },
             },
         };

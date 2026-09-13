@@ -27,6 +27,10 @@ internal static class PeerTestSupport {
 
         return (peerA, peerB, linkAtoB, linkBtoA);
     }
+    public static Task<IPEndPoint> ListenLoopbackAsync(Peer peer) => peer.ListenAsync(
+        ct: TestContext.Current.CancellationToken,
+        endpoint: Loopback()
+    );
     public static IPEndPoint Loopback(int port = 0) => new(
         address: IPAddress.Loopback,
         port: port
@@ -63,10 +67,6 @@ internal static class PeerTestSupport {
 
         return new QuicPeerTransport(certificate: certificate);
     }
-    public static Task<IPEndPoint> ListenLoopbackAsync(Peer peer) => peer.ListenAsync(
-        ct: TestContext.Current.CancellationToken,
-        endpoint: Loopback()
-    );
     public static async Task<PeerEvent> NextEventAsync(PeerLink link) {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
 
@@ -153,6 +153,7 @@ internal sealed class TappedPeerTransport : IPeerTransport {
         ),
         record: Record
     );
+    public ValueTask DisposeAsync() => m_inner.DisposeAsync();
     public async ValueTask<IPeerListener> ListenAsync(IPEndPoint endpoint, CancellationToken ct = default) => new TappedListener(
         inner: await m_inner.ListenAsync(
             ct: ct,
@@ -160,7 +161,6 @@ internal sealed class TappedPeerTransport : IPeerTransport {
         ),
         record: Record
     );
-    public ValueTask DisposeAsync() => m_inner.DisposeAsync();
 
     private sealed class TappedListener : IPeerListener {
         private readonly IPeerListener m_inner;
@@ -181,7 +181,8 @@ internal sealed class TappedPeerTransport : IPeerTransport {
                 : new TappedConnection(
                     inner: connection,
                     record: m_record
-                ));
+                )
+            );
         }
         public ValueTask DisposeAsync() => m_inner.DisposeAsync();
     }
@@ -205,6 +206,7 @@ internal sealed class TappedPeerTransport : IPeerTransport {
 
             return stream;
         }
+        public ValueTask DisposeAsync() => m_inner.DisposeAsync();
         public async ValueTask<Stream> OpenStreamAsync(CancellationToken ct = default) {
             var stream = await m_inner.OpenStreamAsync(ct: ct);
 
@@ -217,6 +219,5 @@ internal sealed class TappedPeerTransport : IPeerTransport {
             ct: ct,
             datagram: datagram
         );
-        public ValueTask DisposeAsync() => m_inner.DisposeAsync();
     }
 }

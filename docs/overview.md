@@ -25,8 +25,8 @@ The engine includes several systems that can also be studied independently:
   between worlds.
 
 The [project map](project-map.md) connects these responsibilities to the
-repository's individual projects. Each project README owns its API-specific
-explanations and usage details.
+repository's individual projects. Package READMEs introduce each library and route
+readers to the manual or specialized reference that owns its usage details.
 
 ## From a document to a frame
 

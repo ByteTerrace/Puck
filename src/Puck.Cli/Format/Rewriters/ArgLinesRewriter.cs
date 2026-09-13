@@ -17,6 +17,24 @@ namespace Puck.Cli.Format.Rewriters;
 // alphabetical ordering, and only it knows which calls can be safely reordered), so this is a pure
 // layout edit. Indentation is taken structurally, so nested calls settle over successive runs.
 internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
+    // True when any trivia slot this pass rewrites carries prose or a directive.
+    private static bool IsAnnotated(ArgumentListSyntax list) =>
+        (RewriteShaping.HasCommentOrDirective(trivia: list.OpenParenToken.TrailingTrivia)
+        || RewriteShaping.HasCommentOrDirective(trivia: list.CloseParenToken.LeadingTrivia)
+        || RewriteShaping.IsAnnotated(list: list.Arguments));
+    // The indent this call's wrapped body hangs from: the enclosing statement's indent plus one level per
+    // ENCLOSING multi-argument call (every such call is itself wrapped and pushes this one deeper), one
+    // level per enclosing collection expression (its elements sit one level past the opening bracket),
+    // plus one level per enclosing ternary whose BRANCH holds this call — ternary-lines lays each branch
+    // out one level past its condition, so a call opening on a branch line hangs from that deeper line.
+    private static int WrappedIndent(ArgumentListSyntax node) =>
+        RewriteShaping.StructuralIndent(
+            node: node,
+            addsLevel: static (ancestor, child) => ((ancestor is ArgumentListSyntax { Arguments.Count: > 1 })
+                || (ancestor is CollectionExpressionSyntax)
+                || ((ancestor is ConditionalExpressionSyntax conditional) && ((conditional.WhenTrue == child) || (conditional.WhenFalse == child))))
+        );
+
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node) {
         var visited = ((ArgumentListSyntax)base.VisitArgumentList(node: node)!);
 
@@ -42,7 +60,13 @@ internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
         }
 
         var lineIndent = WrappedIndent(node: node);
-        var argumentTrivia = SyntaxFactory.TriviaList(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: new string(c: ' ', count: (lineIndent + 4))));
+        var argumentTrivia = SyntaxFactory.TriviaList(
+            RewriteShaping.EndOfLine,
+            SyntaxFactory.Whitespace(text: new string(
+                c: ' ',
+                count: (lineIndent + 4)
+            ))
+        );
         var separators = visited.Arguments.GetSeparators().ToArray();
         var nodesAndTokens = new List<SyntaxNodeOrToken>(capacity: (visited.Arguments.Count * 2));
 
@@ -52,34 +76,21 @@ internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
             if (index < (visited.Arguments.Count - 1)) {
                 // The source separator carries through (it is the token the call was written with); only
                 // its layout whitespace is dropped, since the argument leads now supply the line breaks.
-                nodesAndTokens.Add(
-                    item: ((index < separators.Length)
-                        ? separators[index].WithLeadingTrivia().WithTrailingTrivia()
-                        : SyntaxFactory.Token(kind: SyntaxKind.CommaToken)));
+                nodesAndTokens.Add(item: ((index < separators.Length)
+                    ? separators[index].WithLeadingTrivia().WithTrailingTrivia()
+                    : SyntaxFactory.Token(kind: SyntaxKind.CommaToken)));
             }
         }
 
         return visited
             .WithOpenParenToken(openParenToken: visited.OpenParenToken.WithTrailingTrivia())
             .WithArguments(arguments: SyntaxFactory.SeparatedList<ArgumentSyntax>(nodesAndTokens: nodesAndTokens))
-            .WithCloseParenToken(
-                closeParenToken: visited.CloseParenToken.WithLeadingTrivia(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: new string(c: ' ', count: lineIndent))));
+            .WithCloseParenToken(closeParenToken: visited.CloseParenToken.WithLeadingTrivia(
+            RewriteShaping.EndOfLine,
+            SyntaxFactory.Whitespace(text: new string(
+                c: ' ',
+                count: lineIndent
+            ))
+        ));
     }
-
-    // True when any trivia slot this pass rewrites carries prose or a directive.
-    private static bool IsAnnotated(ArgumentListSyntax list) =>
-        (RewriteShaping.HasCommentOrDirective(trivia: list.OpenParenToken.TrailingTrivia)
-        || RewriteShaping.HasCommentOrDirective(trivia: list.CloseParenToken.LeadingTrivia)
-        || RewriteShaping.IsAnnotated(list: list.Arguments));
-    // The indent this call's wrapped body hangs from: the enclosing statement's indent plus one level per
-    // ENCLOSING multi-argument call (every such call is itself wrapped and pushes this one deeper), one
-    // level per enclosing collection expression (its elements sit one level past the opening bracket),
-    // plus one level per enclosing ternary whose BRANCH holds this call — ternary-lines lays each branch
-    // out one level past its condition, so a call opening on a branch line hangs from that deeper line.
-    private static int WrappedIndent(ArgumentListSyntax node) =>
-        RewriteShaping.StructuralIndent(
-            node: node,
-            addsLevel: static (ancestor, child) => ((ancestor is ArgumentListSyntax { Arguments.Count: > 1 })
-                || (ancestor is CollectionExpressionSyntax)
-                || ((ancestor is ConditionalExpressionSyntax conditional) && ((conditional.WhenTrue == child) || (conditional.WhenFalse == child)))));
 }

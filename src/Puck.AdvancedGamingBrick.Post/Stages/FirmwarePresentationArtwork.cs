@@ -18,23 +18,14 @@ internal static class FirmwarePresentationArtwork {
         ['C'] = [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
     };
 
-    /// <summary>Builds the complete 240-by-160 expected image, with an optional hardware darkening coefficient.</summary>
-    /// <param name="dark">The GBA brightness-decrease coefficient, from zero through sixteen.</param>
-    /// <returns>RGBA pixels in the framebuffer's native little-endian storage layout.</returns>
-    public static uint[] Create(int dark = 0) {
-        var pixels = new uint[240 * 160];
-        Array.Fill(array: pixels, value: Color(rgb555: 0x1C83, dark: dark));
-        for (var glyph = 0; glyph < Wordmark.Length; ++glyph) {
-            Draw(pixels: pixels, rows: Wordmark[glyph], left: 56 + glyph * 32, top: 55, scale: 4, color: Color(rgb555: 0x6FBC, dark: dark));
+    private static void Draw(uint[] pixels, string[] rows, int left, int top, int scale, uint color) {
+        for (var y = 0; (y < (rows.Length * scale)); ++y) {
+            for (var x = 0; (x < (rows[(y / scale)].Length * scale)); ++x) {
+                if (rows[(y / scale)][(x / scale)] == '#') {
+                    pixels[((((top + y) * 240) + left) + x)] = color;
+                }
+            }
         }
-        const string PublisherText = "BYTETERRACE";
-        for (var glyph = 0; glyph < PublisherText.Length; ++glyph) {
-            Draw(pixels: pixels, rows: Publisher[PublisherText[glyph]], left: 87 + glyph * 6, top: 102, scale: 1, color: Color(rgb555: 0x5F6C, dark: dark));
-        }
-        for (var y = 91; y < 93; ++y) {
-            pixels.AsSpan(start: y * 240 + 111, length: 18).Fill(value: Color(rgb555: 0x5F6C, dark: dark));
-        }
-        return pixels;
     }
 
     /// <summary>Expands three five-bit channels after integer hardware darkening, without calling the production PPU.</summary>
@@ -43,21 +34,65 @@ internal static class FirmwarePresentationArtwork {
     /// <returns>The native framebuffer pixel.</returns>
     public static uint Color(ushort rgb555, int dark = 0) {
         var rgba = 0xFF000000u;
-        for (var channel = 0; channel < 3; ++channel) {
+
+        for (var channel = 0; (channel < 3); ++channel) {
             var value = (rgb555 >> (channel * 5)) & 31;
-            value -= value * dark / 16;
-            rgba |= (uint)(value * 8 + value / 4) << (channel * 8);
+
+            value -= ((value * dark) / 16);
+            rgba |= (((uint)((value * 8) + (value / 4))) << (channel * 8));
         }
         return rgba;
     }
+    /// <summary>Builds the complete 240-by-160 expected image, with an optional hardware darkening coefficient.</summary>
+    /// <param name="dark">The GBA brightness-decrease coefficient, from zero through sixteen.</param>
+    /// <returns>RGBA pixels in the framebuffer's native little-endian storage layout.</returns>
+    public static uint[] Create(int dark = 0) {
+        var pixels = new uint[(240 * 160)];
 
-    private static void Draw(uint[] pixels, string[] rows, int left, int top, int scale, uint color) {
-        for (var y = 0; y < rows.Length * scale; ++y) {
-            for (var x = 0; x < rows[y / scale].Length * scale; ++x) {
-                if (rows[y / scale][x / scale] == '#') {
-                    pixels[(top + y) * 240 + left + x] = color;
-                }
-            }
+        Array.Fill(
+            array: pixels,
+            value: Color(
+                dark: dark,
+                rgb555: 0x1C83
+            )
+        );
+        for (var glyph = 0; (glyph < Wordmark.Length); ++glyph) {
+            Draw(
+                pixels: pixels,
+                rows: Wordmark[glyph],
+                left: (56 + (glyph * 32)),
+                top: 55,
+                scale: 4,
+                color: Color(
+                    dark: dark,
+                    rgb555: 0x6FBC
+                )
+            );
         }
+        const string PublisherText = "BYTETERRACE";
+
+        for (var glyph = 0; (glyph < PublisherText.Length); ++glyph) {
+            Draw(
+                pixels: pixels,
+                rows: Publisher[PublisherText[glyph]],
+                left: (87 + (glyph * 6)),
+                top: 102,
+                scale: 1,
+                color: Color(
+                    dark: dark,
+                    rgb555: 0x5F6C
+                )
+            );
+        }
+        for (var y = 91; (y < 93); ++y) {
+            pixels.AsSpan(
+                length: 18,
+                start: ((y * 240) + 111)
+            ).Fill(value: Color(
+                dark: dark,
+                rgb555: 0x5F6C
+            ));
+        }
+        return pixels;
     }
 }

@@ -16,11 +16,12 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     private readonly TextSubmissionBarrier m_barrier = new();
     private readonly ConcurrentQueue<TextSessionWork> m_pending = new();
     private readonly Lock m_enqueueGate = new();
-    private Func<bool>? m_wait;
-    private bool m_disposed;
 
     private readonly Action<string, CommandResult>? m_onResult;
     private readonly TextCommandSource m_source;
+
+    private bool m_disposed;
+    private Func<bool>? m_wait;
 
     internal TextCommandSession(
         TextCommandSource source,
@@ -42,6 +43,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         Authorize = authorize;
     }
 
+    internal Func<CommandMetadata, bool>? Authorize { get; }
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;
     // This session's own hold predicate, or null for a session nothing suspends on its own (the ordinary case; the
@@ -53,7 +55,6 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     // label (which row a hosted session belongs to) available to whatever the handler calls synchronously, without
     // this project knowing what the label is for. Null for a session nothing ambient-labels (the ordinary case).
     internal Func<IDisposable>? Scope { get; }
-    internal Func<CommandMetadata, bool>? Authorize { get; }
     internal CommandInjectionSink? SimulationSink { get; }
 
     /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>
@@ -64,20 +65,13 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     internal void EnqueuePending(TextSessionWork work) {
         lock (m_enqueueGate) {
             if (m_disposed) {
-                work.Refuse(new ObjectDisposedException(nameof(TextCommandSession)));
-                throw new ObjectDisposedException(nameof(TextCommandSession));
+                work.Refuse(exception: new ObjectDisposedException(objectName: nameof(TextCommandSession)));
+                throw new ObjectDisposedException(objectName: nameof(TextCommandSession));
             }
 
             m_pending.Enqueue(item: work);
         }
     }
-    internal void PublishResult(string line, CommandResult result) => m_onResult?.Invoke(
-        line,
-        result
-    );
-    internal bool TryDequeuePending(out TextSessionWork? work) => m_pending.TryDequeue(result: out work);
-    internal bool TryPeekPending(out TextSessionWork? work) => m_pending.TryPeek(result: out work);
-
     internal bool IsHolding() {
         if (Hold?.Invoke() ?? false) {
             return true;
@@ -90,7 +84,33 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         m_wait = null;
         return false;
     }
+    internal void PublishResult(string line, CommandResult result) => m_onResult?.Invoke(
+        line,
+        result
+    );
+    internal bool TryDequeuePending(out TextSessionWork? work) => m_pending.TryDequeue(result: out work);
+    internal bool TryPeekPending(out TextSessionWork? work) => m_pending.TryPeek(result: out work);
 
+    /// <summary>Closes this ingress and refuses work still in its queue. Work already taken by the pump and injected
+    /// simulation commands retain their normal execution semantics. Safe to call from a worker; disposal does not
+    /// stop the host.</summary>
+    public void Dispose() {
+        lock (m_enqueueGate) {
+            m_disposed = true;
+            while (m_pending.TryDequeue(result: out var work)) {
+                work.Refuse(exception: new ObjectDisposedException(objectName: nameof(TextCommandSession)));
+            }
+        }
+    }
+    /// <inheritdoc/>
+    public void Enqueue(string line) {
+        ArgumentNullException.ThrowIfNull(line);
+
+        m_source.EnqueueSession(
+            work: new TextSessionLine(line: line),
+            session: this
+        );
+    }
     /// <summary>Holds subsequent work in this session while the predicate returns true. Call only from the host
     /// pump, normally through an immediate handler's <see cref="CommandContext.TextSession"/>.</summary>
     /// <param name="hold">A short pump-thread predicate. A new hold replaces the previous session wait.</param>
@@ -98,7 +118,6 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         ArgumentNullException.ThrowIfNull(argument: hold);
         m_wait = hold;
     }
-
     /// <summary>Queues a short host operation behind this session's preceding commands, mutation barriers and
     /// waits. The delegate runs on the command pump, never on the calling worker. It must not block on I/O or
     /// wait for the pump. Task continuations run asynchronously.</summary>
@@ -109,35 +128,20 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     /// <exception cref="ObjectDisposedException">The session has closed.</exception>
     public ValueTask<TResult> InvokeAsync<TResult>(Func<TResult> operation, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: operation);
-        var work = new TextSessionOperation<TResult>(operation, cancellationToken);
+        var work = new TextSessionOperation<TResult>(
+            cancellationToken: cancellationToken,
+            operation: operation
+        );
+
         try {
-            m_source.EnqueueSession(session: this, work: work);
+            m_source.EnqueueSession(
+                session: this,
+                work: work
+            );
         } catch (ObjectDisposedException) {
             // EnqueuePending already refused this operation; return its faulted task to the caller.
         }
-        return new ValueTask<TResult>(work.Task);
-    }
-
-    /// <summary>Closes this ingress and refuses work still in its queue. Work already taken by the pump and injected
-    /// simulation commands retain their normal execution semantics. Safe to call from a worker; disposal does not
-    /// stop the host.</summary>
-    public void Dispose() {
-        lock (m_enqueueGate) {
-            m_disposed = true;
-            while (m_pending.TryDequeue(out var work)) {
-                work.Refuse(new ObjectDisposedException(nameof(TextCommandSession)));
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public void Enqueue(string line) {
-        ArgumentNullException.ThrowIfNull(line);
-
-        m_source.EnqueueSession(
-            work: new TextSessionLine(line),
-            session: this
-        );
+        return new ValueTask<TResult>(task: work.Task);
     }
 }
 

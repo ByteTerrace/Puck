@@ -9,7 +9,11 @@ namespace Puck.World.Browser.Engine;
 public sealed class LongAsStringJsonConverter : JsonConverter<long> {
     /// <inheritdoc/>
     public override long Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        long.Parse(s: (reader.GetString() ?? throw new JsonException(message: "expected a decimal string.")), style: NumberStyles.AllowLeadingSign, provider: CultureInfo.InvariantCulture);
+        long.Parse(
+            s: (reader.GetString() ?? throw new JsonException(message: "expected a decimal string.")),
+            style: NumberStyles.AllowLeadingSign,
+            provider: CultureInfo.InvariantCulture
+        );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value: value.ToString(provider: CultureInfo.InvariantCulture));
@@ -18,7 +22,11 @@ public sealed class LongAsStringJsonConverter : JsonConverter<long> {
 public sealed class UInt64AsStringJsonConverter : JsonConverter<ulong> {
     /// <inheritdoc/>
     public override ulong Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        ulong.Parse(s: (reader.GetString() ?? throw new JsonException(message: "expected a decimal string.")), style: NumberStyles.None, provider: CultureInfo.InvariantCulture);
+        ulong.Parse(
+            s: (reader.GetString() ?? throw new JsonException(message: "expected a decimal string.")),
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture
+        );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, ulong value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value: value.ToString(provider: CultureInfo.InvariantCulture));

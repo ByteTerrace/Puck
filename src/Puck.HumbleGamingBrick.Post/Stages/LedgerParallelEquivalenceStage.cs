@@ -45,6 +45,7 @@ internal sealed class LedgerParallelEquivalenceStage : IPostStage<PostContext> {
             : PostStageOutcome.Fail(detail: $"{differences.Count} of {cases.Length} cases differ between 1 and {context.Parallelism} threads: {string.Join(
                 separator: "; ",
                 values: differences.Take(count: 10)
-            )}"));
+            )}")
+        );
     }
 }

@@ -20,10 +20,20 @@ public static partial class WorldSchema {
         root.Clear();
 
         foreach (var (key, value) in existing) {
-            root.Add(propertyName: key, value: value);
+            root.Add(
+                propertyName: key,
+                value: value
+            );
 
-            if (string.Equals(a: key, b: "$id", comparisonType: StringComparison.Ordinal)) {
-                root.Add(propertyName: "x-puck", value: identity);
+            if (string.Equals(
+                a: key,
+                b: "$id",
+                comparisonType: StringComparison.Ordinal
+            )) {
+                root.Add(
+                    propertyName: "x-puck",
+                    value: identity
+                );
             }
         }
 

@@ -10,24 +10,6 @@ namespace Puck.World;
 /// <see cref="WorldCaptureScheduler"/> stamps into a manifest entry).
 /// </summary>
 internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandModule {
-    /// <inheritdoc/>
-    public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.captures",
-            description: "Reads the document's captures section (Immediate, no arguments): the resolved output directory and every station's declared tick schedule and palette-entry count. Absent captures reports an empty schedule, never a refusal.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.captures") is { } refusal)
-            ? refusal
-            : Describe())
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.state.hash",
-            description: "Reads a live deterministic state hash (Immediate): world.state.hash [capture|pose|world|authoritative]. The default capture scope is byte-for-byte compatible with manifests; authoritative additionally covers rule latches, body/identity action state, and field-lattice cells.",
-            handler: (_, args) => Hash(args: args)
-        );
-    }
-
     private CommandResult Describe() {
         var captures = server.Definition.Captures;
 
@@ -59,7 +41,10 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
             return CommandResult.Error(output: "[world.state.hash: expected [capture|pose|world|authoritative]]");
         }
 
-        var token = ((args.Count == 0) ? "capture" : args[0].ToString());
+        var token = ((args.Count == 0)
+            ? "capture"
+            : args[0].ToString()
+        );
         var scope = token switch {
             "capture" => WorldStateHashScope.Capture,
             "pose" => WorldStateHashScope.Pose,
@@ -87,6 +72,27 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
             : string.Create(
                 provider: CultureInfo.InvariantCulture,
                 handler: $"[world.state.hash: scope={token} tick={tick} hash={hash:x16}]"
-        )));
+            )));
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.captures",
+            description: "Reads the document's captures section (Immediate, no arguments): the resolved output directory and every station's declared tick schedule and palette-entry count. Absent captures reports an empty schedule, never a refusal.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.captures"
+            ) is { } refusal)
+            ? refusal
+            : Describe())
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.state.hash",
+            description: "Reads a live deterministic state hash (Immediate): world.state.hash [capture|pose|world|authoritative]. The default capture scope is byte-for-byte compatible with manifests; authoritative additionally covers rule latches, body/identity action state, and field-lattice cells.",
+            handler: (_, args) => Hash(args: args)
+        );
     }
 }

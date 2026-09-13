@@ -12,41 +12,16 @@ namespace Puck.GamingBricks.Forge;
 /// byte, operand spill and discard sink come off the top of the variable window rather than out of the array space.
 /// </remarks>
 public static class CartridgeLimits {
-    /// <summary>The largest value a one-byte state slot holds, and the default ceiling of a slot that declares none.</summary>
-    public const int NarrowMaximum = 255;
-    /// <summary>The largest value any state slot may declare. Two bytes is what both backends widen a slot to; a
-    /// wider one would need a third representation neither emitter has.</summary>
-    public const int WideMaximum = 65535;
-    /// <summary>The maximum number of named state slots. A slot spends one or two bytes of the variable window
-    /// depending on its declared ceiling, so the window, not this number, is what a wide document runs out of.</summary>
-    public const int VariableCount = 128;
+    /// <summary>The maximum number of background or object palettes on the advanced machine.</summary>
+    public const int AdvancedPaletteCount = 16;
+    /// <summary>The maximum total bytes across every array.</summary>
+    public const int ArrayByteCount = 7168;
     /// <summary>The maximum number of named arrays.</summary>
     public const int ArrayCount = 32;
     /// <summary>The maximum number of elements in one array; a byte index cannot address more.</summary>
     public const int ArrayLength = 256;
-    /// <summary>The maximum total bytes across every array.</summary>
-    public const int ArrayByteCount = 7168;
-    /// <summary>The maximum number of rules. A rule costs CODE, and code is what the image's own windows bound, so
-    /// the real gate is <c>CartridgeCapacityException</c>: this number exists only to keep a runaway document from
-    /// spending minutes in the compiler before that refusal arrives. Per-FRAME work is bounded separately, and a
-    /// document declaring <c>scene</c> runs at most one scene's rules in a frame.</summary>
-    public const int RuleCount = 1024;
-    /// <summary>The maximum number of conditions in one rule.</summary>
-    public const int ConditionCount = 8;
-    /// <summary>The maximum number of steps anywhere in one rule's body tree.</summary>
-    public const int StatementCount = 64;
-    /// <summary>The maximum nesting depth of if and repeat steps within one rule body.</summary>
-    public const int StatementDepth = 8;
-    /// <summary>The maximum iteration count of one repeat; the index variable is a byte and must hold the terminal value.</summary>
-    public const int RepeatCount = 255;
-    /// <summary>The maximum number of named screens.</summary>
-    public const int ScreenCount = 16;
-    /// <summary>
-    /// The maximum number of map writes one frame may execute. The background write queue drains in the vertical blank
-    /// and holds exactly this many, so a document is refused rather than allowed to overflow it and lose a write.
-    /// </summary>
-    /// <remarks>KEEP IN SYNC with <c>FrameworkMemoryMap.VramQueueCapacity</c>.</remarks>
-    public const int MapWriteCount = 24;
+    /// <summary>The blend weight that leaves the translucent surface fully opaque.</summary>
+    public const int BlendWeights = 16;
     /// <summary>
     /// The largest rectangle a blit may paint, in tiles. A blit repaints with the display off, and with the display off
     /// no vertical blank arrives, so the frame counter does not advance while it runs. Measured on the Color machine,
@@ -54,24 +29,64 @@ public static class CartridgeLimits {
     /// entirely near 168 cells.
     /// </summary>
     public const int BlitCellCount = 120;
+    /// <summary>The maximum number of conditions in one rule.</summary>
+    public const int ConditionCount = 8;
+    /// <summary>The fade amount that reaches the target colour completely.</summary>
+    public const int FadeSteps = 16;
+    /// <summary>The maximum number of background or object palettes on the humble machine.</summary>
+    public const int HumblePaletteCount = 8;
+    /// <summary>The maximum number of scrolling backgrounds beside the document's own.</summary>
+    /// <remarks>A turning background occupies the nearer of the two, so declaring one leaves room for a single layer.</remarks>
+    public const int LayerCount = 2;
+    /// <summary>
+    /// The maximum number of map writes one frame may execute. The background write queue drains in the vertical blank
+    /// and holds exactly this many, so a document is refused rather than allowed to overflow it and lose a write.
+    /// </summary>
+    /// <remarks>KEEP IN SYNC with <c>FrameworkMemoryMap.VramQueueCapacity</c>.</remarks>
+    public const int MapWriteCount = 24;
+    /// <summary>The largest value a one-byte state slot holds, and the default ceiling of a slot that declares none.</summary>
+    public const int NarrowMaximum = 255;
+    /// <summary>The maximum number of mid-picture scroll changes.</summary>
+    /// <remarks>Each one interrupts the processor part way down the picture, so the count is deliberately small.</remarks>
+    public const int RasterRowCount = 8;
+    /// <summary>The maximum iteration count of one repeat; the index variable is a byte and must hold the terminal value.</summary>
+    public const int RepeatCount = 255;
+    /// <summary>The maximum number of rules. A rule costs CODE, and code is what the image's own windows bound, so
+    /// the real gate is <c>CartridgeCapacityException</c>: this number exists only to keep a runaway document from
+    /// spending minutes in the compiler before that refusal arrives. Per-FRAME work is bounded separately, and a
+    /// document declaring <c>scene</c> runs at most one scene's rules in a frame.</summary>
+    public const int RuleCount = 1024;
+    /// <summary>The maximum number of samples in one recorded one-shot.</summary>
+    public const int SampleLength = 16384;
+    /// <summary>The maximum number of recorded one-shots sounding at once.</summary>
+    public const int SampleVoiceCount = 4;
     /// <summary>
     /// The largest battery-backed payload, in bytes. The framework mirrors the block in work RAM before writing it
     /// through to the cartridge's save window, and that mirror is what bounds it.
     /// </summary>
     /// <remarks>KEEP IN SYNC with <c>FrameworkMemoryMap.SaveMirrorCapacity</c>.</remarks>
     public const int SaveByteCount = 72;
+    /// <summary>The maximum number of named screens.</summary>
+    public const int ScreenCount = 16;
     /// <summary>The maximum number of named music tracks.</summary>
     public const int SoundCount = 8;
-    /// <summary>The maximum number of background or object palettes on the humble machine.</summary>
-    public const int HumblePaletteCount = 8;
-    /// <summary>The maximum number of background or object palettes on the advanced machine.</summary>
-    public const int AdvancedPaletteCount = 16;
-    /// <summary>The maximum number of samples in one recorded one-shot.</summary>
-    public const int SampleLength = 16384;
-    /// <summary>The maximum number of recorded one-shots sounding at once.</summary>
-    public const int SampleVoiceCount = 4;
-    /// <summary>The fade amount that reaches the target colour completely.</summary>
-    public const int FadeSteps = 16;
+    /// <summary>The machine's sound voices, and so the most parts one track can carry.</summary>
+    public const int SoundVoiceCount = 4;
+    /// <summary>The maximum number of hardware sprites.</summary>
+    public const int SpriteCount = 40;
+    /// <summary>The maximum number of steps anywhere in one rule's body tree.</summary>
+    public const int StatementCount = 64;
+    /// <summary>The maximum nesting depth of if and repeat steps within one rule body.</summary>
+    public const int StatementDepth = 8;
+    /// <summary>The maximum number of 8 by 8 tiles.</summary>
+    public const int TileCount = 256;
+    /// <summary>The maximum number of named state slots. A slot spends one or two bytes of the variable window
+    /// depending on its declared ceiling, so the window, not this number, is what a wide document runs out of.</summary>
+    public const int VariableCount = 128;
+    /// <summary>The largest value any state slot may declare. Two bytes is what both backends widen a slot to; a
+    /// wider one would need a third representation neither emitter has.</summary>
+    public const int WideMaximum = 65535;
+
     /// <summary>The surfaces a blend step can make translucent, in the order the hardware numbers them.</summary>
     /// <remarks>
     /// KEEP IN SYNC with the target bits each backend writes; the index here is the bit position. "middle" and "far"
@@ -79,18 +94,4 @@ public static class CartridgeLimits {
     /// declared layers fill them nearest first.
     /// </remarks>
     public static readonly string[] BlendSurfaces = ["background", "panel", "middle", "far", "sprites", "backdrop"];
-    /// <summary>The maximum number of scrolling backgrounds beside the document's own.</summary>
-    /// <remarks>A turning background occupies the nearer of the two, so declaring one leaves room for a single layer.</remarks>
-    public const int LayerCount = 2;
-    /// <summary>The blend weight that leaves the translucent surface fully opaque.</summary>
-    public const int BlendWeights = 16;
-    /// <summary>The maximum number of mid-picture scroll changes.</summary>
-    /// <remarks>Each one interrupts the processor part way down the picture, so the count is deliberately small.</remarks>
-    public const int RasterRowCount = 8;
-    /// <summary>The maximum number of hardware sprites.</summary>
-    public const int SpriteCount = 40;
-    /// <summary>The maximum number of 8 by 8 tiles.</summary>
-    public const int TileCount = 256;
-    /// <summary>The machine's sound voices, and so the most parts one track can carry.</summary>
-    public const int SoundVoiceCount = 4;
 }

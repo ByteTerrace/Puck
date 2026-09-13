@@ -13,17 +13,17 @@ internal static class SerialLinkRom {
     private const int EntryPoint = 0x0100;
     private const int RomSize = 0x8000;
 
-    /// <summary>The number of serial transfers each side performs.</summary>
-    public const byte TransferCount = 8;
-    /// <summary>The work-RAM address of the first received byte (one per transfer, ascending).</summary>
-    public const ushort ReceiveBufferAddress = 0xC000;
-    /// <summary>The work-RAM address of the completion marker (<see cref="CompletionMarker"/> once all transfers ran).</summary>
-    public const ushort CompletionMarkerAddress = 0xC0F0;
     /// <summary>The completion marker value.</summary>
     public const byte CompletionMarker = 0xA5;
+    /// <summary>The work-RAM address of the completion marker (<see cref="CompletionMarker"/> once all transfers ran).</summary>
+    public const ushort CompletionMarkerAddress = 0xC0F0;
     /// <summary>The work-RAM address of the serial-interrupt observation count — how many completed transfers found IF
     /// bit 3 raised (and acknowledged it), which must equal <see cref="TransferCount"/> on a healthy link.</summary>
     public const ushort InterruptCountAddress = 0xC0F1;
+    /// <summary>The work-RAM address of the first received byte (one per transfer, ascending).</summary>
+    public const ushort ReceiveBufferAddress = 0xC000;
+    /// <summary>The number of serial transfers each side performs.</summary>
+    public const byte TransferCount = 8;
 
     /// <summary>Creates one side's ROM image.</summary>
     /// <param name="internalClock">Whether this side drives the transfer clock (SC <c>0x81</c>, the master) or waits

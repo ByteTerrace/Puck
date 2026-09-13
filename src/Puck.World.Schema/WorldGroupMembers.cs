@@ -20,86 +20,150 @@ public readonly record struct WorldMemberIdentity(string Issuer, string Subject,
 
     /// <summary>Gets a canonical, injective token for this identity.</summary>
     public string Describe() {
-        if (!TryValidateComponent(value: Issuer) ||
+        if (
+            !TryValidateComponent(value: Issuer) ||
             !TryValidateComponent(value: Subject) ||
-            (World is { } scopedWorld && !SafeName.TryParse(candidate: scopedWorld.Value, name: out _, reason: out _))) {
+            ((World is { } scopedWorld) && !SafeName.TryParse(
+            candidate: scopedWorld.Value,
+            name: out _,
+            reason: out _
+        ))
+        ) {
             return "?";
         }
 
-        return string.Concat(TokenPrefix, Segment(value: Issuer), Segment(value: Subject), World is { } world ? Segment(value: world.Value) : string.Empty);
+        return string.Concat(
+            str0: TokenPrefix,
+            str1: Segment(value: Issuer),
+            str2: Segment(value: Subject),
+            str3: ((World is { } world)
+            ? Segment(value: world.Value)
+            : string.Empty)
+        );
     }
-
     /// <summary>Determines whether this value is the exact value represented by its own canonical token.</summary>
-    public bool IsCanonical() => TryParse(token: Describe(), identity: out var parsed) && (parsed == this);
-
+    public bool IsCanonical() => (TryParse(
+        token: Describe(),
+        identity: out var parsed
+    ) && (parsed == this));
     /// <summary>Parses a token and requires its exact canonical spelling.</summary>
-    public static bool TryParseCanonical(ReadOnlySpan<char> token, out WorldMemberIdentity identity) => TryParse(token: token, identity: out identity) && token.SequenceEqual(other: identity.Describe());
-
+    public static bool TryParseCanonical(ReadOnlySpan<char> token, out WorldMemberIdentity identity) => (TryParse(
+        identity: out identity,
+        token: token
+    ) && token.SequenceEqual(other: identity.Describe()));
     /// <summary>Parses the length-prefixed <c>member:</c> token. The parser accepts a case-insensitive prefix and
     /// non-canonical decimal length spelling; callers crossing an identity boundary should use
     /// <see cref="TryParseCanonical"/>.</summary>
     public static bool TryParse(ReadOnlySpan<char> token, out WorldMemberIdentity identity) {
         identity = default;
 
-        if (!token.StartsWith(value: TokenPrefix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (!token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: TokenPrefix
+        )) {
             return false;
         }
 
         var offset = TokenPrefix.Length;
 
-        if (!TryReadSegment(token: token, offset: ref offset, value: out var issuer) ||
-            !TryReadSegment(token: token, offset: ref offset, value: out var subject) ||
+        if (
+            !TryReadSegment(
+            offset: ref offset,
+            token: token,
+            value: out var issuer
+        ) ||
+            !TryReadSegment(
+            offset: ref offset,
+            token: token,
+            value: out var subject
+        ) ||
             !TryValidateComponent(value: issuer) ||
-            !TryValidateComponent(value: subject)) {
+            !TryValidateComponent(value: subject)
+        ) {
             return false;
         }
 
         SafeName? world = null;
 
         if (offset < token.Length) {
-            if (!TryReadSegment(token: token, offset: ref offset, value: out var worldText) ||
+            if (
+                !TryReadSegment(
+                offset: ref offset,
+                token: token,
+                value: out var worldText
+            ) ||
                 (offset != token.Length) ||
-                !SafeName.TryParse(candidate: worldText, name: out var worldName, reason: out _)) {
+                !SafeName.TryParse(
+                candidate: worldText,
+                name: out var worldName,
+                reason: out _
+            )
+            ) {
                 return false;
             }
 
             world = worldName;
         }
 
-        identity = new WorldMemberIdentity(Issuer: issuer, Subject: subject, World: world);
+        identity = new WorldMemberIdentity(
+            Issuer: issuer,
+            Subject: subject,
+            World: world
+        );
         return true;
     }
 
-    private static string Segment(string value) => string.Concat(value.Length.ToString(provider: CultureInfo.InvariantCulture), "~", value);
-
+    private static string Segment(string value) => string.Concat(
+        str0: value.Length.ToString(provider: CultureInfo.InvariantCulture),
+        str1: "~",
+        str2: value
+    );
     private static bool TryReadSegment(ReadOnlySpan<char> token, ref int offset, out string value) {
         value = string.Empty;
 
-        if ((offset >= token.Length) || !char.IsAsciiDigit(c: token[offset])) {
+        if (
+            (offset >= token.Length) ||
+            !char.IsAsciiDigit(c: token[offset])
+        ) {
             return false;
         }
 
         var separator = token[offset..].IndexOf(value: '~');
+
         if (separator <= 0) {
             return false;
         }
 
         separator += offset;
 
-        if (!int.TryParse(s: token[offset..separator], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var length) || (length < 1)) {
+        if (
+            !int.TryParse(
+            s: token[offset..separator],
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out var length
+        ) ||
+            (length < 1)
+        ) {
             return false;
         }
 
-        var start = separator + 1;
-        if ((start > token.Length) || (length > (token.Length - start))) {
+        var start = (separator + 1);
+
+        if (
+            (start > token.Length) ||
+            (length > (token.Length - start))
+        ) {
             return false;
         }
 
-        value = token.Slice(start: start, length: length).ToString();
-        offset = start + length;
+        value = token.Slice(
+            length: length,
+            start: start
+        ).ToString();
+        offset = (start + length);
         return true;
     }
-
     private static bool TryValidateComponent(string? value) {
         if (string.IsNullOrEmpty(value: value)) {
             return false;
@@ -114,7 +178,6 @@ public readonly record struct WorldMemberIdentity(string Issuer, string Subject,
         return true;
     }
 }
-
 /// <summary>Distinguishes a locally addressed principal from an issuer-qualified verified identity.</summary>
 [JsonConverter(typeof(StrictEnumConverter<MemberRefKind>))]
 public enum MemberRefKind : byte {
@@ -123,7 +186,6 @@ public enum MemberRefKind : byte {
     /// <summary>The member is addressed by a verified issuer-qualified identity.</summary>
     Verified,
 }
-
 /// <summary>The allocation-free local-or-verified membership key. Exactly one payload is populated according to
 /// <see cref="Kind"/>; a default value is intentionally not a member.</summary>
 /// <param name="Kind">The populated payload arm.</param>
@@ -132,39 +194,58 @@ public enum MemberRefKind : byte {
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public readonly record struct WorldMemberRef(MemberRefKind Kind, WorldPrincipal? Principal = null, WorldMemberIdentity? Verified = null) {
     /// <summary>Creates a local membership reference.</summary>
-    public static WorldMemberRef Local(WorldPrincipal principal) => new(Kind: MemberRefKind.Local, Principal: principal);
-
+    public static WorldMemberRef Local(WorldPrincipal principal) => new(
+        Kind: MemberRefKind.Local,
+        Principal: principal
+    );
     /// <summary>Creates a verified membership reference.</summary>
-    public static WorldMemberRef VerifiedIdentity(WorldMemberIdentity identity) => new(Kind: MemberRefKind.Verified, Verified: identity);
-
+    public static WorldMemberRef VerifiedIdentity(WorldMemberIdentity identity) => new(
+        Kind: MemberRefKind.Verified,
+        Verified: identity
+    );
     /// <summary>Determines whether exactly one canonical payload matches the tagged arm.</summary>
     public bool IsCanonical() => Kind switch {
-        MemberRefKind.Local => Principal is { } principal && (Verified is null) && principal.IsCanonical(),
-        MemberRefKind.Verified => (Principal is null) && Verified is { } identity && identity.IsCanonical(),
+        MemberRefKind.Local => ((Principal is { } principal) && (Verified is null) && principal.IsCanonical()),
+        MemberRefKind.Verified => ((Principal is null) && (Verified is { } identity) && identity.IsCanonical()),
         _ => false,
     };
-
     /// <summary>Gets the canonical local-or-verified token, or <c>?</c> for a malformed value.</summary>
-    public string Describe() => IsCanonical()
+    public string Describe() => (IsCanonical()
         ? Kind switch {
             MemberRefKind.Local => $"local:{Principal!.Value.Describe()}",
             MemberRefKind.Verified => $"verified:{Verified!.Value.Describe()}",
             _ => "?",
         }
-        : "?";
-
+        : "?"
+    );
     /// <summary>Parses a canonical local-or-verified token.</summary>
     public static bool TryParseCanonical(ReadOnlySpan<char> token, out WorldMemberRef member) {
         member = default;
 
-        if (token.StartsWith(value: "local:", comparisonType: StringComparison.Ordinal) &&
-            WorldPrincipal.TryParseCanonical(token: token[6..], principal: out var principal)) {
+        if (
+            token.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "local:"
+        ) &&
+            WorldPrincipal.TryParseCanonical(
+            token: token[6..],
+            principal: out var principal
+        )
+        ) {
             member = Local(principal: principal);
             return true;
         }
 
-        if (token.StartsWith(value: "verified:", comparisonType: StringComparison.Ordinal) &&
-            WorldMemberIdentity.TryParseCanonical(token: token[9..], identity: out var identity)) {
+        if (
+            token.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "verified:"
+        ) &&
+            WorldMemberIdentity.TryParseCanonical(
+            token: token[9..],
+            identity: out var identity
+        )
+        ) {
             member = VerifiedIdentity(identity: identity);
             return true;
         }
@@ -172,7 +253,6 @@ public readonly record struct WorldMemberRef(MemberRefKind Kind, WorldPrincipal?
         return false;
     }
 }
-
 /// <summary>One member of a group's roster, including its declared role, stable succession ordinal, and optional
 /// tags used by membership selectors.</summary>
 /// <param name="Ref">The local or verified member identity.</param>

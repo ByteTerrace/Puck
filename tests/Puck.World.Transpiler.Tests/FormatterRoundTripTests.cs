@@ -13,110 +13,179 @@ namespace Puck.World.Transpiler.Tests;
 /// change what it compiles to, must be idempotent, and must leave the decompiler's one-time-import header as the
 /// first line.</summary>
 public class FormatterRoundTripTests {
-    public static TheoryData<string> GetShippedWorldFiles() => ShippedWorlds.Files();
+    private static JsonNode CompileToJson(string source, string fullPath, string relativePath) {
+        var diagnostics = new DiagnosticBag();
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source,
+            diagnostics: diagnostics
+        );
 
-    [Theory]
-    [MemberData(nameof(GetShippedWorldFiles))]
-    public void DecompileFormatCompileRoundTripsToTheOriginalDocument(string relativePath) {
-        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
-        var originalJsonText = File.ReadAllText(fullPath);
-        var originalNode = JsonNode.Parse(originalJsonText);
-        Assert.NotNull(originalNode);
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: $"Parse errors for {relativePath}:{Environment.NewLine}{diagnostics.FormatReport(source)}"
+        );
+        Assert.NotNull(@object: parseResult.Value);
 
-        var decompiled = WorldDecompiler.Decompile(originalJsonText);
-        var formatted = PuckFormatter.Format(decompiled);
-        var recompiledNode = CompileToJson(formatted, fullPath, relativePath);
+        var loweringDiagnostics = new DiagnosticBag();
+        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+            parseResult.Value,
+            basePath: Path.GetDirectoryName(path: fullPath),
+            diagnostics: loweringDiagnostics,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
-        var originalCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(originalNode));
-        var recompiledCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(recompiledNode));
+        Assert.False(
+            condition: loweringDiagnostics.HasErrors,
+            userMessage: $"Lowering errors for {relativePath}:{Environment.NewLine}{loweringDiagnostics.FormatReport(source)}"
+        );
+        Assert.NotNull(@object: loweringResult.Value);
 
-        var mismatch = JsonMismatch.Find(JsonNode.Parse(originalCanonical), JsonNode.Parse(recompiledCanonical), $"{relativePath}:");
-        Assert.Null(mismatch);
+        return loweringResult.Value!;
     }
 
+    [MemberData(nameof(GetShippedWorldFiles))]
+    [Theory]
+    public void DecompileFormatCompileRoundTripsToTheOriginalDocument(string relativePath) {
+        var fullPath = Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        );
+        var originalJsonText = File.ReadAllText(path: fullPath);
+        var originalNode = JsonNode.Parse(originalJsonText);
+
+        Assert.NotNull(@object: originalNode);
+
+        var decompiled = WorldDecompiler.Decompile(jsonText: originalJsonText);
+        var formatted = PuckFormatter.Format(decompiled);
+        var recompiledNode = CompileToJson(
+            fullPath: fullPath,
+            relativePath: relativePath,
+            source: formatted
+        );
+
+        var originalCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: originalNode));
+        var recompiledCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: recompiledNode));
+
+        var mismatch = JsonMismatch.Find(
+            JsonNode.Parse(originalCanonical),
+            JsonNode.Parse(recompiledCanonical),
+            $"{relativePath}:"
+        );
+
+        Assert.Null(@object: mismatch);
+    }
+    [MemberData(nameof(GetShippedWorldSources))]
+    [Theory]
+    public void FormattingACommittedSourceIsIdempotent(string relativePath) {
+        var pass1 = PuckFormatter.Format(File.ReadAllText(path: Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        )));
+        var pass2 = PuckFormatter.Format(pass1);
+
+        Assert.Equal(
+            actual: pass2,
+            expected: pass1
+        );
+    }
+    [MemberData(nameof(GetShippedWorldFiles))]
+    [Theory]
+    public void FormattingIsIdempotent(string relativePath) {
+        var fullPath = Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        );
+        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
+
+        var pass1 = PuckFormatter.Format(decompiled);
+        var pass2 = PuckFormatter.Format(pass1);
+
+        Assert.Equal(
+            actual: pass2,
+            expected: pass1
+        );
+    }
+    [MemberData(nameof(GetShippedWorldSources))]
+    [Theory]
+    public void FormattingNeverChangesWhatACommittedSourceCompilesTo(string relativePath) {
+        var fullPath = Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        );
+        var source = File.ReadAllText(path: fullPath);
+        var formatted = PuckFormatter.Format(source);
+
+        var unformattedCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: CompileToJson(
+            fullPath: fullPath,
+            relativePath: relativePath,
+            source: source
+        )));
+        var formattedCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: CompileToJson(
+            fullPath: fullPath,
+            relativePath: relativePath,
+            source: formatted
+        )));
+
+        var mismatch = JsonMismatch.Find(
+            JsonNode.Parse(unformattedCanonical),
+            JsonNode.Parse(formattedCanonical),
+            $"{relativePath}:"
+        );
+
+        Assert.Null(@object: mismatch);
+    }
     // Isolates the formatter from the decompiler: comparing the unformatted and formatted decompiled sources
     // against each other, rather than against the original JSON, fails only when formatting itself drifts.
     [Theory]
     [MemberData(nameof(GetShippedWorldFiles))]
     public void FormattingNeverChangesWhatADocumentCompilesTo(string relativePath) {
-        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
-        var decompiled = WorldDecompiler.Decompile(File.ReadAllText(fullPath));
+        var fullPath = Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        );
+        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
         var formatted = PuckFormatter.Format(decompiled);
 
-        var unformattedNode = CompileToJson(decompiled, fullPath, relativePath);
-        var formattedNode = CompileToJson(formatted, fullPath, relativePath);
+        var unformattedNode = CompileToJson(
+            fullPath: fullPath,
+            relativePath: relativePath,
+            source: decompiled
+        );
+        var formattedNode = CompileToJson(
+            fullPath: fullPath,
+            relativePath: relativePath,
+            source: formatted
+        );
 
-        var unformattedCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(unformattedNode));
-        var formattedCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(formattedNode));
+        var unformattedCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: unformattedNode));
+        var formattedCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: formattedNode));
 
-        var mismatch = JsonMismatch.Find(JsonNode.Parse(unformattedCanonical), JsonNode.Parse(formattedCanonical), $"{relativePath}:");
-        Assert.Null(mismatch);
+        var mismatch = JsonMismatch.Find(
+            JsonNode.Parse(unformattedCanonical),
+            JsonNode.Parse(formattedCanonical),
+            $"{relativePath}:"
+        );
+
+        Assert.Null(@object: mismatch);
     }
-
-    [Theory]
+    public static TheoryData<string> GetShippedWorldFiles() => ShippedWorlds.Files();
+    public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
     [MemberData(nameof(GetShippedWorldFiles))]
-    public void FormattingIsIdempotent(string relativePath) {
-        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
-        var decompiled = WorldDecompiler.Decompile(File.ReadAllText(fullPath));
-
-        var pass1 = PuckFormatter.Format(decompiled);
-        var pass2 = PuckFormatter.Format(pass1);
-
-        Assert.Equal(pass1, pass2);
-    }
-
     [Theory]
-    [MemberData(nameof(GetShippedWorldFiles))]
     public void TheFirstLineAfterFormattingIsTheHeaderComment(string relativePath) {
-        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
-        var decompiled = WorldDecompiler.Decompile(File.ReadAllText(fullPath));
+        var fullPath = Path.Combine(
+            path1: ShippedWorlds.FindDirectory(),
+            path2: relativePath
+        );
+        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
         var formatted = PuckFormatter.Format(decompiled);
 
         var firstLine = formatted.Split('\n')[0];
-        Assert.Equal("// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and", firstLine);
-    }
 
-    public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
-
-    [Theory]
-    [MemberData(nameof(GetShippedWorldSources))]
-    public void FormattingNeverChangesWhatACommittedSourceCompilesTo(string relativePath) {
-        var fullPath = Path.Combine(ShippedWorlds.FindDirectory(), relativePath);
-        var source = File.ReadAllText(fullPath);
-        var formatted = PuckFormatter.Format(source);
-
-        var unformattedCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(CompileToJson(source, fullPath, relativePath)));
-        var formattedCanonical = System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(CompileToJson(formatted, fullPath, relativePath)));
-
-        var mismatch = JsonMismatch.Find(JsonNode.Parse(unformattedCanonical), JsonNode.Parse(formattedCanonical), $"{relativePath}:");
-        Assert.Null(mismatch);
-    }
-
-    [Theory]
-    [MemberData(nameof(GetShippedWorldSources))]
-    public void FormattingACommittedSourceIsIdempotent(string relativePath) {
-        var pass1 = PuckFormatter.Format(File.ReadAllText(Path.Combine(ShippedWorlds.FindDirectory(), relativePath)));
-        var pass2 = PuckFormatter.Format(pass1);
-
-        Assert.Equal(pass1, pass2);
-    }
-
-    private static JsonNode CompileToJson(string source, string fullPath, string relativePath) {
-        var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);
-        Assert.False(diagnostics.HasErrors, $"Parse errors for {relativePath}:{Environment.NewLine}{diagnostics.FormatReport(source)}");
-        Assert.NotNull(parseResult.Value);
-
-        var loweringDiagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
-            basePath: Path.GetDirectoryName(fullPath),
-            diagnostics: loweringDiagnostics
-        , cancellationToken: TestContext.Current.CancellationToken);
-        Assert.False(loweringDiagnostics.HasErrors, $"Lowering errors for {relativePath}:{Environment.NewLine}{loweringDiagnostics.FormatReport(source)}");
-        Assert.NotNull(loweringResult.Value);
-
-        return loweringResult.Value!;
+        Assert.Equal(
+            actual: firstLine,
+            expected: "// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and"
+        );
     }
 
 }

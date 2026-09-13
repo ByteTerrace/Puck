@@ -323,31 +323,37 @@ public sealed partial class SdfWorldEngine {
 
         var floats = MemoryMarshal.Cast<byte, float>(span: m_volumeScratch.AsSpan());
         var volumes = frame.Volumes;
+
         if (volumes.Count > MaxVolumes) {
-            throw new ArgumentOutOfRangeException(nameof(frame), "Too many bounded volumes.");
+            throw new ArgumentOutOfRangeException(
+                nameof(frame),
+                "Too many bounded volumes."
+            );
         }
         var count = volumes.Count;
 
         for (var index = 0; (index < count); index++) {
             var volume = volumes[index];
-            volume.Validate(frame.DynamicTransforms.Count);
-            var b = index * SdfVolume.VectorsPerEntry * 4;
-            var rotation = Quaternion.Normalize(volume.Rotation);
+
+            volume.Validate(dynamicTransformCount: frame.DynamicTransforms.Count);
+            var b = ((index * SdfVolume.VectorsPerEntry) * 4);
+            var rotation = Quaternion.Normalize(value: volume.Rotation);
 
             floats[(b + 0)] = volume.Position.X; floats[(b + 1)] = volume.Position.Y; floats[(b + 2)] = volume.Position.Z; floats[(b + 3)] = volume.DynamicSlot;
             floats[(b + 4)] = rotation.X; floats[(b + 5)] = rotation.Y; floats[(b + 6)] = rotation.Z; floats[(b + 7)] = rotation.W;
             floats[(b + 8)] = volume.HalfExtent.X; floats[(b + 9)] = volume.HalfExtent.Y; floats[(b + 10)] = volume.HalfExtent.Z; floats[(b + 11)] = volume.Axis;
-            floats[(b + 12)] = volume.Width; floats[(b + 13)] = volume.Speed; floats[(b + 14)] = BitConverter.UInt32BitsToSingle(volume.Seed); floats[(b + 15)] = volume.Steps;
-            floats[b + 16] = volume.Intensity; floats[b + 17] = volume.Extinction;
-            floats[b + 18] = volume.PulseAmplitude; floats[b + 19] = volume.PulseFrequency;
-            floats[b + 20] = volume.IntensityLane ?? -1; floats[b + 21] = volume.Ramp.Count;
-            floats[b + 22] = (float)volume.Kind;
-            floats[b + 40] = volume.Coverage; floats[b + 41] = volume.Softness;
-            for (var stop = 0; stop < volume.Ramp.Count; stop++) {
-                var row = b + 24 + stop * 4;
+            floats[(b + 12)] = volume.Width; floats[(b + 13)] = volume.Speed; floats[(b + 14)] = BitConverter.UInt32BitsToSingle(value: volume.Seed); floats[(b + 15)] = volume.Steps;
+            floats[(b + 16)] = volume.Intensity; floats[(b + 17)] = volume.Extinction;
+            floats[(b + 18)] = volume.PulseAmplitude; floats[(b + 19)] = volume.PulseFrequency;
+            floats[(b + 20)] = (volume.IntensityLane ?? -1); floats[(b + 21)] = volume.Ramp.Count;
+            floats[(b + 22)] = ((float)volume.Kind);
+            floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness;
+            for (var stop = 0; (stop < volume.Ramp.Count); stop++) {
+                var row = ((b + 24) + (stop * 4));
                 var value = volume.Ramp[stop];
-                floats[row] = value.Color.X; floats[row + 1] = value.Color.Y;
-                floats[row + 2] = value.Color.Z; floats[row + 3] = value.Density;
+
+                floats[row] = value.Color.X; floats[(row + 1)] = value.Color.Y;
+                floats[(row + 2)] = value.Color.Z; floats[(row + 3)] = value.Density;
             }
         }
     }
@@ -365,8 +371,8 @@ public sealed partial class SdfWorldEngine {
         var envBase = ((MaxScreenSurfaces + 8) * 4);
 
         lanes.CopyTo(destination: floats.Slice(
-            start: envBase,
-            length: SdfEnvironment.LaneCount
+            length: SdfEnvironment.LaneCount,
+            start: envBase
         ));
 
         for (var index = 0; (index < SdfEnvironment.MaxLights); index++) {
@@ -421,11 +427,26 @@ public sealed partial class SdfWorldEngine {
         var cloudsC = (envBase + ((SdfEnvironment.CloudsRow + 2) * 4));
         var cloudsD = (envBase + ((SdfEnvironment.CloudsRow + 3) * 4));
 
-        floats[(cloudsC + 0)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * drift.X), y: CloudLatticePeriod));
-        floats[(cloudsC + 1)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * drift.Y), y: CloudLatticePeriod));
-        floats[(cloudsC + 2)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * shear.X), y: CloudLatticePeriod));
-        floats[(cloudsC + 3)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * shear.Y), y: CloudLatticePeriod));
-        floats[(cloudsD + 0)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * environment.CloudSpin), y: Math.Tau));
+        floats[(cloudsC + 0)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * drift.X),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsC + 1)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * drift.Y),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsC + 2)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * shear.X),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsC + 3)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * shear.Y),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsD + 0)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * environment.CloudSpin),
+            y: Math.Tau
+        ));
 
         for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
             var local = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
@@ -502,7 +523,10 @@ public sealed partial class SdfWorldEngine {
         // The far distance is read by every marching kernel as the depth each march ends at; a non-finite or
         // non-positive value would make every cone proof and far exit meaningless, so it is refused here rather than
         // guarded per kernel (the world validator refuses the authored value by name long before it reaches a frame).
-        if (!float.IsFinite(f: frame.FarDistance) || (frame.FarDistance <= 0f)) {
+        if (
+            !float.IsFinite(f: frame.FarDistance) ||
+            (frame.FarDistance <= 0f)
+        ) {
             throw new ArgumentException(
                 message: $"The frame's far distance must be finite and positive; got {frame.FarDistance}.",
                 paramName: nameof(frame)

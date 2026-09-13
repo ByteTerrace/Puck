@@ -14,6 +14,23 @@ namespace Puck.World.Silo;
 public sealed class SiloStdinRouter(WorldSiloHost host, SiloConsoleRouting routing, TextCommandSource administrative) : BackgroundService {
     private const string SiloVerbPrefix = "silo.";
 
+    // The verbs that address the process rather than a row: the terminal's own quit and the registry-wide
+    // rejection count. Everything else untagged is a row verb and needs a selected row.
+    private static bool IsProcessVerb(ReadOnlySpan<char> trimmed) {
+        var end = trimmed.IndexOfAny(
+            value0: ' ',
+            value1: '	'
+        );
+        var verb = ((end < 0)
+            ? trimmed
+            : trimmed[..end]
+        );
+
+        return (
+            verb.SequenceEqual(other: "quit") ||
+            verb.SequenceEqual(other: "wire.errors")
+        );
+    }
     private void ReadLoop(CancellationToken stoppingToken) {
         try {
             var input = Console.In;
@@ -51,7 +68,10 @@ public sealed class SiloStdinRouter(WorldSiloHost host, SiloConsoleRouting routi
         }
 
         if (
-            trimmed.StartsWith(comparisonType: StringComparison.Ordinal, value: SiloVerbPrefix) ||
+            trimmed.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: SiloVerbPrefix
+        ) ||
             IsProcessVerb(trimmed: trimmed)
         ) {
             administrative.Enqueue(line: line);
@@ -71,21 +91,17 @@ public sealed class SiloStdinRouter(WorldSiloHost host, SiloConsoleRouting routi
 
         Console.Error.WriteLine(value: ((routing.DefaultWorldId is null)
             ? "refused: no row selected — tag the line '@<key> ...' or run 'silo.use <key>' first"
-            : $"refused: '{routing.DefaultWorldId}' is no longer admitted — select another row with 'silo.use <key>'"
-        ));
-    }
-    // The verbs that address the process rather than a row: the terminal's own quit and the registry-wide
-    // rejection count. Everything else untagged is a row verb and needs a selected row.
-    private static bool IsProcessVerb(ReadOnlySpan<char> trimmed) {
-        var end = trimmed.IndexOfAny(value0: ' ', value1: '	');
-        var verb = ((end < 0) ? trimmed : trimmed[..end]);
-
-        return (verb.SequenceEqual(other: "quit") || verb.SequenceEqual(other: "wire.errors"));
+            : $"refused: '{routing.DefaultWorldId}' is no longer admitted — select another row with 'silo.use <key>'"));
     }
     private void RouteTagged(ReadOnlySpan<char> rest) {
         var separator = rest.IndexOf(value: ' ');
-        var key = ((separator < 0) ? rest : rest[..separator]).ToString();
-        var content = ((separator < 0) ? string.Empty : rest[(separator + 1)..].ToString());
+        var key = ((separator < 0)
+            ? rest
+            : rest[..separator]).ToString();
+        var content = ((separator < 0)
+            ? string.Empty
+            : rest[(separator + 1)..].ToString()
+        );
 
         if (!host.TryResolveKey(
             identity: out var identity,

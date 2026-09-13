@@ -27,6 +27,10 @@ public abstract class ManifestCatalog<TManifest> {
     /// <summary>Gets the shipped ids, sorted ordinally.</summary>
     public IReadOnlyList<string> Ids => m_pathsById.Keys.Order(comparer: StringComparer.Ordinal).ToList();
 
+    /// <summary>Parses and validates one manifest file — the call into the manifest type's own loader.</summary>
+    /// <param name="manifestPath">The manifest's path.</param>
+    /// <returns>The manifest.</returns>
+    protected abstract TManifest LoadManifest(string manifestPath);
     /// <summary>Scans a directory tree for the manifests carrying one file suffix. A missing root yields an empty index.</summary>
     /// <param name="description">The singular, lower-case noun a collision diagnostic names this kind with.</param>
     /// <param name="fileSuffix">The manifest file suffix, including its leading dot.</param>
@@ -39,10 +43,17 @@ public abstract class ManifestCatalog<TManifest> {
         var pathsById = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         if (Directory.Exists(path: rootDirectory)) {
-            foreach (var path in Directory.EnumerateFiles(path: rootDirectory, searchOption: SearchOption.AllDirectories, searchPattern: $"*{fileSuffix}")) {
+            foreach (var path in Directory.EnumerateFiles(
+                path: rootDirectory,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: $"*{fileSuffix}"
+            )) {
                 var id = Path.GetFileName(path: path)[..^fileSuffix.Length];
 
-                if (!pathsById.TryAdd(key: id, value: path)) {
+                if (!pathsById.TryAdd(
+                    key: id,
+                    value: path
+                )) {
                     throw new InvalidDataException(message: $"The {description} '{id}' is shipped twice under '{rootDirectory}': '{pathsById[id]}' and '{path}'.");
                 }
             }
@@ -60,20 +71,23 @@ public abstract class ManifestCatalog<TManifest> {
     /// <returns>The manifest.</returns>
     /// <exception cref="KeyNotFoundException">No manifest with that id was found.</exception>
     public TManifest Load(string id) {
-        return (m_pathsById.TryGetValue(key: id, value: out var path)
+        return (m_pathsById.TryGetValue(
+            key: id,
+            value: out var path
+        )
             ? LoadManifest(manifestPath: path)
-            : throw new KeyNotFoundException(message: $"No {m_description} '{id}' is shipped; the shipped ids are: {string.Join(separator: ", ", values: Ids)}.")
+            : throw new KeyNotFoundException(message: $"No {m_description} '{id}' is shipped; the shipped ids are: {string.Join(
+                separator: ", ",
+                values: Ids
+            )}.")
         );
     }
-
-    /// <summary>Parses and validates one manifest file — the call into the manifest type's own loader.</summary>
-    /// <param name="manifestPath">The manifest's path.</param>
-    /// <returns>The manifest.</returns>
-    protected abstract TManifest LoadManifest(string manifestPath);
-
     /// <summary>Gets a shipped manifest's path.</summary>
     /// <param name="id">The id.</param>
     /// <param name="path">The manifest path, when found.</param>
     /// <returns><see langword="true"/> when found.</returns>
-    public bool TryGetPath(string id, out string path) => m_pathsById.TryGetValue(key: id, value: out path!);
+    public bool TryGetPath(string id, out string path) => m_pathsById.TryGetValue(
+        key: id,
+        value: out path!
+    );
 }

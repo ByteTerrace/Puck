@@ -57,7 +57,11 @@ public static class WorldPlacementStamper {
                 );
             }
 
-            Vector3 ResolveLayerColor(string value) => WorldColor.Resolve(definition: definition, fallback: Vector3.Zero, value: value);
+            Vector3 ResolveLayerColor(string value) => WorldColor.Resolve(
+                definition: definition,
+                fallback: Vector3.Zero,
+                value: value
+            );
             ids[index] = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: (entry?.Emissive ?? 0f),
@@ -66,17 +70,71 @@ public static class WorldPlacementStamper {
                 Specular: (entry?.Specular ?? 0f),
                 Metal: (entry?.Metal ?? 0f),
                 Coat: (entry?.Coat ?? 0f),
-                Weathering: entry?.Weathering?.ToWeathering(ResolveLayerColor),
+                Weathering: entry?.Weathering?.ToWeathering(resolve: ResolveLayerColor),
                 Wrap: (entry?.Wrap ?? 0f),
                 Soften: (entry?.Soften ?? 0f),
-                Bounce: WorldColor.Resolve(definition: definition, fallback: Vector3.Zero, value: entry?.Bounce),
-                Inset: entry?.Inset?.ToInset(ResolveLayerColor)
+                Bounce: WorldColor.Resolve(
+                    definition: definition,
+                    fallback: Vector3.Zero,
+                    value: entry?.Bounce
+                ),
+                Inset: entry?.Inset?.ToInset(resolve: ResolveLayerColor)
             ));
         }
 
         return ids;
     }
 
+    // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
+    // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
+    // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
+    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes) {
+        if (
+            (volumes is null) ||
+            (creation.Volumes is not { Count: > 0 } authored)
+        ) {
+            return;
+        }
+
+        var shapes = (creation.Shapes ?? []);
+
+        foreach (var volume in authored) {
+            if (!volume.Enabled) {
+                continue;
+            }
+            if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
+                return;
+            }
+
+            var frameOrigin = origin;
+            var frameRotation = rotation;
+
+            if (volume.Parent is { } parent) {
+                foreach (var shape in shapes) {
+                    if (string.Equals(
+                        a: shape.Name?.Value,
+                        b: parent,
+                        comparisonType: StringComparison.Ordinal
+                    )) {
+                        frameOrigin = (origin + Vector3.Transform(
+                            rotation: rotation,
+                            value: (shape.Position.Value * scale)
+                        ));
+                        frameRotation = Quaternion.Normalize(value: (rotation * shape.Rotation.Value));
+
+                        break;
+                    }
+                }
+            }
+
+            volumes.Add(item: volume.ToVolume(
+                dynamicSlot: -1,
+                origin: frameOrigin,
+                rotation: frameRotation,
+                scale: scale
+            ));
+        }
+    }
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
@@ -99,7 +157,10 @@ public static class WorldPlacementStamper {
         );
     }
     private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes) {
-        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var frame = WorldDefinitionRows.ResolvedFrame(
+            definition: definition,
+            placement: placement
+        );
         // Laid out ONCE here (rather than once for the reach measure below plus once per pattern/scatter instance
         // inside the visitor's EmitText call) — TextLayout.Layout is a pure function of (atlas, text, scale,
         // options), all fixed for this whole EmitPlacement call, so every reader below shares this one result.
@@ -146,7 +207,10 @@ public static class WorldPlacementStamper {
             origin: frame.Position,
             rotation: rotation,
             pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed),
+            sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(
+                placement: placement,
+                worldSeed: worldSeed
+            ),
             mirror: WorldPlacementStamp.MirrorFor(placement: placement),
             visitor: instance => {
                 AppendStaticVolumes(
@@ -324,8 +388,14 @@ public static class WorldPlacementStamper {
                         .Scale(scale: Vector3.One),
                     type: SdfSolidPrimitive.Sphere,
                     material: paletteIds[(shape % CreationDocument.PaletteSize)]
-                ).ResetPoint().Translate(center).Rotate(Quaternion.Identity)
-                    .CellDisplace(1f, 0.1f, 0u, SdfCellMode.F1, 0.2f).PopField();
+                ).ResetPoint().Translate(offset: center).Rotate(rotation: Quaternion.Identity)
+                    .CellDisplace(
+                    amplitude: 0.1f,
+                    frequency: 1f,
+                    mode: SdfCellMode.F1,
+                    randomness: 0.2f,
+                    seed: 0u
+                ).PopField();
             }
 
             _ = builder.EndInstance();
@@ -367,8 +437,14 @@ public static class WorldPlacementStamper {
                     .PushField(compose: SdfBlendOp.Union),
                 type: SdfSolidPrimitive.Sphere,
                 material: material
-            ).ResetPoint().Translate(center).Rotate(Quaternion.Identity)
-                .CellDisplace(1f, 0.1f, 0u, SdfCellMode.F1, 0.2f).PopField();
+            ).ResetPoint().Translate(offset: center).Rotate(rotation: Quaternion.Identity)
+                .CellDisplace(
+                amplitude: 0.1f,
+                frequency: 1f,
+                mode: SdfCellMode.F1,
+                randomness: 0.2f,
+                seed: 0u
+            ).PopField();
             _ = builder.EndInstance();
         }
     }
@@ -432,56 +508,6 @@ public static class WorldPlacementStamper {
             );
         }
     }
-    // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
-    // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
-    // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
-    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes) {
-        if (
-            (volumes is null) ||
-            (creation.Volumes is not { Count: > 0 } authored)
-        ) {
-            return;
-        }
-
-        var shapes = (creation.Shapes ?? []);
-
-        foreach (var volume in authored) {
-            if (!volume.Enabled) {
-                continue;
-            }
-            if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                return;
-            }
-
-            var frameOrigin = origin;
-            var frameRotation = rotation;
-
-            if (volume.Parent is { } parent) {
-                foreach (var shape in shapes) {
-                    if (string.Equals(
-                        a: shape.Name?.Value,
-                        b: parent,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        frameOrigin = (origin + Vector3.Transform(
-                            rotation: rotation,
-                            value: (shape.Position.Value * scale)
-                        ));
-                        frameRotation = Quaternion.Normalize(value: (rotation * shape.Rotation.Value));
-
-                        break;
-                    }
-                }
-            }
-
-            volumes.Add(item: volume.ToVolume(
-                dynamicSlot: -1,
-                origin: frameOrigin,
-                rotation: frameRotation,
-                scale: scale
-            ));
-        }
-    }
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
@@ -489,14 +515,17 @@ public static class WorldPlacementStamper {
     public static int InstanceCount(WorldPlacement placement, ulong worldSeed) {
         return CreationStampLattice.InstanceCount(
             pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledCount: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed)?.Count,
+            sampledCount: WorldPlacementStamp.SampledOffsetsFor(
+                placement: placement,
+                worldSeed: worldSeed
+            )?.Count,
             mirror: WorldPlacementStamp.MirrorFor(placement: placement)
         );
     }
     /// <summary>Whether a creation row animates through timeline frames or drivers — the static/animated fork every consumer
     /// shares.</summary>
     /// <param name="creation">The creation row.</param>
-    public static bool IsAnimated(WorldPrototype creation) => (creation.Document.Frames is { Count: > 0 } || creation.Document.Drivers is { Count: > 0 });
+    public static bool IsAnimated(WorldPrototype creation) => ((creation.Document.Frames is { Count: > 0 }) || (creation.Document.Drivers is { Count: > 0 }));
     /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
     /// it), not when it INHABITS (a live body renders its creation through a body-rooted stamp instead), and not when it
     /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform

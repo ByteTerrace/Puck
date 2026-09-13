@@ -10,14 +10,77 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 public class ShippedWorldsParityTests {
+    private static void AssertDecompilationRoundTrips(string originalJsonText, string? basePath, string label) {
+        var originalNode = JsonNode.Parse(originalJsonText);
+
+        Assert.NotNull(@object: originalNode);
+
+        // 1. Decompile JSON -> .puck
+        var decompiledPuck = WorldDecompiler.Decompile(jsonText: originalJsonText);
+
+        Assert.False(
+            condition: string.IsNullOrWhiteSpace(value: decompiledPuck),
+            userMessage: $"Decompiled source was empty for {label}"
+        );
+
+        // 2. Parse .puck -> AST
+        var diagnostics = new DiagnosticBag();
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            decompiledPuck,
+            diagnostics: diagnostics
+        );
+
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: $"Parse errors for {label}:{Environment.NewLine}{diagnostics.FormatReport(decompiledPuck)}"
+        );
+        Assert.NotNull(@object: parseResult.Value);
+
+        // 3. Lower AST -> JSON
+        var loweringDiagnostics = new DiagnosticBag();
+        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+            parseResult.Value,
+            basePath: basePath,
+            diagnostics: loweringDiagnostics,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.False(
+            condition: loweringDiagnostics.HasErrors,
+            userMessage: $"Lowering errors for {label}:{Environment.NewLine}{loweringDiagnostics.FormatReport(decompiledPuck)}"
+        );
+        Assert.NotNull(@object: loweringResult.Value);
+
+        // 4. Parity check: Canonical serialization structural equivalence
+        var originalCanonicalBytes = CanonicalJsonDocument.Serialize(node: originalNode);
+        var roundtripCanonicalBytes = CanonicalJsonDocument.Serialize(node: loweringResult.Value);
+
+        var originalCanonicalJson = System.Text.Encoding.UTF8.GetString(bytes: originalCanonicalBytes);
+        var roundtripCanonicalJson = System.Text.Encoding.UTF8.GetString(bytes: roundtripCanonicalBytes);
+
+        var originalRoundtripNode = JsonNode.Parse(originalCanonicalJson);
+        var recompiledNode = JsonNode.Parse(roundtripCanonicalJson);
+
+        var mismatch = JsonMismatch.Find(
+            actual: recompiledNode,
+            expected: originalRoundtripNode,
+            path: $"{label}:"
+        );
+
+        Assert.Null(@object: mismatch);
+    }
+
     public static TheoryData<string> GetShippedWorldFiles() => ShippedWorlds.Files();
-
     public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
-
+    // Carries the same directive as its first `placements` row, plus placement rows a basis completes.
+    [Fact]
+    public void TestQuiltShardParity() {
+        TestShippedWorldRoundTripParity(relativePath: "shards/quilt-ne.world.json");
+    }
     // A `{"$replace": true}` basis-merge directive row in `rules` is not a rule.
     [Fact]
     public void TestReplaceDirectiveRuleRowParity() {
-        const string document = """
+        const string Document = """
             {
               "basis": "avatars/moth.world.json",
               "rules": [
@@ -27,97 +90,83 @@ public class ShippedWorldsParityTests {
             }
             """;
 
-        AssertDecompilationRoundTrips(originalJsonText: document, basePath: ShippedWorlds.FindDirectory(), label: "replace-directive");
+        AssertDecompilationRoundTrips(
+            originalJsonText: Document,
+            basePath: ShippedWorlds.FindDirectory(),
+            label: "replace-directive"
+        );
     }
-
-    // Carries the same directive as its first `placements` row, plus placement rows a basis completes.
-    [Fact]
-    public void TestQuiltShardParity() {
-        TestShippedWorldRoundTripParity("shards/quilt-ne.world.json");
-    }
-
-    [Theory]
     [MemberData(nameof(GetShippedWorldFiles))]
+    [Theory]
     public void TestShippedWorldRoundTripParity(string relativePath) {
         var worldsDir = ShippedWorlds.FindDirectory();
-        var fullPath = Path.Combine(worldsDir, relativePath);
-        Assert.True(File.Exists(fullPath), $"Shipped world file not found: {fullPath}");
+        var fullPath = Path.Combine(
+            path1: worldsDir,
+            path2: relativePath
+        );
 
-        AssertDecompilationRoundTrips(originalJsonText: File.ReadAllText(fullPath), basePath: Path.GetDirectoryName(fullPath), label: relativePath);
+        Assert.True(
+            condition: File.Exists(path: fullPath),
+            userMessage: $"Shipped world file not found: {fullPath}"
+        );
+
+        AssertDecompilationRoundTrips(
+            originalJsonText: File.ReadAllText(path: fullPath),
+            basePath: Path.GetDirectoryName(path: fullPath),
+            label: relativePath
+        );
     }
-
-    [Theory]
     [MemberData(nameof(GetShippedWorldSources))]
+    [Theory]
     public void TestSourceCompilesToTheGeneratedDocument(string relativePath) {
         var worldsDir = ShippedWorlds.FindDirectory();
-        var sourcePath = Path.Combine(worldsDir, relativePath);
-        var documentPath = Path.Combine(worldsDir, ShippedWorlds.DocumentOf(relativePath));
-        Assert.True(File.Exists(documentPath), $"{relativePath} has no generated document at {documentPath}");
+        var sourcePath = Path.Combine(
+            path1: worldsDir,
+            path2: relativePath
+        );
+        var documentPath = Path.Combine(
+            path1: worldsDir,
+            path2: ShippedWorlds.DocumentOf(sourcePath: relativePath)
+        );
 
-        var source = File.ReadAllText(sourcePath);
+        Assert.True(
+            condition: File.Exists(path: documentPath),
+            userMessage: $"{relativePath} has no generated document at {documentPath}"
+        );
+
+        var source = File.ReadAllText(path: sourcePath);
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);
-        Assert.NotNull(parseResult.Value);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source,
+            diagnostics: diagnostics
+        );
 
-        ModuleResolver.ValidateImportGraph(diagnostics: diagnostics, rootDoc: parseResult.Value, rootPath: sourcePath);
+        Assert.NotNull(@object: parseResult.Value);
+
+        ModuleResolver.ValidateImportGraph(
+            diagnostics: diagnostics,
+            rootDoc: parseResult.Value,
+            rootPath: sourcePath
+        );
 
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
             parseResult.Value,
-            basePath: Path.GetDirectoryName(sourcePath),
-            diagnostics: diagnostics
-        , cancellationToken: TestContext.Current.CancellationToken);
+            basePath: Path.GetDirectoryName(path: sourcePath),
+            diagnostics: diagnostics,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
-        Assert.False(diagnostics.HasErrors, $"Compile errors for {relativePath}:{Environment.NewLine}{diagnostics.FormatReport(source)}");
-        Assert.NotNull(loweringResult.Value);
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: $"Compile errors for {relativePath}:{Environment.NewLine}{diagnostics.FormatReport(source)}"
+        );
+        Assert.NotNull(@object: loweringResult.Value);
 
         // The regeneration gate: the source is canonical and the document is its generated output, so the two can
         // never drift apart without failing here. Byte identity is what `puck compile` writes.
-        Assert.Equal(File.ReadAllBytes(documentPath), CanonicalJsonDocument.Serialize(loweringResult.Value));
-    }
-
-    private static void AssertDecompilationRoundTrips(string originalJsonText, string? basePath, string label) {
-        var originalNode = JsonNode.Parse(originalJsonText);
-        Assert.NotNull(originalNode);
-
-        // 1. Decompile JSON -> .puck
-        var decompiledPuck = WorldDecompiler.Decompile(originalJsonText);
-        Assert.False(string.IsNullOrWhiteSpace(decompiledPuck), $"Decompiled source was empty for {label}");
-
-        // 2. Parse .puck -> AST
-        var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(decompiledPuck, diagnostics: diagnostics);
-
-        Assert.False(
-            diagnostics.HasErrors,
-            $"Parse errors for {label}:{Environment.NewLine}{diagnostics.FormatReport(decompiledPuck)}"
+        Assert.Equal(
+            File.ReadAllBytes(path: documentPath),
+            CanonicalJsonDocument.Serialize(node: loweringResult.Value)
         );
-        Assert.NotNull(parseResult.Value);
-
-        // 3. Lower AST -> JSON
-        var loweringDiagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
-            basePath: basePath,
-            diagnostics: loweringDiagnostics
-        , cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.False(
-            loweringDiagnostics.HasErrors,
-            $"Lowering errors for {label}:{Environment.NewLine}{loweringDiagnostics.FormatReport(decompiledPuck)}"
-        );
-        Assert.NotNull(loweringResult.Value);
-
-        // 4. Parity check: Canonical serialization structural equivalence
-        var originalCanonicalBytes = CanonicalJsonDocument.Serialize(originalNode);
-        var roundtripCanonicalBytes = CanonicalJsonDocument.Serialize(loweringResult.Value);
-
-        var originalCanonicalJson = System.Text.Encoding.UTF8.GetString(originalCanonicalBytes);
-        var roundtripCanonicalJson = System.Text.Encoding.UTF8.GetString(roundtripCanonicalBytes);
-
-        var originalRoundtripNode = JsonNode.Parse(originalCanonicalJson);
-        var recompiledNode = JsonNode.Parse(roundtripCanonicalJson);
-
-        var mismatch = JsonMismatch.Find(originalRoundtripNode, recompiledNode, $"{label}:");
-        Assert.Null(mismatch);
     }
 }

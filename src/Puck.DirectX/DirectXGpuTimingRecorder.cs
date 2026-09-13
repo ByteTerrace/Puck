@@ -57,7 +57,11 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
 
         void* mapped;
 
-        buffer->Map(Subresource: 0, pReadRange: &readRange, ppData: &mapped);
+        buffer->Map(
+            Subresource: 0,
+            pReadRange: &readRange,
+            ppData: &mapped
+        );
 
         try {
             var ticks = ((ulong*)mapped);
@@ -69,7 +73,10 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
             // We wrote nothing back; an empty written range tells the runtime so.
             var writtenRange = new D3D12_RANGE { Begin = 0, End = 0, };
 
-            buffer->Unmap(Subresource: 0, pWrittenRange: &writtenRange);
+            buffer->Unmap(
+                Subresource: 0,
+                pWrittenRange: &writtenRange
+            );
         }
 
         return queryCount;

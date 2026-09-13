@@ -10,16 +10,22 @@ public sealed class CompiledShaderPipeline {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(shaders);
         Plan = plan;
-        Shaders = new ReadOnlyDictionary<string, CompiledShader>(new Dictionary<string, CompiledShader>(shaders, StringComparer.Ordinal));
-        if (plan.Passes.Any(pass => !Shaders.ContainsKey(pass.Name))) {
-            throw new ArgumentException("Every planned pass needs a compiled shader result.", nameof(shaders));
+        Shaders = new ReadOnlyDictionary<string, CompiledShader>(dictionary: new Dictionary<string, CompiledShader>(
+            collection: shaders,
+            comparer: StringComparer.Ordinal
+        ));
+        if (plan.Passes.Any(predicate: pass => !Shaders.ContainsKey(key: pass.Name))) {
+            throw new ArgumentException(
+                message: "Every planned pass needs a compiled shader result.",
+                paramName: nameof(shaders)
+            );
         }
     }
 
+    /// <summary>Gets whether every shader result succeeded for both backends.</summary>
+    public bool IsSuccess => Shaders.Values.All(predicate: static shader => shader.IsSuccess);
     /// <summary>Gets the immutable execution plan.</summary>
     public ShaderPipelinePlan Plan { get; }
     /// <summary>Gets compiled shader results keyed by planned pass name.</summary>
     public IReadOnlyDictionary<string, CompiledShader> Shaders { get; }
-    /// <summary>Gets whether every shader result succeeded for both backends.</summary>
-    public bool IsSuccess => Shaders.Values.All(static shader => shader.IsSuccess);
 }

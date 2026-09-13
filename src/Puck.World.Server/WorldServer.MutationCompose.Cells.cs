@@ -61,13 +61,19 @@ public sealed partial class WorldServer {
         // is then an ordinary text set of that token.
         var isTextCycle = ((row.Kind == CellKind.Text) && (mutation.CycleTokens is { Count: >= 2 }));
 
-        if (isTextCycle && (mutation.Kind != WorldDocumentWriteKind.Set)) {
+        if (
+            isTextCycle &&
+            (mutation.Kind != WorldDocumentWriteKind.Set)
+        ) {
             reason = $"state row '{mutation.Row}' cell '{mutation.Key}' cycle needs a set write";
 
             return false;
         }
 
-        if (isTextWrite || isTextCycle) {
+        if (
+            isTextWrite ||
+            isTextCycle
+        ) {
             var textToWrite = mutation.Text!;
 
             if (isTextCycle) {
@@ -82,7 +88,11 @@ public sealed partial class WorldServer {
                 );
                 textToWrite = NextInCycle(
                     tokens: mutation.CycleTokens!,
-                    matches: token => string.Equals(a: token, b: currentText, comparisonType: StringComparison.Ordinal)
+                    matches: token => string.Equals(
+                        a: token,
+                        b: currentText,
+                        comparisonType: StringComparison.Ordinal
+                    )
                 );
             }
 
@@ -94,7 +104,7 @@ public sealed partial class WorldServer {
                 row: row,
                 text: textToWrite
             )) {
-                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {composeTextReason}";
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {composeTextReason}";
 
                 return false;
             }
@@ -152,7 +162,7 @@ public sealed partial class WorldServer {
                     value: out parsed[index],
                     reason: out var cycleReason
                 )) {
-                            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {cycleReason}";
+                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {cycleReason}";
 
                     return false;
                 }
@@ -182,7 +192,7 @@ public sealed partial class WorldServer {
                 value: out operand,
                 reason: out var tokenReason
             )) {
-                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {tokenReason}";
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {tokenReason}";
 
                 return false;
             }
@@ -213,8 +223,15 @@ public sealed partial class WorldServer {
         // tick's rotation into it (which would double the turn on the next read).
         if (
             (addendRow is not null) &&
-            CellName.TryParse(candidate: mutation.Key, name: out var addendKey, reason: out _) &&
-            (StateRows.FindCell(cells: addendRow.Cells, key: addendKey) is { } phaseCell) &&
+            CellName.TryParse(
+            candidate: mutation.Key,
+            name: out var addendKey,
+            reason: out _
+        ) &&
+            (StateRows.FindCell(
+            cells: addendRow.Cells,
+            key: addendKey
+        ) is { } phaseCell) &&
             ((phaseCell.Cycle is not null) || ((phaseCell.Key == WorldStateRow.SlotKey) && (addendRow.Cycle is not null)))
         ) {
             addend = phaseCell.Value;

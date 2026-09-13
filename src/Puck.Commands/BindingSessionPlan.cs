@@ -18,6 +18,60 @@ public sealed record BindingSessionPlan(
     float PressThreshold = 0.5f,
     float ReleaseThreshold = 0.4f
 ) {
+    // Every source a capture must refuse because binding it would move a PAGE rather than a command: the declared
+    // modifiers' own sources, plus each chord/held member that resolves to neither a declared modifier id nor a
+    // declared modifier source. BindingProfile.Compile mints an implicit modifier (default thresholds, the member
+    // as its single source) for exactly that last set, so leaving them out would let a guided session capture a
+    // page selector onto an ordinary command and quietly make the source flip pages instead of firing.
+    private static IEnumerable<string> ReservedSourcesOf(BindingProfileDocument document) {
+        // Both sets are OrdinalIgnoreCase because BindingProfile.Compile's modifierIndexById/modifierIndexBySource
+        // are: a member differing from a declared modifier's id — or from one of its sources — only by case IS that
+        // modifier there and mints nothing, so reserving the raw member string would reserve a control name no
+        // catalog declares. When that phantom name collides with a real source the walked page binds, the session
+        // refuses the very capture its own step suggests.
+        var modifierIds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var reserved = new List<string>();
+        var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        // Null ELEMENTS are skipped as carefully as null collections: a hole anywhere in these four lists is
+        // BindingProfile.Compile's refusal to make, in its own words, and crashing here would deny the caller both
+        // the plan AND that refusal. A null row reserves nothing, which is exactly what it selects.
+        foreach (var modifier in (document.Modifiers ?? [])) {
+            if (modifier is null) {
+                continue;
+            }
+
+            _ = modifierIds.Add(item: modifier.Id);
+
+            foreach (var source in (modifier.Sources ?? [])) {
+                if (
+                    (source is not null) &&
+                    seen.Add(item: source)
+                ) {
+                    reserved.Add(item: source);
+                }
+            }
+        }
+
+        foreach (var row in (document.Chords ?? [])) {
+            if (row is null) {
+                continue;
+            }
+
+            foreach (var member in row.Members) {
+                if (
+                    (member is not null) &&
+                    !modifierIds.Contains(item: member) &&
+                    seen.Add(item: member)
+                ) {
+                    reserved.Add(item: member);
+                }
+            }
+        }
+
+        return reserved;
+    }
+
     /// <summary>
     /// Builds a plan from one page of a binding profile document: every entry becomes a step whose suggested
     /// source is the entry's current source, and every source that drives page selection is reserved (capturing one
@@ -81,59 +135,5 @@ public sealed record BindingSessionPlan(
                     SuggestedSource: entry.Sources![0]
                 ))]
         );
-    }
-
-    // Every source a capture must refuse because binding it would move a PAGE rather than a command: the declared
-    // modifiers' own sources, plus each chord/held member that resolves to neither a declared modifier id nor a
-    // declared modifier source. BindingProfile.Compile mints an implicit modifier (default thresholds, the member
-    // as its single source) for exactly that last set, so leaving them out would let a guided session capture a
-    // page selector onto an ordinary command and quietly make the source flip pages instead of firing.
-    private static IEnumerable<string> ReservedSourcesOf(BindingProfileDocument document) {
-        // Both sets are OrdinalIgnoreCase because BindingProfile.Compile's modifierIndexById/modifierIndexBySource
-        // are: a member differing from a declared modifier's id — or from one of its sources — only by case IS that
-        // modifier there and mints nothing, so reserving the raw member string would reserve a control name no
-        // catalog declares. When that phantom name collides with a real source the walked page binds, the session
-        // refuses the very capture its own step suggests.
-        var modifierIds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-        var reserved = new List<string>();
-        var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        // Null ELEMENTS are skipped as carefully as null collections: a hole anywhere in these four lists is
-        // BindingProfile.Compile's refusal to make, in its own words, and crashing here would deny the caller both
-        // the plan AND that refusal. A null row reserves nothing, which is exactly what it selects.
-        foreach (var modifier in (document.Modifiers ?? [])) {
-            if (modifier is null) {
-                continue;
-            }
-
-            _ = modifierIds.Add(item: modifier.Id);
-
-            foreach (var source in (modifier.Sources ?? [])) {
-                if (
-                    (source is not null) &&
-                    seen.Add(item: source)
-                ) {
-                    reserved.Add(item: source);
-                }
-            }
-        }
-
-        foreach (var row in (document.Chords ?? [])) {
-            if (row is null) {
-                continue;
-            }
-
-            foreach (var member in row.Members) {
-                if (
-                    (member is not null) &&
-                    !modifierIds.Contains(item: member) &&
-                    seen.Add(item: member)
-                ) {
-                    reserved.Add(item: member);
-                }
-            }
-        }
-
-        return reserved;
     }
 }

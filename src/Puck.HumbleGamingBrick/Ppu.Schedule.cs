@@ -28,10 +28,12 @@ public sealed partial class Ppu {
 
         var lineLength = (m_firstLineAfterEnable
             ? FirstLineLength
-            : DotsPerScanline);
+            : DotsPerScanline
+        );
         var nextLine = (((m_ly + 1) == ScanlinesPerFrame)
             ? 0
-            : (m_ly + 1));
+            : (m_ly + 1)
+        );
 
         ApplyLineSchedule(
             line: nextLine,
@@ -112,7 +114,8 @@ public sealed partial class Ppu {
         if (nominalDot == (LineEventLyWriteVisibleDot + LycEventPhase)) {
             m_lyForComparison = ((line != 0)
                 ? LycNone
-                : 0);
+                : 0
+            );
         }
 
         if (nominalDot == (LineEventComparisonDot + PolledEventPhase)) {
@@ -286,7 +289,7 @@ public sealed partial class Ppu {
         if (m_ly < VisibleScanlines) {
             if (m_mode == 2) {
                 // The line-start group ends with the object pulse's release, one dot later on line 0.
-                var lastEventDot = ((LineEventLyWriteVisibleDot + OamPulseOffset + 2 + LineEventPhase) + ((m_ly == 0)
+                var lastEventDot = ((((LineEventLyWriteVisibleDot + OamPulseOffset) + 2) + LineEventPhase) + ((m_ly == 0)
                     ? 1
                     : 0));
 
@@ -301,7 +304,8 @@ public sealed partial class Ppu {
             ) {
                 lastQuietDot = (((m_ly + 1) >= VisibleScanlines)
                     ? (DotsPerScanline - 2)
-                    : (DotsPerScanline - 1));
+                    : (DotsPerScanline - 1)
+                );
             } else {
                 return 0;
             }
@@ -309,8 +313,9 @@ public sealed partial class Ppu {
             var lastEventDot = ((m_ly == VisibleScanlines)
                 ? (VBlankEntryDot + LineEventPhase)
                 : ((m_ly == (ScanlinesPerFrame - 1))
-                    ? (Line153ComparisonZeroDot + LycEventPhase + LineEventPhase)
-                    : (LineEventComparisonDot + LycEventPhase + LineEventPhase)));
+                    ? ((Line153ComparisonZeroDot + LycEventPhase) + LineEventPhase)
+                    : ((LineEventComparisonDot + LycEventPhase) + LineEventPhase)
+            ));
 
             if (m_dot < lastEventDot) {
                 return 0;
@@ -318,7 +323,8 @@ public sealed partial class Ppu {
 
             lastQuietDot = ((m_ly == (ScanlinesPerFrame - 1))
                 ? (DotsPerScanline - 1)
-                : (DotsPerScanline - 2));
+                : (DotsPerScanline - 2)
+            );
         }
 
         return Math.Max(

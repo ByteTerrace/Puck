@@ -10,17 +10,46 @@ public sealed partial class AzureResourceOperationProvider {
     /// <returns>A registration for explicit host composition; no code discovery, credential lookup, or service call.</returns>
     public WorldExtensionOperation Register(string description) {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
-        return new(new(m_binding.Name, description, "{\"type\":\"object\"}"), this, CreateOperation, PollDelay);
+        return new(
+            new(
+                m_binding.Name,
+                description,
+                "{\"type\":\"object\"}"
+            ),
+            this,
+            CreateOperation,
+            PollDelay
+        );
     }
 
     private static TimeSpan? PollDelay(WorldExternalOperationResult result, DateTimeOffset now) {
         AzureResourceOperationReceipt receipt;
-        try { receipt = AzureResourceOperationReceipt.Parse(result.Result); }
-        catch (JsonException) { return null; }
-        if (long.TryParse(receipt.RetryAfter, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) && seconds >= 0) {
-            return TimeSpan.FromTicks(Math.Min(seconds, TimeSpan.MaxValue.Ticks / TimeSpan.TicksPerSecond) * TimeSpan.TicksPerSecond);
+
+        try { receipt = AzureResourceOperationReceipt.Parse(result: result.Result); } catch (JsonException) { return null; }
+        if (
+            long.TryParse(
+            receipt.RetryAfter,
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var seconds
+        ) &&
+            (seconds >= 0)
+        ) {
+            return TimeSpan.FromTicks(value: (Math.Min(
+                val1: seconds,
+                val2: (TimeSpan.MaxValue.Ticks / TimeSpan.TicksPerSecond)
+            ) * TimeSpan.TicksPerSecond));
         }
-        return DateTimeOffset.TryParse(receipt.RetryAfter, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var due)
-            ? due > now ? due - now : TimeSpan.Zero : null;
+        return (DateTimeOffset.TryParse(
+            receipt.RetryAfter,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out var due
+        )
+            ? ((due > now)
+                ? (due - now)
+                : TimeSpan.Zero)
+            : null
+        );
     }
 }

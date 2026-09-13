@@ -75,162 +75,157 @@ public sealed class ThumbEmitter {
     /// <summary>The current byte length of the emitted stream (used to place data that trails the routine).</summary>
     public int Length => m_code.Count;
 
-    // --- Labels. --------------------------------------------------------------------------------------------------------
-    /// <summary>Allocates an unbound label id; bind it with <see cref="MarkLabel"/> at the target instruction.</summary>
-    public int NewLabel() =>
-        m_labels.New();
-    /// <summary>Binds <paramref name="label"/> to the current position in the stream.</summary>
-    public void MarkLabel(int label) =>
-        m_labels.Mark(
-            label: label,
-            offset: m_code.Count
-        );
-    // --- Format 1: shift by immediate (also the canonical low-register mov). --------------------------------------------
-    /// <summary>&lt;shift&gt; rd, rs, #amount — shift a low register by an immediate. Per the architecture, an
-    /// <paramref name="amount"/> of 0 means "shift by 32" for <see cref="ThumbShift.LogicalRight"/> and
-    /// <see cref="ThumbShift.ArithmeticRight"/> (and a plain move for <see cref="ThumbShift.LogicalLeft"/>).</summary>
-    public void ShiftImmediate(ThumbShift op, LowRegister destination, LowRegister source, int amount) {
-        if ((amount < 0) || (amount > 31)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(amount), message: "A Thumb immediate shift amount is 0..31.");
+    private static ushort BuildHiRegister(int operation, CoreRegister destination, CoreRegister source) =>
+        ((ushort)(0x4400 | (operation << 8) | ((((byte)destination) & 0x8) << 4) | ((((byte)source) & 0xF) << 3) | (((byte)destination) & 0x7)));
+    private static ushort BuildRegisterOffset(ushort opcode, LowRegister register, LowRegister baseRegister, LowRegister offsetRegister) =>
+        ((ushort)(opcode | (((byte)offsetRegister) << 6) | (((byte)baseRegister) << 3) | ((byte)register)));
+    private void EmitHalfWord(ushort value) {
+        m_code.Add(item: ((byte)(value & 0xFF)));
+        m_code.Add(item: ((byte)((value >> 8) & 0xFF)));
+    }
+    private void ResolveCalls() {
+        foreach (var (patchOffset, label) in m_callFixups) {
+            var delta = (m_labels.Resolve(
+                kind: "bl",
+                label: label
+            ) - (patchOffset + 4));
+
+            if (
+                (delta < -0x400000) ||
+                (delta > 0x3FFFFE)
+            ) {
+                throw new InvalidOperationException(message: $"A bl delta {delta} exceeds the ±4 MiB reach.");
+            }
+
+            var high = (delta >> 12) & 0x7FF;
+            var low = (delta >> 1) & 0x7FF;
+
+            m_code[patchOffset] = ((byte)(high & 0xFF));
+            m_code[(patchOffset + 1)] = ((byte)(0xF0 | ((high >> 8) & 0x07)));
+            m_code[(patchOffset + 2)] = ((byte)(low & 0xFF));
+            m_code[(patchOffset + 3)] = ((byte)(0xF8 | ((low >> 8) & 0x07)));
+        }
+    }
+    private void ResolveLongBranches() {
+        foreach (var (patchOffset, label) in m_longBranchFixups) {
+            var delta = (m_labels.Resolve(
+                kind: "b",
+                label: label
+            ) - (patchOffset + 4));
+            var halfSteps = (delta >> 1);
+
+            if (
+                (halfSteps < -1024) ||
+                (halfSteps > 1023)
+            ) {
+                throw new InvalidOperationException(message: $"An unconditional branch's delta {delta} exceeds the ±2 KiB reach; use Call.");
+            }
+
+            m_code[patchOffset] = ((byte)(halfSteps & 0xFF));
+            m_code[(patchOffset + 1)] = ((byte)(0xE0 | ((halfSteps >> 8) & 0x07)));
+        }
+    }
+    private void ResolveShortBranches() {
+        foreach (var (patchOffset, label) in m_shortBranchFixups) {
+            var delta = (m_labels.Resolve(
+                kind: "b<cond>",
+                label: label
+            ) - (patchOffset + 4));
+            var halfSteps = (delta >> 1);
+
+            if (
+                (halfSteps < -128) ||
+                (halfSteps > 127)
+            ) {
+                throw new InvalidOperationException(message: $"A conditional branch's delta {delta} exceeds the ±256-byte reach; restructure with an unconditional branch.");
+            }
+
+            m_code[patchOffset] = ((byte)((sbyte)halfSteps));
+        }
+    }
+    private static int ValidateImmediate3(int value) {
+        if (
+            (value < 0) ||
+            (value > 7)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(value),
+                message: "A 3-bit immediate is 0..7."
+            );
         }
 
-        EmitHalfWord(value: ((ushort)((((byte)op) << 11) | (amount << 6) | (((byte)source) << 3) | ((byte)destination))));
+        return value;
     }
-    /// <summary>mov rd, rs — copy one low register to another (encoded as <c>lsl rd, rs, #0</c>, the canonical
-    /// Thumb-1 low-register move; it sets the N/Z flags, unlike the hi-register <see cref="MoveHigh"/>).</summary>
-    public void MoveRegister(LowRegister destination, LowRegister source) =>
-        ShiftImmediate(amount: 0, destination: destination, op: ThumbShift.LogicalLeft, source: source);
+    private static int ValidateScaledOffset(int byteOffset, int scale) {
+        if (
+            (byteOffset < 0) ||
+            ((byteOffset % scale) != 0) ||
+            ((byteOffset / scale) > 31)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(byteOffset),
+                message: $"The offset must be a multiple of {scale} in 0..{(31 * scale)}."
+            );
+        }
+
+        return (byteOffset / scale);
+    }
+    private static int ValidateSpOffset(int byteOffset) {
+        if (
+            (byteOffset < 0) ||
+            ((byteOffset & 3) != 0) ||
+            (byteOffset > 1020)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(byteOffset),
+                message: "An SP-relative offset is a multiple of 4 in 0..1020."
+            );
+        }
+
+        return (byteOffset / 4);
+    }
+
+    // --- Format 5: hi-register operations and bx. -----------------------------------------------------------------------
+    /// <summary>add rd, rs — a hi-register add (either operand may be r8–r15; no flags are set).</summary>
+    public void AddHigh(CoreRegister destination, CoreRegister source) =>
+        EmitHalfWord(value: BuildHiRegister(
+            destination: destination,
+            operation: 0,
+            source: source
+        ));
+    /// <summary>add rd, #imm8 — add an 8-bit immediate in place.</summary>
+    public void AddImmediate(LowRegister register, byte value) =>
+        EmitHalfWord(value: ((ushort)(0x3000 | (((byte)register) << 8) | value)));
+    /// <summary>add rd, rs, #imm3 — rd = rs + a 3-bit immediate (0..7).</summary>
+    public void AddImmediate3(LowRegister destination, LowRegister source, int value) =>
+        EmitHalfWord(value: ((ushort)(0x1C00 | (ValidateImmediate3(value: value) << 6) | (((byte)source) << 3) | ((byte)destination))));
     // --- Format 2: three-register add/subtract and the 3-bit immediates. ------------------------------------------------
     /// <summary>add rd, rs, rn — rd = rs + rn.</summary>
     public void AddRegister(LowRegister destination, LowRegister source, LowRegister operand) =>
         EmitHalfWord(value: ((ushort)(0x1800 | (((byte)operand) << 6) | (((byte)source) << 3) | ((byte)destination))));
-    /// <summary>sub rd, rs, rn — rd = rs − rn.</summary>
-    public void SubtractRegister(LowRegister destination, LowRegister source, LowRegister operand) =>
-        EmitHalfWord(value: ((ushort)(0x1A00 | (((byte)operand) << 6) | (((byte)source) << 3) | ((byte)destination))));
-    /// <summary>add rd, rs, #imm3 — rd = rs + a 3-bit immediate (0..7).</summary>
-    public void AddImmediate3(LowRegister destination, LowRegister source, int value) =>
-        EmitHalfWord(value: ((ushort)(0x1C00 | (ValidateImmediate3(value: value) << 6) | (((byte)source) << 3) | ((byte)destination))));
-    /// <summary>sub rd, rs, #imm3 — rd = rs − a 3-bit immediate (0..7).</summary>
-    public void SubtractImmediate3(LowRegister destination, LowRegister source, int value) =>
-        EmitHalfWord(value: ((ushort)(0x1E00 | (ValidateImmediate3(value: value) << 6) | (((byte)source) << 3) | ((byte)destination))));
-    // --- Format 3: mov/cmp/add/sub with an 8-bit immediate. -------------------------------------------------------------
-    /// <summary>mov rd, #imm8 — load an 8-bit immediate.</summary>
-    public void MoveImmediate(LowRegister destination, byte value) =>
-        EmitHalfWord(value: ((ushort)(0x2000 | (((byte)destination) << 8) | value)));
-    /// <summary>cmp rd, #imm8 — compare against an 8-bit immediate.</summary>
-    public void CompareImmediate(LowRegister register, byte value) =>
-        EmitHalfWord(value: ((ushort)(0x2800 | (((byte)register) << 8) | value)));
-    /// <summary>add rd, #imm8 — add an 8-bit immediate in place.</summary>
-    public void AddImmediate(LowRegister register, byte value) =>
-        EmitHalfWord(value: ((ushort)(0x3000 | (((byte)register) << 8) | value)));
-    /// <summary>sub rd, #imm8 — subtract an 8-bit immediate in place.</summary>
-    public void SubtractImmediate(LowRegister register, byte value) =>
-        EmitHalfWord(value: ((ushort)(0x3800 | (((byte)register) << 8) | value)));
-    // --- Format 4: the register-to-register ALU grid. -------------------------------------------------------------------
-    /// <summary>&lt;op&gt; rd, rs — a format-4 ALU operation (rd ∘= rs, or a flag-only test/compare).</summary>
-    public void Alu(ThumbAlu op, LowRegister destination, LowRegister source) =>
-        EmitHalfWord(value: ((ushort)(0x4000 | (((byte)op) << 6) | (((byte)source) << 3) | ((byte)destination))));
-    // --- Format 5: hi-register operations and bx. -----------------------------------------------------------------------
-    /// <summary>add rd, rs — a hi-register add (either operand may be r8–r15; no flags are set).</summary>
-    public void AddHigh(CoreRegister destination, CoreRegister source) =>
-        EmitHalfWord(value: BuildHiRegister(destination: destination, operation: 0, source: source));
-    /// <summary>cmp rd, rs — a hi-register compare (flags only).</summary>
-    public void CompareHigh(CoreRegister destination, CoreRegister source) =>
-        EmitHalfWord(value: BuildHiRegister(destination: destination, operation: 1, source: source));
-    /// <summary>mov rd, rs — a hi-register move (no flags; the way to read or write r8–r15, sp, or lr).</summary>
-    public void MoveHigh(CoreRegister destination, CoreRegister source) =>
-        EmitHalfWord(value: BuildHiRegister(destination: destination, operation: 2, source: source));
-    /// <summary>bx rs — branch to the address in <paramref name="source"/>, switching state by its bit 0
-    /// (<c>bx lr</c> is the standard subroutine return).</summary>
-    public void BranchExchange(CoreRegister source) =>
-        EmitHalfWord(value: ((ushort)(0x4700 | ((((byte)source) & 0xF) << 3))));
-    // --- Format 6: PC-relative load (literal pools). --------------------------------------------------------------------
-    /// <summary>ldr rd, =value — load a 32-bit constant from a PC-relative literal pool. The pool itself is placed
-    /// by the next <see cref="EmitLiteralPool"/> (or by <see cref="ToArray"/>'s automatic final flush); equal values
-    /// pending for the same pool share one slot. The pool must land within 1020 bytes after this instruction.</summary>
-    public void LoadConstant(LowRegister destination, uint value) {
-        m_pendingLiterals.Add(item: (m_code.Count, value));
-        EmitHalfWord(value: ((ushort)(0x4800 | (((byte)destination) << 8))));
-    }
-    // --- Formats 7 and 8: load/store with a register offset. ------------------------------------------------------------
-    /// <summary>ldr rd, [rb, ro] — load a word.</summary>
-    public void LoadWordRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5800, register: destination));
-    /// <summary>str rd, [rb, ro] — store a word.</summary>
-    public void StoreWordRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5000, register: source));
-    /// <summary>ldrb rd, [rb, ro] — load a zero-extended byte.</summary>
-    public void LoadByteRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5C00, register: destination));
-    /// <summary>strb rd, [rb, ro] — store a byte.</summary>
-    public void StoreByteRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5400, register: source));
-    /// <summary>ldrh rd, [rb, ro] — load a zero-extended halfword.</summary>
-    public void LoadHalfRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5A00, register: destination));
-    /// <summary>strh rd, [rb, ro] — store a halfword.</summary>
-    public void StoreHalfRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5200, register: source));
-    /// <summary>ldrsb rd, [rb, ro] — load a sign-extended byte.</summary>
-    public void LoadSignedByteRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5600, register: destination));
-    /// <summary>ldrsh rd, [rb, ro] — load a sign-extended halfword.</summary>
-    public void LoadSignedHalfRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
-        EmitHalfWord(value: BuildRegisterOffset(baseRegister: baseRegister, offsetRegister: offsetRegister, opcode: 0x5E00, register: destination));
-    // --- Formats 9 and 10: load/store with an immediate offset. ---------------------------------------------------------
-    /// <summary>ldr rd, [rb, #offset] — load a word from a byte offset (0..124, a multiple of 4).</summary>
-    public void LoadWord(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x6800 | (ValidateScaledOffset(byteOffset: byteOffset, scale: 4) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
-    /// <summary>str rd, [rb, #offset] — store a word to a byte offset (0..124, a multiple of 4).</summary>
-    public void StoreWord(LowRegister source, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x6000 | (ValidateScaledOffset(byteOffset: byteOffset, scale: 4) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
-    /// <summary>ldrb rd, [rb, #offset] — load a zero-extended byte from a byte offset (0..31).</summary>
-    public void LoadByte(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x7800 | (ValidateScaledOffset(byteOffset: byteOffset, scale: 1) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
-    /// <summary>strb rd, [rb, #offset] — store a byte to a byte offset (0..31).</summary>
-    public void StoreByte(LowRegister source, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x7000 | (ValidateScaledOffset(byteOffset: byteOffset, scale: 1) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
-    /// <summary>ldrh rd, [rb, #offset] — load a zero-extended halfword from a byte offset (0..62, even).</summary>
-    public void LoadHalf(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x8800 | (ValidateScaledOffset(byteOffset: byteOffset, scale: 2) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
-    /// <summary>strh rd, [rb, #offset] — store a halfword to a byte offset (0..62, even).</summary>
-    public void StoreHalf(LowRegister source, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x8000 | (ValidateScaledOffset(byteOffset: byteOffset, scale: 2) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
-    // --- Format 11: SP-relative load/store. -----------------------------------------------------------------------------
-    /// <summary>ldr rd, [sp, #offset] — load a word from an SP-relative byte offset (0..1020, a multiple of 4).</summary>
-    public void LoadSpRelative(LowRegister destination, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x9800 | (((byte)destination) << 8) | ValidateSpOffset(byteOffset: byteOffset))));
-    /// <summary>str rd, [sp, #offset] — store a word to an SP-relative byte offset (0..1020, a multiple of 4).</summary>
-    public void StoreSpRelative(LowRegister source, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x9000 | (((byte)source) << 8) | ValidateSpOffset(byteOffset: byteOffset))));
     // --- Format 13: add an offset to SP. --------------------------------------------------------------------------------
     /// <summary>add sp, #offset — adjust SP by a signed byte offset (−508..508, a multiple of 4).</summary>
     public void AddToStackPointer(int byteOffset) {
         var magnitude = Math.Abs(value: byteOffset);
 
-        if ((magnitude > 508) || ((magnitude & 3) != 0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(byteOffset), message: "An SP adjustment is a multiple of 4 in -508..508.");
+        if (
+            (magnitude > 508) ||
+            ((magnitude & 3) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(byteOffset),
+                message: "An SP adjustment is a multiple of 4 in -508..508."
+            );
         }
 
-        EmitHalfWord(value: ((ushort)(0xB000 | ((byteOffset < 0) ? 0x80 : 0x00) | (magnitude / 4))));
+        EmitHalfWord(value: ((ushort)(0xB000 | ((byteOffset < 0)
+            ? 0x80
+            : 0x00) | (magnitude / 4))));
     }
-    // --- Format 14: push/pop. -------------------------------------------------------------------------------------------
-    /// <summary>push {mask, lr?} — push a low-register set (and optionally lr) onto the full-descending stack.</summary>
-    public void Push(LowRegisterMask registers, bool includeLinkRegister) {
-        if ((registers == LowRegisterMask.None) && !includeLinkRegister) {
-            throw new ArgumentException(message: "A push needs at least one register.", paramName: nameof(registers));
-        }
-
-        EmitHalfWord(value: ((ushort)(0xB400 | (includeLinkRegister ? 0x100 : 0x000) | ((byte)registers))));
-    }
-    /// <summary>pop {mask, pc?} — pop a low-register set (and optionally pc; on ARMv4T a popped pc stays in Thumb).</summary>
-    public void Pop(LowRegisterMask registers, bool includeProgramCounter) {
-        if ((registers == LowRegisterMask.None) && !includeProgramCounter) {
-            throw new ArgumentException(message: "A pop needs at least one register.", paramName: nameof(registers));
-        }
-
-        EmitHalfWord(value: ((ushort)(0xBC00 | (includeProgramCounter ? 0x100 : 0x000) | ((byte)registers))));
-    }
+    // --- Format 4: the register-to-register ALU grid. -------------------------------------------------------------------
+    /// <summary>&lt;op&gt; rd, rs — a format-4 ALU operation (rd ∘= rs, or a flag-only test/compare).</summary>
+    public void Alu(ThumbAlu op, LowRegister destination, LowRegister source) =>
+        EmitHalfWord(value: ((ushort)(0x4000 | (((byte)op) << 6) | (((byte)source) << 3) | ((byte)destination))));
     // --- Formats 16, 18, 19: label-resolved control flow. ---------------------------------------------------------------
     /// <summary>b&lt;cond&gt; label — conditional branch (±256-byte reach).</summary>
     public void Branch(ThumbCondition condition, int label) {
@@ -242,6 +237,10 @@ public sealed class ThumbEmitter {
         m_longBranchFixups.Add(item: (m_code.Count, label));
         EmitHalfWord(value: 0xE000);
     }
+    /// <summary>bx rs — branch to the address in <paramref name="source"/>, switching state by its bit 0
+    /// (<c>bx lr</c> is the standard subroutine return).</summary>
+    public void BranchExchange(CoreRegister source) =>
+        EmitHalfWord(value: ((ushort)(0x4700 | ((((byte)source) & 0xF) << 3))));
     /// <summary>bl label — long branch with link (the two-halfword pair; lr receives the return address with its
     /// Thumb bit set, so <c>bx lr</c> or <c>pop {pc}</c> returns).</summary>
     public void Call(int label) {
@@ -249,6 +248,16 @@ public sealed class ThumbEmitter {
         EmitHalfWord(value: 0xF000);
         EmitHalfWord(value: 0xF800);
     }
+    /// <summary>cmp rd, rs — a hi-register compare (flags only).</summary>
+    public void CompareHigh(CoreRegister destination, CoreRegister source) =>
+        EmitHalfWord(value: BuildHiRegister(
+            destination: destination,
+            operation: 1,
+            source: source
+        ));
+    /// <summary>cmp rd, #imm8 — compare against an 8-bit immediate.</summary>
+    public void CompareImmediate(LowRegister register, byte value) =>
+        EmitHalfWord(value: ((ushort)(0x2800 | (((byte)register) << 8) | value)));
     // --- Literal pools and finalization. --------------------------------------------------------------------------------
     /// <summary>Places the literal pool for every <see cref="LoadConstant"/> emitted since the previous pool: aligns
     /// the stream to a word boundary (padding with one zero halfword when needed), writes each distinct pending value
@@ -266,7 +275,10 @@ public sealed class ThumbEmitter {
         var slotOffsets = new Dictionary<uint, int>();
 
         foreach (var (patchOffset, value) in m_pendingLiterals) {
-            if (!slotOffsets.TryGetValue(key: value, value: out var literalOffset)) {
+            if (!slotOffsets.TryGetValue(
+                key: value,
+                value: out var literalOffset
+            )) {
                 literalOffset = m_code.Count;
                 slotOffsets[value] = literalOffset;
 
@@ -278,7 +290,10 @@ public sealed class ThumbEmitter {
             var anchor = (patchOffset + 4) & ~3;
             var delta = (literalOffset - anchor);
 
-            if ((delta < 0) || (delta > 1020)) {
+            if (
+                (delta < 0) ||
+                (delta > 1020)
+            ) {
                 throw new Puck.GamingBricks.Forge.CartridgeCapacityException(message: $"A literal load at offset 0x{patchOffset:X} cannot reach its pool slot at 0x{literalOffset:X} (delta {delta}); call EmitLiteralPool closer to the load.");
             }
 
@@ -287,12 +302,221 @@ public sealed class ThumbEmitter {
 
         m_pendingLiterals.Clear();
     }
+    /// <summary>ldrb rd, [rb, #offset] — load a zero-extended byte from a byte offset (0..31).</summary>
+    public void LoadByte(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x7800 | (ValidateScaledOffset(
+            byteOffset: byteOffset,
+            scale: 1
+        ) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
+    /// <summary>ldrb rd, [rb, ro] — load a zero-extended byte.</summary>
+    public void LoadByteRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5C00,
+            register: destination
+        ));
+    // --- Format 6: PC-relative load (literal pools). --------------------------------------------------------------------
+    /// <summary>ldr rd, =value — load a 32-bit constant from a PC-relative literal pool. The pool itself is placed
+    /// by the next <see cref="EmitLiteralPool"/> (or by <see cref="ToArray"/>'s automatic final flush); equal values
+    /// pending for the same pool share one slot. The pool must land within 1020 bytes after this instruction.</summary>
+    public void LoadConstant(LowRegister destination, uint value) {
+        m_pendingLiterals.Add(item: (m_code.Count, value));
+        EmitHalfWord(value: ((ushort)(0x4800 | (((byte)destination) << 8))));
+    }
+    /// <summary>ldrh rd, [rb, #offset] — load a zero-extended halfword from a byte offset (0..62, even).</summary>
+    public void LoadHalf(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x8800 | (ValidateScaledOffset(
+            byteOffset: byteOffset,
+            scale: 2
+        ) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
+    /// <summary>ldrh rd, [rb, ro] — load a zero-extended halfword.</summary>
+    public void LoadHalfRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5A00,
+            register: destination
+        ));
+    /// <summary>ldrsb rd, [rb, ro] — load a sign-extended byte.</summary>
+    public void LoadSignedByteRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5600,
+            register: destination
+        ));
+    /// <summary>ldrsh rd, [rb, ro] — load a sign-extended halfword.</summary>
+    public void LoadSignedHalfRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5E00,
+            register: destination
+        ));
+    // --- Format 11: SP-relative load/store. -----------------------------------------------------------------------------
+    /// <summary>ldr rd, [sp, #offset] — load a word from an SP-relative byte offset (0..1020, a multiple of 4).</summary>
+    public void LoadSpRelative(LowRegister destination, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x9800 | (((byte)destination) << 8) | ValidateSpOffset(byteOffset: byteOffset))));
+    // --- Formats 9 and 10: load/store with an immediate offset. ---------------------------------------------------------
+    /// <summary>ldr rd, [rb, #offset] — load a word from a byte offset (0..124, a multiple of 4).</summary>
+    public void LoadWord(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x6800 | (ValidateScaledOffset(
+            byteOffset: byteOffset,
+            scale: 4
+        ) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
+    // --- Formats 7 and 8: load/store with a register offset. ------------------------------------------------------------
+    /// <summary>ldr rd, [rb, ro] — load a word.</summary>
+    public void LoadWordRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5800,
+            register: destination
+        ));
+    /// <summary>Binds <paramref name="label"/> to the current position in the stream.</summary>
+    public void MarkLabel(int label) =>
+        m_labels.Mark(
+            label: label,
+            offset: m_code.Count
+        );
+    /// <summary>mov rd, rs — a hi-register move (no flags; the way to read or write r8–r15, sp, or lr).</summary>
+    public void MoveHigh(CoreRegister destination, CoreRegister source) =>
+        EmitHalfWord(value: BuildHiRegister(
+            destination: destination,
+            operation: 2,
+            source: source
+        ));
+    // --- Format 3: mov/cmp/add/sub with an 8-bit immediate. -------------------------------------------------------------
+    /// <summary>mov rd, #imm8 — load an 8-bit immediate.</summary>
+    public void MoveImmediate(LowRegister destination, byte value) =>
+        EmitHalfWord(value: ((ushort)(0x2000 | (((byte)destination) << 8) | value)));
+    /// <summary>mov rd, rs — copy one low register to another (encoded as <c>lsl rd, rs, #0</c>, the canonical
+    /// Thumb-1 low-register move; it sets the N/Z flags, unlike the hi-register <see cref="MoveHigh"/>).</summary>
+    public void MoveRegister(LowRegister destination, LowRegister source) =>
+        ShiftImmediate(
+            amount: 0,
+            destination: destination,
+            op: ThumbShift.LogicalLeft,
+            source: source
+        );
+    // --- Labels. --------------------------------------------------------------------------------------------------------
+    /// <summary>Allocates an unbound label id; bind it with <see cref="MarkLabel"/> at the target instruction.</summary>
+    public int NewLabel() =>
+        m_labels.New();
+    /// <summary>pop {mask, pc?} — pop a low-register set (and optionally pc; on ARMv4T a popped pc stays in Thumb).</summary>
+    public void Pop(LowRegisterMask registers, bool includeProgramCounter) {
+        if (
+            (registers == LowRegisterMask.None) &&
+            !includeProgramCounter
+        ) {
+            throw new ArgumentException(
+                message: "A pop needs at least one register.",
+                paramName: nameof(registers)
+            );
+        }
+
+        EmitHalfWord(value: ((ushort)(0xBC00 | (includeProgramCounter
+            ? 0x100
+            : 0x000) | ((byte)registers))));
+    }
+    // --- Format 14: push/pop. -------------------------------------------------------------------------------------------
+    /// <summary>push {mask, lr?} — push a low-register set (and optionally lr) onto the full-descending stack.</summary>
+    public void Push(LowRegisterMask registers, bool includeLinkRegister) {
+        if (
+            (registers == LowRegisterMask.None) &&
+            !includeLinkRegister
+        ) {
+            throw new ArgumentException(
+                message: "A push needs at least one register.",
+                paramName: nameof(registers)
+            );
+        }
+
+        EmitHalfWord(value: ((ushort)(0xB400 | (includeLinkRegister
+            ? 0x100
+            : 0x000) | ((byte)registers))));
+    }
+    // --- Format 1: shift by immediate (also the canonical low-register mov). --------------------------------------------
+    /// <summary>&lt;shift&gt; rd, rs, #amount — shift a low register by an immediate. Per the architecture, an
+    /// <paramref name="amount"/> of 0 means "shift by 32" for <see cref="ThumbShift.LogicalRight"/> and
+    /// <see cref="ThumbShift.ArithmeticRight"/> (and a plain move for <see cref="ThumbShift.LogicalLeft"/>).</summary>
+    public void ShiftImmediate(ThumbShift op, LowRegister destination, LowRegister source, int amount) {
+        if (
+            (amount < 0) ||
+            (amount > 31)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(amount),
+                message: "A Thumb immediate shift amount is 0..31."
+            );
+        }
+
+        EmitHalfWord(value: ((ushort)((((byte)op) << 11) | (amount << 6) | (((byte)source) << 3) | ((byte)destination))));
+    }
+    /// <summary>strb rd, [rb, #offset] — store a byte to a byte offset (0..31).</summary>
+    public void StoreByte(LowRegister source, LowRegister baseRegister, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x7000 | (ValidateScaledOffset(
+            byteOffset: byteOffset,
+            scale: 1
+        ) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
+    /// <summary>strb rd, [rb, ro] — store a byte.</summary>
+    public void StoreByteRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5400,
+            register: source
+        ));
+    /// <summary>strh rd, [rb, #offset] — store a halfword to a byte offset (0..62, even).</summary>
+    public void StoreHalf(LowRegister source, LowRegister baseRegister, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x8000 | (ValidateScaledOffset(
+            byteOffset: byteOffset,
+            scale: 2
+        ) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
+    /// <summary>strh rd, [rb, ro] — store a halfword.</summary>
+    public void StoreHalfRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5200,
+            register: source
+        ));
+    /// <summary>str rd, [sp, #offset] — store a word to an SP-relative byte offset (0..1020, a multiple of 4).</summary>
+    public void StoreSpRelative(LowRegister source, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x9000 | (((byte)source) << 8) | ValidateSpOffset(byteOffset: byteOffset))));
+    /// <summary>str rd, [rb, #offset] — store a word to a byte offset (0..124, a multiple of 4).</summary>
+    public void StoreWord(LowRegister source, LowRegister baseRegister, int byteOffset) =>
+        EmitHalfWord(value: ((ushort)(0x6000 | (ValidateScaledOffset(
+            byteOffset: byteOffset,
+            scale: 4
+        ) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
+    /// <summary>str rd, [rb, ro] — store a word.</summary>
+    public void StoreWordRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
+        EmitHalfWord(value: BuildRegisterOffset(
+            baseRegister: baseRegister,
+            offsetRegister: offsetRegister,
+            opcode: 0x5000,
+            register: source
+        ));
+    /// <summary>sub rd, #imm8 — subtract an 8-bit immediate in place.</summary>
+    public void SubtractImmediate(LowRegister register, byte value) =>
+        EmitHalfWord(value: ((ushort)(0x3800 | (((byte)register) << 8) | value)));
+    /// <summary>sub rd, rs, #imm3 — rd = rs − a 3-bit immediate (0..7).</summary>
+    public void SubtractImmediate3(LowRegister destination, LowRegister source, int value) =>
+        EmitHalfWord(value: ((ushort)(0x1E00 | (ValidateImmediate3(value: value) << 6) | (((byte)source) << 3) | ((byte)destination))));
+    /// <summary>sub rd, rs, rn — rd = rs − rn.</summary>
+    public void SubtractRegister(LowRegister destination, LowRegister source, LowRegister operand) =>
+        EmitHalfWord(value: ((ushort)(0x1A00 | (((byte)operand) << 6) | (((byte)source) << 3) | ((byte)destination))));
     /// <summary>Flushes any remaining literal pool, resolves every branch fixup, and returns the finished machine
     /// code. <paramref name="baseAddress"/> is the address the routine will be loaded at; it must be word-aligned
     /// (the PC-relative literal anchor depends on it). Call it once per emitter.</summary>
     public byte[] ToArray(uint baseAddress) {
         if ((baseAddress & 3u) != 0u) {
-            throw new ArgumentException(message: "The Thumb routine's base address must be word-aligned (PC-relative literal anchors depend on it).", paramName: nameof(baseAddress));
+            throw new ArgumentException(
+                message: "The Thumb routine's base address must be word-aligned (PC-relative literal anchors depend on it).",
+                paramName: nameof(baseAddress)
+            );
         }
 
         EmitLiteralPool();
@@ -301,77 +525,5 @@ public sealed class ThumbEmitter {
         ResolveCalls();
 
         return m_code.ToArray();
-    }
-
-    private void ResolveShortBranches() {
-        foreach (var (patchOffset, label) in m_shortBranchFixups) {
-            var delta = (m_labels.Resolve(kind: "b<cond>", label: label) - (patchOffset + 4));
-            var halfSteps = (delta >> 1);
-
-            if ((halfSteps < -128) || (halfSteps > 127)) {
-                throw new InvalidOperationException(message: $"A conditional branch's delta {delta} exceeds the ±256-byte reach; restructure with an unconditional branch.");
-            }
-
-            m_code[patchOffset] = ((byte)((sbyte)halfSteps));
-        }
-    }
-    private void ResolveLongBranches() {
-        foreach (var (patchOffset, label) in m_longBranchFixups) {
-            var delta = (m_labels.Resolve(kind: "b", label: label) - (patchOffset + 4));
-            var halfSteps = (delta >> 1);
-
-            if ((halfSteps < -1024) || (halfSteps > 1023)) {
-                throw new InvalidOperationException(message: $"An unconditional branch's delta {delta} exceeds the ±2 KiB reach; use Call.");
-            }
-
-            m_code[patchOffset] = ((byte)(halfSteps & 0xFF));
-            m_code[(patchOffset + 1)] = ((byte)(0xE0 | ((halfSteps >> 8) & 0x07)));
-        }
-    }
-    private void ResolveCalls() {
-        foreach (var (patchOffset, label) in m_callFixups) {
-            var delta = (m_labels.Resolve(kind: "bl", label: label) - (patchOffset + 4));
-
-            if ((delta < -0x400000) || (delta > 0x3FFFFE)) {
-                throw new InvalidOperationException(message: $"A bl delta {delta} exceeds the ±4 MiB reach.");
-            }
-
-            var high = (delta >> 12) & 0x7FF;
-            var low = (delta >> 1) & 0x7FF;
-
-            m_code[patchOffset] = ((byte)(high & 0xFF));
-            m_code[(patchOffset + 1)] = ((byte)(0xF0 | ((high >> 8) & 0x07)));
-            m_code[(patchOffset + 2)] = ((byte)(low & 0xFF));
-            m_code[(patchOffset + 3)] = ((byte)(0xF8 | ((low >> 8) & 0x07)));
-        }
-    }
-    private void EmitHalfWord(ushort value) {
-        m_code.Add(item: ((byte)(value & 0xFF)));
-        m_code.Add(item: ((byte)((value >> 8) & 0xFF)));
-    }
-    private static ushort BuildHiRegister(int operation, CoreRegister destination, CoreRegister source) =>
-        ((ushort)(0x4400 | (operation << 8) | ((((byte)destination) & 0x8) << 4) | ((((byte)source) & 0xF) << 3) | (((byte)destination) & 0x7)));
-    private static ushort BuildRegisterOffset(ushort opcode, LowRegister register, LowRegister baseRegister, LowRegister offsetRegister) =>
-        ((ushort)(opcode | (((byte)offsetRegister) << 6) | (((byte)baseRegister) << 3) | ((byte)register)));
-    private static int ValidateImmediate3(int value) {
-        if ((value < 0) || (value > 7)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(value), message: "A 3-bit immediate is 0..7.");
-        }
-
-        return value;
-    }
-    private static int ValidateScaledOffset(int byteOffset, int scale) {
-        if ((byteOffset < 0) || ((byteOffset % scale) != 0) || ((byteOffset / scale) > 31)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(byteOffset), message: $"The offset must be a multiple of {scale} in 0..{(31 * scale)}.");
-        }
-
-        return (byteOffset / scale);
-    }
-    private static int ValidateSpOffset(int byteOffset) {
-        if ((byteOffset < 0) || ((byteOffset & 3) != 0) || (byteOffset > 1020)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(byteOffset), message: "An SP-relative offset is a multiple of 4 in 0..1020.");
-        }
-
-        return (byteOffset / 4);
     }
 }

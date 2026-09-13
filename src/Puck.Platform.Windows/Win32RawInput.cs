@@ -16,7 +16,10 @@ public static class Win32RawInput {
     /// <param name="isDown"><see langword="true"/> for a make; <see langword="false"/> for a break.</param>
     public static void ApplyKeyTransition(Span<byte> keyState, ushort virtualKey, bool isDown) {
         if (virtualKey < keyState.Length) {
-            keyState[virtualKey] = (isDown ? (byte)0x80 : (byte)0);
+            keyState[virtualKey] = (isDown
+                ? (byte)0x80
+                : (byte)0
+            );
         }
     }
     /// <summary>Maps an absolute raw pointer report into client-relative pixels using its declared desktop space.</summary>
@@ -35,7 +38,10 @@ public static class Win32RawInput {
         Win32DesktopBounds virtualDesktop,
         Vector2 clientOrigin
     ) {
-        var desktop = (usesVirtualDesktop ? virtualDesktop : primaryDesktop);
+        var desktop = (usesVirtualDesktop
+            ? virtualDesktop
+            : primaryDesktop
+        );
         var screenX = (desktop.Left + ((rawX / 65535f) * desktop.Width));
         var screenY = (desktop.Top + ((rawY / 65535f) * desktop.Height));
 

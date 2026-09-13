@@ -302,10 +302,12 @@ public static class FusedArithmetic {
     private static (ulong Quotient, ulong Remainder) DivideShifted(ulong remainder, ulong denominator, int fractionBitCount) {
         var upper = ((fractionBitCount == 64)
             ? remainder
-            : (remainder >> (64 - fractionBitCount)));
+            : (remainder >> (64 - fractionBitCount))
+        );
         var lower = ((fractionBitCount == 64)
             ? 0UL
-            : (remainder << fractionBitCount));
+            : (remainder << fractionBitCount)
+        );
 
         if (X86Base.X64.IsSupported) {
 #pragma warning disable SYSLIB5004

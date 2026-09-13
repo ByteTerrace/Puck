@@ -39,6 +39,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private readonly RecordingSessionClock m_sessionClock;
     private readonly bool m_stripAv1Td;
     private readonly IVideoEncoder? m_videoEncoder;
+    private readonly int m_videoHeight;
+    private readonly int m_videoWidth;
 
     private bool m_disposed;
     private long m_firstTick;
@@ -46,12 +48,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private long m_framesDropped;
     private bool m_haveFirstTick;
     private volatile bool m_muxerStarted;
-
-    private readonly int m_videoHeight;
-
     private bool m_videoTrackRegistered;
-
-    private readonly int m_videoWidth;
 
     private (long SessionNanoseconds, long SimNanoseconds) ComputeTimestamps(in CaptureFrame frame) {
         // The same clock the audio sources stamp against, so video and audio share one epoch and one exact rescale.

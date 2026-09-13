@@ -11,15 +11,38 @@ public sealed class CompiledWorldFlockAffinities {
     public CompiledWorldFlockAffinities(WorldFlockProfile profile, WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(definition);
-        Cohesion = profile.CohesionAffinity is { } cohesion ? WorldRuleCompiler.CompileFlockAffinity(cohesion, definition) : null;
-        Alignment = profile.AlignmentAffinity is { } alignment ? WorldRuleCompiler.CompileFlockAffinity(alignment, definition) : null;
-        WorkUnitsPerNeighbor = (Cohesion is null ? 0 : WorldRuleWorkBudget.ExpressionCost(Cohesion, definition)) +
-            (Alignment is null ? 0 : WorldRuleWorkBudget.ExpressionCost(Alignment, definition));
+        Cohesion = ((profile.CohesionAffinity is { } cohesion)
+            ? WorldRuleCompiler.CompileFlockAffinity(
+                definition: definition,
+                expression: cohesion
+            )
+            : null
+        );
+        Alignment = ((profile.AlignmentAffinity is { } alignment)
+            ? WorldRuleCompiler.CompileFlockAffinity(
+                definition: definition,
+                expression: alignment
+            )
+            : null
+        );
+        WorkUnitsPerNeighbor = (((Cohesion is null)
+            ? 0
+            : WorldRuleWorkBudget.ExpressionCost(
+                Cohesion,
+                definition
+            )) +
+            ((Alignment is null)
+            ? 0
+            : WorldRuleWorkBudget.ExpressionCost(
+                Alignment,
+                definition
+            )));
     }
-    /// <summary>Gets the centroid expression, or null for uniform influence.</summary>
-    public CompiledExpressionToken[]? Cohesion { get; }
+
     /// <summary>Gets the heading expression, or null for uniform influence.</summary>
     public CompiledExpressionToken[]? Alignment { get; }
+    /// <summary>Gets the centroid expression, or null for uniform influence.</summary>
+    public CompiledExpressionToken[]? Cohesion { get; }
     /// <summary>Gets the conservative token and state-candidate-visit cost of evaluating both expressions once.</summary>
     public long WorkUnitsPerNeighbor { get; }
 }

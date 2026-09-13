@@ -31,12 +31,18 @@ public sealed class ApiSurfaceTests {
         "Obsolete",
     ];
 
+    private static IEnumerable<Type> ExportedTypes() =>
+        typeof(CommandRegistry).Assembly.GetExportedTypes().OrderBy(
+            keySelector: static type => type.FullName,
+            comparer: StringComparer.Ordinal
+        );
     // An `init` accessor is an ordinary setter whose return parameter carries a required custom modifier of
     // IsExternalInit — the only thing that distinguishes the two in metadata.
     private static bool IsInitOnly(MethodInfo setter) =>
-        (Array.IndexOf(array: setter.ReturnParameter.GetRequiredCustomModifiers(), value: typeof(IsExternalInit)) >= 0);
-    private static IEnumerable<Type> ExportedTypes() =>
-        typeof(CommandRegistry).Assembly.GetExportedTypes().OrderBy(keySelector: static type => type.FullName, comparer: StringComparer.Ordinal);
+        (Array.IndexOf(
+            array: setter.ReturnParameter.GetRequiredCustomModifiers(),
+            value: typeof(IsExternalInit)
+        ) >= 0);
 
     [Fact]
     public void NoPublicMemberCarriesObsolete() {
@@ -48,28 +54,52 @@ public sealed class ApiSurfaceTests {
         var offenders = new List<string>();
 
         foreach (var type in ExportedTypes()) {
-            if (!type.IsByRefLike && (type.GetCustomAttributes(attributeType: typeof(ObsoleteAttribute), inherit: false).Length != 0)) {
+            if (
+                !type.IsByRefLike &&
+                (type.GetCustomAttributes(
+                attributeType: typeof(ObsoleteAttribute),
+                inherit: false
+            ).Length != 0)
+            ) {
                 offenders.Add(item: type.FullName!);
             }
 
             foreach (var member in type.GetMembers(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
-                if (member.GetCustomAttributes(attributeType: typeof(ObsoleteAttribute), inherit: false).Length != 0) {
+                if (member.GetCustomAttributes(
+                    attributeType: typeof(ObsoleteAttribute),
+                    inherit: false
+                ).Length != 0) {
                     offenders.Add(item: ((type.FullName + ".") + member.Name));
                 }
             }
         }
 
-        Assert.Equal(expected: string.Empty, actual: string.Join(separator: ", ", values: offenders));
+        Assert.Equal(
+            expected: string.Empty,
+            actual: string.Join(
+                separator: ", ",
+                values: offenders
+            )
+        );
     }
     [Fact]
     public void NoPublicTypeIsNamedForARetiredShape() {
         // Rule 5 again, read off the names: a "LegacyBinding" or "CommandCompat" on the published
         // surface would mean a second shape survived beside the one that replaced it.
         var offenders = ExportedTypes()
-            .Where(predicate: static type => RetiredShapeMarkers.Any(predicate: marker => type.Name.Contains(comparisonType: StringComparison.Ordinal, value: marker)))
+            .Where(predicate: static type => RetiredShapeMarkers.Any(predicate: marker => type.Name.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: marker
+        )))
             .Select(selector: static type => type.FullName!);
 
-        Assert.Equal(expected: string.Empty, actual: string.Join(separator: ", ", values: offenders));
+        Assert.Equal(
+            expected: string.Empty,
+            actual: string.Join(
+                separator: ", ",
+                values: offenders
+            )
+        );
     }
     [Fact]
     public void PublicSurfaceExposesNoMutableField() {
@@ -80,13 +110,22 @@ public sealed class ApiSurfaceTests {
 
         foreach (var type in ExportedTypes().Where(predicate: static type => !type.IsEnum)) {
             foreach (var field in type.GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
-                if (!field.IsLiteral && !field.IsInitOnly) {
+                if (
+                    !field.IsLiteral &&
+                    !field.IsInitOnly
+                ) {
                     offenders.Add(item: ((type.FullName + ".") + field.Name));
                 }
             }
         }
 
-        Assert.Equal(expected: string.Empty, actual: string.Join(separator: ", ", values: offenders));
+        Assert.Equal(
+            expected: string.Empty,
+            actual: string.Join(
+                separator: ", ",
+                values: offenders
+            )
+        );
     }
     [Fact]
     public void PublicSurfaceExposesNoUndeclaredMutableProperty() {
@@ -99,19 +138,31 @@ public sealed class ApiSurfaceTests {
 
         foreach (var type in ExportedTypes()) {
             foreach (var property in type.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
-                if ((property.SetMethod is not { IsPublic: true } setter) || IsInitOnly(setter: setter)) {
+                if (
+                    (property.SetMethod is not { IsPublic: true } setter) ||
+                    IsInitOnly(setter: setter)
+                ) {
                     continue;
                 }
 
                 var name = ((type.FullName + ".") + property.Name);
 
-                if (!MutableByDesign.Contains(value: name, comparer: StringComparer.Ordinal)) {
+                if (!MutableByDesign.Contains(
+                    value: name,
+                    comparer: StringComparer.Ordinal
+                )) {
                     offenders.Add(item: name);
                 }
             }
         }
 
-        Assert.Equal(expected: string.Empty, actual: string.Join(separator: ", ", values: offenders));
+        Assert.Equal(
+            expected: string.Empty,
+            actual: string.Join(
+                separator: ", ",
+                values: offenders
+            )
+        );
     }
     [Fact]
     public void SnapshotShapesStayInternalToConstruct() {
@@ -119,17 +170,29 @@ public sealed class ApiSurfaceTests {
         var offenders = new List<string>();
 
         foreach (var name in InternalToConstruct) {
-            var type = assembly.GetType(name: name, throwOnError: false);
+            var type = assembly.GetType(
+                name: name,
+                throwOnError: false
+            );
 
             // A rename that loses one of these types must fail here rather than pass vacuously:
             // an absent type proves nothing about the constructor the test is guarding.
             Assert.NotNull(@object: type);
 
             foreach (var constructor in type.GetConstructors(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
-                offenders.Add(item: (((name + "(") + string.Join(separator: ", ", values: constructor.GetParameters().Select(selector: static parameter => parameter.ParameterType.Name))) + ")"));
+                offenders.Add(item: (((name + "(") + string.Join(
+                    separator: ", ",
+                    values: constructor.GetParameters().Select(selector: static parameter => parameter.ParameterType.Name)
+                )) + ")"));
             }
         }
 
-        Assert.Equal(expected: string.Empty, actual: string.Join(separator: ", ", values: offenders));
+        Assert.Equal(
+            expected: string.Empty,
+            actual: string.Join(
+                separator: ", ",
+                values: offenders
+            )
+        );
     }
 }

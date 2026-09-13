@@ -24,8 +24,14 @@ public static class DerivedBoards {
         ArgumentNullException.ThrowIfNull(argument: topology);
 
         if (
-            (StateRows.FindStateRow(rows: rows, name: inverse.Tokens.Value)?.Cells is not { } tokenCells) ||
-            (StateRows.FindStateRow(rows: rows, name: inverse.Codes.Value)?.Cells is not { } codeCells)
+            (StateRows.FindStateRow(
+            rows: rows,
+            name: inverse.Tokens.Value
+        )?.Cells is not { } tokenCells) ||
+            (StateRows.FindStateRow(
+            rows: rows,
+            name: inverse.Codes.Value
+        )?.Cells is not { } codeCells)
         ) {
             return [];
         }
@@ -33,12 +39,18 @@ public static class DerivedBoards {
         var cellCount = topology.CellCount;
         var winner = new int[cellCount];
 
-        Array.Fill(array: winner, value: -1);
+        Array.Fill(
+            array: winner,
+            value: -1
+        );
 
         for (var index = 0; (index < tokenCells.Count); index++) {
             var cell = tokenCells[index].Value;
 
-            if ((cell >= 0) && (cell < cellCount)) {
+            if (
+                (cell >= 0) &&
+                (cell < cellCount)
+            ) {
                 winner[cell] = index;
             }
         }
@@ -54,7 +66,9 @@ public static class DerivedBoards {
 
             cells.Add(item: new StateCell(
                 Key: CellName.Parse(candidate: topology.Key(cell: cell)),
-                Value: ((token < codeCells.Count) ? codeCells[token].Value : 0L)
+                Value: ((token < codeCells.Count)
+                ? codeCells[token].Value
+                : 0L)
             ));
         }
 

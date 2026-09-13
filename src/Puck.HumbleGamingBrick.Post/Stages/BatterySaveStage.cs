@@ -17,14 +17,98 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
     private const int PatternLength = 64;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "battery-save";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
+
+    private static string? RunHuC3ClockLeg() {
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0xFE,
+            ramSize: 0x03
+        ); // HuC3 (RAM + battery per the type decode)
+
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.DmgC,
+            rom: rom
+        );
+
+        var cartridge = machine.GetRequiredService<ICartridge>();
+
+        if (cartridge.PersistentClockByteCount != 16) {
+            return $"the HuC3 cartridge declares a {cartridge.PersistentClockByteCount}-byte clock footer (expected 16)";
+        }
+
+        // minutes = 0x4D2 (1234), days = 0xABC — stored LSB-nibble first at access indices 0..2 and 3..6.
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0B
+        );
+
+        foreach (var command in ((byte[])[0x40, 0x50, 0x32, 0x3D, 0x34, 0x3C, 0x3B, 0x3A, 0x30])) {
+            cartridge.WriteRam(
+                address: 0xA000,
+                value: command
+            );
+        }
+
+        var footer = cartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp);
+
+        if (System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(source: footer.AsSpan(start: 8)) != InteropTimestamp) {
+            return "the HuC3 clock footer did not stamp the host's interop timestamp at offset 8";
+        }
+
+        using var reboot = PostMachine.Build(
+            model: ConsoleModel.DmgC,
+            rom: rom
+        );
+
+        var rebootCartridge = reboot.GetRequiredService<ICartridge>();
+
+        rebootCartridge.ImportPersistentClock(source: footer);
+
+        // Protocol read-back of nibble 0 (minutes' low nibble, 2): fetch post-increment in command mode, then read.
+        rebootCartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0B
+        );
+        rebootCartridge.WriteRam(
+            address: 0xA000,
+            value: 0x40
+        );
+        rebootCartridge.WriteRam(
+            address: 0xA000,
+            value: 0x50
+        );
+        rebootCartridge.WriteRam(
+            address: 0xA000,
+            value: 0x10
+        );
+        rebootCartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0C
+        );
+
+        if (rebootCartridge.ReadRam(address: 0xA000) != 0x02) {
+            return "the imported HuC3 clock's minutes low nibble did not read back 2 through the protocol";
+        }
+
+        if (!footer.AsSpan(
+            length: 8,
+            start: 0
+        ).SequenceEqual(other: rebootCartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp).AsSpan(
+            length: 8,
+            start: 0
+        ))) {
+            return "the imported HuC3 clock's re-exported minutes/days diverged from the original footer";
+        }
+
+        return null;
+    }
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -177,89 +261,5 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
         }
 
         return PostStageOutcome.Pass(detail: $"MBC3+RAM+BATTERY: store sets dirty, export preserves it, acknowledge/import clear it, a {save.Length}-byte save round-trips into a fresh machine byte-identical, and the {footer.Length}-byte clock footer restores the RTC registers (interop timestamp stamped and ignored); HuC3: the 16-byte minutes/days footer round-trips through the nibble protocol");
-    }
-
-    private static string? RunHuC3ClockLeg() {
-        var rom = SyntheticRom.Create(
-            cartridgeType: 0xFE,
-            ramSize: 0x03
-        ); // HuC3 (RAM + battery per the type decode)
-
-        using var machine = PostMachine.Build(
-            model: ConsoleModel.DmgC,
-            rom: rom
-        );
-
-        var cartridge = machine.GetRequiredService<ICartridge>();
-
-        if (cartridge.PersistentClockByteCount != 16) {
-            return $"the HuC3 cartridge declares a {cartridge.PersistentClockByteCount}-byte clock footer (expected 16)";
-        }
-
-        // minutes = 0x4D2 (1234), days = 0xABC — stored LSB-nibble first at access indices 0..2 and 3..6.
-        cartridge.WriteControl(
-            address: 0x0000,
-            value: 0x0B
-        );
-
-        foreach (var command in ((byte[])[0x40, 0x50, 0x32, 0x3D, 0x34, 0x3C, 0x3B, 0x3A, 0x30])) {
-            cartridge.WriteRam(
-                address: 0xA000,
-                value: command
-            );
-        }
-
-        var footer = cartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp);
-
-        if (System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(source: footer.AsSpan(start: 8)) != InteropTimestamp) {
-            return "the HuC3 clock footer did not stamp the host's interop timestamp at offset 8";
-        }
-
-        using var reboot = PostMachine.Build(
-            model: ConsoleModel.DmgC,
-            rom: rom
-        );
-
-        var rebootCartridge = reboot.GetRequiredService<ICartridge>();
-
-        rebootCartridge.ImportPersistentClock(source: footer);
-
-        // Protocol read-back of nibble 0 (minutes' low nibble, 2): fetch post-increment in command mode, then read.
-        rebootCartridge.WriteControl(
-            address: 0x0000,
-            value: 0x0B
-        );
-        rebootCartridge.WriteRam(
-            address: 0xA000,
-            value: 0x40
-        );
-        rebootCartridge.WriteRam(
-            address: 0xA000,
-            value: 0x50
-        );
-        rebootCartridge.WriteRam(
-            address: 0xA000,
-            value: 0x10
-        );
-        rebootCartridge.WriteControl(
-            address: 0x0000,
-            value: 0x0C
-        );
-
-        if (rebootCartridge.ReadRam(address: 0xA000) != 0x02) {
-            return "the imported HuC3 clock's minutes low nibble did not read back 2 through the protocol";
-        }
-
-        if (!footer.AsSpan(
-            length: 8,
-            start: 0
-        ).SequenceEqual(other: rebootCartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp).AsSpan(
-            length: 8,
-            start: 0
-        ))) {
-            return "the imported HuC3 clock's re-exported minutes/days diverged from the original footer";
-        }
-
-        return null;
     }
 }

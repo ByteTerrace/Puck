@@ -59,6 +59,169 @@ public sealed class ShaderPushConstantLayout {
     /// <summary>Gets the stages that read the block.</summary>
     public GpuShaderStage Stages { get; }
 
+    private static ShaderConfigField FindConfigField(IReadOnlyDictionary<string, ShaderConfigField>? config, string name, string manifestName, string what) {
+        if (
+            (config is not null) &&
+            config.TryGetValue(
+            key: name,
+            value: out var field
+        )
+        ) {
+            return field;
+        }
+
+        throw new InvalidDataException(message: $"'{manifestName}' {what} references config field '{name}', which the manifest's config schema does not declare.");
+    }
+    private static void RefuseQuantization(ShaderPushConstantField field, string manifestName) {
+        if (field.QuantizeHz is not null) {
+            throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' carries quantizeHz, which only a tick source accepts.");
+        }
+    }
+    private static (uint? Literal, string? ConfigField) ResolveQuantization(IReadOnlyDictionary<string, ShaderConfigField>? config, ShaderPushConstantField field, string manifestName) {
+        if (field.QuantizeHz is not { } quantize) {
+            return (null, null);
+        }
+
+        if (quantize.ValueKind == JsonValueKind.Number) {
+            if (
+                !quantize.TryGetUInt32(value: out var hz) ||
+                !DividesTickRate(hz: hz)
+            ) {
+                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' quantizeHz must be a positive integer that divides {EngineTicks.PerSecond} exactly; it is {quantize.GetRawText()}.");
+            }
+
+            return (hz, null);
+        }
+
+        if (
+            (quantize.ValueKind == JsonValueKind.String) &&
+            (quantize.GetString() is { } text) &&
+            text.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ConfigSourcePrefix
+        )
+        ) {
+            var configName = text[ConfigSourcePrefix.Length..];
+            var configField = FindConfigField(
+                config: config,
+                name: configName,
+                manifestName: manifestName,
+                what: $"push-constant field '{field.Name}' quantizeHz"
+            );
+
+            if (configField.Type != ShaderValueType.Uint) {
+                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' quantizeHz names config field '{configName}', which must be uint; it is {configField.Type.Spelling()}.");
+            }
+
+            return (null, configName);
+        }
+
+        throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' quantizeHz must be a positive integer or a config.<field> reference.");
+    }
+    private static ShaderPushConstantSlot ResolveSlot(IReadOnlyDictionary<string, ShaderConfigField>? config, ShaderPushConstantField field, string manifestName, uint offset) {
+        var source = field.Source;
+
+        if (source.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ConfigSourcePrefix
+        )) {
+            var configName = source[ConfigSourcePrefix.Length..];
+            var configField = FindConfigField(
+                config: config,
+                name: configName,
+                manifestName: manifestName,
+                what: $"push-constant field '{field.Name}'"
+            );
+
+            if (configField.Type != field.Type) {
+                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' is {field.Type.Spelling()} but its source config field '{configName}' is {configField.Type.Spelling()}.");
+            }
+            if (field.QuantizeHz is not null) {
+                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' carries quantizeHz, which only a tick source accepts.");
+            }
+
+            return new ShaderPushConstantSlot(
+                Name: field.Name,
+                Type: field.Type,
+                Offset: offset,
+                Kind: ShaderPushConstantSourceKind.Config,
+                ConfigField: configName,
+                QuantizeHzLiteral: null,
+                QuantizeHzConfigField: null
+            );
+        }
+
+        switch (source) {
+            case "tick": {
+                    if (
+                        (field.Type != ShaderValueType.Uint) &&
+                        (field.Type != ShaderValueType.Uint2)
+                    ) {
+                        throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' sources tick, which must be uint (low 32 bits) or uint2 (low, high); it is {field.Type.Spelling()}.");
+                    }
+
+                    var (literal, configName) = ResolveQuantization(
+                        config: config,
+                        field: field,
+                        manifestName: manifestName
+                    );
+
+                    return new ShaderPushConstantSlot(
+                        Name: field.Name,
+                        Type: field.Type,
+                        Offset: offset,
+                        Kind: ShaderPushConstantSourceKind.Tick,
+                        ConfigField: null,
+                        QuantizeHzLiteral: literal,
+                        QuantizeHzConfigField: configName
+                    );
+                }
+            case "resolution":
+                RefuseQuantization(
+                    field: field,
+                    manifestName: manifestName
+                );
+
+                if (
+                    (field.Type != ShaderValueType.Float2) &&
+                    (field.Type != ShaderValueType.Uint2)
+                ) {
+                    throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' sources resolution, which must be float2 or uint2; it is {field.Type.Spelling()}.");
+                }
+
+                return new ShaderPushConstantSlot(
+                    Name: field.Name,
+                    Type: field.Type,
+                    Offset: offset,
+                    Kind: ShaderPushConstantSourceKind.Resolution,
+                    ConfigField: null,
+                    QuantizeHzLiteral: null,
+                    QuantizeHzConfigField: null
+                );
+            case "frame":
+                RefuseQuantization(
+                    field: field,
+                    manifestName: manifestName
+                );
+
+                if (field.Type != ShaderValueType.Uint) {
+                    throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' sources frame, which must be uint; it is {field.Type.Spelling()}.");
+                }
+
+                return new ShaderPushConstantSlot(
+                    Name: field.Name,
+                    Type: field.Type,
+                    Offset: offset,
+                    Kind: ShaderPushConstantSourceKind.Frame,
+                    ConfigField: null,
+                    QuantizeHzLiteral: null,
+                    QuantizeHzConfigField: null
+                );
+            default:
+                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' has source '{source}'; expected config.<field>, tick, resolution, or frame.");
+        }
+    }
+
     /// <summary>Computes each field's byte offset under the packing rule, for a field list given only by type.</summary>
     /// <param name="types">The field types, in declaration order.</param>
     /// <param name="sizeBytes">The block's byte size.</param>
@@ -85,6 +248,10 @@ public sealed class ShaderPushConstantLayout {
 
         return offsets;
     }
+    /// <summary>Determines whether a rate divides the engine tick base exactly.</summary>
+    /// <param name="hz">The rate in hertz.</param>
+    /// <returns><see langword="true"/> when positive and dividing <see cref="EngineTicks.PerSecond"/>.</returns>
+    public static bool DividesTickRate(uint hz) => ((hz != 0) && ((EngineTicks.PerSecond % hz) == 0));
     /// <summary>Resolves a manifest's push-constant block against its config schema: offsets under the packing rule,
     /// each source parsed and type-checked, each quantization rate checked against the engine tick base.</summary>
     /// <param name="block">The authored block.</param>
@@ -118,111 +285,35 @@ public sealed class ShaderPushConstantLayout {
             types[index] = block.Fields[index].Type;
         }
 
-        var offsets = ComputeOffsets(sizeBytes: out var sizeBytes, types: types);
+        var offsets = ComputeOffsets(
+            sizeBytes: out var sizeBytes,
+            types: types
+        );
         var slots = new ShaderPushConstantSlot[block.Fields.Count];
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < slots.Length); index++) {
             var field = block.Fields[index];
 
-            if (string.IsNullOrEmpty(value: field.Name) || !names.Add(item: field.Name)) {
+            if (
+                string.IsNullOrEmpty(value: field.Name) ||
+                !names.Add(item: field.Name)
+            ) {
                 throw new InvalidDataException(message: $"'{manifestName}' pushConstants field #{index} has an empty or repeated name '{field.Name}'.");
             }
 
-            slots[index] = ResolveSlot(config: config, field: field, manifestName: manifestName, offset: offsets[index]);
+            slots[index] = ResolveSlot(
+                config: config,
+                field: field,
+                manifestName: manifestName,
+                offset: offsets[index]
+            );
         }
 
-        return new ShaderPushConstantLayout(sizeBytes: sizeBytes, slots: slots, stages: stages);
+        return new ShaderPushConstantLayout(
+            sizeBytes: sizeBytes,
+            slots: slots,
+            stages: stages
+        );
     }
-
-    private static ShaderPushConstantSlot ResolveSlot(IReadOnlyDictionary<string, ShaderConfigField>? config, ShaderPushConstantField field, string manifestName, uint offset) {
-        var source = field.Source;
-
-        if (source.StartsWith(comparisonType: StringComparison.Ordinal, value: ConfigSourcePrefix)) {
-            var configName = source[ConfigSourcePrefix.Length..];
-            var configField = FindConfigField(config: config, name: configName, manifestName: manifestName, what: $"push-constant field '{field.Name}'");
-
-            if (configField.Type != field.Type) {
-                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' is {field.Type.Spelling()} but its source config field '{configName}' is {configField.Type.Spelling()}.");
-            }
-            if (field.QuantizeHz is not null) {
-                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' carries quantizeHz, which only a tick source accepts.");
-            }
-
-            return new ShaderPushConstantSlot(Name: field.Name, Type: field.Type, Offset: offset, Kind: ShaderPushConstantSourceKind.Config, ConfigField: configName, QuantizeHzLiteral: null, QuantizeHzConfigField: null);
-        }
-
-        switch (source) {
-            case "tick": {
-                    if ((field.Type != ShaderValueType.Uint) && (field.Type != ShaderValueType.Uint2)) {
-                        throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' sources tick, which must be uint (low 32 bits) or uint2 (low, high); it is {field.Type.Spelling()}.");
-                    }
-
-                    var (literal, configName) = ResolveQuantization(config: config, field: field, manifestName: manifestName);
-
-                    return new ShaderPushConstantSlot(Name: field.Name, Type: field.Type, Offset: offset, Kind: ShaderPushConstantSourceKind.Tick, ConfigField: null, QuantizeHzLiteral: literal, QuantizeHzConfigField: configName);
-                }
-            case "resolution":
-                RefuseQuantization(field: field, manifestName: manifestName);
-
-                if ((field.Type != ShaderValueType.Float2) && (field.Type != ShaderValueType.Uint2)) {
-                    throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' sources resolution, which must be float2 or uint2; it is {field.Type.Spelling()}.");
-                }
-
-                return new ShaderPushConstantSlot(Name: field.Name, Type: field.Type, Offset: offset, Kind: ShaderPushConstantSourceKind.Resolution, ConfigField: null, QuantizeHzLiteral: null, QuantizeHzConfigField: null);
-            case "frame":
-                RefuseQuantization(field: field, manifestName: manifestName);
-
-                if (field.Type != ShaderValueType.Uint) {
-                    throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' sources frame, which must be uint; it is {field.Type.Spelling()}.");
-                }
-
-                return new ShaderPushConstantSlot(Name: field.Name, Type: field.Type, Offset: offset, Kind: ShaderPushConstantSourceKind.Frame, ConfigField: null, QuantizeHzLiteral: null, QuantizeHzConfigField: null);
-            default:
-                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' has source '{source}'; expected config.<field>, tick, resolution, or frame.");
-        }
-    }
-    private static (uint? Literal, string? ConfigField) ResolveQuantization(IReadOnlyDictionary<string, ShaderConfigField>? config, ShaderPushConstantField field, string manifestName) {
-        if (field.QuantizeHz is not { } quantize) {
-            return (null, null);
-        }
-
-        if (quantize.ValueKind == JsonValueKind.Number) {
-            if (!quantize.TryGetUInt32(value: out var hz) || !DividesTickRate(hz: hz)) {
-                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' quantizeHz must be a positive integer that divides {EngineTicks.PerSecond} exactly; it is {quantize.GetRawText()}.");
-            }
-
-            return (hz, null);
-        }
-
-        if ((quantize.ValueKind == JsonValueKind.String) && (quantize.GetString() is { } text) && text.StartsWith(comparisonType: StringComparison.Ordinal, value: ConfigSourcePrefix)) {
-            var configName = text[ConfigSourcePrefix.Length..];
-            var configField = FindConfigField(config: config, name: configName, manifestName: manifestName, what: $"push-constant field '{field.Name}' quantizeHz");
-
-            if (configField.Type != ShaderValueType.Uint) {
-                throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' quantizeHz names config field '{configName}', which must be uint; it is {configField.Type.Spelling()}.");
-            }
-
-            return (null, configName);
-        }
-
-        throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' quantizeHz must be a positive integer or a config.<field> reference.");
-    }
-    private static void RefuseQuantization(ShaderPushConstantField field, string manifestName) {
-        if (field.QuantizeHz is not null) {
-            throw new InvalidDataException(message: $"'{manifestName}' push-constant field '{field.Name}' carries quantizeHz, which only a tick source accepts.");
-        }
-    }
-    private static ShaderConfigField FindConfigField(IReadOnlyDictionary<string, ShaderConfigField>? config, string name, string manifestName, string what) {
-        if ((config is not null) && config.TryGetValue(key: name, value: out var field)) {
-            return field;
-        }
-
-        throw new InvalidDataException(message: $"'{manifestName}' {what} references config field '{name}', which the manifest's config schema does not declare.");
-    }
-
-    /// <summary>Determines whether a rate divides the engine tick base exactly.</summary>
-    /// <param name="hz">The rate in hertz.</param>
-    /// <returns><see langword="true"/> when positive and dividing <see cref="EngineTicks.PerSecond"/>.</returns>
-    public static bool DividesTickRate(uint hz) => ((hz != 0) && ((EngineTicks.PerSecond % hz) == 0));
 }

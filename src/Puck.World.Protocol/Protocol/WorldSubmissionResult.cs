@@ -27,15 +27,12 @@ public abstract record WorldSubmissionResult {
     /// <summary>The server's composed answer to a <see cref="Protocol.WorldSubmissionPayload.Query"/> submission.</summary>
     /// <param name="Answer">The query answer.</param>
     public sealed record Query(QueryAnswer Answer) : WorldSubmissionResult;
-
     /// <summary>The typed applied/refused completion for a generic named-machine operation.</summary>
     /// <param name="Result">The provider result, including its optional value and diagnostic reason.</param>
     public sealed record MachineOperation(MachineOperationResult Result) : WorldSubmissionResult;
-
     /// <summary>The typed applied/refused completion for a <see cref="Protocol.WorldSubmissionPayload.Mutation"/>.</summary>
     /// <param name="Outcome">The actor-bound decision and independent persistence status.</param>
     public sealed record Mutation(WorldMutationOutcome Outcome) : WorldSubmissionResult;
-
     /// <summary>A named ingress or transport refusal for which no canonical mutation outcome could be formed.</summary>
     /// <param name="Code">The stable refusal code.</param>
     /// <param name="Detail">The human-readable refusal detail.</param>

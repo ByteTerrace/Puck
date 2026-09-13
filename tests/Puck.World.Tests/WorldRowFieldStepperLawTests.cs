@@ -49,74 +49,26 @@ public sealed class WorldRowFieldStepperLawTests {
     };
 
     [Fact]
-    public void IntegerField_AddsDeltaAndReportsOldNew() {
-        var row = Row(count: 3L);
+    public void BooleanField_TogglesBackOnSecondStep() {
+        var row = Row(enabled: true);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 4f, error: out var error, fieldPath: "count", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "3");
-        Assert.Equal(actual: newText, expected: "7");
-        Assert.Equal(expected: 7L, actual: ((long)row["count"]!));
-    }
-    [Fact]
-    public void IntegerField_NegativeDeltaSubtracts() {
-        var row = Row(count: 3L);
-
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: -5f, error: out _, fieldPath: "count", newText: out var newText, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Equal(actual: newText, expected: "-2");
-    }
-    [Fact]
-    public void DoubleField_AddsFractionalDelta() {
-        var row = Row(ratio: 1.5);
-
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 0.25f, error: out var error, fieldPath: "ratio", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "1.5");
-        Assert.Equal(actual: newText, expected: "1.75");
-    }
-    [Fact]
-    public void FloatField_WholeNumberValue_StepsFractionally_TypedByClrTypeNotJsonSpelling() {
-        // A double field holding a whole number serializes as the integer literal `8` (SerializeToNode renders 8f as
-        // `8`), so keying on the JSON kind would take an integer step (8 + 0.5 -> 9). The CLR type is authoritative.
-        var row = RowWithRatioLiteral(ratioJson: "8");
-
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 0.5f, error: out var error, fieldPath: "ratio", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "8");
-        Assert.Equal(actual: newText, expected: "8.5");
-    }
-    [Fact]
-    public void FloatField_WholeNumberValue_FractionalStep_IsNotAnIntegerNoOp() {
-        // The bug's second face: an integer step rounds 8 - 0.4 back to 8 and echoes a no-op as success. Floating-point
-        // typing lands the real value.
-        var row = RowWithRatioLiteral(ratioJson: "8");
-
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: -0.4f, error: out _, fieldPath: "ratio", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Equal(actual: oldText, expected: "8");
-        Assert.Equal(actual: newText, expected: "7.6");
-    }
-    [Fact]
-    public void IntegerField_LargeValue_StepsExactlyAboveFloatPrecision() {
-        // 1e8 exceeds float's 2^24 integer-exact ceiling; adding the delta in float space would round 100000001 back
-        // to 100000000 (a silent no-op). Integer arithmetic keeps the current value exact.
-        var row = Row(count: 100_000_000L);
-
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "count", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "100000000");
-        Assert.Equal(actual: newText, expected: "100000001");
-    }
-    [Fact]
-    public void IntegerField_OverflowingDelta_RefusesByName_NeverThrows() {
-        var row = Row(count: 3L);
-
-        // The call itself must NOT throw (the dispatcher catches nothing) — it returns a by-name refusal.
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 1e19f, error: out var error, fieldPath: "count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "out of range");
-        // Control: an in-range delta on the identical field steps cleanly, and the refused step submitted nothing.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 5f, error: out var controlError, fieldPath: "count", newText: out var newText, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: controlError);
-        Assert.Equal(actual: newText, expected: "8");
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out _,
+            fieldPath: "enabled",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Equal(
+            actual: oldText,
+            expected: "true"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "false"
+        );
     }
     [InlineData(1f)]
     [InlineData(-1f)]
@@ -125,116 +77,485 @@ public sealed class WorldRowFieldStepperLawTests {
     public void BooleanField_TogglesOnAnyNonzeroDelta(float delta) {
         var row = Row(enabled: false);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: delta, error: out var error, fieldPath: "enabled", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: delta,
+            error: out var error,
+            fieldPath: "enabled",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
         Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "false");
-        Assert.Equal(actual: newText, expected: "true");
+        Assert.Equal(
+            actual: oldText,
+            expected: "false"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "true"
+        );
         Assert.True(condition: ((bool)row["enabled"]!));
     }
     [Fact]
-    public void BooleanField_TogglesBackOnSecondStep() {
-        var row = Row(enabled: true);
+    public void DoubleField_AddsFractionalDelta() {
+        var row = Row(ratio: 1.5);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out _, fieldPath: "enabled", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Equal(actual: oldText, expected: "true");
-        Assert.Equal(actual: newText, expected: "false");
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 0.25f,
+            error: out var error,
+            fieldPath: "ratio",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: error);
+        Assert.Equal(
+            actual: oldText,
+            expected: "1.5"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "1.75"
+        );
     }
     [Fact]
-    public void EnumField_PositiveDeltaCyclesForwardAndWraps() {
-        var row = Row(mode: TestMode.Gamma);
+    public void EmptyPath_RefusesByName() {
+        var row = Row();
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "mode", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "Gamma");
-        Assert.Equal(actual: newText, expected: "Alpha");
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "empty path"
+        );
     }
     [Fact]
     public void EnumField_NegativeDeltaCyclesBackwardAndWraps() {
         var row = Row(mode: TestMode.Alpha);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: -1f, error: out _, fieldPath: "mode", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Equal(actual: oldText, expected: "Alpha");
-        Assert.Equal(actual: newText, expected: "Gamma");
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: -1f,
+            error: out _,
+            fieldPath: "mode",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Equal(
+            actual: oldText,
+            expected: "Alpha"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "Gamma"
+        );
+    }
+    [Fact]
+    public void EnumField_PositiveDeltaCyclesForwardAndWraps() {
+        var row = Row(mode: TestMode.Gamma);
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "mode",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: error);
+        Assert.Equal(
+            actual: oldText,
+            expected: "Gamma"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "Alpha"
+        );
     }
     [Fact]
     public void EnumField_ZeroDelta_RefusesByName() {
         var row = Row(mode: TestMode.Beta);
 
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 0f, error: out var error, fieldPath: "mode", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "delta must be nonzero to cycle an enum");
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 0f,
+            error: out var error,
+            fieldPath: "mode",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "delta must be nonzero to cycle an enum"
+        );
         // Control: the identical field with a nonzero delta steps cleanly.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var controlError, fieldPath: "mode", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var controlError,
+            fieldPath: "mode",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
         Assert.Null(@object: controlError);
     }
     [Fact]
-    public void NonEnumStringField_RefusesByName() {
-        var row = Row(label: "fixed");
+    public void FloatField_WholeNumberValue_FractionalStep_IsNotAnIntegerNoOp() {
+        // The bug's second face: an integer step rounds 8 - 0.4 back to 8 and echoes a no-op as success. Floating-point
+        // typing lands the real value.
+        var row = RowWithRatioLiteral(ratioJson: "8");
 
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "label", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "not a steppable field");
-        // Control: a genuinely steppable sibling field on the same row still steps.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var controlError, fieldPath: "count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: controlError);
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: -0.4f,
+            error: out _,
+            fieldPath: "ratio",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Equal(
+            actual: oldText,
+            expected: "8"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "7.6"
+        );
     }
     [Fact]
-    public void NestedObjectField_RefusesByName() {
-        var row = Row();
+    public void FloatField_WholeNumberValue_StepsFractionally_TypedByClrTypeNotJsonSpelling() {
+        // A double field holding a whole number serializes as the integer literal `8` (SerializeToNode renders 8f as
+        // `8`), so keying on the JSON kind would take an integer step (8 + 0.5 -> 9). The CLR type is authoritative.
+        var row = RowWithRatioLiteral(ratioJson: "8");
 
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "nested", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "not a steppable field");
-        // Control: walking INTO the nested object to its own leaf steps cleanly.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var controlError, fieldPath: "nested.count", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: controlError);
-        Assert.Equal(actual: oldText, expected: "7");
-        Assert.Equal(actual: newText, expected: "8");
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 0.5f,
+            error: out var error,
+            fieldPath: "ratio",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: error);
+        Assert.Equal(
+            actual: oldText,
+            expected: "8"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "8.5"
+        );
     }
     [Fact]
     public void IndexedArrayElementField_Steps() {
         var row = Row(items: [10L, 20L, 30L]);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 5f, error: out var error, fieldPath: "items[1].count", newText: out var newText, oldText: out var oldText, root: row, rowType: typeof(TestRow)));
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 5f,
+            error: out var error,
+            fieldPath: "items[1].count",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
         Assert.Null(@object: error);
-        Assert.Equal(actual: oldText, expected: "20");
-        Assert.Equal(actual: newText, expected: "25");
+        Assert.Equal(
+            actual: oldText,
+            expected: "20"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "25"
+        );
         // The untouched neighbors are unaffected.
-        Assert.Equal(expected: 10L, actual: ((long)row["items"]![0]!["count"]!));
-        Assert.Equal(expected: 30L, actual: ((long)row["items"]![2]!["count"]!));
+        Assert.Equal(
+            expected: 10L,
+            actual: ((long)row["items"]![0]!["count"]!)
+        );
+        Assert.Equal(
+            expected: 30L,
+            actual: ((long)row["items"]![2]!["count"]!)
+        );
     }
     [Fact]
     public void IndexedArrayElement_OutOfRange_RefusesByName() {
         var row = Row(items: [10L, 20L]);
 
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "items[5].count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "out of range");
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "items[5].count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "out of range"
+        );
         // Control: an in-range index on the identical array steps cleanly.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var controlError, fieldPath: "items[1].count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var controlError,
+            fieldPath: "items[1].count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: controlError);
+    }
+    [Fact]
+    public void IntegerField_AddsDeltaAndReportsOldNew() {
+        var row = Row(count: 3L);
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 4f,
+            error: out var error,
+            fieldPath: "count",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: error);
+        Assert.Equal(
+            actual: oldText,
+            expected: "3"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "7"
+        );
+        Assert.Equal(
+            expected: 7L,
+            actual: ((long)row["count"]!)
+        );
+    }
+    [Fact]
+    public void IntegerField_LargeValue_StepsExactlyAboveFloatPrecision() {
+        // 1e8 exceeds float's 2^24 integer-exact ceiling; adding the delta in float space would round 100000001 back
+        // to 100000000 (a silent no-op). Integer arithmetic keeps the current value exact.
+        var row = Row(count: 100_000_000L);
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "count",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: error);
+        Assert.Equal(
+            actual: oldText,
+            expected: "100000000"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "100000001"
+        );
+    }
+    [Fact]
+    public void IntegerField_NegativeDeltaSubtracts() {
+        var row = Row(count: 3L);
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: -5f,
+            error: out _,
+            fieldPath: "count",
+            newText: out var newText,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Equal(
+            actual: newText,
+            expected: "-2"
+        );
+    }
+    [Fact]
+    public void IntegerField_OverflowingDelta_RefusesByName_NeverThrows() {
+        var row = Row(count: 3L);
+
+        // The call itself must NOT throw (the dispatcher catches nothing) — it returns a by-name refusal.
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 1e19f,
+            error: out var error,
+            fieldPath: "count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "out of range"
+        );
+        // Control: an in-range delta on the identical field steps cleanly, and the refused step submitted nothing.
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 5f,
+            error: out var controlError,
+            fieldPath: "count",
+            newText: out var newText,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: controlError);
+        Assert.Equal(
+            actual: newText,
+            expected: "8"
+        );
+    }
+    [Fact]
+    public void NestedObjectField_RefusesByName() {
+        var row = Row();
+
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "nested",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "not a steppable field"
+        );
+        // Control: walking INTO the nested object to its own leaf steps cleanly.
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var controlError,
+            fieldPath: "nested.count",
+            newText: out var newText,
+            oldText: out var oldText,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: controlError);
+        Assert.Equal(
+            actual: oldText,
+            expected: "7"
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: "8"
+        );
+    }
+    [Fact]
+    public void NonEnumStringField_RefusesByName() {
+        var row = Row(label: "fixed");
+
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "label",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "not a steppable field"
+        );
+        // Control: a genuinely steppable sibling field on the same row still steps.
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var controlError,
+            fieldPath: "count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: controlError);
+    }
+    [Fact]
+    public void NonFiniteDelta_RefusesByName() {
+        var row = Row();
+
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: float.NaN,
+            error: out var error,
+            fieldPath: "count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "finite"
+        );
+        // Control: a finite delta on the identical field steps cleanly.
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var controlError,
+            fieldPath: "count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
         Assert.Null(@object: controlError);
     }
     [Fact]
     public void UnknownMember_RefusesByName() {
         var row = Row();
 
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "notAField", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "unknown or empty member");
+        Assert.False(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var error,
+            fieldPath: "notAField",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "unknown or empty member"
+        );
         // Control: the correctly spelled sibling steps cleanly.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var controlError, fieldPath: "count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Null(@object: controlError);
-    }
-    [Fact]
-    public void EmptyPath_RefusesByName() {
-        var row = Row();
-
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var error, fieldPath: "", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "empty path");
-    }
-    [Fact]
-    public void NonFiniteDelta_RefusesByName() {
-        var row = Row();
-
-        Assert.False(condition: WorldRowFieldStepper.TryStep(delta: float.NaN, error: out var error, fieldPath: "count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
-        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "finite");
-        // Control: a finite delta on the identical field steps cleanly.
-        Assert.True(condition: WorldRowFieldStepper.TryStep(delta: 1f, error: out var controlError, fieldPath: "count", newText: out _, oldText: out _, root: row, rowType: typeof(TestRow)));
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: 1f,
+            error: out var controlError,
+            fieldPath: "count",
+            newText: out _,
+            oldText: out _,
+            root: row,
+            rowType: typeof(TestRow)
+        ));
         Assert.Null(@object: controlError);
     }
 }

@@ -17,6 +17,13 @@ public sealed record ReleaseTrustAnchor(string Domain, string Algorithm, string 
     /// <see cref="PublicKeySubjectPublicKeyInfoBase64"/> as a key at all.</summary>
     public const string PlaceholderDomain = "placeholder-release-trust-anchor";
 
+    /// <summary>Gets a value indicating whether this anchor is the build-time <see cref="Placeholder"/> rather than
+    /// an authored real key.</summary>
+    public bool IsPlaceholder => string.Equals(
+        a: Domain,
+        b: PlaceholderDomain,
+        comparisonType: StringComparison.Ordinal
+    );
     /// <summary>A build-time placeholder pin: the exact shape a composition root compiles in before it has a real
     /// release-signing chain to pin. <see cref="LauncherServiceRegistration.AddSelfUpdate"/> resolves a verifier
     /// that refuses every manifest outright while <see cref="UpdateOptions.TrustAnchor"/> equals this — never one
@@ -26,9 +33,6 @@ public sealed record ReleaseTrustAnchor(string Domain, string Algorithm, string 
         Domain: PlaceholderDomain,
         PublicKeySubjectPublicKeyInfoBase64: string.Empty
     );
-    /// <summary>Gets a value indicating whether this anchor is the build-time <see cref="Placeholder"/> rather than
-    /// an authored real key.</summary>
-    public bool IsPlaceholder => string.Equals(a: Domain, b: PlaceholderDomain, comparisonType: StringComparison.Ordinal);
 
     /// <summary>Builds the <see cref="TrustListEntry"/> this anchor authorizes for release-manifest verification —
     /// always <see cref="AttestationTrustMode.Vouches"/>, since a release root vouches for a rotatable issuing key

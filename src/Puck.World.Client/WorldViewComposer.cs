@@ -54,15 +54,6 @@ public sealed class WorldViewComposer {
     /// <summary>This frame's resolved slots (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
     public IReadOnlyList<WorldComposedSlot> Slots => m_slots;
 
-    /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or
-    /// <see langword="null"/> when no authored layout sits there — the <c>view.override</c> bound dispatch's
-    /// ordinal-to-name resolution.</summary>
-    /// <param name="ordinal">The 1-based <c>views.layouts</c> row ordinal.</param>
-    public string? AuthoredLayoutName(int ordinal) => (((ordinal >= 1) && (ordinal <= m_authoredLayoutNames.Count))
-        ? m_authoredLayoutNames[(ordinal - 1)]
-        : null
-    );
-
     // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set.
     private void ApplyCameraOverride(string? cameraOverride) {
         if (cameraOverride is not { } camera) {
@@ -208,10 +199,10 @@ public sealed class WorldViewComposer {
 
             if (slot.Pipeline is { } pipeline) {
                 m_targetSlots.Add(item: new WorldComposedSlot(
-                    Region: region,
-                    SeatOrder: -1,
                     Camera: null,
-                    Pipeline: pipeline
+                    Pipeline: pipeline,
+                    Region: region,
+                    SeatOrder: -1
                 ));
             } else if (slot.Camera is null) {
                 m_targetSlots.Add(item: new WorldComposedSlot(
@@ -272,6 +263,14 @@ public sealed class WorldViewComposer {
         return (BuiltinName, BuiltinName, BuiltinTransitionSeconds, BuiltinTransitionRenderScale);
     }
 
+    /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or
+    /// <see langword="null"/> when no authored layout sits there — the <c>view.override</c> bound dispatch's
+    /// ordinal-to-name resolution.</summary>
+    /// <param name="ordinal">The 1-based <c>views.layouts</c> row ordinal.</param>
+    public string? AuthoredLayoutName(int ordinal) => (((ordinal >= 1) && (ordinal <= m_authoredLayoutNames.Count))
+        ? m_authoredLayoutNames[(ordinal - 1)]
+        : null
+    );
     /// <summary>Composes the window for this frame.</summary>
     /// <param name="joinedCount">The joined local-seat count.</param>
     /// <param name="views">The resolved view defaults (authored or built-in).</param>

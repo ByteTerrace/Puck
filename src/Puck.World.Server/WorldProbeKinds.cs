@@ -14,7 +14,11 @@ namespace Puck.World;
 /// and validated once an probe starts.</remarks>
 public static class WorldProbeKinds {
     /// <summary>Gets the shipped probe kinds, found under <c>Assets/Probes</c> beside the executable.</summary>
-    public static ProbeKindCatalog Shipped { get; } = ProbeKindCatalog.Scan(rootDirectory: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Probes"));
+    public static ProbeKindCatalog Shipped { get; } = ProbeKindCatalog.Scan(rootDirectory: Path.Combine(
+        path1: AppContext.BaseDirectory,
+        path2: "Assets",
+        path3: "Probes"
+    ));
 
     /// <summary>Determines whether a kind id names a shipped probe kind.</summary>
     /// <param name="kindId">The candidate id.</param>

@@ -26,18 +26,15 @@ namespace Puck.HumbleGamingBrick;
 /// </para>
 /// </summary>
 public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IModeSwitchable {
-    // RP read-back: keep the written bits 7-6 (data enable) and bit 0 (LED); force the unused bits (1-5) high.
-    // 0x3E = 0b0011_1110 — bit 1 defaults high (no light), bits 2-5 are wired high.
-    private const byte ReadBackKeepMask = 0xC1;
-    private const byte ReadBackHighBits = 0x3E;
     // The data-read-enable gate: light is reported on bit 1 only when bits 7-6 are BOTH set.
     private const byte DataReadEnableMask = 0xC0;
     private const byte LedOutBit = 0x01;
+    private const byte ReadBackHighBits = 0x3E;
+    // RP read-back: keep the written bits 7-6 (data enable) and bit 0 (LED); force the unused bits (1-5) high.
+    // 0x3E = 0b0011_1110 — bit 1 defaults high (no light), bits 2-5 are wired high.
+    private const byte ReadBackKeepMask = 0xC1;
     private const byte ReceivedLightBit = 0x02;
 
-    // The last value written to RP. Only bits 7-6 and bit 0 survive a read-back, but the full byte is kept because that
-    // matches how the register behaves on real hardware.
-    private byte m_register;
     // The HuC1/HuC3 cart IR-mode LED latch: a second LED drive OR-ed with the RP LED bit.
     private bool m_cartLightOut;
     // The currently-emulated model, re-derived on a live device swap (IModeSwitchable) exactly like every other
@@ -47,6 +44,9 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     // The linked peer whose emitted light this transceiver receives; null is the no-cable default. Host wiring, never
     // serialized — attaching it cannot perturb determinism (see the class remarks and IrLinkSession).
     private IInfraredPeer? m_peer;
+    // The last value written to RP. Only bits 7-6 and bit 0 survive a read-back, but the full byte is kept because that
+    // matches how the register behaves on real hardware.
+    private byte m_register;
 
     /// <summary>Creates the transceiver seeded with the boot model's self-sensing gate.</summary>
     /// <param name="configuration">The machine configuration, whose <see cref="MachineConfiguration.Model"/> seeds the
@@ -58,6 +58,10 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
         m_model = configuration.Model;
     }
 
+    /// <inheritdoc/>
+    bool IInfraredPeer.EmittedLight =>
+        (((m_register & LedOutBit) != 0) || m_cartLightOut);
+
     /// <summary>Gets or sets whether a HuC1/HuC3 cartridge's IR window is wired to this transceiver. Set once by the
     /// component factory when such a cartridge is loaded (see <see cref="IInfraredCartridge"/>); widens hardware
     /// self-sensing to the Advanced console, exactly as it does on real hardware (see <see cref="ReceivedLight"/>). Not
@@ -65,6 +69,17 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// category as <see cref="ModelState"/>'s boot wiring.</summary>
     internal bool HasHuCCartridge { get; set; }
 
+    // Whether this machine's own emitted light feeds back into ReceivedLight: always on the Color steppings, which sense
+    // their own lit LED; only with a HuC1/HuC3 cartridge present on the Advanced console (or on monochrome hardware,
+    // where HuC IR works too). See the ReceivedLight remarks for the SameBoy citation.
+    private bool SelfSensingEnabled =>
+        (m_model.SensesOwnInfraredLight() || HasHuCCartridge);
+
+    /// <inheritdoc/>
+    public bool CartLightOut {
+        get => m_cartLightOut;
+        set => m_cartLightOut = value;
+    }
     /// <inheritdoc/>
     /// <remarks>
     /// Hardware self-sensing (SameBoy oracle, verified against the checked-out source): <c>Core/memory.c</c>'s
@@ -83,52 +98,6 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// </remarks>
     public bool ReceivedLight =>
         ((m_peer?.EmittedLight ?? false) || (SelfSensingEnabled && ((IInfraredPeer)this).EmittedLight));
-    /// <inheritdoc/>
-    public bool CartLightOut {
-        get => m_cartLightOut;
-        set => m_cartLightOut = value;
-    }
-
-    /// <inheritdoc/>
-    bool IInfraredPeer.EmittedLight =>
-        (((m_register & LedOutBit) != 0) || m_cartLightOut);
-
-    // Whether this machine's own emitted light feeds back into ReceivedLight: always on the Color steppings, which sense
-    // their own lit LED; only with a HuC1/HuC3 cartridge present on the Advanced console (or on monochrome hardware,
-    // where HuC IR works too). See the ReceivedLight remarks for the SameBoy citation.
-    private bool SelfSensingEnabled =>
-        (m_model.SensesOwnInfraredLight() || HasHuCCartridge);
-
-    /// <inheritdoc/>
-    public void ApplyModel(ConsoleModel model) =>
-        m_model = model;
-    /// <inheritdoc/>
-    public byte ReadRegister() {
-        var value = ((byte)((m_register & ReadBackKeepMask) | ReadBackHighBits));
-
-        // Bit 1 reads 0 (light detected) only while the data-read-enable bits 7-6 are both set AND a peer LED is lit.
-        if (
-            ((m_register & DataReadEnableMask) == DataReadEnableMask) &&
-            ReceivedLight
-        ) {
-            value &= unchecked((byte)~ReceivedLightBit);
-        }
-
-        return value;
-    }
-    /// <inheritdoc/>
-    public void WriteRegister(byte value) =>
-        m_register = value;
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_register);
-        writer.WriteBoolean(value: m_cartLightOut);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_register = reader.ReadByte();
-        m_cartLightOut = reader.ReadBoolean();
-    }
 
     // Wires two transceivers as IR peers. Internal on purpose: IrLinkSession is the one blessed connect seam, because a
     // connected pair must also be STEPPED as a pair (the interleave keeps their light levels coherent) — the session owns
@@ -161,4 +130,35 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
             port.m_peer = null;
         }
     }
+
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) =>
+        m_model = model;
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_register = reader.ReadByte();
+        m_cartLightOut = reader.ReadBoolean();
+    }
+    /// <inheritdoc/>
+    public byte ReadRegister() {
+        var value = ((byte)((m_register & ReadBackKeepMask) | ReadBackHighBits));
+
+        // Bit 1 reads 0 (light detected) only while the data-read-enable bits 7-6 are both set AND a peer LED is lit.
+        if (
+            ((m_register & DataReadEnableMask) == DataReadEnableMask) &&
+            ReceivedLight
+        ) {
+            value &= unchecked((byte)~ReceivedLightBit);
+        }
+
+        return value;
+    }
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteByte(value: m_register);
+        writer.WriteBoolean(value: m_cartLightOut);
+    }
+    /// <inheritdoc/>
+    public void WriteRegister(byte value) =>
+        m_register = value;
 }

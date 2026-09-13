@@ -27,9 +27,9 @@
     </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="Firmware\*.bin" LogicalName="Puck.HumbleGamingBrick.Firmware.%(Filename)%(Extension)" />
-        <!-- Explicit items avoid the default glob's RecursiveDir being appended to the package path. -->
-        <None Remove="Firmware\LICENSE;Firmware\README.md" />
-        <None Include="Firmware\LICENSE;Firmware\README.md" Pack="true" PackagePath="Firmware\" />
+        <!-- Ship firmware notices; usage and provenance guides remain in the linked source documentation. -->
+        <None Remove="Firmware\LICENSE" />
+        <None Include="Firmware\LICENSE" Pack="true" PackagePath="Firmware\" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />

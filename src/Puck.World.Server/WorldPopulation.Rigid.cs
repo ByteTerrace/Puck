@@ -10,7 +10,6 @@ public sealed partial class WorldPopulation {
     /// resolved through the rigid impulse path (at least one side a rigid kit) rather than plain positional
     /// depenetration.</summary>
     public int RigidPairResolvedCount { get; private set; }
-
     /// <summary>Gets the document-derived speed a <c>body.impulse</c> command's resulting velocity may not exceed —
     /// <see cref="WorldFacePortalPolicy.SpeedCeiling"/>, the same fastest travel the document already declares for
     /// crossing a face. <see cref="WorldBody.TryApplyRigidImpulse"/> refuses by name rather than applying a delta
@@ -39,10 +38,13 @@ public sealed partial class WorldPopulation {
                 restingCount++;
             }
 
-            worstSubsteps = Math.Max(val1: worstSubsteps, val2: body.RigidStaticSubstepsThisTick);
+            worstSubsteps = Math.Max(
+                val1: worstSubsteps,
+                val2: body.RigidStaticSubstepsThisTick
+            );
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, pairPasses={RigidPairPassesThisTick}/{m_bodyContactPolicy.RigidPairIterationCeiling} pairBudget={m_bodyContactPolicy.RigidPairIterationBudget}, manifoldIterations={m_bodyContactPolicy.RigidManifoldIterations}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={(double)m_rigidVelocityCeiling:0.###}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, pairPasses={RigidPairPassesThisTick}/{m_bodyContactPolicy.RigidPairIterationCeiling} pairBudget={m_bodyContactPolicy.RigidPairIterationBudget}, manifoldIterations={m_bodyContactPolicy.RigidManifoldIterations}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={((double)m_rigidVelocityCeiling):0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an
@@ -81,19 +83,29 @@ public sealed partial class WorldPopulation {
         // side's anchor is irrelevant (its handle carries zero inverse inertia, so its own angular term is always
         // zero) and left at zero.
         var anchorA = (right.IsRigid
-            ? FixedRigidWitness.Anchor(centerOffset: right.RigidCenterOffset, orientation: right.FixedOrientation, volume: right.RigidWitnessVolume(), worldDirection: normal)
+            ? FixedRigidWitness.Anchor(
+                centerOffset: right.RigidCenterOffset,
+                orientation: right.FixedOrientation,
+                volume: right.RigidWitnessVolume(),
+                worldDirection: normal
+            )
             : FixedVector3.Zero
         );
         var anchorB = (left.IsRigid
-            ? FixedRigidWitness.Anchor(centerOffset: left.RigidCenterOffset, orientation: left.FixedOrientation, volume: left.RigidWitnessVolume(), worldDirection: -normal)
+            ? FixedRigidWitness.Anchor(
+                centerOffset: left.RigidCenterOffset,
+                orientation: left.FixedOrientation,
+                volume: left.RigidWitnessVolume(),
+                worldDirection: -normal
+            )
             : FixedVector3.Zero
         );
         var refusals = 0;
         var closingSpeed = FixedTwoBodyKernel.RelativeNormalVelocity(
-            bodyA: aHandle,
             anchorA: anchorA,
-            bodyB: bHandle,
             anchorB: anchorB,
+            bodyA: aHandle,
+            bodyB: bHandle,
             normal: normal
         );
 
@@ -161,7 +173,10 @@ public sealed partial class WorldPopulation {
         // choose to contact. Routed through the rigid-aware correction (never the locomotion one, whose planar/
         // vertical-velocity channels a rigid body does not use) so a body this displaces wakes rather than keeping a
         // stale resting latch while it is visibly being pushed.
-        if (left.IsRigid && right.IsRigid) {
+        if (
+            left.IsRigid &&
+            right.IsRigid
+        ) {
             var shared = (correction / FixedQ4816.FromInteger(value: 2L));
 
             left.ApplyRigidPositionalCorrection(correction: shared);
@@ -230,9 +245,9 @@ public sealed partial class WorldPopulation {
             right: frictionCoefficient
         ).Value;
         var clampedImpulseRaw = Math.Clamp(
-            value: stickImpulseRaw,
+            max: maxTangentImpulseRaw,
             min: -maxTangentImpulseRaw,
-            max: maxTangentImpulseRaw
+            value: stickImpulseRaw
         );
 
         if (clampedImpulseRaw == 0L) {
@@ -253,11 +268,21 @@ public sealed partial class WorldPopulation {
     // (left + right) / 2 rounded to nearest, ties to even — the same value (left + right) * 0.5 yields through the
     // fixed-point multiply — computed on the halves so the intermediate sum can never leave the raw.
     private static FixedQ4816 AverageNonnegative(FixedQ4816 left, FixedQ4816 right) {
-        var leftRaw = Math.Max(val1: 0L, val2: left.Value);
-        var rightRaw = Math.Max(val1: 0L, val2: right.Value);
+        var leftRaw = Math.Max(
+            val1: 0L,
+            val2: left.Value
+        );
+        var rightRaw = Math.Max(
+            val1: 0L,
+            val2: right.Value
+        );
         var halvesRaw = ((leftRaw >> 1) + (rightRaw >> 1));
         var lowBits = ((leftRaw & 1L) + (rightRaw & 1L));
-        var averageRaw = (halvesRaw + ((lowBits == 2L) ? 1L : ((lowBits == 1L) ? (halvesRaw & 1L) : 0L)));
+        var averageRaw = (halvesRaw + ((lowBits == 2L)
+            ? 1L
+            : ((lowBits == 1L)
+                ? halvesRaw & 1L
+                : 0L)));
 
         return FixedQ4816.FromRawBits(value: averageRaw);
     }

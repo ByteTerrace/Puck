@@ -13,7 +13,6 @@ public enum MachineFieldKind {
     /// <summary>An ordered array whose elements follow the item descriptor.</summary>
     Array,
 }
-
 /// <summary>How a field participates in host composition, relocation, and pinning.</summary>
 public enum MachineFieldRole {
     /// <summary>Provider-owned data with no document reference semantics.</summary>
@@ -33,7 +32,6 @@ public enum MachineFieldRole {
     /// <summary>A reference to a provider-owned declaration.</summary>
     LocalReference,
 }
-
 /// <summary>One provider-authored field. Runtime admission, schema emission, completion, and import rewriting consume
 /// this same description; the host does not recognize console-specific property names.</summary>
 /// <param name="Name">The JSON member name, or the diagnostic label for an array item.</param>
@@ -58,24 +56,20 @@ public sealed record MachineFieldDescriptor(
     decimal? Minimum = null,
     decimal? Maximum = null
 );
-
 /// <summary>A versioned object shape owned by a provider.</summary>
 /// <param name="Id">The exact schema identifier carried by a configuration or operation envelope.</param>
 /// <param name="Fields">The admitted object fields, in author-facing order. Undeclared fields refuse.</param>
 public sealed record MachineObjectDescriptor(string Id, IReadOnlyList<MachineFieldDescriptor> Fields);
-
 /// <summary>One named optional input or output.</summary>
 /// <param name="Name">The stable provider-owned port name.</param>
 /// <param name="Contract">The capability contract, such as puck.machine.video.v1 or puck.machine.pad.v1.</param>
 /// <param name="Description">What the port presents or controls.</param>
 public sealed record MachinePortDescriptor(string Name, string Contract, string Description);
-
 /// <summary>A provider-owned ordered operation and the exact payload it accepts.</summary>
 /// <param name="Id">The operation identifier used by commands and rule effects.</param>
 /// <param name="Description">The hardware and lifecycle effects visible to authors.</param>
 /// <param name="Payload">The versioned payload shape.</param>
 public sealed record MachineOperationDescriptor(string Id, string Description, MachineObjectDescriptor Payload);
-
 /// <summary>The provider's single authoring and admission description. Runtime capabilities must agree with it for
 /// every admitted configuration; provider-specific semantic validation may impose additional constraints.</summary>
 /// <param name="Id">The registered engine identifier.</param>

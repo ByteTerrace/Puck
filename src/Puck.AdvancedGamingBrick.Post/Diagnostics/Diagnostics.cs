@@ -13,8 +13,9 @@ internal sealed partial class Diagnostics {
     /// <summary>Creates a diagnostic runner with explicit BIOS and per-machine options.</summary>
     public Diagnostics(ReadOnlyMemory<byte> biosImage, AgbMachineOptions? machineOptions = null) {
         BiosImage = biosImage;
-        MachineOptions = machineOptions ?? new AgbMachineOptions();
+        MachineOptions = (machineOptions ?? new AgbMachineOptions());
     }
+
     private ReadOnlyMemory<byte> BiosImage { get; }
     private AgbMachineOptions MachineOptions { get; }
 
@@ -30,7 +31,10 @@ internal sealed partial class Diagnostics {
     public bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
 
-        if (TryCompareExecution(args: args, exitCode: out exitCode)) {
+        if (TryCompareExecution(
+            args: args,
+            exitCode: out exitCode
+        )) {
             return true;
         }
 
@@ -53,7 +57,10 @@ internal sealed partial class Diagnostics {
                 b: "--bench",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
-                exitCode = BenchDiagnostic.Run(args: args, bios: BiosImage);
+                exitCode = BenchDiagnostic.Run(
+                    args: args,
+                    bios: BiosImage
+                );
 
                 return true;
             }
@@ -71,7 +78,8 @@ internal sealed partial class Diagnostics {
                 : "FAIL")} — {detail} ==");
             exitCode = (pass
                 ? 0
-                : 1);
+                : 1
+            );
 
             return true;
         }
@@ -89,7 +97,8 @@ internal sealed partial class Diagnostics {
                 value: "--"
             ))
                 ? args[(stateRoundTripIndex + 1)]
-                : null);
+                : null
+            );
 
             exitCode = StateRoundTrip(romPath: romArg);
 
@@ -124,13 +133,17 @@ internal sealed partial class Diagnostics {
                     out var parsed
                 ))
                     ? parsed
-                    : 6_000_000L);
+                    : 6_000_000L
+                );
 
                 Render(
                     romPath: args[(index + 1)],
                     outputPath: args[(index + 2)],
                     steps: steps,
-                    fullBoot: args.Contains(value: "--full-boot", comparer: StringComparer.OrdinalIgnoreCase)
+                    fullBoot: args.Contains(
+                        value: "--full-boot",
+                        comparer: StringComparer.OrdinalIgnoreCase
+                    )
                 );
 
                 return true;
@@ -211,8 +224,14 @@ internal sealed partial class Diagnostics {
                 }
 
                 exitCode = Lockstep(
-                    cosimExe: CommandLineArguments.Value(args: args, name: "--ares"),
-                    biosPath: CommandLineArguments.Value(args: args, name: "--bios"),
+                    cosimExe: CommandLineArguments.Value(
+                        args: args,
+                        name: "--ares"
+                    ),
+                    biosPath: CommandLineArguments.Value(
+                        args: args,
+                        name: "--bios"
+                    ),
                     romPath: args[(index + 1)],
                     steps: long.Parse(s: args[(index + 2)]),
                     direct: (Array.IndexOf(
@@ -267,7 +286,10 @@ internal sealed partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 1)); ++index) {
             if (args[index] == "--accuracy-suite") {
                 exitCode = RunAccuracySuite(
-                    focus: CommandLineArguments.Value(args: args, name: "--suite-focus"),
+                    focus: CommandLineArguments.Value(
+                        args: args,
+                        name: "--suite-focus"
+                    ),
                     romPath: args[(index + 1)],
                     name: "accuracy suite"
                 );
@@ -280,7 +302,10 @@ internal sealed partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 1)); ++index) {
             if (args[index] == "--ags") {
                 _ = RunAgs(
-                    trace: args.Contains(value: "--ags-trace", comparer: StringComparer.OrdinalIgnoreCase),
+                    trace: args.Contains(
+                        value: "--ags-trace",
+                        comparer: StringComparer.OrdinalIgnoreCase
+                    ),
                     romPath: args[(index + 1)],
                     name: Path.GetFileName(path: args[(index + 1)])
                 );

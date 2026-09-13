@@ -53,7 +53,8 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
         foreach (var floor in m_floors) {
             var root = ((floor.Source == RenderFloorSource.Corpus)
                 ? context.TestRomRoot
-                : context.GamesRoot);
+                : context.GamesRoot
+            );
 
             // A BIOS-dependent floor renders a blank screen on the zeroed stub, which would never match — skip it there
             // rather than false-fail. Nonzero images run, but the floor's fixed step budget is BIOS-specific.
@@ -81,14 +82,15 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
         var outcome = RomCaseRunner.Run(
             cases: floors
                 .Select(selector: static item => new RomCase(
-                    FullPath: item.FullPath,
-                    Group: "render-hash",
-                    Name: item.Floor.Name
-                ))
+                FullPath: item.FullPath,
+                Group: "render-hash",
+                Name: item.Floor.Name
+            ))
                 .ToArray(),
             parallelism: context.Parallelism,
             probe: romCase => {
                 var floor = floors[floors.FindIndex(match: item => (item.Floor.Name == romCase.Name))].Floor;
+
                 var (pass, _, detail) = RenderHashProbe.Run(
                     bios: context.BiosImage,
                     expected: floor.ExpectedHash,

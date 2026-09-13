@@ -23,10 +23,10 @@ internal sealed class MachineInstancePool<TMachine, TConfiguration> : IDisposabl
     private readonly TConfiguration m_configuration;
     private readonly Func<TConfiguration, Action<IServiceCollection>?, MachineInstance<TMachine, TConfiguration>> m_create;
 
+    private bool m_disposed;
+
     private readonly Lock m_gate = new();
     private readonly Stack<MachineInstance<TMachine, TConfiguration>> m_parked = new();
-
-    private bool m_disposed;
 
     internal MachineInstancePool(
         TConfiguration configuration,

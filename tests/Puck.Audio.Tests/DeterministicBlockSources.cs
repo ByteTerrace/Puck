@@ -32,7 +32,10 @@ internal sealed class CountingSource(short value) : IAudioBlockSource {
 /// all the mixer-core proofs below need of an external source.</summary>
 /// <param name="seed">The PCG32 seed.</param>
 internal sealed class SeededPatternSource(ulong seed) : IAudioBlockSource {
-    private Pcg32XshRr m_stream = Pcg32XshRr.Create(state: seed, stream: 1UL);
+    private Pcg32XshRr m_stream = Pcg32XshRr.Create(
+        state: seed,
+        stream: 1UL
+    );
 
     /// <inheritdoc/>
     public int Pull(Span<short> interleavedStereo, int frames) {

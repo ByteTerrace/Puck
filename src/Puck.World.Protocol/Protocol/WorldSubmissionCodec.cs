@@ -92,9 +92,8 @@ public static class WorldSubmissionCodec {
         throw new LeafCodecException(failure: Fail(
             WorldCodecRefusal.EnumValueUnknown,
             (WorldWireTags.IsRetiredCapabilityWire(wire: value)
-                ? $"{nameof(WorldCapability)} wire value {value} is retired"
-                : $"{nameof(WorldCapability)} wire value {value} is not declared"
-            )
+            ? $"{nameof(WorldCapability)} wire value {value} is retired"
+            : $"{nameof(WorldCapability)} wire value {value} is not declared")
         ));
     }
     private static byte CapabilityToWire(WorldCapability value) {
@@ -135,21 +134,6 @@ public static class WorldSubmissionCodec {
         Detail: detail,
         Refusal: refusal
     );
-    // The lever leaf is keyed by the knob's registered NAME, not an ordinal: the vocabulary is a composition-time
-    // registration (Client.WorldSessionLevers), so the wire carries the token and the applier owns which tokens
-    // resolve. An empty name can address no registration, so it is refused here rather than travelling.
-    private static string ReadLeverName(BinaryReader reader) {
-        var value = reader.ReadString();
-
-        if (value.Length == 0) {
-            throw new LeafCodecException(failure: Fail(
-                detail: "session lever name is empty",
-                refusal: WorldCodecRefusal.PayloadMalformed
-            ));
-        }
-
-        return value;
-    }
     private static Type? MutationType(byte kind) {
         try {
             foreach (var entry in WorldMutationKindCatalog.All()) {
@@ -296,8 +280,8 @@ public static class WorldSubmissionCodec {
             TargetIndex: reader.ReadInt32()
         ),
             12 => new WorldCommand.ReleaseCarry(
-            Principal: principal,
-            EntityIndex: entity
+            EntityIndex: entity,
+            Principal: principal
         ),
             var wire => throw new LeafCodecException(failure: Fail(
             detail: $"command discriminant {wire} is not declared",
@@ -395,6 +379,66 @@ public static class WorldSubmissionCodec {
         var low = reader.ReadUInt64();
 
         return (((UInt128)reader.ReadUInt64()) << 64) | low;
+    }
+    // The lever leaf is keyed by the knob's registered NAME, not an ordinal: the vocabulary is a composition-time
+    // registration (Client.WorldSessionLevers), so the wire carries the token and the applier owns which tokens
+    // resolve. An empty name can address no registration, so it is refused here rather than travelling.
+    private static string ReadLeverName(BinaryReader reader) {
+        var value = reader.ReadString();
+
+        if (value.Length == 0) {
+            throw new LeafCodecException(failure: Fail(
+                detail: "session lever name is empty",
+                refusal: WorldCodecRefusal.PayloadMalformed
+            ));
+        }
+
+        return value;
+    }
+    private static WorldMachineOperation ReadMachineOperation(BinaryReader reader) {
+        var instance = ReadRequiredString(
+            field: "MachineOperation.Instance",
+            reader: reader
+        );
+        var generation = reader.ReadUInt64();
+        var operationId = ReadRequiredString(
+            field: "MachineOperation.OperationId",
+            reader: reader
+        );
+        var payloadLength = reader.ReadInt32();
+
+        if (
+            (payloadLength < 0) ||
+            (payloadLength > WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation))
+        ) {
+            throw new LeafCodecException(failure: Fail(
+                detail: $"machine operation payload length {payloadLength} is outside 0..{WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation)}",
+                refusal: WorldCodecRefusal.PayloadTooLarge
+            ));
+        }
+        var payloadBytes = reader.ReadBytes(count: payloadLength);
+
+        if (payloadBytes.Length != payloadLength) {
+            throw new LeafCodecException(failure: Fail(
+                detail: "machine operation payload is truncated",
+                refusal: WorldCodecRefusal.PayloadTruncated
+            ));
+        }
+        try {
+            using var document = JsonDocument.Parse(payloadBytes);
+
+            return new WorldMachineOperation(
+                instance,
+                generation,
+                operationId,
+                document.RootElement
+            );
+        } catch (JsonException exception) {
+            throw new LeafCodecException(failure: Fail(
+                detail: $"machine operation payload is not valid JSON: {exception.Message}",
+                refusal: WorldCodecRefusal.PayloadMalformed
+            ));
+        }
     }
     private static T? ReadOptional<T>(BinaryReader reader, Func<BinaryReader, T> read) where T : struct => (reader.ReadBoolean()
         ? read(reader)
@@ -495,34 +539,6 @@ public static class WorldSubmissionCodec {
         }
 
         return value;
-    }
-    private static WorldMachineOperation ReadMachineOperation(BinaryReader reader) {
-        var instance = ReadRequiredString(reader: reader, field: "MachineOperation.Instance");
-        var generation = reader.ReadUInt64();
-        var operationId = ReadRequiredString(reader: reader, field: "MachineOperation.OperationId");
-        var payloadLength = reader.ReadInt32();
-        if (payloadLength < 0 || payloadLength > WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)) {
-            throw new LeafCodecException(failure: Fail(
-                detail: $"machine operation payload length {payloadLength} is outside 0..{WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)}",
-                refusal: WorldCodecRefusal.PayloadTooLarge
-            ));
-        }
-        var payloadBytes = reader.ReadBytes(count: payloadLength);
-        if (payloadBytes.Length != payloadLength) {
-            throw new LeafCodecException(failure: Fail(
-                detail: "machine operation payload is truncated",
-                refusal: WorldCodecRefusal.PayloadTruncated
-            ));
-        }
-        try {
-            using var document = JsonDocument.Parse(payloadBytes);
-            return new WorldMachineOperation(instance, generation, operationId, document.RootElement);
-        } catch (JsonException exception) {
-            throw new LeafCodecException(failure: Fail(
-                detail: $"machine operation payload is not valid JSON: {exception.Message}",
-                refusal: WorldCodecRefusal.PayloadMalformed
-            ));
-        }
     }
     private static WorldScreenOp ReadScreenOp(BinaryReader reader) {
         return reader.ReadByte() switch {
@@ -722,6 +738,28 @@ public static class WorldSubmissionCodec {
             return false;
         }
     }
+    private static bool TryDecodeMutationCore(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure, bool committed) {
+        if (
+            !TryDecodeJsonUnion(
+            bytes: bytes,
+            failure: out failure,
+            typeOf: MutationType,
+            value: out mutation
+        ) ||
+            (mutation is null)
+        ) {
+            return false;
+        }
+        if (!TryValidateMutationPrincipals(
+            committed: committed,
+            failure: out failure,
+            mutation: mutation
+        )) {
+            mutation = null;
+            return false;
+        }
+        return true;
+    }
     private static bool TryEncodeJsonUnion<T>(T value, Func<T, byte> kind, out byte[] bytes, out WorldCodecFailure failure) where T : class {
         if (value is null) {
             bytes = [];
@@ -754,6 +792,51 @@ public static class WorldSubmissionCodec {
             bytes = [];
             failure = Fail(
                 WorldCodecRefusal.PayloadMalformed,
+                exception.Message
+            );
+            return false;
+        }
+    }
+    private static bool TryEncodeMutationCore(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure, bool committed) {
+        if (mutation is null) {
+            bytes = [];
+            failure = Fail(
+                detail: "WorldMutation is null",
+                refusal: WorldCodecRefusal.PayloadMissing
+            );
+
+            return false;
+        }
+        if (!TryValidateMutationPrincipals(
+            committed: committed,
+            failure: out failure,
+            mutation: mutation
+        )) {
+            bytes = [];
+            return false;
+        }
+
+        try {
+            var entry = WorldMutationKindCatalog.All().FirstOrDefault(predicate: candidate => (candidate.Type == mutation.GetType()));
+
+            if (entry.Type is null) {
+                bytes = [];
+                failure = Fail(
+                    WorldCodecRefusal.LeafKindUnknown,
+                    $"mutation kind '{mutation.GetType().Name}' is not cataloged"
+                );
+                return false;
+            }
+            return TryEncodeJsonUnion(
+                mutation,
+                _ => checked((byte)entry.Ordinal),
+                out bytes,
+                out failure
+            );
+        } catch (Exception exception) when ((exception is InvalidOperationException or OverflowException)) {
+            bytes = [];
+            failure = Fail(
+                WorldCodecRefusal.LeafKindUnknown,
                 exception.Message
             );
             return false;
@@ -853,20 +936,30 @@ public static class WorldSubmissionCodec {
     private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure, bool committed = false) {
         failure = default;
         if (mutation is WorldMutation.Batch batch) {
-            if (!batch.TryValidateShape(out var reason)) {
-                failure = new WorldCodecFailure(WorldCodecRefusal.PayloadMalformed, reason);
+            if (!batch.TryValidateShape(reason: out var reason)) {
+                failure = new WorldCodecFailure(
+                    Detail: reason,
+                    Refusal: WorldCodecRefusal.PayloadMalformed
+                );
                 return false;
             }
-            for (var index = 0; index < batch.Mutations.Count; index++) {
-                if (!TryValidateMutationPrincipals(batch.Mutations[index], out failure, committed)) { return false; }
+            for (var index = 0; (index < batch.Mutations.Count); index++) {
+                if (!TryValidateMutationPrincipals(
+                    batch.Mutations[index],
+                    out failure,
+                    committed
+                )) { return false; }
             }
         }
         // Only the committed-journal codec admits the canonical structural actor. A nested grant row still passes
         // the normal validation below; no live submission decoder calls this with committed=true.
-        if (!(committed && mutation.Principal == WorldPrincipal.World) && !TryValidatePrincipal(
+        if (
+            !(committed && (mutation.Principal == WorldPrincipal.World)) &&
+            !TryValidatePrincipal(
             mutation.Principal,
             out failure
-        )) {
+        )
+        ) {
             return false;
         }
         var nested = mutation switch {
@@ -1113,6 +1206,47 @@ public static class WorldSubmissionCodec {
         writer.Write(value: ((ulong)bits));
         writer.Write(value: ((ulong)(bits >> 64)));
     }
+    // The screen-op leaf's own tagged union: one discriminant byte, then each case's own fields — mirroring the
+    // addon-lifecycle leaf's shape (small, fixed, binary, no reflection-serialization debt). Insert never carries a
+    // content hash on this wire — the receiving server reads and hashes ContentPath itself, at apply time, exactly
+    // like a Reset request's base hash (see WorldServer.ApplyRebuild's own remarks).
+    private static void WriteMachineOperation(BinaryWriter writer, WorldMachineOperation operation) {
+        if (operation is null) {
+            throw new LeafCodecException(failure: Fail(
+                detail: "machine operation is null",
+                refusal: WorldCodecRefusal.PayloadMissing
+            ));
+        }
+        WriteRequiredString(
+            writer: writer,
+            value: operation.Instance,
+            field: "MachineOperation.Instance"
+        );
+        writer.Write(value: operation.ExpectedGeneration);
+        WriteRequiredString(
+            writer: writer,
+            value: operation.OperationId,
+            field: "MachineOperation.OperationId"
+        );
+        byte[] payload;
+
+        try {
+            payload = Encoding.UTF8.GetBytes(s: operation.Payload.GetRawText());
+        } catch (InvalidOperationException exception) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.PayloadMalformed,
+                exception.Message
+            ));
+        }
+        if (payload.Length > WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation)) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.PayloadTooLarge,
+                $"machine operation payload length {payload.Length} exceeds {WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation)}"
+            ));
+        }
+        writer.Write(value: payload.Length);
+        writer.Write(buffer: payload);
+    }
     private static void WriteOptional<T>(BinaryWriter writer, T? value, Action<BinaryWriter, T> write) where T : struct {
         writer.Write(value: value.HasValue);
         if (value is { } present) {
@@ -1216,32 +1350,6 @@ public static class WorldSubmissionCodec {
             ));
         }
         writer.Write(value: value);
-    }
-    // The screen-op leaf's own tagged union: one discriminant byte, then each case's own fields — mirroring the
-    // addon-lifecycle leaf's shape (small, fixed, binary, no reflection-serialization debt). Insert never carries a
-    // content hash on this wire — the receiving server reads and hashes ContentPath itself, at apply time, exactly
-    // like a Reset request's base hash (see WorldServer.ApplyRebuild's own remarks).
-    private static void WriteMachineOperation(BinaryWriter writer, WorldMachineOperation operation) {
-        if (operation is null) {
-            throw new LeafCodecException(failure: Fail(WorldCodecRefusal.PayloadMissing, "machine operation is null"));
-        }
-        WriteRequiredString(writer: writer, value: operation.Instance, field: "MachineOperation.Instance");
-        writer.Write(value: operation.ExpectedGeneration);
-        WriteRequiredString(writer: writer, value: operation.OperationId, field: "MachineOperation.OperationId");
-        byte[] payload;
-        try {
-            payload = Encoding.UTF8.GetBytes(operation.Payload.GetRawText());
-        } catch (InvalidOperationException exception) {
-            throw new LeafCodecException(failure: Fail(WorldCodecRefusal.PayloadMalformed, exception.Message));
-        }
-        if (payload.Length > WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)) {
-            throw new LeafCodecException(failure: Fail(
-                WorldCodecRefusal.PayloadTooLarge,
-                $"machine operation payload length {payload.Length} exceeds {WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Operation)}"
-            ));
-        }
-        writer.Write(value: payload.Length);
-        writer.Write(buffer: payload);
     }
     private static void WriteScreenOp(BinaryWriter writer, WorldScreenOp op) {
         if (op is null) {
@@ -1488,8 +1596,8 @@ public static class WorldSubmissionCodec {
             case WorldSubmissionKind.Operation:
                 if (TryDecodeMachineOperation(
                     bytes: bytes,
-                    operation: out var operation,
-                    failure: out failure
+                    failure: out failure,
+                    operation: out var operation
                 )) {
                     payload = new WorldSubmissionPayload.Operation(Value: operation!);
                     return true;
@@ -1512,6 +1620,19 @@ public static class WorldSubmissionCodec {
             read: ReadCommand,
             value: out command
         );
+    /// <summary>Decodes a mutation already committed by a trusted authority, including its world-authored actor.
+    /// This is a persistence leaf, never an external-submission decoder.</summary>
+    /// <param name="bytes">The bounded catalog-tagged mutation bytes from trusted authority storage.</param>
+    /// <param name="mutation">The decoded mutation, or null on refusal.</param>
+    /// <param name="failure">The shape refusal, or default on success.</param>
+    /// <returns>Whether the mutation and all principal shapes are admissible for a committed journal.</returns>
+    public static bool TryDecodeCommittedMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
+        TryDecodeMutationCore(
+            bytes,
+            out mutation,
+            out failure,
+            committed: true
+        );
     /// <summary>Decodes the composition leaf.</summary>
     public static bool TryDecodeComposition(ReadOnlySpan<byte> bytes, out WorldComposition? composition, out WorldCodecFailure failure) =>
         TryDecodeJsonUnion(
@@ -1529,12 +1650,12 @@ public static class WorldSubmissionCodec {
                 Register: reader.ReadString(),
                 Subject: ReadSubject(reader: reader),
                 Point: (reader.ReadBoolean()
-                    ? new FixedVector3(
+            ? new FixedVector3(
                         X: FixedQ4816.FromRawBits(value: reader.ReadInt64()),
                         Y: FixedQ4816.FromRawBits(value: reader.ReadInt64()),
                         Z: FixedQ4816.FromRawBits(value: reader.ReadInt64())
                     )
-                    : null)
+            : null)
             ),
             out designation,
             out failure
@@ -1561,41 +1682,22 @@ public static class WorldSubmissionCodec {
             out lever,
             out failure
         );
-    /// <summary>Decodes the mutation leaf under its stable catalog ordinal.</summary>
-    public static bool TryDecodeMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
-        TryDecodeMutationCore(bytes, out mutation, out failure, committed: false);
-
-    /// <summary>Decodes a mutation already committed by a trusted authority, including its world-authored actor.
-    /// This is a persistence leaf, never an external-submission decoder.</summary>
-    /// <param name="bytes">The bounded catalog-tagged mutation bytes from trusted authority storage.</param>
-    /// <param name="mutation">The decoded mutation, or null on refusal.</param>
-    /// <param name="failure">The shape refusal, or default on success.</param>
-    /// <returns>Whether the mutation and all principal shapes are admissible for a committed journal.</returns>
-    public static bool TryDecodeCommittedMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
-        TryDecodeMutationCore(bytes, out mutation, out failure, committed: true);
-
-    private static bool TryDecodeMutationCore(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure, bool committed) {
-        if (
-            !TryDecodeJsonUnion(
+    /// <summary>Decodes the generic named-machine operation leaf.</summary>
+    public static bool TryDecodeMachineOperation(ReadOnlySpan<byte> bytes, out WorldMachineOperation? operation, out WorldCodecFailure failure) =>
+        TryRead(
             bytes: bytes,
             failure: out failure,
-            typeOf: MutationType,
-            value: out mutation
-        ) ||
-            (mutation is null)
-        ) {
-            return false;
-        }
-        if (!TryValidateMutationPrincipals(
-            failure: out failure,
-            mutation: mutation,
-            committed: committed
-        )) {
-            mutation = null;
-            return false;
-        }
-        return true;
-    }
+            read: ReadMachineOperation,
+            value: out operation
+        );
+    /// <summary>Decodes the mutation leaf under its stable catalog ordinal.</summary>
+    public static bool TryDecodeMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
+        TryDecodeMutationCore(
+            bytes,
+            out mutation,
+            out failure,
+            committed: false
+        );
     /// <summary>Decodes the query leaf.</summary>
     public static bool TryDecodeQuery(ReadOnlySpan<byte> bytes, out WorldQuery? query, out WorldCodecFailure failure) =>
         TryDecodeJsonUnion(
@@ -1628,15 +1730,6 @@ public static class WorldSubmissionCodec {
             read: ReadScreenOp,
             value: out screenOp
         );
-    /// <summary>Decodes the generic named-machine operation leaf.</summary>
-    public static bool TryDecodeMachineOperation(ReadOnlySpan<byte> bytes, out WorldMachineOperation? operation, out WorldCodecFailure failure) =>
-        TryRead(
-            bytes: bytes,
-            failure: out failure,
-            read: ReadMachineOperation,
-            value: out operation
-        );
-
     /// <summary>Decodes the session leaf.</summary>
     public static bool TryDecodeSession(ReadOnlySpan<byte> bytes, out SessionRequest? request, out WorldCodecFailure failure) {
         if (
@@ -1801,6 +1894,19 @@ public static class WorldSubmissionCodec {
             out bytes,
             out failure
         );
+    /// <summary>Encodes a mutation already committed by a trusted authority. Unlike live ingress, this permits
+    /// the canonical world-authored actor; it does not grant authority or admit a new submission.</summary>
+    /// <param name="mutation">The committed journal entry.</param>
+    /// <param name="bytes">Its catalog-tagged bytes, or an empty array on refusal.</param>
+    /// <param name="failure">The shape refusal, or default on success.</param>
+    /// <returns>Whether the mutation is encodable with valid committed-journal principal shapes.</returns>
+    public static bool TryEncodeCommittedMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryEncodeMutationCore(
+            mutation,
+            out bytes,
+            out failure,
+            committed: true
+        );
     /// <summary>Encodes the composition leaf.</summary>
     public static bool TryEncodeComposition(WorldComposition composition, out byte[] bytes, out WorldCodecFailure failure) =>
         TryEncodeJsonUnion(
@@ -1855,64 +1961,24 @@ public static class WorldSubmissionCodec {
             out bytes,
             out failure
         );
+    /// <summary>Encodes the generic named-machine operation leaf.</summary>
+    public static bool TryEncodeMachineOperation(WorldMachineOperation operation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryWrite(
+            writer => WriteMachineOperation(
+                operation: operation,
+                writer: writer
+            ),
+            out bytes,
+            out failure
+        );
     /// <summary>Encodes the mutation leaf under its stable catalog ordinal.</summary>
     public static bool TryEncodeMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
-        TryEncodeMutationCore(mutation, out bytes, out failure, committed: false);
-
-    /// <summary>Encodes a mutation already committed by a trusted authority. Unlike live ingress, this permits
-    /// the canonical world-authored actor; it does not grant authority or admit a new submission.</summary>
-    /// <param name="mutation">The committed journal entry.</param>
-    /// <param name="bytes">Its catalog-tagged bytes, or an empty array on refusal.</param>
-    /// <param name="failure">The shape refusal, or default on success.</param>
-    /// <returns>Whether the mutation is encodable with valid committed-journal principal shapes.</returns>
-    public static bool TryEncodeCommittedMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
-        TryEncodeMutationCore(mutation, out bytes, out failure, committed: true);
-
-    private static bool TryEncodeMutationCore(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure, bool committed) {
-        if (mutation is null) {
-            bytes = [];
-            failure = Fail(
-                detail: "WorldMutation is null",
-                refusal: WorldCodecRefusal.PayloadMissing
-            );
-
-            return false;
-        }
-        if (!TryValidateMutationPrincipals(
-            failure: out failure,
-            mutation: mutation,
-            committed: committed
-        )) {
-            bytes = [];
-            return false;
-        }
-
-        try {
-            var entry = WorldMutationKindCatalog.All().FirstOrDefault(predicate: candidate => (candidate.Type == mutation.GetType()));
-
-            if (entry.Type is null) {
-                bytes = [];
-                failure = Fail(
-                    WorldCodecRefusal.LeafKindUnknown,
-                    $"mutation kind '{mutation.GetType().Name}' is not cataloged"
-                );
-                return false;
-            }
-            return TryEncodeJsonUnion(
-                mutation,
-                _ => checked((byte)entry.Ordinal),
-                out bytes,
-                out failure
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or OverflowException)) {
-            bytes = [];
-            failure = Fail(
-                WorldCodecRefusal.LeafKindUnknown,
-                exception.Message
-            );
-            return false;
-        }
-    }
+        TryEncodeMutationCore(
+            mutation,
+            out bytes,
+            out failure,
+            committed: false
+        );
     /// <summary>Encodes the query leaf.</summary>
     public static bool TryEncodeQuery(WorldQuery query, out byte[] bytes, out WorldCodecFailure failure) =>
         TryEncodeJsonUnion(
@@ -1957,14 +2023,6 @@ public static class WorldSubmissionCodec {
             out bytes,
             out failure
         );
-    /// <summary>Encodes the generic named-machine operation leaf.</summary>
-    public static bool TryEncodeMachineOperation(WorldMachineOperation operation, out byte[] bytes, out WorldCodecFailure failure) =>
-        TryWrite(
-            writer => WriteMachineOperation(writer: writer, operation: operation),
-            out bytes,
-            out failure
-        );
-
     /// <summary>Encodes the session leaf.</summary>
     public static bool TryEncodeSession(SessionRequest request, out byte[] bytes, out WorldCodecFailure failure) {
         if (request is null) {

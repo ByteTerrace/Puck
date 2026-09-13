@@ -17,10 +17,22 @@ public static partial class LocalUserAccess {
         var security = new TSecurity();
 
         security.SetOwner(identity: user);
-        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        var inheritance = ((security is DirectorySecurity) ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None);
+        security.SetAccessRuleProtection(
+            isProtected: true,
+            preserveInheritance: false
+        );
+        var inheritance = ((security is DirectorySecurity)
+            ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit
+            : InheritanceFlags.None
+        );
 
-        security.AddAccessRule(rule: new FileSystemAccessRule(fileSystemRights: FileSystemRights.FullControl, identity: user, inheritanceFlags: inheritance, propagationFlags: PropagationFlags.None, type: AccessControlType.Allow));
+        security.AddAccessRule(rule: new FileSystemAccessRule(
+            fileSystemRights: FileSystemRights.FullControl,
+            identity: user,
+            inheritanceFlags: inheritance,
+            propagationFlags: PropagationFlags.None,
+            type: AccessControlType.Allow
+        ));
         return security;
     }
 }

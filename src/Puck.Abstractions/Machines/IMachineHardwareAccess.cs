@@ -9,7 +9,6 @@ public enum MachineAccessMode {
     /// <summary>A hardware-visible access with the provider's actual bus or device side effects.</summary>
     Bus,
 }
-
 /// <summary>Availability of a hardware observation or operation. Failure never masquerades as a successful zero.</summary>
 public enum MachineAccessStatus {
     /// <summary>The runtime has no currently accessible hardware instance.</summary>
@@ -23,7 +22,6 @@ public enum MachineAccessStatus {
     /// <summary>A machine or worker fault prevented the access.</summary>
     Faulted,
 }
-
 /// <summary>The provider's address-space contract. Individual configurations and operations can narrow admission.</summary>
 /// <param name="Name">The stable space name.</param>
 /// <param name="FirstAddress">The first admitted byte address.</param>
@@ -36,25 +34,23 @@ public sealed record MachineMemorySpaceDescriptor(
     string Name, ulong FirstAddress, ulong LastAddress, IReadOnlyList<int> Widths,
     bool LittleEndian, IReadOnlyList<MachineAccessMode> AccessModes, string Description
 );
-
 /// <summary>A scalar hardware address. A width belongs to the request, rather than to a host-wide bus assumption.</summary>
 /// <param name="Space">The provider-owned address space.</param>
 /// <param name="Address">The unsigned byte address.</param>
 /// <param name="Width">The scalar width in bytes.</param>
 public readonly record struct MachineMemoryAddress(string Space, ulong Address, int Width);
-
 /// <summary>A hardware access outcome with explicit availability.</summary>
 /// <param name="Status">Whether the operation completed, or why it could not.</param>
 /// <param name="Value">The observed scalar when available. Undefined for failed reads and for writes.</param>
 /// <param name="Reason">An author-facing explanation of a refusal or fault.</param>
 public readonly record struct MachineAccessResult(MachineAccessStatus Status, ulong Value = 0, string? Reason = null);
-
 /// <summary>Optional direct hardware access. Implementations drain queued execution before observing state, keep
 /// inspection coherent across bytes, and validate a complete write before changing any state. Bus access follows
 /// hardware ordering and side effects; it is never substituted with a debug patch.</summary>
 public interface IMachineHardwareAccess {
     /// <summary>Gets the hardware spaces available in this runtime's configuration.</summary>
     IReadOnlyList<MachineMemorySpaceDescriptor> MemorySpaces { get; }
+
     /// <summary>Reads a scalar at a deterministic execution boundary.</summary>
     /// <param name="address">The provider space, address, and width.</param>
     /// <param name="mode">Inspect for side-effect-free reads, or Bus for a hardware-visible read.</param>

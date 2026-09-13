@@ -14,6 +14,7 @@ namespace Puck.Text;
 public sealed class FontAtlasGenerationOptions {
     /// <summary>The default full signed-distance band width in atlas pixels.</summary>
     public const float DefaultDistanceRange = 8f;
+
     /// <summary>
     /// Gets or sets the additional characters to include in the atlas regardless of the configured ranges.
     /// Whitespace is ignored. Defaults to an empty string.

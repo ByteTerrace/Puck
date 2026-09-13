@@ -16,6 +16,270 @@ public static class ArmDisassembler {
     private static readonly string[] DataOps = ["AND", "EOR", "SUB", "RSB", "ADD", "ADC", "SBC", "RSC", "TST", "TEQ", "CMP", "CMN", "ORR", "MOV", "BIC", "MVN"];
     private static readonly string[] ShiftNames = ["LSL", "LSR", "ASR", "ROR"];
 
+    private static uint BitwiseRotateRight(uint value, int amount) =>
+        ((amount == 0)
+            ? value
+            : (value >> amount) | (value << (32 - amount))
+        );
+    private static string DecodeBlockTransfer(uint instruction, string condition) {
+        var load = ((instruction & 0x00100000u) != 0u);
+        var up = ((instruction & 0x00800000u) != 0u);
+        var preIndexed = ((instruction & 0x01000000u) != 0u);
+        var mode = (up
+            ? (preIndexed
+                ? "IB"
+                : "IA")
+            : (preIndexed
+                ? "DB"
+                : "DA"
+        ));
+        var writeBack = (((instruction & 0x00200000u) != 0u)
+            ? "!"
+            : ""
+        );
+        var force = (((instruction & 0x00400000u) != 0u)
+            ? "^"
+            : ""
+        );
+
+        return $"{(load
+            ? "LDM"
+            : "STM")}{condition}{mode} {Register(index: ((int)((instruction >> 16) & 0xFu)))}{writeBack},{RegisterList(
+            extra: null,
+            mask: ((ushort)instruction)
+        )}{force}";
+    }
+    private static string DecodeDataProcessing(uint instruction, string condition) {
+        var opcode = ((int)((instruction >> 21) & 0xFu));
+        var setFlags = ((instruction & 0x00100000u) != 0u);
+        var rn = ((int)((instruction >> 16) & 0xFu));
+        var rd = ((int)((instruction >> 12) & 0xFu));
+        var mnemonic = DataOps[opcode];
+        var operand = DecodeOperand2(instruction: instruction);
+        var setSuffix = ((setFlags && (opcode is < 8 or > 11))
+            ? "S"
+            : ""
+        );
+
+        // TST/TEQ/CMP/CMN take no destination; MOV/MVN take no first operand.
+        if (opcode is >= 8 and <= 11) {
+            return $"{mnemonic}{condition} {Register(index: rn)},{operand}";
+        }
+
+        if (opcode is 13 or 15) {
+            return $"{mnemonic}{condition}{setSuffix} {Register(index: rd)},{operand}";
+        }
+
+        return $"{mnemonic}{condition}{setSuffix} {Register(index: rd)},{Register(index: rn)},{operand}";
+    }
+    private static string DecodeHalfwordTransfer(uint instruction, string condition) {
+        var load = ((instruction & 0x00100000u) != 0u);
+        var rd = ((int)((instruction >> 12) & 0xFu));
+        var rn = ((int)((instruction >> 16) & 0xFu));
+        var kind = ((instruction >> 5) & 3u) switch {
+            1u => "H",
+            2u => "SB",
+            _ => "SH",
+        };
+        var mnemonic = $"{(load
+            ? "LDR"
+            : "STR")}{kind}{condition}";
+
+        // Immediate offset is split across the high and low nibbles when bit 22 is set; else it is a register.
+        string offset;
+
+        if ((instruction & 0x00400000u) != 0u) {
+            var immediate = ((int)(((instruction >> 4) & 0xF0u) | (instruction & 0xFu)));
+
+            offset = ((immediate != 0)
+                ? $",#{((((instruction & 0x00800000u) != 0u))
+                    ? ""
+                    : "-")}0x{immediate:X}"
+                : ""
+            );
+        } else {
+            offset = $",{((((instruction & 0x00800000u) != 0u))
+                ? ""
+                : "-")}{Register(index: ((int)(instruction & 0xFu)))}";
+        }
+
+        return $"{mnemonic} {Register(index: rd)},[{Register(index: rn)}{offset}]";
+    }
+    private static string DecodeMoveToStatus(uint instruction, string condition) {
+        var target = (((instruction & 0x00400000u) != 0u)
+            ? "SPSR"
+            : "CPSR"
+        );
+
+        if ((instruction & 0x02000000u) != 0u) {
+            var rotate = (((int)((instruction >> 8) & 0xFu)) * 2);
+            var value = ((uint)BitwiseRotateRight(
+                amount: rotate,
+                value: instruction & 0xFFu
+            ));
+
+            return $"MSR{condition} {target}_flg,#{Hex32(value: value)}";
+        }
+
+        return $"MSR{condition} {target},{Register(index: ((int)(instruction & 0xFu)))}";
+    }
+    private static string DecodeMultiply(uint instruction, string condition) {
+        var setFlags = (((instruction & 0x00100000u) != 0u)
+            ? "S"
+            : ""
+        );
+        var rd = ((int)((instruction >> 16) & 0xFu));
+        var rn = ((int)((instruction >> 12) & 0xFu));
+        var rs = ((int)((instruction >> 8) & 0xFu));
+        var rm = ((int)(instruction & 0xFu));
+
+        if ((instruction & 0x00800000u) != 0u) {
+            var unsigned = (((instruction & 0x00400000u) == 0u)
+                ? "U"
+                : "S"
+            );
+            var accumulate = (((instruction & 0x00200000u) != 0u)
+                ? "MLAL"
+                : "MULL"
+            );
+
+            return $"{unsigned}{accumulate}{condition}{setFlags} {Register(index: rn)},{Register(index: rd)},{Register(index: rm)},{Register(index: rs)}";
+        }
+
+        return (((instruction & 0x00200000u) != 0u)
+            ? $"MLA{condition}{setFlags} {Register(index: rd)},{Register(index: rm)},{Register(index: rs)},{Register(index: rn)}"
+            : $"MUL{condition}{setFlags} {Register(index: rd)},{Register(index: rm)},{Register(index: rs)}"
+        );
+    }
+    private static string DecodeOperand2(uint instruction) {
+        if ((instruction & 0x02000000u) != 0u) {
+            var rotate = (((int)((instruction >> 8) & 0xFu)) * 2);
+            var value = BitwiseRotateRight(
+                amount: rotate,
+                value: instruction & 0xFFu
+            );
+
+            return $"#{Hex32(value: value)}";
+        }
+
+        var rm = Register(index: ((int)(instruction & 0xFu)));
+        var shiftType = ShiftNames[(instruction >> 5) & 3u];
+
+        if ((instruction & 0x00000010u) != 0u) {
+            return $"{rm},{shiftType} {Register(index: ((int)((instruction >> 8) & 0xFu)))}";
+        }
+
+        var amount = ((int)((instruction >> 7) & 0x1Fu));
+
+        if (amount == 0) {
+            // A zero immediate shift is just the register (LSL #0), except the special ROR #0 = RRX and LSR/ASR #32.
+            return ((((instruction >> 5) & 3u) == 0u)
+                ? rm
+                : $"{rm},{((((instruction >> 5) & 3u) == 3u)
+                    ? "RRX"
+                    : $"{shiftType} #32")}"
+            );
+        }
+
+        return $"{rm},{shiftType} #{amount}";
+    }
+    private static string DecodeSingleTransfer(uint instruction, string condition) {
+        var load = ((instruction & 0x00100000u) != 0u);
+        var byteAccess = ((instruction & 0x00400000u) != 0u);
+        var rd = ((int)((instruction >> 12) & 0xFu));
+        var rn = ((int)((instruction >> 16) & 0xFu));
+        var mnemonic = $"{(load
+            ? "LDR"
+            : "STR")}{(byteAccess
+            ? "B"
+            : "")}{condition}";
+        var offset = DecodeTransferOffset(
+            immediateBitClearMeansImmediate: true,
+            instruction: instruction
+        );
+
+        return $"{mnemonic} {Register(index: rd)},{FormatAddress(
+            instruction: instruction,
+            offset: offset,
+            rn: rn
+        )}";
+    }
+    private static string DecodeTransferOffset(uint instruction, bool immediateBitClearMeansImmediate) {
+        var down = (((instruction & 0x00800000u) == 0u)
+            ? "-"
+            : ""
+        );
+
+        // For LDR/STR, bit 25 SET means a register (shifted) offset, CLEAR means a 12-bit immediate.
+        if ((instruction & 0x02000000u) == 0u) {
+            var immediate = instruction & 0xFFFu;
+
+            return ((immediate != 0)
+                ? $",#{down}0x{immediate:X}"
+                : ""
+            );
+        }
+
+        var rm = Register(index: ((int)(instruction & 0xFu)));
+        var shiftType = ShiftNames[(instruction >> 5) & 3u];
+        var amount = ((int)((instruction >> 7) & 0x1Fu));
+
+        return ((amount != 0)
+            ? $",{down}{rm},{shiftType} #{amount}"
+            : $",{down}{rm}"
+        );
+    }
+    private static string FormatAddress(int rn, string offset, uint instruction) {
+        var preIndexed = ((instruction & 0x01000000u) != 0u);
+        var writeBack = ((instruction & 0x00200000u) != 0u);
+
+        return (preIndexed
+            ? $"[{Register(index: rn)}{offset}]{((writeBack)
+                ? "!"
+                : "")}"
+            : $"[{Register(index: rn)}]{offset}"
+        );
+    }
+    private static string Hex32(uint value) =>
+        $"0x{value.ToString(
+            format: "X8",
+            provider: CultureInfo.InvariantCulture
+        )}";
+    private static string Register(int index) =>
+        index switch {
+            13 => "SP",
+            14 => "LR",
+            15 => "PC",
+            _ => $"R{index.ToString(provider: CultureInfo.InvariantCulture)}",
+        };
+    private static string RegisterList(ushort mask, string? extra) {
+        var builder = new StringBuilder(value: "{");
+        var first = true;
+
+        for (var index = 0; (index < 16); ++index) {
+            if ((mask & (1 << index)) != 0) {
+                if (!first) {
+                    builder.Append(value: ',');
+                }
+
+                builder.Append(value: Register(index: index));
+                first = false;
+            }
+        }
+
+        if (extra is not null) {
+            if (!first) {
+                builder.Append(value: ',');
+            }
+
+            builder.Append(value: extra);
+        }
+
+        builder.Append(value: '}');
+
+        return builder.ToString();
+    }
+
     /// <summary>Disassembles one ARM instruction word.</summary>
     /// <param name="address">The instruction's address (for branch-target resolution).</param>
     /// <param name="instruction">The 32-bit instruction word.</param>
@@ -227,7 +491,8 @@ public static class ArmDisassembler {
                 ? (pop
                     ? "PC"
                     : "LR")
-                : null);
+                : null
+            );
 
             return $"{(pop
                 ? "POP"
@@ -273,252 +538,4 @@ public static class ArmDisassembler {
 
         return $"DCW 0x{op:X4}";
     }
-
-    private static string DecodeMultiply(uint instruction, string condition) {
-        var setFlags = (((instruction & 0x00100000u) != 0u)
-            ? "S"
-            : "");
-        var rd = ((int)((instruction >> 16) & 0xFu));
-        var rn = ((int)((instruction >> 12) & 0xFu));
-        var rs = ((int)((instruction >> 8) & 0xFu));
-        var rm = ((int)(instruction & 0xFu));
-
-        if ((instruction & 0x00800000u) != 0u) {
-            var unsigned = (((instruction & 0x00400000u) == 0u)
-                ? "U"
-                : "S");
-            var accumulate = (((instruction & 0x00200000u) != 0u)
-                ? "MLAL"
-                : "MULL");
-
-            return $"{unsigned}{accumulate}{condition}{setFlags} {Register(index: rn)},{Register(index: rd)},{Register(index: rm)},{Register(index: rs)}";
-        }
-
-        return (((instruction & 0x00200000u) != 0u)
-            ? $"MLA{condition}{setFlags} {Register(index: rd)},{Register(index: rm)},{Register(index: rs)},{Register(index: rn)}"
-            : $"MUL{condition}{setFlags} {Register(index: rd)},{Register(index: rm)},{Register(index: rs)}");
-    }
-    private static string DecodeMoveToStatus(uint instruction, string condition) {
-        var target = (((instruction & 0x00400000u) != 0u)
-            ? "SPSR"
-            : "CPSR");
-
-        if ((instruction & 0x02000000u) != 0u) {
-            var rotate = (((int)((instruction >> 8) & 0xFu)) * 2);
-            var value = ((uint)BitwiseRotateRight(
-                amount: rotate,
-                value: instruction & 0xFFu
-            ));
-
-            return $"MSR{condition} {target}_flg,#{Hex32(value: value)}";
-        }
-
-        return $"MSR{condition} {target},{Register(index: ((int)(instruction & 0xFu)))}";
-    }
-    private static string DecodeDataProcessing(uint instruction, string condition) {
-        var opcode = ((int)((instruction >> 21) & 0xFu));
-        var setFlags = ((instruction & 0x00100000u) != 0u);
-        var rn = ((int)((instruction >> 16) & 0xFu));
-        var rd = ((int)((instruction >> 12) & 0xFu));
-        var mnemonic = DataOps[opcode];
-        var operand = DecodeOperand2(instruction: instruction);
-        var setSuffix = ((setFlags && (opcode is < 8 or > 11))
-            ? "S"
-            : "");
-
-        // TST/TEQ/CMP/CMN take no destination; MOV/MVN take no first operand.
-        if (opcode is >= 8 and <= 11) {
-            return $"{mnemonic}{condition} {Register(index: rn)},{operand}";
-        }
-
-        if (opcode is 13 or 15) {
-            return $"{mnemonic}{condition}{setSuffix} {Register(index: rd)},{operand}";
-        }
-
-        return $"{mnemonic}{condition}{setSuffix} {Register(index: rd)},{Register(index: rn)},{operand}";
-    }
-    private static string DecodeOperand2(uint instruction) {
-        if ((instruction & 0x02000000u) != 0u) {
-            var rotate = (((int)((instruction >> 8) & 0xFu)) * 2);
-            var value = BitwiseRotateRight(
-                amount: rotate,
-                value: instruction & 0xFFu
-            );
-
-            return $"#{Hex32(value: value)}";
-        }
-
-        var rm = Register(index: ((int)(instruction & 0xFu)));
-        var shiftType = ShiftNames[(instruction >> 5) & 3u];
-
-        if ((instruction & 0x00000010u) != 0u) {
-            return $"{rm},{shiftType} {Register(index: ((int)((instruction >> 8) & 0xFu)))}";
-        }
-
-        var amount = ((int)((instruction >> 7) & 0x1Fu));
-
-        if (amount == 0) {
-            // A zero immediate shift is just the register (LSL #0), except the special ROR #0 = RRX and LSR/ASR #32.
-            return ((((instruction >> 5) & 3u) == 0u)
-                ? rm
-                : $"{rm},{((((instruction >> 5) & 3u) == 3u)
-                    ? "RRX"
-                    : $"{shiftType} #32")}");
-        }
-
-        return $"{rm},{shiftType} #{amount}";
-    }
-    private static string DecodeSingleTransfer(uint instruction, string condition) {
-        var load = ((instruction & 0x00100000u) != 0u);
-        var byteAccess = ((instruction & 0x00400000u) != 0u);
-        var rd = ((int)((instruction >> 12) & 0xFu));
-        var rn = ((int)((instruction >> 16) & 0xFu));
-        var mnemonic = $"{(load
-            ? "LDR"
-            : "STR")}{(byteAccess
-            ? "B"
-            : "")}{condition}";
-        var offset = DecodeTransferOffset(
-            immediateBitClearMeansImmediate: true,
-            instruction: instruction
-        );
-
-        return $"{mnemonic} {Register(index: rd)},{FormatAddress(
-            instruction: instruction,
-            offset: offset,
-            rn: rn
-        )}";
-    }
-    private static string DecodeHalfwordTransfer(uint instruction, string condition) {
-        var load = ((instruction & 0x00100000u) != 0u);
-        var rd = ((int)((instruction >> 12) & 0xFu));
-        var rn = ((int)((instruction >> 16) & 0xFu));
-        var kind = ((instruction >> 5) & 3u) switch {
-            1u => "H",
-            2u => "SB",
-            _ => "SH",
-        };
-        var mnemonic = $"{(load
-            ? "LDR"
-            : "STR")}{kind}{condition}";
-
-        // Immediate offset is split across the high and low nibbles when bit 22 is set; else it is a register.
-        string offset;
-
-        if ((instruction & 0x00400000u) != 0u) {
-            var immediate = ((int)(((instruction >> 4) & 0xF0u) | (instruction & 0xFu)));
-
-            offset = ((immediate != 0)
-                ? $",#{((((instruction & 0x00800000u) != 0u))
-                    ? ""
-                    : "-")}0x{immediate:X}"
-                : "");
-        } else {
-            offset = $",{((((instruction & 0x00800000u) != 0u))
-                ? ""
-                : "-")}{Register(index: ((int)(instruction & 0xFu)))}";
-        }
-
-        return $"{mnemonic} {Register(index: rd)},[{Register(index: rn)}{offset}]";
-    }
-    private static string DecodeTransferOffset(uint instruction, bool immediateBitClearMeansImmediate) {
-        var down = (((instruction & 0x00800000u) == 0u)
-            ? "-"
-            : "");
-
-        // For LDR/STR, bit 25 SET means a register (shifted) offset, CLEAR means a 12-bit immediate.
-        if ((instruction & 0x02000000u) == 0u) {
-            var immediate = instruction & 0xFFFu;
-
-            return ((immediate != 0)
-                ? $",#{down}0x{immediate:X}"
-                : "");
-        }
-
-        var rm = Register(index: ((int)(instruction & 0xFu)));
-        var shiftType = ShiftNames[(instruction >> 5) & 3u];
-        var amount = ((int)((instruction >> 7) & 0x1Fu));
-
-        return ((amount != 0)
-            ? $",{down}{rm},{shiftType} #{amount}"
-            : $",{down}{rm}");
-    }
-    private static string FormatAddress(int rn, string offset, uint instruction) {
-        var preIndexed = ((instruction & 0x01000000u) != 0u);
-        var writeBack = ((instruction & 0x00200000u) != 0u);
-
-        return (preIndexed
-            ? $"[{Register(index: rn)}{offset}]{((writeBack)
-                ? "!"
-                : "")}"
-            : $"[{Register(index: rn)}]{offset}");
-    }
-    private static string DecodeBlockTransfer(uint instruction, string condition) {
-        var load = ((instruction & 0x00100000u) != 0u);
-        var up = ((instruction & 0x00800000u) != 0u);
-        var preIndexed = ((instruction & 0x01000000u) != 0u);
-        var mode = (up
-            ? (preIndexed
-                ? "IB"
-                : "IA")
-            : (preIndexed
-                ? "DB"
-                : "DA"));
-        var writeBack = (((instruction & 0x00200000u) != 0u)
-            ? "!"
-            : "");
-        var force = (((instruction & 0x00400000u) != 0u)
-            ? "^"
-            : "");
-
-        return $"{(load
-            ? "LDM"
-            : "STM")}{condition}{mode} {Register(index: ((int)((instruction >> 16) & 0xFu)))}{writeBack},{RegisterList(
-            extra: null,
-            mask: ((ushort)instruction)
-        )}{force}";
-    }
-    private static string RegisterList(ushort mask, string? extra) {
-        var builder = new StringBuilder(value: "{");
-        var first = true;
-
-        for (var index = 0; (index < 16); ++index) {
-            if ((mask & (1 << index)) != 0) {
-                if (!first) {
-                    builder.Append(value: ',');
-                }
-
-                builder.Append(value: Register(index: index));
-                first = false;
-            }
-        }
-
-        if (extra is not null) {
-            if (!first) {
-                builder.Append(value: ',');
-            }
-
-            builder.Append(value: extra);
-        }
-
-        builder.Append(value: '}');
-
-        return builder.ToString();
-    }
-    private static uint BitwiseRotateRight(uint value, int amount) =>
-        ((amount == 0)
-        ? value
-        : (value >> amount) | (value << (32 - amount)));
-    private static string Register(int index) =>
-        index switch {
-            13 => "SP",
-            14 => "LR",
-            15 => "PC",
-            _ => $"R{index.ToString(provider: CultureInfo.InvariantCulture)}",
-        };
-    private static string Hex32(uint value) =>
-        $"0x{value.ToString(
-        format: "X8",
-        provider: CultureInfo.InvariantCulture
-    )}";
 }

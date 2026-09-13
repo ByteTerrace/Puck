@@ -144,4 +144,4 @@ The measurement file lands at `bin/<configuration>/net10.0/physics-measurements.
 
 ## Documentation
 
-📚 [Puck.Physics](../../src/Puck.Physics/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)
+📚 [Physics kernels](../../docs/reference/physics.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

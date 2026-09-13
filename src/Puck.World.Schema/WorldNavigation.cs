@@ -14,7 +14,6 @@ public sealed record WorldNavigationSection(IReadOnlyList<WorldNavigationDomain>
     [JsonIgnore]
     public IReadOnlyList<WorldNavigationDomain> Rows => (Domains ?? []);
 }
-
 /// <summary>The topology and occupancy constraint of an authored navigation domain.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldNavigationKind>))]
 public enum WorldNavigationKind : byte {
@@ -25,7 +24,6 @@ public enum WorldNavigationKind : byte {
     /// <summary>A 3D grid constrained to one live fluid-medium field.</summary>
     Medium,
 }
-
 /// <summary>The neighbour set used by a volume navigation domain.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldNavigationConnectivity>))]
 public enum WorldNavigationConnectivity : byte {
@@ -36,7 +34,6 @@ public enum WorldNavigationConnectivity : byte {
     /// <summary>All 26 neighbours, including three-axis diagonals.</summary>
     Full,
 }
-
 /// <summary>One finite navigation grid compiled from the world's collision and optional medium truth.</summary>
 /// <param name="Name">The stable domain name referenced by navigated producer targets.</param>
 /// <param name="Kind">Whether cells follow ground, free 3D space, or a live medium.</param>
@@ -84,7 +81,6 @@ public sealed record WorldNavigationDomain(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSharing? Shared = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
 );
-
 /// <summary>Bounds reusable destination trees and their aggregate expansion work in one navigation domain.</summary>
 /// <param name="GoalCapacity">Resident destination-cell trees. A full cache with pending work refuses another
 /// destination as capacity-limited; it never launches an unbudgeted independent search.</param>
@@ -93,43 +89,45 @@ public sealed record WorldNavigationDomain(
 /// the independent A* MaxExpandedNodes bound does not truncate a shared tree.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationSharing(int GoalCapacity, int ExpandedNodesPerTick);
-
 /// <summary>Hard representation ceilings for authored navigation work and memory.</summary>
 public static class WorldNavigationCapacity {
-    /// <summary>The greatest number of named domains in one world.</summary>
-    public const int MaxDomains = 16;
     /// <summary>The greatest cell count in one domain.</summary>
     public const int MaxCellsPerDomain = 65_536;
     /// <summary>The greatest total cell count compiled by one world.</summary>
     public const int MaxCellsPerWorld = 262_144;
-    /// <summary>The greatest route length retained per body.</summary>
-    public const int MaxPathNodes = 1_024;
-    /// <summary>The greatest number of parallel sphere sweeps used to prove one tall surface-agent transition.</summary>
-    public const int MaxSurfaceClearanceSweeps = 16;
+    /// <summary>The greatest number of named domains in one world.</summary>
+    public const int MaxDomains = 16;
     /// <summary>The greatest number of equal subsegments checked along one live medium edge.</summary>
     public const int MaxMediumSegmentSubdivisions = 32;
-    /// <summary>The greatest resident destination-tree count per shared domain.</summary>
-    public const int MaxSharedGoals = 16;
+    /// <summary>The greatest route length retained per body.</summary>
+    public const int MaxPathNodes = 1_024;
     /// <summary>The greatest sum of domain cells times resident shared goals; bounds boot workspace and checkpoints.</summary>
     public const int MaxSharedCellsPerWorld = 1_048_576;
     /// <summary>The greatest aggregate authored shared-tree expansion budget per simulation tick.</summary>
     public const int MaxSharedExpandedPerTick = 65_536;
+    /// <summary>The greatest resident destination-tree count per shared domain.</summary>
+    public const int MaxSharedGoals = 16;
+    /// <summary>The greatest number of parallel sphere sweeps used to prove one tall surface-agent transition.</summary>
+    public const int MaxSurfaceClearanceSweeps = 16;
 }
-
 /// <summary>The stable authored-name to navigation-domain ordinal table.</summary>
 public sealed class WorldNavigationDomainTable {
-    private readonly OrdinalTable m_table;
     private readonly WorldNavigationKind[] m_kinds;
+    private readonly OrdinalTable m_table;
 
     private WorldNavigationDomainTable(OrdinalTable table, WorldNavigationKind[] kinds) {
         m_table = table;
         m_kinds = kinds;
     }
 
-    /// <summary>Gets an empty domain table.</summary>
-    public static WorldNavigationDomainTable Empty { get; } = new(table: OrdinalTable.Empty, kinds: []);
     /// <summary>Gets the number of domains.</summary>
     public int Count => m_table.Count;
+    /// <summary>Gets an empty domain table.</summary>
+    public static WorldNavigationDomainTable Empty { get; } = new(
+        table: OrdinalTable.Empty,
+        kinds: []
+    );
+
     /// <summary>Compiles authored order into stable ordinals.</summary>
     public static WorldNavigationDomainTable Compile(IReadOnlyList<WorldNavigationDomain> domains) => new(
         table: OrdinalTable.Build(
@@ -138,14 +136,16 @@ public sealed class WorldNavigationDomainTable {
         ),
         kinds: domains.Select(selector: static domain => domain.Kind).ToArray()
     );
-    /// <summary>Gets an ordinal's authored name.</summary>
-    public string Name(int index) => m_table.Name(ordinal: index);
     /// <summary>Gets an ordinal's navigation topology.</summary>
     public WorldNavigationKind Kind(int index) => m_kinds[index];
+    /// <summary>Gets an ordinal's authored name.</summary>
+    public string Name(int index) => m_table.Name(ordinal: index);
     /// <summary>Resolves a domain name.</summary>
-    public bool TryGetIndex(string name, out int index) => m_table.TryGetOrdinal(name: name, ordinal: out index);
+    public bool TryGetIndex(string name, out int index) => m_table.TryGetOrdinal(
+        name: name,
+        ordinal: out index
+    );
 }
-
 /// <summary>The fixed-point runtime tuning for one validated navigation domain.</summary>
 public readonly record struct FixedWorldNavigationDomain(
     WorldNavigationKind Kind,
@@ -180,7 +180,7 @@ public readonly record struct FixedWorldNavigationDomain(
         AgentRadius: FixedQ4816.FromDouble(value: domain.AgentRadius),
         AgentHeight: FixedQ4816.FromDouble(value: domain.AgentHeight),
         MaxStepHeight: FixedQ4816.FromDouble(value: domain.MaxStepHeight),
-        MaximumSlopeRise: FixedQ4816.FromDouble(value: (domain.CellSize * Math.Tan(domain.MaxSlopeDegrees * (Math.PI / 180.0)))),
+        MaximumSlopeRise: FixedQ4816.FromDouble(value: (domain.CellSize * Math.Tan(a: (domain.MaxSlopeDegrees * (Math.PI / 180.0))))),
         ArrivalDistance: FixedQ4816.FromDouble(value: domain.ArrivalDistance),
         MaxExpandedNodes: domain.MaxExpandedNodes,
         MaxPathNodes: domain.MaxPathNodes,

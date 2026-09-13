@@ -12,32 +12,6 @@ internal static class CliPaths {
     // candidate file per glob during a walk and again per emitted record.
     private static readonly string WorkingDirectory = Directory.GetCurrentDirectory();
 
-    // The repository root, or false with the failure already reported — scan turns that into exit 2
-    // rather than an unhandled exception.
-    public static bool TryGetRepositoryRoot([NotNullWhen(returnValue: true)] out string? repositoryRoot) {
-        repositoryRoot = Root;
-
-        if (repositoryRoot is null) {
-            Console.Error.WriteLine(
-                value: $"ERROR: could not locate the repository root (no Puck.slnx above {AppContext.BaseDirectory} or {Environment.CurrentDirectory}).");
-
-            return false;
-        }
-
-        return true;
-    }
-    // The form printed for a file addressed relative to the working directory — the default every verb's
-    // reporting uses.
-    public static string ToDisplay(string fullPath) =>
-        ToDisplay(fullPath: fullPath, relativeTo: WorkingDirectory);
-    // The form printed for a file addressed relative to an explicit base: the scan root for a corpus
-    // entry.
-    public static string ToDisplay(string relativeTo, string fullPath) =>
-        Path.GetRelativePath(path: fullPath, relativeTo: relativeTo).Replace(newChar: '/', oldChar: '\\');
-    // The form a path glob matches against (identical to ToDisplay; named for intent at the glob call sites).
-    public static string RelForGlob(string fullPath) =>
-        ToDisplay(fullPath: fullPath);
-
     // The marker walk every verb that ascends from a start directory shares: try `probe` at `start`, then each
     // parent in turn, stopping at the first non-null result (or the file system root).
     public static string? AscendUntil(string start, Func<DirectoryInfo, string?> probe) {
@@ -48,5 +22,38 @@ internal static class CliPaths {
         }
 
         return null;
+    }
+    // The form a path glob matches against (identical to ToDisplay; named for intent at the glob call sites).
+    public static string RelForGlob(string fullPath) =>
+        ToDisplay(fullPath: fullPath);
+    // The form printed for a file addressed relative to the working directory — the default every verb's
+    // reporting uses.
+    public static string ToDisplay(string fullPath) =>
+        ToDisplay(
+            fullPath: fullPath,
+            relativeTo: WorkingDirectory
+        );
+    // The form printed for a file addressed relative to an explicit base: the scan root for a corpus
+    // entry.
+    public static string ToDisplay(string relativeTo, string fullPath) =>
+        Path.GetRelativePath(
+            path: fullPath,
+            relativeTo: relativeTo
+        ).Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
+    // The repository root, or false with the failure already reported — scan turns that into exit 2
+    // rather than an unhandled exception.
+    public static bool TryGetRepositoryRoot([NotNullWhen(returnValue: true)] out string? repositoryRoot) {
+        repositoryRoot = Root;
+
+        if (repositoryRoot is null) {
+            Console.Error.WriteLine(value: $"ERROR: could not locate the repository root (no Puck.slnx above {AppContext.BaseDirectory} or {Environment.CurrentDirectory}).");
+
+            return false;
+        }
+
+        return true;
     }
 }

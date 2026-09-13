@@ -27,6 +27,8 @@ public sealed class SelfOnboard(
         string? FaultReason
     );
 
+    private HttpClient CreateActorsClient() =>
+        httpClientFactory.CreateClient(name: "Actors");
     private static async Task<HttpResponseData> CreateStateResponseAsync(
         HttpRequestData httpRequestData,
         string state,
@@ -44,8 +46,6 @@ public sealed class SelfOnboard(
 
         return response;
     }
-    private HttpClient CreateActorsClient() =>
-        httpClientFactory.CreateClient(name: "Actors");
 
     [FeatureGate(features: nameof(SelfOnboard))]
     [Function(name: nameof(SelfOnboard))]
@@ -88,23 +88,23 @@ public sealed class SelfOnboard(
         // so it must never fall into the Onboarding/NotOnboarded poll loop.
         return actorState?.Status switch {
             ReadyState => await CreateStateResponseAsync(
-                cancellationToken: cancellationToken,
-                httpRequestData: httpRequestData,
-                state: ReadyState,
-                statusCode: HttpStatusCode.OK
-            ),
+            cancellationToken: cancellationToken,
+            httpRequestData: httpRequestData,
+            state: ReadyState,
+            statusCode: HttpStatusCode.OK
+        ),
             MigratingState => await CreateStateResponseAsync(
-                cancellationToken: cancellationToken,
-                httpRequestData: httpRequestData,
-                state: MigratingState,
-                statusCode: HttpStatusCode.OK
-            ),
+            cancellationToken: cancellationToken,
+            httpRequestData: httpRequestData,
+            state: MigratingState,
+            statusCode: HttpStatusCode.OK
+        ),
             _ => await CreateStateResponseAsync(
-                cancellationToken: cancellationToken,
-                httpRequestData: httpRequestData,
-                state: OnboardingState,
-                statusCode: HttpStatusCode.Accepted
-            ),
+            cancellationToken: cancellationToken,
+            httpRequestData: httpRequestData,
+            state: OnboardingState,
+            statusCode: HttpStatusCode.Accepted
+        ),
         };
     }
     [FeatureGate(features: nameof(SelfOnboard))]

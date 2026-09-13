@@ -97,9 +97,8 @@ internal static class FixedContactPushMath {
                     Normal: normal,
                     PositionDelta: (wall * (penetration / acrossLength)),
                     VelocityDelta: ((intoWall < FixedQ4816.Zero)
-                        ? -(wall * intoWall)
-                        : FixedVector3.Zero
-                    )
+                    ? -(wall * intoWall)
+                    : FixedVector3.Zero)
                 );
             }
         }

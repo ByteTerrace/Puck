@@ -76,15 +76,15 @@ public sealed class WorldQueryArtifact {
     /// edge lies outside signed Q48.16.</exception>
     public WorldQueryArtifact(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked)
         : this(
-            blocked: blocked,
-            cellSizeRaw: cellSizeRaw,
-            height: height,
-            heightRaw: heightRaw,
-            originXRaw: originXRaw,
-            originZRaw: originZRaw,
-            takeOwnership: false,
-            width: width
-        ) { }
+        blocked: blocked,
+        cellSizeRaw: cellSizeRaw,
+        height: height,
+        heightRaw: heightRaw,
+        originXRaw: originXRaw,
+        originZRaw: originZRaw,
+        takeOwnership: false,
+        width: width
+    ) { }
 
     private WorldQueryArtifact(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked, bool takeOwnership) {
         ArgumentNullException.ThrowIfNull(argument: blocked);
@@ -165,9 +165,15 @@ public sealed class WorldQueryArtifact {
             );
         }
 
-        m_blocked = (takeOwnership ? blocked : blocked.ToArray());
+        m_blocked = (takeOwnership
+            ? blocked
+            : blocked.ToArray()
+        );
         m_cellCount = cellCount;
-        m_heightRaw = (takeOwnership ? heightRaw : heightRaw.ToArray());
+        m_heightRaw = (takeOwnership
+            ? heightRaw
+            : heightRaw.ToArray()
+        );
 
         CellSizeRaw = cellSizeRaw;
         HasBlocked = AnyBlockedBit(blocked: m_blocked);
@@ -235,7 +241,9 @@ public sealed class WorldQueryArtifact {
 
         // Shift-then-carry rather than (cellCount + 63) / 64: the rounding addend overflows int for the last 63 cell
         // counts and turns the largest grids into negative word counts.
-        return ((cellCount >> 6) + (((cellCount & 63) == 0) ? 0 : 1));
+        return ((cellCount >> 6) + (((cellCount & 63) == 0)
+            ? 0
+            : 1));
     }
     /// <summary>Returns a value indicating whether the cell at <paramref name="cellIndex"/> is blocked. An index
     /// outside the grid reads as not blocked — the "out of bounds reads as clear" contract this artifact inherits

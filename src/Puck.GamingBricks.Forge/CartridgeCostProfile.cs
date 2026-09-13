@@ -80,18 +80,54 @@ public sealed record CartridgeCostProfile(
     long TargetArray) {
     /// <summary>The advanced machine's reservation and weights.</summary>
     public static CartridgeCostProfile Advanced { get; } = new(
-        Name: "puck.cartridge.agb.v1", FrameUnits: 182000L,
-        Blit: 2172L, ConditionCompare: 23L, ConditionKey: 23L, LoopSetup: 39L, LoopStep: 35L, MapWrite: 46L,
-        OperandArray: 28L, OperandVariable: 10L, RasterRow: 1147L, RasterSetup: 2791L, SaveByte: 28L,
-        SaveFixed: 156L, Sound: 156L, Sprite: 72L, StepArithmetic: 15L, StepDivide: 40L, StepMultiply: 18L,
-        StepSet: 11L, StepShift: 18L, TargetArray: 18L);
+        Blit: 2172L,
+        ConditionCompare: 23L,
+        ConditionKey: 23L,
+        FrameUnits: 182000L,
+        LoopSetup: 39L,
+        LoopStep: 35L,
+        MapWrite: 46L,
+        Name: "puck.cartridge.agb.v1",
+        OperandArray: 28L,
+        OperandVariable: 10L,
+        RasterRow: 1147L,
+        RasterSetup: 2791L,
+        SaveByte: 28L,
+        SaveFixed: 156L,
+        Sound: 156L,
+        Sprite: 72L,
+        StepArithmetic: 15L,
+        StepDivide: 40L,
+        StepMultiply: 18L,
+        StepSet: 11L,
+        StepShift: 18L,
+        TargetArray: 18L
+    );
     /// <summary>The Color machine's reservation and weights.</summary>
     public static CartridgeCostProfile Humble { get; } = new(
-        Name: "puck.cartridge.cgb.v1", FrameUnits: 25000L,
-        Blit: 1521L, ConditionCompare: 8L, ConditionKey: 7L, LoopSetup: 4L, LoopStep: 17L, MapWrite: 76L,
-        OperandArray: 13L, OperandVariable: 2L, RasterRow: 130L, RasterSetup: 480L, SaveByte: 28L,
-        SaveFixed: 156L, Sound: 156L, Sprite: 38L, StepArithmetic: 13L, StepDivide: 120L, StepMultiply: 38L,
-        StepSet: 11L, StepShift: 34L, TargetArray: 10L);
+        Blit: 1521L,
+        ConditionCompare: 8L,
+        ConditionKey: 7L,
+        FrameUnits: 25000L,
+        LoopSetup: 4L,
+        LoopStep: 17L,
+        MapWrite: 76L,
+        Name: "puck.cartridge.cgb.v1",
+        OperandArray: 13L,
+        OperandVariable: 2L,
+        RasterRow: 130L,
+        RasterSetup: 480L,
+        SaveByte: 28L,
+        SaveFixed: 156L,
+        Sound: 156L,
+        Sprite: 38L,
+        StepArithmetic: 13L,
+        StepDivide: 120L,
+        StepMultiply: 38L,
+        StepSet: 11L,
+        StepShift: 34L,
+        TargetArray: 10L
+    );
     /// <summary>
     /// The reservation used while measuring what a machine sustains, large enough that the machine binds before the
     /// model does. Its weights are the Color machine's, so a probe is shaped the same way either machine's is.
@@ -101,6 +137,11 @@ public sealed record CartridgeCostProfile(
         FrameUnits = long.MaxValue,
     };
 
+    /// <summary>Returns a value indicating whether a cost fits the reservation.</summary>
+    /// <param name="bound">The cost to test.</param>
+    /// <returns><see langword="true"/> when the cost is known and within the reservation.</returns>
+    /// <remarks>An unmodeled or overflowed cost never fits: it cannot certify a deadline it was never measured against.</remarks>
+    public bool Admits(CostBound bound) => (bound.IsKnown && (bound.Cycles <= FrameUnits));
     /// <summary>Returns the profile a target is costed against.</summary>
     /// <param name="target">The document's target.</param>
     /// <returns>The target's profile.</returns>
@@ -108,12 +149,10 @@ public sealed record CartridgeCostProfile(
     public static CartridgeCostProfile For(string target) => target switch {
         "agb" => Advanced,
         "cgb" => Humble,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(target), actualValue: target, message: "No machine carries that target name."),
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(target),
+        actualValue: target,
+        message: "No machine carries that target name."
+    ),
     };
-
-    /// <summary>Returns a value indicating whether a cost fits the reservation.</summary>
-    /// <param name="bound">The cost to test.</param>
-    /// <returns><see langword="true"/> when the cost is known and within the reservation.</returns>
-    /// <remarks>An unmodeled or overflowed cost never fits: it cannot certify a deadline it was never measured against.</remarks>
-    public bool Admits(CostBound bound) => bound.IsKnown && bound.Cycles <= FrameUnits;
 }

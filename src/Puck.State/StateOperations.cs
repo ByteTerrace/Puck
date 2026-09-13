@@ -18,7 +18,6 @@ public enum ZoneSelector : byte {
     /// run (a solitaire column's run from a card to its top).</summary>
     Slice,
 }
-
 /// <summary>What <see cref="StateTransform.BoardCombine"/> writes into its board, cell by cell. A cell is a member of a
 /// board when its value is not the board's declared <c>empty</c>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<BoardCombineOp>))]
@@ -46,7 +45,6 @@ public enum BoardCombineOp : byte {
     /// <c>boardImage</c> makes.</summary>
     Image,
 }
-
 /// <summary>The closed set of atomic state transforms. Each folds one candidate document and journals once.</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(StateTransform.Transfer), "transfer")]
@@ -79,7 +77,6 @@ public abstract record StateTransform {
     /// and a slice selection moves the keyed token's whole tail (its count is 1).</param>
     public sealed record Transfer(string From, string To, ZoneSelector Selector = ZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : StateTransform;
-
     /// <summary>Writes the longest run a <c>patterns</c> row accepts, walked from the origin outward: the same
     /// prefix semantics as the <c>$match</c> operand's <c>prefix</c> facet, landed back on the board instead of
     /// read as a fact. Refuses when the accepted prefix is empty, so an author closes a run with the required
@@ -91,7 +88,6 @@ public abstract record StateTransform {
     /// <param name="Pattern">A <c>patterns</c> row over the board's own raw values (kind Int).</param>
     /// <param name="Value">The replacement value written to every cell of the accepted prefix.</param>
     public sealed record SetRay(string Row, string From, string Direction, string Pattern, long Value) : StateTransform;
-
     /// <summary>Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer
     /// <c>streamDraw</c> site: n cells consume n - 1 samples, so the site's cursor advances by exactly that and a
     /// replay reproduces the permutation.</summary>
@@ -108,7 +104,6 @@ public abstract record StateTransform {
     /// <param name="Row">The keyed numeric row.</param>
     /// <param name="Descending">Whether the greatest value comes first.</param>
     public sealed record SortKeyed(string Row, bool Descending = false) : StateTransform;
-
     /// <summary>Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state
     /// cell: the way a set built from <c>$board:mask</c> and the and/or/xor/not/shift/image expression ops lands
     /// back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no
@@ -120,7 +115,6 @@ public abstract record StateTransform {
     /// <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection).</param>
     /// <param name="Value">The value written to every masked cell.</param>
     public sealed record WriteSet(string Row, string Set, string? SetKey = null, long Value = 0) : StateTransform;
-
     /// <summary>Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled
     /// mutation: the set algebra <c>$board:mask</c> and the bit operators give a board of at most 64 cells, for a board
     /// of any size. A cell is a member when its value is not its board's <c>empty</c>; every member of the result is
@@ -156,7 +150,6 @@ public abstract record StateTransform {
     /// <param name="Upper">The enclosed range's inclusive high end.</param>
     public sealed record ClearEnclosed(string Row, string From, long Lower, long Upper) : StateTransform;
 }
-
 /// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>
 /// <param name="Row">The attribute row.</param>
 /// <param name="Descending">Whether the greatest value comes first under this key.</param>

@@ -6,18 +6,17 @@ namespace Puck.Assets;
 /// <typeparam name="TValue">The cached value type.</typeparam>
 public sealed class ContentAddressedLruCache<TValue> {
     private readonly OrderedDictionary<AssetContentHash, (TValue Value, long Weight)> m_entries = [];
-    private readonly Action<TValue>? m_onEvicted;
     private readonly Func<TValue, long>? m_getWeight;
-
-    /// <summary>Gets the maximum retained weight, in the units supplied by the caller.</summary>
-    public long WeightCapacity { get; }
-    /// <summary>Gets the sum of the weights recorded at insertion for retained entries.</summary>
-    public long Weight { get; private set; }
+    private readonly Action<TValue>? m_onEvicted;
 
     /// <summary>Gets the maximum number of entries retained before eviction occurs.</summary>
     public int Capacity { get; }
     /// <summary>Gets the number of entries currently cached.</summary>
     public int Count => m_entries.Count;
+    /// <summary>Gets the sum of the weights recorded at insertion for retained entries.</summary>
+    public long Weight { get; private set; }
+    /// <summary>Gets the maximum retained weight, in the units supplied by the caller.</summary>
+    public long WeightCapacity { get; }
 
     /// <summary>Initializes a new cache.</summary>
     /// <param name="capacity">The maximum number of entries to retain. Must be greater than zero.</param>
@@ -82,7 +81,8 @@ public sealed class ContentAddressedLruCache<TValue> {
     /// <param name="value">The value to cache.</param>
     /// <exception cref="ArgumentOutOfRangeException">The weight selector returns a negative weight.</exception>
     public void Set(AssetContentHash hash, TValue value) {
-        var weight = m_getWeight?.Invoke(value) ?? 0;
+        var weight = (m_getWeight?.Invoke(value) ?? 0);
+
         ArgumentOutOfRangeException.ThrowIfNegative(weight);
 
         if (m_entries.TryGetValue(
@@ -99,7 +99,10 @@ public sealed class ContentAddressedLruCache<TValue> {
         }
 
         // Subtraction avoids overflowing when the admitted weight is close to Int64.MaxValue.
-        while ((m_entries.Count >= Capacity) || (Weight > (WeightCapacity - weight))) {
+        while (
+            (m_entries.Count >= Capacity) ||
+            (Weight > (WeightCapacity - weight))
+        ) {
             var evicted = m_entries.GetAt(index: 0);
 
             m_entries.RemoveAt(index: 0);
@@ -107,7 +110,10 @@ public sealed class ContentAddressedLruCache<TValue> {
             m_onEvicted?.Invoke(evicted.Value.Value);
         }
 
-        m_entries.Add(hash, (value, weight));
+        m_entries.Add(
+            key: hash,
+            value: (value, weight)
+        );
         Weight += weight;
     }
     /// <summary>Attempts to read the value cached for <paramref name="hash"/>, marking it most-recently-used.</summary>

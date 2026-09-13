@@ -37,7 +37,8 @@ public static class DebugViewModes {
     public static string Name(int mode) {
         return (((mode >= 0) && (mode < Names.Length))
             ? Names[mode]
-            : "off");
+            : "off"
+        );
     }
     /// <summary>Parses a mode name (case-insensitive) to its value.</summary>
     /// <param name="name">The mode name.</param>
@@ -45,7 +46,11 @@ public static class DebugViewModes {
     /// <returns><see langword="true"/> when the name is a known mode.</returns>
     public static bool TryParse(string name, out int mode) {
         for (var index = 0; (index < Names.Length); index++) {
-            if (string.Equals(a: Names[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(
+                a: Names[index],
+                b: name,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 mode = index;
 
                 return true;

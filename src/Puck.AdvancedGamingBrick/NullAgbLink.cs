@@ -18,13 +18,14 @@ public sealed class NullAgbLink : IAgbLink, IAgbLinkNode {
     /// <inheritdoc/>
     public IAgbLinkNode Connect(IAgbLinkClient client) => this;
     /// <inheritdoc/>
-    public uint NormalExchange(uint outgoing, bool word) => (word
-        ? 0xFFFFFFFFu
-        : 0xFFu);
-    /// <inheritdoc/>
     public bool MultiplayerExchange(ushort send, out ushort[] slots) {
         slots = new ushort[] { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
 
         return false;
     }
+    /// <inheritdoc/>
+    public uint NormalExchange(uint outgoing, bool word) => (word
+        ? 0xFFFFFFFFu
+        : 0xFFu
+    );
 }

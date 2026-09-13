@@ -37,7 +37,10 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.LiarSpiral,
             Name: "liar-spiral",
             Title: "The liar's spiral",
-            Target: Vector3.Zero, Yaw: 0.7f, Pitch: 0.5f, Distance: 5.0f,
+            Target: Vector3.Zero,
+            Yaw: 0.7f,
+            Pitch: 0.5f,
+            Distance: 5.0f,
             Plaque: [
                 "A twist-rate-3 thin blade — the field over-estimates distance where the hard twist shears space, so",
                 "it is NOT 1-Lipschitz along a ray. This is exactly WHY the per-program Lipschitz clamp (SdfProgram",
@@ -49,7 +52,10 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.DrosteTunnel,
             Name: "droste",
             Title: "The Droste tunnel",
-            Target: Vector3.Zero, Yaw: 0.6f, Pitch: 0.5f, Distance: 6.0f,
+            Target: Vector3.Zero,
+            Yaw: 0.6f,
+            Pitch: 0.5f,
+            Distance: 6.0f,
             Plaque: [
                 "A LogSphere shellRatio-2 fold. The log-polar",
                 "map makes the field DISCONTINUOUS at each shell boundary, so a ±1-LSB UV delta lands in a different",
@@ -60,7 +66,10 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.CellJitterCreases,
             Name: "celljitter",
             Title: "CellJitter neighbour-cell creases",
-            Target: Vector3.Zero, Yaw: 0.6f, Pitch: 0.45f, Distance: 5.0f,
+            Target: Vector3.Zero,
+            Yaw: 0.6f,
+            Pitch: 0.45f,
+            Distance: 5.0f,
             Plaque: [
                 "A contained CellJitter prototype that STILL seams at the cell walls — the round fold picks each point's",
                 "OWN cell, not the nearest copy, so containment ≠ nearest-copy and the field overestimates across a",
@@ -71,7 +80,14 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.NotchHorizon,
             Name: "notch",
             Title: "The ground-plane horizon notch",
-            Target: new Vector3(x: 0f, y: -1.0f, z: -6f), Yaw: 0.0f, Pitch: 0.08f, Distance: 4.0f,
+            Target: new Vector3(
+                x: 0f,
+                y: -1.0f,
+                z: -6f
+            ),
+            Yaw: 0.0f,
+            Pitch: 0.08f,
+            Distance: 4.0f,
             Plaque: [
                 "The far ground silhouette against the sky steps in EXACT one-tile (16 px) increments near the far distance",
                 "instead of a smooth perspective curve. Per-tile marchStart / beam-cull GRANULARITY leaking into the",
@@ -83,7 +99,14 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.SmoothChain,
             Name: "smooth-chain",
             Title: "A deep smooth-chamfer chain",
-            Target: new Vector3(x: 0.4f, y: 0f, z: 0f), Yaw: 0.7f, Pitch: 0.5f, Distance: 6.5f,
+            Target: new Vector3(
+                x: 0.4f,
+                y: 0f,
+                z: 0f
+            ),
+            Yaw: 0.7f,
+            Pitch: 0.5f,
+            Distance: 6.5f,
             Plaque: [
                 "Eight spheres blended in a long alternating SmoothUnion/ChamferUnion chain — each blend accumulates a",
                 "least-significant-bit of rounding, so a deep chain drifts. The scoped field accumulator bounds where",
@@ -94,7 +117,14 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.WallpaperP4G,
             Name: "wallpaper-p4g",
             Title: "P4G glide mirrors",
-            Target: new Vector3(x: 0f, y: -1.0f, z: 0f), Yaw: 0.5f, Pitch: 0.9f, Distance: 7.0f,
+            Target: new Vector3(
+                x: 0f,
+                y: -1.0f,
+                z: 0f
+            ),
+            Yaw: 0.5f,
+            Pitch: 0.9f,
+            Distance: 7.0f,
             Plaque: [
                 "P4G folds an asymmetric motif through quarter-turn and glide-reflection classes while preserving a",
                 "one-cell translation period. The asymmetric tile makes the glide mirrors visible and keeps the",
@@ -105,7 +135,10 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.CarveCeiling,
             Name: "carve-ceiling",
             Title: "Clustered carves at the views ceiling",
-            Target: Vector3.Zero, Yaw: 0.6f, Pitch: 0.5f, Distance: 5.5f,
+            Target: Vector3.Zero,
+            Yaw: 0.6f,
+            Pitch: 0.5f,
+            Distance: 5.5f,
             Plaque: [
                 "~256 hard carves packed onto one subject, densely overlapping the same screen tiles — the honest",
                 "destruction budget made visible (every overlapping carve is evaluated per covered tile: the views-cost",
@@ -117,7 +150,14 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.LogSphereRunDoc,
             Name: "logsphere-rundoc",
             Title: "Validator-legal ≠ marcher-safe",
-            Target: new Vector3(x: 0f, y: -0.8f, z: 0f), Yaw: 0.4f, Pitch: 0.18f, Distance: 2.6f,
+            Target: new Vector3(
+                x: 0f,
+                y: -0.8f,
+                z: 0f
+            ),
+            Yaw: 0.4f,
+            Pitch: 0.18f,
+            Distance: 2.6f,
             Plaque: [
                 "An aggressive LogSphere (shellRatio ~2.8, twist) with the camera DOWN INSIDE the fold near a floor.",
                 "The folded field can overestimate distance near shell boundaries, so marchers step on the minimum of",
@@ -131,7 +171,14 @@ public sealed class SdfGalleryScene {
             Kind: SdfGalleryExhibit.DriftMonolith,
             Name: "drift-monolith",
             Title: "The drift monolith",
-            Target: new Vector3(x: 0f, y: 1f, z: 0f), Yaw: 0f, Pitch: 0.26f, Distance: 10f,
+            Target: new Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
+            Yaw: 0f,
+            Pitch: 0.26f,
+            Distance: 10f,
             Plaque: [
                 "A stacked-amplifier parity stress: LogSphere Droste + P6M wallpaper fold + a near-tie emissive",
                 "material seam + a deep smooth/chamfer chain + a far grazing wall, all in one frame. It was shared",
@@ -143,22 +190,8 @@ public sealed class SdfGalleryScene {
     private int m_index = -1;
     private int m_revision;
 
-    /// <summary>The active exhibit index (0-based), or -1 when the gallery is OFF (the plain debug subject renders).</summary>
-    public int Index => m_index;
     /// <summary>Whether the gallery is showing an exhibit (the mode renders it in place of the debug subject).</summary>
     public bool Active => (m_index >= 0);
-    /// <summary>The active exhibit kind — valid only while <see cref="Active"/> (the emitter dispatches on it).</summary>
-    public SdfGalleryExhibit Exhibit => Exhibits[m_index].Kind;
-    /// <summary>The active exhibit's title, or empty when the gallery is off — the overlay plaque card's headline
-    /// (the diegetic museum tour's stdout plaque names the same title).</summary>
-    public string CurrentTitle => (Active ? Exhibits[m_index].Title : "");
-    /// <summary>The active exhibit's jump name, or empty when the gallery is off (the plaque card's metadata line).</summary>
-    public string CurrentName => (Active ? Exhibits[m_index].Name : "");
-    /// <summary>The exhibit count (the tour length).</summary>
-    public static int Count => Exhibits.Length;
-    /// <summary>Bumped on every enter/advance/jump/off — the mode folds it into its revision so the frame source
-    /// rebuilds the program to the active exhibit (mirrors <see cref="SdfDebugScene.Revision"/>).</summary>
-    public int Revision => m_revision;
     /// <summary>The active exhibit's fixed SNAP pose (target/yaw/pitch/distance), or null when the gallery is off (the
     /// pad orbit resumes). Snapped — applied verbatim so each exhibit holds its authored framing.</summary>
     public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame {
@@ -172,62 +205,26 @@ public sealed class SdfGalleryScene {
             return (exhibit.Target, exhibit.Yaw, exhibit.Pitch, exhibit.Distance, false);
         }
     }
-
-    /// <summary>Enters the tour at the FIRST exhibit when off, else advances to the next (wrapping). Prints the exhibit's
-    /// plaque and bumps the revision.</summary>
-    /// <returns>A one-line status.</returns>
-    public string EnterOrAdvance() {
-        m_index = (Active ? ((m_index + 1) % Exhibits.Length) : 0);
-        m_revision++;
-
-        return Announce();
-    }
-    /// <summary>Jumps to an exhibit by index (clamped into range). Prints the plaque and bumps the revision.</summary>
-    /// <returns>A one-line status.</returns>
-    public string Jump(int index) {
-        m_index = Math.Clamp(value: index, min: 0, max: (Exhibits.Length - 1));
-        m_revision++;
-
-        return Announce();
-    }
-    /// <summary>Jumps to an exhibit by jump name (case-insensitive), or returns usage when the name is unknown (no state
-    /// change on a miss). Prints the plaque and bumps the revision on a hit.</summary>
-    /// <returns>A one-line status, or usage on an unknown name.</returns>
-    public string JumpByName(string name) {
-        for (var index = 0; (index < Exhibits.Length); index++) {
-            if (string.Equals(a: Exhibits[index].Name, b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                m_index = index;
-                m_revision++;
-
-                return Announce();
-            }
-        }
-
-        return $"[sdf.gallery: unknown exhibit '{name}' — {Names()}]";
-    }
-    /// <summary>Exits the tour back to the plain debug subject (no-op when already off). Bumps the revision on change.</summary>
-    /// <returns>A one-line status.</returns>
-    public string Off() {
-        if (!Active) {
-            return "[sdf.gallery: already off]";
-        }
-
-        m_index = -1;
-        m_revision++;
-
-        return "[sdf.gallery off — back to the plain debug subject]";
-    }
-    /// <summary>Lists every exhibit (index + jump name + title) for the console.</summary>
-    public string List() {
-        var lines = new System.Text.StringBuilder(value: "[sdf.gallery — the torture museum]");
-
-        for (var index = 0; (index < Exhibits.Length); index++) {
-            _ = lines.Append(value: '\n').Append(value: "  ").Append(value: index).Append(value: ". ")
-                .Append(value: Exhibits[index].Name).Append(value: " — ").Append(value: Exhibits[index].Title);
-        }
-
-        return lines.ToString();
-    }
+    /// <summary>The exhibit count (the tour length).</summary>
+    public static int Count => Exhibits.Length;
+    /// <summary>The active exhibit's jump name, or empty when the gallery is off (the plaque card's metadata line).</summary>
+    public string CurrentName => (Active
+        ? Exhibits[m_index].Name
+        : ""
+    );
+    /// <summary>The active exhibit's title, or empty when the gallery is off — the overlay plaque card's headline
+    /// (the diegetic museum tour's stdout plaque names the same title).</summary>
+    public string CurrentTitle => (Active
+        ? Exhibits[m_index].Title
+        : ""
+    );
+    /// <summary>The active exhibit kind — valid only while <see cref="Active"/> (the emitter dispatches on it).</summary>
+    public SdfGalleryExhibit Exhibit => Exhibits[m_index].Kind;
+    /// <summary>The active exhibit index (0-based), or -1 when the gallery is OFF (the plain debug subject renders).</summary>
+    public int Index => m_index;
+    /// <summary>Bumped on every enter/advance/jump/off — the mode folds it into its revision so the frame source
+    /// rebuilds the program to the active exhibit (mirrors <see cref="SdfDebugScene.Revision"/>).</summary>
+    public int Revision => m_revision;
 
     // Prints the active exhibit's plaque to stdout (the museum placard — the scriptable stdout channel the console
     // control-plane echoes) and returns a one-line console status. The caller appends the run-`sdf`-to-view nudge when
@@ -254,7 +251,77 @@ public sealed class SdfGalleryScene {
             names[index] = Exhibits[index].Name;
         }
 
-        return string.Join(separator: " | ", values: names);
+        return string.Join(
+            separator: " | ",
+            values: names
+        );
+    }
+
+    /// <summary>Enters the tour at the FIRST exhibit when off, else advances to the next (wrapping). Prints the exhibit's
+    /// plaque and bumps the revision.</summary>
+    /// <returns>A one-line status.</returns>
+    public string EnterOrAdvance() {
+        m_index = (Active
+            ? ((m_index + 1) % Exhibits.Length)
+            : 0
+        );
+        m_revision++;
+
+        return Announce();
+    }
+    /// <summary>Jumps to an exhibit by index (clamped into range). Prints the plaque and bumps the revision.</summary>
+    /// <returns>A one-line status.</returns>
+    public string Jump(int index) {
+        m_index = Math.Clamp(
+            value: index,
+            min: 0,
+            max: (Exhibits.Length - 1)
+        );
+        m_revision++;
+
+        return Announce();
+    }
+    /// <summary>Jumps to an exhibit by jump name (case-insensitive), or returns usage when the name is unknown (no state
+    /// change on a miss). Prints the plaque and bumps the revision on a hit.</summary>
+    /// <returns>A one-line status, or usage on an unknown name.</returns>
+    public string JumpByName(string name) {
+        for (var index = 0; (index < Exhibits.Length); index++) {
+            if (string.Equals(
+                a: Exhibits[index].Name,
+                b: name,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                m_index = index;
+                m_revision++;
+
+                return Announce();
+            }
+        }
+
+        return $"[sdf.gallery: unknown exhibit '{name}' — {Names()}]";
+    }
+    /// <summary>Lists every exhibit (index + jump name + title) for the console.</summary>
+    public string List() {
+        var lines = new System.Text.StringBuilder(value: "[sdf.gallery — the torture museum]");
+
+        for (var index = 0; (index < Exhibits.Length); index++) {
+            _ = lines.Append(value: '\n').Append(value: "  ").Append(value: index).Append(value: ". ")
+                .Append(value: Exhibits[index].Name).Append(value: " — ").Append(value: Exhibits[index].Title);
+        }
+
+        return lines.ToString();
+    }
+    /// <summary>Exits the tour back to the plain debug subject (no-op when already off). Bumps the revision on change.</summary>
+    /// <returns>A one-line status.</returns>
+    public string Off() {
+        if (!Active) {
+            return "[sdf.gallery: already off]";
+        }
+
+        m_index = -1;
+        m_revision++;
+
+        return "[sdf.gallery off — back to the plain debug subject]";
     }
 
     private readonly record struct ExhibitEntry(SdfGalleryExhibit Kind, string Name, string Title, Vector3 Target, float Yaw, float Pitch, float Distance, string[] Plaque);

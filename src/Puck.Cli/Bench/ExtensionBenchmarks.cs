@@ -23,10 +23,34 @@ public class ExtensionMul {
         var field = PrimeField64.Create(modulus: Operands.Modulus);
 
         m_extension = QuadraticExtensionField64.CreateCanonical(baseField: field);
-        m_xSeed = new XElem(A: 123_456_789UL, B: 987_654_321UL);
-        m_xStep = new XElem(A: 424_242_424UL, B: 111_111_113UL);
-        m_eSeed = new ModPElem(U: new ModP(Value: m_xSeed.A, Modulus: Operands.Modulus), V: new ModP(Value: m_xSeed.B, Modulus: Operands.Modulus));
-        m_eStep = new ModPElem(U: new ModP(Value: m_xStep.A, Modulus: Operands.Modulus), V: new ModP(Value: m_xStep.B, Modulus: Operands.Modulus));
+        m_xSeed = new XElem(
+            A: 123_456_789UL,
+            B: 987_654_321UL
+        );
+        m_xStep = new XElem(
+            A: 424_242_424UL,
+            B: 111_111_113UL
+        );
+        m_eSeed = new ModPElem(
+            U: new ModP(
+                Value: m_xSeed.A,
+                Modulus: Operands.Modulus
+            ),
+            V: new ModP(
+                Value: m_xSeed.B,
+                Modulus: Operands.Modulus
+            )
+        );
+        m_eStep = new ModPElem(
+            U: new ModP(
+                Value: m_xStep.A,
+                Modulus: Operands.Modulus
+            ),
+            V: new ModP(
+                Value: m_xStep.B,
+                Modulus: Operands.Modulus
+            )
+        );
     }
     [Benchmark(Baseline = true, OperationsPerInvoke = Ops)]
     public long Hand() {
@@ -34,7 +58,10 @@ public class ExtensionMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = m_extension.Multiply(left: accumulator, right: m_xStep);
+            accumulator = m_extension.Multiply(
+                left: accumulator,
+                right: m_xStep
+            );
             sink ^= unchecked((long)accumulator.B);
         }
 
@@ -46,7 +73,10 @@ public class ExtensionMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = Operands.ModAlg.Multiply(left: accumulator, right: m_eStep);
+            accumulator = Operands.ModAlg.Multiply(
+                left: accumulator,
+                right: m_eStep
+            );
             sink ^= unchecked((long)accumulator.V.Value);
         }
 
@@ -54,7 +84,11 @@ public class ExtensionMul {
     }
     [Benchmark(OperationsPerInvoke = Ops)]
     public long GenericLocal() =>
-        Local(algebra: Operands.ModAlg, seed: m_eSeed, step: m_eStep);
+        Local(
+            algebra: Operands.ModAlg,
+            seed: m_eSeed,
+            step: m_eStep
+        );
 
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static long Local(QuadraticAlgebra<ModP> algebra, ModPElem seed, ModPElem step) {
@@ -62,7 +96,10 @@ public class ExtensionMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = algebra.Multiply(left: accumulator, right: step);
+            accumulator = algebra.Multiply(
+                left: accumulator,
+                right: step
+            );
             sink ^= unchecked((long)accumulator.V.Value);
         }
 
@@ -84,12 +121,18 @@ public class ExtensionOnly {
         var rng = new Random(Seed: Operands.Seed);
 
         m_extension = QuadraticExtensionField64.CreateCanonical(baseField: PrimeField64.Create(modulus: Operands.Modulus));
-        m_seed = new XElem(A: 123_456_789UL, B: 987_654_321UL);
+        m_seed = new XElem(
+            A: 123_456_789UL,
+            B: 987_654_321UL
+        );
         m_batch = new XElem[Operands.WidePairCount];
 
         for (var i = 0; (i < Operands.WidePairCount); ++i) {
             // Non-zero base-field parts guarantee non-zero norm for every element (required by BatchInverse).
-            m_batch[i] = new XElem(A: Operands.RandomResidue(rng: rng) | 1UL, B: Operands.RandomResidue(rng: rng));
+            m_batch[i] = new XElem(
+                A: Operands.RandomResidue(rng: rng) | 1UL,
+                B: Operands.RandomResidue(rng: rng)
+            );
         }
     }
     [Benchmark(OperationsPerInvoke = Ops)]

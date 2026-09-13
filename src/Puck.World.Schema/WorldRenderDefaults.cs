@@ -125,15 +125,15 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
 ) {
-    /// <summary>The smallest <see cref="FarDistance"/> the validator admits: one world unit. The beam's cone march
-    /// starts at 0.02 units and the fine march accepts a hit within a 0.001-unit floor, so a far plane under one unit
-    /// leaves no marchable depth a camera could frame a body in.</summary>
-    public const float MinFarDistance = 1f;
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
     /// (2^13 · 2^-23 = 0.00098) still resolves that epsilon, so every sample along the whole ray can still land within
     /// it. Past this the accept floor is unrepresentable and the cone proofs would rest on rounding.</summary>
     public const float MaxFarDistance = 8192f;
+    /// <summary>The smallest <see cref="FarDistance"/> the validator admits: one world unit. The beam's cone march
+    /// starts at 0.02 units and the fine march accepts a hit within a 0.001-unit floor, so a far plane under one unit
+    /// leaves no marchable depth a camera could frame a body in.</summary>
+    public const float MinFarDistance = 1f;
 
     /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
     /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: the

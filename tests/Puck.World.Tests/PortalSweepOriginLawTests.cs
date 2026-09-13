@@ -22,7 +22,12 @@ public sealed class PortalSweepOriginLawTests {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
 
         var body = fixture.Server.Body(index: actor.Index)!;
         var spawnPosition = body.FixedPosition;
@@ -31,23 +36,40 @@ public sealed class PortalSweepOriginLawTests {
         // step from tick 1 on — a real, non-degenerate previous/current pair with no player intent required.
         fixture.Step();
 
-        Assert.Equal(expected: spawnPosition, actual: body.FixedPreviousPosition);
-        Assert.NotEqual(expected: spawnPosition, actual: body.FixedPosition);
+        Assert.Equal(
+            expected: spawnPosition,
+            actual: body.FixedPreviousPosition
+        );
+        Assert.NotEqual(
+            expected: spawnPosition,
+            actual: body.FixedPosition
+        );
 
         var afterFirstStep = body.FixedPosition;
 
         fixture.Step();
 
         // The captured origin tracks EACH step's own pre-step position — not stuck at spawn forever.
-        Assert.Equal(expected: afterFirstStep, actual: body.FixedPreviousPosition);
-        Assert.NotEqual(expected: afterFirstStep, actual: body.FixedPosition);
+        Assert.Equal(
+            expected: afterFirstStep,
+            actual: body.FixedPreviousPosition
+        );
+        Assert.NotEqual(
+            expected: afterFirstStep,
+            actual: body.FixedPosition
+        );
     }
     [Fact]
     public void Pose_HardTeleport_CollapsesSweptSegmentToLandingPosition() {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
 
         var body = fixture.Server.Body(index: actor.Index)!;
 
@@ -56,36 +78,70 @@ public sealed class PortalSweepOriginLawTests {
         fixture.Step();
         fixture.Step();
 
-        Assert.NotEqual(expected: body.FixedPreviousPosition, actual: body.FixedPosition);
+        Assert.NotEqual(
+            expected: body.FixedPreviousPosition,
+            actual: body.FixedPosition
+        );
 
-        var landing = new FixedVector3(X: FixedQ4816.FromDouble(value: 5.0), Y: FixedQ4816.FromDouble(value: 10.0), Z: FixedQ4816.FromDouble(value: -3.0));
+        var landing = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: 5.0),
+            Y: FixedQ4816.FromDouble(value: 10.0),
+            Z: FixedQ4816.FromDouble(value: -3.0)
+        );
 
-        body.Pose(position: landing, yawRadians: FixedQ4816.Zero, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        body.Pose(
+            position: landing,
+            yawRadians: FixedQ4816.Zero,
+            pitchRadians: FixedQ4816.Zero,
+            rollRadians: FixedQ4816.Zero
+        );
 
-        Assert.Equal(expected: landing, actual: body.FixedPosition);
+        Assert.Equal(
+            expected: landing,
+            actual: body.FixedPosition
+        );
         // THE ruled behavior: a hard teleport resets the swept segment's start to the landing spot, so a portal
         // scan immediately after sees a degenerate point at the NEW position — never a ghost segment from where the
         // body used to be.
-        Assert.Equal(expected: landing, actual: body.FixedPreviousPosition);
+        Assert.Equal(
+            expected: landing,
+            actual: body.FixedPreviousPosition
+        );
     }
     [Fact]
     public void Reconcile_HardCorrection_CollapsesSweptSegmentToLandingPosition() {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
 
         var body = fixture.Server.Body(index: actor.Index)!;
 
         fixture.Step();
         fixture.Step();
 
-        Assert.NotEqual(expected: body.FixedPreviousPosition, actual: body.FixedPosition);
+        Assert.NotEqual(
+            expected: body.FixedPreviousPosition,
+            actual: body.FixedPosition
+        );
 
-        _ = body.Reconcile(seconds: 0.25f, x: 7f, yawRadians: 0f, z: 2f);
+        _ = body.Reconcile(
+            seconds: 0.25f,
+            x: 7f,
+            yawRadians: 0f,
+            z: 2f
+        );
 
         // Reconcile is the OTHER hard-write site the brief names (CommitTeleport runs regardless of whether the
         // continuity kind it reports afterward is Teleport or Correction) — same reset, same reason.
-        Assert.Equal(expected: body.FixedPosition, actual: body.FixedPreviousPosition);
+        Assert.Equal(
+            expected: body.FixedPosition,
+            actual: body.FixedPreviousPosition
+        );
     }
 }

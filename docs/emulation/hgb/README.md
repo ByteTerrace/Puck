@@ -25,7 +25,7 @@ The detailed pages are organized by hardware area:
 
 For a synchronous application, the project exposes `HumbleGamingBrickCore`.
 For a queued engine integration, `MachineHost` adapts the core to the shared
-machine runtime. The [Humble project README](../../../src/Puck.HumbleGamingBrick/README.md)
+machine runtime. The [embedding guide](embedding.md)
 contains the API examples and firmware details; [Machine hosting runtime](../shared/machine-hosting.md)
 covers worker boundaries, pacing, buffers, audio, and snapshots.
 

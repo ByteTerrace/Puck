@@ -18,19 +18,21 @@ internal sealed class ReleaseChainFixture {
 
     public KeyId RootId => m_keys.RootId;
     public string Subject => m_keys.Subject;
-
-    public ReleaseChainFixture(string subject = "puck.world") {
-        m_keys = AttestationTestSupport.MintDomainKeys(subject: subject);
-    }
-
     public ReleaseTrustAnchor TrustAnchor => new(
         Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
         Domain: RootId.Domain,
         PublicKeySubjectPublicKeyInfoBase64: Convert.ToBase64String(inArray: m_keys.RootSpki)
     );
 
+    public ReleaseChainFixture(string subject = "puck.world") {
+        m_keys = AttestationTestSupport.MintDomainKeys(subject: subject);
+    }
+
     public TrustList BuildTrustList(TimeSpan replayHorizon) => new(
-        entries: [TrustAnchor.ToTrustListEntry(maximumAge: null, reach: new HashSet<string>(comparer: StringComparer.Ordinal) { AttestationReleaseVerifier.Slot })],
+        entries: [TrustAnchor.ToTrustListEntry(
+                maximumAge: null,
+                reach: new HashSet<string>(comparer: StringComparer.Ordinal) { AttestationReleaseVerifier.Slot }
+            )],
         defaultMaximumAge: null,
         replayAcceptanceHorizon: replayHorizon
     );
@@ -38,7 +40,12 @@ internal sealed class ReleaseChainFixture {
     /// sequenced bearer release claim, returning the fully signed manifest.</summary>
     public ReleaseManifest Sign(ReleaseManifest document, ulong sequence, long notBefore, long notAfter) {
         var canonical = ReleaseCanonicalizer.Canonicalize(document: document);
-        var chain = AttestationTestSupport.BuildChain(codec: Codec, keys: m_keys, notAfter: notAfter, notBefore: notBefore);
+        var chain = AttestationTestSupport.BuildChain(
+            codec: Codec,
+            keys: m_keys,
+            notAfter: notAfter,
+            notBefore: notBefore
+        );
         var claim = AttestationSigner.SignClaim(
             audience: null,
             claimBytes: canonical.Bytes,
@@ -64,5 +71,8 @@ internal sealed class ReleaseChainFixture {
     }
     /// <summary>Serializes <paramref name="manifest"/> to the raw bytes an <see cref="IReleaseSource"/> would hand back.</summary>
     public static byte[] ToWireBytes(ReleaseManifest manifest) =>
-        JsonSerializer.SerializeToUtf8Bytes(value: manifest, options: DocumentJsonOptions.Shared);
+        JsonSerializer.SerializeToUtf8Bytes(
+            value: manifest,
+            options: DocumentJsonOptions.Shared
+        );
 }

@@ -16,9 +16,9 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbSpriteTurn {
+    private const int EntryStride = 8;
     private const uint GroupBaseAddress = 0x07000006u;
     private const int GroupStride = 32;
-    private const int EntryStride = 8;
 
     private readonly ThumbEmitter m_emitter;
     private readonly uint m_tableAddress;
@@ -33,6 +33,18 @@ public sealed class AgbSpriteTurn {
         m_tableAddress = tableAddress;
     }
 
+    private void StoreFrom(LowRegister register, uint address) {
+        m_emitter.LoadConstant(
+            destination: LowRegister.R2,
+            value: address
+        );
+        m_emitter.StoreHalf(
+            baseRegister: LowRegister.R2,
+            byteOffset: 0,
+            source: register
+        );
+    }
+
     /// <summary>Emits a parameter group's four halfwords for the given angle.</summary>
     /// <param name="group">The group index, 0 through 31.</param>
     /// <param name="angle">Loads the angle into the given register.</param>
@@ -41,21 +53,46 @@ public sealed class AgbSpriteTurn {
 
         // r6 = sine, r7 = cosine, both signed 8.8.
         angle(LowRegister.R0);
-        AgbTurnLookup.Emit(emitter: m_emitter, tableAddress: m_tableAddress, destination: LowRegister.R6, quarterTurns: 0);
+        AgbTurnLookup.Emit(
+            destination: LowRegister.R6,
+            emitter: m_emitter,
+            quarterTurns: 0,
+            tableAddress: m_tableAddress
+        );
         angle(LowRegister.R0);
-        AgbTurnLookup.Emit(emitter: m_emitter, tableAddress: m_tableAddress, destination: LowRegister.R7, quarterTurns: 64);
+        AgbTurnLookup.Emit(
+            destination: LowRegister.R7,
+            emitter: m_emitter,
+            quarterTurns: 64,
+            tableAddress: m_tableAddress
+        );
 
-        var slot = GroupBaseAddress + (uint)(group * GroupStride);
-        StoreFrom(register: LowRegister.R7, address: slot);
-        m_emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
-        m_emitter.SubtractRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R6);
-        StoreFrom(register: LowRegister.R0, address: slot + EntryStride);
-        StoreFrom(register: LowRegister.R6, address: slot + (EntryStride * 2));
-        StoreFrom(register: LowRegister.R7, address: slot + (EntryStride * 3));
-    }
+        var slot = (GroupBaseAddress + ((uint)(group * GroupStride)));
 
-    private void StoreFrom(LowRegister register, uint address) {
-        m_emitter.LoadConstant(destination: LowRegister.R2, value: address);
-        m_emitter.StoreHalf(source: register, baseRegister: LowRegister.R2, byteOffset: 0);
+        StoreFrom(
+            address: slot,
+            register: LowRegister.R7
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R0,
+            value: 0
+        );
+        m_emitter.SubtractRegister(
+            destination: LowRegister.R0,
+            operand: LowRegister.R6,
+            source: LowRegister.R0
+        );
+        StoreFrom(
+            address: (slot + EntryStride),
+            register: LowRegister.R0
+        );
+        StoreFrom(
+            address: (slot + (EntryStride * 2)),
+            register: LowRegister.R6
+        );
+        StoreFrom(
+            address: (slot + (EntryStride * 3)),
+            register: LowRegister.R7
+        );
     }
 }

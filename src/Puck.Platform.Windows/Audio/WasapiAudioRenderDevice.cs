@@ -21,7 +21,11 @@ internal sealed class WasapiAudioRenderDeviceFactory : IAudioRenderDeviceFactory
         try {
             reason = "";
 
-            return new WasapiAudioRenderDevice(fill: fill, maxQuantumFrames: maxQuantumFrames, sampleRate: sampleRate);
+            return new WasapiAudioRenderDevice(
+                fill: fill,
+                maxQuantumFrames: maxQuantumFrames,
+                sampleRate: sampleRate
+            );
         } catch (COMException exception) {
             reason = $"render endpoint could not be opened: 0x{exception.HResult:X8} {exception.Message}";
 
@@ -79,7 +83,10 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
             m_stop = true;
             m_thread.Join(millisecondsTimeout: 2000);
 
-            throw new COMException(errorCode: m_initHResult, message: (m_initError ?? "the render endpoint failed to initialize"));
+            throw new COMException(
+                errorCode: m_initHResult,
+                message: (m_initError ?? "the render endpoint failed to initialize")
+            );
         }
     }
 
@@ -111,7 +118,10 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
     }
 
     private void RenderThread() {
-        _ = Wasapi.CoInitializeEx(dwCoInit: 0, pvReserved: 0); // COINIT_MULTITHREADED
+        _ = Wasapi.CoInitializeEx(
+            dwCoInit: 0,
+            pvReserved: 0
+        ); // COINIT_MULTITHREADED
 
         IAudioClient? audioClient = null;
         IAudioRenderClient? renderClient = null;
@@ -131,8 +141,15 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
             m_initDone.Set();
         }
 
-        if (m_initOk && (audioClient is not null) && (renderClient is not null)) {
-            RunRenderLoop(audioClient: audioClient, renderClient: renderClient);
+        if (
+            m_initOk &&
+            (audioClient is not null) &&
+            (renderClient is not null)
+        ) {
+            RunRenderLoop(
+                audioClient: audioClient,
+                renderClient: renderClient
+            );
         }
 
         if (renderClient is not null) {
@@ -146,7 +163,10 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         Wasapi.CoUninitialize();
     }
     private (IAudioClient AudioClient, IAudioRenderClient RenderClient) Initialize() {
-        var audioClient = Wasapi.ActivateAudioClient(dataFlow: Wasapi.DataFlowRender, deviceId: null);
+        var audioClient = Wasapi.ActivateAudioClient(
+            dataFlow: Wasapi.DataFlowRender,
+            deviceId: null
+        );
 
         // The endpoint's own mix format is only released, not consumed: the stream requests OUR format below and the
         // AUTOCONVERT flags absorb any difference. Calling it first also fails fast on a half-present endpoint.
@@ -165,7 +185,11 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         var formatPointer = Marshal.AllocHGlobal(cb: Marshal.SizeOf<Wasapi.WaveFormatEx>());
 
         try {
-            Marshal.StructureToPtr(fDeleteOld: false, ptr: formatPointer, structure: format);
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: formatPointer,
+                structure: format
+            );
             // Buffer duration 0 = the engine's default event-driven buffer (~2 device periods, ~20 ms at 48 kHz); no
             // IAudioClient3 low-latency negotiation.
             Wasapi.Check(hr: audioClient.Initialize(
@@ -180,10 +204,18 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
             Marshal.FreeHGlobal(hglobal: formatPointer);
         }
 
-        m_eventHandle = Wasapi.CreateEventW(bInitialState: false, bManualReset: false, lpEventAttributes: 0, lpName: null);
+        m_eventHandle = Wasapi.CreateEventW(
+            bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: 0,
+            lpName: null
+        );
 
         if (m_eventHandle == 0) {
-            throw new COMException(message: "failed to create the render event", errorCode: Marshal.GetHRForLastWin32Error());
+            throw new COMException(
+                message: "failed to create the render event",
+                errorCode: Marshal.GetHRForLastWin32Error()
+            );
         }
 
         Wasapi.Check(hr: audioClient.SetEventHandle(eventHandle: m_eventHandle));
@@ -192,29 +224,49 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
 
         var renderClientIid = Wasapi.IID_IAudioRenderClient;
 
-        Wasapi.Check(hr: audioClient.GetService(ppv: out var renderClientObject, riid: ref renderClientIid));
+        Wasapi.Check(hr: audioClient.GetService(
+            ppv: out var renderClientObject,
+            riid: ref renderClientIid
+        ));
 
         return (audioClient, ((IAudioRenderClient)renderClientObject));
     }
     private void RunRenderLoop(IAudioClient audioClient, IAudioRenderClient renderClient) {
         // Prime the whole buffer with silence before Start so the stream's first period never underruns while the
         // first event is still in flight.
-        if (!TryFillAvailable(audioClient: audioClient, prime: true, renderClient: renderClient)) {
+        if (!TryFillAvailable(
+            audioClient: audioClient,
+            prime: true,
+            renderClient: renderClient
+        )) {
             return;
         }
 
         var hr = audioClient.Start();
 
         if (hr < 0) {
-            Park(hr: hr, where: "Start");
+            Park(
+                hr: hr,
+                where: "Start"
+            );
 
             return;
         }
 
         while (!m_stop) {
-            _ = Wasapi.WaitForSingleObject(dwMilliseconds: EventTimeoutMilliseconds, hHandle: m_eventHandle);
+            _ = Wasapi.WaitForSingleObject(
+                dwMilliseconds: EventTimeoutMilliseconds,
+                hHandle: m_eventHandle
+            );
 
-            if (m_stop || !TryFillAvailable(audioClient: audioClient, prime: false, renderClient: renderClient)) {
+            if (
+                m_stop ||
+                !TryFillAvailable(
+                audioClient: audioClient,
+                prime: false,
+                renderClient: renderClient
+            )
+            ) {
                 break;
             }
         }
@@ -227,25 +279,43 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         var hr = audioClient.GetCurrentPadding(pNumPaddingFrames: out var padding);
 
         if (hr < 0) {
-            Park(hr: hr, where: "GetCurrentPadding");
+            Park(
+                hr: hr,
+                where: "GetCurrentPadding"
+            );
 
             return false;
         }
 
         var available = (m_bufferFrames - ((int)padding));
 
-        while ((available > 0) && !m_stop) {
-            var quantum = Math.Min(val1: available, val2: m_maxQuantumFrames);
+        while (
+            (available > 0) &&
+            !m_stop
+        ) {
+            var quantum = Math.Min(
+                val1: available,
+                val2: m_maxQuantumFrames
+            );
 
-            hr = renderClient.GetBuffer(numFramesRequested: ((uint)quantum), ppData: out var data);
+            hr = renderClient.GetBuffer(
+                numFramesRequested: ((uint)quantum),
+                ppData: out var data
+            );
 
             if (hr < 0) {
-                Park(hr: hr, where: "GetBuffer");
+                Park(
+                    hr: hr,
+                    where: "GetBuffer"
+                );
 
                 return false;
             }
 
-            var span = SampleSpan(data: data, samples: (quantum * 2));
+            var span = SampleSpan(
+                data: data,
+                samples: (quantum * 2)
+            );
 
             if (prime) {
                 span.Clear();
@@ -256,25 +326,45 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
                     // The fill callback is world code; a defect there degrades to a silent quantum, never a dead
                     // stream ("plays silent, never crashes").
                     span.Clear();
-                    Volatile.Write(location: ref m_fillFaults, value: (m_fillFaults + 1));
+                    Volatile.Write(
+                        location: ref m_fillFaults,
+                        value: (m_fillFaults + 1)
+                    );
                 }
             }
 
-            hr = renderClient.ReleaseBuffer(dwFlags: 0, numFramesWritten: ((uint)quantum));
+            hr = renderClient.ReleaseBuffer(
+                dwFlags: 0,
+                numFramesWritten: ((uint)quantum)
+            );
 
             if (hr < 0) {
-                Park(hr: hr, where: "ReleaseBuffer");
+                Park(
+                    hr: hr,
+                    where: "ReleaseBuffer"
+                );
 
                 return false;
             }
 
-            Volatile.Write(location: ref m_framesDelivered, value: (m_framesDelivered + quantum));
+            Volatile.Write(
+                location: ref m_framesDelivered,
+                value: (m_framesDelivered + quantum)
+            );
             available -= quantum;
         }
 
         return true;
     }
     private void Park(int hr, string where) =>
-        Volatile.Write(location: ref m_fault, value: $"{where} failed: 0x{hr:X8}{((hr == Wasapi.AudclntEDeviceInvalidated) ? " (device invalidated)" : "")}");
-    private static unsafe Span<short> SampleSpan(nint data, int samples) => new(length: samples, pointer: ((void*)data));
+        Volatile.Write(
+            location: ref m_fault,
+            value: $"{where} failed: 0x{hr:X8}{((hr == Wasapi.AudclntEDeviceInvalidated)
+            ? " (device invalidated)"
+            : "")}"
+        );
+    private static unsafe Span<short> SampleSpan(nint data, int samples) => new(
+        length: samples,
+        pointer: ((void*)data)
+    );
 }

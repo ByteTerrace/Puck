@@ -22,10 +22,31 @@ public sealed partial class ProcessTerminationTests {
         var puck = await RunChildAsync(mode: "puck");
         var control = await RunChildAsync(mode: "default");
 
-        Assert.Contains(actualString: puck, expectedSubstring: "cleanup complete");
-        Assert.True(condition: (puck.IndexOf(comparisonType: StringComparison.Ordinal, value: "cleanup complete") < puck.IndexOf(comparisonType: StringComparison.Ordinal, value: "invoke returned 0")), userMessage: puck);
-        Assert.Contains(actualString: control, expectedSubstring: "invoke returned 130");
-        Assert.DoesNotContain(actualString: control[..control.IndexOf(comparisonType: StringComparison.Ordinal, value: "invoke returned 130")], expectedSubstring: "cleanup complete");
+        Assert.Contains(
+            actualString: puck,
+            expectedSubstring: "cleanup complete"
+        );
+        Assert.True(
+            condition: (puck.IndexOf(
+                comparisonType: StringComparison.Ordinal,
+                value: "cleanup complete"
+            ) < puck.IndexOf(
+                comparisonType: StringComparison.Ordinal,
+                value: "invoke returned 0"
+            )),
+            userMessage: puck
+        );
+        Assert.Contains(
+            actualString: control,
+            expectedSubstring: "invoke returned 130"
+        );
+        Assert.DoesNotContain(
+            actualString: control[..control.IndexOf(
+                comparisonType: StringComparison.Ordinal,
+                value: "invoke returned 130"
+            )],
+            expectedSubstring: "cleanup complete"
+        );
     }
     [Fact]
     public async Task TerminationChildAsync() {
@@ -34,12 +55,18 @@ public sealed partial class ProcessTerminationTests {
         if (evidence is null) { Assert.Skip(reason: $"Runs only as the child of {nameof(CancellationWaitsForCleanupLongerThanTheParserDefaultAsync)}."); return; }
         var clock = Stopwatch.StartNew();
 
-        void Log(string line) => File.AppendAllText(contents: $"{clock.ElapsedMilliseconds,6} ms {line}\n", path: evidence);
+        void Log(string line) => File.AppendAllText(
+            contents: $"{clock.ElapsedMilliseconds,6} ms {line}\n",
+            path: evidence
+        );
         var root = new RootCommand(description: "termination fixture");
 
         root.SetAction(action: async (_, cancellationToken) => {
             Log(line: "started");
-            try { await Task.Delay(cancellationToken: cancellationToken, delay: Timeout.InfiniteTimeSpan); } catch (OperationCanceledException) { Log(line: "cancelled"); }
+            try { await Task.Delay(
+                cancellationToken: cancellationToken,
+                delay: Timeout.InfiniteTimeSpan
+            ); } catch (OperationCanceledException) { Log(line: "cancelled"); }
             // The cleanup under test must outlive the interrupt, so it deliberately takes no token.
 #pragma warning disable xUnit1051
             await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 3));
@@ -48,20 +75,39 @@ public sealed partial class ProcessTerminationTests {
             return 0;
         });
         // A parent that ignores Ctrl+C hands that state down; the fixture must receive the interrupt it raises.
-        SetConsoleCtrlHandler(add: false, handler: 0);
-        _ = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: async () => {
-            await Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromMilliseconds(milliseconds: 500));
-            if (!GenerateConsoleCtrlEvent(controlEvent: 0, processGroupId: 0)) { Log(line: $"GenerateConsoleCtrlEvent failed {Marshal.GetLastWin32Error()}"); }
-        });
+        SetConsoleCtrlHandler(
+            add: false,
+            handler: 0
+        );
+        _ = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: async () => {
+            await Task.Delay(
+                cancellationToken: TestContext.Current.CancellationToken,
+                delay: TimeSpan.FromMilliseconds(milliseconds: 500)
+            );
+            if (!GenerateConsoleCtrlEvent(
+                controlEvent: 0,
+                processGroupId: 0
+            )) { Log(line: $"GenerateConsoleCtrlEvent failed {Marshal.GetLastWin32Error()}"); }
+        }
+        );
         var code = ((Environment.GetEnvironmentVariable(variable: ModeVariable) == "default")
             ? await root.Parse(args: []).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken)
-            : await PuckRootCommand.InvokeAsync(args: [], root: root));
+            : await PuckRootCommand.InvokeAsync(
+                args: [],
+                root: root
+            )
+        );
 
         Log(line: $"invoke returned {code}");
     }
 
     private static async Task<string> RunChildAsync(string mode) {
-        var evidence = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-termination-{mode}-{Guid.NewGuid():N}.txt");
+        var evidence = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-termination-{mode}-{Guid.NewGuid():N}.txt"
+        );
         var info = new ProcessStartInfo(fileName: "dotnet") {
             CreateNoWindow = true,
             RedirectStandardError = true,
@@ -80,9 +126,18 @@ public sealed partial class ProcessTerminationTests {
             var errors = child.StandardError.ReadToEndAsync();
 
             using (var deadline = new CancellationTokenSource(delay: TimeSpan.FromMinutes(minutes: 2))) { await child.WaitForExitAsync(cancellationToken: deadline.Token); }
-            var recorded = (File.Exists(path: evidence) ? File.ReadAllText(path: evidence) : "");
+            var recorded = (File.Exists(path: evidence)
+                ? File.ReadAllText(path: evidence)
+                : ""
+            );
 
-            Assert.True(condition: recorded.Contains(comparisonType: StringComparison.Ordinal, value: "cancelled"), userMessage: $"{mode}: the child never observed the interrupt.\n{recorded}\n{await output}\n{await errors}");
+            Assert.True(
+                condition: recorded.Contains(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "cancelled"
+                ),
+                userMessage: $"{mode}: the child never observed the interrupt.\n{recorded}\n{await output}\n{await errors}"
+            );
             return recorded;
         } finally { File.Delete(path: evidence); }
     }

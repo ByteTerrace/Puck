@@ -63,278 +63,278 @@ internal static class PostStages {
             // Tier B — reference-ROM correctness (conformance ROMs via the $A000 result block; ledger-gated; skip when
             // the corpus is absent).
             new LedgerRomStage(
-        discover: context => SuiteCatalog.ConformanceLedgerCases(
-            group: "cpu-instrs",
-            model: ConsoleModel.DmgC,
-            root: context.TestRomRoot,
-            subPath: "cpu_instrs/individual"
-        ),
-        name: "conformance-cpu-instrs",
-        suites: ["cpu-instrs"]
-    ),
+                discover: context => SuiteCatalog.ConformanceLedgerCases(
+                    group: "cpu-instrs",
+                    model: ConsoleModel.DmgC,
+                    root: context.TestRomRoot,
+                    subPath: "cpu_instrs/individual"
+                ),
+                name: "conformance-cpu-instrs",
+                suites: ["cpu-instrs"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.ConformanceLedgerCases(
-            group: "instr-timing",
-            model: ConsoleModel.DmgC,
-            root: context.TestRomRoot,
-            subPath: "instr_timing"
-        ),
-        name: "conformance-instr-timing",
-        suites: ["instr-timing"]
-    ),
+                discover: context => SuiteCatalog.ConformanceLedgerCases(
+                    group: "instr-timing",
+                    model: ConsoleModel.DmgC,
+                    root: context.TestRomRoot,
+                    subPath: "instr_timing"
+                ),
+                name: "conformance-instr-timing",
+                suites: ["instr-timing"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.ConformanceLedgerCases(
-            group: "mem-timing",
-            model: ConsoleModel.DmgC,
-            root: context.TestRomRoot,
-            subPath: "mem_timing/individual"
-        ),
-        name: "conformance-mem-timing",
-        suites: ["mem-timing"]
-    ),
+                discover: context => SuiteCatalog.ConformanceLedgerCases(
+                    group: "mem-timing",
+                    model: ConsoleModel.DmgC,
+                    root: context.TestRomRoot,
+                    subPath: "mem_timing/individual"
+                ),
+                name: "conformance-mem-timing",
+                suites: ["mem-timing"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.ConformanceLedgerCases(
-            group: "dmg-sound",
-            model: ConsoleModel.DmgC,
-            root: context.TestRomRoot,
-            subPath: "dmg_sound/rom_singles"
-        ),
-        name: "conformance-dmg-sound",
-        suites: ["dmg-sound"]
-    ),
+                discover: context => SuiteCatalog.ConformanceLedgerCases(
+                    group: "dmg-sound",
+                    model: ConsoleModel.DmgC,
+                    root: context.TestRomRoot,
+                    subPath: "dmg_sound/rom_singles"
+                ),
+                name: "conformance-dmg-sound",
+                suites: ["dmg-sound"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.ConformanceLedgerCases(
-            group: "cgb-sound",
-            model: ConsoleModel.CgbE,
-            root: context.TestRomRoot,
-            subPath: "cgb_sound/rom_singles"
-        ),
-        name: "conformance-cgb-sound",
-        suites: ["cgb-sound"]
-    ),
+                discover: context => SuiteCatalog.ConformanceLedgerCases(
+                    group: "cgb-sound",
+                    model: ConsoleModel.CgbE,
+                    root: context.TestRomRoot,
+                    subPath: "cgb_sound/rom_singles"
+                ),
+                name: "conformance-cgb-sound",
+                suites: ["cgb-sound"]
+            ),
             // Tier B — the un-gated blargg corpus: oam_bug/mem_timing-2 singles via the same $A000 block, and the
             // top-level ROMs (halt_bug, interrupt_time, oam_bug, mem_timing-2) that report by screen content instead.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.BlarggOamBugSinglesRoms(root: context.TestRomRoot),
-        name: "conformance-oam-bug-singles",
-        suites: ["oam-bug-singles"]
-    ),
+                discover: context => SuiteCatalog.BlarggOamBugSinglesRoms(root: context.TestRomRoot),
+                name: "conformance-oam-bug-singles",
+                suites: ["oam-bug-singles"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.BlarggMemTiming2SinglesRoms(root: context.TestRomRoot),
-        name: "conformance-mem-timing-2-singles",
-        suites: ["mem-timing-2-singles"]
-    ),
+                discover: context => SuiteCatalog.BlarggMemTiming2SinglesRoms(root: context.TestRomRoot),
+                name: "conformance-mem-timing-2-singles",
+                suites: ["mem-timing-2-singles"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.BlarggVisualRoms(root: context.TestRomRoot),
-        name: "blargg-visual"
-    ),
+                discover: context => SuiteCatalog.BlarggVisualRoms(root: context.TestRomRoot),
+                name: "blargg-visual"
+            ),
             // Tier B — SingleStepTests/sm83 per-instruction vectors: the shared SM83 core against 500 opcode families
             // on a flat-RAM harness, off-ROM (skip when the vector corpus is absent).
             new Sm83SstStage(),
             // Tier B — acceptance timing suite (serial Fibonacci signature; ledger-gated; skip when the corpus is absent).
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "timer",
-            recurse: true,
-            relativeDirectory: "timer",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-timer",
-        suites: ["timer"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "timer",
+                    recurse: true,
+                    relativeDirectory: "timer",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-timer",
+                suites: ["timer"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "ppu",
-            recurse: true,
-            relativeDirectory: "ppu",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-ppu",
-        suites: ["ppu"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "ppu",
+                    recurse: true,
+                    relativeDirectory: "ppu",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-ppu",
+                suites: ["ppu"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "interrupts",
-            recurse: true,
-            relativeDirectory: "interrupts",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-interrupts",
-        suites: ["interrupts"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "interrupts",
+                    recurse: true,
+                    relativeDirectory: "interrupts",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-interrupts",
+                suites: ["interrupts"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "serial",
-            recurse: true,
-            relativeDirectory: "serial",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-serial",
-        suites: ["serial"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "serial",
+                    recurse: true,
+                    relativeDirectory: "serial",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-serial",
+                suites: ["serial"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "oam-dma",
-            recurse: true,
-            relativeDirectory: "oam_dma",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-oam-dma",
-        suites: ["oam-dma"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "oam-dma",
+                    recurse: true,
+                    relativeDirectory: "oam_dma",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-oam-dma",
+                suites: ["oam-dma"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "bits",
-            recurse: true,
-            relativeDirectory: "bits",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-bits",
-        suites: ["bits"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "bits",
+                    recurse: true,
+                    relativeDirectory: "bits",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-bits",
+                suites: ["bits"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "instr",
-            recurse: true,
-            relativeDirectory: "instr",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-instr",
-        suites: ["instr"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "instr",
+                    recurse: true,
+                    relativeDirectory: "instr",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-instr",
+                suites: ["instr"]
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AcceptanceLedgerCases(
-            group: "misc",
-            recurse: false,
-            relativeDirectory: "",
-            root: context.TestRomRoot
-        ),
-        name: "acceptance-misc",
-        suites: ["misc"]
-    ),
+                discover: context => SuiteCatalog.AcceptanceLedgerCases(
+                    group: "misc",
+                    recurse: false,
+                    relativeDirectory: "",
+                    root: context.TestRomRoot
+                ),
+                name: "acceptance-misc",
+                suites: ["misc"]
+            ),
             // Tier B — the rest of the mooneye-test-suite tree: emulator-only (mbc1/mbc2/mbc5), misc (boot state and
             // I/O), and the one manual screenshot case.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.MooneyeEmulatorOnlyRoms(root: context.TestRomRoot),
-        name: "mooneye-emulator-only"
-    ),
+                discover: context => SuiteCatalog.MooneyeEmulatorOnlyRoms(root: context.TestRomRoot),
+                name: "mooneye-emulator-only"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.MooneyeMiscRoms(root: context.TestRomRoot),
-        name: "mooneye-misc"
-    ),
+                discover: context => SuiteCatalog.MooneyeMiscRoms(root: context.TestRomRoot),
+                name: "mooneye-misc"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.MooneyeManualRoms(root: context.TestRomRoot),
-        name: "mooneye-manual"
-    ),
+                discover: context => SuiteCatalog.MooneyeManualRoms(root: context.TestRomRoot),
+                name: "mooneye-manual"
+            ),
             // Tier B — the wilbertpol fork: same tree shape, register-signature read (this fork never emits its
             // result over serial) except the visual manual case.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.WilbertpolAcceptanceRoms(root: context.TestRomRoot),
-        name: "wilbertpol-acceptance"
-    ),
+                discover: context => SuiteCatalog.WilbertpolAcceptanceRoms(root: context.TestRomRoot),
+                name: "wilbertpol-acceptance"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.WilbertpolEmulatorOnlyRoms(root: context.TestRomRoot),
-        name: "wilbertpol-emulator-only"
-    ),
+                discover: context => SuiteCatalog.WilbertpolEmulatorOnlyRoms(root: context.TestRomRoot),
+                name: "wilbertpol-emulator-only"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.WilbertpolMiscRoms(root: context.TestRomRoot),
-        name: "wilbertpol-misc"
-    ),
+                discover: context => SuiteCatalog.WilbertpolMiscRoms(root: context.TestRomRoot),
+                name: "wilbertpol-misc"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.WilbertpolManualRoms(root: context.TestRomRoot),
-        name: "wilbertpol-manual"
-    ),
+                discover: context => SuiteCatalog.WilbertpolManualRoms(root: context.TestRomRoot),
+                name: "wilbertpol-manual"
+            ),
             // Tier B — SameSuite: also never emits its signature over serial, and its own apu/README.md restricts
             // most of apu/ to CPU-CGB-E.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.SameSuiteRoms(root: context.TestRomRoot),
-        name: "same-suite"
-    ),
+                discover: context => SuiteCatalog.SameSuiteRoms(root: context.TestRomRoot),
+                name: "same-suite"
+            ),
             // Tier B — GBMicrotest: 513 small DMG-only ROMs read through the $FF80-$FF82 result block.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.GbMicrotestRoms(root: context.TestRomRoot),
-        name: "gbmicrotest"
-    ),
+                discover: context => SuiteCatalog.GbMicrotestRoms(root: context.TestRomRoot),
+                name: "gbmicrotest"
+            ),
             // Tier B — the ledger a run measures is independent of how many cases ran at once.
             new LedgerParallelEquivalenceStage(),
             // Tier B — AGE: register-signature or screenshot depending on what each ROM's own leaf folder ships.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.AgeRoms(root: context.TestRomRoot),
-        name: "age"
-    ),
+                discover: context => SuiteCatalog.AgeRoms(root: context.TestRomRoot),
+                name: "age"
+            ),
             // Tier B — the acid family and mealybug: pixel-exact screenshot comparisons under the shared "common
             // palette" this framebuffer already produces.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.DmgAcid2Roms(root: context.TestRomRoot),
-        name: "dmg-acid2"
-    ),
+                discover: context => SuiteCatalog.DmgAcid2Roms(root: context.TestRomRoot),
+                name: "dmg-acid2"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.CgbAcid2Roms(root: context.TestRomRoot),
-        name: "cgb-acid2"
-    ),
+                discover: context => SuiteCatalog.CgbAcid2Roms(root: context.TestRomRoot),
+                name: "cgb-acid2"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.CgbAcidHellRoms(root: context.TestRomRoot),
-        name: "cgb-acid-hell"
-    ),
+                discover: context => SuiteCatalog.CgbAcidHellRoms(root: context.TestRomRoot),
+                name: "cgb-acid-hell"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.MealybugRoms(root: context.TestRomRoot),
-        name: "mealybug"
-    ),
+                discover: context => SuiteCatalog.MealybugRoms(root: context.TestRomRoot),
+                name: "mealybug"
+            ),
             // Tier B — gambatte: hex-pattern, audio-silence-or-sound, and screenshot cases all route mechanically per
             // ROM stem (see SuiteCatalog.GambatteRoms); only button-driven or dump-only ROMs stay unrunnable.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.GambatteRoms(root: context.TestRomRoot),
-        name: "gambatte"
-    ),
+                discover: context => SuiteCatalog.GambatteRoms(root: context.TestRomRoot),
+                name: "gambatte"
+            ),
             // Tier B — the small screenshot suites.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.LittleThingsRoms(root: context.TestRomRoot),
-        name: "little-things-gb"
-    ),
+                discover: context => SuiteCatalog.LittleThingsRoms(root: context.TestRomRoot),
+                name: "little-things-gb"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.ScribbleTestsRoms(root: context.TestRomRoot),
-        name: "scribbltests"
-    ),
+                discover: context => SuiteCatalog.ScribbleTestsRoms(root: context.TestRomRoot),
+                name: "scribbltests"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.StrikethroughRoms(root: context.TestRomRoot),
-        name: "strikethrough"
-    ),
+                discover: context => SuiteCatalog.StrikethroughRoms(root: context.TestRomRoot),
+                name: "strikethrough"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.TurtleTestsRoms(root: context.TestRomRoot),
-        name: "turtle-tests"
-    ),
+                discover: context => SuiteCatalog.TurtleTestsRoms(root: context.TestRomRoot),
+                name: "turtle-tests"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.BullyRoms(root: context.TestRomRoot),
-        name: "bully"
-    ),
+                discover: context => SuiteCatalog.BullyRoms(root: context.TestRomRoot),
+                name: "bully"
+            ),
             // Tier B — suites this battery cannot drive mechanically (button-input selection); recorded unrunnable
             // rather than omitted from the ledger.
             new LedgerRomStage(
-        discover: context => SuiteCatalog.Rtc3TestRoms(root: context.TestRomRoot),
-        name: "rtc3test"
-    ),
+                discover: context => SuiteCatalog.Rtc3TestRoms(root: context.TestRomRoot),
+                name: "rtc3test"
+            ),
             new LedgerRomStage(
-        discover: context => SuiteCatalog.Mbc3TesterRoms(root: context.TestRomRoot),
-        name: "mbc3-tester"
-    ),
+                discover: context => SuiteCatalog.Mbc3TesterRoms(root: context.TestRomRoot),
+                name: "mbc3-tester"
+            ),
             // Tier C — cross-machine link determinism, one stage per generation pairing (self-contained synthetic
             // ROMs; run anywhere). Dmg↔Cgb is the original pairing; Dmg↔Agb and Cgb↔Agb prove the carry-forward
             // rule's Agb costume links through the identical SerialLinkSession machinery.
             new SerialLinkStage(
-        masterModel: ConsoleModel.DmgC,
-        name: "serial-link",
-        slaveModel: ConsoleModel.CgbE
-    ),
+                masterModel: ConsoleModel.DmgC,
+                name: "serial-link",
+                slaveModel: ConsoleModel.CgbE
+            ),
             new SerialLinkStage(
-        masterModel: ConsoleModel.DmgC,
-        name: "serial-link-dmg-agb",
-        slaveModel: ConsoleModel.Agb
-    ),
+                masterModel: ConsoleModel.DmgC,
+                name: "serial-link-dmg-agb",
+                slaveModel: ConsoleModel.Agb
+            ),
             new SerialLinkStage(
-        masterModel: ConsoleModel.CgbE,
-        name: "serial-link-cgb-agb",
-        slaveModel: ConsoleModel.Agb
-    ),
+                masterModel: ConsoleModel.CgbE,
+                name: "serial-link-cgb-agb",
+                slaveModel: ConsoleModel.Agb
+            ),
             // Tier C — the link cable under a longer gapped exchange and a mid-exchange churn: suspend/snapshot/restore/
             // reconnect at a transfer-idle boundary via the credit-preserving resume token, proving the exchange is
             // transparent to a snapshot cycle (self-contained synthetic ROMs; runs anywhere).

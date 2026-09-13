@@ -25,56 +25,62 @@ public sealed class StateReader {
 
         m_buffer = buffer;
         m_offset = start;
-        m_end = ((length < 0) ? buffer.Length : (start + length));
+        m_end = ((length < 0)
+            ? buffer.Length
+            : (start + length)
+        );
     }
 
-    /// <summary>Gets the read position, in bytes from the start of the backing buffer.</summary>
-    public int Position => m_offset;
     /// <summary>Gets whether every byte in the reader's window has been consumed.</summary>
     public bool AtEnd => (m_offset == m_end);
-
-    /// <summary>Reads a single byte.</summary>
-    /// <returns>The next byte.</returns>
-    public byte ReadByte() => Take(count: sizeof(byte))[0];
-    /// <summary>Reads a signed byte.</summary>
-    /// <returns>The value.</returns>
-    public sbyte ReadSByte() => ((sbyte)Take(count: sizeof(sbyte))[0]);
-    /// <summary>Reads a boolean written as one byte.</summary>
-    /// <returns>The boolean value.</returns>
-    public bool ReadBoolean() => (ReadByte() != 0);
-    /// <summary>Reads a little-endian 16-bit unsigned integer.</summary>
-    /// <returns>The value.</returns>
-    public ushort ReadUInt16() => BinaryPrimitives.ReadUInt16LittleEndian(source: Take(count: sizeof(ushort)));
-    /// <summary>Reads a little-endian 32-bit signed integer.</summary>
-    /// <returns>The value.</returns>
-    public int ReadInt32() => BinaryPrimitives.ReadInt32LittleEndian(source: Take(count: sizeof(int)));
-    /// <summary>Reads a little-endian 32-bit unsigned integer.</summary>
-    /// <returns>The value.</returns>
-    public uint ReadUInt32() => BinaryPrimitives.ReadUInt32LittleEndian(source: Take(count: sizeof(uint)));
-    /// <summary>Reads a little-endian 64-bit signed integer.</summary>
-    /// <returns>The value.</returns>
-    public long ReadInt64() => BinaryPrimitives.ReadInt64LittleEndian(source: Take(count: sizeof(long)));
-    /// <summary>Reads a little-endian 64-bit unsigned integer.</summary>
-    /// <returns>The value.</returns>
-    public ulong ReadUInt64() => BinaryPrimitives.ReadUInt64LittleEndian(source: Take(count: sizeof(ulong)));
-    /// <summary>Reads a raw run of bytes into a destination span, filling it completely.</summary>
-    /// <param name="destination">The span to fill.</param>
-    public void ReadBytes(Span<byte> destination) => Take(count: destination.Length).CopyTo(destination: destination);
-    /// <summary>Bulk-reads raw bytes into a span of unmanaged values — the memcpy counterpart of
-    /// <see cref="StateWriter.WriteBlock{T}"/>, filling <paramref name="destination"/> completely.</summary>
-    /// <typeparam name="T">The unmanaged element type.</typeparam>
-    /// <param name="destination">The span to fill.</param>
-    public void ReadBlock<T>(Span<T> destination) where T : unmanaged => ReadBytes(destination: MemoryMarshal.AsBytes(span: destination));
+    /// <summary>Gets the read position, in bytes from the start of the backing buffer.</summary>
+    public int Position => m_offset;
 
     private ReadOnlySpan<byte> Take(int count) {
         if ((m_offset + count) > m_end) {
             throw new InvalidOperationException(message: "Snapshot restore read past the end of the state buffer; the save/load field order has drifted.");
         }
 
-        var slice = m_buffer.AsSpan(length: count, start: m_offset);
+        var slice = m_buffer.AsSpan(
+            length: count,
+            start: m_offset
+        );
 
         m_offset += count;
 
         return slice;
     }
+
+    /// <summary>Bulk-reads raw bytes into a span of unmanaged values — the memcpy counterpart of
+    /// <see cref="StateWriter.WriteBlock{T}"/>, filling <paramref name="destination"/> completely.</summary>
+    /// <typeparam name="T">The unmanaged element type.</typeparam>
+    /// <param name="destination">The span to fill.</param>
+    public void ReadBlock<T>(Span<T> destination) where T : unmanaged => ReadBytes(destination: MemoryMarshal.AsBytes(span: destination));
+    /// <summary>Reads a boolean written as one byte.</summary>
+    /// <returns>The boolean value.</returns>
+    public bool ReadBoolean() => (ReadByte() != 0);
+    /// <summary>Reads a single byte.</summary>
+    /// <returns>The next byte.</returns>
+    public byte ReadByte() => Take(count: sizeof(byte))[0];
+    /// <summary>Reads a raw run of bytes into a destination span, filling it completely.</summary>
+    /// <param name="destination">The span to fill.</param>
+    public void ReadBytes(Span<byte> destination) => Take(count: destination.Length).CopyTo(destination: destination);
+    /// <summary>Reads a little-endian 32-bit signed integer.</summary>
+    /// <returns>The value.</returns>
+    public int ReadInt32() => BinaryPrimitives.ReadInt32LittleEndian(source: Take(count: sizeof(int)));
+    /// <summary>Reads a little-endian 64-bit signed integer.</summary>
+    /// <returns>The value.</returns>
+    public long ReadInt64() => BinaryPrimitives.ReadInt64LittleEndian(source: Take(count: sizeof(long)));
+    /// <summary>Reads a signed byte.</summary>
+    /// <returns>The value.</returns>
+    public sbyte ReadSByte() => ((sbyte)Take(count: sizeof(sbyte))[0]);
+    /// <summary>Reads a little-endian 16-bit unsigned integer.</summary>
+    /// <returns>The value.</returns>
+    public ushort ReadUInt16() => BinaryPrimitives.ReadUInt16LittleEndian(source: Take(count: sizeof(ushort)));
+    /// <summary>Reads a little-endian 32-bit unsigned integer.</summary>
+    /// <returns>The value.</returns>
+    public uint ReadUInt32() => BinaryPrimitives.ReadUInt32LittleEndian(source: Take(count: sizeof(uint)));
+    /// <summary>Reads a little-endian 64-bit unsigned integer.</summary>
+    /// <returns>The value.</returns>
+    public ulong ReadUInt64() => BinaryPrimitives.ReadUInt64LittleEndian(source: Take(count: sizeof(ulong)));
 }

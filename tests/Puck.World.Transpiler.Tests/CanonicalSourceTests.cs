@@ -20,42 +20,85 @@ public class CanonicalSourceTests {
         var worlds = ShippedWorlds.FindDirectory();
         var data = new TheoryData<string>();
 
-        foreach (var source in Directory.GetFiles(worlds, "*.puck", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal)) {
-            if (File.Exists(Path.ChangeExtension(source, ".world.json"))) {
-                data.Add(Path.GetRelativePath(worlds, source).Replace('\\', '/'));
+        foreach (var source in Directory.GetFiles(
+            path: worlds,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.puck"
+        ).OrderBy(
+            path => path,
+            StringComparer.Ordinal
+        )) {
+            if (File.Exists(path: Path.ChangeExtension(
+                extension: ".world.json",
+                path: source
+            ))) {
+                data.Add(row: Path.GetRelativePath(
+                    path: source,
+                    relativeTo: worlds
+                ).Replace(
+                    newChar: '/',
+                    oldChar: '\\'
+                ));
             }
         }
 
         return data;
     }
-
-    [Theory]
     [MemberData(nameof(AuthoredWorlds))]
+    [Theory]
     public void TestTheCommittedSourceCompilesToTheCommittedDocument(string relativePath) {
         var worlds = ShippedWorlds.FindDirectory();
-        var sourcePath = Path.Combine(worlds, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        var documentPath = Path.ChangeExtension(sourcePath, ".world.json");
-        var stem = Path.GetFileNameWithoutExtension(sourcePath);
+        var sourcePath = Path.Combine(
+            path1: worlds,
+            path2: relativePath.Replace(
+                newChar: Path.DirectorySeparatorChar,
+                oldChar: '/'
+            )
+        );
+        var documentPath = Path.ChangeExtension(
+            extension: ".world.json",
+            path: sourcePath
+        );
+        var stem = Path.GetFileNameWithoutExtension(path: sourcePath);
 
         var diagnostics = new DiagnosticBag();
-        var parsed = PuckParser.ParseDocumentWithDiagnostics(source: File.ReadAllText(sourcePath), diagnostics: diagnostics).Value;
+        var parsed = PuckParser.ParseDocumentWithDiagnostics(
+            source: File.ReadAllText(path: sourcePath),
+            diagnostics: diagnostics
+        ).Value;
 
-        Assert.NotNull(parsed);
+        Assert.NotNull(@object: parsed);
 
-        ModuleResolver.ValidateImportGraph(diagnostics: diagnostics, rootDoc: parsed, rootPath: sourcePath);
+        ModuleResolver.ValidateImportGraph(
+            diagnostics: diagnostics,
+            rootDoc: parsed,
+            rootPath: sourcePath
+        );
 
         var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
             basePath: worlds,
             diagnostics: diagnostics,
-            document: parsed, cancellationToken: TestContext.Current.CancellationToken);
+            document: parsed,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
-        Assert.False(diagnostics.HasErrors, string.Join("\n", diagnostics.Select(d => $"{d.Code}: {d.Message}")));
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: string.Join(
+                separator: "\n",
+                values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
+            )
+        );
 
-        var produced = JsonNode.Parse(System.Text.Encoding.UTF8.GetString(CanonicalJsonDocument.Serialize(lowered.Value!)));
-        var committed = JsonNode.Parse(File.ReadAllText(documentPath));
+        var produced = JsonNode.Parse(System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: lowered.Value!)));
+        var committed = JsonNode.Parse(File.ReadAllText(path: documentPath));
 
         Assert.True(
-            JsonNode.DeepEquals(produced, committed),
-            $"{stem}.world.json is not what {stem}.puck compiles to — recompile the source rather than editing the document.");
+            condition: JsonNode.DeepEquals(
+                node1: produced,
+                node2: committed
+            ),
+            userMessage: $"{stem}.world.json is not what {stem}.puck compiles to — recompile the source rather than editing the document."
+        );
     }
 }

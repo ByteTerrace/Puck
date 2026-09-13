@@ -21,7 +21,6 @@ public static class CartridgeOperations {
         ExpressionOp.ShiftLeft,
         ExpressionOp.ShiftRight,
     };
-
     /// <summary>Gets the admitted operations, comma separated, for a refusal message.</summary>
     public static string CombineNames { get; } = string.Join(
         separator: ", ",
@@ -32,7 +31,6 @@ public static class CartridgeOperations {
     /// <param name="operation">The authored operation, or <see langword="null"/> for plain assignment.</param>
     /// <returns><see langword="true"/> when the step is emittable.</returns>
     public static bool AdmitsCombine(ExpressionOp? operation) => ((operation is not { } op) || Combines.Contains(item: op));
-
     /// <summary>Returns whether an operation shifts. A literal count of eight or more is refused at validation; a
     /// runtime one yields zero.</summary>
     /// <param name="operation">The authored operation.</param>

@@ -31,9 +31,9 @@ public sealed class CartridgeSlot : ICartridgeSlot, ISnapshotable {
         m_cartridge = cartridge;
     }
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) =>
-        m_cartridge.SaveState(writer: writer);
-    /// <inheritdoc/>
     public void LoadState(StateReader reader) =>
         m_cartridge.LoadState(reader: reader);
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) =>
+        m_cartridge.SaveState(writer: writer);
 }

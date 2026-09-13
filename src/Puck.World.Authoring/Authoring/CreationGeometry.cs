@@ -65,9 +65,10 @@ public static class CreationGeometry {
             var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
                 ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
                 : SdfSolidGeometry.Reach(
-                scale: shape.Scale,
-                type: shape.Type
-            ));
+                    scale: shape.Scale,
+                    type: shape.Type
+                )
+            );
 
             reach = MathF.Max(
                 x: reach,
