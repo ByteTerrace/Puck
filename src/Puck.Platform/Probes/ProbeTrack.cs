@@ -4,14 +4,14 @@ using Puck.Maths;
 
 namespace Puck.Platform.Probes;
 
-/// <summary>One recorded sample in a <c>puck.probe-track.v1</c> track.</summary>
+/// <summary>One recorded sample in a <c>puck.probe.track.v1</c> track.</summary>
 /// <param name="T">The elapsed capture time, in seconds from the track's own start. Finite, non-negative, and
 /// strictly ascending across the track — the schedule playback follows.</param>
 /// <param name="C">The channel values, one entry per the document's declared <see cref="ProbeTrackDocument.Channels"/>.</param>
 /// <param name="K">The confidence, nominally in <c>[0, 1]</c>.</param>
 public sealed record ProbeTrackSample(double T, IReadOnlyList<double>? C = null, double K = 1.0);
 /// <summary>
-/// A recorded reading track (<c>puck.probe-track.v1</c>): a timestamped sequence of samples an probe can be
+/// A recorded reading track (<c>puck.probe.track.v1</c>): a timestamped sequence of samples an probe can be
 /// fed instead of a live device, so its bindings are testable without hardware.
 /// </summary>
 /// <param name="Schema">The schema tag; must equal <see cref="SchemaVersion"/>.</param>
@@ -60,7 +60,7 @@ public sealed class ProbeTrackPlayer {
     /// <param name="ring">The ring to publish into.</param>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="ring"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The document fails one of the <c>puck.probe-track.v1</c> shape
+    /// <exception cref="InvalidDataException">The document fails one of the <c>puck.probe.track.v1</c> shape
     /// checks: wrong schema tag, a non-positive rate, a channel count outside
     /// <c>0..</c><see cref="ProbeReadingLimits.MaxChannels"/>, no samples, a sample whose channel count
     /// disagrees with the declared <see cref="ProbeTrackDocument.Channels"/>, or a sample time that is not finite,

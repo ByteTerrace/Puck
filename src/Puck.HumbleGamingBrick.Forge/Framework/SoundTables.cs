@@ -66,7 +66,7 @@ public static class SoundTables {
     /// <see cref="ApuSoundDriver.Bind"/> after the manifest links.</summary>
     /// <param name="manifest">The game's manifest.</param>
     /// <param name="musicLoop">The pulse-2 music loop stream to declare instead of the hand-authored
-    /// <see cref="BuildMusicLoop"/> (null = the stock loop). A game whose music comes from a <c>puck.audio.v1</c>
+    /// <see cref="BuildMusicLoop"/> (null = the stock loop). A game whose music comes from a <c>puck.tune.v1</c>
     /// document (compiled with <c>AudioDocumentCompiler.CompileMusicLoop</c>) passes its bytes here so it still
     /// declares under <see cref="MusicLoopTableName"/> and rides the same driver/manifest plumbing.</param>
     public static void DefineIn(GameManifest manifest, byte[]? musicLoop = null) {

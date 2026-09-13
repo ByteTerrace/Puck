@@ -3,7 +3,7 @@
 The `.puck` authoring language's core, with no knowledge of any particular document schema. It turns source text
 into a syntax tree, formats it, resolves its imports, and reports diagnostics against source spans. What the tree
 means is defined by its document vocabulary: `Puck.World.Transpiler` is the one that lowers it to
-`puck.world.def.v1`.
+`puck.world.definition.v1`.
 
 The split exists so a vocabulary can be authored beside the document it describes. `Puck.World.Transpiler`
 references `Puck.World.Schema`; `Puck.GamingBricks.Transpiler` references `Puck.GamingBricks.Forge`. Neither could
@@ -230,7 +230,7 @@ author to split excessive generated data. Both vocabulary emitters accept a canc
 interpolated string contents survive formatting unchanged, including indentation and blank lines. Nonempty objects expand their opening brace, members, and closing brace onto separate lines; scalar arrays and vectors stay compact. Formatting defaults to two spaces per level. The editor honors its `tabSize` and `insertSpaces` formatting options; `puck fmt --indent-size 4` or `--tabs` supplies an explicit CLI override. The CLI applies the same default style to newly decompiled sources.
 
 There is no test project of this project's own: `tests/Puck.World.Transpiler.Tests` (parser, formatter, linter,
-emitter, decompiler and LSP against `puck.world.def.v1`) and `tests/Puck.GamingBricks.Transpiler.Tests` (compile and
+emitter, decompiler and LSP against `puck.world.definition.v1`) and `tests/Puck.GamingBricks.Transpiler.Tests` (compile and
 decompile against `puck.cartridge.v1`) are the regression net for a change here—a core change is proven by
 whichever of the two vocabularies it reaches.
 

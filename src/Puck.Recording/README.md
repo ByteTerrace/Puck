@@ -17,7 +17,7 @@ project never references it and knows nothing about Media Foundation or COM.
 
 ## Key features
 
-- *One document, several drivers:* `RecordingDocument` (`puck.recording.v1`)
+- *One document, several drivers:* `RecordingDocument` (`puck.recording.configuration.v1`)
   is schema-versioned, extension-preserving JSON; any host that can supply the
   two platform factories can drive it.
 - *A factory ladder that declines loudly:* a video or audio factory returns

@@ -25,7 +25,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestBlockAndArraySectionsCarryNoColon() {
         var document = PuckParser.ParseDocument("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             host {
                 width: 1280
@@ -47,7 +47,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestAColonBeforeAContainerIsRefusedAtEveryDepth() {
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             host: {
                 width: 1280
@@ -55,7 +55,7 @@ public class ContainerSpellingTests {
             """, "host:");
 
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             cameras: [
                 { name: "a" }
@@ -63,7 +63,7 @@ public class ContainerSpellingTests {
             """, "cameras:");
 
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             collision {
                 requirements: [
@@ -76,7 +76,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestAnObjectLiteralFollowsTheSameRule() {
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             screens [
                 { index: 0, origin: [0, 1, 0] }
@@ -87,7 +87,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestRuleDecisionAndOptionBodiesFollowTheSameRule() {
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "zoned" {
                 when score[0] > 0
@@ -97,7 +97,7 @@ public class ContainerSpellingTests {
             """, "'zones: [' - a array is written without the ':': use 'zones ['");
 
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "chooser" {
                 decision {
@@ -111,7 +111,7 @@ public class ContainerSpellingTests {
             """, "'tieBreak: {' - a block is written without the ':': use 'tieBreak {'");
 
         AssertRefusesColon("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "chooser" {
                 decision {
@@ -128,7 +128,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestRuleBodyContainersWithoutAColonAndScalarsWithOneParseClean() {
         var diagnostics = ParseForDiagnostics("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "zoned" {
                 when score[0] > 0
@@ -154,7 +154,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestACallArgumentKeepsItsColon() {
         var diagnostics = ParseForDiagnostics("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             cameras [
                 {
@@ -174,7 +174,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestANameStandingForAContainerKeepsItsColon() {
         var diagnostics = ParseForDiagnostics("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             let bounds = [0, 1, 0]
 
@@ -191,7 +191,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestABareFlagIsNotSwallowedByTheBlockStatementBelowIt() {
         var document = PuckParser.ParseDocument("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             placements {
                 placement "debugRoom" {
@@ -212,7 +212,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestANestedFieldBlockLowersLikeItsPropertySpelling() {
         var lowered = WorldDocumentEmitter.Lower(PuckParser.ParseDocument("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             placements {
                 policy {
@@ -229,7 +229,7 @@ public class ContainerSpellingTests {
     [Fact]
     public void TestFormattingNeverReintroducesTheColon() {
         var formatted = PuckFormatter.Format("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             host:
             {
             width: 1280

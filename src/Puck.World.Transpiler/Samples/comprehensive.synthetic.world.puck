@@ -1,4 +1,4 @@
-schema: "puck.world.definition.v1"
+﻿schema: "puck.world.definition.v1"
 basis: "worlds/base.puck"
 documentId: "comprehensive-synthetic-v1"
 
@@ -24,7 +24,7 @@ export binding input, pointer, pad
 // Parametric templates
 template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
     seatRig rigName {
-        version: "puck.camera.v1"
+        version: "puck.camera.program.v1"
         operations [
             orbit(distance: dist, pitch: angle, yaw: 0)
             fieldOfView(fieldOfViewRadians: 0.001)

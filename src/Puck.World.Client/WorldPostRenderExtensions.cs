@@ -3,7 +3,7 @@ using Puck.Shaders;
 namespace Puck.World;
 
 /// <summary>
-/// The post-render extensions this build ships: the shader sets found by their <c>puck.shader.v1</c> manifests
+/// The post-render extensions this build ships: the shader sets found by their <c>puck.shader.manifest.v1</c> manifests
 /// under the deploy's <c>Assets/Shaders</c> tree. A world document's <c>render.extensions[].id</c> is a set's id
 /// (its manifest's file stem); shipping a set is exactly shipping its manifest beside its bytecode. Read by both
 /// composition roots' pre-container <see cref="WorldExtensionVocabularyHook"/> wiring (the validator checks a

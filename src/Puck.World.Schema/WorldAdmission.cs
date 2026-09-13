@@ -42,7 +42,7 @@ public enum WorldDisclosureTier : byte {
     /// The wire default: a peer whose admission entry authors no tier receives this.</summary>
     Presentation,
 
-    /// <summary>The whole <c>puck.world.def.v1</c> document, verbatim — the sanctioned download. Authored
+    /// <summary>The whole <c>puck.world.definition.v1</c> document, verbatim — the sanctioned download. Authored
     /// explicitly, never defaulted into.</summary>
     Replica,
 }

@@ -7,12 +7,12 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-// puck.world.def.v1 rule bodies are straight-line and its gates are comparisons, so the world side of these
+// puck.world.definition.v1 rule bodies are straight-line and its gates are comparisons, so the world side of these
 // features is a named refusal rather than a lowering.
 public class ControlFlowTests {
     private static RuleBlockNode ParseOneRule(string body) {
         var document = PuckParser.ParseDocument($$"""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "probe" {
             {{body}}
@@ -110,7 +110,7 @@ public class ControlFlowTests {
     [Fact]
     public void TestRepeatCountMayBeAConstant() {
         var document = PuckParser.ParseDocument("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             let corners = 4
 
@@ -174,7 +174,7 @@ public class ControlFlowTests {
             ("break", "break"),
         }) {
             var diagnostics = LowerForDiagnostics($$"""
-                schema: "puck.world.def.v1"
+                schema: "puck.world.definition.v1"
 
                 rule "probe" {
                     {{body}}
@@ -189,7 +189,7 @@ public class ControlFlowTests {
     [Fact]
     public void TestWorldLoweringRefusesACallFormGateByName() {
         var diagnostics = LowerForDiagnostics("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "probe" {
                 when key(left, held)
@@ -204,7 +204,7 @@ public class ControlFlowTests {
     [Fact]
     public void TestFormatterRoundTripsAControlFlowBody() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             rule "probe" {
                 if score[total] > 8 {

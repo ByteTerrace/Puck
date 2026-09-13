@@ -19,7 +19,7 @@ public enum SynthOscillator {
     Noise,
 }
 /// <summary>
-/// The <c>puck.synth.v1</c> document — one deterministic synth PATCH as data: the parameter set a world voice synth
+/// The <c>puck.synthesizer-patch.v1</c> document — one deterministic synth PATCH as data: the parameter set a world voice synth
 /// renders a creature/phenomenon sound from, integer end to end (no wall-clock, RNG seeds arrive per-trigger, no
 /// float anywhere in the schema). Every field is a RUNTIME unit — frames are mixer-rate audio frames (48000 per
 /// second) and pitch rides integer millihertz — so a renderer consumes the document
@@ -28,7 +28,7 @@ public enum SynthOscillator {
 /// Document doctrine applies throughout: every OPTIONAL member is nullable, validated only when present, and
 /// normalized through <see cref="SynthPatchCanonicalizer"/>.
 /// </summary>
-/// <param name="Schema">The document version tag (<c>puck.synth.v1</c>).</param>
+/// <param name="Schema">The document version tag (<c>puck.synthesizer-patch.v1</c>).</param>
 /// <param name="Name">The patch's display name (null = "patch").</param>
 /// <param name="Oscillator">The oscillator kind (null = <see cref="SynthOscillator.Pulse"/>).</param>
 /// <param name="DutyThousandths">The pulse duty cycle in thousandths of a period, 1..999 (null = 500 — a square
@@ -108,7 +108,7 @@ public static class SynthPatchCanonicalizer {
     /// rewrite, so nothing here self-heals except the cross-oscillator field clears
     /// <see cref="Normalize"/> owns.</summary>
     /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.synth.v1</c> value.</returns>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.synthesizer-patch.v1</c> value.</returns>
     public static IReadOnlyList<DocumentValidationError> Validate(SynthPatchDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -260,7 +260,7 @@ public sealed class PuckLanguageServer {
         // 2. Sections
         AddCompletion(items, "host", "host {\n    width: ${1:1280}\n    height: ${2:720}\n    fullscreen: ${3:false}\n    targetHertz: ${4:60}\n}", "Section: Host window & presentation", 7);
         AddCompletion(items, "views", "views {\n    $0\n}", "Section: Camera layouts & seat rigs", 7);
-        AddCompletion(items, "seatRig", "seatRig \"${1:main}\" {\n    version: \"puck.camera.v1\"\n    operations: [\n        orbit(pitch: 0deg, yaw: 0deg, distance: 2.5m)\n    ]\n}", "Section: Camera seat rig", 7);
+        AddCompletion(items, "seatRig", "seatRig \"${1:main}\" {\n    version: \"puck.camera.program.v1\"\n    operations: [\n        orbit(pitch: 0deg, yaw: 0deg, distance: 2.5m)\n    ]\n}", "Section: Camera seat rig", 7);
         AddCompletion(items, "layout", "layout \"${1:main}\" {\n    $0\n}", "Section: View layout", 7);
         AddCompletion(items, "solids", "solids: [\n    $0\n]", "Section: SDF CSG Solids", 7);
         AddCompletion(items, "materials", "materials: [\n    $0\n]", "Section: Surface materials", 7);

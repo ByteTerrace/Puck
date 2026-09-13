@@ -6,7 +6,7 @@ A single shader and a connected graph share the same execution model; see
 The shader-set manifest describes reusable stages and their configuration.
 
 A shader set is data: one HLSL source (or a vertex+fragment pair) and one
-`puck.shader.v1` manifest beside it. The manifest declares everything the
+`puck.shader.manifest.v1` manifest beside it. The manifest declares everything the
 engine needs to run the set—its stages, its descriptor bindings, the
 configuration a document may author for it, and the push-constant block and
 where each field's value comes from. The engine loads that manifest beside the
@@ -25,7 +25,7 @@ Assets/Shaders/Sdf/sdf-film-grain.puck.shader.json
 
 ```json
 {
-  "$schema": "puck.shader.v1",
+  "$schema": "puck.shader.manifest.v1",
   "name": "sdf-film-grain",
   "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output.",
   "stages": { "vertex": "fullscreen.vert", "fragment": "sdf-film-grain.frag" },
@@ -72,7 +72,7 @@ manifest's config schema into the world-document JSON Schema, so
 
 | Key | Meaning |
 |-----|---------|
-| `$schema` | `puck.shader.v1`. |
+| `$schema` | `puck.shader.manifest.v1`. |
 | `name` | The set's id; the manifest filename is `<name>.puck.shader.json`. |
 | `description` | Carried into the emitted config JSON Schema. |
 | `stages` | `{ "vertex", "fragment" }` (a graphics set) or `{ "compute" }`; each a sibling `<stem>.hlsl` compiled to `<stem>.spv` and `<stem>.dxil`. |
@@ -179,7 +179,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 
 | Type | Role |
 |------|------|
-| `ShaderSetManifest` | A parsed, validated `puck.shader.v1` document with its resolved `PushConstantLayout` and load `Directory`. |
+| `ShaderSetManifest` | A parsed, validated `puck.shader.manifest.v1` document with its resolved `PushConstantLayout` and load `Directory`. |
 | `ShaderSetCatalog` | The shipped sets under a directory tree, by id. |
 | `ShaderConfigField` / `ShaderConfigValues` | One config schema field; a document's bound values. |
 | `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
@@ -187,10 +187,10 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `ShaderValueType` | `float`…`int4`, with component count and kind. |
 | `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
-| `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.v1` probe kind and the shipped kinds under a directory tree, by id. |
+| `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.manifest.v1` probe kind and the shipped kinds under a directory tree, by id. |
 | `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
 
-## Probe kinds (`puck.probe.v1`)
+## Probe kinds (`puck.probe.manifest.v1`)
 
 An probe kind is data the same way a shader set is: one `<id>.puck.probe.json`
 manifest, found by `ProbeKindCatalog.Scan` under a deploy's `Assets/Probes`
@@ -202,7 +202,7 @@ runs, only the kind's own `class`.
 
 ```json
 {
-  "$schema": "puck.probe.v1",
+  "$schema": "puck.probe.manifest.v1",
   "name": "ir-blob",
   "class": "kernel",
   "inputs": [{ "name": "lit", "class": "frame" }],
@@ -222,7 +222,7 @@ runs, only the kind's own `class`.
 
 | Key | Meaning |
 |-----|---------|
-| `$schema` | `puck.probe.v1`. |
+| `$schema` | `puck.probe.manifest.v1`. |
 | `name` | The kind's id; the manifest filename is `<name>.puck.probe.json`. |
 | `class` | `kernel` (handwritten GPU compute on the camera graph's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
 | `inputs[]` | `{ name, class: "frame"\|"strobePair", optional?: bool }`, `1..8` sockets bound at `t0, t1, …` in this order (a `strobePair` socket takes two consecutive registers, lit then unlit). `name` is unique within the manifest: letters, digits, or `-`, starting with a letter. A document row plugs one `WorldFrameSource` into each socket by name; `optional` lets a row leave it unbound. |

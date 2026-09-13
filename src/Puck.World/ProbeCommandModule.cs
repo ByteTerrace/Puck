@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <c>probes</c> document section's live host (<see cref="WorldProbes"/>). All three verbs are Immediate.
 /// <c>probe.status</c> is a query (always echoes, even under <c>wire.ack quiet</c>) reporting every declared
 /// probe's run state and every binding's conditioned value and write count; <c>probe.record</c> arms a live
-/// recording of one probe's fresh readings to a <c>puck.probe-track.v1</c> document — the recorded track a
+/// recording of one probe's fresh readings to a <c>puck.probe.track.v1</c> document — the recorded track a
 /// track-input probe plugs into in place of a live device, so a binding's downstream behavior is testable without
 /// hardware; <c>probe.set</c> patches one probe kind config field live (<see cref="WorldProbes.TrySetField"/>). A
 /// refusal marks <see cref="CommandResult.IsError"/> (stderr, counted by <c>wire.errors</c>);
@@ -95,7 +95,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "probe.record",
-            description: "Arms a live recording of one declared probe instance to a puck.probe-track.v1 document: probe.record <probe>[@<seat>] <path> <seconds> — every fresh reading the instance publishes over the window is captured (serviced once per host frame, so this only progresses while the world is running windowed); the document writes once the window elapses and completion narrates on stderr with the sample count. The recorded document plugs into a track-input probe (probes[].track) in place of a live device — the hardware-free proof leg. The @<seat> suffix names one instance of a seat-relative probe (required — omitting it is ambiguous and refused, naming the live instances) or, for a single-instance probe, is optional. Errors on an unknown probe, an unresolved or ambiguous instance, a non-positive or non-numeric seconds, an already-armed recording, or an unwritable path.",
+            description: "Arms a live recording of one declared probe instance to a puck.probe.track.v1 document: probe.record <probe>[@<seat>] <path> <seconds> — every fresh reading the instance publishes over the window is captured (serviced once per host frame, so this only progresses while the world is running windowed); the document writes once the window elapses and completion narrates on stderr with the sample count. The recorded document plugs into a track-input probe (probes[].track) in place of a live device — the hardware-free proof leg. The @<seat> suffix names one instance of a seat-relative probe (required — omitting it is ambiguous and refused, naming the live instances) or, for a single-instance probe, is optional. Errors on an unknown probe, an unresolved or ambiguous instance, a non-positive or non-numeric seconds, an already-armed recording, or an unwritable path.",
             handler: RecordHandler
         );
         yield return CommandDefinition.WithWireArgs(

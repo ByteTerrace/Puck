@@ -9,7 +9,7 @@ public sealed class MachineAuthoringTests {
     [Fact]
     public void NamedDevicesUseOrdinaryBlocksArraysAndConstants() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let deviceModel = "cgb"
             let cartridge = "content/demo.cartridge.json"
             machines [

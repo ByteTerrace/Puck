@@ -14,12 +14,12 @@ public sealed class TuneAndPatchAssetSourceValidationLawTests {
     [Fact]
     public void MissingTuneSourceRefusesByPath() {
         var document = Fixtures.BuildDocument() with {
-            TunesRaw = [new WorldTune(Hash: "0000000000000000000000000000000000000000000000000000000000000000", Name: "missing-tune", Source: "does-not-exist.puck.audio.v1.json")],
+            TunesRaw = [new WorldTune(Hash: "0000000000000000000000000000000000000000000000000000000000000000", Name: "missing-tune", Source: "does-not-exist.puck.tune.v1.json")],
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "a tune row naming an unresolvable source was expected to refuse");
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "tunes[0]");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "does-not-exist.puck.audio.v1.json");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "does-not-exist.puck.tune.v1.json");
     }
     [Fact]
     public void ValidTuneSourceControl() {
@@ -38,12 +38,12 @@ public sealed class TuneAndPatchAssetSourceValidationLawTests {
     [Fact]
     public void MissingPatchSourceRefusesByPath() {
         var document = Fixtures.BuildDocument() with {
-            PatchesRaw = [new WorldPatch(Hash: "0000000000000000000000000000000000000000000000000000000000000000", Name: "missing-patch", Source: "does-not-exist.puck.synth.v1.json")],
+            PatchesRaw = [new WorldPatch(Hash: "0000000000000000000000000000000000000000000000000000000000000000", Name: "missing-patch", Source: "does-not-exist.puck.synthesizer-patch.v1.json")],
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "a patch row naming an unresolvable source was expected to refuse");
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "patches[0]");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "does-not-exist.puck.synth.v1.json");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "does-not-exist.puck.synthesizer-patch.v1.json");
     }
     [Fact]
     public void ValidPatchSourceControl() {
@@ -62,7 +62,7 @@ public sealed class TuneAndPatchAssetSourceValidationLawTests {
 
     private static WorldTune BuildTuneRow(string assetDirectory, string name) {
         var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: name, Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
-        var path = Path.Combine(path1: assetDirectory, path2: $"{name}.puck.audio.v1.json");
+        var path = Path.Combine(path1: assetDirectory, path2: $"{name}.puck.tune.v1.json");
 
         File.WriteAllBytes(path: path, bytes: tune.Bytes);
 
@@ -70,7 +70,7 @@ public sealed class TuneAndPatchAssetSourceValidationLawTests {
     }
     private static WorldPatch BuildPatchRow(string assetDirectory, string name) {
         var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: name, Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
-        var path = Path.Combine(path1: assetDirectory, path2: $"{name}.puck.synth.v1.json");
+        var path = Path.Combine(path1: assetDirectory, path2: $"{name}.puck.synthesizer-patch.v1.json");
 
         File.WriteAllBytes(path: path, bytes: patch.Bytes);
 

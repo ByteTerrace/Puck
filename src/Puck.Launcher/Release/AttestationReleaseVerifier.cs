@@ -4,7 +4,7 @@ using Puck.Attestation;
 namespace Puck.Launcher.Release;
 
 /// <summary>
-/// The <c>puck.release.v1</c> signature verifier: the <c>sequence</c>-route bearer claim from
+/// The <c>puck.release.manifest.v1</c> signature verifier: the <c>sequence</c>-route bearer claim from
 /// <see cref="Puck.Attestation.AttestationProfile.Base"/>, checked against the durable
 /// <see cref="IReleaseSequenceStore"/> mark BEFORE anything else — a replayed old manifest is refused by sequence
 /// alone, before its embedded <see cref="ReleaseManifest.Revoked"/>/<see cref="ReleaseManifest.MinimumSupported"/>

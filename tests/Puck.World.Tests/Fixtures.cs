@@ -185,7 +185,7 @@ internal static class Fixtures {
         var bodyMotionPrograms = new BodyMotionProgram[] {
             new(
                 Name: "grounded",
-                Version: "puck.body-motion.v1",
+                Version: BodyMotionProgram.CurrentVersion,
                 Kind: BodyProgramKind.Motion,
                 Operations: [
                     BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -203,7 +203,7 @@ internal static class Fixtures {
             // initialization are independent of whether the assigned kit declares this optional behavior.
             new(
                 Name: "roam",
-                Version: "puck.body-motion.v1",
+                Version: BodyMotionProgram.CurrentVersion,
                 Kind: BodyProgramKind.Producer,
                 Operations: [BodyMotionOp.ProduceSteeringIntent]
             ),

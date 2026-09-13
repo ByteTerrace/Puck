@@ -31,7 +31,7 @@ public sealed class CurveFollowValidationLawTests {
         var kit = document.Kits[0];
         var followProgram = new BodyMotionProgram(
             Name: "follow",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: curve, Rate: rate)

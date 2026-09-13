@@ -73,7 +73,7 @@ public class LspTests {
         WriteRpcMessage(input, System.Text.Json.JsonSerializer.Serialize(new {
             jsonrpc = "2.0", method = "textDocument/didOpen",
             @params = new { textDocument = new { uri, languageId = "puck", version = 1,
-                text = "schema: \"puck.world.def.v1\"\nbasis: \"avatars/moth.puck\"\n" } }
+                text = "schema: \"puck.world.definition.v1\"\nbasis: \"avatars/moth.puck\"\n" } }
         }));
         WriteRpcMessage(input, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
         input.Position = 0;

@@ -18,7 +18,7 @@ namespace Puck.Platform.Windows;
 /// <see cref="TryRun"/> after converting a trigger frame, holding the device's critical section; the kernel binds the
 /// converted frames it was asked for, dispatches accumulate and finalize, writes its output slot, reads the channels
 /// back, and publishes the reading before returning.
-/// <para>Kernel ABI (<c>puck.probe.v1</c>): sockets bind <c>t</c> registers in declaration order — a
+/// <para>Kernel ABI (<c>puck.probe.manifest.v1</c>): sockets bind <c>t</c> registers in declaration order — a
 /// <see cref="ProbeKernelInput.StrobePair"/> socket spans two consecutive registers (lit, then unlit); every other
 /// socket spans one; <c>cbuffer ProbeConfig : register(b0)</c> is the kind's packed config; <c>cbuffer ProbeFrame :
 /// register(b1)</c> is <c>{ float time; float deltaTime; uint frame; uint boundMask; }</c> — bit <c>i</c> set when

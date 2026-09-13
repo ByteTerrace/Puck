@@ -20,7 +20,7 @@ public enum SynthOscillator {
     Noise,
 }
 /// <summary>The per-voice state-variable filter response. <see cref="Bypass"/> is the neutral default every
-/// current <c>puck.synth.v1</c> patch converts to — patch-side filter fields are not yet part of the document; the
+/// current <c>puck.synthesizer-patch.v1</c> patch converts to — patch-side filter fields are not yet part of the document; the
 /// runtime block already carries them so the DSP works ahead of the document surface.</summary>
 public enum VoiceFilterMode {
     /// <summary>No filtering — the voice output is the oscillator/envelope product unchanged.</summary>
@@ -34,7 +34,7 @@ public enum VoiceFilterMode {
 }
 /// <summary>
 /// The flat runtime parameter block one trigger voices from — converted once at registration (never per sample)
-/// from a normalized <c>puck.synth.v1</c> document by the host's patch factory:
+/// from a normalized <c>puck.synthesizer-patch.v1</c> document by the host's patch factory:
 /// duty is pre-scaled to a Q32 phase threshold with its DC term precomputed, and all frame/millihertz fields ride
 /// verbatim (they are already runtime units by the document's design). Filter parameters have no document fields
 /// yet — the factory sets <see cref="VoiceFilterMode.Bypass"/>.

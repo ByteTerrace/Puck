@@ -20,7 +20,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     }
   ],
   "channels": [
@@ -137,7 +137,7 @@
       "arena_freezable"
     ]
   },
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "simulation": {
     "rateHz": 30
   },
@@ -183,7 +183,7 @@
           "row": "chase"
         }
       ],
-      "version": "puck.camera.v1"
+      "version": "puck.camera.program.v1"
     }
   }
 }

@@ -50,8 +50,10 @@ loopback-only `POST /drain`. Provider settings and metadata protocols belong to
 the extension; the silo schema and lifecycle service do not interpret them.
 The [Azure extension](../Puck.World.Azure/README.md#silo-hosting) owns its provider keys.
 
-`GET /healthz` returns 200 only after all pinned worlds have activated, reconciled
-their published definitions, and checkpointed. It also checks ongoing simulation
+`GET /healthz` returns 200 only after all pinned worlds have activated and
+checkpointed. Unmanaged startup also reconciles published definitions through
+ordinary reload. Managed startup preserves the recovered state and waits for
+release admission. Health also checks ongoing simulation
 progress, checkpoint age, journal failures and backlog, and pending release saves.
 `GET /livez` checks simulation progress independently of storage health, so a
 storage outage does not trigger VM replacement. Both refuse during retirement.
@@ -59,7 +61,10 @@ Managed documents may add `release` with a deployment `group`, its private-store
 `owner`, and an exact `expectedRelease`. Such a host restores candidates behind
 the durable group barrier: route registration, listeners, console sessions,
 simulation steps, transfers, and federation effects remain closed until the
-explicit all-row publication succeeds. Loopback-only `GET /private-healthz`
+explicit all-row publication succeeds. Publication checks every row's current
+authority fence; a missing row or stale fence refuses the whole group. A
+committed target can reopen after restart under fresh fences while retaining
+the previous release and its rollback window. Loopback-only `GET /private-healthz`
 reports candidate persistence health without opening admission. A managed
 candidate in an uncommitted operation remains available for private
 verification; it is not ready for public traffic.
@@ -68,6 +73,7 @@ JSON contract, returning HTTP 200 with `Healthy` or `Unhealthy`. The generic
 `/livez` retains its HTTP 200/503 contract.
 Loopback-only `POST /reload` reconciles published content through the existing
 reload submission, saves a checkpoint, and records the accepted content hash.
+This administrative content reload is separate from managed release cutover.
 Unchanged releases preserve recovered state; failed saves can retry without
 applying the same accepted rebuild twice. Readiness stays closed while a release
 is uncommitted. Changing the world's network binding requires a fresh activation.

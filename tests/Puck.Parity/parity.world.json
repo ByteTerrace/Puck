@@ -35,7 +35,7 @@
             "fieldOfViewRadians": 0.9
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -71,7 +71,7 @@
             "fieldOfViewRadians": 0.75
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -109,7 +109,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -147,7 +147,7 @@
             "fieldOfViewRadians": 0.75
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -185,7 +185,7 @@
             "fieldOfViewRadians": 1.4
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -224,7 +224,7 @@
             "key": "state.station"
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     }
   ],
@@ -980,7 +980,7 @@
       "name": "toVocabulary"
     }
   ],
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "simulation": {
     "rateHz": 240
   },
@@ -1078,7 +1078,7 @@
           "fieldOfViewRadians": 0.9
         }
       ],
-      "version": "puck.camera.v1"
+      "version": "puck.camera.program.v1"
     }
   }
 }

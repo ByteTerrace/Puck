@@ -114,7 +114,7 @@ public sealed class CurveFollowLawTests {
         var kit = document.Kits[0];
         var followProgram = new BodyMotionProgram(
             Name: programName,
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: curve.Name, Rate: rate)
@@ -410,14 +410,14 @@ public sealed class CurveFollowLawTests {
         var kit = document.Kits[0];
         var followStraight = new BodyMotionProgram(
             Name: FollowProgramName,
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: straight.Name, Rate: 2f)
         );
         var followLoop = new BodyMotionProgram(
             Name: LoopFollowProgramName,
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: loop.Name, Rate: 2f)

@@ -1602,7 +1602,7 @@
                         "pitchMillihertz"
                       ],
                       "additionalProperties": false,
-                      "description": "The voice\u0027s puck.synth.v1 patch, inline (validated through the synth family\u0027s own canonicalizer as part of creation validation)."
+                      "description": "The voice\u0027s puck.synthesizer-patch.v1 patch, inline (validated through the synth family\u0027s own canonicalizer as part of creation validation)."
                     },
                     "level": {
                       "type": [
@@ -1624,7 +1624,7 @@
                     "patch"
                   ],
                   "additionalProperties": false,
-                  "description": "One sound a creation carries \u2014 a creature/phenomenon voice as data, following CreationFaceDocument\u0027s named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the creation\u0027s root), and the puck.synth.v1 patch inline \u2014 creations stay portable, and the existing creation hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an audio emitter anchored to the placement (root or the named shape); the placement row\u0027s own emission facet remains the per-instance override channel."
+                  "description": "One sound a creation carries \u2014 a creature/phenomenon voice as data, following CreationFaceDocument\u0027s named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the creation\u0027s root), and the puck.synthesizer-patch.v1 patch inline \u2014 creations stay portable, and the existing creation hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an audio emitter anchored to the placement (root or the named shape); the placement row\u0027s own emission facet remains the per-instance override channel."
                 },
                 "default": null,
                 "description": "The declared sounds (null = none). Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes."

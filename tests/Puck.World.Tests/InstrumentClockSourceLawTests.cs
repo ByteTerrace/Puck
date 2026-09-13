@@ -86,7 +86,7 @@ public sealed class InstrumentClockSourceLawTests {
         return fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text;
     }
     /// <summary>Builds the fixture: <see cref="Fixtures.BuildDocument"/> plus a real <c>puck.music.v1</c>/
-    /// <c>puck.audio.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, an
+    /// <c>puck.tune.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, an
     /// engageable <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>, and one music segment whose
     /// transition discriminates the fold.</summary>
     private static WorldDefinition BuildDocument(string assetDirectory) {
@@ -107,7 +107,7 @@ public sealed class InstrumentClockSourceLawTests {
         var instrument = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "fast-instrument", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: 1));
 
         var musicPath = Path.Combine(path1: assetDirectory, path2: "instrument-clock-law.puck.music.v1.json");
-        var instrumentPath = Path.Combine(path1: assetDirectory, path2: "fast-instrument.puck.audio.v1.json");
+        var instrumentPath = Path.Combine(path1: assetDirectory, path2: "fast-instrument.puck.tune.v1.json");
 
         File.WriteAllBytes(path: musicPath, bytes: music.Bytes);
         File.WriteAllBytes(path: instrumentPath, bytes: instrument.Bytes);

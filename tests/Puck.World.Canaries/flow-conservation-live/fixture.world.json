@@ -1,5 +1,5 @@
 {
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "documentId": "flow-conservation-live-canary",
   "simulation": { "rateHz": 240 },
   "state": {

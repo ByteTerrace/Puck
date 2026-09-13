@@ -259,7 +259,7 @@
           "title": "WorldQualityPreset"
         },
         "extensions": {
-          "description": "The post-render extension chain, composed over the world\u0027s rendered output in list order \u2014 e.g. [{ \u0022id\u0022: \u0022sdf-film-grain\u0022, \u0022config\u0022: { \u0022intensity\u0022: 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set \u2014 a puck.shader.v1 manifest\u0027s file stem (checked at document load); each entry\u0027s own config is validated against that manifest\u0027s declared config schema at boot and by puck schema.",
+          "description": "The post-render extension chain, composed over the world\u0027s rendered output in list order \u2014 e.g. [{ \u0022id\u0022: \u0022sdf-film-grain\u0022, \u0022config\u0022: { \u0022intensity\u0022: 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set \u2014 a puck.shader.manifest.v1 manifest\u0027s file stem (checked at document load); each entry\u0027s own config is validated against that manifest\u0027s declared config schema at boot and by puck schema.",
           "type": [
             "array",
             "null"
@@ -272,7 +272,7 @@
             ],
             "properties": {
               "id": {
-                "description": "The shader set id (its puck.shader.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.",
+                "description": "The shader set id (its puck.shader.manifest.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.",
                 "type": "string",
                 "enum": [
                   "sdf-film-grain"
@@ -11421,7 +11421,7 @@
                             "pitchMillihertz"
                           ],
                           "additionalProperties": false,
-                          "description": "The voice\u0027s puck.synth.v1 patch, inline (validated through the synth family\u0027s own canonicalizer as part of creation validation)."
+                          "description": "The voice\u0027s puck.synthesizer-patch.v1 patch, inline (validated through the synth family\u0027s own canonicalizer as part of creation validation)."
                         },
                         "level": {
                           "type": [
@@ -11443,7 +11443,7 @@
                         "patch"
                       ],
                       "additionalProperties": false,
-                      "description": "One sound a creation carries \u2014 a creature/phenomenon voice as data, following CreationFaceDocument\u0027s named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the creation\u0027s root), and the puck.synth.v1 patch inline \u2014 creations stay portable, and the existing creation hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an audio emitter anchored to the placement (root or the named shape); the placement row\u0027s own emission facet remains the per-instance override channel."
+                      "description": "One sound a creation carries \u2014 a creature/phenomenon voice as data, following CreationFaceDocument\u0027s named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the creation\u0027s root), and the puck.synthesizer-patch.v1 patch inline \u2014 creations stay portable, and the existing creation hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an audio emitter anchored to the placement (root or the named shape); the placement row\u0027s own emission facet remains the per-instance override channel."
                     },
                     "default": null,
                     "description": "The declared sounds (null = none). Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes."
@@ -13793,7 +13793,7 @@
       "description": "The tune assets.",
       "type": "array",
       "items": {
-        "description": "One tune asset reference row \u2014 a puck.audio.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldMusicRow uses), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Never embedded: the document is loaded, canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline WorldMusicRow already applies. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
+        "description": "One tune asset reference row \u2014 a puck.tune.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldMusicRow uses), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Never embedded: the document is loaded, canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline WorldMusicRow already applies. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
         "type": [
           "object",
           "null"
@@ -13825,7 +13825,7 @@
       "description": "The synth patch assets.",
       "type": "array",
       "items": {
-        "description": "One synth-patch asset reference row \u2014 the puck.synth.v1 twin of WorldTune, same name/source/hash shape and load-then-pin discipline.",
+        "description": "One synth-patch asset reference row \u2014 the puck.synthesizer-patch.v1 twin of WorldTune, same name/source/hash shape and load-then-pin discipline.",
         "type": [
           "object",
           "null"

@@ -168,7 +168,7 @@ public class LspSugarTests {
     [InlineData("shape Super|ellipsoid \"stone\" { exponent: 2.7 }", "shape.type: Superellipsoid", "Superellipsoid")]
     [InlineData("shape Superellipsoid \"stone\" { blend: Smooth|Union }", "blend: SmoothUnion", "SmoothUnion")]
     public async Task HoverExplainsCreationFieldsInsideAWorldPrototype(string body, string field, string description) {
-        var source = "schema: \"puck.world.def.v1\"\nprototypes { prototype \"limestone\" { document {\nschema: \"puck.creation.v1\"\n" + body + "\n} } }\n";
+        var source = "schema: \"puck.world.definition.v1\"\nprototypes { prototype \"limestone\" { document {\nschema: \"puck.creation.v1\"\n" + body + "\n} } }\n";
         var response = await HoverMarkedAsync(source);
         var text = response["result"]?["contents"]?["value"]?.ToString();
         Assert.NotNull(text);

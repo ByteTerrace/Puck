@@ -14,7 +14,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     }
   ],
   "exports": {

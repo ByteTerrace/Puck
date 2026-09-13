@@ -12,7 +12,7 @@ engine. This README owns application usage; sibling projects own their local con
 
 | Project | Owns |
 |---|---|
-| [`Puck.World.Schema`](../Puck.World.Schema/README.md) | The `puck.world.def.v1` document model |
+| [`Puck.World.Schema`](../Puck.World.Schema/README.md) | The `puck.world.definition.v1` document model |
 | [`Puck.World.Protocol`](../Puck.World.Protocol/README.md) | The wire/tape protocol |
 | [`Puck.Networking`](../Puck.Networking/README.md) | The world-agnostic wire substrate—the frame grammar and reader/writer pair |
 | [`Puck.World.Server`](../Puck.World.Server/README.md) | The authoritative runtime: the tick, entity table, grants, addons, owned worlds, storage, replay |
@@ -435,7 +435,7 @@ Facts a script needs:
   own wheel-hold page binds.
 - `WorldDefinitionLoader.cs`—resolves and validates the boot world
   document; `RecordingDocumentSource.cs` does the same for
-  `puck.recording.v1`.
+  `puck.recording.configuration.v1`.
 - [`Puck.World.Client`](../Puck.World.Client/README.md)—the per-machine
   client half: seats and device intents, the snapshot-fed entity view and
   render interpolation, the fly camera application, the
@@ -1043,7 +1043,7 @@ rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
-instrument: its content is a `puck.audio.v1` document rather than a
+instrument: its content is a `puck.tune.v1` document rather than a
 cartridge ROM, compiled to the same jukebox cart `Audio/TuneMachineSource.cs`
 plays passively and booted on a real `Puck.HumbleGamingBrick.MachineHost`, so
 `body.engage` reaches it exactly like any other screen machine. While a seat
@@ -1109,7 +1109,7 @@ takes.
 ## Native capture
 
 The world records itself to WebM/Matroska through the recording graph in
-`Puck.Recording` (`puck.recording.v1`—resolved at boot from `--recording`
+`Puck.Recording` (`puck.recording.configuration.v1`—resolved at boot from `--recording`
 or `Assets/recordings/default.recording.json`). `capture.start` arms Hosting's
 generic frame-capture controller with a `RecordingSession`; Launcher supplies
 the exact final root surface immediately before presentation, and the active
@@ -1130,9 +1130,9 @@ arm-to-first-packet latency.
 ## Probes
 
 A document's optional `probes` rows (`WorldProbe`, boot-authored only) each
-declare a registered `puck.probe.v1` kind and plug one `WorldFrameSource` into
+declare a registered `puck.probe.manifest.v1` kind and plug one `WorldFrameSource` into
 each of the kind's typed sockets (`inputs`, by socket name)—or, in place of
-every socket at once, a recorded `puck.probe-track.v1` track—and carry the
+every socket at once, a recorded `puck.probe.track.v1` track—and carry the
 bindings that route one of its channels to a command axis (a `probe.<name>`
 source, an ordinary bindable stick-like input any binding overlay may map), a
 presentation float (a `render.extensions` config field, or another probe's
@@ -1210,7 +1210,7 @@ seat carries no camera)—a query, always echoing even under `wire.ack quiet`.
 A seat-relative row's instance is listed as `<id>@<seat>`; a single-instance
 row's is listed by its bare `<id>`. `probe.record <probe>[@<seat>] <path>
 <seconds>` arms a live recording of one instance's fresh readings to a
-`puck.probe-track.v1` document, sampled once per host frame (an instance
+`puck.probe.track.v1` document, sampled once per host frame (an instance
 faster than the host frame rate records its latest reading per frame); each
 sample carries its own capture time, and playback follows those times, so
 completion narrates on stderr with the sample count and the recorded cadence

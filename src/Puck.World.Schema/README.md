@@ -1,9 +1,9 @@
 # Puck.World.Schema
 
-Puck.World.Schema defines the world data model: `puck.world.def.v1`, the
+Puck.World.Schema defines the world data model: `puck.world.definition.v1`, the
 versioned JSON document family that describes a world and a player—plus the
 two egress families, `puck.world.projection.v1` (`WorldProjection.cs`) and
-`puck.world.counterpart.v1` (`WorldCounterpartAttestation.cs`), which are what
+`puck.world.counterpart-attestation.v1` (`WorldCounterpartAttestation.cs`), which are what
 a world hands a peer instead of itself. It contains no rendering, no input
 handling, and no server logic; it exists so the data the simulation runs on
 remains independent of presentation. It also carries the
@@ -521,7 +521,7 @@ throughout the tree already spells them `Puck.World.Protocol.WorldGrant`
 etc., so the split kept the namespace and moved only the file, rather than
 renaming the type everywhere it is used.
 
-## `puck.world.def.v1`—the world definition
+## `puck.world.definition.v1`—the world definition
 
 `WorldDefinition.cs` is one aggregate record with a section record per concern;
 the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
@@ -533,7 +533,7 @@ dynamics, curves, tables). Worlds live as data
 under `../Puck.World/Assets/worlds/`. There is one shipped world,
 `puck.world.json` (the island, the boot default), a `basis` delta over
 `standard.basis.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
-`arena`, `arcade`, `granaries`—are imported `puck.world.def.v1` module
+`arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
 fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
 live as imported fragments under `worlds/games/`. The corner shards
 (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, plus `quilt-nw-gap`) under
@@ -803,7 +803,7 @@ some ticks always elapse before a save can be requested at all.
 
 ## Owned identity worlds
 
-A person or character is an ordinary `puck.world.def.v1` document carrying an
+A person or character is an ordinary `puck.world.definition.v1` document carrying an
 `identity` row and durable `state` rows. Multiple identities are multiple owned
 worlds; there is no player-document family or aggregate catalog. The runtime
 stores them independently beneath the selected state root's `owned-worlds`

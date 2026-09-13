@@ -4,7 +4,7 @@ The authored-content document families `Puck.World` embeds inline:
 `puck.creation.v1` (`CreationDocument`/`CreationCanonicalizer`) and
 `puck.music.v1` (`MusicDocument`), both
 riding the shared `DocumentCanonicalizer` core in `Puck.Assets`—which also
-owns the `puck.audio.v1`/`puck.synth.v1` families (`Puck.Assets.Documents`),
+owns the `puck.tune.v1`/`puck.synthesizer-patch.v1` families (`Puck.Assets.Documents`),
 so the ROM forges can consume them without a world assembly. `CreationFrame`
 and `GridSnap` live here too. Host-side float on purpose—
 authoring/presentation math, outside the simulation-state determinism

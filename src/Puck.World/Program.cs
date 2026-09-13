@@ -33,11 +33,11 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world definition file (puck.world.definition.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
-    Description = "The recording document (puck.recording.v1) the capture verbs use; a missing or invalid file falls back loudly to the baked default. Default: Assets/recordings/default.recording.json beside the executable.",
+    Description = "The recording document (puck.recording.configuration.v1) the capture verbs use; a missing or invalid file falls back loudly to the baked default. Default: Assets/recordings/default.recording.json beside the executable.",
 };
 var storageUriOption = new Option<string?>(name: "--storage-uri") {
     DefaultValueFactory = static _ => null,
@@ -377,7 +377,7 @@ if (hostSettings.Headless) {
     services.AddWorldOffscreenPresentation(hostsOnDirectX: hostsOnDirectX);
     services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
 } else {
-    // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows, defined as data.
+    // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows, defined as data.
     // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/capture controller/verb module), but the
     // document resolution itself can fail-and-exit, so it stays here beside World's other --world/--recording
     // loaders. Skipped headless: a GPU-less CI box has no reason to carry a valid recordings asset.
@@ -407,7 +407,7 @@ if (hostSettings.Headless) {
 // Self-update: channel/cacheRoot/checkInterval/keepVersions come from the world document's own update section
 // (WorldUpdateDefaults) — a deployment-facet field carrying no simulation-state weight, matching WorldHostDefaults'
 // own posture. The trust anchor is a build-pinned composition-root constant, never a document field: a synced
-// puck.world.def.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
+// puck.world.definition.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
 // ReleaseTrustAnchor.Placeholder until a real release-signing chain is minted for this build.
 var updateSection = worldSource.Definition.Update;
 var updateCacheRoot = (updateSection?.CacheRoot ?? Path.Combine(

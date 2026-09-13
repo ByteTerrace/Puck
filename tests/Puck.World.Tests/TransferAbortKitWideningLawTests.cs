@@ -40,7 +40,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         var driveGround = new BodyMotionProgram(
             Name: "drive-ground",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
@@ -56,7 +56,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // BodyMotionProgramName's own law needs: a name distinct from the kit's own default to switch TO and prove
         // the switch survives an abort/restore.
         var driveGroundAlt = driveGround with { Name = "drive-ground-alt" };
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         var kit = new WorldKit(
             Name: "kart-test",
@@ -121,7 +121,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         var medium = new BodyMotionProgram(
             Name: "medium",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -135,7 +135,7 @@ public sealed class TransferAbortKitWideningLawTests {
             ]
         );
         var mediumAlt = medium with { Name = "medium-alt" };
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         var kit = new WorldKit(
             Name: "diver-test",

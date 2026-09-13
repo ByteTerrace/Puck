@@ -19,7 +19,7 @@ internal static class McpCommand {
             Description = "The local stdio profile. `operator` serves one attachment over this process's standard input and output. Requires --attach.",
         };
         var siloOption = new Option<string?>(name: "--silo") {
-            Description = "The silo document (puck.silo.def.v1) to run, forwarded to Puck.World.Silo unchanged; the MCP extension composes over that host. Requires --http.",
+            Description = "The silo document (puck.silo.configuration.v1) to run, forwarded to Puck.World.Silo unchanged; the MCP extension composes over that host. Requires --http.",
         };
         var command = new Command(description: """
             Optional Puck Console/MCP hosting over local stdio or OAuth-protected HTTP. Both target MCP 2026-07-28.

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
 
@@ -177,7 +177,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
     }
     [Fact]
     public void WrongSchemaTag_Refuses() {
-        var wrong = MakeValid() with { Schema = "puck.world.def.v1" };
+        var wrong = MakeValid() with { Schema = "puck.world.definition.v1" };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: wrong, reason: out var reason));
         Assert.Contains(actualString: reason, expectedSubstring: "schema");

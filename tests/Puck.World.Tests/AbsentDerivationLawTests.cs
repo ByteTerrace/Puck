@@ -19,7 +19,7 @@ public sealed class AbsentDerivationLawTests {
         // The exact contents of src/Puck.World/Assets/worlds/null.world.json.
         var definition = Parse(json: """
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "null"
             }
             """);
@@ -37,7 +37,7 @@ public sealed class AbsentDerivationLawTests {
         // standard.world.json) — the smallest document that puts one body in a world and lets a seat see it.
         var definition = Parse(json: $$"""
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "null-seat",
               "bodies": { "localSeats": 1 },
               {{MinimalChannelSection}},
@@ -47,7 +47,7 @@ public sealed class AbsentDerivationLawTests {
               "bodyMotionPrograms": [
                 {
                   "name": "traverse",
-                  "version": "puck.body-motion.v1",
+                  "version": "puck.body.program.v1",
                   "kind": "Motion",
                   "operations": [
                     "ResolveYawAttitudeAndPlanarFrame",
@@ -107,7 +107,7 @@ public sealed class AbsentDerivationLawTests {
         """;
     private const string MinimalKitSection = """
         "bodyMotionPrograms": [
-          { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
+          { "name": "p", "version": "puck.body.program.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
         ],
         "kits": { "rows": [
           { "name": "k", "bodyMotionProgram": "p", "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46 }, "envelope": { "sinkSpeed": 40 } } ], "shaping": [ { "along": {} } ] } }
@@ -119,7 +119,7 @@ public sealed class AbsentDerivationLawTests {
           "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
           "seatRig": {
             "name": "seatChase",
-            "version": "puck.camera.v1",
+            "version": "puck.camera.program.v1",
             "operations": [
               { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
               { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
@@ -134,7 +134,7 @@ public sealed class AbsentDerivationLawTests {
     public void LocalSeats_Absent_DerivesFromDeclaredSeatSpawnsRowCount() {
         var definition = Parse(json: $$"""
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "seat-spawns-derive",
               "spawnPoints": [
                 { "id": "a", "position": [0, 0, 0] },
@@ -156,7 +156,7 @@ public sealed class AbsentDerivationLawTests {
     public void Capacity_Absent_DerivesFromLocalSeatsPlusNetworkPlayers() {
         var definition = Parse(json: $$"""
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "capacity-derive",
               "bodies": { "localSeats": 2, "networkPlayers": 3 },
               {{MinimalChannelSection}},
@@ -173,11 +173,11 @@ public sealed class AbsentDerivationLawTests {
     public void DefaultSeatKit_Absent_DerivesFromTheSoleKit() {
         var definition = Parse(json: $$"""
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "sole-kit-derive",
               {{MinimalChannelSection}},
               "bodyMotionPrograms": [
-                { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
+                { "name": "p", "version": "puck.body.program.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
               ],
               "kits": { "rows": [
                 {
@@ -195,7 +195,7 @@ public sealed class AbsentDerivationLawTests {
     public void Channels_Absent_ResolvesToNone() {
         // The engine declares no channel of its own: the standard movement set is authored, in
         // src/Puck.World/Assets/worlds/standard.world.json, and a world inherits it by naming that basis.
-        var definition = Parse(json: """{"schema": "puck.world.def.v1", "documentId": "channels-derive"}""");
+        var definition = Parse(json: """{"schema": "puck.world.definition.v1", "documentId": "channels-derive"}""");
 
         Assert.Empty(collection: definition.Channels);
 
@@ -203,7 +203,7 @@ public sealed class AbsentDerivationLawTests {
         // by name rather than resolving against a built-in table.
         var exception = Assert.Throws<InvalidDataException>(testCode: () => Parse(json: $$"""
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "channels-required",
               "bodies": { "localSeats": 1 },
               {{MinimalKitSection}},
@@ -218,13 +218,13 @@ public sealed class AbsentDerivationLawTests {
     public void Views_Absent_RequiredOnlyWhenPopulationImpliesABody() {
         // The engine ships no seat rig either (standard.world.json authors it), so a seatless document may author no
         // views and a census implying a body may not.
-        var seatless = Parse(json: """{"schema": "puck.world.def.v1", "documentId": "views-absent-ok"}""");
+        var seatless = Parse(json: """{"schema": "puck.world.definition.v1", "documentId": "views-absent-ok"}""");
 
         Assert.Empty(collection: seatless.Views.Layouts);
 
         var exception = Assert.Throws<InvalidDataException>(testCode: () => Parse(json: $$"""
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "views-required",
               "bodies": { "localSeats": 1 },
               {{MinimalChannelSection}},
@@ -239,7 +239,7 @@ public sealed class AbsentDerivationLawTests {
         // The same "pip" creation null.world.json authored by hand, minus the hash field.
         var definition = Parse(json: """
             {
-              "schema": "puck.world.def.v1",
+              "schema": "puck.world.definition.v1",
               "documentId": "creation-hash-derive",
               "prototypes": [
                 {
@@ -299,11 +299,11 @@ public sealed class AbsentDerivationLawTests {
     }
     [Fact]
     public void Kits_Empty_RequiredOnlyWhenPopulationImpliesABody() {
-        var zeroCapacity = Parse(json: """{"schema": "puck.world.def.v1", "documentId": "kits-empty-ok"}""");
+        var zeroCapacity = Parse(json: """{"schema": "puck.world.definition.v1", "documentId": "kits-empty-ok"}""");
 
         Assert.Empty(collection: zeroCapacity.Kits);
 
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => Parse(json: """{"schema": "puck.world.def.v1", "documentId": "kits-required", "bodies": {"localSeats": 1}}"""));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => Parse(json: """{"schema": "puck.world.definition.v1", "documentId": "kits-required", "bodies": {"localSeats": 1}}"""));
 
         Assert.Contains(expectedSubstring: "kits", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }

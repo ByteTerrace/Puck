@@ -337,7 +337,7 @@ public sealed record WorldHostDefaults(
 /// A world's self-update OPERATIONAL configuration — the deployment-facet fields <c>Puck.Launcher.AddSelfUpdate</c>
 /// needs from a document field, matching <see cref="WorldHostDefaults"/>'s own posture for fields carrying no
 /// simulation-state weight. The SECURITY-CRITICAL trust anchor and the durable replay high-water mark are never
-/// document fields — a synced <c>puck.world.def.v1</c> a user's own storage container could rewrite is not a trust
+/// document fields — a synced <c>puck.world.definition.v1</c> a user's own storage container could rewrite is not a trust
 /// anchor; the composition root compiles the anchor in as a constant.
 /// </summary>
 /// <param name="Channel">The release channel this install tracks (e.g. <c>stable</c>, <c>beta</c>). Null = the app's own default channel.</param>

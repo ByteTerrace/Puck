@@ -7,7 +7,7 @@ namespace Puck.Cli.Official;
 internal static class OfficialCommand {
     public static Command Create() {
         var command = new Command(description: """
-            The local official tree producer: build, serve, and verify a puck.official.v1 tree.
+            The local official tree producer: build, serve, and verify a puck.official.manifest.v1 tree.
 
             No sub-verb here uploads, signs, or drives a GitHub workflow — this verb's whole job is the local tree.
             """, name: "official");

@@ -253,7 +253,7 @@ spawnPoints [
 // speed, turn and gravity values are the validator's positive-and-finite floor, not a
 // policy this world has any use for.
 bodyMotionPrograms [
-    { version: "puck.body-motion.v1", name: "display", kind: "Motion", operations ["CommitPose"] }
+    { version: "puck.body.program.v1", name: "display", kind: "Motion", operations ["CommitPose"] }
 ]
 
 kits {

@@ -63,7 +63,7 @@ public class ParserTests {
     [Fact]
     public void TestMinimalSyntheticWorldParsing() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             basis: "worlds/standard.basis.json"
 
             host {
@@ -75,7 +75,7 @@ public class ParserTests {
             """;
 
         var doc = PuckParser.ParseDocument(source);
-        Assert.Equal("puck.world.def.v1", doc.Schema);
+        Assert.Equal("puck.world.definition.v1", doc.Schema);
         Assert.Equal("worlds/standard.basis.json", doc.Basis);
         Assert.Single(doc.Statements);
 
@@ -92,7 +92,7 @@ public class ParserTests {
     [Fact]
     public void TestLanguageFeaturesParsing() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             let defaultGravity = [0, -9.81, 0]
             let tickInterval = 0.25s
@@ -128,7 +128,7 @@ public class ParserTests {
             """;
 
         var doc = PuckParser.ParseDocument(source);
-        Assert.Equal("puck.world.def.v1", doc.Schema);
+        Assert.Equal("puck.world.definition.v1", doc.Schema);
         Assert.Equal(11, doc.Statements.Count);
 
         // Verify let statements

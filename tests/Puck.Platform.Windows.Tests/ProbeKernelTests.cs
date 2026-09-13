@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Presentation;
 using Puck.Platform.Probes;
@@ -489,7 +489,7 @@ public sealed class ProbeKernelTests {
         Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
     }
 
-    // A minimal puck.probe.v1 kernel that ignores its unbound socket and writes the frame constants' boundMask
+    // A minimal puck.probe.manifest.v1 kernel that ignores its unbound socket and writes the frame constants' boundMask
     // straight into Channels[0], so a test can assert the bit a run was given without a real texture.
     private const string BoundMaskProbeSource = """
         cbuffer ProbeFrame : register(b1) {

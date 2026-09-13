@@ -51,7 +51,7 @@
       "default": null
     },
     "extensions": {
-      "description": "The post-render extension chain, composed over the world\u0027s rendered output in list order \u2014 e.g. [{ \u0022id\u0022: \u0022sdf-film-grain\u0022, \u0022config\u0022: { \u0022intensity\u0022: 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set \u2014 a puck.shader.v1 manifest\u0027s file stem (checked at document load); each entry\u0027s own config is validated against that manifest\u0027s declared config schema at boot and by puck schema.",
+      "description": "The post-render extension chain, composed over the world\u0027s rendered output in list order \u2014 e.g. [{ \u0022id\u0022: \u0022sdf-film-grain\u0022, \u0022config\u0022: { \u0022intensity\u0022: 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set \u2014 a puck.shader.manifest.v1 manifest\u0027s file stem (checked at document load); each entry\u0027s own config is validated against that manifest\u0027s declared config schema at boot and by puck schema.",
       "type": [
         "array",
         "null"
@@ -64,7 +64,7 @@
         ],
         "properties": {
           "id": {
-            "description": "The shader set id (its puck.shader.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.",
+            "description": "The shader set id (its puck.shader.manifest.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.",
             "type": "string",
             "enum": [
               "sdf-film-grain"

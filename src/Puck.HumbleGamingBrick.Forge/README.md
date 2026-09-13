@@ -36,7 +36,7 @@ existing Tune audio compiler and authored boot-ROM tools remain available.
   (`ISoundDriver`, `ApuSoundDriver`, `SoundTables`).
 - `HgbImage`—pure-C# RGBA8 → 2bpp/RGB555 encoders; every byte layout is the
   inverse of the emulator's PPU decode. No external image library.
-- `AudioDocumentCompiler`—compiles a `puck.audio.v1` document
+- `AudioDocumentCompiler`—compiles a `puck.tune.v1` document
   (`Puck.Assets.Documents.AudioDocument`) into driver streams; shares
   `ApuNotePeriod`'s integer math exactly, so the document path and the
   hand-authored path cannot drift.

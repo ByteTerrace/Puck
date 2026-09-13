@@ -56,7 +56,7 @@ public sealed class LocalAttitudeHoldLawTests {
         };
         var free = new BodyMotionProgram(
             Name: "free",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.IntegrateLocalAttitude,
@@ -68,7 +68,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "flyer-test",
             BodyMotionProgram: "free",
@@ -144,7 +144,7 @@ public sealed class LocalAttitudeHoldLawTests {
     public void OwnsVerticalContactState_ExcludesALocalAttitudeProgram_WhereAnOrdinaryHoldProgramOwnsIt() {
         var localAttitude = BodyMotionProgramFactory.Compile(program: new BodyMotionProgram(
             Name: "free-test",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.IntegrateLocalAttitude,
@@ -157,7 +157,7 @@ public sealed class LocalAttitudeHoldLawTests {
         ));
         var ordinary = BodyMotionProgramFactory.Compile(program: new BodyMotionProgram(
             Name: "grounded-test",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,

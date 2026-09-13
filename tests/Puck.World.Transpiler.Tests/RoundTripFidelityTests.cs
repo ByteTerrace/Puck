@@ -36,7 +36,7 @@ public class RoundTripFidelityTests {
     [Fact]
     public void BasisReplaceDirectiveRowInRulesSurvivesTheRoundTrip() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"$replace":true},
               {"name":"toggle","effects":[{"$type":"setState","state":"sky","key":"on","value":1}]}
             ]}
@@ -50,7 +50,7 @@ public class RoundTripFidelityTests {
     [Fact]
     public void BasisReplaceDirectiveRowInPlacementsSurvivesTheRoundTrip() {
         const string json = """
-            {"schema":"puck.world.def.v1","placements":{"rows":[
+            {"schema":"puck.world.definition.v1","placements":{"rows":[
               {"$replace":true},
               {"id":"a","prototypeId":"p","position":[0,0,0],"scale":1,"yawDegrees":0}
             ]}}
@@ -64,7 +64,7 @@ public class RoundTripFidelityTests {
         // A row without its own prototypeId is completed by the basis chain; filling yawDegrees/scale here would
         // override the value composition was about to supply.
         const string json = """
-            {"schema":"puck.world.def.v1","basis":"b.json","placements":{"rows":[
+            {"schema":"puck.world.definition.v1","basis":"b.json","placements":{"rows":[
               {"id":"tabletop","parent":"marketCourt","position":[-8,-0.5,6],"yawDegrees":0}
             ]}}
             """;
@@ -79,7 +79,7 @@ public class RoundTripFidelityTests {
     [Fact]
     public void ScientificNotationSurvivesTheRoundTrip() {
         const string json = """
-            {"schema":"puck.world.def.v1","palette":{"b":[0.01452,-0.0030928,8.57e-05]}}
+            {"schema":"puck.world.definition.v1","palette":{"b":[0.01452,-0.0030928,8.57e-05]}}
             """;
 
         AssertRoundTripsExactly(json);
@@ -107,7 +107,7 @@ public class RoundTripFidelityTests {
         // The engine's enum converter accepts any casing; the sugar can only reprint the canonical spelling, so a
         // document that spelled it otherwise must not be folded onto a different operator.
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareState","state":"hp","comparison":"greaterOrEqual","value":5},
                "effects":[{"$type":"setState","state":"hp","value":0}]}
             ]}
@@ -121,7 +121,7 @@ public class RoundTripFidelityTests {
     [Fact]
     public void CompareValueKindSpelledOffCanonicalKeepsItsKind() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareValue","comparison":"NotEqual","kind":"int","left":"a[from]","right":"a[to]"},
                "effects":[{"$type":"setState","state":"hp","value":0}]}
             ]}
@@ -133,7 +133,7 @@ public class RoundTripFidelityTests {
     [Fact]
     public void CompareStateCarryingBothValueAndComparandLosesNeither() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareState","state":"a","key":"k","comparison":"Equal","value":1,"comparandState":"b","comparandKey":"j"},
                "effects":[{"$type":"setState","state":"hp","value":0}]}
             ]}
@@ -146,7 +146,7 @@ public class RoundTripFidelityTests {
     public void BindingWithoutAKindIsNotGivenOne() {
         // RuleBinding.Kind has no default; inventing one would author a binding the source never asked for.
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","bindings":[{"name":"x","expression":"$each"}],
                "effects":[{"$type":"setState","state":"hp","value":0}]}
             ]}
@@ -162,7 +162,7 @@ public class RoundTripFidelityTests {
         // A compareValue whose `left` opens with '(' is read by the gate grammar as a parenthesized sub-gate, and a
         // single-child `all` has no `and`/`or` spelling at all.
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","forEach":"seat","effects":[],
                "decision":{"periodSeconds":1,
                  "interrupt":{"$type":"all","predicates":[{"$type":"compareState","state":"a","comparison":"Equal","value":1}]},
@@ -180,7 +180,7 @@ public class RoundTripFidelityTests {
         // An exported facet with zero names is a present-but-empty array, not an absent facet; losing it would
         // silently drop the export from the composed document.
         const string json = """
-            {"schema":"puck.world.def.v1","exports":{"actions":[]}}
+            {"schema":"puck.world.definition.v1","exports":{"actions":[]}}
             """;
 
         var puck = WorldDecompiler.Decompile(json);
@@ -193,7 +193,7 @@ public class RoundTripFidelityTests {
         // A call-form argument can be explicitly authored as JSON null (distinct from the argument being absent
         // entirely); the printer must reprint it rather than silently dropping the argument.
         const string json = """
-            {"schema":"puck.world.def.v1","views":{"seatRig":{"operations":[
+            {"schema":"puck.world.definition.v1","views":{"seatRig":{"operations":[
               {"$type":"lookAt","focusDistance":6,"targetOffset":null,"worldAxes":true}
             ]}}}
             """;
@@ -206,7 +206,7 @@ public class RoundTripFidelityTests {
     [Fact]
     public void DegreesNativeFieldsAllPrintTheirUnitNotJustYawDegrees() {
         const string json = """
-            {"schema":"puck.world.def.v1","placements":{"rows":[
+            {"schema":"puck.world.definition.v1","placements":{"rows":[
               {"id":"a","prototypeId":"p","position":[0,0,0],"scale":1,"yawDegrees":30,"outwardYawDegrees":15}
             ]}}
             """;

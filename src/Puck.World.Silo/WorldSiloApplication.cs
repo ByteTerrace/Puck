@@ -20,7 +20,7 @@ public static class WorldSiloApplication {
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default) {
         var siloOption = new Option<string?>(name: "--silo") {
             DefaultValueFactory = static _ => null,
-            Description = "The silo document (puck.silo.def.v1) to load. Required.",
+            Description = "The silo document (puck.silo.configuration.v1) to load. Required.",
         };
         var extensionsDirOption = new Option<string?>(name: "--extensions-dir") {
             DefaultValueFactory = static _ => null,

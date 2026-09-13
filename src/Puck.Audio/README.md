@@ -60,7 +60,7 @@ fire-time-chosen patch with no world site.
 
 Built on `Puck.Hosting` (which itself carries `Puck.Abstractions` and
 `Puck.Commands`) plus `Puck.Maths` for every fixed-point primitive; nothing
-else. In particular, `Puck.Audio` parses no document—a `puck.synth.v1`
+else. In particular, `Puck.Audio` parses no document—a `puck.synthesizer-patch.v1`
 patch crosses into the mixer's `VoicePatch` struct through the host's patch
 factory, which stays in `Puck.World` alongside the rest of the presentation glue (the tune host, the
 render device) documented in [`Puck.World`'s Audio/ folder](../Puck.World/Audio/README.md).

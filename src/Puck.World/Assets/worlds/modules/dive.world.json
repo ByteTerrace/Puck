@@ -507,7 +507,7 @@
   "bodyMotionPrograms": [
     {
       "name": "diveDiverMotion",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
@@ -523,7 +523,7 @@
     },
     {
       "name": "diveFishMotion",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
@@ -539,7 +539,7 @@
     },
     {
       "name": "diveSchool",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Producer",
       "operations": [
         "ProduceFlockIntent"

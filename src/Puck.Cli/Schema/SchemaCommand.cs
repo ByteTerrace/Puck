@@ -6,14 +6,14 @@ using Puck.World;
 
 namespace Puck.Cli.Schema;
 
-// The `puck schema` verb: the report-and-write surface for the checked-in JSON Schema of puck.world.def.v1 — a
-// small root (src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json) plus one file per top-level document
+// The `puck schema` verb: the report-and-write surface for the checked-in JSON Schema of puck.world.definition.v1 — a
+// small root (src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json) plus one file per top-level document
 // section and a common.schema.json for shapes shared by more than one section, both under
 // src/Puck.World/Assets/worlds/schema/. All generation and the dedup/split logic live in Puck.World.WorldSchema
 // (src/Puck.World.Schema); this verb only decides where the text goes and, under --check, whether every file agrees
 // with what is on disk — the same drift-detection shape `puck architecture --map` establishes for
 // docs/project-map.md's layering block. The one input the generator takes from outside the type model is the
-// shipped post-render extension vocabulary: every puck.shader.v1 manifest under src/*/Assets/Shaders, whose id and
+// shipped post-render extension vocabulary: every puck.shader.manifest.v1 manifest under src/*/Assets/Shaders, whose id and
 // config schema splice into render.extensions[] so an entry's config validates by id.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {

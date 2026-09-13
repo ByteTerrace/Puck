@@ -15,7 +15,7 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The System.Text.Json source-generation context for the world document (<c>puck.world.def.v1</c>) — the only
+/// The System.Text.Json source-generation context for the world document (<c>puck.world.definition.v1</c>) — the only
 /// sanctioned entry point for (de)serializing a <see cref="WorldDefinition"/>. Source-gen (not runtime reflection) keeps
 /// the load/save boundary trimming/AOT-clean; every row type in the document graph rejects an unmapped member by
 /// default (<c>UnmappedMemberHandling = Disallow</c> below) — an authoring typo or a stale field fails loud, by name
@@ -304,7 +304,7 @@ namespace Puck.World;
 // The signed border claim's payload shape — a separate document family, sharing this context's strictness and
 // Vector3/enum spellings so a boundary reads identically here and in the world document.
 [JsonSerializable(typeof(WorldCounterpartAttestation))]
-// The silo document (puck.silo.def.v1) — a separate document family (Puck.World.Silo's own composition input,
+// The silo document (puck.silo.configuration.v1) — a separate document family (Puck.World.Silo's own composition input,
 // never embedded in or referenced from a world document), sharing this context's strictness and naming policy so
 // its own JSON Schema generation rides the same exporter machinery as every world-document family.
 [JsonSerializable(typeof(WorldSiloDefinition))]
@@ -1067,7 +1067,7 @@ public static class WorldDefinitionSerialization {
     /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
     /// <returns>The deserialized, validated definition.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.def.v1</c> document.</exception>
+    /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.definition.v1</c> document.</exception>
     public static WorldDefinition Deserialize(byte[] utf8Json) {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
 

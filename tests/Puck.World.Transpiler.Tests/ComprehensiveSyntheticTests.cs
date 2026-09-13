@@ -10,7 +10,7 @@ public class ComprehensiveSyntheticTests {
     [Fact]
     public void TestComprehensiveNookAndCrannySynthesis() {
         const string comprehensivePuck = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             basis: "worlds/standard.basis.json"
             documentId: "comprehensive-synthetic-v1"
 
@@ -36,7 +36,7 @@ public class ComprehensiveSyntheticTests {
             // Parametric templates
             template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
                 seatRig rigName {
-                    version: "puck.camera.v1"
+                    version: "puck.camera.program.v1"
                     operations [
                         orbit(distance: dist, pitch: angle, yaw: 0)
                         fieldOfView(fieldOfViewRadians: 0.001)
@@ -126,14 +126,14 @@ public class ComprehensiveSyntheticTests {
 
         // 1. Parse .puck into AST
         var ast = PuckParser.ParseDocument(comprehensivePuck);
-        Assert.Equal("puck.world.def.v1", ast.Schema);
+        Assert.Equal("puck.world.definition.v1", ast.Schema);
         Assert.Equal("worlds/standard.basis.json", ast.Basis);
 
         // 2. Lower AST into JsonObject
         var json = WorldDocumentEmitter.Lower(ast);
 
         // Assert schema, basis, documentId
-        Assert.Equal("puck.world.def.v1", json["schema"]?.ToString());
+        Assert.Equal("puck.world.definition.v1", json["schema"]?.ToString());
         Assert.Equal("worlds/standard.basis.json", json["basis"]?.ToString());
         Assert.Equal("comprehensive-synthetic-v1", json["documentId"]?.ToString());
 
@@ -204,7 +204,7 @@ public class ComprehensiveSyntheticTests {
         // 4. Decompile back to .puck
         var decompiledPuck = WorldDecompiler.Decompile(json);
         Assert.NotEmpty(decompiledPuck);
-        Assert.Contains("schema: \"puck.world.def.v1\"", decompiledPuck);
+        Assert.Contains("schema: \"puck.world.definition.v1\"", decompiledPuck);
         Assert.Contains("basis: \"worlds/standard.basis.json\"", decompiledPuck);
         Assert.Contains("documentId: \"comprehensive-synthetic-v1\"", decompiledPuck);
         Assert.Contains("import \"extensions/rules.world.puck\" as rules", decompiledPuck);

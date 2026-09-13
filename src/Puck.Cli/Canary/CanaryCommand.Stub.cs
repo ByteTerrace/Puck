@@ -314,7 +314,7 @@ internal static partial class CanaryCommand {
         )),
         path: path
     );
-    // The proof a puck.release.v1-shaped positive.expect can read without parsing any wire format: literal
+    // The proof a puck.release.manifest.v1-shaped positive.expect can read without parsing any wire format: literal
     // expected-version fixtures beside a snapshot of the install's own current pointer after both boots, checked
     // through the shared filesDiffer assertion. Both fixtures are written into every leg's run directory
     // (regardless of which one that leg's own expect references) because RunSelected re-evaluates the POSITIVE

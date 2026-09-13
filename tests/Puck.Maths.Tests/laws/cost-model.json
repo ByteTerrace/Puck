@@ -209,7 +209,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "CostModelProfile retains all supplied fields through signed-64 maximum and minimum positive inputs, and refuses null/blank names, non-positive frequency/share components and shares greater than one with exact exception types and parameter names. Portable is the authored policy (puck.portable64.v1, 3000000000, 1/2); the clock is 50400 engine ticks per second. These are policy and unit contracts, not measured hardware calibration.",
+        "Subject": "CostModelProfile retains all supplied fields through signed-64 maximum and minimum positive inputs, and refuses null/blank names, non-positive frequency/share components and shares greater than one with exact exception types and parameter names. Portable is the authored policy (puck.cost.portable-profile.v1, 3000000000, 1/2); the clock is 50400 engine ticks per second. These are policy and unit contracts, not measured hardware calibration.",
         "Against": "",
         "Shared": "",
         "Citation": "",

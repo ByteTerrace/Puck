@@ -1431,7 +1431,7 @@ public static partial class CreationCanonicalizer {
             }
         }
     }
-    // The declared sounds: unique names, a finite level/radius, and the INLINE puck.synth.v1 patch validated through
+    // The declared sounds: unique names, a finite level/radius, and the INLINE puck.synthesizer-patch.v1 patch validated through
     // the synth family's OWN canonicalizer (the one pipeline — never a re-implementation), its violations re-pathed
     // under this creation. A sound naming a missing shape is NOT a failure — Normalize drops it (the faces rule).
     private static void ValidateSounds(CreationDocument document, List<DocumentValidationError> errors) {

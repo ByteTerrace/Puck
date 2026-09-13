@@ -12,7 +12,7 @@ from it and publishes `AudioSnapshot`s here.
 ## Document intake (`WorldVoicePatchFactory.cs`)
 
 `Puck.Audio` parses no document. `WorldVoicePatchFactory.FromDocument`
-converts a normalized `puck.synth.v1` document
+converts a normalized `puck.synthesizer-patch.v1` document
 (`Puck.World.Authoring.SynthPatchDocument`) into the runtime
 `Puck.Audio.Mixing.VoicePatch` struct—the one place a document crosses
 that boundary, including mapping the document's
@@ -22,18 +22,18 @@ enumerations rather than one shared type across the layering boundary).
 
 ## Tune hosting (`TuneMachineSource.cs`)
 
-Hosts a `puck.audio.v1` tune through the `Puck.HumbleGamingBrick.Forge` compile chain over a
+Hosts a `puck.tune.v1` tune through the `Puck.HumbleGamingBrick.Forge` compile chain over a
 synchronous emulator core, acquired while referenced and released when
 orphaned.
 
 ## The diegetic instrument (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`/`TuneInstrumentMachine`)
 
-A second, server-side host over the same `puck.audio.v1` → jukebox-cart
+A second, server-side host over the same `puck.tune.v1` → jukebox-cart
 compile chain (`TuneRom.Build`), not in this folder (`Puck.HumbleGamingBrick.Forge/Tune/`,
 reachable by `Puck.World.Server`'s `WorldMachineHost` without a dependency on
 this composition-root project) and not built on `TuneMachineSource`—a
 screen's declared `Machine` source names engine id `tune-instrument`, whose
-content is a `puck.audio.v1` document rather than a cartridge ROM;
+content is a `puck.tune.v1` document rather than a cartridge ROM;
 `TuneInstrumentEngine.Create` parses/validates/normalizes it and boots a real
 `Puck.HumbleGamingBrick.MachineHost` from the compiled cart, so the instrument
 gets a genuine diegetic screen, real `IAudioMachine` output, and pad-driven

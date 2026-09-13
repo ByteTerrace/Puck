@@ -138,7 +138,7 @@ public class DecompilerSugarTests {
     [Fact]
     public void AnyTypeObjectOutsideSeatRigPrintsAsCallForm() {
         var root = new JsonObject {
-            ["schema"] = "puck.world.def.v1",
+            ["schema"] = "puck.world.definition.v1",
             ["cameras"] = new JsonArray(
                 new JsonObject { ["$type"] = "worldPoint", ["x"] = 1, ["y"] = 2, ["z"] = 3 }
             ),

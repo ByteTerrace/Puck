@@ -88,7 +88,7 @@ public sealed record ProbeKindOutput(string Of, string Format = ProbeKindOutput.
 /// <param name="Finalize">The single-dispatch entry point that writes the reading's channels.</param>
 public sealed record ProbeKindKernel(string Source, string Accumulate, string Finalize);
 /// <summary>
-/// A <c>puck.probe.v1</c> probe kind manifest: one <c>&lt;id&gt;.puck.probe.json</c> declaring an probe's
+/// A <c>puck.probe.manifest.v1</c> probe kind manifest: one <c>&lt;id&gt;.puck.probe.json</c> declaring an probe's
 /// input, its channels, and — for a <see cref="ProbeKindClass.Kernel"/> kind — the HLSL source and entry points a
 /// kernel host compiles and runs. Registered exactly the way a <see cref="ShaderSetManifest"/> registers a shader
 /// set: a document names a kind by id, and shipping the manifest beside its kernel source (when it has one) IS

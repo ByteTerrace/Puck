@@ -499,7 +499,7 @@ public static class WorldDefinitionFileSource {
     /// which refuses a <c>basis</c> member outright rather than composing one). The validation class answers under
     /// its own wording, never the strict parse's: a validation refusal can rest on facts outside this call — an
     /// adjacency claim resolved through <paramref name="neighbours"/> against documents this caller may itself be
-    /// about to move — so it is retryable in a way "these bytes are not a puck.world.def.v1 document" never is, and
+    /// about to move — so it is retryable in a way "these bytes are not a puck.world.definition.v1 document" never is, and
     /// a caller classifying on <paramref name="reason"/> must be able to tell them apart (see <see cref="TryLoad"/>'s
     /// own remarks for the exact classified prefixes).</summary>
     /// <param name="json">The already-decoded, already-composed document JSON.</param>
@@ -1640,7 +1640,7 @@ public static class WorldDefinitionFileSource {
     /// A load boundary never throws out of this method: every failure comes back as
     /// <paramref name="reason"/>, whose opening words name the class — <c>no file at</c>, <c>cannot read</c>,
     /// <c>cannot decode</c>, <c>&lt;path&gt; composition refused</c>, <c>&lt;path&gt; document validation
-    /// refused</c>, or <c>&lt;path&gt; is not a valid puck.world.def.v1 document</c>. Only that last pair is a
+    /// refused</c>, or <c>&lt;path&gt; is not a valid puck.world.definition.v1 document</c>. Only that last pair is a
     /// verdict on the bytes themselves; the rest can each answer differently on a later call, so a caller acting
     /// destructively on a refusal (<c>WorldOwnedWorlds</c> quarantines a file it cannot admit) must classify before
     /// it acts.</summary>

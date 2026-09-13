@@ -1,4 +1,4 @@
-using Puck.Abstractions.Machines;
+﻿using Puck.Abstractions.Machines;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -35,7 +35,7 @@ public static partial class PuckLinter {
         }.Select(static prefix => prefix.TrimEnd(':', '[')).Distinct(StringComparer.Ordinal),
     ];
 
-    /// <summary>Lints a canonical lowered <c>puck.world.def.v1</c> document for unresolved symbolic references.
+    /// <summary>Lints a canonical lowered <c>puck.world.definition.v1</c> document for unresolved symbolic references.
     /// A document naming a <c>basis</c> or <c>imports</c> composes that whole graph (through
     /// <see cref="PuckDocumentComposer"/>, rooted beside <paramref name="sourcePath"/> exactly like
     /// <see cref="WorldSemanticValidator.ValidateComposedWorld"/>) to build the name catalog references resolve

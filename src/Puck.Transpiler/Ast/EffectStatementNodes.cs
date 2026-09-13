@@ -188,7 +188,7 @@ public sealed record TransactionStatementNode(
 /// <summary><c>if Gate { ... } [else { ... }]</c>, and the <c>else if</c> chain an <c>Else</c> holding a single
 /// nested <see cref="IfStatementNode"/> spells. General control flow: the language parses it for every document
 /// vocabulary, and each one decides whether its rule shape can carry a branch at all —
-/// <c>puck.world.def.v1</c> rules are straight-line and refuse it by name, a <c>puck.cartridge.v1</c> rule lowers
+/// <c>puck.world.definition.v1</c> rules are straight-line and refuse it by name, a <c>puck.cartridge.v1</c> rule lowers
 /// it to its own <c>if</c> action.</summary>
 /// <param name="Condition">The branch gate, parsed by the same reader a rule's own <c>when</c> uses.</param>
 /// <param name="Then">The statements run when the gate holds.</param>

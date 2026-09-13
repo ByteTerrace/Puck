@@ -6,7 +6,7 @@ using Puck.World.Server;
 
 namespace Puck.Cli.Automation;
 
-/// <summary>Operator-facing release preparation and local operation inspection commands.</summary>
+/// <summary>Operator-facing release preparation and local deployment-group inspection commands.</summary>
 internal static class WorldReleaseCommand {
     public static Command Create() {
         var package = new Argument<string>("package-directory") { Description = "Package directory containing composed worlds and release artifacts." };
@@ -28,12 +28,12 @@ internal static class WorldReleaseCommand {
             persistenceContract: parse.GetRequiredValue(persistence),
             peerProtocolContract: parse.GetRequiredValue(peer)));
 
-        var status = new Command("status", "Show a durable release operation record.");
-        var statusPath = new Argument<string>("operation-file");
+        var status = new Command("status", "Show a validated durable deployment-group state file.");
+        var statusPath = new Argument<string>("group-file");
         status.Arguments.Add(statusPath);
         status.SetAction(parse => Status(Path.GetFullPath(parse.GetRequiredValue(statusPath))));
 
-        return new Command("release", "Prepare and inspect hosted-world release operations.") { prepare, status };
+        return new Command("release", "Prepare and inspect hosted-world deployment groups.") { prepare, status };
     }
 
     private static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
@@ -132,10 +132,11 @@ internal static class WorldReleaseCommand {
     private static string FullHash(byte[] bytes) => "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes));
 
     private static int Status(string path) {
-        var record = Read(path);
+        if (!File.Exists(path)) {
+            throw new FileNotFoundException("deployment-group state file was not found", path);
+        }
+        var record = WorldReleaseGroupStore.DeserializeValidated(File.ReadAllBytes(path));
         Console.WriteLine(JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
         return 0;
     }
-
-    private static WorldReleaseOperationRecord Read(string path) => JsonSerializer.Deserialize<WorldReleaseOperationRecord>(File.ReadAllBytes(path)) ?? throw new InvalidDataException("operation record is empty");
 }

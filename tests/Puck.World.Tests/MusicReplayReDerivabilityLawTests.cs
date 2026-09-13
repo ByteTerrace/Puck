@@ -93,9 +93,9 @@ public sealed class MusicReplayReDerivabilityLawTests {
         var arrivalTune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "arrival", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
         var stingerPatch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: "stinger", Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
 
-        var ambientTunePath = Path.Combine(path1: assetDirectory, path2: "ambient-tune.puck.audio.v1.json");
-        var arrivalTunePath = Path.Combine(path1: assetDirectory, path2: "arrival-tune.puck.audio.v1.json");
-        var stingerPatchPath = Path.Combine(path1: assetDirectory, path2: "stinger.puck.synth.v1.json");
+        var ambientTunePath = Path.Combine(path1: assetDirectory, path2: "ambient-tune.puck.tune.v1.json");
+        var arrivalTunePath = Path.Combine(path1: assetDirectory, path2: "arrival-tune.puck.tune.v1.json");
+        var stingerPatchPath = Path.Combine(path1: assetDirectory, path2: "stinger.puck.synthesizer-patch.v1.json");
 
         File.WriteAllBytes(path: ambientTunePath, bytes: ambientTune.Bytes);
         File.WriteAllBytes(path: arrivalTunePath, bytes: arrivalTune.Bytes);

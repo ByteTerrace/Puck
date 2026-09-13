@@ -16,7 +16,7 @@ public class DecompilerTests {
 
         // 1. Decompile original JSON -> .puck DSL
         var decompiledPuck = WorldDecompiler.Decompile(originalNode);
-        Assert.Contains("schema: \"puck.world.def.v1\"", decompiledPuck);
+        Assert.Contains("schema: \"puck.world.definition.v1\"", decompiledPuck);
         Assert.Contains("host {", decompiledPuck);
         Assert.Contains("views {", decompiledPuck);
         Assert.Contains("layout \"pipeline\" {", decompiledPuck);

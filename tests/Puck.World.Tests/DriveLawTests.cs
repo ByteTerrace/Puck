@@ -296,7 +296,7 @@ public sealed class DriveLawTests {
 
         var drive = new BodyMotionProgram(
             Name: "drive",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,

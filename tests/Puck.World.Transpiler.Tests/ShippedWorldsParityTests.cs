@@ -23,7 +23,7 @@ public class ShippedWorldsParityTests {
               "rules": [
                 { "$replace": true }
               ],
-              "schema": "puck.world.def.v1"
+              "schema": "puck.world.definition.v1"
             }
             """;
 

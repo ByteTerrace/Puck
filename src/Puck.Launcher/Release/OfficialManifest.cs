@@ -20,7 +20,7 @@ public sealed record OfficialObjectRef(string Path, string Hash, long Size, stri
 /// <param name="Commit">The commit the generator was built at, or <c>unknown</c> outside a SourceLink build.</param>
 /// <param name="Dirty">Whether the working tree carried uncommitted changes at build time.</param>
 /// <param name="Generator">The generator string <c>puck schema</c> stamps into <c>x-puck.generator</c>.</param>
-/// <param name="WorldSchema">The world document schema (<c>puck.world.def.v1</c>).</param>
+/// <param name="WorldSchema">The world document schema (<c>puck.world.definition.v1</c>).</param>
 public sealed record OfficialBuildInfo(string Commit, bool Dirty, string Generator, string WorldSchema);
 /// <summary>One file of the shipped engine's AppBundle (a browser-wasm publish output), by name relative to the
 /// AppBundle root (forward-slash separated, e.g. <c>_framework/dotnet.js</c>).</summary>
@@ -131,7 +131,7 @@ public sealed record OfficialAssetEntry(
     string? Pin
 );
 /// <summary>
-/// The <c>puck.official.v1</c> document: a local official tree's mutable channel pointer — the shipped browser-wasm
+/// The <c>puck.official.manifest.v1</c> document: a local official tree's mutable channel pointer — the shipped browser-wasm
 /// engine, the world schema bundle, every world document under the worlds directory, the one fully-composed root
 /// world, and every off-disk asset those documents reference — all content-addressed and hash-checked, so a client
 /// verifies what it fetches without trusting the transport. Unsigned in this package: publishing (signing, upload,

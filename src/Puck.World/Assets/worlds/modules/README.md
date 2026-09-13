@@ -1,6 +1,6 @@
 # World modules
 
-Every district of the one world is a module in this directory: a `puck.world.def.v1` fragment with no
+Every district of the one world is a module in this directory: a `puck.world.definition.v1` fragment with no
 `basis`, `host`, `bodies` census, `views`, or `channels`, imported by `puck.world.json` under an alias
 (`imports: [{"document": "modules/<name>.world.json", "as": "<alias>"}]`). A module declares its own
 `prototypes`, `placements` rooted under one court placement named `<alias>Court` at local origin, `state.world`

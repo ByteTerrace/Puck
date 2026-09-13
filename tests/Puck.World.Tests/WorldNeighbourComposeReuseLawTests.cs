@@ -115,7 +115,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
 
         _ = files.WriteText(
             name: "basis.world.json",
-            text: /*lang=json*/ """{ "schema": "puck.world.def.v1", "name": "first" }"""
+            text: /*lang=json*/ """{ "schema": "puck.world.definition.v1", "name": "first" }"""
         );
 
         Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(
@@ -132,7 +132,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         // keyed on the named document's own bytes alone would answer with the stale merge.
         _ = files.WriteText(
             name: "basis.world.json",
-            text: /*lang=json*/ """{ "schema": "puck.world.def.v1", "name": "second" }"""
+            text: /*lang=json*/ """{ "schema": "puck.world.definition.v1", "name": "second" }"""
         );
 
         Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(
@@ -159,7 +159,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
 
         _ = files.WriteText(
             name: $"link{(WorldDocumentBasis.MaxChainDepth - 1)}.world.json",
-            text: /*lang=json*/ """{ "schema": "puck.world.def.v1", "name": "tail" }"""
+            text: /*lang=json*/ """{ "schema": "puck.world.definition.v1", "name": "tail" }"""
         );
 
         var head = Path.Combine(

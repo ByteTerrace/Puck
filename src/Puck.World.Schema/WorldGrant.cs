@@ -96,10 +96,10 @@ public enum WorldSection : byte {
     /// <c>WorldMutation.RemoveSpeaker</c>.</summary>
     Speakers,
 
-    /// <summary>The tune asset rows — inline-canonical <c>puck.audio.v1</c> documents with pinned hashes.</summary>
+    /// <summary>The tune asset rows — inline-canonical <c>puck.tune.v1</c> documents with pinned hashes.</summary>
     Tunes,
 
-    /// <summary>The synth-patch asset rows — inline-canonical <c>puck.synth.v1</c> documents with pinned hashes.</summary>
+    /// <summary>The synth-patch asset rows — inline-canonical <c>puck.synthesizer-patch.v1</c> documents with pinned hashes.</summary>
     Patches,
 
     /// <summary>The audio host-section defaults (master gain, attenuation coalescing, the listener policy).</summary>

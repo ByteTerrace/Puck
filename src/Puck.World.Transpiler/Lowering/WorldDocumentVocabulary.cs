@@ -1,9 +1,9 @@
-using Puck.Transpiler.Lowering;
+﻿using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 
 namespace Puck.World.Transpiler.Lowering;
 
-/// <summary>The <c>puck.world.def.v1</c> answers to the questions generic value lowering cannot settle for
+/// <summary>The <c>puck.world.definition.v1</c> answers to the questions generic value lowering cannot settle for
 /// itself.</summary>
 public sealed class WorldDocumentVocabulary : IDocumentVocabulary {
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>

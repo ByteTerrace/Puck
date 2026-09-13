@@ -215,7 +215,7 @@ public sealed class WorldMediumLawTests {
         };
         var hold = new BodyMotionProgram(
             Name: "medium",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -227,7 +227,7 @@ public sealed class WorldMediumLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",

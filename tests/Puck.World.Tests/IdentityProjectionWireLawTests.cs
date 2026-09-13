@@ -50,7 +50,7 @@ public sealed class IdentityProjectionWireLawTests {
 
         Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: PrivateChatPeer);
         Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: PrivateStateRow);
-        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "puck.world.def.v1");
+        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "puck.world.definition.v1");
         // The control: what the destination legitimately needs did cross.
         Assert.Contains(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "traveller-one");
 

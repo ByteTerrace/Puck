@@ -169,7 +169,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 22, section: WorldSection.Speakers)]
     public sealed record RemoveSpeaker(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Name"/>. The compose boundary loads the
-    /// referenced <c>puck.audio.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
+    /// referenced <c>puck.tune.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
     /// compute — the referenced twin of <see cref="UpsertCreation"/>'s embedded-document rule.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Tune">The whole tune row.</param>
@@ -181,7 +181,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The tune name to remove.</param>
     [MutationKind(ordinal: 24, section: WorldSection.Tunes)]
     public sealed record RemoveTune(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
-    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synth.v1</c>
+    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synthesizer-patch.v1</c>
     /// twin of <see cref="UpsertTune"/>, same load + canonicalize + hash-pin boundary.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Patch">The whole patch row.</param>

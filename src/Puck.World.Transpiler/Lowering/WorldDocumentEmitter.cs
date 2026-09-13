@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.World.Transpiler.Addons;
@@ -9,7 +9,7 @@ using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Lowering;
 
-/// <summary>Lowers a Puck authoring AST into a canonical JSON document according to puck.world.def.v1.</summary>
+/// <summary>Lowers a Puck authoring AST into a canonical JSON document according to puck.world.definition.v1.</summary>
 public static partial class WorldDocumentEmitter {
     /// <summary>Lowers the AST <see cref="DocumentNode"/> into a mutable <see cref="JsonObject"/> with diagnostic reporting.</summary>
     /// <param name="document">The document AST to lower.</param>

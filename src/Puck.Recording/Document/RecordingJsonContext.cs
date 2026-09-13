@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Puck.Recording.Document;
 
 /// <summary>
-/// The System.Text.Json source-generation context for the recording document (<c>puck.recording.v1</c>) — the
+/// The System.Text.Json source-generation context for the recording document (<c>puck.recording.configuration.v1</c>) — the
 /// only sanctioned entry point for (de)serializing a <see cref="RecordingDocument"/>. Source-gen (not runtime
 /// reflection) keeps the boundary trimming/AOT-clean; every enum the document carries declares its own strict
 /// by-name conversion at the enum declaration (<c>[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter{TEnum}))]</c>

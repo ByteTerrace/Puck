@@ -3,7 +3,7 @@ using Puck.Abstractions.Machines;
 namespace Puck.HumbleGamingBrick.Forge.Tune;
 
 /// <summary>
-/// A player-operated diegetic instrument: a <c>puck.audio.v1</c> document compiled to a jukebox cart
+/// A player-operated diegetic instrument: a <c>puck.tune.v1</c> document compiled to a jukebox cart
 /// (<see cref="TuneRom.Build"/>) and hosted on a real <see cref="MachineHost"/> — every <see cref="IMachineRuntime"/>/
 /// <see cref="IAudioMachine"/> member composes straight through to it, so this wrapper's only job is owning the
 /// content-to-cart compile step and reporting <see cref="TicksPerBeat"/>.

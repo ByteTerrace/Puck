@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
@@ -372,7 +372,7 @@ public static partial class WorldDocumentEmitter {
         _ => throw new InvalidOperationException($"unrecognized effect statement '{stmt.GetType()}'"),
     };
 
-    // puck.world.def.v1 carries two assignment effects, setState and addState; every other operator belongs in the
+    // puck.world.definition.v1 carries two assignment effects, setState and addState; every other operator belongs in the
     // expression on the right, where the state engine evaluates it.
     private static JsonNode? RefuseCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope) {
         var target = (compound.Target.Key is null) ? compound.Target.Name : $"{compound.Target.Name}[{compound.Target.Key}]";
@@ -386,7 +386,7 @@ public static partial class WorldDocumentEmitter {
         return null;
     }
 
-    // puck.world.def.v1 rule effects are a straight line: the rule's own gate decides whether the whole body runs,
+    // puck.world.definition.v1 rule effects are a straight line: the rule's own gate decides whether the whole body runs,
     // and there is no branch or loop for one to lower onto. The language still parses control flow, because another
     // document vocabulary (a cartridge's rules) carries it natively.
     private static JsonNode? RefuseControlFlow(StatementNode stmt, string keyword, string alternative, DocumentScope scope) {

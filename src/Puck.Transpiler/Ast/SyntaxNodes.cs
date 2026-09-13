@@ -13,7 +13,7 @@ public abstract record SyntaxNode(int Offset = 0, int Length = 0, int Line = 1, 
 }
 
 /// <summary>Represents a top-level authoring document.</summary>
-/// <param name="Schema">The schema identifier (e.g., 'puck.world.def.v1').</param>
+/// <param name="Schema">The schema identifier (e.g., 'puck.world.definition.v1').</param>
 /// <param name="Basis">The optional base document path inherited by this document.</param>
 /// <param name="Statements">The top-level statements composing the document.</param>
 /// <param name="Offset">The character offset within the source text.</param>

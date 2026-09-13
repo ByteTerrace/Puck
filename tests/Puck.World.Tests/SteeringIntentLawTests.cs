@@ -133,7 +133,7 @@ public sealed class SteeringIntentLawTests {
     // containing IntegrateLocalAttitude).
     private static readonly BodyMotionProgram FlyerFreeProgram = new(
         Name: "free",
-        Version: "puck.body-motion.v1",
+        Version: "puck.body.program.v1",
         Kind: BodyProgramKind.Motion,
         Operations: [
             BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -168,7 +168,7 @@ public sealed class SteeringIntentLawTests {
         Collider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f)
     );
     private static WorldDefinition FlyerDocument() {
-        var roam = new BodyMotionProgram(Name: ProducerName, Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: ProducerName, Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = FlyerKit() with {
             ProducersRaw = new Dictionary<string, BodyProgramParameters> {
                 [ProducerName] = Fixtures.TravelerRoamParameters with {
@@ -346,7 +346,7 @@ public sealed class SteeringIntentLawTests {
         var kit = document.Kits[0];
         var sensingProgram = new BodyMotionProgram(
             Name: SensingProducerName,
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.Sensed(Scope: BodyTargetScope.Bodies, Range: 1000f, HalfAngleDegrees: 180f, RequiresLineOfSight: false)
@@ -485,7 +485,7 @@ public sealed class SteeringIntentLawTests {
     private static WorldDefinition ApproachOnlyFlyerDocument(float approachAltitudeGain = 0.5f, float sensedRange = 0.01f) {
         var approach = new BodyMotionProgram(
             Name: ProducerName,
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Producer,
             Target: new BodyTargetSource.Sensed(Scope: BodyTargetScope.Bodies, Range: sensedRange, HalfAngleDegrees: 180f, RequiresLineOfSight: false),
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent, BodyMotionOp.FaceSensorTarget]

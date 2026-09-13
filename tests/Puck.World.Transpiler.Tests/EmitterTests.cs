@@ -9,7 +9,7 @@ public class EmitterTests {
     [Fact]
     public void TestMinimalSyntheticWorldEmission() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             basis: "worlds/standard.basis.json"
 
             host {
@@ -23,7 +23,7 @@ public class EmitterTests {
         var doc = PuckParser.ParseDocument(source);
         var jsonObj = WorldDocumentEmitter.Lower(doc);
 
-        Assert.Equal("puck.world.def.v1", jsonObj["schema"]?.ToString());
+        Assert.Equal("puck.world.definition.v1", jsonObj["schema"]?.ToString());
         Assert.Equal("worlds/standard.basis.json", jsonObj["basis"]?.ToString());
 
         var host = Assert.IsType<JsonObject>(jsonObj["host"]);
@@ -33,7 +33,7 @@ public class EmitterTests {
         Assert.Equal(60L, host["targetHertz"]?.GetValue<long>());
 
         var canonicalJson = WorldDocumentEmitter.CompileToJson(doc);
-        Assert.Contains("\"schema\": \"puck.world.def.v1\"", canonicalJson);
+        Assert.Contains("\"schema\": \"puck.world.definition.v1\"", canonicalJson);
         Assert.Contains("\"width\": 1280", canonicalJson);
         Assert.EndsWith("\n", canonicalJson);
     }
@@ -41,7 +41,7 @@ public class EmitterTests {
     [Fact]
     public void TestPipelineWorldParity() {
         const string puckPipeline = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             host {
                 authority: null
@@ -85,7 +85,7 @@ public class EmitterTests {
                 }
 
                 seatRig "pipeline" {
-                    version: "puck.camera.v1"
+                    version: "puck.camera.program.v1"
                     operations [
                         orbit(distance: 0.01, pitch: 0, yaw: 0)
                         fieldOfView(fieldOfViewRadians: 0.001)
@@ -112,7 +112,7 @@ public class EmitterTests {
 
         var seatRig = Assert.IsType<JsonObject>(views["seatRig"]);
         Assert.Equal("pipeline", seatRig["name"]?.ToString());
-        Assert.Equal("puck.camera.v1", seatRig["version"]?.ToString());
+        Assert.Equal("puck.camera.program.v1", seatRig["version"]?.ToString());
 
         var ops = Assert.IsType<JsonArray>(seatRig["operations"]);
         Assert.Equal(2, ops.Count);
@@ -128,7 +128,7 @@ public class EmitterTests {
     [Fact]
     public void TestTemplateExpansionAndLetSubstitution() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             let defaultGravity = [0, -9.81, 0]
             let interval = 0.25s
@@ -171,7 +171,7 @@ public class EmitterTests {
     [Fact]
     public void TestAddonAutoHashing() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
 
             addon "test-addon" {
                 source: "addons/game.wasm"

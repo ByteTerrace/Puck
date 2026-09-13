@@ -86,8 +86,8 @@ public sealed class MusicGainThousandthsRangeLawTests {
             var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "bed", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
             var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: "stinger", Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
             var musicPath = Path.Combine(path1: directory, path2: "gain-law.puck.music.v1.json");
-            var tunePath = Path.Combine(path1: directory, path2: "bed-tune.puck.audio.v1.json");
-            var patchPath = Path.Combine(path1: directory, path2: "stinger.puck.synth.v1.json");
+            var tunePath = Path.Combine(path1: directory, path2: "bed-tune.puck.tune.v1.json");
+            var patchPath = Path.Combine(path1: directory, path2: "stinger.puck.synthesizer-patch.v1.json");
 
             File.WriteAllBytes(path: musicPath, bytes: music.Bytes);
             File.WriteAllBytes(path: tunePath, bytes: tune.Bytes);

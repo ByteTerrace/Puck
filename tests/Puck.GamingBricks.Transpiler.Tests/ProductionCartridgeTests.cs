@@ -41,7 +41,7 @@ public sealed class ProductionCartridgeTests {
         var items = CartridgeLanguageServices.Completions(document)!;
         Assert.Contains(items, item => item!["label"]!.GetValue<string>() == "sprite");
         Assert.DoesNotContain(items, item => item!["label"]!.GetValue<string>() == "seatRig");
-        Assert.Null(CartridgeLanguageServices.Completions(PuckParser.ParseDocument("schema: \"puck.world.def.v1\"")));
+        Assert.Null(CartridgeLanguageServices.Completions(PuckParser.ParseDocument("schema: \"puck.world.definition.v1\"")));
     }
 
     [Theory]

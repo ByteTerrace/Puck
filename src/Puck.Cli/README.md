@@ -15,7 +15,7 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck docs`](#automation-commands) | build and stage the website documentation. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
-| [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect release operations, or probe a QUIC endpoint. |
+| [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect deployment-group state, or probe a QUIC endpoint. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
 | [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape installs the optional host extension, and standalone silo and World have no MCP dependency. MCP 2026-07-28. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
@@ -23,7 +23,7 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck bench`](#puck-benchthe-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
-| [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
+| [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1`, checked and regenerated. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`. |
@@ -41,7 +41,7 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library—currently `FixedQ4816`'s Rust port and known-answer vectors. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
-| [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.v1` tree—the shipped engine, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
+| [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 
 Unlike its retired `tools/` predecessors, this project is a **first-class member
 of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
@@ -130,7 +130,7 @@ puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <worlds-directory> <output-directory>
 puck world release prepare <package-directory> --silo <silo.json> --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
-puck world release status <operation-file>
+puck world release status <group-file>
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -154,8 +154,9 @@ composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest after hashing those definitions and the remaining
 package artifacts. Stable owner/world identities and package paths are recorded
 separately; authored `.puck` inputs are artifacts and are never treated as ready
-definitions. `world release status` is read-only and prints a durable operation
-record from a supplied local file. Rollback, finalization, and restore remain hosted maintenance operations
+definitions. `world release status` is read-only and validates then prints a
+durable deployment-group root from a supplied local file; it does not query a
+live deployment. Rollback, finalization, and restore remain hosted maintenance operations
 until their coordinator can perform the corresponding guarded storage and
 admission transitions.
 Azure credentials, deployment ordering, and access restoration belong to
@@ -170,7 +171,7 @@ puck official verify --base <dir> --channel <name> [--expect-commit <hex>]
 puck official serve --tree <dir> [--port 61102]
 ```
 
-Writes, serves, and verifies a `puck.official.v1` tree: the shipped browser-wasm
+Writes, serves, and verifies a `puck.official.manifest.v1` tree: the shipped browser-wasm
 engine (a `dotnet publish src/Puck.World.Browser -c Release`
 AppBundle), the world schema bundle (the same `WorldSchema.Export`/`Bundle` path
 `puck schema --bundle` uses), every world document under the worlds directory,
@@ -716,7 +717,7 @@ registers one.
 
 ## `puck schema`—world.def JSON Schema
 
-Generates the JSON Schema for `puck.world.def.v1` from the live C# model—
+Generates the JSON Schema for `puck.world.definition.v1` from the live C# model—
 `Puck.World.WorldSchema` (`src/Puck.World.Schema/WorldSchema.cs`) walks
 `WorldDefinition` over its own source-generated `WorldJsonContext` via
 `System.Text.Json`'s `JsonSchemaExporter`, so `$type` unions, enum values, and
@@ -729,7 +730,7 @@ property), then a type `<summary>` for a node with no containing property
 (an array's item schema, a `$type` arm).
 
 `render.extensions[]` takes its `id` vocabulary and per-id `config` schema
-from the shipped `puck.shader.v1` manifests under `src/*/Assets/Shaders`
+from the shipped `puck.shader.manifest.v1` manifests under `src/*/Assets/Shaders`
 (`Puck.Shaders.ShaderSetManifest.ConfigJsonSchema`)—one `if`/`then` arm per
 id—so an entry's config validates by id in an editor, and adding a shader
 set changes the schema (`--check` catches a manifest edit not regenerated).
@@ -768,7 +769,7 @@ puck schema --bundle [path] emit the single-file equivalent with every cross-fil
 puck schema -h / --help     this text
 ```
 
-Written to `src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json` (root)
+Written to `src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json` (root)
 and `src/Puck.World/Assets/worlds/schema/*.schema.json` (sections + common),
 which already flow to `Puck.World`'s build output (`Assets\**` copies
 `PreserveNewest`), so the schema ships beside the world documents it
@@ -807,7 +808,7 @@ Cartridge sources select `puck.cartridge.v1` and use `CartridgeDocuments.Validat
 for unsaved buffers. Forge paths map back to authored properties and rows.
 
 World engine-schema validation runs only on a ROOT—a document declaring
-`schema: "puck.world.def.v1"`, a `basis`, or both
+`schema: "puck.world.definition.v1"`, a `basis`, or both
 (`WorldSemanticValidator.IsRootDocument`). A World fragment is a MODULE some
 other, unknown root supplies fields for, and validating it as a world would
 report those fields as missing; `--validate` on a module is therefore a no-op,

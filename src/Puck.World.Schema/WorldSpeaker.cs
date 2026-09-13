@@ -131,7 +131,7 @@ public abstract record WorldSpeaker(
     );
 }
 /// <summary>
-/// One tune asset reference row — a <c>puck.audio.v1</c> document's stable name, its file path (relative to
+/// One tune asset reference row — a <c>puck.tune.v1</c> document's stable name, its file path (relative to
 /// <see cref="AppContext.BaseDirectory"/>, the same convention <see cref="WorldMusicRow"/> uses), and the SHA-256
 /// hex64 pin of the referenced document's own canonical bytes. Never embedded: the document is loaded,
 /// canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline <see cref="WorldMusicRow"/>
@@ -144,7 +144,7 @@ public abstract record WorldSpeaker(
 /// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
 public sealed record WorldTune(string Name, string Source, string Hash);
 /// <summary>
-/// One synth-patch asset reference row — the <c>puck.synth.v1</c> twin of <see cref="WorldTune"/>, same
+/// One synth-patch asset reference row — the <c>puck.synthesizer-patch.v1</c> twin of <see cref="WorldTune"/>, same
 /// name/source/hash shape and load-then-pin discipline.
 /// </summary>
 /// <param name="Name">The row's stable name — its mutation address; referenced by

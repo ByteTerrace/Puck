@@ -5,7 +5,7 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Puck.World;
 
-/// <summary>One JSON path a registered member reaches in a <c>puck.world.def.v1</c> document.</summary>
+/// <summary>One JSON path a registered member reaches in a <c>puck.world.definition.v1</c> document.</summary>
 /// <param name="Path">The path from the root: <c>rules[].effects[setState].state</c>, where <c>[]</c> is a list
 /// element and <c>[name]</c> a <c>$type</c> arm.</param>
 /// <param name="Field">The registration the path carries.</param>

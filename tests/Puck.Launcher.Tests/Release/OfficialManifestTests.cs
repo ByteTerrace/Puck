@@ -14,7 +14,7 @@ public sealed class OfficialManifestTests {
 
     private static OfficialManifest ValidDocument() => new(
         Assets: [],
-        Build: new OfficialBuildInfo(Commit: "0123456789abcdef0123456789abcdef01234567", Dirty: false, Generator: "Puck.World.WorldSchema", WorldSchema: "puck.world.def.v1"),
+        Build: new OfficialBuildInfo(Commit: "0123456789abcdef0123456789abcdef01234567", Dirty: false, Generator: "Puck.World.WorldSchema", WorldSchema: "puck.world.definition.v1"),
         Channel: "dev",
         Composed: [
             new OfficialComposedEntry(ContentType: "application/json", DocumentId: "puck", Hash: ContentHashA, Identity: null, Name: "puck.world.json", Path: "objects/sha256/00/aaa", Pin: ShortPin, Size: 10),

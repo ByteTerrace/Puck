@@ -10,7 +10,7 @@ using Puck.Abstractions.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// Generates the JSON Schema for <c>puck.world.def.v1</c> (<see cref="WorldDefinition"/>) directly from the live
+/// Generates the JSON Schema for <c>puck.world.definition.v1</c> (<see cref="WorldDefinition"/>) directly from the live
 /// C# model and its XML documentation — never hand-maintained, so an editor's completion, enum values, <c>$type</c>
 /// union arms, and hover text always match the code that actually parses a world document. The walk runs over
 /// <see cref="WorldJsonContext"/>'s own source-generated metadata via <see cref="JsonSchemaExporter"/>, which
@@ -1743,7 +1743,7 @@ public static partial class WorldSchema {
 
         typesByNode[obj] = context.TypeInfo.Type;
 
-        // The document root carries its own hand-written title ("Puck world definition (puck.world.def.v1)" and
+        // The document root carries its own hand-written title ("Puck world definition (puck.world.definition.v1)" and
         // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.
         if (context.Path.Length > 0) {
             StampTitle(

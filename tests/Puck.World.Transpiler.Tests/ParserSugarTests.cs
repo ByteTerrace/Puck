@@ -7,7 +7,7 @@ namespace Puck.World.Transpiler.Tests;
 
 public class ParserSugarTests {
     private static DocumentNode ParseClean(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var (doc, diagnostics) = PuckParser.ParseDocumentWithDiagnostics(source);
         Assert.NotNull(doc);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(source));
@@ -15,7 +15,7 @@ public class ParserSugarTests {
     }
 
     private static (DocumentNode? Document, DiagnosticBag Diagnostics) ParseWithDiagnostics(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var result = PuckParser.ParseDocumentWithDiagnostics(source);
         return (result.Value, result.Diagnostics);
     }

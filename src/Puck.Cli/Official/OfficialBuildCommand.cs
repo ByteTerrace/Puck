@@ -8,7 +8,7 @@ using Puck.World;
 
 namespace Puck.Cli.Official;
 
-// The `puck official build` verb: writes a puck.official.v1 tree from the shipped browser-wasm engine, every world
+// The `puck official build` verb: writes a puck.official.manifest.v1 tree from the shipped browser-wasm engine, every world
 // document under the worlds directory, the one composed root world, and the off-disk assets it references. No
 // upload, no signing, no GitHub workflow — those are a separate, later concern.
 // Exit 0 wrote the tree, 1 the build refused (ledger drift, a dirty tree without --allow-dirty, a composition or
@@ -21,7 +21,7 @@ internal static class OfficialBuildCommand {
         var outOption = new Option<string>(name: "--out") { Description = "The official tree's root, created if missing.", Required = true };
         var worldsOption = new Option<string?>(name: "--worlds") { Description = "The worlds directory. Absent, src/Puck.World/Assets/worlds under the repository root." };
         var command = new Command(description: """
-            Write a puck.official.v1 tree from the shipped engine, world documents, and their assets.
+            Write a puck.official.manifest.v1 tree from the shipped engine, world documents, and their assets.
 
             Refuses unless `puck schema --check` and `puck registry --check` both pass in-process first — a document
             field added without regenerating its ledger never ships. Refuses on a dirty working tree unless

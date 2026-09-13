@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Puck.Cli.Official;
 
@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Puck.Cli.Tests.Official;
 
-/// <summary>Builds a real puck.official.v1 tree once, from this checkout's own worlds and the read-only browser-wasm
+/// <summary>Builds a real puck.official.manifest.v1 tree once, from this checkout's own worlds and the read-only browser-wasm
 /// AppBundle in the current checkout, so every test in <see cref="OfficialBuildCommandTests"/> exercises the actual
 /// verb end to end rather than a synthetic fixture.</summary>
 public sealed class OfficialBuildFixture : IDisposable {

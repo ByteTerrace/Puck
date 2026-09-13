@@ -198,7 +198,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         return true;
     }
     /// <summary>Arms a live recording of one declared probe instance's fresh readings to a
-    /// <c>puck.probe-track.v1</c> document — <c>probe.record</c>'s own seam. Serviced from <see cref="CaptureFrame"/>,
+    /// <c>puck.probe.track.v1</c> document — <c>probe.record</c>'s own seam. Serviced from <see cref="CaptureFrame"/>,
     /// so it only progresses while this instance is polled (the windowed launcher; see the class remarks). The
     /// document writes, and completion narrates on <see cref="Console.Error"/>, once <paramref name="seconds"/>
     /// elapses.</summary>
@@ -428,7 +428,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         builder.Append(value: " value=").Append(value: parameter.LastValue.ToString(format: "0.0000", provider: CultureInfo.InvariantCulture));
         builder.Append(value: " writes=").Append(value: parameter.Writes);
     }
-    // Writes the finished recording's puck.probe-track.v1 document and narrates completion — or, honestly, a
+    // Writes the finished recording's puck.probe.track.v1 document and narrates completion — or, honestly, a
     // failure — on stderr. Static: it never touches instance state, only the finished snapshot handed to it.
     private static void FinishRecording(RecordingState recording) {
         if (recording.Samples.Count == 0) {

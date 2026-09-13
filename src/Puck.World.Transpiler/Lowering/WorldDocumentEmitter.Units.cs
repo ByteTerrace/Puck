@@ -1,8 +1,8 @@
-using Puck.Transpiler.Units;
+﻿using Puck.Transpiler.Units;
 
 namespace Puck.World.Transpiler.Lowering;
 
-/// <summary>The field-dimension table: which <c>puck.world.def.v1</c> field names carry which physical dimension.
+/// <summary>The field-dimension table: which <c>puck.world.definition.v1</c> field names carry which physical dimension.
 /// The emitter converts against it and the decompiler classifies against it when deciding whether to print a unit
 /// back onto a field's numeric value, so neither side carries its own copy. What each dimension's suffixes are
 /// worth is <see cref="UnitConversion"/>'s — this table only says which of THIS document's fields is a length, a

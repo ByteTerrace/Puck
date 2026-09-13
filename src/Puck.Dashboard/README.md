@@ -59,7 +59,7 @@ installed CLI, or `puck` on `PATH`; these checks never compile another CLI.
 ## The official content model
 
 `official/officialClient.ts`'s `loadOfficial` fetches and parses the
-channel's manifest (`puck.official.v1`—build info, the world-schema
+channel's manifest (`puck.official.manifest.v1`—build info, the world-schema
 bundle, every document/composed-world/asset entry, the engine's own file
 list), then verifies every object it fetches against the manifest's own
 SHA-256 hash before caching it (`official/byteStore.ts`, IndexedDB-backed

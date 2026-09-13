@@ -250,7 +250,7 @@ bodies {
 
 bodyMotionPrograms [
   {
-    version: "puck.body-motion.v1"
+    version: "puck.body.program.v1"
     name: "display"
     kind: "Motion"
     operations [

@@ -939,7 +939,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // Vocabulary only — the shallow half of the shallow-then-deep split WorldScreenSource.Machine's Options string
-    // already uses: an id naming no shipped shader set (no puck.shader.v1 manifest with that stem) refuses here, at
+    // already uses: an id naming no shipped shader set (no puck.shader.manifest.v1 manifest with that stem) refuses here, at
     // load, by name and index — not a silent no-op discovered only once the composition root tries to compose the
     // chain. Each entry's own Config is opaque here; the manifest's declared config schema validates it at boot,
     // refusing with the set id and reason on a malformed value.

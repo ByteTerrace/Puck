@@ -34,7 +34,7 @@ public sealed record ReleaseRollout(int Percent);
 /// <param name="Chain">The base64-encoded key-binding attestations beneath the claim, in root-to-subject order — 0 or exactly 2 entries.</param>
 public sealed record ReleaseSignature(string Claim, IReadOnlyList<string> Chain);
 /// <summary>
-/// The <c>puck.release.v1</c> document: what one build of a Launcher-based program's release looks like — its
+/// The <c>puck.release.manifest.v1</c> document: what one build of a Launcher-based program's release looks like — its
 /// version, its per-RID file manifest, its staged-rollout fraction, and the signed claim that lets a client verify
 /// it without contacting the issuer. Code and content ride separate channels: this document names binaries only,
 /// never a world or library asset.

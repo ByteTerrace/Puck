@@ -182,7 +182,7 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Gets the visited world's player presentation defaults.</summary>
     public WorldPlayerDefaults Defaults { get; }
     /// <summary>Gets the documents this catalog DISPOSED OF at construction, in file-name order — the ones whose
-    /// bytes are not a <c>puck.world.def.v1</c> document at all. Empty on every ordinary boot, and a one-time event
+    /// bytes are not a <c>puck.world.definition.v1</c> document at all. Empty on every ordinary boot, and a one-time event
     /// otherwise, since each entry names a file moved out of the catalog directory. A document refused for a reason
     /// that can answer differently later (an unreadable file, an unresolved basis link, a validation claim resting
     /// on a neighbour) is NOT here: it is named on stderr and left where it is for the next boot.</summary>
@@ -559,7 +559,7 @@ public sealed class WorldOwnedWorlds {
     // The one predicate that decides whether a refusal is a verdict on the file's BYTES or on the moment it was read
     // in — the loader's own reason classes, matched on the wording WorldDefinitionFileSource.TryLoad documents.
     // Quarantine is irreversible from the catalog's side (the name it frees is re-seeded), so only the byte verdict
-    // earns it: a document that does not parse as puck.world.def.v1 parses no better on the next boot.
+    // earns it: a document that does not parse as puck.world.definition.v1 parses no better on the next boot.
     //
     // The rest each answer differently on a later call and would CASCADE if quarantined. "cannot read" is a lock or
     // a half-written file; "no file at" is a file that vanished between the enumeration and the load; "basis

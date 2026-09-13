@@ -50,7 +50,7 @@ public sealed class ShapingRowLawTests {
         };
         var walker = new BodyMotionProgram(
             Name: "walker",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -64,7 +64,7 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "walker-test",
             BodyMotionProgram: "walker",
@@ -115,7 +115,7 @@ public sealed class ShapingRowLawTests {
         };
         var walker = new BodyMotionProgram(
             Name: "walker",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -127,7 +127,7 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "glider-test",
             BodyMotionProgram: "walker",
@@ -309,7 +309,7 @@ public sealed class ShapingRowLawTests {
         };
         var program = new BodyMotionProgram(
             Name: "held-row",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -320,7 +320,7 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body.program.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         WorldDefinition Build(bool withHeldRow) {
             var shaping = new List<WorldShaping>();

@@ -12,7 +12,7 @@ namespace Puck.World.Transpiler.Tests;
 /// visible rather than letting the suffix trail the whole chain.</summary>
 public class CompareValueKindBindingTests {
     private static JsonObject Lower(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 
@@ -67,7 +67,7 @@ public class CompareValueKindBindingTests {
     [Fact]
     public void DecompilerWrapsIntKindComparisonInParensWithinAMixedChain() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"all","predicates":[
                 {"$type":"compareState","state":"a","comparison":"Equal","value":1},
                 {"$type":"compareValue","comparison":"NotEqual","kind":"Int","left":"b","right":"c"}
@@ -96,7 +96,7 @@ public class CompareValueKindBindingTests {
     [Fact]
     public void DecompilerLeavesDefaultFixedKindUnannotatedWhenTheBareTextKeepsCompareValue() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareValue","comparison":"NotEqual","kind":"Fixed","left":"b + 1","right":"c"},
                "effects":[{"$type":"setState","state":"hp","value":0}]}
             ]}
@@ -113,7 +113,7 @@ public class CompareValueKindBindingTests {
     [Fact]
     public void DecompilerPrintsTheDefaultFixedKindWhenTheBareTextWouldReLowerToCompareState() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"all","predicates":[
                  {"$type":"compareValue","comparison":"Greater","kind":"Fixed","left":"a","right":"b"},
                  {"$type":"compareState","comparison":"NotEqual","state":"c","comparandState":"d"}]},
@@ -131,7 +131,7 @@ public class CompareValueKindBindingTests {
     [Fact]
     public void AKindlessCompareValueOverSimpleReadsFallsToCallForm() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareValue","comparison":"Greater","left":"a","right":"b"},
                "effects":[{"$type":"setState","state":"hp","value":0}]}
             ]}

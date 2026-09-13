@@ -1,6 +1,6 @@
 # Puck.World.Transpiler
 
-The `puck.world.def.v1` VOCABULARY for the `.puck` authoring language: it compiles a parsed document to world JSON
+The `puck.world.definition.v1` VOCABULARY for the `.puck` authoring language: it compiles a parsed document to world JSON
 and decompiles the other way. The language itself—parser, syntax tree, diagnostics, formatter, import resolver,
 unit arithmetic—is [`Puck.Transpiler`](../Puck.Transpiler/README.md), which knows no schema at all. `.puck` is an
 authoring layer: JSON stays the wire form and the checked-in source of every shipped world.
@@ -16,7 +16,7 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 ### Documents and blocks
 
 ```puck
-schema: "puck.world.def.v1"
+schema: "puck.world.definition.v1"
 basis: "worlds/base.puck"
 
 let name = expression                 // compile-time constant
@@ -232,7 +232,7 @@ document declaring `basis` builds its name catalog from the WHOLE composed basis
 name only a basis or import supplies resolves correctly. It still only ever WALKS the document's own tree, never
 the composed one (whose merged array order no longer lines up with the caller's `SourceMap`), so a reported
 finding's JSON pointer always belongs to the document's own source. Whether an unresolvable name is REPORTED turns
-on `WorldSemanticValidator.IsRootDocument` instead: a ROOT declares `schema: "puck.world.def.v1"`, a `basis`, or
+on `WorldSemanticValidator.IsRootDocument` instead: a ROOT declares `schema: "puck.world.definition.v1"`, a `basis`, or
 both, and every other document is a MODULE—a fragment some other, unknown root may import—so a name a module
 cannot resolve standalone is never a finding; it may be a name that root supplies. (`imports` alone does not make a
 root: a module may import sibling modules.) `puck lint` and `compile --validate` apply the same test before

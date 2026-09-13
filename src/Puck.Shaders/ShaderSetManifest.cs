@@ -6,7 +6,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 /// <summary>
-/// A <c>puck.shader.v1</c> shader-set manifest: one <c>&lt;id&gt;.puck.shader.json</c> beside its HLSL and compiled
+/// A <c>puck.shader.manifest.v1</c> shader-set manifest: one <c>&lt;id&gt;.puck.shader.json</c> beside its HLSL and compiled
 /// bytecode, and the whole declaration of a shader set — its stage stems, its descriptor bindings, its config
 /// schema (what a document may author for it), and its push-constant block (which fields, in what order, filled from
 /// which source). The binding layout is authored by hand and cross-checked against the pipeline description built

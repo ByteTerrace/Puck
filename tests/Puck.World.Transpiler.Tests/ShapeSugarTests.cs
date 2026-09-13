@@ -11,7 +11,7 @@ namespace Puck.World.Transpiler.Tests;
 /// `document.shapes` reaches the same `shape Type "name" { }` sugar a root-level creation document uses.</summary>
 public class ShapeSugarTests {
     private static JsonObject Lower(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 
@@ -172,7 +172,7 @@ public class ShapeSugarTests {
     public void DecompiledPrototypeUsesShapeBlockSugarWithDefaultsElided() {
         const string json = """
         {
-            "schema": "puck.world.def.v1",
+            "schema": "puck.world.definition.v1",
             "prototypes": [
                 {
                     "id": "pipelineProp",
@@ -213,7 +213,7 @@ public class ShapeSugarTests {
     public void PrototypesArrayWithoutIdFallsBackToGenericPrinting() {
         const string json = """
         {
-            "schema": "puck.world.def.v1",
+            "schema": "puck.world.definition.v1",
             "prototypes": [
                 { "document": { "schema": "puck.creation.v1", "shapes": [] } }
             ]
@@ -233,7 +233,7 @@ public class ShapeSugarTests {
     public void PartialMergeShapeRowFallsBackToGenericPrintingForTheWholeArray() {
         const string json = """
         {
-            "schema": "puck.world.def.v1",
+            "schema": "puck.world.definition.v1",
             "prototypes": [
                 {
                     "id": "moth",

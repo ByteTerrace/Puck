@@ -16,7 +16,7 @@ public static class OfficialCanonicalizer {
     /// rather than throwing on the first. An absent or foreign <see cref="OfficialManifest.Schema"/> short-circuits
     /// to that one violation.</summary>
     /// <param name="document">The document to validate, as constructed — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.official.v1</c> value.</returns>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.official.manifest.v1</c> value.</returns>
     public static IReadOnlyList<DocumentValidationError> Validate(OfficialManifest document) {
         ArgumentNullException.ThrowIfNull(document);
 

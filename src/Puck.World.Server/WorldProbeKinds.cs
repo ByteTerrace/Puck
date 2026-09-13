@@ -3,7 +3,7 @@ using Puck.Shaders;
 namespace Puck.World;
 
 /// <summary>
-/// The probe kinds this build ships: the probe kinds found by their <c>puck.probe.v1</c> manifests under the
+/// The probe kinds this build ships: the probe kinds found by their <c>puck.probe.manifest.v1</c> manifests under the
 /// deploy's <c>Assets/Probes</c> tree. A world document's <c>probes[].kind</c> is a kind's id (its
 /// manifest's file stem); shipping a kind is exactly shipping its manifest (and, for a kernel-class kind, its HLSL
 /// source) beside it. Read by both composition roots' pre-container <see cref="WorldProbeVocabularyHook"/> wiring

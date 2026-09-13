@@ -6,7 +6,7 @@ using Puck.Launcher.Release;
 
 namespace Puck.Cli.PublishRelease;
 
-// The `puck publish` verb: walks a built RID's output directory into a puck.release.v1 payload file list
+// The `puck publish` verb: walks a built RID's output directory into a puck.release.manifest.v1 payload file list
 // (hash+size per file via Puck.Assets.ContentAddressedStore) and writes the canonical, UNSIGNED manifest plus the
 // payload objects into a release-source tree shaped exactly like DirectoryReleaseSource reads
 // (<out>/<channel>/manifest.json, <out>/objects/sha256/<hex[0..2]>/<hex64>). Dry-run only — --sign (a live publish
@@ -25,7 +25,7 @@ internal static class PublishCommand {
         var stateGenerationOption = new Option<int>(name: "--state-generation") { DefaultValueFactory = _ => 0, Description = "The state generation this release's payload reads and writes." };
         var versionOption = new Option<string>(name: "--version") { Description = "The release's semantic version.", Required = true };
         var command = new Command(description: """
-            Write an unsigned puck.release.v1 release-source tree from a built RID's output.
+            Write an unsigned puck.release.manifest.v1 release-source tree from a built RID's output.
 
             Writes <out>/<channel>/manifest.json (canonical, UNSIGNED — Signature is null) and every payload file under
             <out>/objects/sha256/<hex[0..2]>/<hex64>. A DirectoryReleaseSource rooted at <out> reads this tree as-is.

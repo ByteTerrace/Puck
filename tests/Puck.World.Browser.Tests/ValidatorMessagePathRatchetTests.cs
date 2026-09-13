@@ -54,7 +54,7 @@ public sealed class ValidatorMessagePathRatchetTests {
     [Fact]
     public void Nameless_addon_refusal_carries_no_path() {
         const string Json = /*lang=json*/ """
-            { "schema": "puck.world.def.v1", "addons": [{ "name": "", "modulePath": "m", "hash": "sha256-64/0000000000000000", "fuel": 1000, "enabled": true }] }
+            { "schema": "puck.world.definition.v1", "addons": [{ "name": "", "modulePath": "m", "hash": "sha256-64/0000000000000000", "fuel": 1000, "enabled": true }] }
             """;
 
         var split = ValidateAndSplitErrors(utf8Json: Encoding.UTF8.GetBytes(s: Json));

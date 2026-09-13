@@ -10,7 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 /// effect-statement lowering, bind/decision/option, shape/placement row elision, and the unit-dimension table.</summary>
 public class EmitterSugarTests {
     private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 

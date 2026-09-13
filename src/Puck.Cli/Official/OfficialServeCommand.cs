@@ -7,7 +7,7 @@ using Puck.Launcher.Release;
 
 namespace Puck.Cli.Official;
 
-// The `puck official serve` verb: a minimal static HTTP server over a puck.official.v1 tree, using
+// The `puck official serve` verb: a minimal static HTTP server over a puck.official.manifest.v1 tree, using
 // System.Net.HttpListener (already in the BCL — no new package) rather than a hosting framework, since this is a
 // throwaway local dev loop, not a production endpoint. Content-Type comes from the manifest's own per-object
 // contentType where a manifest names the object (an object under objects/sha256/... carries no extension of its
@@ -21,7 +21,7 @@ internal static class OfficialServeCommand {
         var portOption = new Option<int>(name: "--port") { DefaultValueFactory = _ => DefaultPort, Description = "The port to listen on." };
         var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root.", Required = true };
         var command = new Command(description: """
-            A minimal static HTTP server over a puck.official.v1 tree.
+            A minimal static HTTP server over a puck.official.manifest.v1 tree.
 
             Serves every file under <tree> by its path (a channel or builds manifest.json, and every object under
             objects/sha256/...). Content-Type comes from the enclosing manifest's own per-object contentType when one

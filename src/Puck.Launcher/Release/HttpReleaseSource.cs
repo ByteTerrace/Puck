@@ -4,7 +4,7 @@ namespace Puck.Launcher.Release;
 
 /// <summary>
 /// A release source backed by anonymous HTTP GET against the app's own public-content endpoint — the app's document
-/// names this endpoint through its own operational configuration section (e.g. <c>puck.world.def.v1</c>'s
+/// names this endpoint through its own operational configuration section (e.g. <c>puck.world.definition.v1</c>'s
 /// <c>update</c> section), never a <c>PUCK_*</c> environment variable. Layout mirrors <see cref="DirectoryReleaseSource"/>'s directory tree over
 /// HTTP: <c>&lt;baseUri&gt;/&lt;channel&gt;/manifest.json</c> and
 /// <c>&lt;baseUri&gt;/objects/sha256/&lt;hex[0..2]&gt;/&lt;hex64&gt;</c>. Genuinely distinct from

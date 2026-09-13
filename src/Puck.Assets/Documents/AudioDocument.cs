@@ -31,7 +31,7 @@ public sealed record AudioEffectDocument(string? Voice, IReadOnlyList<AudioRowDo
     public const string VoiceWave = "wave";
 }
 /// <summary>
-/// The <c>puck.audio.v1</c> document — authored music as DATA: a short song describing the exact ROM sound-table
+/// The <c>puck.tune.v1</c> document — authored music as DATA: a short song describing the exact ROM sound-table
 /// streams the SM83 game framework's sound driver plays (the pulse-2 music loop, plus named pulse-1/noise effect
 /// streams), compiled by <c>Puck.HumbleGamingBrick.Forge</c>'s <c>AudioDocumentCompiler</c>. Document doctrine applies throughout:
 /// every OPTIONAL member is nullable, validated only when present, and normalized through
@@ -39,7 +39,7 @@ public sealed record AudioEffectDocument(string? Voice, IReadOnlyList<AudioRowDo
 /// wall-clock, RNG, or float anywhere in the schema or the compile path: <see cref="Tempo"/> is an integer frame
 /// count, and every row resolves through integer millihertz note-period math.
 /// </summary>
-/// <param name="Schema">The document version tag (<c>puck.audio.v1</c>).</param>
+/// <param name="Schema">The document version tag (<c>puck.tune.v1</c>).</param>
 /// <param name="Name">The song's display name (shown on the jukebox title screen; null = "UNTITLED").</param>
 /// <param name="Tempo">Frames per pattern row (null = 8 — the framework's stock eighth-note rate at 60 fps).</param>
 /// <param name="Patterns">The song's patterns, each a list of rows (null/empty = one silent 16-row pattern).</param>
@@ -84,7 +84,7 @@ public static class AudioCanonicalizer {
     /// entry naming a pattern that is not there) are failures; clampable values (duty, tempo) are normalization's
     /// job.</summary>
     /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.audio.v1</c> value.</returns>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.tune.v1</c> value.</returns>
     public static IReadOnlyList<DocumentValidationError> Validate(AudioDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 

@@ -55,7 +55,7 @@ public sealed record WorldCamera(
 public static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
-    /// (the "durable config lives in the data file" doctrine); the <c>puck.world.def.v1</c> loader
+    /// (the "durable config lives in the data file" doctrine); the <c>puck.world.definition.v1</c> loader
     /// (<c>Puck.World.WorldDefinitionLoader</c>) reads one, but the checked-in default file authors an empty content
     /// path, so the native-AGB screen boots unconfigured (a graceful fault, never a crash) until a real deployment
     /// supplies a named <see cref="WorldScreenSource.Machine"/> output.</summary>
@@ -86,7 +86,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Extensions">The post-render extension chain, composed over the world's rendered output in list
 /// order — e.g. <c>[{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]</c>. Optional; an absent or
 /// empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader
-/// set — a <c>puck.shader.v1</c> manifest's file stem (checked at document load); each entry's own
+/// set — a <c>puck.shader.manifest.v1</c> manifest's file stem (checked at document load); each entry's own
 /// <c>config</c> is validated against that manifest's declared config schema at boot and by <c>puck schema</c>.</param>
 /// <param name="Lighting">The scene's directional sun and ambient term. Optional, and every field within it is
 /// optional individually — an absent section, or an absent field within it, resolves to <c>SdfFrame</c>'s pinned
@@ -157,7 +157,7 @@ public sealed record WorldRenderDefaults(
 }
 /// <summary>One entry in <see cref="WorldRenderDefaults.Extensions"/> — a shipped shader set's id plus the values
 /// for its manifest-declared config fields.</summary>
-/// <param name="Id">The shader set id (its <c>puck.shader.v1</c> manifest's file stem) — checked against the
+/// <param name="Id">The shader set id (its <c>puck.shader.manifest.v1</c> manifest's file stem) — checked against the
 /// shipped vocabulary at document load (<see cref="WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension"/>),
 /// never interpreted here.</param>
 /// <param name="Config">The set's config values, or <see langword="null"/> when the manifest declares none or every

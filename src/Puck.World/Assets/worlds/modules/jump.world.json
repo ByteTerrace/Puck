@@ -287,7 +287,7 @@
   "bodyMotionPrograms": [
     {
       "name": "vaultMotion",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",

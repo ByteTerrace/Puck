@@ -1,5 +1,5 @@
 {
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "documentId": "navigation-shared-canary",
   "simulation": {
     "rateHz": 240
@@ -19,7 +19,7 @@
     },
     "seatRig": {
       "name": "flock-view",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",
@@ -98,7 +98,7 @@
   "bodyMotionPrograms": [
     {
       "name": "flock",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Producer",
       "operations": [
         "SenseNearestInCone",
@@ -112,7 +112,7 @@
     },
     {
       "name": "flock-motion",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",

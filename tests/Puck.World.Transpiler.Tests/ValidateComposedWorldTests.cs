@@ -21,7 +21,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
     // semantic check runs.
     private const string RootJson = """
         {
-          "schema": "puck.world.def.v1",
+          "schema": "puck.world.definition.v1",
           "basis": "basis.json",
           "placements": {
             "rows": [
@@ -70,7 +70,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
 
     [Fact]
     public void ValidateComposedWorld_WithNoBasisOrImports_ValidatesTheDocumentAsGiven() {
-        const string flatJson = """{ "schema": "puck.world.def.v1" }""";
+        const string flatJson = """{ "schema": "puck.world.definition.v1" }""";
         var root = JsonNode.Parse(flatJson)!.AsObject();
         var diagnostics = new DiagnosticBag();
         var rootPath = Path.Combine(m_directory, "flat.world.json");

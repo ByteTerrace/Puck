@@ -10,7 +10,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The recording console surface — <c>capture.start</c> / <c>capture.stop</c> / <c>capture.status</c>, the native-capture
-/// control plane over the pipe. It resolves the boot recording document (<c>puck.recording.v1</c>, host-scope data) and
+/// control plane over the pipe. It resolves the boot recording document (<c>puck.recording.configuration.v1</c>, host-scope data) and
 /// the platform's Media Foundation encoder ladder + WASAPI audio sources against real hardware, opening only what this
 /// machine can encode and capture, and arms launcher-level frame capture. Every verb is Immediate (no simulation effect) and echoes
 /// honestly: the negotiated codec, frames captured/dropped, audio track count and drops, bytes, and the output path;

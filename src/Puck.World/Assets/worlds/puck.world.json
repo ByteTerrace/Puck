@@ -146,7 +146,7 @@
       "operations": [
         "ProduceSteeringIntent"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Motion",
@@ -162,7 +162,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -175,7 +175,7 @@
         "$type": "designated",
         "register": "companion"
       },
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -183,7 +183,7 @@
       "operations": [
         "ProduceFlockIntent"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -191,7 +191,7 @@
       "operations": [
         "ProduceFlockIntent"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -206,7 +206,7 @@
         "domain": "deck",
         "register": "quarry"
       },
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Motion",
@@ -222,7 +222,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     }
   ],
   "cameras": [

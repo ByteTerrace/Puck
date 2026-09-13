@@ -10,14 +10,14 @@ namespace Puck.World.Transpiler.Tests;
 /// the thing that is wrong, under a code no other report site also uses.</summary>
 public class DiagnosticsFixTests {
     private static DiagnosticBag Parse(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var diagnostics = new DiagnosticBag();
         PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);
         return diagnostics;
     }
 
     private static (JsonObject Json, DiagnosticBag Diagnostics) Compile(string body) {
-        var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
+        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var diagnostics = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);
         var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);

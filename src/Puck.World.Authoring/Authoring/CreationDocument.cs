@@ -413,14 +413,14 @@ public sealed record CreationFaceDocument(
 );
 /// <summary>One sound a creation carries — a creature/phenomenon voice as data, following <see cref="CreationFaceDocument"/>'s
 /// named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the
-/// creation's root), and the <c>puck.synth.v1</c> patch inline — creations stay portable, and the existing creation
+/// creation's root), and the <c>puck.synthesizer-patch.v1</c> patch inline — creations stay portable, and the existing creation
 /// hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an
 /// audio emitter anchored to the placement (root or the named shape); the placement row's own emission facet remains
 /// the per-instance override channel.</summary>
 /// <param name="Name">The sound's name (a wiring handle — <c>sound</c> by default; unique within the creation).</param>
 /// <param name="ShapeId">The shape the voice emits from (a <see cref="ShapeDocument.Id"/>; null = the creation's
 /// root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces).</param>
-/// <param name="Patch">The voice's <c>puck.synth.v1</c> patch, inline (validated through the synth family's own
+/// <param name="Patch">The voice's <c>puck.synthesizer-patch.v1</c> patch, inline (validated through the synth family's own
 /// canonicalizer as part of creation validation).</param>
 /// <param name="Level">The emitter level (null = 1 — unity).</param>
 /// <param name="Radius">The audible support radius in world units (null = the consuming world's default speaker

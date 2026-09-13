@@ -34,7 +34,7 @@ public class SugarFallbackTests {
     [Fact]
     public void CompareStateWithAnExplicitNullValueKeepsTheNullThroughCallForm() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareState","comparison":"Equal","state":"a","value":null},
                "effects":[{"$type":"setState","state":"z","value":1}]}
             ]}
@@ -49,7 +49,7 @@ public class SugarFallbackTests {
     [Fact]
     public void CompareStateWithAnExplicitNullComparandStateKeepsTheKeyThroughCallForm() {
         const string json = """
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareState","comparison":"NotEqual","state":"b","comparandState":null},
                "effects":[{"$type":"setState","state":"z","value":1}]}
             ]}
@@ -71,7 +71,7 @@ public class SugarFallbackTests {
     [InlineData("""{"$type":"scheduleState","state":"j","delaySeconds":2,"target":"Self"}""")]
     public void AnEffectCarryingAKeyTheSugarWouldNotReprintFallsToCallForm(string effectJson) {
         var json = $$"""
-            {"schema":"puck.world.def.v1","rules":[
+            {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","effects":[{{effectJson}}]}
             ]}
             """;
@@ -84,7 +84,7 @@ public class SugarFallbackTests {
     [Fact]
     public void APrototypesRowWhoseDocumentIsNullKeepsTheKeyThroughTheGenericValuePath() {
         const string json = """
-            {"schema":"puck.world.def.v1","prototypes":[{"id":"p3","document":null}]}
+            {"schema":"puck.world.definition.v1","prototypes":[{"id":"p3","document":null}]}
             """;
 
         var puck = AssertRoundTripsExactly(json);
@@ -98,7 +98,7 @@ public class SugarFallbackTests {
     [InlineData("prototypes", "version: 3", "version")]
     [InlineData("placements", "placemnt \"typo\" { prototypeId: \"p\" }", "placemnt")]
     public void AStatementASectionCannotCarryIsReportedRatherThanDropped(string section, string statement, string spelling) {
-        var source = $"schema: \"puck.world.def.v1\"\n{section} {{\n    {statement}\n}}\n";
+        var source = $"schema: \"puck.world.definition.v1\"\n{section} {{\n    {statement}\n}}\n";
 
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
@@ -114,7 +114,7 @@ public class SugarFallbackTests {
 
     [Fact]
     public void ExportNamesOnAnIndentedContinuationLineAreRead() {
-        var lowered = Recompile("schema: \"puck.world.def.v1\"\n\nexport action\n    moveCell, moveRequest\n\nexport binding\n    bTest\n");
+        var lowered = Recompile("schema: \"puck.world.definition.v1\"\n\nexport action\n    moveCell, moveRequest\n\nexport binding\n    bTest\n");
 
         var exports = Assert.IsType<JsonObject>(lowered["exports"]);
         Assert.Equal(["moveCell", "moveRequest"], Assert.IsType<JsonArray>(exports["actions"]).Select(n => n!.ToString()));
@@ -125,7 +125,7 @@ public class SugarFallbackTests {
     // its own line, and the next statement sits at the same indentation, so it is not read as a name.
     [Fact]
     public void ABareExportFacetLowersToAnEmptyArrayWithoutSwallowingTheNextStatement() {
-        var lowered = Recompile("schema: \"puck.world.def.v1\"\n\nexport action\nexport binding\n\nname: \"t\"\n");
+        var lowered = Recompile("schema: \"puck.world.definition.v1\"\n\nexport action\nexport binding\n\nname: \"t\"\n");
 
         var exports = Assert.IsType<JsonObject>(lowered["exports"]);
         Assert.Empty(Assert.IsType<JsonArray>(exports["actions"]));
@@ -137,7 +137,7 @@ public class SugarFallbackTests {
     [InlineData("    when hp > 0 // a trailing comment on the gate line\n    hp = 1")]
     [InlineData("    when hp > 0\n    bind tmp : Int = hp + 1 // after a bind\n    hp = 1")]
     public void ATrailingCommentEndsAGateOrBindOperandRatherThanJoiningIt(string body) {
-        var lowered = Recompile($"schema: \"puck.world.def.v1\"\nrule \"r\" {{\n{body}\n}}\n");
+        var lowered = Recompile($"schema: \"puck.world.definition.v1\"\nrule \"r\" {{\n{body}\n}}\n");
 
         var gate = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(lowered["rules"])[0]!["gate"]);
         Assert.Equal("compareState", gate["$type"]?.ToString());

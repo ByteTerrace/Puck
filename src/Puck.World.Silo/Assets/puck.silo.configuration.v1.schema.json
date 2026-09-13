@@ -207,6 +207,36 @@
       "default": null,
       "title": "WorldSiloLifecycle"
     },
+    "release": {
+      "description": "Optional managed release identity and private deployment-group admission binding.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "group": {
+          "description": "The deployment-group key in the private release store.",
+          "type": "string"
+        },
+        "owner": {
+          "description": "The deployment-group owner\u0027s stable container UUID.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "expectedRelease": {
+          "description": "The exact immutable release identity this process may publish.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "owner",
+        "expectedRelease"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldSiloReleaseManagement"
+    },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",
       "type": "string",

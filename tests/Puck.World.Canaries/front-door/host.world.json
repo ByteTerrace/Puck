@@ -1,5 +1,5 @@
 {
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
   "documentId": "front-door-canary",
   "simulation": {
@@ -160,7 +160,7 @@
   "views": {
     "seatRig": {
       "name": "studio-chase",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",

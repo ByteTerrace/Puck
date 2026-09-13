@@ -23,7 +23,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestNegatedConstantParsesAsAUnaryOverAnIdentifier() {
         const string source = """
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             """;
 
@@ -43,7 +43,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestNegatedConstantLowersToTheNegatedValue() {
         var origin = LoweredOrigin("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [
                 { origin [-spread, 0, 0] }
@@ -56,7 +56,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestNegatedIntegralConstantStaysIntegral() {
         var origin = LoweredOrigin("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let step = 4
             screens [
                 { origin [-step, 0, 0] }
@@ -70,7 +70,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestSignedNumericLiteralStillFoldsIntoTheLiteral() {
         var document = PuckParser.ParseDocument("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let drop = -1.5
             """);
         var constant = Assert.IsType<LetNode>(document.Statements[0]);
@@ -82,7 +82,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestNegationAppliesToAParenthesizedExpression() {
         var origin = LoweredOrigin("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             let gap = 0.2
             screens [
@@ -97,7 +97,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestNegationReadsAsTheRightOperandOfASubtraction() {
         var origin = LoweredOrigin("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [
                 { origin [0 - -spread, 0, 0] }
@@ -110,7 +110,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestDoubleNegationCancels() {
         var origin = LoweredOrigin("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [
                 { origin [--spread, 0, 0] }
@@ -123,7 +123,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestNegatedConstantCountsAsAUseOfIt() {
         var document = PuckParser.ParseDocument("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [
                 { origin [-spread, 0, 0] }
@@ -140,7 +140,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestWholeNumberArithmeticEvaluates() {
         var origin = LoweredOrigin("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let step = 4
             screens [
                 { origin [step * 3, step + 1, step - 6] }
@@ -157,7 +157,7 @@ public class UnaryOperandTests {
     [Fact]
     public void TestFormatterKeepsTheSignAttachedToItsOperand() {
         var formatted = PuckFormatter.Format("""
-            schema: "puck.world.def.v1"
+            schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [
             { origin [-spread, 0, 0] }

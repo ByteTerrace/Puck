@@ -10,7 +10,7 @@ using Puck.World.Authoring;
 
 namespace Puck.Cli.Official;
 
-// The `puck official verify` verb: re-hashes and re-checks a puck.official.v1 tree's own claims, so a mirrored or
+// The `puck official verify` verb: re-hashes and re-checks a puck.official.manifest.v1 tree's own claims, so a mirrored or
 // hand-edited tree is caught before a client trusts it. Reads only — never writes.
 // Exit 0 every check passed, 1 one or more checks failed (every discrepancy named), 2 an unreadable path.
 internal static class OfficialVerifyCommand {
@@ -19,7 +19,7 @@ internal static class OfficialVerifyCommand {
         var channelOption = new Option<string>(name: "--channel") { Description = "The channel to verify.", Required = true };
         var expectCommitOption = new Option<string?>(name: "--expect-commit") { Description = "Refuse unless build.commit equals this." };
         var command = new Command(description: """
-            Re-hash and re-check a puck.official.v1 tree's own claims. Reads only — never writes.
+            Re-hash and re-check a puck.official.manifest.v1 tree's own claims. Reads only — never writes.
 
             Checks: every object the manifest names re-hashes and re-sizes to what it claims; every document/composed
             pin recomputes to what WorldDefinitionFileSource.ComputeContentHash mints for that object's own bytes; every

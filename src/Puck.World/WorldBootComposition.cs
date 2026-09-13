@@ -763,7 +763,7 @@ internal static class WorldBootComposition {
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
         services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
-        // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows. Presentation-only:
+        // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows. Presentation-only:
         // AddWindowsRecordingPlatform/AddLinuxRecordingPlatform register the encoder ladder, audio-source factory,
         // and shared session clock. The launcher drives the generic FrameCaptureController with the exact root
         // surface immediately before presentation; the world command module owns the concrete recording session it

@@ -879,7 +879,7 @@ of; the ones that bear on a single type are argued at that type above.
 
 - **One stream per system.** Derive each consumer's `Pcg32XshRr` from a master
   seed with small, consecutive stream ids (`Create(masterSeed, streamId)`). In
-  an engine run that master seed comes from the `puck.world.def.v1` document, so the
+  an engine run that master seed comes from the `puck.world.definition.v1` document, so the
   whole draw tree is a function of the run. Sharing one generator across systems
   couples them through draw order, and two systems that drew in a different
   order diverge.
