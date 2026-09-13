@@ -360,6 +360,14 @@ so older coordinators cannot silently skip the transformation on resume or rollb
 Preserve legacy identities by omitting an absent coordinator contract. Run
 `WorldReleaseCoordinatorContractLawTests`; `PUCK_TEST_PREVIOUS_WORLD_SERVER` enables
 its actual previous-reader check and records the assembly hash.
+Receipt export is being connected separately. `CaptureReceiptSnapshotAsync` must
+receive a root selected in the checkpoint's publication queue, never a later root
+sampled after capture. `WorldAuthorityReceiptSnapshot` retains and validates the
+original index and complete chain. `CreateReleaseFixtureAsync` creates only a new
+disposable authority, retaining those references and the source sequence/journal
+coverage under an unowned epoch. Run `WorldAuthorityReceiptSnapshotLawTests` and
+`WorldReleaseReceiptFixtureLawTests`. The host/archive/CLI integration and packaged
+receipt checks remain required; do not equate the checkpoint hash with receipt proof.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains

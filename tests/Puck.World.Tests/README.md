@@ -67,6 +67,14 @@ assembly context. It must accept the legacy control and refuse the new requireme
 without writing. That binary-dependent test skips when the variable is absent;
 its output records the reader's SHA-256 for provenance.
 
+`WorldAuthorityReceiptSnapshotLawTests` checks a selected root's original index
+and complete receipt chain, excludes later publications, and refuses corrupt or
+inconsistent graphs. `WorldReleaseReceiptFixtureLawTests` reconstructs a disposable
+authority around a real checkpoint with journaled edits. It verifies receipt
+lookups and duplicate/conflicting operation decisions after continuation, plus
+interrupted uploads and a competing root writer. Automatic export and Docker
+receipt qualification still need integration; these laws cover the store boundary.
+
 ## What an assertion must prove
 
 Assert behavior, not an incidental implementation shape. Counts that belong to

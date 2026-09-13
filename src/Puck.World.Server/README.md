@@ -141,6 +141,18 @@ reverse fixtures and compares complete imports in both packaged images. Only
 metadata changes can pass; unsupported definition sections and conflicting live
 values refuse. Qualification is repeated for rollback against the latest state.
 
+`WorldAuthorityReceiptSnapshot` retains the exact receipt chain and index selected
+by a captured authority root. Validation checks their pins, budgets, unique
+operation IDs and complete agreement; it does not regenerate receipt bytes.
+`CaptureReceiptSnapshotAsync` reads only that root's immutable graph, so later
+publications cannot enter the capture. The caller must select the root in its
+checkpoint publication queue. `CreateReleaseFixtureAsync` can create a disposable
+authority with that history and a complete checkpoint, preserving sequence and
+journal coverage while assigning an unowned epoch. Existing authority refuses.
+Directory laws verify original lookups, duplicate-operation decisions after
+continued gameplay, partial uploads and competing publication. These store methods
+are not yet connected to automatic fixture export or packaged receipt checks.
+
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes
 admission. `Step`, `Advance`, and the administrative drain cannot advance a retired

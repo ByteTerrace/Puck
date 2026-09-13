@@ -75,6 +75,11 @@ to metadata and require package-bound qualification.
 - Law tests cover manifest identity, guarded group transitions, cutover and
   rollback across two rows, stale fences, lost commit responses, and pre-commit
   recovery restart.
+- Store-level receipt snapshots retain the original index and complete chain
+  selected by one root. Fixture construction can retain those bytes, sequence
+  meaning and journal coverage alongside a complete checkpoint. Directory laws
+  cover later publications, malformed graphs, duplicate decisions after gameplay,
+  interrupted uploads and competing roots. Automatic export is not yet wired to it.
 
 **Remaining:**
 
@@ -93,6 +98,8 @@ to metadata and require package-bound qualification.
   the deployment guide has no maintenance and recovery runbook.
 - Automatic fixtures reconstruct fresh authority roots around complete checkpoints.
   They do not yet retain the source storage receipt chain and index. Add explicit
+  capture-boundary root selection and wire the store-level snapshot through the
+  fixture archive and builder, then add
   receipt-lookup compatibility evidence in both images; matching simulation
   checkpoints alone does not prove storage-level operation deduplication survives.
 - Named handheld machine checkpoints now preserve core state and host pacing,
