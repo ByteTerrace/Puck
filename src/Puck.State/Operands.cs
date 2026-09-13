@@ -370,11 +370,19 @@ public sealed class ReductionOperand : OperandFact {
                 kind: ValueKind
             );
         }
+        var rowOrdinal = ((reader.Catalog.TryGetDescriptor(
+            descriptor: out var rowDesc,
+            handle: handle
+        ))
+            ? rowDesc.LaneOrdinal
+            : -1
+        );
         if (Reduce == StateReduceOp.ArrangementRank) {
             return RuleFact.Finite(
                 value: StateReader.ArrangementRank(
                     store: reader.Store,
-                    zone: declared
+                    zone: declared,
+                    rowOrdinal: rowOrdinal
                 ),
                 kind: ValueKind
             );
@@ -405,14 +413,6 @@ public sealed class ReductionOperand : OperandFact {
                 filterOrdinal = filterDesc.LaneOrdinal;
             }
         }
-        var rowOrdinal = ((reader.Catalog.TryGetDescriptor(
-            descriptor: out var rowDesc,
-            handle: handle
-        ))
-            ? rowDesc.LaneOrdinal
-            : -1
-        );
-
         return RuleFact.Finite(
             StateReader.ReduceRaw(
                 reader.Store,

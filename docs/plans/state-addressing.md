@@ -11,8 +11,14 @@ the two structural changes wait for a profile that says they are worth it.
 
 ## Implementation status
 
-Reviewed against `95e5c8c0a`. Nothing has landed. The facts below were read
-from the code at that commit; recheck them before scheduling a stage.
+The original investigation below describes `95e5c8c0a`. The current tree
+implements Stage 1's ordinal entrances, trait-scan avoidance, parsed literal
+keys, and bound iteration reads. Stage 1 also includes the frame-owned domain
+cache and direct arrangement-rank reads described below. Stages 2 and 3 remain
+profile-gated; the original cost inventory is historical, not a claim that
+every listed lookup remains in the current tree.
+The benchmark now passes its machine catalog and document path into `Boot`;
+Stage 0's setup failure below records the original investigation.
 
 ## What the tick path does today
 
@@ -114,7 +120,8 @@ this stage.
 
 ## Stage 1: remove the redundant work the handle already paid for
 
-This stage needs no catalog or lifecycle change and lands as one commit.
+This stage needs no catalog change. Domain caches follow the frame's existing
+constructor and `Rebind` lifecycle.
 
 **Ordinal entrances on the store.** Add `TryStored(int rowOrdinal, …)`,
 `TryStoredAt(int rowOrdinal, …)`, `TryKeyAt(int rowOrdinal, …)`, and
@@ -164,6 +171,32 @@ An omitted optional handle still resolves the row through the current catalog.
 zone by index when it binds `$token` and `$previous`; publish those indices
 the same way so a token's value expression reads by position.
 
+**Reuse domain positions for every zone key.** `StateFrame` owns a lazy map
+from cell keys to positions for each token domain used by its zones. `Load`
+shares that map across zones; `ZonePosition` uses it before the existing
+vectorized search through the pile's domain positions. This includes dynamic
+keys such as `$token`, `$each`, and transfer selectors, so it belongs in
+Stage 1 rather than waiting for Stage 2's literal-only address table.
+
+`Rebind` clears every built dictionary while retaining its capacity. A warm
+cache rebuild allocates nothing unless a domain outgrows that capacity.
+Keys and their domain order must remain unchanged while the frame is bound,
+as required already by the frame's ordinal-to-key reads. Layouts can survive
+same-shape domain key changes, so they cannot own these maps; record fields on
+`StateRow` would also affect copying and equality. A fresh `CellOrdinalIndex`
+per lookup cannot amortize the domain walk. Dictionary iteration never
+determines state: positions come from authored cell order, and `TryAdd`
+preserves the previous scan's first-occurrence answer for duplicate keys.
+`Load` continues to drop members absent from their domain.
+
+Arrangement rank uses `StateFrame.TryZoneOrdinals` to read the pile's domain
+positions directly, carrying a resolved row ordinal from the operand. It
+skips domain-name lookup and the positions-to-keys-to-positions conversion.
+The document-store implementation stays unchanged. Ranking refuses more
+than 20 members; zones themselves can be larger. Reusing a map across rebinds
+when the domain cell-list reference is unchanged remains a Stage 3 refinement
+requiring the no-in-place-mutation proof.
+
 ## Stage 2: intern static cell addresses, resolved per layout
 
 Scheduled only if the Stage 0 profile shows keyed-row reads or writes carry a
@@ -188,6 +221,11 @@ never leave a stale index anywhere. A literal key on a keyed row that has not
 been minted yet maps to `-1` until the layout that follows the mint resolves
 it. `EnsureRuleFrame` rebuilds when the catalog or the table identity
 changes, in addition to its existing `Fits` check.
+
+A same-shape rebind can also change keyed cell names or order while `Fits`
+still succeeds. Before Stage 2 lands, address resolution must be invalidated
+on that binding change or the fit check must account for key identity and
+order. Layout identity alone cannot prove a cached cell address remains valid.
 
 A frame read through a cell handle is one array index plus the existing
 absence rule for boards. `RowStore` answers a cell handle by looking up its

@@ -343,7 +343,7 @@ Unfinished promotion does not advance turn. `boardCollisions` prevents duplicate
 being accepted, including identical-code overlaps: it is the sampled on-board
 piece count minus occupied squares. A `:between:0:63` count reduction over
 `pieceCell` supplies the census without sampling writes; the occupied count is
-64 minus the empty-square mask's population. The [state reduction contract](../../../../docs/reference/state.md)
+64 minus the empty-square mask's population. The [state reduction contract](../../../../docs/reference/state/expressions.md#reductions)
 owns range bounds, `:where:` composition, live reads, and pricing.
 Board-history fingerprints remain diagnostic, not repetition adjudication.
 The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
@@ -352,7 +352,7 @@ projection of home-piece losses into castling rights. The existing two-rule sett
 avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an integer
 conditional expression cannot combine its gates.
 Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
-[Puck.State](../../../../docs/reference/state.md) owns their Int-only domain and refusal contract.
+[Puck.State](../../../../docs/reference/state/expressions.md#periodic-bit-masks) owns their Int-only domain and refusal contract.
 `Puck.State/ExpressionOperators.cs` owns context-free operator spelling, arity,
 type signature, and cost; keep payload-bearing literal/state/board lowering specialized.
 The compiler folds successful constant subexpressions after full validation,

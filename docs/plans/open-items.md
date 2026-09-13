@@ -198,7 +198,7 @@ closed its last two items in `ae6fb8a5d`.
 ## [State addressing on the tick path](state-addressing.md)
 
 - [ ] Stage 0: baseline numbers and operand distribution recorded.
-- [ ] Stage 1: ordinal entrances, skip authored-cell scan without traits, pre-parsed literal keys, bound index reads.
+- [ ] Stage 1: ordinal entrances, skip authored-cell scan without traits, pre-parsed literal keys, bound index reads, frame-owned zone domain caches, and direct frame arrangement ranks; complete the plan's verification before closing.
 - [ ] Stage 2: intern static cell addresses resolved per layout (profile-gated).
 - [ ] Stage 3: reload only rows that changed (profile-gated).
 

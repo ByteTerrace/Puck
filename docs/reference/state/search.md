@@ -1,0 +1,110 @@
+# Search possible moves
+
+Search repeatedly asks a set of rules to judge possible changes to a
+[frame](frames.md). It can enumerate legal moves or compare futures.
+A **candidate** is one proposed change; a **ply** is one move deeper into
+a future. The installed state stays under the host's control.
+
+## Follow one candidate
+
+```mermaid
+flowchart LR
+    Base["Load inputs into a frame<br/>and read the SearchPlan"] --> Candidate["Apply a candidate<br/>and run judge rules"]
+    Candidate --> Result["Check verdict and turn;<br/>record result or explore replies"]
+    Result -- "quota spent" --> Resume["Checkpoint progress;<br/>resume next tick"]
+    Result -- "walk complete" --> Writes["Produce SearchWrites<br/>for host installation"]
+```
+
+The acceptance convention is explicit: the judge must leave the verdict slot
+equal to `SearchPlan.Accept` and change the turn slot from the candidate's
+base turn. A changed piece position alone does not establish a legal move.
+
+The host resolves a plan against its rows and topologies. The runtime receives
+those resolved names, compiled candidate shapes, and judge rules; it does not
+understand a world's wire format or mutation permissions.
+
+## Choose what to enumerate
+
+| Shape | Candidate change |
+|---|---|
+| Relocate | Move a token to another cell, with the declared displacement policy. |
+| Drop | Place an off-board token into an empty cell. |
+| Jump | Follow an allowed direction over an occupied cell, optionally as a bounded chain. |
+| Promote | Relocate while trying one of the declared replacement codes. |
+| Pair | Relocate a token and its fixed companion together. |
+| Transfer | Move an endpoint token between declared ordered zones. |
+
+The shape supplies possible changes; judge rules supply the game's acceptance
+conditions. A geometric relocation can therefore be considered and rejected
+without making it an authoritative move.
+
+Outputs can include accepted-destination masks, per-token counts, a reach board
+for the held token, and a best-move answer. A single-word legal mask has a board
+size limit; size-independent counts and the runtime's wider destination storage
+serve other outputs. See `SearchPlan` and `SearchCapacity` for the exact bounds.
+
+## Choose how to compare futures
+
+| Mode | How it chooses | Suitable question |
+|---|---|---|
+| Enumeration without a score | Visit root candidates and collect accepted results | Which moves are legal? |
+| Negamax with `Score` | Compare a two-sided score, reversing perspective between sides | Which move has the best reply-adjusted score? |
+| Negamax with `Scores` | Maximize the mover's own seat score (max-n) | Which move benefits this seat in a multi-seat game? |
+| Tree search | Use UCB1 selection and seeded playouts; land the most-visited root move | Which move looks promising under a bounded sampling budget? |
+
+**Alpha-beta pruning** skips reply branches that cannot improve the current
+choice. A **transposition table** remembers evaluations of positions reached
+by more than one path. **Iterative deepening** completes progressively deeper
+passes. The root enumeration still visits every candidate so legal-move outputs
+remain complete independently of scoring.
+
+**UCB1** balances trying less-visited choices against revisiting successful ones.
+A playout follows one sampled future; it is evidence for a choice, not exhaustive
+proof that the choice is optimal. The tree has a bounded node pool and an authored
+iteration limit. Per-seat `Scores` and tree search are not combined.
+
+## Account for chance
+
+A `SearchChancePlan` supplies a bounded table of possible values and weights.
+Two six-sided dice have 36 joint outcomes. Negamax averages the outcome values
+using their weights; tree search samples an outcome from the job's stream.
+The plan's `AtDepth` uses absolute ply numbering for negamax and 1-based
+playout numbering for tree search, so the two interpretations must be chosen
+deliberately.
+
+The document compiler bakes the outcomes before execution. The search runtime
+does not invoke a live generator to discover them.
+
+## Keep work and progress deterministic
+
+`Nodes` limits the candidate work performed each tick. The runtime suspends
+its explicit search stack and resumes it on later ticks rather than making a
+decision according to elapsed wall-clock time. Relevant input changes restart
+the job so a finished answer does not describe an abandoned position.
+
+Unlike a rule scheduling cache, search progress is simulation state: node
+cursors, frames, depth passes, stored position results, and tree progress
+participate in hashes and checkpoints. Persist it when continuation must resume
+the same work. A finished job emits `SearchWrite.Cell` and
+`SearchWrite.ClearBoard`; the host translates those writes into its own
+validated mutation pipeline.
+
+## Search (`Search/`)
+
+`SearchRuntime`—negamax with alpha-beta and a
+transposition table, or UCB1 tree search, walking every (shape, token,
+target or direction) candidate a `SearchPlan` declares and judging each
+through a document project's own compiled rules over a `StateFrame`; a
+finished job lands as `SearchWrite`s (`Cell`, `ClearBoard`), never a
+document project's own mutation vocabulary. `SearchShapePlan`/`SearchShapeKind`
+compile the six candidate shapes (relocate, drop, jump, promote, pair,
+transfer); `SearchCapacity` holds its bounds. A document project resolves
+its own authored rows into a `SearchPlan[]` (row and topology references,
+by name), compiles its own judge rules, and translates a landed job's
+writes into its own wire vocabulary—the runtime holds no world, document,
+or wire concept.
+
+
+---
+
+[State and rules](../state.md) · Next: [Host and extend State](hosting.md)

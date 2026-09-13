@@ -26,12 +26,13 @@ internal static class AuthoredGameFixtures {
         return directory.FullName;
     }
 
-    public static WorldDefinition Load(string relativePath) {
+    public static WorldDefinition Load(string relativePath, Puck.Abstractions.Machines.IMachineValidationCatalog? catalog = null) {
         var path = Path.Combine(
             path1: Root,
             path2: relativePath
         );
         // The island proves its seams against the shard documents beside it, read the way the host reads them.
+        // A supplied catalog also relocates imported machine assets through the real content-provider metadata.
         var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => (Path.GetDirectoryName(path: path) ?? Root));
 
         Assert.True(
@@ -39,7 +40,8 @@ internal static class AuthoredGameFixtures {
                 path,
                 out var definition,
                 out var reason,
-                neighbours: neighbours
+                neighbours: neighbours,
+                catalog: catalog
             ),
             userMessage: reason
         );

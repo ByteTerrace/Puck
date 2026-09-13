@@ -663,16 +663,17 @@ internal static class Fixtures {
     /// <see cref="Puck.World.WorldReplaySnapshot.Drive"/> uses to rehydrate an authoritative world for offline
     /// replay verification (no GPU, no window, no client): a fresh <see cref="WorldPopulation"/>, an unconfigured
     /// <see cref="WorldRenderEnvelope"/> (reads as "fits" — no render-growing edit is exercised here), a
-    /// <see cref="WorldMachineHost"/> with no registered engines (no screen ever boots a machine), and a
+    /// <see cref="WorldMachineHost"/> with the caller's catalog or engines (empty by default), and a
     /// scratch-directory <see cref="WorldOwnedWorlds"/> catalog seeded from the same document. Every caller —
     /// including one passing its own document — crosses the SAME serialize/deserialize round-trip
     /// <see cref="DefaultWorldBytes"/>'s own doc names as the fixture's trustworthiness proof. Callers own disposal
     /// via <see cref="WorldFixture.Dispose"/>.</summary>
     /// <param name="definition">The document to boot the server from, or <see langword="null"/> for <see cref="BuildDocument"/>.</param>
     /// <param name="engines">The screen-machine engines a declared <c>screens</c> row resolves against, or
-    /// <see langword="null"/> for none (no screen ever boots a machine) — every existing caller's behavior.</param>
+    /// <see langword="null"/> for none when no <paramref name="machineCatalog"/> is supplied.</param>
     /// <param name="machineCatalog">An explicit catalog including content providers, instead of engine-only registration.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null) {
+    /// <param name="documentPath">The source document path for resolving relative machine content, or null for the host default.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -686,7 +687,8 @@ internal static class Fixtures {
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
-            catalog: (machineCatalog ?? new WorldMachineCatalog((engines ?? [])))
+            catalog: (machineCatalog ?? new WorldMachineCatalog((engines ?? []))),
+            documentPath: documentPath
         );
         // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
         // second round trip to disk for nothing. It sits under one run-wide root that is removed once, rather than

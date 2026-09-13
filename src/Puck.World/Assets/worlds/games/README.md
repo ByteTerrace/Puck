@@ -122,7 +122,7 @@ modules in another world. Piles are ordered `keysOf` zones over stable card
 identities. Patterns judge a selected suffix and the destination's top card;
 accepted moves transfer the suffix in one transaction with their counters and
 request acknowledgement. Endpoint keys use the generic
-[`$zone:` spelling](../../../../../docs/reference/state.md#the-facts), so a top-card lookup
+[`$zone:` spelling](../../../../../docs/reference/state/rules.md#the-facts), so a top-card lookup
 needs no per-card rule loop, and every rule that judges or moves a pile
 selects it live through its own `zones` table (`$zones[<index>]`): `move`,
 `source`, and `target` index by the request's `from`/`to` (pile id = table

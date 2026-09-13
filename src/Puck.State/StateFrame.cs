@@ -378,6 +378,9 @@ public sealed class StateFrame : StateStore {
     private readonly ulong[] m_rowVersions;
     private readonly long[] m_values;
 
+    // Domain cell order belongs to this binding, not the shared layout. Rebind clears entries but retains capacity.
+    private readonly Dictionary<int, Dictionary<CellName, int>> m_domainOrdinals = [];
+
     private int m_journalLength;
     private int m_journalScopes;
     private long m_journalTouches;
@@ -388,7 +391,8 @@ public sealed class StateFrame : StateStore {
 
     /// <summary>Initializes an all-zero frame.</summary>
     /// <param name="layout">The layout.</param>
-    /// <param name="rows">The rows the layout was computed from.</param>
+    /// <param name="rows">The rows the layout was computed from; domain cell keys and order must remain unchanged
+    /// until <see cref="Rebind"/>.</param>
     public StateFrame(FrameLayout layout, IReadOnlyList<StateRow> rows) {
         ArgumentNullException.ThrowIfNull(argument: layout);
         ArgumentNullException.ThrowIfNull(argument: rows);
@@ -400,6 +404,20 @@ public sealed class StateFrame : StateStore {
 
     // Bumps the version of the row owning a frame index — one array read via the layout's precomputed inverse map.
     private void BumpRow(int index) => m_rowVersions[Layout.RowOfIndex(index: index)]++;
+    private Dictionary<CellName, int> DomainOrdinals(int rowOrdinal) {
+        if (!m_domainOrdinals.TryGetValue(key: rowOrdinal, value: out var ordinals)) {
+            ordinals = [];
+            m_domainOrdinals.Add(key: rowOrdinal, value: ordinals);
+        }
+        if ((ordinals.Count == 0) && (m_rows[rowOrdinal].Cells is { } cells)) {
+            ordinals.EnsureCapacity(capacity: cells.Count);
+            for (var index = 0; (index < cells.Count); index++) {
+                // Match IndexOf's first occurrence even on an unvalidated domain with duplicate keys.
+                ordinals.TryAdd(key: cells[index].Key, value: index);
+            }
+        }
+        return ordinals;
+    }
     private static int IndexOf(IReadOnlyList<StateCell>? cells, CellName key) {
         if (cells is null) {
             return -1;
@@ -785,12 +803,7 @@ public sealed class StateFrame : StateStore {
     }
     // A member's position in a zone's pile order, or -1 when the key is no member (or no token of the domain).
     private int ZonePosition(FrameRowLayout layout, CellName key) {
-        var ordinal = IndexOf(
-            cells: Rows[layout.DomainOrdinal].Cells,
-            key: key
-        );
-
-        if (ordinal < 0) {
+        if (!DomainOrdinals(rowOrdinal: layout.DomainOrdinal).TryGetValue(key: key, value: out var ordinal)) {
             return -1;
         }
 
@@ -930,7 +943,7 @@ public sealed class StateFrame : StateStore {
                     break;
                 case FrameRowKind.Zone: {
                         var capacity = layout.ZoneCapacity;
-                        var domain = Rows[layout.DomainOrdinal].Cells;
+                        var domain = DomainOrdinals(rowOrdinal: layout.DomainOrdinal);
                         var members = Math.Min(
                             val1: source.CellCount(row: row),
                             val2: capacity
@@ -947,10 +960,10 @@ public sealed class StateFrame : StateStore {
                                 key: out var key,
                                 row: row
                             ) &&
-                                (IndexOf(
-                                cells: domain,
-                                key: key
-                            ) is >= 0 and var tokenOrdinal)
+                                domain.TryGetValue(
+                                key: key,
+                                value: out var tokenOrdinal
+                            )
                             ) {
                                 values[(1 + count)] = tokenOrdinal;
                                 values[((1 + capacity) + count)] = (source.TryStoredAt(
@@ -1029,11 +1042,30 @@ public sealed class StateFrame : StateStore {
             );
         }
     }
-    /// <summary>Rebinds the frame's structure to rows the layout <see cref="FrameLayout.Fits"/>; the values stay.</summary>
-    /// <param name="rows">The rows.</param>
+    /// <summary>Rebinds the frame's structure to rows the layout <see cref="FrameLayout.Fits"/>; the values stay,
+    /// and cached domain positions are cleared for lazy rebuilding with reused dictionary capacity.</summary>
+    /// <param name="rows">The rows; domain cell keys and order must remain unchanged until the next rebind.</param>
     public void Rebind(IReadOnlyList<StateRow> rows) {
         ArgumentNullException.ThrowIfNull(argument: rows);
         m_rows = rows;
+        foreach (var ordinals in m_domainOrdinals.Values) {
+            ordinals.Clear();
+        }
+    }
+    /// <summary>Exposes a framed zone's live domain positions in pile order, without reconstructing cell keys.</summary>
+    /// <param name="rowOrdinal">The zone's row ordinal.</param>
+    /// <param name="ordinals">A borrowed span, valid until the frame is written, loaded, copied, rebound, or rewound.</param>
+    /// <returns>Whether the ordinal names a framed zone; false yields an empty span.</returns>
+    public bool TryZoneOrdinals(int rowOrdinal, out ReadOnlySpan<long> ordinals) {
+        if (
+            (((uint)rowOrdinal) < ((uint)Layout.RowCount)) &&
+            (Layout[rowOrdinal] is { Kind: FrameRowKind.Zone } layout)
+        ) {
+            ordinals = m_values.AsSpan(start: (layout.Offset + 1), length: ((int)m_values[layout.Offset]));
+            return true;
+        }
+        ordinals = default;
+        return false;
     }
     /// <summary>Closes the innermost open scope, restoring every cell it wrote to what it overwrote, most recent
     /// write first (a cell written twice in the scope returns to its value from before the first write).</summary>

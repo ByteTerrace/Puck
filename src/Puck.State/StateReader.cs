@@ -409,19 +409,38 @@ public static class StateReader {
         );
     }
     /// <summary>Returns <see cref="ArrangementRank(IReadOnlyList{StateRow}?, StateRow)"/> over a store's rows — the
-    /// rank reads token order alone, which the rows carry.</summary>
+    /// rank reads live frame membership when framed, otherwise the document's token order.</summary>
     /// <param name="store">The store.</param>
     /// <param name="zone">The ordered zone.</param>
-    public static long ArrangementRank(StateStore store, StateRow zone) {
+    /// <param name="rowOrdinal">The resolved zone ordinal, or -1 to resolve it by name. An ordinal that does not
+    /// name <paramref name="zone"/> falls back to resolving that zone through the store.</param>
+    public static long ArrangementRank(StateStore store, StateRow zone, int rowOrdinal = -1) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: zone);
         Span<int> ordinals = stackalloc int[MaxArrangementTokens];
-        var count = DomainOrdinals(
-            rows: store.Rows,
-            store: store,
-            zone: zone,
-            ordinals: ordinals
-        );
+        int count;
+        if (
+            (store is StateFrame frame) &&
+            ((rowOrdinal >= 0) || frame.Layout.TryOrdinal(name: zone.Name.Value, ordinal: out rowOrdinal)) &&
+            frame.TryZoneOrdinals(ordinals: out var members, rowOrdinal: rowOrdinal) &&
+            (frame.Rows[rowOrdinal].Name == zone.Name) &&
+            (zone.EffectiveDomain is StateDomain.KeysOf { Ordered: true } keysOf) &&
+            (frame.Rows[frame.Layout[rowOrdinal].DomainOrdinal] is { Cells: not null } domain) &&
+            (domain.Name == keysOf.Row)
+        ) {
+            count = members.Length;
+            if (count > MaxArrangementTokens) { return -1L; }
+            for (var index = 0; (index < count); index++) {
+                ordinals[index] = ((int)members[index]);
+            }
+        } else {
+            count = DomainOrdinals(
+                rows: store.Rows,
+                store: store,
+                zone: zone,
+                ordinals: ordinals
+            );
+        }
 
         if (count < 0) {
             return -1L;

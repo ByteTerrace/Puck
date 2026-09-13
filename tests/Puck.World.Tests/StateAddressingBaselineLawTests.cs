@@ -7,10 +7,16 @@ namespace Puck.World.Tests;
 public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
     [Fact]
     public void ShippedWorldStateHashesAndOperandDistribution() {
-        var definition = AuthoredGameFixtures.Nexus;
+        const string WorldPath = "src/Puck.World/Assets/worlds/puck.world.json";
+        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var definition = AuthoredGameFixtures.Load(relativePath: WorldPath, catalog: catalog);
         var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
 
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        using var fixture = Fixtures.FreshServer(
+            definition: definition,
+            machineCatalog: catalog,
+            documentPath: Path.Combine(path1: AuthoredGameFixtures.Root, path2: WorldPath)
+        );
 
         var hash31 = 0UL;
         var hash151 = 0UL;
