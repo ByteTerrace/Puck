@@ -6,7 +6,7 @@ public sealed partial class GamingBrickEngine {
     /// <inheritdoc/>
     public MachineEngineDescriptor Descriptor { get; } = new(
         "gaming-brick", "Deterministic SM83 machine with selectable hardware revision.",
-        new("puck.gaming-brick.config.v1", [
+        new("puck.gaming-brick.configuration.v1", [
             new("model", MachineFieldKind.String, "Hardware family or revision; defaults to dmg.", Choices: [.. ModelTokens.Keys]),
             new("dmgSpeed", MachineFieldKind.Boolean, "Keep a DMG-rate tick budget across CPU speed changes."),
             new("boot", MachineFieldKind.String, "Cold runs firmware; fast starts at cartridge handoff.", Choices: ["cold", "fast"]),
@@ -28,7 +28,7 @@ public sealed partial class GamingBrickEngine {
             ])),
             new("content.eject", "Removes mounted content through the host's replacement transaction.", new("puck.gaming-brick.content-eject.v1", [])),
             new("machine.reset", "Recreates the current machine configuration through the host's replacement transaction.", new("puck.gaming-brick.machine-reset.v1", [])),
-            new("device.model", "Retargets the live hardware revision when the runtime supports it.", new("puck.gaming-brick.device-model.v1", [
+            new("device.model", "Retargets the live hardware revision when the runtime supports it.", new("puck.gaming-brick.device-model-set.v1", [
                 new("model", MachineFieldKind.String, "Hardware family or revision.", Required: true, Choices: [.. ModelTokens.Keys])
             ]))
         ], HumbleGamingBrickCore.HardwareSpaces

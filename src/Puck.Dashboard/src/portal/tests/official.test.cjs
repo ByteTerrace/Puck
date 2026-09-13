@@ -46,9 +46,9 @@ async function buildFixture() {
   const dotnetJsHash = toHashName(await sha256Hex(dotnetJsBytes));
 
   const manifest = {
-    schema: 'puck.official.v1',
+    schema: 'puck.official.manifest.v1',
     channel: 'dev',
-    build: { commit: 'abc123', dirty: false, generator: 'Puck.World.WorldSchema', worldSchema: 'puck.world.def.v1' },
+    build: { commit: 'abc123', dirty: false, generator: 'Puck.World.WorldSchema', worldSchema: 'puck.world.definition.v1' },
     worldSchemaBundle: { path: 'objects/sha256/aa/schemabundle', hash: schemaBundleHash, size: schemaBundleBytes.length, contentType: 'application/schema+json' },
     engine: {
       entry: 'main.mjs',
@@ -118,11 +118,11 @@ test('officialBase.resolveOfficial joins root/channel/objects without import.met
 test('manifest.parseManifest refuses an unknown schema and a foreign build.worldSchema by name', () => {
   assert.throws(() => parseManifest('not json'), ManifestRefusal);
   assert.throws(
-    () => parseManifest(JSON.stringify({ schema: 'not.a.real.schema', build: { worldSchema: 'puck.world.def.v1' } })),
+    () => parseManifest(JSON.stringify({ schema: 'not.a.real.schema', build: { worldSchema: 'puck.world.definition.v1' } })),
     /not\.a\.real\.schema/,
   );
   assert.throws(
-    () => parseManifest(JSON.stringify({ schema: 'puck.official.v1', build: { worldSchema: 'not.a.real.schema' } })),
+    () => parseManifest(JSON.stringify({ schema: 'puck.official.manifest.v1', build: { worldSchema: 'not.a.real.schema' } })),
     /not\.a\.real\.schema/,
   );
 });

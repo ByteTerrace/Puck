@@ -54,7 +54,7 @@ public sealed class CostModel {
     }
 
     /// <summary>Gets the uncalibrated portable model. No host discovery participates in its identity or prices.</summary>
-    public static CostModel Default { get; } = new("puck.cost.portable.v1", CostModelProfile.Portable);
+    public static CostModel Default { get; } = new("puck.cost.portable-model.v1", CostModelProfile.Portable);
 
     /// <summary>Returns unresolved memory service until coefficients are substantiated. A proved empty operation costs zero.</summary>
     public static CostBound MemoryCycles(MemoryAccessClass accessClass, long starts, long dependentAccesses, long bytesTransferred) {

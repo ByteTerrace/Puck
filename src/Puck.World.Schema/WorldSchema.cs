@@ -746,7 +746,7 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world definition (puck.world.def.v1)"
+            value: "Puck world definition (puck.world.definition.v1)"
         );
 
         foreach (var (propertyName, value) in generated) {
@@ -2254,7 +2254,7 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world silo (puck.silo.def.v1)"
+            value: "Puck world silo (puck.silo.configuration.v1)"
         );
 
         foreach (var (propertyName, value) in generated) {

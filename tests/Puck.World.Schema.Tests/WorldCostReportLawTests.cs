@@ -68,7 +68,7 @@ public sealed class WorldCostReportLawTests {
     public void HeuristicTotalsDoNotCertifyReferenceDeadlines(int rate) {
         var definition = Document(rate);
         var report = WorldCostReport.Generate(definition);
-        Assert.Equal("puck.cost.portable.v1", report.ModelId);
+        Assert.Equal("puck.cost.portable-model.v1", report.ModelId);
         Assert.True(report.RecurringBound.IsUnmodeled);
         Assert.True(report.TotalBound.IsUnmodeled);
         Assert.Equal(CostBound.Zero, report.SearchReservations);

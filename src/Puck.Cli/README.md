@@ -15,7 +15,7 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck docs`](#automation-commands) | build and stage the website documentation. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
-| [`puck world`](#automation-commands) | prepare hosted world documents or probe a QUIC endpoint. |
+| [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect release operations, or probe a QUIC endpoint. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
 | [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape installs the optional host extension, and standalone silo and World have no MCP dependency. MCP 2026-07-28. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
@@ -129,6 +129,8 @@ puck docs build [output-directory]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <worlds-directory> <output-directory>
+puck world release prepare <package-directory> --silo <silo.json> --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
+puck world release status <operation-file>
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -147,6 +149,15 @@ referenced neighbours under canonical hosted file names. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
 and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
 committed default addon, printing the content hash needed by its document rows.
+`world release prepare` loads the validated silo inventory, requires one canonical
+composed `*.world.json` output for every owner/world row, and writes a
+content-addressed manifest after hashing those definitions and the remaining
+package artifacts. Stable owner/world identities and package paths are recorded
+separately; authored `.puck` inputs are artifacts and are never treated as ready
+definitions. `world release status` is read-only and prints a durable operation
+record from a supplied local file. Rollback, finalization, and restore remain hosted maintenance operations
+until their coordinator can perform the corresponding guarded storage and
+admission transitions.
 Azure credentials, deployment ordering, and access restoration belong to
 [`puck azure`](../../docs/development/ci.md#azure-production-deployment), which reaches these
 verbs in process.

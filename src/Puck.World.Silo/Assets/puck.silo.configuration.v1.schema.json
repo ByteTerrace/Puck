@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "puck.silo.def.v1",
+  "$id": "puck.silo.configuration.v1",
   "x-puck": {
-    "schemaVersion": "puck.silo.def.v1",
+    "schemaVersion": "puck.silo.configuration.v1",
     "generator": "Puck.World.WorldSchema"
   },
-  "title": "Puck world silo (puck.silo.def.v1)",
-  "description": "The silo document (puck.silo.def.v1) \u2014 durable configuration for one Puck.World.Silo process: which worlds it may activate, its declared door budget, where its checkpoints/journals/definitions live, its own state directory, and its clustering membership. Loaded once at silo start (--silo \u003Cpath\u003E); nothing in it is simulation state. See WorldSiloDefinitionValidator for the checks a document must pass before the silo composes against it.",
+  "title": "Puck world silo (puck.silo.configuration.v1)",
+  "description": "The silo document (puck.silo.configuration.v1) \u2014 durable configuration for one Puck.World.Silo process: which worlds it may activate, its declared door budget, where its checkpoints/journals/definitions live, its own state directory, and its clustering membership. Loaded once at silo start (--silo \u003Cpath\u003E); nothing in it is simulation state. See WorldSiloDefinitionValidator for the checks a document must pass before the silo composes against it.",
   "type": [
     "object",
     "null"
@@ -210,7 +210,7 @@
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",
       "type": "string",
-      "const": "puck.silo.def.v1"
+      "const": "puck.silo.configuration.v1"
     }
   },
   "required": [

@@ -85,7 +85,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         using var document = JsonDocument.Parse(json: File.ReadAllText(path: channelManifestPath));
         var root = document.RootElement;
 
-        Assert.Equal(expected: "puck.official.v1", actual: root.GetProperty(propertyName: "schema").GetString());
+        Assert.Equal(expected: "puck.official.manifest.v1", actual: root.GetProperty(propertyName: "schema").GetString());
         Assert.Equal(expected: "dev", actual: root.GetProperty(propertyName: "channel").GetString());
 
         var commit = root.GetProperty(propertyName: "build").GetProperty(propertyName: "commit").GetString()!;

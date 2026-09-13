@@ -72,7 +72,7 @@ public sealed record SynthPatchDocument(
     int? DurationFrames = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.synth.v1";
+    public const string CurrentSchema = "puck.synthesizer-patch.v1";
     /// <summary>The largest pitch-shaped value the schema admits, in millihertz: the Nyquist frequency of the
     /// 48000 Hz mixer — a contract invariant of the runtime unit, not a tunable (a pitch beyond it cannot be
     /// rendered at the mixer rate).</summary>

@@ -77,12 +77,12 @@ public sealed class ProbeKindManifestTests {
     }
     [Fact]
     public void Wrong_schema_tag_refuses() {
-        var scratch = WriteScratchManifest(mutate: node => node["$schema"] = "puck.shader.v1");
+        var scratch = WriteScratchManifest(mutate: node => node["$schema"] = "puck.shader.manifest.v1");
 
         try {
             var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(expectedSubstring: "expected 'puck.probe.v1'", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+            Assert.Contains(expectedSubstring: "expected 'puck.probe.manifest.v1'", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
         } finally {
             Directory.Delete(path: Path.GetDirectoryName(path: scratch)!, recursive: true);
         }
@@ -318,7 +318,7 @@ public sealed class ProbeKindManifestTests {
     // shape: a required frame socket, a required strobePair socket, and an optional frame socket.
     private const string MultiSocketManifestJson = """
     {
-      "$schema": "puck.probe.v1",
+      "$schema": "puck.probe.manifest.v1",
       "name": "multi-socket",
       "class": "model",
       "inputs": [

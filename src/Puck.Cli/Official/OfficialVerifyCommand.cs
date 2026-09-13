@@ -53,7 +53,7 @@ internal static class OfficialVerifyCommand {
             manifest = (JsonSerializer.Deserialize<OfficialManifest>(utf8Json: manifestBytes, options: DocumentJsonOptions.Shared)
                 ?? throw new InvalidDataException(message: "the manifest deserialized to null."));
         } catch (JsonException exception) {
-            Console.Error.WriteLine(value: $"official verify: '{manifestPath}' is not a valid puck.official.v1 document: {exception.Message}");
+            Console.Error.WriteLine(value: $"official verify: '{manifestPath}' is not a valid puck.official.manifest.v1 document: {exception.Message}");
 
             return 2;
         }

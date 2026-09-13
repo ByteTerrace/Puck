@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.probe.v1",
+  "$schema": "puck.probe.manifest.v1",
   "name": "faerie",
   "class": "kernel",
   "description": "Relights the color frame by a small wandering light: the infrared strobe pair (lit minus unlit) is the subject's illumination response, which stands in for depth — a height field and its normals — so a light placed in the frame shades the subject with wrapped Lambert, Blinn-Phong, distance falloff, and a short shadow march, and draws itself as a glowing sprite orbiting its anchor. The anchor is config, so another probe's reading (a tracked head) can carry it. An optional third socket, painting, shows a rectangle of the color frame as a canvas hung on the wall when the strobe response there is background-level; journey carries the sprite from its orbit into that canvas.",

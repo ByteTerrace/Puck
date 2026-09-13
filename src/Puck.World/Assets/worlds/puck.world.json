@@ -123,7 +123,7 @@
           }
         ],
         "modifiers": [],
-        "version": "puck.bindings.v1"
+        "version": "puck.input.bindings.v1"
       },
       "id": "bare"
     }
@@ -261,7 +261,7 @@
             "fieldOfViewRadians": 0.9
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -299,7 +299,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -337,7 +337,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -375,7 +375,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -413,7 +413,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -451,7 +451,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -489,7 +489,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -527,7 +527,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -565,7 +565,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -603,7 +603,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -641,7 +641,7 @@
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -704,7 +704,7 @@
             "key": "state.captureStation"
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     }
   ],
@@ -10153,7 +10153,7 @@
       "name": "seat2-studio-look-cycle"
     }
   ],
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "seatDefaults": {
     "seatCameraFeel": {
       "gyro": {
@@ -11004,7 +11004,7 @@
           "row": "chase"
         }
       ],
-      "version": "puck.camera.v1"
+      "version": "puck.camera.program.v1"
     }
   },
   "references": [

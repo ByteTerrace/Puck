@@ -18,9 +18,9 @@ namespace Puck.Cli.Schema;
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {
     private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
-    private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
+    private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json";
     private const string SectionsRelativeDirectory = "src/Puck.World/Assets/worlds/schema";
-    private const string SiloRelativePath = "src/Puck.World.Silo/Assets/puck.silo.def.v1.schema.json";
+    private const string SiloRelativePath = "src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json";
 
     private readonly record struct SchemaFile(string FullPath, string Text);
 
@@ -39,7 +39,7 @@ internal static class SchemaCommand {
             Description = "Emit the generated root document to stdout instead of writing the checked-in files; skips --check.",
         };
         var command = new Command(description: """
-            Generate the JSON Schema for puck.world.def.v1.
+            Generate the JSON Schema for puck.world.definition.v1.
 
             Generated from WorldDefinition (src/Puck.World.Schema/WorldDefinition.cs) over the same
             source-generated WorldJsonContext the engine loads a world document through
@@ -47,13 +47,13 @@ internal static class SchemaCommand {
             pulled from the World.Schema, State, World.Authoring, and SignedDistance XML files beside the assemblies; when a file is missing the
             schema still writes, with no descriptions, and this verb says so on stderr.
             render.extensions[] takes its id vocabulary and per-id config schema from the shipped
-            puck.shader.v1 manifests under src/*/Assets/Shaders (Puck.Shaders.ShaderSetManifest).
+            puck.shader.manifest.v1 manifests under src/*/Assets/Shaders (Puck.Shaders.ShaderSetManifest).
 
-            Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root),
+            Written to: src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json (root),
             src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress
             document, one unsplit file), src/Puck.World/Assets/worlds/schema/*.schema.json
             (one file per document section, plus common.schema.json for shapes more than one
-            section references), and src/Puck.World.Silo/Assets/puck.silo.def.v1.schema.json
+            section references), and src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json
             (the silo document, one unsplit file, generated from Puck.World.Schema.WorldSiloDefinition
             over the same exporter).
             Exit codes: 0 wrote or matched, 1 check found drift, 2 usage error or missing

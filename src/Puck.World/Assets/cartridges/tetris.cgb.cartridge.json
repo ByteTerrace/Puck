@@ -8964,7 +8964,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 7
           },
           "voice": "pulse2"
@@ -9309,7 +9309,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 7
           },
           "voice": "pulse1"
@@ -9654,7 +9654,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 7
           },
           "voice": "wave",
@@ -10038,7 +10038,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 6
           },
           "voice": "pulse2"
@@ -10383,7 +10383,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 6
           },
           "voice": "pulse1"
@@ -10728,7 +10728,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 6
           },
           "voice": "wave",
@@ -11032,7 +11032,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 10
           },
           "voice": "pulse2"
@@ -11297,7 +11297,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 10
           },
           "voice": "pulse1"
@@ -11562,7 +11562,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 10
           },
           "voice": "wave",
@@ -11780,7 +11780,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 6
           },
           "voice": "pulse2"
@@ -11959,7 +11959,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 6
           },
           "voice": "pulse1"
@@ -12138,7 +12138,7 @@
                 }
               ]
             ],
-            "schema": "puck.audio.v1",
+            "schema": "puck.tune.v1",
             "tempo": 6
           },
           "voice": "wave",

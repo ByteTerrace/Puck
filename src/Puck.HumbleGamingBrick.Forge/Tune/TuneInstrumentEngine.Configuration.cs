@@ -6,7 +6,7 @@ public sealed partial class TuneInstrumentEngine {
     /// <inheritdoc/>
     public MachineEngineDescriptor Descriptor { get; } = new(
         "tune-instrument", "A player-operated instrument compiled to a native SM83 jukebox.",
-        new("puck.tune-instrument.config.v1", [
+        new("puck.tune-instrument.configuration.v1", [
             new("content", MachineFieldKind.Object, "The instrument's audio document.", Fields: [
                 new("path", MachineFieldKind.String, "Audio document path relative to the declaring document.", Required: true, Role: MachineFieldRole.ContentPath)
             ])

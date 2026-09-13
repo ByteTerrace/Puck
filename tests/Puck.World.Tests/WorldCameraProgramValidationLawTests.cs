@@ -112,7 +112,7 @@ public sealed class WorldCameraProgramValidationLawTests {
     public void AnUnsupportedVersionIsRefusedByName() => Refuses(
         control: Program("probe-rig", Fov()),
         denied: (Program("probe-rig", Fov()) with { Version = "puck.camera.v0" }),
-        expected: "must be 'puck.camera.v1'"
+        expected: "must be 'puck.camera.program.v1'"
     );
     [Fact]
     public void AMissingNameIsRefusedByName() => Refuses(

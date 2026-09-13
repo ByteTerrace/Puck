@@ -12,7 +12,7 @@ public sealed class MachineOperationProviderLawTests {
     [Fact]
     public void UnknownWrongTypedAndMissingPayloadsRefuseBeforeAnyReplacementIsPrepared() {
         var engine = new GamingBrickEngine();
-        var current = CurrentConfiguration("puck.gaming-brick.config.v1");
+        var current = CurrentConfiguration("puck.gaming-brick.configuration.v1");
         using var unknownPayload = Payload("puck.gaming-brick.unknown.v1", "{}");
         using var wrongTypePayload = Payload("puck.gaming-brick.content-insert.v1", "{\"content\":{\"path\":3}}");
         using var missingPayload = Payload("puck.gaming-brick.content-insert.v1", "{\"content\":{}}");
@@ -30,7 +30,7 @@ public sealed class MachineOperationProviderLawTests {
     [Fact]
     public void InsertPreparesAHostReplacementWithoutTouchingTheLiveMachine() {
         var engine = new GamingBrickEngine();
-        var current = CurrentConfiguration("puck.gaming-brick.config.v1");
+        var current = CurrentConfiguration("puck.gaming-brick.configuration.v1");
         using var runtime = engine.Create(options: "cgb fast");
         using var payload = Payload("puck.gaming-brick.content-insert.v1", "{\"content\":{\"path\":\"new.gb\"}}");
         var prepared = ((IMachineOperationProvider)engine).PrepareOperation(current, new("content.insert", payload.RootElement));
@@ -38,15 +38,15 @@ public sealed class MachineOperationProviderLawTests {
 
         Assert.Equal(MachineRuntimeStatus.Empty, runtime.Status);
         Assert.Equal("new.gb", replacement.Configuration.GetProperty("content").GetProperty("path").GetString());
-        Assert.Equal("puck.gaming-brick.config.v1", replacement.Configuration.GetProperty("schema").GetString());
+        Assert.Equal("puck.gaming-brick.configuration.v1", replacement.Configuration.GetProperty("schema").GetString());
     }
 
     [Fact]
     public void HumbleDeviceModelOperationUsesTheRealRuntimeAndReturnsTheAuthoredToken() {
         var engine = new GamingBrickEngine();
-        var current = CurrentConfiguration("puck.gaming-brick.config.v1");
+        var current = CurrentConfiguration("puck.gaming-brick.configuration.v1");
         using var runtime = engine.Create(options: "cgb fast", contentBytes: new byte[0x8000]);
-        using var payload = Payload("puck.gaming-brick.device-model.v1", "{\"model\":\"dmgc\"}");
+        using var payload = Payload("puck.gaming-brick.device-model-set.v1", "{\"model\":\"dmgc\"}");
         var prepared = Assert.IsType<MachineOperationPreparation.Runtime>(((IMachineOperationProvider)engine).PrepareOperation(current, new("device.model", payload.RootElement)));
 
         var result = prepared.Operation.Apply(runtime);
@@ -60,13 +60,13 @@ public sealed class MachineOperationProviderLawTests {
     [Fact]
     public void HumbleDeviceModelRefusesDuringColdBootAndPreservesHardwareState() {
         var engine = new GamingBrickEngine();
-        var current = CurrentConfiguration("puck.gaming-brick.config.v1");
+        var current = CurrentConfiguration("puck.gaming-brick.configuration.v1");
         using var runtime = engine.Create(options: "cgb cold", contentBytes: new byte[0x8000]);
         var memory = Assert.IsAssignableFrom<IMachineMemoryPeek>(runtime);
         var reconfigurable = Assert.IsAssignableFrom<IReconfigurableMachine>(runtime);
         Assert.Equal(0, memory.PeekByte(0xFF50) & 1);
         var before = reconfigurable.Options;
-        using var payload = Payload("puck.gaming-brick.device-model.v1", "{\"model\":\"dmgc\"}");
+        using var payload = Payload("puck.gaming-brick.device-model-set.v1", "{\"model\":\"dmgc\"}");
         var prepared = Assert.IsType<MachineOperationPreparation.Runtime>(((IMachineOperationProvider)engine).PrepareOperation(current, new("device.model", payload.RootElement)));
 
         var result = prepared.Operation.Apply(runtime);
@@ -96,9 +96,9 @@ public sealed class MachineOperationProviderLawTests {
         var advanced = new AdvancedGamingBrickEngine();
         var tune = new TuneInstrumentEngine();
         var cases = new (IMachineEngine Engine, IMachineOperationProvider Provider, Func<IMachineRuntime> Create, string Schema)[] {
-            (humble, (IMachineOperationProvider)humble, () => humble.Create(options: "fast"), "puck.gaming-brick.config.v1"),
+            (humble, (IMachineOperationProvider)humble, () => humble.Create(options: "fast"), "puck.gaming-brick.configuration.v1"),
             (advanced, (IMachineOperationProvider)advanced, () => advanced.Create(options: "stub"), "puck.advanced-gaming-brick.config.v1"),
-            (tune, (IMachineOperationProvider)tune, () => tune.Create(options: null), "puck.tune-instrument.config.v1"),
+            (tune, (IMachineOperationProvider)tune, () => tune.Create(options: null), "puck.tune-instrument.configuration.v1"),
         };
 
         foreach (var item in cases) {
@@ -131,7 +131,7 @@ public sealed class MachineOperationProviderLawTests {
         using (var payload = Payload("puck.gaming-brick.content-insert.v1", "{\"content\":{\"path\":\"detached.gb\"}}")) {
             request = new("content.insert", payload.RootElement);
             prepared = ((IMachineOperationProvider)new GamingBrickEngine()).PrepareOperation(
-                CurrentConfiguration("puck.gaming-brick.config.v1"), request);
+                CurrentConfiguration("puck.gaming-brick.configuration.v1"), request);
         }
 
         Assert.Equal("detached.gb", request.Payload.GetProperty("content").GetProperty("path").GetString());

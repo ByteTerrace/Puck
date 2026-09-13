@@ -85,7 +85,7 @@ public sealed class MachineMemoryLawTests {
 
         return document with {
             MachinesRaw = [.. document.Machines, new WorldMachine("cabinet", CgbEngine,
-                JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = "fast", content = new { path = CartridgePath() } }),
+                JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = CartridgePath() } }),
                 Memory: namedMemory)],
             ScreensRaw = [
                 .. document.Screens,

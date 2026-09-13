@@ -30,7 +30,7 @@ public sealed record CostModelProfile {
 
     /// <summary>Proposed portable service policy: three billion abstract cycles per second, half reserved for
     /// authored work. This is unit normalization and reservation policy, not a measured hardware frequency.</summary>
-    public static CostModelProfile Portable { get; } = new("puck.portable64.v1", 3_000_000_000L, 1L, 2L);
+    public static CostModelProfile Portable { get; } = new("puck.cost.portable-profile.v1", 3_000_000_000L, 1L, 2L);
 
     /// <summary>Returns the exact step period; rate zero has no recurring period.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The rate is negative.</exception>

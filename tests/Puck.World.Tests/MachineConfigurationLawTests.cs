@@ -12,7 +12,7 @@ public sealed class MachineConfigurationLawTests {
     [Fact]
     public void AliasedDisplaysAndSpeakersKeepTheirNamedProducer() {
         var module = JsonNode.Parse("""
-            {"machines":[{"name":"cabinet","engine":"gaming-brick","configuration":{"schema":"puck.gaming-brick.config.v1"}}],
+            {"machines":[{"name":"cabinet","engine":"gaming-brick","configuration":{"schema":"puck.gaming-brick.configuration.v1"}}],
              "screens":[{"index":0,"source":{"$type":"machine","instance":"cabinet","output":"video"}}],
              "speakers":[{"$type":"fixed","name":"speaker","position":[0,0,0],"feed":{"source":{"$type":"machine","instance":"cabinet","output":"audio"},"channel":"mix","gain":1}}]}
             """)!.AsObject();
@@ -38,7 +38,7 @@ public sealed class MachineConfigurationLawTests {
     public void StructuredConstructionConsumesPreparedFirmwareWithoutReadingItsAuthoredPath() {
         IMachineEngine engine = new GamingBrickEngine();
         using var document = JsonDocument.Parse("""
-            {"schema":"puck.gaming-brick.config.v1","model":"cgb","boot":"fast",
+            {"schema":"puck.gaming-brick.configuration.v1","model":"cgb","boot":"fast",
              "firmware":{"path":"an-intentionally-unresolved-firmware-path.bin"}}
             """);
         var image = HgbFirmware.GetImage(ConsoleModel.CgbE);

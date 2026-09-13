@@ -209,7 +209,7 @@ public static partial class WorldDocumentEmitter {
     private static JsonObject RefuseCallGate(CallPredicateNode call, DocumentScope scope) {
         scope.Diagnostics.ReportError(
             PuckDiagnosticCodes.UnsupportedCallGate,
-            $"'{call.Call.Name}(...)' is not a puck.world.def.v1 gate - a world gate compares two operands",
+            $"'{call.Call.Name}(...)' is not a puck.world.definition.v1 gate - a world gate compares two operands",
             call.Span
         );
 
@@ -368,7 +368,7 @@ public static partial class WorldDocumentEmitter {
         CompoundAssignStatementNode compound => RefuseCompoundAssignment(compound, scope),
         IfStatementNode => RefuseControlFlow(stmt, "if", "gate the rule itself with 'when', or split it into two rules", scope),
         RepeatStatementNode => RefuseControlFlow(stmt, "repeat", "a rule already runs once per matching subject - use 'forEach'", scope),
-        BreakStatementNode => RefuseControlFlow(stmt, "break", "there is no loop in a puck.world.def.v1 rule to leave", scope),
+        BreakStatementNode => RefuseControlFlow(stmt, "break", "there is no loop in a puck.world.definition.v1 rule to leave", scope),
         _ => throw new InvalidOperationException($"unrecognized effect statement '{stmt.GetType()}'"),
     };
 
@@ -379,7 +379,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             PuckDiagnosticCodes.UnsupportedAssignmentOperator,
-            $"puck.world.def.v1 has no '{compound.Operator}=' effect - write it as '{target} = {target} {compound.Operator} ...'",
+            $"puck.world.definition.v1 has no '{compound.Operator}=' effect - write it as '{target} = {target} {compound.Operator} ...'",
             compound.Span
         );
 
@@ -392,7 +392,7 @@ public static partial class WorldDocumentEmitter {
     private static JsonNode? RefuseControlFlow(StatementNode stmt, string keyword, string alternative, DocumentScope scope) {
         scope.Diagnostics.ReportError(
             PuckDiagnosticCodes.UnsupportedControlFlow,
-            $"a puck.world.def.v1 rule body is straight-line, so '{keyword}' has nothing to lower onto - {alternative}",
+            $"a puck.world.definition.v1 rule body is straight-line, so '{keyword}' has nothing to lower onto - {alternative}",
             stmt.Span
         );
 

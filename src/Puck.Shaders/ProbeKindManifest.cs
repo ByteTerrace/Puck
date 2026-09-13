@@ -144,7 +144,7 @@ public sealed partial record ProbeKindManifest(
     /// <summary>The file suffix every manifest carries; the text before it is the kind's id.</summary>
     public const string FileSuffix = ".puck.probe.json";
     /// <summary>The required <c>$schema</c> value of every <see cref="ProbeKindManifest"/> document.</summary>
-    public const string SchemaTag = "puck.probe.v1";
+    public const string SchemaTag = "puck.probe.manifest.v1";
     /// <summary>The channel-count ceiling — matches <c>Puck.Platform.Probes.ProbeReadingLimits.MaxChannels</c>,
     /// the fixed slot count a <c>ProbeReading</c> carries; keep the two in sync.</summary>
     public const int MaxChannels = 8;

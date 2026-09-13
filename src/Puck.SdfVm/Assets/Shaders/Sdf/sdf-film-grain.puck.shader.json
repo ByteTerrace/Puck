@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.shader.v1",
+  "$schema": "puck.shader.manifest.v1",
   "name": "sdf-film-grain",
   "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output. The hash is a pure function of pixel cell, grain frame, and seed, so it renders identically on both backends.",
   "stages": { "vertex": "fullscreen.vert", "fragment": "sdf-film-grain.frag" },

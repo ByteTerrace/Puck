@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Puck.Commands;
 
 /// <summary>
-/// The System.Text.Json source-generation context for <c>puck.bindings.v1</c> — the sanctioned entry point for
+/// The System.Text.Json source-generation context for <c>puck.input.bindings.v1</c> — the sanctioned entry point for
 /// (de)serializing a <see cref="BindingProfileDocument"/> from this package, with no runtime reflection anywhere on
 /// the path, so a consumer publishing Native AOT or trimmed round-trips a player's controller mapping without a
 /// single trim warning of this project's making.

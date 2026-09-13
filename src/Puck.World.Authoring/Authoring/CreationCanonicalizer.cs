@@ -1477,7 +1477,7 @@ public static partial class CreationCanonicalizer {
 
             if (sound.Patch is null) {
                 errors.Add(item: new(
-                    Message: "a sound requires an inline puck.synth.v1 patch.",
+                    Message: "a sound requires an inline puck.synthesizer-patch.v1 patch.",
                     Path: $"behavior.sounds[{i}].patch"
                 ));
 

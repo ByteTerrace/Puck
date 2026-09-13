@@ -9,6 +9,9 @@ using Puck.World.Server;
 
 namespace Puck.World.Silo;
 
+/// <summary>Result of the explicit managed group publication barrier.</summary>
+public enum WorldReleaseAdmissionPublication { Opened, CandidatePrivate, Refused }
+
 /// <summary>
 /// The silo's own <see cref="IWorldAuthorityHost"/> — one boot-free <see cref="WorldInstanceHost"/>, one activation
 /// mailbox drained at the tick thread's master boundary, and the per-row bookkeeping (federation identity, adjacency
@@ -68,6 +71,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
     private readonly ObjectStorageTarget m_storageTarget;
     private readonly IWorldAuthorityStore m_store;
+    private readonly WorldReleaseGroupStore? m_releaseGroupStore;
+    private readonly WorldSiloReleaseManagement? m_releaseManagement;
+    private int m_releaseAdmissionOpen;
 
     private ulong m_masterElapsedEngineTicks;
     private int m_draining;
@@ -112,6 +118,10 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             store: blobStore,
             target: m_storageTarget
         );
+        m_releaseManagement = definition.Release;
+        m_releaseGroupStore = (m_releaseManagement is { } managed)
+            ? new WorldReleaseGroupStore(blobStore, m_storageTarget, managed.Owner)
+            : null;
         m_machineId = ResolveMachineId(stateDir: definition.StateDir);
         Instances = new WorldInstanceHost(
             admitsSpawn: false,
@@ -134,6 +144,10 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     public bool Ready { get => Volatile.Read(location: ref m_ready); internal set => Volatile.Write(location: ref m_ready, value: value); }
     /// <summary>Whether the host has stopped stepping worlds for retirement.</summary>
     public bool IsDraining => (Volatile.Read(location: ref m_draining) != 0);
+    /// <summary>Whether managed public, federation, and row-console admission has passed the durable release gate.</summary>
+    public bool ReleaseAdmissionOpen => (m_releaseGroupStore is null) || (Volatile.Read(location: ref m_releaseAdmissionOpen) != 0);
+    /// <summary>Whether the host can be observed privately while a managed candidate remains held.</summary>
+    public bool PrivateCandidateHealthy => Ready && !IsDraining;
 
     /// <summary>Freezes all worlds at one pump boundary and durably saves them before retirement.</summary>
     /// <param name="ct">This caller's retirement deadline. A caller may retry a cancelled or failed save.</param>
@@ -453,6 +467,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         MasterRateHz = fastest;
     }
     private void SweepAwaitingMirrors() {
+        if (!ReleaseAdmissionOpen) { return; }
         foreach (var name in Instances.Names) {
             if (
                 Instances.TryGet(
@@ -684,11 +699,117 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return await ActivateCoreAsync(identity, ct);
         } finally { m_activationGate.Release(); }
     }
+    private async Task<bool> CheckReleaseBeforeActivationAsync(WorldSiloWorldRow worldRow, CancellationToken ct) {
+        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
+            return true;
+        }
+        if (worldRow.Owner != managed.Owner) {
+            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (managed release owner does not match the row)]");
+            return false;
+        }
+        WorldReleaseGroupSnapshot? snapshot;
+        try {
+            snapshot = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
+        } catch (Exception error) when (error is InvalidDataException or ArgumentException) {
+            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (release group: {error.Message})]");
+            return false;
+        }
+        if (snapshot is not { } state) {
+            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (managed release group '{managed.Group}' is not initialized)]");
+            return false;
+        }
+        var record = state.Record;
+        var candidate = string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal) ||
+            (record.PendingOperationId is not null && (record.PendingPhase is WorldReleaseOperationPhase.Activate or WorldReleaseOperationPhase.Verify or WorldReleaseOperationPhase.Commit) && string.Equals(record.PendingTargetRelease, managed.ExpectedRelease, StringComparison.Ordinal));
+        if (!candidate) {
+            Console.Error.WriteLine($"[silo.activate: '{worldRow.World}' refused (expected release '{managed.ExpectedRelease}' is not the active or pending candidate)]");
+            return false;
+        }
+        return true;
+    }
+
+    private Task<bool> EstablishReleaseAdmissionAsync(WorldAuthorityIdentity identity, WorldAuthorityFence fence, CancellationToken ct) {
+        // Managed publication is a group barrier. Activation only loads a private candidate; the startup coordinator
+        // calls PublishManagedReleaseAdmissionAsync after every pinned row has restored and passed its private checks.
+        if (m_releaseGroupStore is not null) {
+            return Task.FromResult(false);
+        }
+        return Task.FromResult(true);
+    }
+
+    /// <summary>Publishes managed admission once, after every pinned candidate is ready and each row owns a fresh fence.</summary>
+    public async Task<WorldReleaseAdmissionPublication> PublishManagedReleaseAdmissionAsync(CancellationToken ct = default) {
+        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
+            Volatile.Write(location: ref m_releaseAdmissionOpen, value: 1);
+            return WorldReleaseAdmissionPublication.Opened;
+        }
+        var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        m_mailbox.Enqueue(() => {
+            try {
+                var rows = new List<(WorldAuthorityIdentity, WorldAuthorityFence)>();
+                foreach (var declared in m_definition.Worlds.Where(static row => row.Pinned)) {
+                    if (!m_rows.TryGetValue(declared.World.Value, out var bookkeeping) || bookkeeping.Initializing || bookkeeping.Released || !Instances.TryGet(declared.World.Value, out var instance) || instance is null) {
+                        captured.TrySetResult([]);
+                        return;
+                    }
+                    rows.Add((new WorldAuthorityIdentity(declared.Owner, declared.World), bookkeeping.Fence));
+                }
+                captured.TrySetResult(rows);
+            } catch (Exception error) { captured.TrySetException(error); }
+        });
+        var rowsReady = await captured.Task.WaitAsync(ct).ConfigureAwait(false);
+        if (rowsReady.Count != m_definition.Worlds.Count(static row => row.Pinned)) { return WorldReleaseAdmissionPublication.Refused; }
+        foreach (var row in rowsReady) {
+            var root = await m_store.LoadRootAsync(row.Identity, ct).ConfigureAwait(false);
+            if (root is not { } currentRoot || currentRoot.Root.Epoch != row.Fence.Epoch || currentRoot.Root.FenceToken != row.Fence.Token) {
+                return WorldReleaseAdmissionPublication.Refused;
+            }
+        }
+        var groupClaim = WorldReleaseFenceClaim.Compute(rowsReady);
+        var snapshot = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
+        if (snapshot is not { } state) { return WorldReleaseAdmissionPublication.Refused; }
+        var record = state.Record;
+        WorldReleaseGroupOutcome opened;
+        if (record.PendingOperationId is { } operationId && record.PendingPhase == WorldReleaseOperationPhase.Commit && record.PendingCommitted) {
+            opened = await groups.OpenAdmissionAsync(state, managed.ExpectedRelease, operationId, groupClaim, ct).ConfigureAwait(false);
+        } else if (record.PendingOperationId is not null && record.PendingPhase == WorldReleaseOperationPhase.Prepare && record.Admission == WorldReleaseAdmissionState.Open && string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
+            // Preflight has no runtime mutation and therefore leaves the source serving while this host restarts.
+            opened = new(WorldReleaseOperationOutcomeKind.Ok, string.Empty, state);
+        } else if (record.PendingOperationId is null && record.Admission == WorldReleaseAdmissionState.Open && string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
+            opened = await groups.RebindAdmissionAsync(state, managed.ExpectedRelease, groupClaim, ct).ConfigureAwait(false);
+        } else if (record.PendingOperationId is null && string.Equals(record.ActiveRelease, managed.ExpectedRelease, StringComparison.Ordinal)) {
+            opened = await groups.OpenRecoveredAdmissionAsync(state, managed.ExpectedRelease, groupClaim, ct).ConfigureAwait(false);
+        } else {
+            return (record.PendingOperationId is not null && string.Equals(record.PendingTargetRelease, managed.ExpectedRelease, StringComparison.Ordinal))
+                ? WorldReleaseAdmissionPublication.CandidatePrivate
+                : WorldReleaseAdmissionPublication.Refused;
+        }
+        if (!opened.Ok) { return WorldReleaseAdmissionPublication.Refused; }
+        var published = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        m_mailbox.Enqueue(() => {
+            try {
+                Volatile.Write(location: ref m_releaseAdmissionOpen, value: 1);
+                foreach (var declared in m_definition.Worlds.Where(static row => row.Pinned)) {
+                    if (!Instances.TryGet(declared.World.Value, out var instance) || instance is null) { published.TrySetResult(false); return; }
+                    if (!m_routing.TryGetSession(declared.World.Value, out _)) { _ = m_routing.Register(declared.World.Value); }
+                    if (AllAdjacenciesPrimed(instance)) { Instances.ReleaseHold(instance); }
+                }
+                published.TrySetResult(true);
+            } catch (Exception error) { published.TrySetException(error); }
+        });
+        return await published.Task.WaitAsync(ct).ConfigureAwait(false)
+            ? WorldReleaseAdmissionPublication.Opened
+            : WorldReleaseAdmissionPublication.Refused;
+    }
+
     private async Task<bool> ActivateCoreAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
         if (IsDraining) { return false; }
         if (FindWorldRow(identity: identity) is not { } worldRow) {
             Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (not declared in this silo's document)]");
 
+            return false;
+        }
+        if (!await CheckReleaseBeforeActivationAsync(worldRow, ct).ConfigureAwait(false)) {
             return false;
         }
 
@@ -929,13 +1050,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 if (checkpointBlob is null && !await CheckpointNowCoreAsync(identity, ct)) {
                     throw new IOException("The initial authority checkpoint could not be published.");
                 }
+                var releaseOpen = await EstablishReleaseAdmissionAsync(identity, fence, ct).ConfigureAwait(false);
                 var releaseHold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 m_mailbox.Enqueue(() => {
                     try {
                         var bookkeeping = m_rows[row.Name];
                         bookkeeping.Initializing = false;
-                        _ = m_routing.Register(worldId: row.Name);
-                        if (AllAdjacenciesPrimed(row)) { Instances.ReleaseHold(row); }
+                        Volatile.Write(location: ref m_releaseAdmissionOpen, value: releaseOpen ? 1 : 0);
+                        if (releaseOpen) {
+                            _ = m_routing.Register(worldId: row.Name);
+                            if (AllAdjacenciesPrimed(row)) { Instances.ReleaseHold(row); }
+                        }
                         releaseHold.TrySetResult();
                     } catch (Exception error) { releaseHold.TrySetException(error); }
                 });

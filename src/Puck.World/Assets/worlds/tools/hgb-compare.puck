@@ -1,4 +1,4 @@
-schema: "puck.world.def.v1"
+schema: "puck.world.definition.v1"
 documentId: "puck-hgb-compare-v1"
 
 let eyeHeight = 1.5
@@ -27,7 +27,7 @@ machines [
         name: "reference"
         engine: brick
         configuration {
-            schema: "puck.gaming-brick.config.v1"
+            schema: "puck.gaming-brick.configuration.v1"
             model: "cgb"
             content { path: reference }
         }
@@ -36,7 +36,7 @@ machines [
         name: "authored"
         engine: brick
         configuration {
-            schema: "puck.gaming-brick.config.v1"
+            schema: "puck.gaming-brick.configuration.v1"
             model: "cgb"
             content { path: authored }
         }
@@ -101,7 +101,7 @@ cameras [
                 lookAt(subject: worldPoint(point: [0, eyeHeight, 0]))
                 fieldOfView(fieldOfViewRadians: fieldOfView)
             ]
-            version: "puck.camera.v1"
+            version: "puck.camera.program.v1"
         }
     }
 ]
@@ -129,7 +129,7 @@ views {
     }
 
     seatRig "seat" {
-        version: "puck.camera.v1"
+        version: "puck.camera.program.v1"
         operations [
             orbit(distance: 1, pitch: 0, yaw: 0)
             fieldOfView(fieldOfViewRadians: fieldOfView)

@@ -96,12 +96,37 @@ definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write—see `Puck.World.Protocol`'s
 `IClientSink`.
 
+## Hosted release records
+
+`WorldReleaseManifest` gives a composed package one immutable identity over its
+engine image digest, stable world definition pins, artifact hashes, and the
+declared persistence and peer contracts. `WorldReleaseOperationStore` persists
+the maintenance operation in the private object store with create-only and
+if-match writes, so a coordinator can resume the same operation and a stale
+writer cannot advance it. Its validation enforces closed admission through
+prepare, drain, activation, verification, and commit; only a durable committed
+record may open it. A post-commit failure follows the committed release. The
+first transition policy refuses changed definitions until a state-preservation
+rule and packaged rollback evidence exist. Managed silo admission now consumes
+the group root and fences its explicit publication barrier; Azure coordinator
+switching and operator rollback/restore remain above these records and policies.
+
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes
 admission. `Step`, `Advance`, and the administrative drain cannot advance a retired
 activation; external authority closures refuse by name. Its checkpoint remains
 capturable so a failed final save can retry the same frozen state. A fresh server
 must be activated to resume. This is distinct from a player-visible pause.
+
+`WorldReleaseGroupStore` is the hosting root for a managed deployment group. It
+guards active and previous release identities, one pending operation, retained
+recovery roots and history, rollback eligibility, and group admission with one
+private-store CAS. Commit records a fresh group activation claim; the silo
+separately verifies every current per-world fence before its explicit all-row
+publication. Pre-commit recovery clears the failed candidate without marking
+it active, while finalization retains recovery references and closes only the
+rollback window. Azure coordinator switching and operator rollback/restore
+commands remain future integration work.
 
 ## Rule effects land on a frame (`WorldServer.RuleHost.cs`, `WorldServer.RuleFrame.cs`)
 

@@ -1,5 +1,5 @@
 {
-  "schema": "puck.probe-track.v1",
+  "schema": "puck.probe.track.v1",
   "rateHz": 30,
   "channels": 4,
   "samples": [

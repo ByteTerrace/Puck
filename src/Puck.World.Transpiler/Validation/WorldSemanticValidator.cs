@@ -10,7 +10,7 @@ namespace Puck.World.Transpiler.Validation;
 public static class WorldSemanticValidator {
     /// <summary>The schema identifier a document declares to state that it is a whole world rather than a
     /// fragment.</summary>
-    public const string RootSchemaId = "puck.world.def.v1";
+    public const string RootSchemaId = "puck.world.definition.v1";
 
     /// <summary>Returns a value indicating whether <paramref name="loweredJson"/> is a ROOT — a whole world that
     /// stands on its own or on a basis chain — rather than a MODULE, a fragment some other root imports.</summary>

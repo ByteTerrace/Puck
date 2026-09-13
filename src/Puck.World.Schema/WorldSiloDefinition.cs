@@ -36,6 +36,11 @@ public sealed record WorldSiloExtension(string Type, JsonElement Settings);
 /// <summary>Orleans cluster membership for this silo.</summary>
 /// <param name="Kind">The membership implementation selected at composition; this distribution supports Localhost.</param>
 public sealed record WorldSiloClustering(string Kind);
+/// <summary>Optional durable release gate for an officially managed silo. The owner is also the private-store object id.</summary>
+/// <param name="Group">The deployment-group key in the private release store.</param>
+/// <param name="Owner">The deployment-group owner's stable container UUID.</param>
+/// <param name="ExpectedRelease">The exact immutable release identity this process may publish.</param>
+public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string ExpectedRelease);
 /// <summary>Deployment-owned lifecycle observation and local health configuration.</summary>
 /// <param name="ShutdownSeconds">Maximum time allowed for operator or deployment retirement.</param>
 /// <param name="HealthPort">HTTP health port; retirement requests are accepted only from loopback.</param>
@@ -54,7 +59,7 @@ public sealed record WorldSiloLifecycle(
     int JournalBacklogLimit = 1024
 );
 /// <summary>
-/// The silo document (<c>puck.silo.def.v1</c>) — durable configuration for one <c>Puck.World.Silo</c> process: which
+/// The silo document (<c>puck.silo.configuration.v1</c>) — durable configuration for one <c>Puck.World.Silo</c> process: which
 /// worlds it may activate, its declared door budget, where its checkpoints/journals/definitions live, its own
 /// state directory, and its clustering membership. Loaded once at silo start (<c>--silo &lt;path&gt;</c>); nothing in
 /// it is simulation state. See <see cref="WorldSiloDefinitionValidator"/> for the checks a document must pass before
@@ -67,16 +72,18 @@ public sealed record WorldSiloLifecycle(
 /// directory under — the <c>--state-dir</c> counterpart.</param>
 /// <param name="Clustering">Orleans cluster membership.</param>
 /// <param name="Lifecycle">Optional deployment-owned host lifecycle adapter.</param>
+/// <param name="Release">Optional managed release identity and private deployment-group admission binding.</param>
 public sealed record WorldSiloDefinition(
     IReadOnlyList<WorldSiloWorldRow> Worlds,
     WorldSiloDoors Doors,
     WorldSiloExtension Store,
     string StateDir,
     WorldSiloClustering Clustering,
-    WorldSiloLifecycle? Lifecycle = null
+    WorldSiloLifecycle? Lifecycle = null,
+    WorldSiloReleaseManagement? Release = null
 ) {
-    /// <summary>The document schema tag every well-formed <c>puck.silo.def.v1</c> document carries.</summary>
-    public const string SchemaVersion = "puck.silo.def.v1";
+    /// <summary>The document schema tag every well-formed <c>puck.silo.configuration.v1</c> document carries.</summary>
+    public const string SchemaVersion = "puck.silo.configuration.v1";
 
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
     public string Schema { get; init; } = SchemaVersion;

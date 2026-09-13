@@ -16,7 +16,7 @@
 // the engine's: author = (-x, y, -z). The `A`-suffixed lets below are already converted,
 // which is why a plateau at picture x 60 reads +5 rather than -5.
 
-schema: "puck.world.def.v1"
+schema: "puck.world.definition.v1"
 documentId: "puck-hgb-mirror-v1"
 
 // ---- the picture, and what one of its pixels is worth ----------------------------
@@ -135,7 +135,7 @@ machines [
         name: "mirror"
         engine: "gaming-brick"
         configuration {
-            schema: "puck.gaming-brick.config.v1"
+            schema: "puck.gaming-brick.configuration.v1"
             model: "cgb"
             content { path: "../../cartridges/hgb-mirror.cgb.cartridge.json" }
         }
@@ -654,7 +654,7 @@ bindingOverlays [
     {
         id: "hgb-mirror"
         document {
-            version: "puck.bindings.v1"
+            version: "puck.input.bindings.v1"
             modifiers []
             chords [
                 {
@@ -683,7 +683,7 @@ cameras [
         renderHeight: viewHeight
         anchor: null
         rig {
-            version: "puck.camera.v1"
+            version: "puck.camera.program.v1"
             name: "compare"
             operations [
                 anchor(subject: worldPoint(point: [0, eyeHeight, eyeDistance]))
@@ -700,7 +700,7 @@ cameras [
         renderHeight: pictureHeight * 4
         anchor: null
         rig {
-            version: "puck.camera.v1"
+            version: "puck.camera.program.v1"
             name: "diorama"
             operations [
                 anchor(subject: worldPoint(point: [0, isoHeight, dioramaZ + isoBack]))
@@ -728,7 +728,7 @@ views {
     }
 
     seatRig "seat" {
-        version: "puck.camera.v1"
+        version: "puck.camera.program.v1"
         operations [
             orbit(distance: 1, pitch: 0, yaw: 0)
             fieldOfView(fieldOfViewRadians: fieldOfView)

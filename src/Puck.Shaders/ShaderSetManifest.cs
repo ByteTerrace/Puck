@@ -37,7 +37,7 @@ public sealed partial record ShaderSetManifest(
     /// <summary>The file suffix every manifest carries; the text before it is the set's id.</summary>
     public const string FileSuffix = ".puck.shader.json";
     /// <summary>The required <c>$schema</c> value of every <see cref="ShaderSetManifest"/> document.</summary>
-    public const string SchemaTag = "puck.shader.v1";
+    public const string SchemaTag = "puck.shader.manifest.v1";
 
     /// <summary>Gets the directory the manifest was loaded from — where its stage stems resolve.</summary>
     [JsonIgnore]

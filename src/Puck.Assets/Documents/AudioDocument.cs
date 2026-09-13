@@ -54,7 +54,7 @@ public sealed record AudioDocument(
     IReadOnlyDictionary<string, AudioEffectDocument>? Effects
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.audio.v1";
+    public const string CurrentSchema = "puck.tune.v1";
     /// <summary>The default tempo (frames per row) when the document omits one.</summary>
     public const int DefaultTempo = 8;
     /// <summary>The default row count of the fallback silent pattern.</summary>

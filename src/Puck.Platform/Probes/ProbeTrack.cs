@@ -21,7 +21,7 @@ public sealed record ProbeTrackSample(double T, IReadOnlyList<double>? C = null,
 /// <param name="Samples">The recorded samples, in strictly ascending <see cref="ProbeTrackSample.T"/> order.</param>
 public sealed record ProbeTrackDocument(string? Schema = ProbeTrackDocument.SchemaVersion, double RateHz = 30.0, int Channels = 0, IReadOnlyList<ProbeTrackSample>? Samples = null) {
     /// <summary>The only accepted schema tag.</summary>
-    public const string SchemaVersion = "puck.probe-track.v1";
+    public const string SchemaVersion = "puck.probe.track.v1";
 }
 /// <summary>
 /// The System.Text.Json source-generation context for <see cref="ProbeTrackDocument"/> — the only sanctioned entry

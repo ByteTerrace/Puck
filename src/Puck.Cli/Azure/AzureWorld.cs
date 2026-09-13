@@ -11,7 +11,7 @@ namespace Puck.Cli.Azure;
 internal static partial class AzureCommand {
     private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null) {
         var result = new JsonObject {
-            ["schema"] = "puck.silo.def.v1",
+            ["schema"] = "puck.silo.configuration.v1",
             ["worlds"] = new JsonArray(new JsonObject { ["owner"] = owner, ["world"] = world, ["pinned"] = true, ["federation"] = new JsonObject { ["keyFile"] = keyFile } }),
             ["doors"] = new JsonObject { ["budget"] = 1 },
             ["store"] = store,

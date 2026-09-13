@@ -66,7 +66,7 @@ public sealed record ReleaseManifest(
     ReleaseSignature? Signature
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.release.v1";
+    public const string CurrentSchema = "puck.release.manifest.v1";
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip. Null when the document carries none.
     /// A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
@@ -87,7 +87,7 @@ public static class ReleaseCanonicalizer {
     /// rather than throwing on the first. An absent or foreign <see cref="ReleaseManifest.Schema"/> short-circuits
     /// to that one violation.</summary>
     /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.release.v1</c> value.</returns>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.release.manifest.v1</c> value.</returns>
     public static IReadOnlyList<DocumentValidationError> Validate(ReleaseManifest document) {
         ArgumentNullException.ThrowIfNull(document);
 

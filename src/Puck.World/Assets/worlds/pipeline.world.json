@@ -16,7 +16,7 @@
     "timing": false,
     "width": 1280
   },
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "views": {
     "layouts": [
       {
@@ -55,7 +55,7 @@
           "fieldOfViewRadians": 0.001
         }
       ],
-      "version": "puck.camera.v1"
+      "version": "puck.camera.program.v1"
     },
     "pipelines": [
       {

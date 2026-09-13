@@ -17,7 +17,7 @@ public sealed class MachineAuthoringTests {
                     name: "brook"
                     engine: "gaming-brick"
                     configuration {
-                        schema: "puck.gaming-brick.config.v1"
+                        schema: "puck.gaming-brick.configuration.v1"
                         model: deviceModel
                         content { path: cartridge }
                     }
@@ -37,7 +37,7 @@ public sealed class MachineAuthoringTests {
     [Fact]
     public void TwoAliasesMintIndependentMachineIdentities() {
         var source = JsonNode.Parse("""
-            {"machines":[{"name":"brook","engine":"gaming-brick","configuration":{"schema":"puck.gaming-brick.config.v1"}}]}
+            {"machines":[{"name":"brook","engine":"gaming-brick","configuration":{"schema":"puck.gaming-brick.configuration.v1"}}]}
             """)!.AsObject();
         var left = source.DeepClone().AsObject();
         var right = source.DeepClone().AsObject();

@@ -173,7 +173,7 @@ public sealed record WorldCameraSelectCase(long Value, string Program);
 /// <param name="Operations">The selected ops, in authored evaluation order.</param>
 public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyList<WorldCameraProgramOp> Operations) {
     /// <summary>The supported camera-program instruction-set version.</summary>
-    public const string CurrentVersion = "puck.camera.v1";
+    public const string CurrentVersion = "puck.camera.program.v1";
     /// <summary>The largest admitted operation count.</summary>
     public const int MaxOperations = 16;
 

@@ -78,7 +78,7 @@ public sealed class CompiledBodyMotionProgram {
     public BodyMotionOp[][] Phases { get; }
 
     /// <summary>Gets the instruction-set version this compiler accepts.</summary>
-    public const string SupportedVersion = "puck.body-motion.v1";
+    public const string SupportedVersion = "puck.body.program.v1";
 
     private static BodyProgramAdmission AdmissionFor(BodyProgramKind kind) => kind switch {
         BodyProgramKind.Motion => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),

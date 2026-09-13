@@ -44,7 +44,7 @@ if (!fs.existsSync(mainMjs)) {
 
     // The schema's own self-identification (WP-A's x-puck root member) is the source of truth once it lands;
     // until then the schema's declared `schema` const is the same fact under its pre-existing name.
-    const schemaPath = path.join(worldsDir, 'puck.world.def.v1.schema.json');
+    const schemaPath = path.join(worldsDir, 'puck.world.definition.v1.schema.json');
     const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
     const expected = (schema['x-puck'] && schema['x-puck'].schemaVersion)
       || (schema.properties && schema.properties.schema && schema.properties.schema.const)

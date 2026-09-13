@@ -5,8 +5,8 @@
  * `ManifestRefusal` naming the offending field.
  */
 
-export const OFFICIAL_MANIFEST_SCHEMA = "puck.official.v1" as const;
-export const REQUIRED_WORLD_SCHEMA = "puck.world.def.v1" as const;
+export const OFFICIAL_MANIFEST_SCHEMA = "puck.official.manifest.v1" as const;
+export const REQUIRED_WORLD_SCHEMA = "puck.world.definition.v1" as const;
 
 export interface ManifestBuild {
   readonly commit: string;

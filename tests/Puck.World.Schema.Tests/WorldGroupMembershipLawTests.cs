@@ -283,7 +283,7 @@ public sealed class WorldGroupMembershipLawTests {
         var baseDefinition = WorldDefinitionSerialization.Deserialize(
             utf8Json: System.Text.Encoding.UTF8.GetBytes(s: """
                 {
-                  "schema": "puck.world.def.v1",
+                  "schema": "puck.world.definition.v1",
                   "documentId": "null"
                 }
                 """)

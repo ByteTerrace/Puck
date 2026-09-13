@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.probe.v1",
+  "$schema": "puck.probe.manifest.v1",
   "name": "ir-blob",
   "class": "kernel",
   "description": "Bright-mass centroid over the lit infrared frame: the brightest connected mass's normalized center, its coverage of the frame, and the mean luminance above threshold. Not illumination-response (lit minus unlit) — the FaceAuth camera graph publishes only the lit half.",

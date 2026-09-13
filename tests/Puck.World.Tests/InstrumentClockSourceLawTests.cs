@@ -129,7 +129,7 @@ public sealed class InstrumentClockSourceLawTests {
         return document with {
             Music = [new WorldMusicRow(Name: "instrument-clock-law", Source: musicPath, Hash: music.Hash)],
             MachinesRaw = [.. document.Machines, new WorldMachine("instrument", "tune-instrument",
-                JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.config.v1", content = new { path = instrumentPath } }))],
+                JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.configuration.v1", content = new { path = instrumentPath } }))],
             SpeakersRaw = [new WorldSpeaker.Fixed("instrument-speaker", new DocumentVector3(0f, 0f, 0f),
                 new WorldSpeakerFeed(new WorldSpeakerSource.Machine("instrument", "audio"), WorldSpeakerFeed.ChannelMix, 1f))],
             ScreensRaw = [.. document.Screens, instrumentScreen],

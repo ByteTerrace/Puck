@@ -104,7 +104,7 @@ internal static class CostModelClaims {
         Assert.Equal(expected: ("custom", long.MaxValue, long.MaxValue - 1, long.MaxValue, 50_400L),
             actual: (profile.Name, profile.CyclesPerSecond, profile.SubsystemShareNumerator, profile.SubsystemShareDenominator, profile.EngineTicksPerSecond));
         var portable = CostModelProfile.Portable;
-        Assert.Equal(expected: ("puck.portable64.v1", 3_000_000_000L, 1L, 2L, 50_400L),
+        Assert.Equal(expected: ("puck.cost.portable-profile.v1", 3_000_000_000L, 1L, 2L, 50_400L),
             actual: (portable.Name, portable.CyclesPerSecond, portable.SubsystemShareNumerator, portable.SubsystemShareDenominator, portable.EngineTicksPerSecond));
         _ = new CostModelProfile("minimum", 1, 1, 1);
         foreach (var name in InvalidNames) {

@@ -4,7 +4,7 @@
 // Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
 // 'for' in it, none of which the document carries.
 
-schema: "puck.world.def.v1"
+schema: "puck.world.definition.v1"
 basis: "avatars/moth.puck"
 documentId: "moth-courtyard"
 
@@ -1372,7 +1372,7 @@ cameras: map(courtyardCameras, camera => {
   renderWidth: captureWidth
   renderHeight: captureHeight
   rig {
-    version: "puck.camera.v1"
+    version: "puck.camera.program.v1"
     name: $"""courtyard-{camera["name"]}"""
     operations [
       anchor(opcode: "anchor", subject: worldPoint(point: camera["position"]))
@@ -1583,7 +1583,7 @@ bindingOverlays [
   {
     id: "bare"
     document {
-      version: "puck.bindings.v1"
+      version: "puck.input.bindings.v1"
       modifiers []
       chords [
         {

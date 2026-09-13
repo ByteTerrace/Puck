@@ -4,7 +4,7 @@
 // Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
 // 'for' in it, none of which the document carries.
 
-schema: "puck.world.def.v1"
+schema: "puck.world.definition.v1"
 
 // The palette, by role. A slot number says nothing; a name says what the surface IS.
 let skin = 0 // #EED3A6
@@ -430,7 +430,7 @@ bindingOverlays [
         }
       ]
       modifiers []
-      version: "puck.bindings.v1"
+      version: "puck.input.bindings.v1"
     }
     id: "bare"
   }
@@ -492,7 +492,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.13, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -520,7 +520,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.13, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -548,7 +548,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.15, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -576,7 +576,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 2.8, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -604,7 +604,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.84, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.54, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -632,7 +632,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.86, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.5, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -660,7 +660,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.86, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.5, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -688,7 +688,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.35, 1.4, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.55, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -716,7 +716,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.2, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.75, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -744,7 +744,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.42, 1.42, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.55, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -772,7 +772,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.35, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -800,7 +800,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.2, 0.35, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.55, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
   {
@@ -828,7 +828,7 @@ cameras [
         lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.35, 0]), worldAxes: false)
         fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
       ]
-      version: "puck.camera.v1"
+      version: "puck.camera.program.v1"
     }
   }
 ]
@@ -5069,7 +5069,7 @@ views {
   }
 
   seatRig "moth-camera" {
-    version: "puck.camera.v1"
+    version: "puck.camera.program.v1"
     operations [
       orbit(distance: 6, opcode: "orbit", pitch: 0.2, pivotOffset: [0, 1.2, 0], yaw: 0)
       lookAt(focusDistance: 6, opcode: "lookAt", subject: reference(), targetOffset: [0, 1.2, 0], worldAxes: true)

@@ -81,6 +81,16 @@ public static class WorldSiloDefinitionValidator {
             reason = "clustering.kind is required";
             return false;
         }
+        if (definition.Release is { } release) {
+            if (string.IsNullOrWhiteSpace(release.Group) || release.Group.Any(char.IsWhiteSpace) || release.Group.Contains("..", StringComparison.Ordinal) || release.Group.Contains('/')) {
+                reason = "release.group must be one safe deployment-group name";
+                return false;
+            }
+            if (release.Owner == Guid.Empty || string.IsNullOrWhiteSpace(release.ExpectedRelease)) {
+                reason = "release requires a non-empty owner and expectedRelease";
+                return false;
+            }
+        }
         if ((clusteringKinds is not null) && !clusteringKinds.Contains(definition.Clustering.Kind, StringComparer.Ordinal)) {
             reason = $"clustering.kind '{definition.Clustering.Kind}' is not installed; name one of: {string.Join(separator: ", ", values: clusteringKinds)}";
             return false;

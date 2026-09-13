@@ -37,7 +37,7 @@ public sealed class MachineHostTransactionLawTests {
 
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
-        var configuration = JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = "fast", content = new { path = contentPath } });
+        var configuration = JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = contentPath } });
 
         return document with {
             MachinesRaw = [.. document.Machines, new WorldMachine("cabinet", engine, configuration)],

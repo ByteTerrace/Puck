@@ -25,7 +25,7 @@ internal sealed class PuckSchemaHover {
     }
 
     internal string? Describe(DocumentNode document, IReadOnlyList<SyntaxNode> path, string word, int offset) {
-        if (document.Schema is not null and not "puck.world.def.v1" and not "puck.creation.v1") {
+        if (document.Schema is not null and not "puck.world.definition.v1" and not "puck.creation.v1") {
             return null;
         }
         var current = ((Cursor?)((document.Schema == "puck.creation.v1") ? m_creation : new Cursor(Node: m_schema.Root, Root: m_schema.Root)));

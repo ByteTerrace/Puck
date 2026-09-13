@@ -67,7 +67,7 @@ public sealed class MachineExtensionCatalogLawTests {
 
     [Fact]
     public void AnEmptyHostCannotPrepareAnEngineFromAnotherCatalog() {
-        var candidate = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [new WorldMachine("cabinet", "gaming-brick", JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = "fast" }))] };
+        var candidate = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [new WorldMachine("cabinet", "gaming-brick", JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast" }))] };
         using var empty = new WorldMachineHost([], new WorldMachineCatalog([]));
         using var installed = new WorldMachineHost([], TestHookInstaller.CreateMachineCatalog());
 
@@ -80,7 +80,7 @@ public sealed class MachineExtensionCatalogLawTests {
 
     [Fact]
     public void OfflineChecksReportDeferralAndAdmissionUsesOnlyTheSuppliedCatalog() {
-        var candidate = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [new WorldMachine("cabinet", "gaming-brick", JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = "fast" }))] };
+        var candidate = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [new WorldMachine("cabinet", "gaming-brick", JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast" }))] };
         var errors = new List<string>();
         var deferred = new List<string>();
         Assert.True(WorldDefinitionValidator.TryValidateLocally(candidate, machines: null, errors, deferred, out _));

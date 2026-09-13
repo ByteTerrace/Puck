@@ -87,7 +87,7 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachine>? MachinesRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
-    public const string SchemaVersion = "puck.world.def.v1";
+    public const string SchemaVersion = "puck.world.definition.v1";
     /// <summary>The rate a world with no <see cref="Simulation"/> section runs at. Distinct from the resident,
     /// non-stepping rate, which a world reaches only by authoring <c>simulation: {"rateHz": 0}</c> explicitly. See
     /// <see cref="SimulationRateHz"/>.</summary>

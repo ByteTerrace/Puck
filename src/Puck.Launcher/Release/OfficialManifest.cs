@@ -160,7 +160,7 @@ public sealed record OfficialManifest(
     JsonNode? Signature
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.official.v1";
+    public const string CurrentSchema = "puck.official.manifest.v1";
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip. Null when the document carries none.
     /// A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
@@ -204,9 +204,9 @@ public static class OfficialAssetFamilies {
     public const string Synth = "synth";
     /// <summary>Reserved — no row type declares this family today.</summary>
     public const string Font = "font";
-    /// <summary>A <c>WorldPatch</c> row (<c>puck.synth.v1</c>).</summary>
+    /// <summary>A <c>WorldPatch</c> row (<c>puck.synthesizer-patch.v1</c>).</summary>
     public const string Patch = "patch";
-    /// <summary>A <c>WorldTune</c> row (<c>puck.audio.v1</c>).</summary>
+    /// <summary>A <c>WorldTune</c> row (<c>puck.tune.v1</c>).</summary>
     public const string Tune = "tune";
 
     /// <summary>Every recognized family.</summary>

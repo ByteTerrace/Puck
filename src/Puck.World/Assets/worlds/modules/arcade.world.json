@@ -987,7 +987,7 @@
       "name": "cgb-screen",
       "engine": "gaming-brick",
       "configuration": {
-        "schema": "puck.gaming-brick.config.v1",
+        "schema": "puck.gaming-brick.configuration.v1",
         "model": "cgb",
         "content": {
           "path": "../../cartridges/hgb-mirror.cgb.cartridge.json"
@@ -1009,7 +1009,7 @@
       "name": "handheld-screen",
       "engine": "gaming-brick",
       "configuration": {
-        "schema": "puck.gaming-brick.config.v1",
+        "schema": "puck.gaming-brick.configuration.v1",
         "model": "cgb",
         "content": {
           "path": "../../cartridges/hgb-mirror.cgb.cartridge.json"

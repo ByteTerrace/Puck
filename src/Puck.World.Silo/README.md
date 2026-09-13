@@ -6,11 +6,11 @@ never rides the Orleans wire: cross-instance effects flow through the same
 thread `Puck.Launcher.HeadlessTickHostedService` pumps.
 
 Run: `dotnet run --project src/Puck.World.Silo -c Release -- --silo <path>`,
-where `<path>` names a `puck.silo.def.v1` document (`WorldSiloDefinition`,
+where `<path>` names a `puck.silo.configuration.v1` document (`WorldSiloDefinition`,
 `Puck.World.Schema`)—the `worlds[]` rows this silo may activate, its
 declared door budget, checkpoint/journal/definition store target, state
 directory, and clustering. The generated schema is
-`Assets/puck.silo.def.v1.schema.json`.
+`Assets/puck.silo.configuration.v1.schema.json`.
 
 Optional host services are supplied by an outer composition through
 `WorldSiloApplication.RunAsync`. The silo exposes fixed-row Console sessions as
@@ -55,6 +55,14 @@ their published definitions, and checkpointed. It also checks ongoing simulation
 progress, checkpoint age, journal failures and backlog, and pending release saves.
 `GET /livez` checks simulation progress independently of storage health, so a
 storage outage does not trigger VM replacement. Both refuse during retirement.
+Managed documents may add `release` with a deployment `group`, its private-store
+`owner`, and an exact `expectedRelease`. Such a host restores candidates behind
+the durable group barrier: route registration, listeners, console sessions,
+simulation steps, transfers, and federation effects remain closed until the
+explicit all-row publication succeeds. Loopback-only `GET /private-healthz`
+reports candidate persistence health without opening admission. A managed
+candidate in an uncommitted operation remains available for private
+verification; it is not ready for public traffic.
 `GET /livez/azure` reports the same liveness as Azure's v2 Application Health
 JSON contract, returning HTTP 200 with `Healthy` or `Unhealthy`. The generic
 `/livez` retains its HTTP 200/503 contract.

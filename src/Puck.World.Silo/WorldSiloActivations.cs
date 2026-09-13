@@ -31,10 +31,18 @@ internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrai
                     throw new InvalidOperationException($"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
                 }
             }
-            foreach (var world in definition.Worlds.Where(static row => row.Pinned)) {
-                await silo.ReloadAsync(new(world.Owner, world.World), stoppingToken);
+            if (definition.Release is null) {
+                foreach (var world in definition.Worlds.Where(static row => row.Pinned)) {
+                    await silo.ReloadAsync(new(world.Owner, world.World), stoppingToken);
+                }
             }
+            // Private health describes the fully loaded candidate before the group barrier opens public ingress.
             silo.Ready = true;
+            var publication = await silo.PublishManagedReleaseAdmissionAsync(stoppingToken);
+            if (publication == WorldReleaseAdmissionPublication.Refused) {
+                Environment.ExitCode = 1;
+                throw new InvalidOperationException("Managed release admission could not be published after private candidate verification.");
+            }
         } catch (Exception) when (!stoppingToken.IsCancellationRequested) {
             Environment.ExitCode = 1;
             throw;

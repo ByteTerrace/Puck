@@ -53,6 +53,14 @@ internal sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplica
 
                 context.Response.StatusCode = ((reason.Length == 0) ? 200 : 503);
                 await context.Response.WriteAsync(((reason.Length == 0) ? "ready" : reason), context.RequestAborted);
+            } else if ((context.Request.Method == "GET") && (context.Request.Path == "/private-healthz") && (context.Connection.RemoteIpAddress is { } privateAddress) && IPAddress.IsLoopback(address: privateAddress)) {
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: context.RequestAborted);
+
+                deadline.CancelAfter(delay: TimeSpan.FromSeconds(m_options.ProgressTimeoutSeconds));
+                var reason = await silo.CheckPrivateHealthAsync(cancellationToken: deadline.Token);
+
+                context.Response.StatusCode = ((reason.Length == 0) ? 200 : 503);
+                await context.Response.WriteAsync(((reason.Length == 0) ? "private-ready" : reason), context.RequestAborted);
             } else if ((context.Request.Method == "GET") && (context.Request.Path == "/livez")) {
                 context.Response.StatusCode = (silo.Live ? 200 : 503);
             } else if ((context.Request.Method == "GET") && WorldSiloExtensions.TryGetHealthCheck(path: context.Request.Path, handler: out var healthHandler) && (healthHandler is not null)) {

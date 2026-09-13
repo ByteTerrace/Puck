@@ -20,6 +20,8 @@ public sealed record WorldReleaseManifest {
     [JsonPropertyName("engineImageDigest")] public required string EngineImageDigest { get; init; }
     /// <summary>Canonical composed world definition pins keyed by stable world identity.</summary>
     [JsonPropertyName("definitions")] public IReadOnlyDictionary<string, string> Definitions { get; init; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
+    /// <summary>Package-relative source paths for definitions, kept separate from stable world identities.</summary>
+    [JsonPropertyName("definitionFiles")] public IReadOnlyDictionary<string, string> DefinitionFiles { get; init; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
     /// <summary>Required release artifact pins keyed by their package-relative path.</summary>
     [JsonPropertyName("artifacts")] public IReadOnlyDictionary<string, string> Artifacts { get; init; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
     /// <summary>Persistence encoding contract shared by this release pair.</summary>
@@ -51,30 +53,108 @@ public sealed record WorldReleaseManifest {
     public static bool TryVerify(WorldReleaseManifest manifest, string packageDirectory, out string reason) {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(packageDirectory);
-        if (!string.Equals(manifest.Schema, CurrentSchema, StringComparison.Ordinal)) { reason = $"unsupported release manifest schema '{manifest.Schema}'"; return false; }
-        if (string.IsNullOrWhiteSpace(manifest.Label) || string.IsNullOrWhiteSpace(manifest.SourceRevision)) { reason = "release label and source revision are required"; return false; }
-        if (!IsImageDigest(manifest.EngineImageDigest)) { reason = "engine image must be an immutable sha256 digest"; return false; }
-        if (string.IsNullOrWhiteSpace(manifest.PersistenceContract) || string.IsNullOrWhiteSpace(manifest.PeerProtocolContract)) { reason = "persistence and peer protocol contracts are required"; return false; }
-        foreach (var pair in manifest.Definitions.Concat(manifest.Artifacts)) {
-            if (string.IsNullOrWhiteSpace(pair.Key) || Path.IsPathRooted(pair.Key) || pair.Key.Contains("..", StringComparison.Ordinal)) { reason = $"release artifact path '{pair.Key}' is not package-relative"; return false; }
-            if (!IsFullHash(pair.Value)) { reason = $"release artifact '{pair.Key}' does not carry a full sha256 pin"; return false; }
-            var path = Path.GetFullPath(Path.Combine(packageDirectory, pair.Key.Replace('/', Path.DirectorySeparatorChar)));
-            if (!path.StartsWith(Path.GetFullPath(packageDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(path)) { reason = $"release artifact '{pair.Key}' is missing"; return false; }
-            var actual = "sha256/" + Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
-            if (!string.Equals(actual, pair.Value, StringComparison.Ordinal)) { reason = $"release artifact '{pair.Key}' hashes to '{actual}', expected '{pair.Value}'"; return false; }
+        if (!string.Equals(manifest.Schema, CurrentSchema, StringComparison.Ordinal)) {
+            reason = $"unsupported release manifest schema '{manifest.Schema}'";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(manifest.Label) || string.IsNullOrWhiteSpace(manifest.SourceRevision)) {
+            reason = "release label and source revision are required";
+            return false;
+        }
+        if (!IsImageDigest(manifest.EngineImageDigest)) {
+            reason = "engine image must be an immutable sha256 digest";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(manifest.PersistenceContract) || string.IsNullOrWhiteSpace(manifest.PeerProtocolContract)) {
+            reason = "persistence and peer protocol contracts are required";
+            return false;
+        }
+        if (manifest.Definitions is null || manifest.DefinitionFiles is null || manifest.Artifacts is null) {
+            reason = "release manifest inventories must be objects";
+            return false;
+        }
+        if (manifest.Definitions.Count == 0) {
+            reason = "release manifest must contain at least one composed world definition";
+            return false;
+        }
+        if (!manifest.Definitions.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(manifest.DefinitionFiles.Keys)) {
+            reason = "release definitionFiles inventory must exactly match definitions inventory";
+            return false;
+        }
+        foreach (var pair in manifest.Definitions.OrderBy(static pair => pair.Key, StringComparer.Ordinal)) {
+            if (string.IsNullOrWhiteSpace(pair.Key) || !IsFullHash(pair.Value)) {
+                reason = $"release definition '{pair.Key}' has an invalid stable identity or hash";
+                return false;
+            }
+            if (!manifest.DefinitionFiles.TryGetValue(pair.Key, out var definitionPath)) {
+                reason = $"release definition '{pair.Key}' has no package path";
+                return false;
+            }
+            if (!VerifyFile(packageDirectory, definitionPath, pair.Value, "definition", out reason)) {
+                return false;
+            }
+        }
+        foreach (var pair in manifest.Artifacts.OrderBy(static pair => pair.Key, StringComparer.Ordinal)) {
+            if (!VerifyFile(packageDirectory, pair.Key, pair.Value, "artifact", out reason)) {
+                return false;
+            }
         }
         reason = string.Empty;
         return true;
     }
 
-    private static bool IsImageDigest(string value) => value.StartsWith("sha256:", StringComparison.Ordinal) && value.Length == 71 && value[7..].All(Uri.IsHexDigit);
-    private static bool IsFullHash(string value) => value.StartsWith("sha256/", StringComparison.Ordinal) && value.Length == 71 && value[7..].All(Uri.IsHexDigit);
+    private static bool VerifyFile(string packageDirectory, string relativeName, string expected, string kind, out string reason) {
+        if (string.IsNullOrWhiteSpace(relativeName) || Path.IsPathRooted(relativeName) || relativeName.Contains('\\') || relativeName.Contains("..", StringComparison.Ordinal)) {
+            reason = $"release {kind} path '{relativeName}' is not package-relative";
+            return false;
+        }
+        if (!IsFullHash(expected)) {
+            reason = $"release {kind} '{relativeName}' does not carry a full sha256 pin";
+            return false;
+        }
+        var path = Path.GetFullPath(Path.Combine(packageDirectory, relativeName.Replace('/', Path.DirectorySeparatorChar)));
+        var packageRoot = Path.GetFullPath(packageDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(packageRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(path)) {
+            reason = $"release {kind} '{relativeName}' is missing";
+            return false;
+        }
+        if (HasReparsePoint(packageDirectory, path)) {
+            reason = $"release {kind} '{relativeName}' uses a symlink or reparse point";
+            return false;
+        }
+        var actual = "sha256/" + Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
+        if (!string.Equals(actual, expected, StringComparison.Ordinal)) {
+            reason = $"release {kind} '{relativeName}' hashes to '{actual}', expected '{expected}'";
+            return false;
+        }
+        reason = string.Empty;
+        return true;
+    }
+
+    private static bool HasReparsePoint(string packageDirectory, string path) {
+        var root = Path.GetFullPath(packageDirectory).TrimEnd(Path.DirectorySeparatorChar);
+        var current = path;
+        while (current.Length >= root.Length) {
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) {
+                return true;
+            }
+            if (string.Equals(current, root, StringComparison.OrdinalIgnoreCase)) {
+                break;
+            }
+            current = Path.GetDirectoryName(current) ?? root;
+        }
+        return false;
+    }
+
+    private static bool IsImageDigest(string? value) => value is not null && value.StartsWith("sha256:", StringComparison.Ordinal) && value.Length == 71 && value[7..].All(Uri.IsHexDigit);
+    private static bool IsFullHash(string? value) => value is not null && value.StartsWith("sha256/", StringComparison.Ordinal) && value.Length == 71 && value[7..].All(Uri.IsHexDigit);
 
     private sealed class JsonObjectBuilder(WorldReleaseManifest manifest) {
         public string ToJson() {
             var root = new SortedDictionary<string, object?>(StringComparer.Ordinal) {
-                ["artifacts"] = new SortedDictionary<string, string>(manifest.Artifacts, StringComparer.Ordinal),
-                ["definitions"] = new SortedDictionary<string, string>(manifest.Definitions, StringComparer.Ordinal),
+                ["artifacts"] = manifest.Artifacts.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal),
+                ["definitions"] = manifest.Definitions.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal),
+                ["definitionFiles"] = manifest.DefinitionFiles.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal),
                 ["engineImageDigest"] = manifest.EngineImageDigest,
                 ["label"] = manifest.Label,
                 ["peerProtocolContract"] = manifest.PeerProtocolContract,
@@ -87,17 +167,36 @@ public sealed record WorldReleaseManifest {
     }
 }
 
-/// <summary>Compatibility policy for the first official release workflow.</summary>
+/// <summary>Structural compatibility checks for the first official release workflow. Passing this check is not a
+/// qualification claim: packaged cross-release exercise evidence is still required before deployment.</summary>
 public static class WorldReleaseCompatibility {
-    /// <summary>Refuses a pair that cannot share its authoritative state encoding and peer protocol.</summary>
-    public static bool TryQualify(WorldReleaseManifest previous, WorldReleaseManifest candidate, out string reason) {
+    /// <summary>Checks structural prerequisites only. This does not qualify a deployment or prove state preservation.</summary>
+    public static bool TryCheckStructuralCompatibility(WorldReleaseManifest previous, WorldReleaseManifest candidate, out string reason) {
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(candidate);
-        if (string.Equals(previous.Identity, candidate.Identity, StringComparison.Ordinal)) { reason = "release is identical to the active release"; return false; }
-        if (!string.Equals(previous.PersistenceContract, candidate.PersistenceContract, StringComparison.Ordinal)) { reason = "persistence contract is not qualified in both directions"; return false; }
-        if (!string.Equals(previous.PeerProtocolContract, candidate.PeerProtocolContract, StringComparison.Ordinal)) { reason = "peer protocol contract is not qualified in both directions"; return false; }
-        if (previous.Definitions.Keys.Except(candidate.Definitions.Keys, StringComparer.Ordinal).Any() || candidate.Definitions.Keys.Except(previous.Definitions.Keys, StringComparer.Ordinal).Any()) { reason = "release definition inventory changes are not admitted"; return false; }
+        if (string.Equals(previous.Identity, candidate.Identity, StringComparison.Ordinal)) {
+            reason = "release is identical to the active release";
+            return false;
+        }
+        if (!string.Equals(previous.PersistenceContract, candidate.PersistenceContract, StringComparison.Ordinal)) {
+            reason = "persistence contract differs between the release pair";
+            return false;
+        }
+        if (!string.Equals(previous.PeerProtocolContract, candidate.PeerProtocolContract, StringComparison.Ordinal)) {
+            reason = "peer protocol contract differs between the release pair";
+            return false;
+        }
+        if (previous.Definitions.Keys.Except(candidate.Definitions.Keys, StringComparer.Ordinal).Any() || candidate.Definitions.Keys.Except(previous.Definitions.Keys, StringComparer.Ordinal).Any()) {
+            reason = "release definition inventory changes are not structurally compatible";
+            return false;
+        }
+        if (!SameInventory(previous.DefinitionFiles, candidate.DefinitionFiles) || !SameInventory(previous.Artifacts, candidate.Artifacts)) {
+            reason = "release artifact inventory or pins differ; engine-only transitions cannot change packaged dependencies";
+            return false;
+        }
         reason = string.Empty;
         return true;
     }
+
+    private static bool SameInventory(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) => left.Count == right.Count && left.All(item => right.TryGetValue(item.Key, out var value) && string.Equals(item.Value, value, StringComparison.Ordinal));
 }

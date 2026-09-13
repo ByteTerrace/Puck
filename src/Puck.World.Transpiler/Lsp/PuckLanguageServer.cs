@@ -247,7 +247,7 @@ public sealed class PuckLanguageServer {
         var items = new JsonArray();
 
         // 1. Directives & Keywords
-        AddCompletion(items, "schema", "schema: \"puck.world.def.v1\"", "Directive: Schema declaration", 14);
+        AddCompletion(items, "schema", "schema: \"puck.world.definition.v1\"", "Directive: Schema declaration", 14);
         AddCompletion(items, "basis", "basis: \"worlds/base.puck\"", "Directive: Base world inheritance", 14);
         AddCompletion(items, "documentId", "documentId: \"my-world-id\"", "Directive: Document ID tag", 14);
         AddCompletion(items, "let", "let ${1:name} = ${2:value}", "Keyword: Declare constant", 14);
@@ -415,7 +415,7 @@ public sealed class PuckLanguageServer {
     }
 
     private static string? GetDocumentationForWord(string word) => word switch {
-        "schema" => "**`schema` Directive**\n\nDeclares the document schema family tag (e.g. `puck.world.def.v1`, `puck.creation.v1`). Enables semantic validation and schema conformance checks.",
+        "schema" => "**`schema` Directive**\n\nDeclares the document schema family tag (e.g. `puck.world.definition.v1`, `puck.creation.v1`). Enables semantic validation and schema conformance checks.",
         "basis" => "**`basis` Directive**\n\nSpecifies the base world document path inherited by this world definition. Properties in this document override or compose over the basis.",
         "documentId" => "**`documentId` Directive**\n\nUnique string identifier for this world definition document.",
         "let" => "**`let` Declaration**\n\nDeclares a compile-time evaluated constant or alias (e.g. `let tickRate = 0.25s`, `let tableColor = #1b4d3e`).",

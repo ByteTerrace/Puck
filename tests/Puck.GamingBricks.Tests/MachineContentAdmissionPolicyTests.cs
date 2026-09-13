@@ -37,10 +37,10 @@ public sealed class MachineContentAdmissionPolicyTests {
     public void FormatComparisonIsOrdinalAndMixedFormatsAreIndependent() {
         var policy = new MachineContentAdmissionPolicy(
             MachineContentAdmissionMode.AuthoredFormatsOnly,
-            trustedSourceFormats: ["puck.cartridge.v1", "puck.audio.v1"]);
+            trustedSourceFormats: ["puck.cartridge.v1", "puck.tune.v1"]);
 
         Assert.True(policy.Evaluate(Request(format: "puck.cartridge.v1")).Allowed);
-        Assert.True(policy.Evaluate(Request(format: "puck.audio.v1")).Allowed);
+        Assert.True(policy.Evaluate(Request(format: "puck.tune.v1")).Allowed);
         Assert.False(policy.Evaluate(Request(format: "PUCK.CARTRIDGE.V1")).Allowed);
         Assert.Equal(
             expected: MachineContentAdmissionPolicy.UntrustedFormatCode,

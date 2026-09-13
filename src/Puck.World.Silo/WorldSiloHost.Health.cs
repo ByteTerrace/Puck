@@ -11,8 +11,14 @@ public sealed partial class WorldSiloHost {
     /// <summary>Reads persistence health at a pump boundary. An unresponsive pump fails within the caller's deadline.</summary>
     /// <param name="cancellationToken">Bounds waiting for the simulation thread.</param>
     /// <returns>An empty string when ready, otherwise the reason readiness is withheld.</returns>
-    public async Task<string> CheckHealthAsync(CancellationToken cancellationToken) {
+    public Task<string> CheckHealthAsync(CancellationToken cancellationToken) => CheckHealthCoreAsync(requireAdmission: true, cancellationToken);
+
+    /// <summary>Checks candidate persistence and pump health without treating private verification as admission.</summary>
+    public Task<string> CheckPrivateHealthAsync(CancellationToken cancellationToken) => CheckHealthCoreAsync(requireAdmission: false, cancellationToken);
+
+    private async Task<string> CheckHealthCoreAsync(bool requireAdmission, CancellationToken cancellationToken) {
         if (!Live) { return (IsDraining ? "draining" : "simulation is not progressing"); }
+        if (requireAdmission && !ReleaseAdmissionOpen) { return "release admission is closed"; }
         if (!m_pendingReleases.IsEmpty) { return "world release is not durably committed"; }
         var completion = new TaskCompletionSource<string>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 

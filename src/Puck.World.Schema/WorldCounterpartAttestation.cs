@@ -108,7 +108,7 @@ public sealed record WorldAttestedEdge(SafeName Name, string Counterpart, string
 /// <param name="Overlap">The neighbour's own overlap terms.</param>
 public sealed record WorldCounterpartAttestation(string Document, IReadOnlyList<WorldAttestedEdge> Edges, WorldOverlapTerms Overlap) {
     /// <summary>The document schema tag a signed attestation payload carries.</summary>
-    public const string SchemaVersion = "puck.world.counterpart.v1";
+    public const string SchemaVersion = "puck.world.counterpart-attestation.v1";
 
     /// <summary>Gets the schema tag.</summary>
     public string Schema { get; init; } = SchemaVersion;

@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.shader.v1",
+  "$schema": "puck.shader.manifest.v1",
   "name": "push-constant-layout",
   "description": "The push-constant packing-rule fixture.",
   "stages": { "compute": "push-constant-layout.comp" },

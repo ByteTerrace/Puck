@@ -61,9 +61,9 @@ public sealed class MachineCartridgeLawTests {
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
         var configuration = engine == CgbEngine
-            ? JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.config.v1", model = "cgb", boot = options?.Contains("fast", StringComparison.Ordinal) == true ? "fast" : "cold", content = new { path = contentPath } })
+            ? JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = options?.Contains("fast", StringComparison.Ordinal) == true ? "fast" : "cold", content = new { path = contentPath } })
             : engine == "tune-instrument"
-                ? JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.config.v1", content = new { path = contentPath } })
+                ? JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.configuration.v1", content = new { path = contentPath } })
                 : JsonSerializer.SerializeToElement(new { schema = "puck.advanced-gaming-brick.config.v1", boot = options?.Contains("fast", StringComparison.Ordinal) == true ? "fast" : "cold", content = new { path = contentPath } });
 
         return document with {
