@@ -11,9 +11,9 @@ public sealed partial class SdfProgramBuilder {
     /// is bound (the world-lit render) and the conservative extruded cell box everywhere else. Most callers use
     /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float, TextLayoutOptions, int?, TextLayoutResult?)"/>, which
     /// bakes these arguments from a laid-out string; this primitive is the one-cell seam.
-    /// <para>The cell must map with uniform scale — <paramref name="halfWidth"/>/<paramref name="halfHeight"/>
-    /// proportional to the atlas cell's texel width/height — for the field to stay 1-Lipschitz (factor 1, no step
-    /// clamp); a stretched cell is the caller's risk, exactly as <see cref="Repeat"/>'s in-cell rule is. The atlas UVs
+    /// <para>The cell's sampled alpha field is corrected using the atlas's measured derivative bounds and the
+    /// packed UV mapping, including stretched cells. Metadata-only atlases use the worst-case RGBA8 bound.
+    /// The correction preserves the reconstructed zero set, not the exact source outline. The atlas UVs
     /// are unorm2x16-packed host-side into two lanes so the ISA-wide <paramref name="smooth"/> radius keeps its lane
     /// (KEEP IN SYNC with SDF_SHAPE_GLYPH / sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).</para></summary>
     /// <param name="uvBottomLeft">The atlas UV (in <c>[0, 1]²</c>) at the cell's local <c>(-halfWidth, -halfHeight)</c> corner.</param>
@@ -26,15 +26,18 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material id the letter shades with.</param>
     /// <param name="blend">The blend against the field accumulated so far (Subtraction engraves).</param>
     /// <param name="smooth">The smooth/chamfer radius (meaningful only for a smooth/chamfer <paramref name="blend"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException">A UV or cell dimension is not finite,
+    /// <param name="atlas">The atlas whose pixels will be uploaded; its dimensions and alpha derivatives bound sampling.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="atlas"/> is null.</exception>
+    /// <exception cref="ArgumentException">Atlas image dimensions disagree with its metadata, or the sampling
+    /// correction cannot be represented.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A UV or cell dimension is not finite, a cell half-extent is not positive,
     /// <paramref name="distanceScale"/> is not finite and non-negative, <paramref name="material"/> is negative,
     /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
     /// finite.</exception>
-    public SdfProgramBuilder Glyph(Vector2 uvBottomLeft, Vector2 uvTopRight, float halfWidth, float halfHeight, float extrudeHalfDepth, float distanceScale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        // PackUv clamps the UVs into [0, 1] and the half-extents/extrusion take MathF.Abs / MathF.Max(0), so only
-        // finiteness is refused there. distanceScale is the ONE lane packed raw: the decoder gates the atlas tap on
-        // `dQuad < 0.5 * distanceScale` and then converts with `(0.5 - encoded) * distanceScale`, so a negative scale
-        // inverts inside and outside.
+    public SdfProgramBuilder Glyph(FontAtlas atlas, Vector2 uvBottomLeft, Vector2 uvTopRight, float halfWidth, float halfHeight, float extrudeHalfDepth, float distanceScale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        ArgumentNullException.ThrowIfNull(atlas);
+        // PackUv clamps UVs into [0, 1]. Positive cell extents keep the derivative mapping defined;
+        // nonnegative distanceScale preserves the field's inside/outside convention.
         RequireFinite(
             value: uvBottomLeft,
             paramName: nameof(uvBottomLeft),
@@ -45,12 +48,12 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(uvTopRight),
             subject: "A glyph atlas UV"
         );
-        RequireFinite(
+        RequirePositive(
             value: halfWidth,
             paramName: nameof(halfWidth),
             subject: "A glyph cell half-width"
         );
-        RequireFinite(
+        RequirePositive(
             value: halfHeight,
             paramName: nameof(halfHeight),
             subject: "A glyph cell half-height"
@@ -70,6 +73,7 @@ public sealed partial class SdfProgramBuilder {
             blend: blend,
             derived1: MathF.Abs(x: halfWidth),   // Data1.y = halfWidth
             derived2: MathF.Abs(x: halfHeight),  // Data1.z = halfHeight
+            derived3: GlyphSamplingCorrection(atlas, uvBottomLeft, uvTopRight, halfWidth, halfHeight, distanceScale),
             dimensions: new Vector4(
                 w: MathF.Max(
                     x: 0f,
@@ -83,6 +87,28 @@ public sealed partial class SdfProgramBuilder {
             shape: SdfShapeType.Glyph,
             smooth: smooth
         );
+    }
+
+    private static float GlyphSamplingCorrection(FontAtlas atlas, Vector2 uvMin, Vector2 uvMax, float halfWidth, float halfHeight, float distanceScale) {
+        if (atlas.ImageData is { } image && (image.Width != atlas.Width || image.Height != atlas.Height)) {
+            throw new ArgumentException("Glyph atlas pixels must match its declared dimensions.", nameof(atlas));
+        }
+        var gradient = atlas.ImageData?.AlphaGradientBound ?? Vector2.One;
+        var first = BitConverter.SingleToUInt32Bits(PackUv(uvMin));
+        var last = BitConverter.SingleToUInt32Bits(PackUv(uvMax));
+        // Decode the actual unorm16 endpoints. Two float ULPs at one cover their shader decode/subtract rounding;
+        // the final relative guard covers the mapping arithmetic. Round the reciprocal downward as well.
+        const double decodeSlack = 2d / 8388608;
+        var spanX = Math.Abs((long)(first & 65535) - (last & 65535)) / 65535d + decodeSlack;
+        var spanY = Math.Abs((long)(first >> 16) - (last >> 16)) / 65535d + decodeSlack;
+        var x = gradient.X * (double)atlas.Width * spanX * distanceScale / (2d * halfWidth);
+        var y = gradient.Y * (double)atlas.Height * spanY * distanceScale / (2d * halfHeight);
+        var bound = Math.Max(1d, Math.Sqrt(x * x + y * y) * 1.00001d);
+        var correction = MathF.BitDecrement((float)(1d / bound));
+        if (!float.IsFinite(correction) || correction <= 0) {
+            throw new ArgumentException("The glyph sampling scale cannot be represented safely.", nameof(atlas));
+        }
+        return correction;
     }
     /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
     /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at
@@ -150,8 +176,7 @@ public sealed partial class SdfProgramBuilder {
             subject: "A text extrude half-depth"
         );
 
-        // Uniform world-per-texel (atlas.Size = pixels per em): every glyph derives BOTH half-extents from it, so the
-        // sampled field stays 1-Lipschitz (factor 1). distanceScale rides the same factor.
+        // Uniform world-per-texel keeps text proportions; Glyph separately bounds the filtered alpha field.
         var worldPerTexel = (worldEmHeight / atlas.Size);
         var distanceScale = (atlas.DistanceRange * worldPerTexel);
         // Local (right, up, forward=right×up) → world: the rotation whose rows are the basis (System.Numerics'
@@ -233,6 +258,7 @@ public sealed partial class SdfProgramBuilder {
                 .Translate(offset: worldCentre)
                 .Rotate(rotation: orientation)
                 .Glyph(
+                atlas: atlas,
                 blend: blend,
                 distanceScale: distanceScale,
                 extrudeHalfDepth: extrudeHalfDepth,

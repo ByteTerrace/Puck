@@ -50,7 +50,7 @@ before drawing performance conclusions from this deliberately expanded prototype
 
 [moth-courtyard.puck](moth-courtyard.puck) is the canonical source;
 [moth-courtyard.world.json](moth-courtyard.world.json) is its compiled runtime
-output. Edit the source and regenerate the JSON. Do not decompile over the
+output, ignored by Git and generated during the build. Edit the source and regenerate the JSON. Do not decompile over the
 source again: that would discard its constants and collection expressions.
 
 ```powershell

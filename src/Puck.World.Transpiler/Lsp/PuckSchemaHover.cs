@@ -73,6 +73,9 @@ internal sealed class PuckSchemaHover {
                 case CallExpressionNode call:
                     current = Operation(context: current, name: call.Name);
                     owner = call.Name;
+                    if ((word == call.Name) && (offset < (call.Offset + call.Name.Length))) {
+                        return Card(cursor: current, enumValue: null, name: call.Name);
+                    }
                     break;
                 case ArgumentNode argument:
                     current = ((argument.Name is null) ? null : Property(cursor: current, name: argument.Name));

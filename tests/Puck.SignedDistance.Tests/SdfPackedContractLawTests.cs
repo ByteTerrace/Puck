@@ -436,7 +436,7 @@ public sealed class SdfPackedContractLawTests {
                 z: 0.1f
             ),
             Data1 = new Vector4(
-                w: 0f,
+                w: 1f,
                 x: 0f,
                 y: 1f,
                 z: 1f

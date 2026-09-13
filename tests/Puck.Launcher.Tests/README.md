@@ -6,6 +6,10 @@ console sessions, release manifests and signatures, content staging, update
 application, rollout selection, and the
 [stub's](../../src/Puck.Launcher.Stub/README.md) rollback policy.
 
+`OverlayGlyphPackTests` also checks the fixed-grid text consumer: equal-sized
+cells pack unchanged, while variable-size, fractional, and out-of-image cells
+are refused, including appended glyphs.
+
 ## Verification
 
 From the repository root, run in PowerShell or another shell:

@@ -66,10 +66,10 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Uploads the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples as a
     /// distance-level field, replacing any previously set atlas. Static: unlike a screen source (an external per-frame
     /// image-view handle), this copies the CPU pixels into a device image once and holds the sampleable view for the
-    /// engine's lifetime; the next produced frame binds it. The atlas must carry the true single-channel signed
-    /// distance in the alpha channel (every Puck source does: the managed MTSDF generator computes it exactly, the
-    /// coverage-conversion fallback <c>Puck.Text.SdfCoverageAtlas</c> replicates its single channel into alpha, and
-    /// an imported MTSDF atlas carries it by construction). Passing an empty
+    /// engine's lifetime; the next produced frame binds it. The atlas must carry single-channel signed-distance
+    /// samples in alpha, as generated and imported MTSDF atlases do. Quantization, outline approximation, and
+    /// filtering mean these samples are not an exact-distance guarantee. Supply the same pixels and dimensions
+    /// used to compute each Glyph instruction's sampling correction. Passing an empty
     /// <paramref name="rgbaPixels"/> clears the atlas back to the neutral 1×1 filler.</summary>
     /// <param name="rgbaPixels">The tightly packed, row-major, top-down RGBA atlas pixels
     /// (<paramref name="width"/> × <paramref name="height"/> × 4 bytes), or empty to clear.</param>

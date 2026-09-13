@@ -8,7 +8,13 @@ namespace Puck.Cli.FontAtlas;
 internal static class FontAtlasCommand {
     public static Command Create() {
         var charactersOption = new Option<string>(name: "--characters") { DefaultValueFactory = static _ => string.Empty, Description = "Additional non-whitespace Unicode scalars to include." };
-        var columnsOption = new Option<int?>(name: "--columns") { Description = "Preferred grid columns (default: 16)." };
+        var columnsOption = new Option<int?>(name: "--columns") { Description = "Preferred glyphs per shelf row (default: 16)." };
+        var defaults = new FontAtlasGenerationLimits();
+        var maxWorkOption = new Option<long>("--max-work") { DefaultValueFactory = _ => defaults.MaxWork, Description = "Whole-job processing work units." };
+        var maxGeometryOption = new Option<int>("--max-geometry") { DefaultValueFactory = _ => defaults.MaxGeometryElements, Description = "Whole-job geometry elements, including composite copies and boundaries." };
+        var maxPairsOption = new Option<int>("--max-kerning-pairs") { DefaultValueFactory = _ => defaults.MaxKerningPairs, Description = "Kerning entries processed or emitted, including zero matches and Unicode aliases." };
+        var maxFontBytesOption = new Option<int>("--max-font-bytes") { DefaultValueFactory = _ => defaults.MaxFontBytes, Description = "Maximum source font bytes, checked before reading." };
+        var maxGlyphsOption = new Option<int>("--max-glyphs") { DefaultValueFactory = _ => defaults.MaxGlyphs, Description = "Maximum distinct mapped source glyphs." };
         var distanceRangeOption = new Option<float?>(name: "--distance-range") { Description = "Signed-distance band width in pixels (default: 8)." };
         var faceIndexOption = new Option<int?>(name: "--face-index") { Description = "Zero-based face in a TTC/OTC collection (default: 0)." };
         var fontArgument = new Argument<string>(name: "font-file") { Description = "The source font: a standalone OpenType font or a TTC/OTC collection." };
@@ -25,7 +31,7 @@ internal static class FontAtlasCommand {
             CFF, and CFF2 outlines in standalone OpenType fonts and TTC/OTC collections. It
             does not use an installed system font, native rasterizer, shaping engine, or Python.
 
-            Exit codes: 0 generated, 1 font or I/O failure.
+            Exit codes: 0 generated, 1 font or I/O failure, 130 cancelled.
             """, name: "font-atlas") {
             fontArgument,
             charactersOption,
@@ -34,6 +40,11 @@ internal static class FontAtlasCommand {
             faceIndexOption,
             maxDimensionOption,
             maxPixelsOption,
+            maxWorkOption,
+            maxGeometryOption,
+            maxPairsOption,
+            maxFontBytesOption,
+            maxGlyphsOption,
             outputOption,
             paddingOption,
             rangeOption,
@@ -45,7 +56,15 @@ internal static class FontAtlasCommand {
                 result.AddError(errorMessage: "--distance-range requires a finite decimal number.");
             }
         });
-        command.SetAction(action: parseResult => Run(
+        command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(Run(
+            cancellationToken: cancellationToken,
+            limits: new FontAtlasGenerationLimits {
+                MaxWork = parseResult.GetValue(maxWorkOption),
+                MaxGeometryElements = parseResult.GetValue(maxGeometryOption),
+                MaxKerningPairs = parseResult.GetValue(maxPairsOption),
+                MaxFontBytes = parseResult.GetValue(maxFontBytesOption),
+                MaxGlyphs = parseResult.GetValue(maxGlyphsOption)
+            },
             characters: parseResult.GetValue(option: charactersOption),
             columns: parseResult.GetValue(option: columnsOption),
             distanceRange: parseResult.GetValue(option: distanceRangeOption),
@@ -57,7 +76,7 @@ internal static class FontAtlasCommand {
             padding: parseResult.GetValue(option: paddingOption),
             ranges: (parseResult.GetValue(option: rangeOption) ?? []),
             size: parseResult.GetValue(option: sizeOption)
-        ));
+        )));
         return command;
     }
 
@@ -73,7 +92,9 @@ internal static class FontAtlasCommand {
         string? output,
         int? padding,
         string[] ranges,
-        int? size
+        int? size,
+        FontAtlasGenerationLimits limits,
+        CancellationToken cancellationToken
     ) {
         var fontPath = Path.GetFullPath(path: fontFile);
 
@@ -115,8 +136,17 @@ internal static class FontAtlasCommand {
         }
 
         try {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var stream = File.OpenRead(fontPath);
+            if (stream.Length > limits.MaxFontBytes) {
+                throw new ArgumentException("The supplied font exceeds the whole-job input byte limit.");
+            }
+            var fontBytes = new byte[checked((int)stream.Length)];
+            stream.ReadExactly(fontBytes);
             var atlas = new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
-                FontBytes = File.ReadAllBytes(path: fontPath),
+                FontBytes = fontBytes,
+                Limits = limits,
+                CancellationToken = cancellationToken,
                 FontIdentifier = fontPath,
                 ImageIdentifier = Path.ChangeExtension(extension: ".png", path: outputPath),
                 Options = options,
@@ -126,6 +156,9 @@ internal static class FontAtlasCommand {
             Console.Out.WriteLine(value: $"font-atlas: wrote {outputPath} and {Path.ChangeExtension(extension: ".png", path: outputPath)} ({atlas.Glyphs.Count} glyphs, {atlas.Width}x{atlas.Height}).");
 
             return 0;
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            Console.Error.WriteLine("font-atlas: cancelled.");
+            return 130;
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"font-atlas: {exception.Message}");
 

@@ -1,13 +1,13 @@
 # Puck.Text
 
 Puck.Text turns a font file into a queryable `FontAtlas`, lays a string out
-against it into positioned glyph quads, and hands a renderer the exact
-distance-field sampling math it needs to anti-alias edges at any size. It
+against it into positioned glyph quads, and hands a renderer the distance-field
+sampling math it needs to anti-alias edges at any size. It
 carries Puck's production in-process font path: TrueType quadratic and
 CFF/CFF2 cubic OpenType outlines are read in managed code and evaluated into a
-multi-channel true signed distance field (MTSDF), where the RGB channels
-reconstruct sharp corners by median and the alpha channel carries the exact
-marchable distance.
+multi-channel signed-distance representation (MTSDF), where the RGB channels
+reconstruct sharp corners by median. The encoded field is intended for the
+documented glyph bounds and sampling path; it is not an exact distance oracle.
 
 It carries no GPU or windowing concepts. All geometry is computed in a scaled
 *em space*, and mapping that to screen pixels is left to the caller. The
@@ -15,7 +15,7 @@ generator behind atlas production is an extension point rather than a fixed
 implementation, so an external tool can serve as an oracle or a third party
 can substitute another backend.
 
-## ✨ Key features
+## Key features
 
 - *One managed font reader:* `ManagedFontAtlasGenerator` reads quadratic
   `glyf` outlines (including composites) and CFF/CFF2 Type 2 cubic
@@ -36,10 +36,10 @@ can substitute another backend.
   replayable with no ambient system-font lookup.
 - *A content-addressed cache:* `FontAtlasSourceResolver` keys atlas reuse on
   the font's bytes and a normalized hash of the generation options, so the
-  same font referenced through different paths — or requested with equivalent
-  options — resolves to one shared `FontAtlas`.
+  same font referenced through different paths—or requested with equivalent
+  options—resolves to one shared `FontAtlas`.
 
-## 📐 Pipeline
+## Pipeline
 
 ```text
  font file ──► IFontAtlasSourceResolver ──► IFontAtlasGenerator ──► FontAtlas
@@ -51,17 +51,17 @@ can substitute another backend.
  per glyph ──► TextGlyphSampling.Create / MtsdfSampling ──► sampling params for the shader
 ```
 
-1. **Resolve** — `IFontAtlasSourceResolver.Resolve(fontPath, generationOptions, basePath)`
+1. **Resolve**—`IFontAtlasSourceResolver.Resolve(fontPath, generationOptions, basePath)`
    reads the font and produces (or returns a cached) `FontAtlas`.
-2. **Generate** — on a cache miss the resolver calls `ManagedFontAtlasGenerator`
+2. **Generate**—on a cache miss the resolver calls `ManagedFontAtlasGenerator`
    by default. The interface preserves a clean backend/oracle seam.
-3. **Lay out** — `TextLayout.Layout(atlas, text, scale, maxLineWidth?)` walks
+3. **Lay out**—`TextLayout.Layout(atlas, text, scale, maxLineWidth?)` walks
    the string and emits a `TextLayoutResult` of `TextGlyphPlacement`s.
-4. **Sample** — `TextGlyphSampling.Create(...)` / `MtsdfSampling` translate the
+4. **Sample**—`TextGlyphSampling.Create(...)` / `MtsdfSampling` translate the
    atlas's encoded distance band into the screen-pixel quantities a shader
    needs.
 
-## 🎨 Atlas kinds and coordinate conventions
+## Atlas kinds and coordinate conventions
 
 `FontAtlasKind` records how the image stores coverage, which determines how a
 shader must decode it:
@@ -87,7 +87,7 @@ first line's baseline sits at `y = 0` with each subsequent line stepping
 with no area (spaces, control glyphs) advance the pen but contribute no
 placement.
 
-## 🚀 Quick start
+## Quick start
 
 ```csharp
 using Puck.Assets;
@@ -132,11 +132,12 @@ word boundaries). The `TextLayoutOptions` overload adds block alignment
 multiplier while preserving the option-free overload's defaults.
 
 `ManagedFontAtlasGenerator` deliberately maps scalars directly and does not
-perform OpenType shaping, ligature substitution, bidirectional reordering, or
-script-specific positioning. CFF2 variable fonts are evaluated at their
-default design coordinates; authored variation-axis values are not yet part
-of the contract. Generated glyph rows retain their source glyph IDs, Unicode
-aliases share one raster cell, and the atlas model admits glyph-ID-only rows
+perform OpenType shaping (GSUB), ligature substitution, bidirectional
+reordering, script mark positioning, or fallback-chain selection. CFF2
+variable fonts are evaluated at their default design coordinates; authored
+variation-axis values are not yet part of the contract. WOFF, WOFF2, and
+color-font tables are not input formats. Generated glyph rows retain their
+source glyph IDs, Unicode aliases share one raster cell, and the atlas model admits glyph-ID-only rows
 with no direct scalar mapping. The current generator still includes only
 directly mapped glyphs; future GSUB-closure generation can add ligatures and
 contextual glyphs without another atlas-contract change. The atlas also
@@ -148,10 +149,10 @@ together; contextual positioning and lookup mark-filter semantics are not
 read. The deprecated CFF1 `seac` endchar form is diagnosed rather than
 composed.
 
-## 🔬 Distance-field sampling
+## Distance-field sampling
 
-A renderer needs the *screen pixel range* — the width of the encoded distance
-band in destination pixels — to set the anti-aliasing ramp.
+A renderer needs the *screen pixel range*—the width of the encoded distance
+band in destination pixels—to set the anti-aliasing ramp.
 `TextGlyphSampling.Create` bundles it all up:
 
 ```csharp
@@ -179,7 +180,7 @@ inert (`UnitRange == 0`, `ScreenPixelRange == 1`). Always route the
 `FontAtlasKind` through `MtsdfSampling.ExpectedMode` / `TextGlyphSampling.Create`
 rather than hard-coding a decode path.
 
-## 🖌️ Enrichment — markup, effects, per-glyph channels
+## Enrichment—markup, effects, per-glyph channels
 
 Enrichment is an optional layer that composes *with* `TextLayout`, never
 around it: an author marks text up, layout carries each glyph's effect onto
@@ -220,17 +221,17 @@ foreach (TextGlyphPlacement p in layout.Placements) {
 | `TextEnrichmentTags` | The control-char grammar + single-pass `Stack<TextEffect>` scan (start pushes, a matching end pops, `reset` clears, innermost **shadows**; malformed or unknown tags are dropped). |
 | `BbCodeTextMarkup` | The human front-end: compiles `[wave]…[/wave]` / `[color=#f00]…[/color]` BBCode down to the control-char stream. |
 | `TextEffect` / `TextEffectKind` | An effect kind + its (late-bindable) parameters. Motion: `Shake`/`Wave`/`Pulse`/`Jitter`/`Dissolve`; static delight: `Color`/`Weight`; pacing: `Reveal`. `IsMotion` classifies. |
-| `TextEffectParameter` / `TextEnrichmentVariable` | Numeric params that may late-bind a named **content-time channel** (additive/multiplicative/replacement) — no wall clock, no RNG. |
+| `TextEffectParameter` / `TextEnrichmentVariable` | Numeric params that may late-bind a named **content-time channel** (additive/multiplicative/replacement)—no wall clock, no RNG. |
 | `TextGlyphChannel` | The tier-agnostic per-glyph output (offset/scale/coverage/weight/tint). `Resolve(...)` turns an effect + content tick into one. |
-| `TextEffectRune` | A visible rune paired with the effect in force at it — the enrichment-aware layout input. |
+| `TextEffectRune` | A visible rune paired with the effect in force at it—the enrichment-aware layout input. |
 
 `TextGlyphChannel.Resolve` is a pure function of the caller's content tick.
 Motion kinds are gated by `motionEnabled` (settling to rest when off; reveals
-still complete), while `Color`/`Weight` always apply — the reduced-motion
+still complete), while `Color`/`Weight` always apply—the reduced-motion
 contract. Delight is not motion: motion is opt-out, and the default emphasis
 is semantic colour/weight/reveal.
 
-## ⚙️ Generation options and glyph selection
+## Generation options and glyph selection
 
 `FontAtlasGenerationOptions` controls which glyphs are included and how the
 atlas is sized. The glyph set is the union of `AllowedCharacters` and the
@@ -242,7 +243,7 @@ maps.
 | `AllowedCharacters` | `""` | Extra characters to include (whitespace ignored). |
 | `AllowedCodePointRanges` | ASCII + Powerline + PUA | Range tokens: `U+0020-U+007E`, `U+E0A0`, or `*` (all BMP). |
 | `FontPixelSize` | `32` | Em size, in pixels, glyphs are rasterized at. |
-| `Columns` | `16` | Preferred glyph columns in the grid. |
+| `Columns` | `16` | Preferred number of glyphs per deterministic shelf row. |
 | `DistanceRange` | `8` | Signed-distance band width in atlas pixels. |
 | `FaceIndex` | `0` | Zero-based face in a TTC/OTC collection; standalone fonts accept only 0. |
 | `Padding` | `8` | Pixels reserved around each glyph cell. |
@@ -255,10 +256,52 @@ point (`U+0041`, `U+` optional, hex), an inclusive range (`U+0020-U+007E`), or
 `U+10FFFF` are rejected.
 
 `FontAtlasSourceResolver` keys its LRU cache on a hash of the font contents
-combined with a normalized hash of the options, and retains up to 256 of the
-most recently used atlases.
+combined with a normalized hash of the options. It retains up to 256 entries
+and enforces a 64 MiB decoded-pixel budget through weighted eviction; metadata,
+transient work, and caller-held atlases are outside that budget. Atlas image
+buffers are copied at public construction and exposed read-only; internal producers
+transfer fresh buffers without another full-image copy. Image identity
+hashes are computed from decoded RGBA pixels rather than encoded PNG bytes.
 
-## 📌 Portable, pinned font catalogs
+Packing uses each glyph's own padded rectangle, not a largest-glyph-sized
+cell. The bounded shelf search tries at most 511 nearby row sizes and one
+height-derived fallback; it can refuse a set that a more exhaustive packer
+could fit. Equivalent character/range unions share a cache entry; whitespace
+in `AllowedCharacters` is ignored, but whitespace explicitly selected by a
+range is included.
+
+Before edge coloring, the generator resolves nonzero-filled outline
+boundaries, removing internal overlap edges. Quadratics are subdivided to a
+0.01-atlas-pixel chord tolerance; CFF cubics first use a 0.025-pixel
+cubic-to-quadratic tolerance. Neither this approximation nor quantized,
+bilinearly filtered texels is an exact or universally conservative distance
+oracle for sphere tracing.
+
+Generation refuses excessive work instead of returning partial output:
+CFF execution allows 100,000 operations per glyph across all subroutine calls;
+boundary processing allows 4,096 polygon edges, 65,536 intersection cuts, and 8,000,000 work units;
+rasterization allows 100,000,000 edge samples per glyph. Outline coordinates
+must be finite and within ±32,768 atlas pixels. Unresolved boundary junctions
+at the supported numerical precision are also refused. Intersections share a
+coordinate-space endpoint tolerance, including cuts near the ends of long edges.
+
+`FontAtlasGenerationRequest.Limits` additionally bounds the whole job: 64 MiB
+of input, 65,535 distinct mapped glyphs, one million geometry elements, one
+million processed/emitted kerning entries, and two billion work units by default.
+Composite copies, flattened boundaries, zero-valued GPOS matches, and Unicode
+alias expansion count too. Geometry and raster-work reservations and kerning
+expansion finish before the full atlas pixel buffer is allocated. These are
+processing ceilings, not an exact heap-byte or wall-clock guarantee; caller-owned
+input and live returned atlases remain outside cache retention limits.
+The request's `CancellationToken` is checked cooperatively during processing and
+per raster row. Refused or cancelled jobs do not return partial atlases.
+
+`FontAtlasImageData.AlphaGradientBound` lazily measures the decoded image's
+horizontal and vertical bilinear alpha derivative bounds, including transitions
+between cells. Renderers can use those bounds with their actual UV-to-world
+mapping; the values do not make the sampled zero set identical to the source outline.
+
+## Portable, pinned font catalogs
 
 `TextFontCatalogDefinition` is the reusable authoring contract for a document
 that brings its own fonts. Every `TextFontDefinition` names a
@@ -289,7 +332,7 @@ keeps a world portable and replayable.
 }
 ```
 
-## 🛠️ Generating artifacts from the CLI
+## Generating artifacts from the CLI
 
 `puck font-atlas` exposes the production managed generator without creating a
 second implementation:
@@ -305,17 +348,19 @@ puck font-atlas fonts/Inter-Regular.ttf \
 
 The command writes loader-compatible JSON and a sibling PNG through
 `FontAtlasArtifactWriter`. Run `puck font-atlas --help` for the complete
-limits and packing options.
+limits and packing options, including `--max-work`, `--max-geometry`,
+`--max-kerning-pairs`, `--max-font-bytes`, and `--max-glyphs`. Ctrl+C cancels
+generation cooperatively; source byte size is checked before allocating its buffer.
 
 The source TTFs behind the committed fixed-UI bake (Inter Regular/Medium/SemiBold,
 JetBrains Mono Regular) plus their OFL license texts are vendored at
-`Assets/Fonts/source/`, beside the bake they produced — OFL-1.1 requires the
+`Assets/Fonts/source/`, beside the bake they produced—OFL-1.1 requires the
 license notice to travel with the font data.
 
-## 🔌 Plugging in a generator
+## Plugging in a generator
 
 Implement `IFontAtlasGenerator` only when the default in-process MTSDF
-generator is not the right backend — for example, to compare it with an
+generator is not the right backend—for example, to compare it with an
 imported pre-baked atlas as an oracle:
 
 ```csharp
@@ -332,7 +377,7 @@ public sealed class MyGenerator : IFontAtlasGenerator {
 owns the file I/O and caching and delegates to a generator. Add caching at the
 resolver layer, not inside a generator.
 
-## 📋 Core types
+## Core types
 
 | Type | Role |
 |------|------|
@@ -355,7 +400,7 @@ resolver layer, not inside a generator.
 | `FontAtlasCatalogPacker` / `PackedFontAtlasCatalog` | Packs several logical atlases into one shared image. |
 | `FontAtlasArtifactWriter` | Writes an atlas's PNG and loader-compatible JSON metadata. |
 
-## 🧪 Verification
+## Verification
 
 ```powershell
 dotnet test tests/Puck.Text.Tests/Puck.Text.Tests.csproj
@@ -363,17 +408,29 @@ dotnet test tests/Puck.Text.Tests/Puck.Text.Tests.csproj
 
 `OpenTypeOutlineTests` and `ManagedFontKerningTests` exercise the TrueType and
 CFF/CFF2 readers (including face selection and GPOS/`kern` kerning) against
-synthetic fonts built in-process; `MtsdfContractTests` pins the distance-field
-sampling contract; `TextContractTests` covers layout, wrapping, alignment, and
-loader round-trips.
+synthetic fonts built in-process. `IndependentFontOracleTests` adds an offline
+JetBrains Mono TrueType snapshot of glyph IDs, advances, and vertical metrics
+recorded with fontTools 4.53.0; it is a table-fact oracle, not a claim that
+Puck's raster pixels match another renderer. `CffDistanceOracleTests` adds real
+Source Serif CFF/CFF2 geometry and alpha-distance samples independently derived
+with fontTools and Shapely; its test fixtures and OFL license are checked in.
+`MtsdfContractTests` pins the
+distance-field sampling contract; `TextContractTests` covers layout, wrapping,
+alignment, and loader round-trips.
 
-## 📦 Packaging
+## Packaging
 
 `ByteTerrace.Puck.Text` depends on `Puck.Assets` and `Puck.Maths`.
 `FontAtlasArtifactWriter` and `FontAtlasImageDataLoader` write and read an
 atlas's raster image through `Puck.Assets`'s PNG codec (`PngEncoder` /
-`PngDecoder`) — Puck.Text has no video or audio dependency. The committed
+`PngDecoder`)—Puck.Text has no video or audio dependency. The committed
 pre-baked fixed-UI assets under `Assets/Fonts` are Puck's own oracle bake for
 its overlay HUD; they are not part of the package (runtime-authored fonts
 always go through the managed generator instead) and are consumed only by
 in-repo project references.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

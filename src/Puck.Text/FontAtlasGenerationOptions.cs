@@ -12,6 +12,8 @@ namespace Puck.Text;
 /// equivalent options reuse the same cached <see cref="FontAtlas"/>.
 /// </remarks>
 public sealed class FontAtlasGenerationOptions {
+    /// <summary>The default full signed-distance band width in atlas pixels.</summary>
+    public const float DefaultDistanceRange = 8f;
     /// <summary>
     /// Gets or sets the additional characters to include in the atlas regardless of the configured ranges.
     /// Whitespace is ignored. Defaults to an empty string.
@@ -24,12 +26,13 @@ public sealed class FontAtlasGenerationOptions {
     /// </summary>
     public IReadOnlyList<string> AllowedCodePointRanges { get; set; } = ["U+0020-U+007E", "U+E0A0", "U+E0B0", "U+E0B1", "U+F000-U+F8FF"];
     /// <summary>
-    /// Gets or sets the preferred number of glyph columns in the atlas grid. A generator may use more
-    /// columns when required to respect <see cref="MaxAtlasDimension"/>. Defaults to <c>16</c>.
+    /// Gets or sets the preferred number of glyphs per deterministic shelf row. A generator may choose a nearby
+    /// row width when required to respect <see cref="MaxAtlasDimension"/> or <see cref="MaxAtlasPixels"/>. Defaults
+    /// to <c>16</c>.
     /// </summary>
     public int Columns { get; set; } = 16;
     /// <summary>Gets or sets the signed-distance band width, in atlas pixels. Defaults to <c>8</c>.</summary>
-    public float DistanceRange { get; set; } = SdfCoverageAtlas.DefaultDistanceRange;
+    public float DistanceRange { get; set; } = DefaultDistanceRange;
     /// <summary>Gets or sets the em size, in pixels, at which glyphs are rasterized. Defaults to <c>32</c>.</summary>
     public int FontPixelSize { get; set; } = 32;
     /// <summary>Gets or sets the maximum allowed width or height of the atlas image, in pixels. Defaults to <c>16384</c>.</summary>

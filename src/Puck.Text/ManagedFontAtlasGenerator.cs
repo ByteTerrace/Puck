@@ -4,15 +4,18 @@ using System.Text;
 namespace Puck.Text;
 
 /// <summary>Generates a multi-channel true signed distance field (MTSDF) atlas from an OpenType font or collection
-/// entirely in managed code: RGB median reconstructs sharp corners, alpha carries the exact marchable distance.</summary>
+/// entirely in managed code: RGB median reconstructs sharp corners, alpha samples distance to the filled boundary.</summary>
 /// <remarks>
 /// Puck reads Unicode mappings, metrics, TrueType quadratic outlines, and CFF/CFF2 cubic charstrings without native
-/// font libraries. Cubics are reduced to quadratic segments before the shared analytic field evaluator runs (see
+/// font libraries. Cubics are reduced to quadratics, then outlines are polygonized to a 0.01-pixel chord tolerance
+/// and their nonzero-fill boundaries resolved before field evaluation (see
 /// <see cref="MtsdfGlyphField"/>). The generated atlas preserves source glyph identifiers for a future shaping stage,
 /// while this generator deliberately maps scalars directly rather than performing language-specific shaping or
 /// ligature substitution. Pair kerning is flattened from GPOS pair positioning (the <c>kern</c> feature, PairPos
 /// formats 1 and 2, extension lookups included) or, when GPOS yields none, the legacy horizontal <c>kern</c> table;
-/// contextual positioning is not read.
+/// contextual positioning is not read. CFF execution, boundary processing, and per-glyph raster work have fixed
+/// safety limits; exceeding a limit throws rather than returning a partial atlas. Quantized and filtered samples
+/// are not guaranteed conservative sphere-tracing steps.
 /// </remarks>
 public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
     private sealed record GlyphRaster(
@@ -53,7 +56,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
     }
     // A kerning pair keys on glyph ids, but the atlas keys on Unicode scalars; every scalar combination that maps
     // onto the pair's glyphs carries the same adjustment.
-    private static IEnumerable<FontKerningPair> BuildKerningPairs(OpenTypeFontFace font, IReadOnlyList<GlyphRaster> glyphs) {
+    private static IEnumerable<FontKerningPair> BuildKerningPairs(OpenTypeFontFace font, IReadOnlyList<GlyphRaster> glyphs, FontGenerationBudget budget) {
         var unicodesByGlyph = new Dictionary<ushort, List<int>>();
 
         foreach (var glyph in glyphs) {
@@ -89,6 +92,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
 
             foreach (var left in leftUnicodes) {
                 foreach (var right in rightUnicodes) {
+                    budget.KerningPairs();
                     yield return new FontKerningPair(
                         AdvanceAdjustment: adjustment,
                         Unicode1: left,
@@ -98,9 +102,28 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             }
         }
     }
-    private static (int Columns, int Height, int Width) ChooseGrid(int glyphCount, int cellWidth, int cellHeight, FontAtlasGenerationOptions options) {
+    private readonly record struct GlyphPlacement(int X, int Y, int Width, int Height);
+    private const int MaxShelfCandidateDistance = 256;
+
+    private static (int Width, int Height, GlyphPlacement[] Placements) ChooseShelves(
+        IReadOnlyList<GlyphRaster> glyphs,
+        int padding,
+        FontAtlasGenerationOptions options
+    ) {
+        var glyphCount = glyphs.Count;
         if (glyphCount == 0) {
-            return (Columns: 1, Height: 1, Width: 1);
+            return (Width: 1, Height: 1, Placements: []);
+        }
+
+        var widths = new int[glyphCount];
+        var heights = new int[glyphCount];
+
+        for (var index = 0; index < glyphCount; index++) {
+            var glyph = glyphs[index];
+            var glyphLeft = MathF.Floor(glyph.Glyph.Left);
+            var glyphTop = MathF.Floor(glyph.Glyph.Top);
+            widths[index] = checked((int)(MathF.Ceiling(glyph.Glyph.Right) - glyphLeft) + (2 * padding));
+            heights[index] = checked((int)(MathF.Ceiling(glyph.Glyph.Bottom) - glyphTop) + (2 * padding));
         }
 
         var preferredColumns = Math.Clamp(
@@ -108,41 +131,82 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             min: 1,
             max: glyphCount
         );
-        (int Columns, int Height, int Width)? best = null;
+        var selectedColumns = 0;
+        var selectedWidth = 0;
+        var selectedHeight = 0;
 
-        for (var columns = 1; (columns <= glyphCount); columns++) {
-            var rows = (((glyphCount + columns) - 1) / columns);
-            var width = checked((columns * cellWidth));
-            var height = checked((rows * cellHeight));
-            var pixels = checked((((long)width) * height));
-
-            if (
-                (width > options.MaxAtlasDimension) ||
-                (height > options.MaxAtlasDimension) ||
-                (pixels > options.MaxAtlasPixels)
-            ) {
-                continue;
+        for (var distance = 0; distance < MaxShelfCandidateDistance; distance++) {
+            var candidateColumns = preferredColumns - distance;
+            if (candidateColumns >= 1 && IsShelfFit(candidateColumns, widths, heights, options, out var candidateWidth, out var candidateHeight)) {
+                selectedColumns = candidateColumns;
+                selectedWidth = candidateWidth;
+                selectedHeight = candidateHeight;
+                break;
             }
 
-            var distance = Math.Abs(value: (columns - preferredColumns));
-            var bestDistance = ((best is { } current)
-                ? Math.Abs(value: (current.Columns - preferredColumns))
-                : int.MaxValue
-            );
-
-            if (
-                (best is null) ||
-                (distance < bestDistance) ||
-                ((distance == bestDistance) && (pixels < (((long)best.Value.Width) * best.Value.Height)))
-            ) {
-                best = (Columns: columns, Height: height, Width: width);
+            candidateColumns = preferredColumns + distance;
+            if (distance != 0 && candidateColumns <= glyphCount && IsShelfFit(candidateColumns, widths, heights, options, out candidateWidth, out candidateHeight)) {
+                selectedColumns = candidateColumns;
+                selectedWidth = candidateWidth;
+                selectedHeight = candidateHeight;
+                break;
             }
         }
 
-        return (best ?? throw new ArgumentException(
-            message: $"The selected glyphs cannot fit within the {options.MaxAtlasDimension}px dimension and {options.MaxAtlasPixels.ToString(provider: CultureInfo.InvariantCulture)}-pixel atlas limits.",
-            paramName: nameof(options)
-        ));
+        if (selectedColumns == 0) {
+            var requiredByHeight = (int)Math.Ceiling(heights.Sum() / (double)options.MaxAtlasDimension);
+            var fallbackColumns = Math.Clamp(requiredByHeight, 1, glyphCount);
+            if (IsShelfFit(fallbackColumns, widths, heights, options, out selectedWidth, out selectedHeight)) {
+                selectedColumns = fallbackColumns;
+            }
+        }
+
+        if (selectedColumns == 0) {
+            throw new ArgumentException(
+                message: $"The selected glyphs cannot fit within the {options.MaxAtlasDimension}px dimension and {options.MaxAtlasPixels.ToString(provider: CultureInfo.InvariantCulture)}-pixel atlas limits, or exceeded the bounded shelf search.",
+                paramName: nameof(options)
+            );
+        }
+
+        var placements = new GlyphPlacement[glyphCount];
+        var y = 0;
+        for (var rowStart = 0; rowStart < glyphCount; rowStart += selectedColumns) {
+            var rowEnd = Math.Min(rowStart + selectedColumns, glyphCount);
+            var rowWidth = 0;
+            var rowHeight = 0;
+            for (var index = rowStart; index < rowEnd; index++) {
+                placements[index] = new GlyphPlacement(rowWidth, y, widths[index], heights[index]);
+                rowWidth = checked(rowWidth + widths[index]);
+                rowHeight = Math.Max(rowHeight, heights[index]);
+            }
+            y = checked(y + rowHeight);
+        }
+
+        return (selectedWidth, selectedHeight, placements);
+    }
+
+    private static bool IsShelfFit(
+        int columns,
+        IReadOnlyList<int> widths,
+        IReadOnlyList<int> heights,
+        FontAtlasGenerationOptions options,
+        out int width,
+        out int height
+    ) {
+        width = 0;
+        height = 0;
+        for (var rowStart = 0; rowStart < widths.Count; rowStart += columns) {
+            var rowEnd = Math.Min(rowStart + columns, widths.Count);
+            var rowWidth = 0;
+            var rowHeight = 0;
+            for (var index = rowStart; index < rowEnd; index++) {
+                rowWidth = checked(rowWidth + widths[index]);
+                rowHeight = Math.Max(rowHeight, heights[index]);
+            }
+            width = Math.Max(width, rowWidth);
+            height = checked(height + rowHeight);
+        }
+        return width <= options.MaxAtlasDimension && height <= options.MaxAtlasDimension && (long)width * height <= options.MaxAtlasPixels;
     }
     private static FontAtlasMetrics ConvertMetrics(OpenTypeFontFace font) {
         var unitsPerEm = ((float)font.UnitsPerEm);
@@ -155,12 +219,13 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             UnderlineThickness: (font.UnderlineThickness / unitsPerEm)
         );
     }
-    private static IReadOnlyList<GlyphRaster> GetGlyphs(OpenTypeFontFace font, IReadOnlyList<int> codePoints, int fontPixelSize) {
+    private static IReadOnlyList<GlyphRaster> GetGlyphs(OpenTypeFontFace font, IReadOnlyList<int> codePoints, int fontPixelSize, FontGenerationBudget budget) {
         var glyphs = new List<GlyphRaster>(capacity: codePoints.Count);
         var rasterDataByGlyphId = new Dictionary<ushort, (float Advance, FontGlyphGeometry Glyph)>();
         var scale = (((float)fontPixelSize) / font.UnitsPerEm);
 
         foreach (var codePoint in codePoints) {
+            budget.Work();
             var glyphId = font.GetGlyphId(codePoint: codePoint);
 
             if (glyphId == 0) {
@@ -171,6 +236,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
                 key: glyphId,
                 value: out var rasterData
             )) {
+                budget.Glyph();
                 var outline = font.LoadGlyphGeometry(
                     glyphId: glyphId,
                     scale: scale
@@ -198,10 +264,12 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
     }
     private static (OpenTypeFontFace Font, IReadOnlyList<GlyphRaster> Glyphs) ParseFont(
         FontAtlasGenerationRequest request,
-        IReadOnlyList<int> codePoints
+        IReadOnlyList<int> codePoints,
+        FontGenerationBudget budget
     ) {
         try {
             var font = OpenTypeFontFace.Parse(
+                budget: budget,
                 faceIndex: request.Options.FaceIndex,
                 fontBytes: request.FontBytes
             );
@@ -209,6 +277,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             return (
                 Font: font,
                 Glyphs: GetGlyphs(
+                budget: budget,
                 codePoints: codePoints,
                 font: font,
                 fontPixelSize: request.Options.FontPixelSize
@@ -286,6 +355,10 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
     public FontAtlas Generate(FontAtlasGenerationRequest request) {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Options);
+        var budget = new FontGenerationBudget(request.Limits, request.CancellationToken);
+        if (request.FontBytes.Length > request.Limits.MaxFontBytes) {
+            throw new ArgumentException("The supplied font exceeds the whole-job input byte limit.", nameof(request));
+        }
         ValidateOptions(options: request.Options);
 
         if (request.FontBytes.IsEmpty) {
@@ -298,6 +371,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: request.FontIdentifier);
         var imageIdentifier = (request.ImageIdentifier ?? $"{request.FontIdentifier}#generated-atlas");
         var parsed = ParseFont(
+            budget: budget,
             codePoints: BuildCodePoints(options: request.Options),
             request: request
         );
@@ -307,46 +381,45 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             .Where(predicate: static glyph => !glyph.Glyph.IsEmpty)
             .DistinctBy(keySelector: static glyph => glyph.GlyphId)
             .ToArray();
-        var cellWidth = ((drawableGlyphs.Length == 0)
-            ? 1
-            : drawableGlyphs.Max(selector: glyph => checked(((((int)MathF.Ceiling(x: glyph.Glyph.Right)) - ((int)MathF.Floor(x: glyph.Glyph.Left))) + (2 * request.Options.Padding))))
-        );
-        var cellHeight = ((drawableGlyphs.Length == 0)
-            ? 1
-            : drawableGlyphs.Max(selector: glyph => checked(((((int)MathF.Ceiling(x: glyph.Glyph.Bottom)) - ((int)MathF.Floor(x: glyph.Glyph.Top))) + (2 * request.Options.Padding))))
-        );
-        var grid = ChooseGrid(
-            cellHeight: cellHeight,
-            cellWidth: cellWidth,
-            glyphCount: drawableGlyphs.Length,
+        var shelves = ChooseShelves(
+            glyphs: drawableGlyphs,
+            padding: request.Options.Padding,
             options: request.Options
         );
-        var rgba = new byte[checked(((grid.Width * grid.Height) * 4))];
+        var prepared = new MtsdfGlyphField.PreparedCell[drawableGlyphs.Length];
+        for (var index = 0; index < drawableGlyphs.Length; index++) {
+            var placement = shelves.Placements[index];
+            prepared[index] = MtsdfGlyphField.PrepareCell(drawableGlyphs[index].Glyph, placement.Width, placement.Height, budget);
+        }
+        var kerningPairs = BuildKerningPairs(font, glyphs, budget).ToArray();
+        budget.CancellationToken.ThrowIfCancellationRequested();
+        var rgba = new byte[checked((shelves.Width * shelves.Height) * 4)];
         var cellsByGlyphId = new Dictionary<ushort, (FontAtlasBounds Atlas, FontAtlasBounds Plane)>();
 
         for (var index = 0; (index < drawableGlyphs.Length); index++) {
             var glyph = drawableGlyphs[index];
-            var cellX = ((index % grid.Columns) * cellWidth);
-            var cellY = ((index / grid.Columns) * cellHeight);
+            var placement = shelves.Placements[index];
+            var cellX = placement.X;
+            var cellY = placement.Y;
             var glyphLeft = MathF.Floor(x: glyph.Glyph.Left);
             var glyphTop = MathF.Floor(x: glyph.Glyph.Top);
-            // The glyph is drawn at the cell's top-left; its bounds are its own padded box, not the grid cell (the
-            // widest glyph's), so a layout's visual extents — what centering and right-alignment measure — are the
-            // letter's, and the rest of the cell is never sampled.
-            var glyphWidth = checked(((((int)MathF.Ceiling(x: glyph.Glyph.Right)) - ((int)glyphLeft)) + (2 * request.Options.Padding)));
-            var glyphHeight = checked(((((int)MathF.Ceiling(x: glyph.Glyph.Bottom)) - ((int)glyphTop)) + (2 * request.Options.Padding)));
+            // The glyph is drawn at the padded rectangle's top-left. Only that rectangle is sampled, so no pixels
+            // are spent on the widest glyph's unused remainder and layout extents remain the letter's own bounds.
+            var glyphWidth = placement.Width;
+            var glyphHeight = placement.Height;
             var planeLeft = ((glyphLeft - request.Options.Padding) / request.Options.FontPixelSize);
             var planeTop = (-(glyphTop - request.Options.Padding) / request.Options.FontPixelSize);
 
             MtsdfGlyphField.EvaluateCell(
+                budget: budget,
                 atlasRgba: rgba,
-                atlasWidth: grid.Width,
-                cellHeight: cellHeight,
-                cellWidth: cellWidth,
+                atlasWidth: shelves.Width,
+                cellHeight: glyphHeight,
+                cellWidth: glyphWidth,
                 cellX: cellX,
                 cellY: cellY,
                 distanceRange: request.Options.DistanceRange,
-                geometry: glyph.Glyph,
+                prepared: prepared[index],
                 offsetX: (request.Options.Padding - glyphLeft),
                 offsetY: (request.Options.Padding - glyphTop)
             );
@@ -374,8 +447,8 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             imagePath: imageIdentifier,
             size: request.Options.FontPixelSize,
             distanceRange: request.Options.DistanceRange,
-            width: grid.Width,
-            height: grid.Height,
+            width: shelves.Width,
+            height: shelves.Height,
             metrics: ConvertMetrics(font: font),
             glyphs: glyphs.Select(selector: glyph => {
                 var hasCell = cellsByGlyphId.TryGetValue(
@@ -395,14 +468,11 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
                     glyphId: glyph.GlyphId
                 );
             }),
-            kerningPairs: BuildKerningPairs(
-                font: font,
-                glyphs: glyphs
-            ),
-            imageData: new FontAtlasImageData(
+            kerningPairs: kerningPairs,
+            imageData: FontAtlasImageData.TakeOwnership(
                 rgbaPixels: rgba,
-                height: grid.Height,
-                width: grid.Width
+                height: shelves.Height,
+                width: shelves.Width
             )
         );
     }

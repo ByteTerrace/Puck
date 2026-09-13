@@ -11,6 +11,7 @@ This directory holds proposed implementation plans and preserved technical decis
 
 ## Runtime and hosting
 
+- [World release management](world-release-management.md)—maintenance deployments, progress-preserving rollback, explicit restore, and official operator qualification.
 - [Groups and cooperative matchmaking](group-finder.md)—groups, membership, matchmaking, recovery, and admission.
 - [World runtime consolidation](world-runtime-consolidation.md)—`WorldServer` facade and runtime consolidation.
 - [MCP integration](mcp-integration.md)—MCP hosting, tools, trust, capture, and release gates.

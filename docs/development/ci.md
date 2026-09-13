@@ -378,6 +378,10 @@ documentation artifact; Azure deploys the website. Desktop builds are downloadab
 
 ## Azure production deployment
 
+The [World release management plan](../plans/world-release-management.md)
+proposes a unified operator workflow for deployment, progress-preserving
+rollback, and explicit restore. The procedure below describes current behavior.
+
 `puck azure` owns cloud orchestration. Run it from the repository root, where it
 reads the repository's artifact files; `puck azure --help` lists its sub-verbs and
 `puck azure <verb> --help` their typed options, `--commit` taking a full 40-hex

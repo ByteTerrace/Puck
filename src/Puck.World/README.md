@@ -1,5 +1,9 @@
 # Puck.World
 
+Normal builds generate the registered world JSON and shader bytecode from their
+tracked parents. See [generated assets](../../build/README.md) for build,
+source-control, and packaging rules.
+
 Puck.World is the application that composes a document-defined local
 multiplayer world of up to 4096 simulated bodies (four local seats plus
 autonomous stand-ins), rendered through the SDF engine and scripted end to end

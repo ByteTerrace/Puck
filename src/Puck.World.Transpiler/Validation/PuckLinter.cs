@@ -158,6 +158,39 @@ public static partial class PuckLinter {
                 }
                 break;
 
+            case ForStatementNode loop:
+                CollectReferences(loop.Sequence, references, diagnostics, inLet);
+                foreach (var statement in loop.Body) {
+                    CollectReferences(statement, references, diagnostics, inLet);
+                }
+                break;
+
+            case RepeatStatementNode repeat:
+                CollectReferences(repeat.Count, references, diagnostics, inLet);
+                foreach (var statement in repeat.Body) {
+                    CollectReferences(statement, references, diagnostics, inLet);
+                }
+                break;
+
+            case IndexExpressionNode index:
+                CollectReferences(index.Target, references, diagnostics, inLet);
+                CollectReferences(index.Index, references, diagnostics, inLet);
+                break;
+
+            case LambdaExpressionNode lambda:
+                CollectReferences(lambda.Body, references, diagnostics, inLet);
+                break;
+
+            case InterpolatedStringNode interpolated:
+                foreach (var hole in interpolated.Segments.OfType<InterpolationSegment.Hole>()) {
+                    CollectReferences(hole.Expression, references, diagnostics, inLet);
+                }
+                break;
+
+            case ExportNode export:
+                references.UnionWith(export.Names);
+                break;
+
             case MemberAccessExpressionNode member:
                 CollectReferences(member.Target, references, diagnostics);
                 break;

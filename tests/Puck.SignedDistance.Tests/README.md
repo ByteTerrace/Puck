@@ -5,6 +5,10 @@ material laws, fixed-point field evaluation, domain and culling bounds, and
 world-query plumbing. It keeps the CPU query contract independent from GPU
 rendering and shader compilation.
 
+`GlyphSamplingLawTests` checks the host's decoded-atlas derivative correction,
+stretched-cell mappings, metadata-only fallback, and packed-lane admission. It
+does not substitute for a rendered glyph pixel-conformance test.
+
 ## Verification
 
 ```powershell

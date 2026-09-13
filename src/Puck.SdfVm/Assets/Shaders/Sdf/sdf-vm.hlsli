@@ -1369,15 +1369,13 @@ float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
 // Text as REAL geometry: a glyph cell's exact 2D quad (the box in XY) extruded along Z, its interior refined by the
 // atlas's true signed distance so the LETTER — not the cell — is the surface. It marches, blends, extrudes, and (with
 // Subtraction) ENGRAVES into any surface. data0 = (packedUvMin, packedUvMax, distanceScale, extrudeHalfDepth); data1 =
-// (smooth, halfWidth, halfHeight, _). distanceScale = atlas distanceRange(texels) × worldPerTexel (host-baked), so the
-// encoded [0,1] distance maps to LOCAL units. The atlas texel is sampled and decoded straight into a march-ready
-// signed distance, so the glyph interior refines under the same sphere-tracing rules as any other shape.
+// (smooth, halfWidth, halfHeight, samplingCorrection). distanceScale = atlas distanceRange(texels) × worldPerTexel
+// (host-baked), so the encoded [0,1] field maps to LOCAL units before its derivative-bound correction.
 //
-// LIPSCHITZ: an exact-EDT single-channel atlas is 1-Lipschitz in texel space (the Eikonal property); bilinear
-// reconstruction preserves that bound; a UNIFORM worldPerTexel (the builder ties halfWidth/halfHeight to the cell's
-// texel aspect) carries it to world space at factor 1 — so the glyph shape needs NO AnalyzeLipschitz step clamp, like
-// the exact 2D-lift family. A caller authoring a non-uniform (stretched) cell owns the >1 risk, exactly as Repeat's
-// in-cell rule is the caller's.
+// LIPSCHITZ: bilinear alpha is NOT generally 1-Lipschitz. Data1.w carries the host's reciprocal derivative bound,
+// computed from decoded pixels (or worst-case RGBA8 differences), packed UVs and cell scale. Correct only the
+// sampled term before max with the exact quad: both terms then have bound <=1, including the far-field seam.
+// Extrusion preserves that bound and the reconstructed zero set. KEEP IN SYNC with GlyphSamplingCorrection.
 
 // Host-baked unorm2x16 of an atlas UV, unpacked: the low 16 bits are u, the high 16 v, each /65535. An integer bit op,
 // so it is bit-identical across DXC's SPIR-V and DXIL targets. Packing the four UV-rect components into two lanes frees
@@ -1400,11 +1398,9 @@ float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
 }
 
 #ifdef SDF_GLYPH_ATLAS
-// One texel's TRUE single-channel signed distance from the ALPHA channel (`puck font-atlas` and compatible external
-// oracles pack the true distance there; Puck.Text's in-process generator writes the same channel into alpha, so alpha
-// decodes both). The RGB
-// median MTSDF tooling reconstructs is deliberately NOT read: it is only C0 at channel-crossover lines and so kinks
-// the field a sphere tracer steps through — GEOMETRY MARCHES THE TRUE CHANNEL. Edge-clamped; SampleLevel(…, 0) because
+// Alpha holds single-channel boundary-distance samples from `puck font-atlas` or a compatible imported atlas.
+// RGB median is coverage-only: channel conflicts need not define a conservative march field.
+// Edge-clamped; SampleLevel(…, 0) because
 // implicit-derivative filtering is undefined inside the march's non-uniform control flow.
 float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
@@ -1477,7 +1473,7 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
         float2 uv = lerp(uvMin, uvMax, clamp((((p.xy / halfSize) * 0.5) + 0.5), 0.0, 1.0));
         float encoded = sdfGlyphSampleField(uv);   // true single-channel distance; 0.5 = edge, > 0.5 inside the glyph
 
-        dPlane = max(((0.5 - encoded) * distanceScale), dQuad);
+        dPlane = max(((0.5 - encoded) * distanceScale * data1.w), dQuad);
     }
 
     float2 w = float2(dPlane, (abs(p.z) - data0.w));

@@ -9,6 +9,8 @@ namespace Puck.Text;
 internal sealed class CffFontOutlines {
     private const float CubicApproximationTolerancePixels = 0.025f;
     private const int MaximumCharStringDepth = 32;
+    // Shared across all subroutine calls for one glyph, including programs that never draw a segment.
+    private const int MaximumCharStringOperations = 100_000;
     private const int MaximumGlyphSegments = 1_000_000;
 
     private readonly bool m_cff2;
@@ -958,9 +960,10 @@ internal sealed class CffFontOutlines {
         return ((int)value);
     }
 
-    public FontGlyphGeometry LoadGlyph(ushort glyphId, float scale) {
+    public FontGlyphGeometry LoadGlyph(ushort glyphId, float scale, FontGenerationBudget? budget = null) {
         var dictionary = m_fontDictionaries[m_fontDictionaryByGlyph[glyphId]];
         var interpreter = new CharStringInterpreter(
+            budget: budget,
             cff2: m_cff2,
             defaultVariationScalars: m_defaultVariationScalars,
             fontDictionary: dictionary,
@@ -1205,7 +1208,8 @@ internal sealed class CffFontOutlines {
         bool cff2,
         FontDictionary fontDictionary,
         ReadOnlyMemory<byte>[] globalSubroutines,
-        double[][] defaultVariationScalars
+        double[][] defaultVariationScalars,
+        FontGenerationBudget? budget
     ) {
         private readonly List<CffContour> m_contours = [];
         private readonly bool m_isCff2 = cff2;
@@ -1218,11 +1222,13 @@ internal sealed class CffFontOutlines {
 
         private CffContour? m_currentContour;
         private int m_segmentCount;
+        private int m_operationCount;
         private int m_stemCount;
         private double m_x;
         private double m_y;
 
         private void AddCurve(double dx1, double dy1, double dx2, double dy2, double dx3, double dy3) {
+            budget?.Geometry(1);
             EnsureCurrentContour();
             var start = new Vector2(
                 x: ((float)m_x),
@@ -1252,6 +1258,7 @@ internal sealed class CffFontOutlines {
             EnsureSegmentLimit();
         }
         private void AddLine(double dx, double dy) {
+            budget?.Geometry(1);
             EnsureCurrentContour();
             var start = new Vector2(
                 x: ((float)m_x),
@@ -1330,10 +1337,16 @@ internal sealed class CffFontOutlines {
                 y: ((float)m_y)
             ) != contour.Start)
             ) {
+                // Implicit Type 2 contour closure does not move the charstring current point.
+                // The next relative moveto starts at the last explicitly drawn endpoint.
+                var previousX = m_x;
+                var previousY = m_y;
                 AddLine(
                     dx: (contour.Start.X - m_x),
                     dy: (contour.Start.Y - m_y)
                 );
+                m_x = previousX;
+                m_y = previousY;
             }
 
             if (contour.Segments.Count > 1) {
@@ -1456,6 +1469,11 @@ internal sealed class CffFontOutlines {
             var offset = 0;
 
             while (offset < bytes.Length) {
+                if (++m_operationCount > MaximumCharStringOperations) {
+                    throw new InvalidDataException(message: "A CFF glyph exceeds Puck's 100000-operation execution limit.");
+                }
+                budget?.Work();
+
                 var op = bytes[offset++];
 
                 if (IsCharStringNumber(first: op)) {
@@ -2038,7 +2056,7 @@ internal sealed class CffFontOutlines {
                 start: start
             );
         }
-        private static void FlattenCubicRecursive(
+        private void FlattenCubicRecursive(
             List<FontOutlineSegment> output,
             Vector2 start,
             Vector2 control1,
@@ -2066,6 +2084,7 @@ internal sealed class CffFontOutlines {
                 (depth >= 16)
             ) {
                 segmentCount++;
+                budget?.Geometry(1);
 
                 if (segmentCount > MaximumGlyphSegments) {
                     throw new InvalidDataException(message: "A flattened CFF glyph exceeds Puck's one-million-segment safety limit.");
@@ -2311,6 +2330,7 @@ internal sealed class CffFontOutlines {
                         );
                     } else {
                         flattenedSegmentCount++;
+                        budget?.Geometry(1);
 
                         if (flattenedSegmentCount > MaximumGlyphSegments) {
                             throw new InvalidDataException(message: "A flattened CFF glyph exceeds Puck's one-million-segment safety limit.");

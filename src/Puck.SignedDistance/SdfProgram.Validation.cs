@@ -44,6 +44,11 @@ public sealed partial class SdfProgram {
     // and warp rate into one scalar) and the cull bounds derived from the same lanes, and the shader propagates it
     // through every blend. SdfProgramBuilder refuses the same values one layer earlier, naming the caller's argument.
     private static void RequireFiniteOperands(SdfInstruction instruction, int index, string paramName) {
+        if (instruction.Op == SdfOp.ShapeBlend && instruction.Shape == (uint)SdfShapeType.Glyph &&
+            (instruction.Data1.Y <= 0f || instruction.Data1.Z <= 0f || instruction.Data0.Z < 0f || instruction.Data0.W < 0f ||
+             instruction.Data1.W <= 0f || instruction.Data1.W > 1f)) {
+            throw new ArgumentException($"Instruction {index} requires positive glyph extents and a sampling correction in (0, 1].", paramName);
+        }
         if (instruction.Op == SdfOp.CellDisplace) {
             new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
                 (SdfCellMode)instruction.Blend, instruction.Data0.Z).Validate();

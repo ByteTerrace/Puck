@@ -271,7 +271,7 @@ are resolved within their enclosing scope. Contiguous `//` comments immediately 
 its popup. Collection functions show their signatures and behavior; scalar function arity, domain, and operation
 come from `Puck.State.ExpressionVocabulary`. Declaration cards quote source rather than evaluating it, so units
 and expressions remain as authored and recoverable declarations still work while the document has syntax errors.
-Field and named-operation-argument hover follows the generated World schema, including embedded creation documents,
+Operation names (including `worldPoint`, `anchor`, and `lookAt`), fields, and named-operation-argument hover follow the generated World schema, including embedded creation documents,
 palette arrays, noise blocks, and shape rows. Popups carry the owning field description, type, declared default,
 enum choices, and accepted DSL units when applicable. Shape primitive and blend names show their enum documentation.
 Creation descriptions come from the authoring model XML comments; no editor-specific copy of the field list is maintained.
@@ -287,6 +287,8 @@ before it—`bind name : Kind`, a `when Gate : Kind`/`as Kind` suffix, and a ter
 `ExpressionSpelling`'s own spacing—keeps that space rather than being squeezed into an unspaced property colon;
 only a run of two or more spaces before a colon is ever collapsed. The decompiler's one-time-import header comment,
 and every other comment, survives formatting in place.
+
+Unused-binding analysis follows references in loops, array indexing, lambda bodies, interpolated strings, and exports.
 
 ## Documentation
 

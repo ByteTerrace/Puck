@@ -286,7 +286,7 @@ public sealed class TextContractTests {
         Assert.Equal(first.Width, second.Width);
         Assert.Equal(first.Height, second.Height);
         Assert.Equal(first.ImageData!.RgbaPixels, second.ImageData!.RgbaPixels);
-        Assert.Contains(collection: first.ImageData.RgbaPixels, filter: static value => (value > 128));
+        Assert.Contains(collection: first.ImageData.RgbaPixels.ToArray(), filter: static value => (value > 128));
     }
     [Fact]
     public void InProcessGeneratorBuildsRequestedMtsdfGlyphs() {
@@ -311,8 +311,8 @@ public sealed class TextContractTests {
         Assert.True(condition: atlas.TryGetGlyph(glyph: out var space, unicode: ' '));
         Assert.Null(value: space.AtlasBounds);
         Assert.False(condition: atlas.TryGetGlyph(glyph: out _, unicode: 'C'));
-        Assert.Contains(collection: atlas.ImageData.RgbaPixels, filter: static value => (value > 128));
-        Assert.Contains(collection: atlas.ImageData.RgbaPixels, filter: static value => (value < 128));
+        Assert.Contains(collection: atlas.ImageData.RgbaPixels.ToArray(), filter: static value => (value > 128));
+        Assert.Contains(collection: atlas.ImageData.RgbaPixels.ToArray(), filter: static value => (value < 128));
     }
     [Fact]
     public void InProcessGeneratorReportsMissingTablesForMalformedCffContainer() {
@@ -469,28 +469,6 @@ public sealed class TextContractTests {
         Assert.Equal(firstImagePath, first.ImagePath);
         Assert.Equal(secondImagePath, second.ImagePath);
         Assert.NotSame(actual: second, expected: first);
-    }
-    [Fact]
-    public void SdfGenerationUsesColorCoverageForOpaqueMasks() {
-        var imageData = new FontAtlasImageData(
-            rgbaPixels: [
-                0, 0, 0, byte.MaxValue,
-                byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue
-            ],
-            height: 1,
-            width: 2
-        );
-        var coverage = CreateAtlas(
-            glyphs: [],
-            imageData: imageData,
-            width: 2
-        );
-
-        var sdf = SdfCoverageAtlas.Generate(coverage: coverage);
-        var pixels = sdf.ImageData!.RgbaPixels;
-
-        Assert.True(condition: (pixels[0] < 128));
-        Assert.True(condition: (pixels[4] > 128));
     }
     [Fact]
     public void StripToPlainTextRejectsNull() {

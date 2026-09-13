@@ -75,9 +75,9 @@ public sealed class OpenTypeOutlineTests {
 }
 
 internal static class SyntheticCffFont {
-    public static byte[] Build(bool cff2) {
+    public static byte[] Build(bool cff2, int subroutineDepth = 0) {
         var charString = BuildRoundedCharString(cff2: cff2);
-        var cff = (cff2 ? BuildCff2(charString: charString) : BuildCff1(charString: charString));
+        var cff = (cff2 ? BuildCff2(charString: charString) : BuildCff1(charString: charString, subroutineDepth: subroutineDepth));
         var head = new byte[54];
 
         BinaryPrimitives.WriteUInt16BigEndian(destination: head.AsSpan(start: 18), value: 1000);
@@ -180,7 +180,7 @@ internal static class SyntheticCffFont {
         output.AddRange(collection: data);
         return output.ToArray();
     }
-    private static byte[] BuildCff1(byte[] charString) {
+    private static byte[] BuildCff1(byte[] charString, int subroutineDepth) {
         var output = new List<byte> { 1, 0, 4, 4 };
 
         AppendIndex(output: output, cff2: false, "Test"u8.ToArray());
@@ -190,7 +190,16 @@ internal static class SyntheticCffFont {
         var localSubroutines = new List<byte>();
         var privateDictionary = new List<byte>();
 
-        AppendIndex(output: globalSubroutines, cff2: false, globalSubroutine);
+        if (subroutineDepth == 0) {
+            AppendIndex(output: globalSubroutines, cff2: false, globalSubroutine);
+        } else {
+            var programs = new byte[subroutineDepth][];
+            for (var index = 0; index < subroutineDepth; index++) {
+                var next = (byte)(33 + index);
+                programs[index] = index == subroutineDepth - 1 ? [11] : [next, 29, next, 29, 11];
+            }
+            AppendIndex(output: globalSubroutines, cff2: false, programs);
+        }
         AppendIndex(output: localSubroutines, cff2: false, localSubroutine);
         AppendDictInteger(output: privateDictionary, value: 6);
         privateDictionary.Add(item: 19);

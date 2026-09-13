@@ -13,21 +13,29 @@ namespace Puck.Text;
 /// <remarks>
 /// Because the cache key is derived from font content rather than from the path, the same font referenced
 /// through different paths resolves to a single shared atlas, and a change to the font or to the options
-/// produces a distinct entry. The cache retains at most a fixed number of the most recently used atlases.
+/// produces a distinct entry. The cache retains at most 256 atlases and the configured pixel-byte budget.
+/// The budget excludes metadata, transient generation buffers, and atlases still held by callers.
 /// </remarks>
 /// <param name="fontAtlasGenerator">The generator invoked to produce an atlas on a cache miss.</param>
 /// <param name="assetSource">The source from which font bytes are read.</param>
+/// <param name="maxCachedPixelBytes">The maximum retained decoded pixel bytes. Oversized atlases are returned without caching. Zero disables pixel retention.</param>
 /// <exception cref="ArgumentNullException"><paramref name="fontAtlasGenerator"/> or <paramref name="assetSource"/> is <see langword="null"/>.</exception>
+/// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCachedPixelBytes"/> is negative.</exception>
 public sealed class FontAtlasSourceResolver(
     IFontAtlasGenerator fontAtlasGenerator,
-    IAssetSource assetSource
+    IAssetSource assetSource,
+    long maxCachedPixelBytes = 64L * 1024 * 1024
 )
     : IFontAtlasSourceResolver {
     private const int MaxCachedFonts = 256;
 
     private readonly IAssetSource m_assetSource = (assetSource ?? throw new ArgumentNullException(paramName: nameof(assetSource)));
     private readonly IFontAtlasGenerator m_fontAtlasGenerator = (fontAtlasGenerator ?? throw new ArgumentNullException(paramName: nameof(fontAtlasGenerator)));
-    private readonly ContentAddressedLruCache<FontAtlas> m_fontAtlasCache = new(MaxCachedFonts);
+    private readonly ContentAddressedLruCache<FontAtlas> m_fontAtlasCache = new(
+        capacity: MaxCachedFonts,
+        getWeight: static atlas => atlas.ImageData is { } image ? image.RgbaPixels.Length : 0,
+        weightCapacity: maxCachedPixelBytes
+    );
     private readonly FontAtlasLoader m_fontAtlasLoader = new();
 
     /// <summary>Initializes a resolver with Puck's in-process font generator.</summary>
@@ -70,19 +78,28 @@ public sealed class FontAtlasSourceResolver(
         ));
         return normalized;
     }
-    private static IReadOnlyList<string> CanonicalizeAllowedCodePointRanges(IReadOnlyList<string> ranges) {
+    private static IReadOnlyList<string> CanonicalizeRequestedCodePoints(FontAtlasGenerationOptions options) {
         var expanded = UnicodeCodePointRangeExpander.Expand(
-            ranges: ranges,
+            ranges: options.AllowedCodePointRanges,
             wildcardSelected: out var wildcardSelected
         );
 
+        var codePoints = expanded;
         if (wildcardSelected) {
             foreach (var codePoint in UnicodeCodePointRangeExpander.EnumerateBmpCodePoints()) {
-                expanded.Add(item: codePoint);
+                codePoints.Add(item: codePoint);
             }
         }
 
-        return BuildCanonicalRangeTokens(codePoints: expanded);
+        if (!string.IsNullOrEmpty(value: options.AllowedCharacters)) {
+            foreach (var rune in options.AllowedCharacters.EnumerateRunes()) {
+                if (!Rune.IsWhiteSpace(value: rune)) {
+                    codePoints.Add(item: rune.Value);
+                }
+            }
+        }
+
+        return BuildCanonicalRangeTokens(codePoints: codePoints);
     }
     private static AssetContentHash CombineHashes(AssetContentHash first, AssetContentHash second) {
         Span<byte> bytes = stackalloc byte[16];
@@ -105,14 +122,12 @@ public sealed class FontAtlasSourceResolver(
             );
         }
 
-        var normalizedCodePointRanges = CanonicalizeAllowedCodePointRanges(ranges: options.AllowedCodePointRanges);
-        var normalizedAllowedCharacters = NormalizeAllowedCharacters(allowedCharacters: options.AllowedCharacters);
+        var normalizedRequestedCodePoints = CanonicalizeRequestedCodePoints(options: options);
         var content = Encoding.UTF8.GetBytes(s: string.Join(
             '|',
-            normalizedAllowedCharacters,
             string.Join(
                 separator: ',',
-                values: normalizedCodePointRanges
+                values: normalizedRequestedCodePoints
             ),
             options.Columns,
             options.DistanceRange.ToString(provider: CultureInfo.InvariantCulture),
@@ -147,29 +162,6 @@ public sealed class FontAtlasSourceResolver(
                     Options = generationOptions,
                 });
             }
-        );
-    }
-    private static string NormalizeAllowedCharacters(string? allowedCharacters) {
-        if (string.IsNullOrWhiteSpace(value: allowedCharacters)) {
-            return string.Empty;
-        }
-
-        var codePoints = new HashSet<int>();
-
-        foreach (var rune in allowedCharacters.EnumerateRunes()) {
-            if (Rune.IsWhiteSpace(value: rune)) {
-                continue;
-            }
-
-            codePoints.Add(item: rune.Value);
-        }
-
-        return string.Join(
-            separator: ',',
-            values: codePoints.OrderBy(keySelector: static value => value).Select(selector: static value => value.ToString(
-                format: "X",
-                provider: CultureInfo.InvariantCulture
-            ))
         );
     }
     private static string ResolveAgainstBase(string path, string basePath) {

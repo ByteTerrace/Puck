@@ -241,7 +241,9 @@ public sealed class OverlayGlyphSdfPack {
     /// <summary>Flattens a shared SDF atlas into the per-glyph cell pack: the ASCII block (indices 0..94) plus, in
     /// order, one cell per entry of <paramref name="extraCodePoints"/> (index = <see cref="AsciiGlyphCount"/> + i —
     /// the caller's own ordering, never re-derived). Returns <see langword="null"/> when <paramref name="monoFont"/>
-    /// is <see langword="null"/> or carries no usable ASCII glyph bounds. A requested extra codepoint the font does
+    /// is <see langword="null"/>, carries no usable ASCII glyph bounds, or a requested cell is not an equal-sized,
+    /// integer-aligned rectangle contained in the image. Variable-cell generated atlases require the layout-based
+    /// text path, not this fixed-grid pack. A requested extra codepoint the font does
     /// not declare leaves a blank cell — the same gap the ASCII block's own boundless glyphs (e.g. space) take.</summary>
     /// <param name="monoFont">The source atlas — a uniform-grid mono atlas (typically
     /// <see cref="OverlayGlyphAtlasSet.MonoFont"/>).</param>
@@ -279,8 +281,27 @@ public sealed class OverlayGlyphSdfPack {
             val1: 1,
             val2: ((int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)))
         );
-        var cellStride = (atlasCellWidth * atlasCellHeight);
+        bool FitsCell(FontAtlasBounds bounds) =>
+            float.IsFinite(bounds.Left) && float.IsFinite(bounds.Top) &&
+            bounds.Left == MathF.Truncate(bounds.Left) && bounds.Top == MathF.Truncate(bounds.Top) &&
+            bounds.Right - bounds.Left == atlasCellWidth && bounds.Bottom - bounds.Top == atlasCellHeight &&
+            bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= image.Width && bounds.Bottom <= image.Height;
+
         var extraCount = (extraCodePoints?.Count ?? 0);
+        var cellStrideLong = (long)atlasCellWidth * atlasCellHeight;
+        var glyphCountLong = (long)AsciiGlyphCount + extraCount;
+        if (cellStrideLong > Array.MaxLength / sizeof(uint) / glyphCountLong) { return null; }
+        if (image.Width != font.Width || image.Height != font.Height ||
+            !float.IsFinite(font.DistanceRange) || font.DistanceRange <= 0) {
+            return null;
+        }
+        for (var index = 0; index < (long)AsciiGlyphCount + extraCount; index++) {
+            var unicode = index < AsciiGlyphCount ? FirstChar + index : extraCodePoints![index - AsciiGlyphCount];
+            if (font.TryGetGlyph(unicode, out var glyph) && glyph.AtlasBounds is { } bounds && !FitsCell(bounds)) {
+                return null;
+            }
+        }
+        var cellStride = (int)cellStrideLong;
         var glyphCount = (AsciiGlyphCount + extraCount);
         var packedSdf = new uint[(glyphCount * cellStride)];
         var imageWidth = image.Width;
@@ -307,9 +328,7 @@ public sealed class OverlayGlyphSdfPack {
                     );
                     var sourceBase = (((sourceY * imageWidth) + sourceX) * 4);
 
-                    // All four channels ride along (little-endian R|G|B|A): the overlays median RGB at shade time,
-                    // and a runtime exact-EDT fallback atlas replicates its single channel so its median IS the
-                    // channel value.
+                    // All four channels ride along (little-endian R|G|B|A); overlays median RGB at shade time.
                     packedSdf[((glyphBase + (y * atlasCellWidth)) + x)] =
                         pixels[sourceBase]
                         | (((uint)pixels[(sourceBase + 1)]) << 8)

@@ -13,18 +13,21 @@ glyph atlas, but they consume different representations of the data.
 `ManagedFontAtlasGenerator` is the production in-process source for author-provided
 OpenType fonts and collections. Puck reads Unicode mappings, metrics, simple and
 composite TrueType quadratic outlines, and CFF/CFF2 Type 2 cubic charstrings. It
-packs the grid and evaluates a multi-channel true SDF from the outlines: the RGB
-median reconstructs sharp corners and alpha carries the exact marchable distance.
+packs per-glyph rectangles in shelves and evaluates a multi-channel signed-distance representation from
+the outlines. The RGB median reconstructs sharp corners for coverage; neither
+the median nor filtering should be treated as an exact or universally
+1-Lipschitz marchable distance.
+The generator resolves overlapping contours into filled boundaries before
+coloring; its approximation and refusal limits are documented in
+[Puck.Text](../../../../src/Puck.Text/README.md#generation-options-and-glyph-selection).
 World and CLI authors can select a zero-based TTC/OTC face; CFF2 variable outlines
 currently use default design coordinates. Pair kerning is flattened from GPOS pair
 positioning (the `kern` feature, PairPos formats 1 and 2, extension lookups included)
 or, when GPOS yields none, the legacy horizontal `kern` table; contextual positioning
 is not read. Pre-baked MTSDF atlases remain valid for fixed engine UI.
 
-`SdfCoverageAtlas.Generate` turns an already-rasterized coverage atlas into the
-single-channel SDF used by geometry. It computes an exact separable Euclidean
-distance transform; the generator replicates that channel into RGBA so both
-backends sample alpha uniformly.
+Coverage-only images are suitable for decals, not for marchable geometry. The
+managed outline generator is the supported path for generated glyph fields.
 
 The render node uploads an atlas when its immutable catalog reference changes.
 Consequently, loading or reloading a world can replace or remove its font set
@@ -34,13 +37,23 @@ without rebuilding the SDF engine; unchanged frames do not repeat the upload.
 
 `SdfProgramBuilder.Text` uses `Puck.Text.TextLayout`, then emits a transformed
 `Glyph` segment for each character. The shape stores packed atlas coordinates,
-world dimensions, extrusion depth, and the atlas-to-world distance scale.
+world dimensions, extrusion depth, the atlas-to-world distance scale, and a
+sampling correction in `Data1.w`.
 Layout options ride `TextLayoutOptions` (greedy wrap width, block alignment,
 tracking, line-height scale), and a `dynamicSlot` argument prefixes each glyph
 chain with `TransformDynamic`, so a whole run follows a dynamic transform's
 per-frame pose—how World's replay stamp pool moves lettering with an
 animated, inhabited, or attached placement while frame replay moves the
 shapes.
+
+The host computes a reciprocal derivative bound from the immutable decoded atlas
+pixels and the actual unorm16-packed UV span divided by the cell's world size.
+This includes quantization, bilinear filtering, and stretched cells; metadata-only
+atlases use the worst-case RGBA8 slope. The shader applies this correction only
+to the sampled alpha term, then takes its maximum with the exact cell-box field
+and extrudes it. The correction bounds the reconstructed field's slope; it does
+not restore the exact source outline or remove approximation error. The uploaded
+pixels and dimensions must be those used to build the glyph instructions.
 
 The shader samples the alpha distance only near the glyph's bounding quad. Far
 from the surface it returns the conservative quad field, which keeps culling
@@ -50,6 +63,10 @@ engraved like other shapes.
 Do not march the median of RGB channels. Median reconstruction is continuous
 enough for coverage but is not guaranteed to be a conservative signed-distance
 field at channel conflicts.
+
+The fixed-grid overlay pack is a separate consumer: it accepts only equal-sized,
+integer-aligned cells contained in the image and explicitly refuses variable-cell
+atlases. Generated proportional text uses the layout-based path.
 
 ## Glyph decals
 
@@ -77,10 +94,11 @@ settings.
 The current layout path maps one Unicode scalar at a time. Atlas rows retain the
 source glyph identifier, and the model permits glyph-ID-only rows, so a future
 generator can include a GSUB substitution closure without changing the atlas
-contract. Today's generator includes only directly mapped glyphs. Advanced OpenType
-shaping, bidirectional text, script-specific substitution, and cluster positioning
-still require an explicit shaping layer rather than ad hoc glyph remapping in the
-SDF VM.
+contract. Today's generator includes only directly mapped glyphs. GSUB,
+bidirectional reordering, script mark positioning, cluster positioning, and
+fallback-chain selection still require an explicit shaping/fallback layer.
+WOFF/WOFF2 and color-font inputs, and authored CFF2 variation axes, are not
+implemented.
 
 ## Choosing a tier
 
