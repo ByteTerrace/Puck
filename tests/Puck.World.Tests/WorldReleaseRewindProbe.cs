@@ -69,6 +69,9 @@ public sealed partial class WorldReleaseCutoverLawTests {
         using var sourceInstances = source.Instances;
         await ActivateAllAsync(source, identities);
         Assert.Equal(WorldReleaseAdmissionPublication.Opened, await PublishAsync(source));
+        var republishing = source.PublishManagedReleaseAdmissionAsync(Token);
+        source.DrainActivationMailbox();
+        Assert.Equal(WorldReleaseAdmissionPublication.Opened, await republishing.WaitAsync(TimeSpan.FromSeconds(3), Token));
         Tick(source, 3);
         var beforeDeploy = Ticks(source, identities);
         var enforcingCapture = source.ExportReleaseFixtureAsync(Guid.NewGuid(), Token);
@@ -238,7 +241,31 @@ public sealed partial class WorldReleaseCutoverLawTests {
         await PumpAllAsync([restarted], resume);
         Assert.True((await resume).Completed, (await resume).Detail);
         AssertTicks(continued, restarted, identities);
-        await PumpAsync(restarted, restarted.DrainAsync(Token));
+
+        // A rejected private rewind must recover the fresh pre-restore drain, never leave the selected old
+        // point installed. Interrupt that recovery before activation, then reconstruct it from durable state.
+        var rejectedCandidate = Host();
+        using var rejectedCandidateInstances = rejectedCandidate.Instances;
+        var recoveredSource = Host();
+        using var recoveredSourceInstances = recoveredSource.Instances;
+        var secondRestore = Required(await restores.BeginAsync("primary", point.RequestId, point.Identity, Guid.NewGuid(), true, Token));
+        var rejecting = new WorldReleaseCoordinator(groups).ResumeAsync(secondRestore, release,
+            new FailureRuntime(new WorldSiloReleaseRuntime(restarted, rejectedCandidate, identities, () => recoveredSource)), Token);
+        await PumpAllAsync([restarted, rejectedCandidate, recoveredSource], rejecting);
+        Assert.False((await rejecting).Completed);
+        Assert.False(rejectedCandidate.ReleaseAdmissionOpen);
+        var recovering = (await groups.LoadAsync("primary", Token))!.Value;
+        Assert.Equal(WorldReleaseOperationPhase.RecoverActivate, recovering.Record.PendingPhase);
+        Assert.Equal(WorldReleaseAdmissionState.Closed, recovering.Record.Admission);
+        var recoveringAfterRestart = new WorldReleaseCoordinator(groups).ResumeAsync(recovering, release,
+            new WorldSiloReleaseRuntime(restarted, rejectedCandidate, identities, () => recoveredSource), Token);
+        await PumpAllAsync([recoveredSource], recoveringAfterRestart);
+        Assert.True((await recoveringAfterRestart).SourceRecovered, (await recoveringAfterRestart).Detail);
+        AssertTicks(continued, recoveredSource, identities);
+        Assert.True(recoveredSource.ReleaseAdmissionOpen);
+        Assert.Null((await groups.LoadAsync("primary", Token))!.Value.Record.RestorePoint);
+        Assert.Equal(lateReceipt, await authority.FindOperationReceiptAsync(identity0, lateReceipt.OperationId, Token));
+        await PumpAsync(recoveredSource, recoveredSource.DrainAsync(Token));
         Console.WriteLine($"rewind probe: saved={string.Join(',', expected.Values)}, resumed={string.Join(',', continued.Values)}, point={point.Identity}");
     }
 

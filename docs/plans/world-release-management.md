@@ -25,6 +25,11 @@ before running Azure acceptance. Focused probes may guide implementation; run
 the relevant suites once the integrated implementation is ready, rather than
 repeatedly during development.
 
+The current checkpoint ends after implementing rewind and proving deploy,
+rollback, rewind, restart, and resume locally. Do not run suites or deploy to
+Azure during this checkpoint. The later acceptance gates below remain required
+before declaring production readiness.
+
 The required v1 supports one authoritative worker and its complete declared world
 group, one retained predecessor, immutable releases, progress-preserving deploy
 and rollback, explicit recovery-point capture and restore, status, resume, and

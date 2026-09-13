@@ -74,6 +74,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly WorldReleaseGroupStore? m_releaseGroupStore;
     private readonly WorldSiloReleaseManagement? m_releaseManagement;
     private int m_releaseAdmissionOpen;
+    private Guid m_publishedAdmissionClaim;
 
     private ulong m_masterElapsedEngineTicks;
     private int m_draining;
@@ -872,15 +873,18 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             Volatile.Write(location: ref m_releaseAdmissionOpen, value: 1);
             return WorldReleaseAdmissionPublication.Opened;
         }
+        var previousPublicationClaim = Guid.Empty;
         var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(TaskCreationOptions.RunContinuationsAsynchronously);
         m_mailbox.Enqueue(() => {
             try {
                 var rows = new List<(WorldAuthorityIdentity, WorldAuthorityFence)>();
+                previousPublicationClaim = m_publishedAdmissionClaim;
                 foreach (var declared in m_definition.Worlds.Where(static row => row.Pinned)) {
-                    if (!m_rows.TryGetValue(declared.World.Value, out var bookkeeping) || bookkeeping.Initializing || bookkeeping.Released || !Instances.TryGet(declared.World.Value, out var instance) || instance is null) {
+                    if (IsDraining || !m_rows.TryGetValue(declared.World.Value, out var bookkeeping) || bookkeeping.Initializing || bookkeeping.PersistenceBlocked || bookkeeping.Released || !Instances.TryGet(declared.World.Value, out var instance) || instance is null || instance.Server.IsRetiring) {
                         captured.TrySetResult([]);
                         return;
                     }
+                    if (instance.AwaitingMirrors || !m_routing.TryGetSession(declared.World.Value, out _)) { previousPublicationClaim = Guid.Empty; }
                     rows.Add((new WorldAuthorityIdentity(declared.Owner, declared.World), bookkeeping.Fence));
                 }
                 captured.TrySetResult(rows);
@@ -926,6 +930,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 : WorldReleaseAdmissionPublication.Refused;
         }
         if (!opened.Ok) { return WorldReleaseAdmissionPublication.Refused; }
+        // A completed publication under these exact fences already registered routes and started doors. Keep
+        // the guarded group write above, but do not repeat host effects or wait for another simulation boundary.
+        if (previousPublicationClaim == groupClaim && ReleaseAdmissionOpen && !IsDraining) { return WorldReleaseAdmissionPublication.Opened; }
         var published = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         m_mailbox.Enqueue(() => {
             try {
@@ -941,6 +948,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     if (!m_routing.TryGetSession(declared.World.Value, out _)) { _ = m_routing.Register(declared.World.Value); }
                     if (AllAdjacenciesPrimed(instance)) { Instances.ReleaseHold(instance); }
                 }
+                m_publishedAdmissionClaim = groupClaim;
                 published.TrySetResult(true);
             } catch (Exception error) { published.TrySetException(error); }
         });

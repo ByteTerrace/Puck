@@ -358,7 +358,7 @@ New package preparation includes `WorldReleaseManifest.CurrentCoordinatorContrac
 (`puck.world.release.restore.v1`) in the canonical manifest. It requires
 closed-group rewind enforcement, receipt-aware qualification and the prior metadata requirement.
 `ReceiptCoordinatorContract` and `MetadataCoordinatorContract` remain readable. Metadata
-publication requires either contract on one side of the pair so older coordinators
+publication requires a supported metadata-capable contract on one side of the pair so older coordinators
 cannot silently skip the transformation on resume or rollback.
 Preserve legacy identities by omitting an absent coordinator contract. Run
 `WorldReleaseCoordinatorContractLawTests`; `PUCK_TEST_PREVIOUS_WORLD_SERVER` enables
@@ -418,10 +418,14 @@ with the point's receipt history. Qualification copies explicitly drop the live
 boundary proof. The focused `LocalDeployRollbackRewindAndInterruptedResumePreserveTheirDistinctStateContracts`
 probe drives actual hosts, metadata publication, an internal transfer, interrupted
 rewind, and restart. It compares the entire checkpoint with the explicit reconnect
-parking adjustment, and verifies reconnect and retained current receipts. It is
+parking adjustment, and verifies reconnect, retained current receipts, and recovery
+of the fresh drain after a rejected private rewind and interrupted recovery. It is
 not a packaged-image or Azure acceptance substitute.
 Local forwarding disposal must tolerate retired destinations without changing their
-frozen checkpoint. Deploy, rollback, restore, resume, and
+frozen checkpoint. An already completed admission under the same fence claim
+still needs the group CAS and root census, but reuses fully published host effects;
+do not add another simulation-boundary wait to a no-op publication retry.
+Deploy, rollback, restore, resume, and
 finalization use a renewable controller lease. Run the CLI
 `WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained
 configuration, bootstrap, or controller ownership. The Azure lease law requires

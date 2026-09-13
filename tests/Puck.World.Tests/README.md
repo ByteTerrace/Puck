@@ -73,6 +73,10 @@ world publication, resumes with admission closed, and compares complete restored
 checkpoints. Disconnected players' documented parking is checked explicitly,
 including reconnect; current operation receipts and fresh writer generations
 survive. Restart and completed-operation resume must retain subsequent progress.
+A rejected private rewind recovers its fresh drain state; interrupting recovery
+before activation must preserve that choice when a new coordinator resumes.
+Repeating a fully published admission still checks fences and the group CAS,
+and completes after one pump boundary without registering routes again.
 This checks the coordinator and storage behavior in one compiled engine; packaged
 runtime and live Azure acceptance remain separate.
 

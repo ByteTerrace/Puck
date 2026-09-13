@@ -79,6 +79,9 @@ activations must enforce that same boundary. `ExportReleaseFixtureAsync` then
 retains a rewindable point with a capture time and complete receipt provenance.
 `ApplyRestorePointAsync` checks the captured group and machine identity before
 applying an explicit restore during private activation.
+Repeating a completed admission publication rechecks the authority fences and
+conditionally updates the group. An already completed publication under those
+same fences reuses its registered routes and listeners without another pump callback.
 
 Managed documents may add `release` with a deployment `group`, its private-store
 `owner`, and an exact `expectedRelease`. Such a host restores candidates behind
