@@ -111,6 +111,14 @@ rule and packaged rollback evidence exist. Managed silo admission consumes the
 group root and fences its explicit publication barrier. The CLI's Azure adapter
 uses this coordinator for deployment and rollback; explicit restore remains pending.
 
+New packages include `coordinatorContract: puck.world.release.metadata.v1` in
+their canonical identity. Existing manifests without that member retain their
+identities. Metadata publication requires the member on at least one side of the
+pair, protecting rollback to an older manifest as well as forward deployment.
+Older archive readers reject the new canonical member before runtime effects;
+new readers reject unknown coordinator contracts by name. The previous-reader
+control is in `WorldReleaseCoordinatorContractLawTests`.
+
 `WorldReleaseMetadataTransition` supplies the first isolated preservation rule:
 merge only the published author-metadata delta into the checkpoint's live definition
 and undo base. It validates both resulting documents, retains unrelated live edits,

@@ -201,6 +201,10 @@ is still unimplemented. The Azure activation adapter has an atomic metadata
 definition publisher, guarded by the operation and exact drained root, with
 receipt-based retries. Definition changes remain refused until packaged
 qualification exercises the same forward and reverse transformation.
+Newly prepared packages carry a coordinator contract automatically. Use current
+tooling to deploy or resume them; an older archive reader can report a noncanonical
+manifest when it encounters this requirement. Update the CLI rather than editing
+or regenerating the retained manifest. Legacy manifest identities remain valid.
 
 `azure prepare-world-release` applies the official endpoint and delegated
 admission bindings to the staged composed worlds, then hashes the complete

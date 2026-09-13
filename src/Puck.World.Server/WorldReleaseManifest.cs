@@ -10,6 +10,8 @@ namespace Puck.World.Server;
 public sealed record WorldReleaseManifest {
     /// <summary>The first release manifest schema.</summary>
     public const string CurrentSchema = "puck.world.release.v1";
+    /// <summary>Requires package-qualified metadata transformation and atomic definition/checkpoint publication.</summary>
+    public const string MetadataCoordinatorContract = "puck.world.release.metadata.v1";
 
     /// <summary>The manifest schema.</summary>
     [JsonPropertyName("schema")] public string Schema { get; init; } = CurrentSchema;
@@ -29,6 +31,10 @@ public sealed record WorldReleaseManifest {
     [JsonPropertyName("persistenceContract")] public required string PersistenceContract { get; init; }
     /// <summary>Peer protocol contract shared by this release pair.</summary>
     [JsonPropertyName("peerProtocolContract")] public required string PeerProtocolContract { get; init; }
+    /// <summary>Required coordinator behavior. Absence preserves existing engine-only manifest identities.
+    /// Older archive readers reject a manifest carrying an unknown canonical member before resuming it.</summary>
+    [JsonPropertyName("coordinatorContract"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CoordinatorContract { get; init; }
 
     /// <summary>Returns the canonical, content-addressed identity of this manifest.</summary>
     [JsonIgnore] public string Identity => ComputeIdentity(this);
@@ -54,6 +60,10 @@ public sealed record WorldReleaseManifest {
         ArgumentNullException.ThrowIfNull(manifest);
         if (!string.Equals(manifest.Schema, CurrentSchema, StringComparison.Ordinal)) {
             reason = $"unsupported release manifest schema '{manifest.Schema}'";
+            return false;
+        }
+        if (manifest.CoordinatorContract is not null && manifest.CoordinatorContract != MetadataCoordinatorContract) {
+            reason = $"unsupported release coordinator contract '{manifest.CoordinatorContract}'; use tooling that supports this package";
             return false;
         }
         if (string.IsNullOrWhiteSpace(manifest.Label) || string.IsNullOrWhiteSpace(manifest.SourceRevision)) {
@@ -185,6 +195,7 @@ public sealed record WorldReleaseManifest {
                 ["schema"] = manifest.Schema,
                 ["sourceRevision"] = manifest.SourceRevision,
             };
+            if (manifest.CoordinatorContract is not null) { root["coordinatorContract"] = manifest.CoordinatorContract; }
             return JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = false });
         }
     }
@@ -193,6 +204,17 @@ public sealed record WorldReleaseManifest {
 /// <summary>Structural compatibility checks for the first official release workflow. Passing this check is not a
 /// qualification claim: packaged cross-release exercise evidence is still required before deployment.</summary>
 public static class WorldReleaseCompatibility {
+    /// <summary>Requires at least one immutable manifest in a metadata pair to exclude older coordinators.
+    /// Both manifests are loaded before runtime effects, so this also protects rollback to a legacy manifest.</summary>
+    public static bool TryRequireMetadataCoordinator(WorldReleaseManifest source, WorldReleaseManifest target, out string reason) {
+        if (!WorldReleaseManifest.TryValidate(source, out reason) || !WorldReleaseManifest.TryValidate(target, out reason)) { return false; }
+        if (source.CoordinatorContract != WorldReleaseManifest.MetadataCoordinatorContract && target.CoordinatorContract != WorldReleaseManifest.MetadataCoordinatorContract) {
+            reason = "metadata transitions require a package with the metadata coordinator contract; prepare the new release with current tooling";
+            return false;
+        }
+        reason = string.Empty;
+        return true;
+    }
     /// <summary>Checks structural prerequisites only. This does not qualify a deployment or prove state preservation.</summary>
     public static bool TryCheckStructuralCompatibility(WorldReleaseManifest previous, WorldReleaseManifest candidate, out string reason) {
         ArgumentNullException.ThrowIfNull(previous);

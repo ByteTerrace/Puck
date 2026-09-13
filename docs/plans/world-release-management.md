@@ -43,6 +43,11 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   retains operation receipts for read-only retries. Directory-backed failure laws
   cover interrupted publication and competing authority. Packaged qualification
   still needs the transformed forward and reverse fixtures before admission.
+- New prepared manifests bind the metadata coordinator contract into their
+  immutable identities. The atomic publisher requires it on one side of a metadata
+  pair. An actual previous archive-reader binary accepted the legacy control and
+  refused the new requirement without writing; the same guard protects rollback
+  because resume loads both manifests before worker effects.
 - The CLI `release` command offers `prepare`, `deploy`, `rollback`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
@@ -74,10 +79,6 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   established before capture; it must not infer safety from current endpoints alone.
 - No definition edit is admitted yet. The metadata rule and guarded checkpoint
   publisher need package-bound qualification before admission.
-  Admission also needs a canonical manifest requirement that older coordinator
-  builds reject: an older `resume` implementation must not skip definition
-  publication and boot the target over unchanged authored state. Exercise that
-  refusal before enabling metadata pairs, including rollback to an older image.
 - The legacy blob-version rewind has been removed. Automatic capture, fixture
   materialization and rollback are wired in. Registry protection, publication
   retry, and VM guards still need real cloud acceptance

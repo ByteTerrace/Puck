@@ -22,7 +22,8 @@ public sealed partial class WorldAuthorityBlobStore {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(archive);
         if (!WorldReleaseManifest.TryValidate(source, out var reason) || !WorldReleaseManifest.TryValidate(target, out reason) ||
-            !WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, target, out reason)) {
+            !WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, target, out reason) ||
+            !WorldReleaseCompatibility.TryRequireMetadataCoordinator(source, target, out reason)) {
             return WorldAuthorityStoreOutcome.Failed(reason);
         }
         var key = $"{identity.Owner:D}/{identity.World}";

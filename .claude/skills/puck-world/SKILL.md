@@ -349,6 +349,12 @@ checkpoint and definition in one CAS against the protected drain root, retaining
 receipts and recognizing retries without rewinding candidate progress. Run
 `WorldReleaseMetadataPublicationLawTests` for that boundary. This rule does not
 yet authorize changed definition pins: package qualification still needs wiring.
+New package preparation includes `WorldReleaseManifest.MetadataCoordinatorContract`
+in the canonical manifest. Metadata publication requires it on one side of the pair
+so older coordinators cannot silently skip the transformation on resume or rollback.
+Preserve legacy identities by omitting an absent coordinator contract. Run
+`WorldReleaseCoordinatorContractLawTests`; `PUCK_TEST_PREVIOUS_WORLD_SERVER` enables
+its actual previous-reader check and records the assembly hash.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains

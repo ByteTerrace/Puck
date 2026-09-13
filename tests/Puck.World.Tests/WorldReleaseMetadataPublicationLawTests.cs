@@ -155,6 +155,18 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         Assert.Equal(root, await scenario.Store.LoadRootAsync(scenario.Identity, Token));
     }
 
+    [Fact]
+    public async Task MetadataPairWithoutCoordinatorRequirementCannotPublish() {
+        using var scenario = await Scenario.CreateAsync(coordinatorContract: false);
+        var before = await scenario.Store.LoadRootAsync(scenario.Identity, Token);
+        var writes = scenario.Blobs.Writes;
+        var outcome = await scenario.ApplyAsync();
+        Assert.False(outcome.Ok);
+        Assert.Contains("metadata coordinator contract", outcome.Detail);
+        Assert.Equal(writes, scenario.Blobs.Writes);
+        Assert.Equal(before, await scenario.Store.LoadRootAsync(scenario.Identity, Token));
+    }
+
     private static bool IsRoot(ObjectBlobAddress address) => address.Key.EndsWith("/authority/root", StringComparison.Ordinal);
     private sealed class Scenario : IDisposable {
         private readonly TempWorldDirectory m_directory = new();
@@ -177,11 +189,11 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             Archive = new(Blobs, Target, Identity.Owner);
             Groups = new(Blobs, Target, Identity.Owner);
         }
-        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false) {
+        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool coordinatorContract = true) {
             var scenario = new Scenario();
             var a = Fixtures.BuildDocument() with { Metadata = new(Title: "A", Description: "authored") };
             scenario.Source = await scenario.PackageAsync(a, "A");
-            scenario.Candidate = await scenario.PackageAsync(a with { Metadata = a.Metadata! with { Title = "B" } }, "B");
+            scenario.Candidate = await scenario.PackageAsync(a with { Metadata = a.Metadata! with { Title = "B" } }, "B", coordinatorContract);
             using var fixture = Fixtures.FreshServer(a with { Metadata = new(Title: conflict ? "operator" : "A", Description: "live note") });
             fixture.Step();
             fixture.Step();
@@ -204,7 +216,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             scenario.Operation = activation.Snapshot!.Value.Record;
             return scenario;
         }
-        private async Task<WorldReleaseManifest> PackageAsync(WorldDefinition definition, string label) {
+        private async Task<WorldReleaseManifest> PackageAsync(WorldDefinition definition, string label, bool coordinator = true) {
             var package = Directory.CreateDirectory(Path.Combine(m_directory.RootPath, label));
             var bytes = WorldDefinitionSerialization.Serialize(definition);
             File.WriteAllBytes(Path.Combine(package.FullName, "world.json"), bytes);
@@ -212,6 +224,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             var manifest = new WorldReleaseManifest {
                 Label = label, SourceRevision = new string('a', 40), EngineImageDigest = "sha256:" + new string('b', 64),
                 PersistenceContract = "test", PeerProtocolContract = "test",
+                CoordinatorContract = label == "B" && coordinator ? WorldReleaseManifest.MetadataCoordinatorContract : null,
                 Definitions = new Dictionary<string, string> { [key] = "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes)) },
                 DefinitionFiles = new Dictionary<string, string> { [key] = "world.json" },
             };

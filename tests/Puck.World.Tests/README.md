@@ -60,6 +60,12 @@ admit definition changes. `WorldReleaseMetadataPublicationLawTests` exercises th
 directory-backed atomic publisher, including interruption before and after the
 root write, competing authority, leaving activation during upload, retained
 receipts, and retries after candidate progress. These do not exercise Azure VMSS.
+`WorldReleaseCoordinatorContractLawTests` checks immutable coordinator requirements
+and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to an older
+`Puck.World.Server.dll` to run the real previous archive reader in an isolated
+assembly context. It must accept the legacy control and refuse the new requirement
+without writing. That binary-dependent test skips when the variable is absent;
+its output records the reader's SHA-256 for provenance.
 
 ## What an assertion must prove
 
