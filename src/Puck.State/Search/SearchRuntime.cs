@@ -705,10 +705,9 @@ public sealed partial class SearchRuntime {
 
             if (
                 m_catalog!.TryResolve(lane: StateLane.Document, name: job.Plan.Tokens, handle: out var handle) &&
-                m_catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
-                (((uint)descriptor.LaneOrdinal) < ((uint)rows.Count))
+                StateReader.TryResolveRowHandle(rows: rows, catalog: m_catalog, handle: handle, rowOrdinal: out _, row: out var row)
             ) {
-                tokens = (rows[descriptor.LaneOrdinal].Cells?.Count ?? 0);
+                tokens = (row.Cells?.Count ?? 0);
             }
 
             if (job.Legal.Length != tokens) {

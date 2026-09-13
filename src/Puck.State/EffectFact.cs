@@ -360,15 +360,19 @@ public sealed class TransformStateEffect : EffectFact {
     /// (<c>$zones[&lt;index&gt;]</c>), or <see langword="null"/> for a literal zone.</param>
     /// <param name="toZone">The live zone a <see cref="StateTransform.Transfer"/>'s <c>to</c> spelled, on the same
     /// terms as <paramref name="fromZone"/>.</param>
-    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? keyRef = null, LiveZone? fromZone = null, LiveZone? toZone = null) : base(describe) {
+    /// <param name="handle">The compiled destination row handle for a push, or default for other transforms.</param>
+    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? keyRef = null, LiveZone? fromZone = null, LiveZone? toZone = null, StateHandle handle = default) : base(describe) {
         Transform = transform;
         KeyRef = keyRef;
         FromZone = fromZone;
         ToZone = toZone;
+        Handle = handle;
     }
 
     /// <summary>Gets the discrete state transform.</summary>
     public StateTransform Transform { get; }
+    /// <summary>Gets the compiled destination row handle for a push, or default.</summary>
+    public StateHandle Handle { get; }
     /// <summary>Gets the live key indirection the transform's one dynamic key resolves through, or <see langword="null"/>.</summary>
     public CompiledCellRef? KeyRef { get; }
     /// <summary>Gets the live zone a transfer's source resolves through, or <see langword="null"/> for a literal zone.</summary>
@@ -488,14 +492,18 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     /// <param name="from">The live copy-source operand, or <see langword="null"/> for a literal/expression push.</param>
     /// <param name="expression">The compiled numeric expression, or <see langword="null"/> for another source spelling.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public PushStateEffect(string row, long rawValue, OperandFact? from, CompiledExpressionToken[]? expression, string describe)
+    /// <param name="handle">The compiled history row handle, or default to resolve the row through the current catalog.</param>
+    public PushStateEffect(string row, long rawValue, OperandFact? from, CompiledExpressionToken[]? expression, string describe, StateHandle handle = default)
         : base(describe) {
         Row = row;
         RawValue = rawValue;
         From = from;
         Expression = expression;
+        Handle = handle;
     }
 
+    /// <summary>Gets the compiled history row handle, or default.</summary>
+    public StateHandle Handle { get; }
     /// <summary>Gets the history row.</summary>
     public string Row { get; }
     /// <inheritdoc/>
@@ -506,12 +514,12 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     public CompiledExpressionToken[]? Expression { get; }
 
     /// <summary>Reshapes an already-resolved <see cref="WriteEffect"/> into the ring push over it: the value spelling
-    /// (literal/copy/expression) carries over unchanged, and the row-addressing fields (Key, KeyFrom, Write, Text)
+    /// (literal/copy/expression) and row handle carry over unchanged, and the cell-addressing fields (Key, KeyFrom, Write, Text)
     /// fall away because a push always targets the ring's own next slot.</summary>
     /// <param name="write">The resolved write over the ring's slot cell.</param>
     /// <param name="describe">The push's own read-back spelling.</param>
     public static PushStateEffect FromWrite(WriteEffect write, string describe) =>
-        new(write.Row, write.RawValue, write.From, write.Expression, describe);
+        new(write.Row, write.RawValue, write.From, write.Expression, describe, handle: write.Handle);
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => EffectCosts.Sourced(baseCost: 1_024L, effect: this, context: context);

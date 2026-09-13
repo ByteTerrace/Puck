@@ -138,13 +138,11 @@ public sealed partial class RuleEvaluator {
             _ = m_host.Catalog.TryResolve(lane: StateLane.Document, name: row, handle: out handle);
         }
 
-        if (handle != default && m_host.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) && (descriptor.Ownership == StateLane.Document) && string.Equals(a: row, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
-            var rows = m_host.Store.Rows;
-
-            if ((((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) && (rows[descriptor.LaneOrdinal] is { Cells: { } cells }) && string.Equals(a: rows[descriptor.LaneOrdinal].Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
-                for (var index = 0; index < cells.Count; index++) {
-                    into.Add(item: cells[index].Key);
-                }
+        if (StateReader.TryResolveRowHandle(rows: m_host.Store.Rows, catalog: m_host.Catalog, handle: handle, rowOrdinal: out _, row: out var resolved) &&
+            string.Equals(a: row, b: resolved.Name, comparisonType: StringComparison.Ordinal) &&
+            (resolved.Cells is { } cells)) {
+            for (var index = 0; index < cells.Count; index++) {
+                into.Add(item: cells[index].Key);
             }
         }
     }

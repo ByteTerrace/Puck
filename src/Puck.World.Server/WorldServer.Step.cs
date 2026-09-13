@@ -311,10 +311,9 @@ public sealed partial class WorldServer {
 
         if (
             catalog.TryResolve(lane: StateLane.Document, name: name, handle: out handle) &&
-            catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
-            (((uint)descriptor.LaneOrdinal) < ((uint)m_definition.State.Count))
+            StateReader.TryResolveRowHandle(rows: m_definition.State, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out _)
         ) {
-            row = m_definition.State[descriptor.LaneOrdinal];
+            row = m_definition.State[ordinal];
 
             return true;
         }

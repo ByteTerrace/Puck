@@ -42,6 +42,14 @@ public abstract class StateStore {
     /// <param name="row">The row.</param>
     public virtual int CellCount(StateRow row) => (row?.Cells?.Count ?? 0);
 
+    /// <summary>Returns a row's live cell count by ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <returns>The cell count, or zero when the ordinal is outside the store.</returns>
+    public virtual int CellCount(int rowOrdinal) {
+        var rows = Rows;
+        return ((uint)rowOrdinal < (uint)rows.Count) ? CellCount(row: rows[rowOrdinal]) : 0;
+    }
+
     /// <summary>Reads the key of a row's cell by position — the ordinal that <see cref="TryStoredAt(Puck.State.StateRow, int, out long)"/> reads the
     /// value of, so a zone's members enumerate in pile order through a frame that has moved them.</summary>
     /// <param name="row">The row.</param>

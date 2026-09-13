@@ -12,6 +12,8 @@ public sealed partial class RuleEvaluator {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="stepTicks">How many ticks the step spans.</param>
     /// <returns><see langword="true"/> when any effect installed a mutation.</returns>
+    /// <exception cref="InvalidOperationException">A compiled write or push handle resolves to a row whose name
+    /// differs from the effect's destination. This is a broken compiled program, not a skipped effect.</exception>
     public bool FireEffects(EffectFact[] effects, string ruleName, ulong tick, ulong stepTicks) {
         var applied = false;
         var trace = m_traceEntry;
@@ -55,7 +57,7 @@ public sealed partial class RuleEvaluator {
                         To = (transformState.ToZone?.ResolveName(reader: m_host) ?? liveEnds.To),
                     };
                 }
-                return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transform), tick: tick, preflight: preflight);
+                return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transform, Handle: transformState.Handle), tick: tick, preflight: preflight);
             case TransactionEffect transaction:
                 return FireTransaction(transaction: transaction, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
             case PushStateEffect push:
@@ -129,18 +131,23 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
-        StateRow? row = null;
-        long? destination = null;
-        string? currentText = null;
-        var hasRow = (destinationCellKey != default)
-            ? StateReader.TryReadHandle(store: m_host.Store, catalog: m_host.Catalog, handle: handle, key: destinationCellKey, tick: tick, row: out row, rawValue: out destination, text: out currentText)
-            : StateReader.TryReadHandle(store: m_host.Store, catalog: m_host.Catalog, handle: handle, key: destinationKey, tick: tick, row: out row, rawValue: out destination, text: out currentText);
-
-        if (!hasRow || !string.Equals(a: row!.Name, b: write.Row, comparisonType: StringComparison.Ordinal)) {
-            return false;
+        var store = m_host.Store;
+        if (!StateReader.TryResolveRowHandle(rows: store.Rows, catalog: m_host.Catalog, handle: handle, rowOrdinal: out var ordinal, row: out var row)) {
+            throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
+        }
+        if (!string.Equals(a: row.Name, b: write.Row, comparisonType: StringComparison.Ordinal)) {
+            throw new InvalidOperationException(message: $"Compiled write for row '{write.Row}' addresses row '{row.Name}'.");
         }
 
-        if (row!.Kind == CellKind.Text) {
+        long? destination;
+        string? currentText;
+        if (destinationCellKey != default) {
+            StateReader.ReadCell(store: store, rowOrdinal: ordinal, row: row, key: destinationCellKey, tick: tick, rawValue: out destination, text: out currentText);
+        } else {
+            StateReader.ReadCell(store: store, rowOrdinal: ordinal, row: row, key: destinationKey, tick: tick, rawValue: out destination, text: out currentText);
+        }
+
+        if (row.Kind == CellKind.Text) {
             // A schedule/countdown row is refused at compile time unless kind=Int, so a text row here can only be a
             // Write.
             var textWrite = (WriteEffect)write;
@@ -173,7 +180,7 @@ public sealed partial class RuleEvaluator {
             (destinationCellKey != default || CellName.TryParse(candidate: destinationKey, name: out destinationCellKey, reason: out _)) &&
             (StateRows.FindCell(cells: row.Cells, key: destinationCellKey) is { } storedCell) &&
             ((storedCell.Cycle is not null) || ((storedCell.Key == StateRow.SlotKey) && (row.Cycle is not null))) &&
-            m_host.Store.TryStored(row: row, key: destinationCellKey, value: out var storedPhase, text: out _)
+            store.TryStored(rowOrdinal: ordinal, key: destinationCellKey, value: out var storedPhase, text: out _)
         ) {
             current = storedPhase;
         }
@@ -223,7 +230,20 @@ public sealed partial class RuleEvaluator {
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and
     // slot move in one journaled mutation.
     private bool FirePush(PushStateEffect effect, string ruleName, ulong tick, bool preflight) {
-        if ((m_host.Store.Find(name: effect.Row) is not { } row) || (row.EffectiveDomain is not StateDomain.Ring)) {
+        var handle = effect.Handle;
+        if (handle == default) {
+            _ = m_host.Catalog.TryResolve(lane: StateLane.Document, name: effect.Row, handle: out handle);
+        }
+        if (handle == default) {
+            return false;
+        }
+        if (!StateReader.TryResolveRowHandle(rows: m_host.Store.Rows, catalog: m_host.Catalog, handle: handle, rowOrdinal: out _, row: out var row)) {
+            throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
+        }
+        if (!string.Equals(a: row.Name, b: effect.Row, comparisonType: StringComparison.Ordinal)) {
+            throw new InvalidOperationException(message: $"Compiled push for row '{effect.Row}' addresses row '{row.Name}'.");
+        }
+        if (row.EffectiveDomain is not StateDomain.Ring) {
             return false;
         }
 
@@ -234,7 +254,7 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
-        return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: new StateTransform.Push(Row: row.Name.Value, Value: raw)), tick: tick, preflight: preflight);
+        return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: new StateTransform.Push(Row: row.Name.Value, Value: raw), Handle: handle), tick: tick, preflight: preflight);
     }
 
     // One source read per execution pass. Absence/forever skip a direct copy; expression faults remain diagnostic.

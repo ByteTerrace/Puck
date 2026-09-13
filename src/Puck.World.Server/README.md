@@ -1672,6 +1672,10 @@ lane write that would leave a cell as it is queues nothing, so a quiet tick
 moves no row version. Cells are never removed: a HUD binding a lane cell must
 find it declared, and the row's authored `capacity` bounds bodies times facts.
 
+The mirror caches the lane handle for the current rule catalog. Row selection,
+key enumeration, and unchanged-value checks use its document-lane ordinal;
+installing another catalog refreshes the handle before the lane is read again.
+
 `setIdentityFact` (`IdentityFactEffect`) resolves its body like `pose` does,
 refuses by name a body driving under no owned identity (`IdentityUnbound`—
 an anonymous seat's fact is refused, never minted), a document declaring no

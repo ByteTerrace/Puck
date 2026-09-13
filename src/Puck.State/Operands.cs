@@ -45,14 +45,12 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
         // Fast path for $each on the iterated row: answer by position without key parsing or cell scanning,
         // guarded by checking that the key at that position still matches the bound key.
         if ((KeyFrom is { Binding: BoundKey.Each }) && (handle == reader.BoundEachRowHandle) && (reader.BoundEachPosition >= 0) && (reader.BoundEachKey is { } boundEachKey)) {
-            if (reader.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) && (descriptor.Ownership == StateLane.Document)) {
-                var rows = reader.Store.Rows;
-                if ((((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) && (rows[descriptor.LaneOrdinal] is { } resolved) && string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
-                    if (reader.Store.TryKeyAt(rowOrdinal: descriptor.LaneOrdinal, index: reader.BoundEachPosition, key: out var liveKey) && string.Equals(a: liveKey.Value, b: boundEachKey, comparisonType: StringComparison.Ordinal)) {
-                        var liveValue = StateReader.LiveAt(store: reader.Store, rowOrdinal: descriptor.LaneOrdinal, row: resolved, index: reader.BoundEachPosition, tick: reader.Tick);
-                        return RuleFact.Finite(value: liveValue, kind: ValueKind);
-                    }
-                }
+            var store = reader.Store;
+            if (StateReader.TryResolveRowHandle(rows: store.Rows, catalog: reader.Catalog, handle: handle, rowOrdinal: out var ordinal, row: out var resolved) &&
+                store.TryKeyAt(rowOrdinal: ordinal, index: reader.BoundEachPosition, key: out var liveKey) &&
+                string.Equals(a: liveKey.Value, b: boundEachKey, comparisonType: StringComparison.Ordinal)) {
+                var liveValue = StateReader.LiveAt(store: store, rowOrdinal: ordinal, row: resolved, index: reader.BoundEachPosition, tick: reader.Tick);
+                return RuleFact.Finite(value: liveValue, kind: ValueKind);
             }
         }
 

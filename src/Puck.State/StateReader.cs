@@ -66,6 +66,30 @@ public enum StateReduceOp : byte {
 /// only what <see cref="Puck.Maths.DiscreteMeasure"/>'s exact rational allocation costs for its magnitude.</para>
 /// </remarks>
 public static class StateReader {
+    /// <summary>Resolves a document-owned row and its ordinal without a row-name scan.</summary>
+    /// <param name="rows">The current document rows, in catalog lane order.</param>
+    /// <param name="catalog">The catalog that owns the handle.</param>
+    /// <param name="handle">The compiled document-lane handle.</param>
+    /// <param name="rowOrdinal">The resolved ordinal, or -1 on failure.</param>
+    /// <param name="row">The resolved row, or null on failure.</param>
+    /// <returns>Whether the handle belongs to the catalog and addresses a current row with the expected name.</returns>
+    public static bool TryResolveRowHandle(IReadOnlyList<StateRow> rows, StateCatalog catalog, StateHandle handle, out int rowOrdinal, [NotNullWhen(true)] out StateRow? row) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        if (catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
+            (descriptor.Ownership == StateLane.Document) &&
+            ((uint)descriptor.LaneOrdinal < (uint)rows.Count) &&
+            (rows[descriptor.LaneOrdinal] is { } resolved) &&
+            string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+            rowOrdinal = descriptor.LaneOrdinal;
+            row = resolved;
+            return true;
+        }
+        rowOrdinal = -1;
+        row = null;
+        return false;
+    }
+
     /// <summary>Resolves one document-owned row by its compiled typed handle without a row-name scan.</summary>
     /// <param name="rows">The section's rows.</param>
     /// <param name="catalog">The section's current state catalog.</param>
@@ -97,17 +121,10 @@ public static class StateReader {
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: catalog);
 
-        if (
-            !catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) ||
-            (descriptor.Ownership != StateLane.Document) ||
-            (((uint)descriptor.LaneOrdinal) >= ((uint)rows.Count)) ||
-            (rows[descriptor.LaneOrdinal] is not { } resolved) ||
-            !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)
-        ) {
+        if (!TryResolveRowHandle(rows: rows, catalog: catalog, handle: handle, rowOrdinal: out _, row: out row)) {
             throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
         }
 
-        row = resolved;
         ReadCell(key: key, rawValue: out rawValue, row: row, text: out text, tick: tick);
 
         return true;
@@ -136,18 +153,11 @@ public static class StateReader {
         ArgumentNullException.ThrowIfNull(argument: catalog);
         var rows = store.Rows;
 
-        if (
-            !catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) ||
-            (descriptor.Ownership != StateLane.Document) ||
-            (((uint)descriptor.LaneOrdinal) >= ((uint)rows.Count)) ||
-            (rows[descriptor.LaneOrdinal] is not { } resolved) ||
-            !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)
-        ) {
+        if (!TryResolveRowHandle(rows: rows, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out row)) {
             throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
         }
 
-        row = resolved;
-        ReadCell(store: store, rowOrdinal: descriptor.LaneOrdinal, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
+        ReadCell(store: store, rowOrdinal: ordinal, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
 
         return true;
     }
@@ -175,18 +185,11 @@ public static class StateReader {
         ArgumentNullException.ThrowIfNull(argument: catalog);
         var rows = store.Rows;
 
-        if (
-            !catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) ||
-            (descriptor.Ownership != StateLane.Document) ||
-            (((uint)descriptor.LaneOrdinal) >= ((uint)rows.Count)) ||
-            (rows[descriptor.LaneOrdinal] is not { } resolved) ||
-            !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)
-        ) {
+        if (!TryResolveRowHandle(rows: rows, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out row)) {
             throw new ArgumentException(message: "The state handle does not address a current document-owned row.", paramName: nameof(handle));
         }
 
-        row = resolved;
-        ReadCell(store: store, rowOrdinal: descriptor.LaneOrdinal, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
+        ReadCell(store: store, rowOrdinal: ordinal, row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
 
         return true;
     }
@@ -519,26 +522,34 @@ public static class StateReader {
     /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank.</returns>
     public static long ReduceRaw(StateStore? store, int rowOrdinal, StateRow row, StateReduceOp op, ulong tick, int filterOrdinal, StateRow? filter, (long Lower, long Upper)? range) {
         ArgumentNullException.ThrowIfNull(row);
-        var count = store?.CellCount(row) ?? row.Cells?.Count ?? 0;
+        var count = store is null ? row.Cells?.Count ?? 0
+            : (rowOrdinal >= 0 ? store.CellCount(rowOrdinal: rowOrdinal) : store.CellCount(row: row));
         if (op == StateReduceOp.Count && filter is null && range is null) { return count; }
         if (op == StateReduceOp.ArrangementRank) { return -1L; }
         if (count == 0) { return 0L; }
 
         // Dense frames can hold keys outside the authored cell list. Their keyed path resolves topology ordinals.
         var denseFilter = store is StateFrame && filter?.EffectiveDomain is StateDomain.CellsOf;
-        var filterCount = filter is null || denseFilter ? 0 : store?.CellCount(filter) ?? filter.Cells?.Count ?? 0;
+        var filterCount = 0;
+        if (filter is not null && !denseFilter) {
+            filterCount = store is null ? filter.Cells?.Count ?? 0
+                : (filterOrdinal >= 0 ? store.CellCount(rowOrdinal: filterOrdinal) : store.CellCount(row: filter));
+        }
         var scratchLength = filter is null || denseFilter ? 0 : CellOrdinalIndex.ScratchLength(filterCount);
         var rented = scratchLength > 512 ? System.Buffers.ArrayPool<int>.Shared.Rent(scratchLength) : null;
         var scratch = rented is null ? stackalloc int[scratchLength] : rented.AsSpan(0, scratchLength);
         try {
-            var lookup = filter is null || denseFilter ? default : new CellOrdinalIndex(store, filter, scratch);
+            var lookup = filter is null || denseFilter ? default : new CellOrdinalIndex(store, filter, scratch, rowOrdinal: filterOrdinal);
             var hasValue = false;
             var accumulator = 0L;
             for (var index = 0; index < count; index++) {
                 if (filter is not null) {
                     var key = default(CellName);
                     if (store is not null) {
-                        if (!store.TryKeyAt(row, index, out key)) { continue; }
+                        var foundKey = rowOrdinal >= 0
+                            ? store.TryKeyAt(rowOrdinal: rowOrdinal, index: index, key: out key)
+                            : store.TryKeyAt(row: row, index: index, key: out key);
+                        if (!foundKey) { continue; }
                     } else {
                         key = row.Cells![index].Key;
                     }

@@ -98,5 +98,7 @@ public abstract record StateMutation {
     public sealed record Generate(string Row) : StateMutation;
     /// <summary>Applies one atomic state transform.</summary>
     /// <param name="Transform">The transform.</param>
-    public sealed record Apply(StateTransform Transform) : StateMutation;
+    /// <param name="Handle">The destination row handle for a push, or default. A host using it must verify that
+    /// it matches the transform's replayable row name; other transforms do not use this hint.</param>
+    public sealed record Apply(StateTransform Transform, StateHandle Handle = default) : StateMutation;
 }

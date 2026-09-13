@@ -117,14 +117,26 @@ this stage.
 This stage needs no catalog or lifecycle change and lands as one commit.
 
 **Ordinal entrances on the store.** Add `TryStored(int rowOrdinal, …)`,
-`TryStoredAt(int rowOrdinal, …)`, and `TryWrite(int rowOrdinal, …)` to
-`StateStore`, implemented on `StateFrame` by indexing `Layout[rowOrdinal]`
-directly and on `RowStore` by indexing `Rows[rowOrdinal]`. Route
+`TryStoredAt(int rowOrdinal, …)`, `TryKeyAt(int rowOrdinal, …)`, and
+`CellCount(int rowOrdinal)` to `StateStore`. `StateFrame` indexes
+`Layout[rowOrdinal]` directly; `RowStore` indexes `Rows[rowOrdinal]`.
+Add ordinal writes on `StateFrame` too. Route
 `StateReader.TryReadHandle`, `IRuleHost.TryApply`, and the reduction and
 board readers that already hold a descriptor through them using
 `descriptor.LaneOrdinal`. The `string.Equals` check between the resolved row's
 name and the descriptor's name stays: it is the invariant that the ordinal
 still names the row the handle was minted for.
+
+Carry the resolved ordinal through identity-lane synchronization, filter-key
+indexing, and row-version checks too. Both push spellings retain their compiled
+row handle through frame application; the serialized transform retains its
+row name, checked against that handle before the frame changes.
+Use `StateReader.TryResolveRowHandle` for the shared catalog ownership, ordinal,
+and current row-name checks. Compile-time push handles use `ResolveHandle` so
+a missing catalog entry fails compilation. A compiled write or push whose
+handle names a different destination fails evaluation as an invariant violation.
+The internal row-name lookups in `clearEnclosed`, `writeSet`, and `boardCombine`
+remain outside Stage 1.
 
 **Skip the authored-cell scan when no trait needs it.** Record on
 `FrameRowLayout` whether the row or any of its cells declares `Advance` or
@@ -137,8 +149,8 @@ because the index is the value's address; the cell they find is free.
 **Parse literal keys once.** `StateCellOperand`, `CompiledCellRef`, and the
 write effects carry a `CellName` for a literal key beside the string the
 refusal text uses, minted by the compiler that already validated it.
-`ResolveKey` returns the parsed name on the literal path and parses only on
-the indirected path.
+Literal reads and writes use that parsed name directly. Indirection still reads
+the source cell's value to resolve the destination key.
 
 **Bind the `forEach` index beside the key.** `RuleEvaluator` already tracks
 `BoundEachPosition`; expose it through `IRuleReader`, and let a `$each` read

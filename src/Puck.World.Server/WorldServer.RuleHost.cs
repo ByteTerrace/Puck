@@ -25,11 +25,9 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
         if (
             m_ruleFrameActive &&
             (m_ruleFrame is { } frame) &&
-            RuleReadCatalog.TryGetDescriptor(handle: row, descriptor: out var descriptor) &&
-            (descriptor.Ownership == StateLane.Document) &&
-            (((uint)descriptor.LaneOrdinal) < ((uint)frame.Layout.RowCount))
+            StateReader.TryResolveRowHandle(rows: frame.Rows, catalog: RuleReadCatalog, handle: row, rowOrdinal: out var ordinal, row: out _)
         ) {
-            version = frame.RowVersion(rowOrdinal: descriptor.LaneOrdinal);
+            version = frame.RowVersion(rowOrdinal: ordinal);
 
             return true;
         }
@@ -88,23 +86,11 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                     _ = RuleReadCatalog.TryResolve(lane: StateLane.Document, name: cell.Row, handle: out handle);
                 }
 
-                var ordinal = -1;
-                StateRow? row = null;
-
-                if (handle != default && RuleReadCatalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) && (descriptor.Ownership == StateLane.Document)) {
-                    if (!string.Equals(a: cell.Row, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+                if (StateReader.TryResolveRowHandle(rows: frame.Rows, catalog: RuleReadCatalog, handle: handle, rowOrdinal: out var ordinal, row: out var row)) {
+                    if (!string.Equals(a: cell.Row, b: row.Name, comparisonType: StringComparison.Ordinal)) {
                         reason = "the state handle does not match the mutation row";
                         return false;
                     }
-                    var rows = frame.Rows;
-
-                    if ((((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) && (rows[descriptor.LaneOrdinal] is { } resolved) && string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
-                        ordinal = descriptor.LaneOrdinal;
-                        row = resolved;
-                    }
-                }
-
-                if (row is not null) {
                     CellName key;
 
                     if (cell.CellKey != default) {
@@ -118,7 +104,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                         return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
                     }
 
-                    var keyed = ((ordinal >= 0) && (frame.Layout[ordinal].Kind == FrameRowKind.Keyed));
+                    var keyed = (frame.Layout[ordinal].Kind == FrameRowKind.Keyed);
 
                     if (keyed && !frame.TryStored(rowOrdinal: ordinal, key: key, value: out _, text: out _)) {
                         return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
@@ -152,15 +138,10 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
 
                 return true;
             }
-            case StateMutation.Apply { Transform: StateTransform.Push push }: {
+            case StateMutation.Apply { Transform: StateTransform.Push push } apply: {
                 var frame = EnsureRuleFrame();
 
-                if (frame.Find(name: push.Row) is not { } ring) {
-                    reason = $"row '{push.Row}' is not in the frame";
-
-                    return false;
-                }
-                if (!frame.TryPush(row: ring, value: push.Value, reason: out reason)) {
+                if (!frame.TryPush(push: push, catalog: RuleReadCatalog, handle: apply.Handle, reason: out reason)) {
                     return false;
                 }
 

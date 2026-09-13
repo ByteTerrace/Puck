@@ -253,11 +253,18 @@ Nothing here carries a `World` name—a state library names no world.
   arrangement rank, a filtered reduce, and a `$match` word read a moved pile.
   Handle reads and writes use document-lane row ordinals, checked against the
   catalog's row names. A pre-resolved mutation address must match its row and
-  key strings, which the host records for replay. The layout records whether
-  a row has time traits; reads by key or position skip authored trait metadata
+  key strings, which the host records for replay. Both `pushState` and the
+  `push` transform retain their compiled row handle through frame application;
+  the replay transform keeps its row name. Compilation refuses a missing push
+  row handle, and evaluation throws if a compiled write or push handle names a
+  different destination row. Cell counts, filter-key indexing,
+  and row-version checks also use ordinals when already resolved.
+  The layout records whether a row has time traits; reads by key or position skip authored trait metadata
   when none exists, while board reads retain their empty-cell presence check.
   A frame copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
   `writeSet`, `push`, `clearEnclosed`, and `transfer` (first, last, or key; never a draw) densely.
+  `boardCombine`, `writeSet`, and `clearEnclosed` still resolve their row names
+  inside the frame; dense application alone does not eliminate those lookups.
   A board declaring `Inverse` is derived,
   never written directly: `FrameLayout` resolves its tokens/codes row ordinals
   once, and a frame write to the tokens row recomputes only the moved token's

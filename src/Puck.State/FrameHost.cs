@@ -85,10 +85,7 @@ public sealed class FrameHost : IRuleHost {
     public bool TryRowVersion(StateHandle row, out ulong version) {
         version = 0UL;
 
-        if (!Catalog.TryGetDescriptor(handle: row, descriptor: out var descriptor) || (descriptor.Ownership != StateLane.Document)) {
-            return false;
-        }
-        if (!Frame.Layout.TryOrdinal(name: descriptor.Name, ordinal: out var ordinal) || (Frame.Layout[ordinal].Kind == FrameRowKind.Unframed)) {
+        if (!StateReader.TryResolveRowHandle(rows: Frame.Rows, catalog: Catalog, handle: row, rowOrdinal: out var ordinal, row: out _) || (Frame.Layout[ordinal].Kind == FrameRowKind.Unframed)) {
             return false;
         }
 
@@ -117,7 +114,7 @@ public sealed class FrameHost : IRuleHost {
             StateMutation.UpsertCell cell => TryUpsert(cell: cell, reason: out reason),
             StateMutation.Apply { Transform: StateTransform.BoardCombine combine } => Frame.TryBoardCombine(combine: combine, reason: out reason),
             StateMutation.Apply { Transform: StateTransform.WriteSet writeSet } => Frame.TryWriteSet(writeSet: writeSet, reason: out reason),
-            StateMutation.Apply { Transform: StateTransform.Push push } => ((Frame.Find(name: push.Row) is { } ring) ? Frame.TryPush(row: ring, value: push.Value, reason: out reason) : Refuse(message: $"row '{push.Row}' is not in the frame", reason: out reason)),
+            StateMutation.Apply { Transform: StateTransform.Push push } apply => Frame.TryPush(push: push, catalog: Catalog, handle: apply.Handle, reason: out reason),
             StateMutation.Apply { Transform: StateTransform.ClearEnclosed enclosed } => Frame.TryClearEnclosed(enclosed: enclosed, reason: out reason),
             StateMutation.Apply { Transform: StateTransform.Transfer transfer } => Frame.TryTransfer(transfer: transfer, reason: out reason),
             StateMutation.Apply apply => Refuse(message: $"a frame does not apply a {apply.Transform.GetType().Name} transform", reason: out reason),
@@ -175,14 +172,8 @@ public sealed class FrameHost : IRuleHost {
             _ = Catalog.TryResolve(lane: StateLane.Document, name: cell.Row, handle: out handle);
         }
 
-        if (handle == default || !Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) || (descriptor.Ownership != StateLane.Document) || !string.Equals(a: cell.Row, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
-            return Refuse(message: $"row '{cell.Row}' is not in the frame", reason: out reason);
-        }
-
-        var ordinal = descriptor.LaneOrdinal;
-        var rows = Frame.Rows;
-
-        if ((((uint)ordinal) >= ((uint)rows.Count)) || (rows[ordinal] is not { } resolved) || !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+        if (!StateReader.TryResolveRowHandle(rows: Frame.Rows, catalog: Catalog, handle: handle, rowOrdinal: out var ordinal, row: out var resolved) ||
+            !string.Equals(a: cell.Row, b: resolved.Name, comparisonType: StringComparison.Ordinal)) {
             return Refuse(message: $"row '{cell.Row}' is not in the frame", reason: out reason);
         }
 

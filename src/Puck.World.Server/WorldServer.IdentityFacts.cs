@@ -28,6 +28,11 @@ public sealed partial class WorldServer {
         }
     }
 
+    private bool TryIdentityLane(StateFrame frame, out StateHandle handle, out int rowOrdinal) {
+        handle = IdentityLaneHandle;
+        return StateReader.TryResolveRowHandle(rows: frame.Rows, catalog: RuleReadCatalog, handle: handle, rowOrdinal: out rowOrdinal, row: out _);
+    }
+
     // A fact written inside a transaction's preflight persists only when the transaction commits.
     private readonly record struct PendingIdentityFact(WorldIdentity Identity, CellName Key, long Value);
 
@@ -57,7 +62,7 @@ public sealed partial class WorldServer {
     private void SyncIdentityFactLanes(ulong tick) {
         var frame = m_ruleFrame!;
 
-        if (frame.Find(name: WorldIdentityFactLane.RowName) is not { } lane) {
+        if (!TryIdentityLane(frame: frame, handle: out var handle, rowOrdinal: out var ordinal)) {
             return;
         }
 
@@ -76,18 +81,18 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            ReloadIdentityFactLane(frame: frame, lane: lane, bodyIndex: index, profile: profile, tick: tick);
+            ReloadIdentityFactLane(frame: frame, rowOrdinal: ordinal, handle: handle, bodyIndex: index, profile: profile, tick: tick);
             m_identityLaneBound[index] = profile;
             m_identityLaneRevision[index] = revision;
         }
     }
-    private void ReloadIdentityFactLane(StateFrame frame, StateRow lane, int bodyIndex, WorldIdentity? profile, ulong tick) {
+    private void ReloadIdentityFactLane(StateFrame frame, int rowOrdinal, StateHandle handle, int bodyIndex, WorldIdentity? profile, ulong tick) {
         var facts = profile?.Facts;
-        var count = frame.CellCount(row: lane);
+        var count = frame.CellCount(rowOrdinal: rowOrdinal);
 
         for (var cell = 0; (cell < count); cell++) {
             if (
-                !frame.TryKeyAt(row: lane, index: cell, key: out var key) ||
+                !frame.TryKeyAt(rowOrdinal: rowOrdinal, index: cell, key: out var key) ||
                 !WorldIdentityFactLane.TryParse(key: key.Value, bodyIndex: out var owner, fact: out var fact) ||
                 (owner != bodyIndex) ||
                 ((facts is not null) && (StateRows.FindCell(cells: facts.Cells, key: CellName.Parse(candidate: fact.ToString())) is not null))
@@ -95,7 +100,7 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            WriteIdentityLane(frame: frame, lane: lane, key: key, value: 0L, tick: tick);
+            WriteIdentityLane(frame: frame, rowOrdinal: rowOrdinal, handle: handle, key: key, value: 0L, tick: tick);
         }
 
         if (facts?.Cells is not { } carried) {
@@ -103,16 +108,16 @@ public sealed partial class WorldServer {
         }
 
         foreach (var carriedCell in carried) {
-            WriteIdentityLane(frame: frame, lane: lane, key: CellName.Parse(candidate: WorldIdentityFactLane.Key(bodyIndex: bodyIndex, fact: carriedCell.Key.Value)), value: carriedCell.Value, tick: tick);
+            WriteIdentityLane(frame: frame, rowOrdinal: rowOrdinal, handle: handle, key: CellName.Parse(candidate: WorldIdentityFactLane.Key(bodyIndex: bodyIndex, fact: carriedCell.Key.Value)), value: carriedCell.Value, tick: tick);
         }
     }
     // A lane write that would leave the cell as it is queues nothing, so a reload after a persist that already
     // mirrored the lane moves no row version.
-    private bool WriteIdentityLane(StateFrame frame, StateRow lane, CellName key, long value, ulong tick) {
-        if (frame.TryStored(row: lane, key: key, value: out var stored, text: out _) && (stored == value)) {
+    private bool WriteIdentityLane(StateFrame frame, int rowOrdinal, StateHandle handle, CellName key, long value, ulong tick) {
+        if (frame.TryStored(rowOrdinal: rowOrdinal, key: key, value: out var stored, text: out _) && (stored == value)) {
             return true;
         }
-        if (((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set, Handle: IdentityLaneHandle, CellKey: key), tick: tick, preflight: false, reason: out var reason)) {
+        if (((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set, Handle: handle, CellKey: key), tick: tick, preflight: false, reason: out var reason)) {
             return true;
         }
         if (m_output.HasNarrationSink) {
@@ -147,7 +152,7 @@ public sealed partial class WorldServer {
 
         var frame = EnsureRuleFrame();
 
-        if (frame.Find(name: WorldIdentityFactLane.RowName) is not { } lane) {
+        if (!TryIdentityLane(frame: frame, handle: out var handle, rowOrdinal: out var ordinal)) {
             m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.IdentityFactUnwritable, ruleName: ruleName, effect: effect, tick: tick, detail: $"the installed document declares no '{WorldIdentityFactLane.RowName}' lane row");
 
             return EffectOutcome.Refused;
@@ -166,9 +171,9 @@ public sealed partial class WorldServer {
         }
 
         var key = effect.LaneKey(bodyIndex: bodyIndex, capacity: m_population.Capacity);
-        var unchanged = (frame.TryStored(row: lane, key: key, value: out var stored, text: out _) && (stored == value));
+        var unchanged = (frame.TryStored(rowOrdinal: ordinal, key: key, value: out var stored, text: out _) && (stored == value));
 
-        if (!unchanged && !((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set, Handle: IdentityLaneHandle, CellKey: key), tick: tick, preflight: preflight, reason: out var reason)) {
+        if (!unchanged && !((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set, Handle: handle, CellKey: key), tick: tick, preflight: preflight, reason: out var reason)) {
             m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.IdentityFactUnwritable, ruleName: ruleName, effect: effect, tick: tick, detail: reason);
 
             return EffectOutcome.Refused;

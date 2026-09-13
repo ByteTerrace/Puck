@@ -575,6 +575,13 @@ public sealed class StateFrame : StateStore {
             ? (int)m_values[layout.Offset]
             : base.CellCount(row: row));
     /// <inheritdoc/>
+    public override int CellCount(int rowOrdinal) {
+        if ((uint)rowOrdinal >= (uint)Layout.RowCount) { return 0; }
+        return (Layout[rowOrdinal] is { Kind: FrameRowKind.Zone } layout)
+            ? (int)m_values[layout.Offset]
+            : base.CellCount(row: Rows[rowOrdinal]);
+    }
+    /// <inheritdoc/>
     public override bool TryKeyAt(int rowOrdinal, int index, out CellName key) {
         var rows = Rows;
 
@@ -839,7 +846,31 @@ public sealed class StateFrame : StateStore {
     /// <param name="value">The value pushed.</param>
     /// <param name="reason">Why the push refused, or empty.</param>
     public bool TryPush(StateRow row, long value, out string reason) {
-        if (!Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) || (Layout[ordinal] is not { Kind: FrameRowKind.Ring } layout)) {
+        var found = Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal);
+        return TryPush(rowOrdinal: found ? ordinal : -1, row: row, value: value, reason: out reason);
+    }
+    /// <summary>Pushes into a ring through its compiled address, checking that the replayable row name agrees.</summary>
+    /// <param name="push">The replayable transform.</param>
+    /// <param name="catalog">The current document catalog.</param>
+    /// <param name="handle">The ring's handle, or default to resolve the transform's row name.</param>
+    /// <param name="reason">Why the push refused, or empty.</param>
+    /// <returns>Whether the frame accepted the push.</returns>
+    public bool TryPush(StateTransform.Push push, StateCatalog catalog, StateHandle handle, out string reason) {
+        if (handle == default) {
+            _ = catalog.TryResolve(lane: StateLane.Document, name: push.Row, handle: out handle);
+        }
+        if (!StateReader.TryResolveRowHandle(rows: Rows, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out var row)) {
+            reason = $"row '{push.Row}' is not in the frame";
+            return false;
+        }
+        if (!string.Equals(a: row.Name, b: push.Row, comparisonType: StringComparison.Ordinal)) {
+            reason = "the state handle does not match the push row";
+            return false;
+        }
+        return TryPush(rowOrdinal: ordinal, row: row, value: push.Value, reason: out reason);
+    }
+    private bool TryPush(int rowOrdinal, StateRow row, long value, out string reason) {
+        if ((uint)rowOrdinal >= (uint)Layout.RowCount || (Layout[rowOrdinal] is not { Kind: FrameRowKind.Ring } layout)) {
             reason = $"row '{row.Name}' is not a ring in the frame";
 
             return false;

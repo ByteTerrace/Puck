@@ -1046,8 +1046,8 @@ public sealed partial class WorldServer {
         foreach (var name in m_touchedRows) {
             if (
                 catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle) &&
-                catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) &&
-                definition.State[descriptor.LaneOrdinal].GatesDrive
+                StateReader.TryResolveRowHandle(rows: definition.State, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out _) &&
+                definition.State[ordinal].GatesDrive
             ) {
                 return true;
             }

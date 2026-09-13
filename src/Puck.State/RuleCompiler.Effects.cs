@@ -579,6 +579,9 @@ public static partial class RuleCompiler {
             default:
                 throw Invalid("unknown or null state transform");
         }
-        return new TransformStateEffect(transform: transform, describe: $"transformState {transform.GetType().Name}");
+        var handle = transform is StateTransform.Push compiledPush
+            ? ResolveHandle(context: context, name: compiledPush.Row)
+            : default;
+        return new TransformStateEffect(transform: transform, describe: $"transformState {transform.GetType().Name}", handle: handle);
     }
 }

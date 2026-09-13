@@ -5,16 +5,19 @@ namespace Puck.State;
 internal readonly ref struct CellOrdinalIndex {
     private readonly StateStore? m_store;
     private readonly StateRow m_row;
+    private readonly int m_rowOrdinal;
     private readonly Span<int> m_buckets;
 
     internal static int ScratchLength(int count) => checked((int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(1, checked(count * 2))));
 
-    internal CellOrdinalIndex(StateStore? store, StateRow row, Span<int> scratch) {
+    internal CellOrdinalIndex(StateStore? store, StateRow row, Span<int> scratch, int rowOrdinal = -1) {
         m_store = store;
         m_row = row;
+        m_rowOrdinal = rowOrdinal;
         m_buckets = scratch;
         scratch.Fill(-1);
-        var count = store?.CellCount(row) ?? row.Cells?.Count ?? 0;
+        var count = store is null ? row.Cells?.Count ?? 0
+            : (rowOrdinal >= 0 ? store.CellCount(rowOrdinal: rowOrdinal) : store.CellCount(row: row));
         for (var index = 0; index < count; index++) {
             if (!TryKey(index, out var key)) { continue; }
             var bucket = key.GetHashCode() & (scratch.Length - 1);
@@ -35,7 +38,11 @@ internal readonly ref struct CellOrdinalIndex {
     }
 
     private bool TryKey(int index, out CellName key) {
-        if (m_store is not null) { return m_store.TryKeyAt(m_row, index, out key); }
+        if (m_store is not null) {
+            return m_rowOrdinal >= 0
+                ? m_store.TryKeyAt(rowOrdinal: m_rowOrdinal, index: index, key: out key)
+                : m_store.TryKeyAt(row: m_row, index: index, key: out key);
+        }
         key = m_row.Cells![index].Key;
         return true;
     }
