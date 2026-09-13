@@ -1,9 +1,9 @@
-# Game development milestones
+﻿# Game development milestones
 
 This document preserves chronological verification logs and empirical test runs
-recorded during the game development waves between August and September 2026.
-Each entry identifies its candidate, command or test, result, and limits, so a
-dated observation stays evidence for that run rather than becoming an undated
+recorded during the game development waves.
+Each entry identifies its candidate, command or test, result, and limits, so an
+observation stays evidence for that run rather than becoming an unsupported
 feature claim.
 
 Per the repository's verification guidance, each entry names the exact check,
@@ -15,9 +15,9 @@ command, or test that produced it. For the binding design decisions, see
 
 ## Chronological verification log
 
-**Verified 2026-08-15, on the branch that split the projects** (rows that described the retired prototype
+**Verified on the branch that split the projects** (rows that described the retired prototype
 worlds, the frozen diorama, the quilt deltas, and the scenario documents are gone with those documents;
-the island's own claims are in the 2026-09-06 entry below):
+the island's own claims are in the One World entry below):
 
 | Claim | The check |
 |---|---|
@@ -25,7 +25,7 @@ the island's own claims are in the 2026-09-06 entry below):
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
 | A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'body.channels 0'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `body.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
 
-**Verified 2026-09-07 (the playthrough's substrate wave):** the island authors its four seams
+**Verified (the playthrough's substrate wave):** the island authors its four seams
 (`world.adjacencies` reads `north`/`east`/`south`/`west` at the measured ground edge, ±66, each `open` onto
 its quilt shard, and the island boots with all four proven against the shards beside it); the shards under
 `Assets/worlds/shards/` validate as basis deltas at a 2.75× ring; a fresh seat
@@ -111,9 +111,9 @@ longer exists. Deleted, each with what it proved and what proves it now:
 | `travel-frame-seam-local`, `travel-frame-seam-remote` | The same frame proof crossing `quilt-nw`'s east seam into a local and a remote `quilt-ne`. | `seamless-adjacency` proves the identical crossing at the console level (pose, contacts, wire errors); no frame-capture successor exists. |
 | `travel-parity` | Walking `quilt-nw`'s invisible east adjacency preserves arrival whether the far side is a remote authority or colocated. | `seamless-four-corners-circuit` proves the same colocated-vs-authoritative shape at the console level. |
 
-**Verified 2026-09-06 (the One World wave):** `puck.world.json` composes the island and ten districts under aliases (`world.imports` names granaries, arcade, dive, kart, jump, arena, studio beside the bare game imports); a headless boot exits 0 with no refusal; `body.pose spawn:<alias>-arrival` then `body.where 0` reads `grounded` in every district; `world.state.hash` is identical across two boots at ticks 31 and 151; the World suite is green with the island laws (`IslandLawTests`) in it. The frozen diorama, its basis, `granaries.world.json`, the two scenario documents, and `experimental/Puck.Demo` are deleted. Not yet: the island authors no `adjacencies` (the quilt shards under `Assets/worlds/shards/` and the file neighbour resolver are landed but the seams must be re-sited to the crown's extent and the shards re-validated as basis deltas), the inhabit count read from a cell (only its law exists), and three cuts the derived limits forced, recorded in `modules/README.md`.
+**Verified (the One World wave):** `puck.world.json` composes the island and ten districts under aliases (`world.imports` names granaries, arcade, dive, kart, jump, arena, studio beside the bare game imports); a headless boot exits 0 with no refusal; `body.pose spawn:<alias>-arrival` then `body.where 0` reads `grounded` in every district; `world.state.hash` is identical across two boots at ticks 31 and 151; the World suite is green with the island laws (`IslandLawTests`) in it. The frozen diorama, its basis, `granaries.world.json`, the two scenario documents, and `experimental/Puck.Demo` are deleted. Not yet: the island authors no `adjacencies` (the quilt shards under `Assets/worlds/shards/` and the file neighbour resolver are landed but the seams must be re-sited to the crown's extent and the shards re-validated as basis deltas), the inhabit count read from a cell (only its law exists), and three cuts the derived limits forced, recorded in `modules/README.md`.
 
-**Verified 2026-08-25 (the medium/flow/ecosystem wave), re-homed 2026-09-06:** the dive district's pool is a
+**Verified (the medium/flow/ecosystem wave), re-homed:** the dive district's pool is a
 lattice `water` field marked `medium` a diver kit settles in, with fish inhabiting it (`modules/dive.world.json`;
 its canary is `dive-medium`); the fire/char chemistry, the `flow` spill into a gated rule, and the falls view layouts
 left with the frozen diorama and return with a district that needs them. `puck canary medium-submersion`
@@ -122,7 +122,7 @@ canary flow-conservation-live` proves a spill row climbs strictly, live, only wh
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
 facet.
 
-**Reset 2026-08-31 (owner decision): the shipped world restarts from a bare minimum.** The
+**Reset (owner decision): the shipped world restarts from a bare minimum.** The
 floating-island diorama was ruled unplayable as a game: the island existed as four unrelated
 descriptions — hand-placed `puck.creation.v1` SDF piles, rect-painted lattice heights, flat-Y prop
 scatter, and detached ground quads — that agreed only by eyeball, so the surface seen and the surface
@@ -130,12 +130,12 @@ collided with could never be the same thing. That document and its basis are del
 crown, root, and planetoids are re-authored on the one-description rule in `puck.world.json`, and its
 combat and elemental suites live in the arena module.
 The new `puck.world.json` is a delta over the new `standard.basis.json`, which carries the standards,
-defined AS STATE (owner ruling, same day) — a `transforms` text row (`identity`/`origin`/`unit`) and
+defined AS STATE (owner ruling) — a `transforms` text row (`identity`/`origin`/`unit`) and
 a `colors` text row that document values reference by `state.<row>.<key>` instead of restating
 literals, so no shipped document carries a literal `[0, 0, 0, 1]` again — the standard `theme`
 (without it the overlay resolves to the zeroed absent theme and the console panel is a 1 px-cell
 black corner) — plus the INFINITE SAFETY
-NET and its debug texture (owner rulings, same day): one solid Plane placement (`groundPlane`, the
+NET and its debug texture (owner rulings): one solid Plane placement (`groundPlane`, the
 `groundContact` precedent) at y = −16, a reasonable distance below origin, catching anything that
 falls, never the level's own floor — its single shape both rendered and collided, one declaration,
 no second description to drift — under the unbounded `groundTexture` checkerboard (one tile
@@ -151,7 +151,7 @@ the `walker` kit, bindings, the chase rig, and the pip look. A field trait's `co
 grammar (resolved live at emit — a state cell write recolors a height field on the next frame with no
 re-bake, since bricks hold only distances; `world.fields` echoes each height field's authored color
 token; the check: author a field row's color as a state reference and boot).
-Everything else returns as deliberate evolution steps on this foundation. The first (2026-09-02): the
+Everything else returns as deliberate evolution steps on this foundation. The first: the
 platform at origin is a DEBUG AREA — one fixture per contact contract, each with a `spawnPoints` row
 and `body.pose spawn:<id>` to stand in front of it (`ramps`, `stairs`, `wall`, `pit`, `ladder`,
 `edge`; compass posts colored by engine axis; a far pillar on the net for fog). Walking the fixtures
@@ -165,7 +165,7 @@ The stairs measured the walker's implicit step-up (0.25 m steps, 0.5 m blocks; n
 height). The checks: `body.pose spawn:ramps` then `body.fly 1 0 0 0 0 0 2` from x = 7.5 and 9.5
 leaves `body.where` at the ramp foot (y = −0.48), from x = 1.5/3.5/5.5 it crests and lands beyond;
 `body.pose 0 0 3 0 0 0` + `body.fly -1 0 0 0 0 0 1` ends on the net at y = −15.98 inside the pit. The second
-(2026-09-02): climbing and a limbed avatar, built on two primitives that name no game at all. The
+The second: climbing and a limbed avatar, built on two primitives that name no game at all. The
 sim publishes a per-body FACT MASK (`BodyFacts`, one bit per `ActionFact` — grounded, airborne,
 rising, falling, inMedium, atMediumBand, holdingUnwalkable, unsupported — derived from the same predicates the action
 gates read; `EntitySnapshot.Facts`, echoed by `body.where`'s `facts=`), never a regime enum, so a

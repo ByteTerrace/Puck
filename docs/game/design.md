@@ -24,12 +24,12 @@ engine prerequisites precede the cooperative experience, with other activity typ
 
 ## Design decisions
 
-The charter was ratified on 2026-08-06 and remains the design authority for
-the reference game. The 2026-09-06 amendment below records the later decision
+The charter was ratified and remains the design authority for
+the reference game. The amendment below records the decision
 to converge the districts into one shipped world; the older four-world wording
 is retained as historical reasoning for those districts.
 
-**Amended 2026-09-06 (owner ruling): one world.** Everything the charter below names, and everything the
+**Amended (owner ruling): one world.** Everything the charter below names, and everything the
 campaign has built toward since the demo, converges on ONE shipped document, `puck.world.json`: the
 floating island IS the nexus, and the dungeons, the studio canvas, the arcade cabinets, the market of
 tabletop games, the creature garden, the proving ground, split-screen seats, and the game-within-a-game
@@ -51,7 +51,7 @@ information-set search nodes, multi-hop candidate chains, n-player search, a cue
 that needs it, never by asserting it. The four-world reading below stays as the record of what each
 district is for.
 
-Three further rulings the same day. **The shipped rate is 30 Hz.** The 240 Hz default was the stress
+Three further rulings. **The shipped rate is 30 Hz.** The 240 Hz default was the stress
 requirement every primitive had to survive, never the game's rate: a world that authors no `simulation.rateHz`
 runs at 30, a fixture that wants the stress rate authors 240 by name, and no document, skill, or law says
 "240 Hz" as if it were the world's own. **Adjacencies return, with the four-corners stressor.** The one
@@ -64,7 +64,7 @@ reason to leave the seams off. **The product is a Trojan horse over the one worl
 is a basis delta over the island that pins the boot seat, layout, and district and hides the plaza until an
 identity fact flips; the reveal is authored presentation reading facts (a camera program selecting on a
 row, a binding overlay swapped by a row, a sky reading a cell), and the true game beyond it is the
-federation the 2026-08-03 rulings describe — every player owns a world, meaning between worlds is
+federation rulings describe — every player owns a world, meaning between worlds is
 bilateral, the grant table is the rulebook, a duel or a wager is a pair of signed attestations each side's
 document honours plus provenance on what changes hands. No accord subsystem, no realm type, no
 seat-router enforcement: the missing primitive is provenance signing for carried state, and it is the
@@ -82,7 +82,7 @@ before any scoring, unlock or progression is layered on it. The nexus's own feel
 dungeon's — a promenading pace fit for a shared plaza.
 
 `studio` ships beside them as a non-game **dev canvas** for character work, and as Puck's first
-formal border crossing (owner amendment 2026-08-09): the nexus and studio meet at a mapped border, so
+formal border crossing (owner amendment): the nexus and studio meet at a mapped border, so
 studio is reachable by walking through the island's fourth arch as well as by `--world`. It is not a
 game world and not a destination in the reveal graph. A doc counting "four worlds" is counting the
 charter's roster; the directory holds five documents.
@@ -197,7 +197,7 @@ come back.
 
 **Chronological verification history.** Detailed test runs, command transcripts, and evidence logs from earlier development waves are preserved in [milestone records](../development/game-milestones.md).
 
-**The charter's back half has not started**: the owner feel sitting (the gate declared 2026-08-08,
+**The charter's back half has not started**: the owner feel sitting (the declared gate,
 never held — and now well behind the motion work, so its recordings want redoing), win conditions,
 achievement facts and the meta-achievement, the cabinet quest, the Konami easter egg, the nexus's social
 pass, and the first reveal edge.

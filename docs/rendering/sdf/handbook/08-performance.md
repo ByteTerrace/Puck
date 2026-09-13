@@ -128,7 +128,7 @@ flag.
 
 ## Use the benchmark as the instrument
 
-> **You cannot run it today.** `Puck.Bench` was quarantined on 2026-08-02 and still contains
+> **You cannot run it today.** `Puck.Bench` was quarantined and still contains
 > everything described below, but **nothing composes it**: no project references
 > the library, nothing implements `IBenchSceneController` to register a scene,
 > and no host registers `BenchCommandModule`, so the verbs are unreachable. Its
@@ -170,7 +170,7 @@ are the source of truth.
 
 The full design—the timing seams, the switch registry, the scoring math, the
 scene roster, the measurement-hygiene machinery—was written down in a bench
-plan that was deleted on 2026-08-02. What survives is the code:
+plan that was deleted. What survives is the code:
 `experimental/Puck.Bench` (quarantined, read-only) and its XML documentation are now the
 only statement of the design, and the scene roster is not among them—the
 roster lived with the host that registered the scenes, which is gone. This
@@ -272,7 +272,7 @@ the same discipline applies whenever you hand-measure anything.
 
 - The per-pass ladders, the beam-slope `O(n)` measurement, and the carve-bill
   discovery in full: no longer recorded anywhere. The bench notes holding them
-  were deleted on 2026-08-02; this chapter's summaries are all that is left.
+  were deleted; this chapter's summaries are all that is left.
 - The benchmark's design—timing seams, switch registry, scoring math, hygiene
   machinery, the frozen reference constants: read
   `experimental/Puck.Bench` (quarantined, read-only) directly. The plan document is gone

@@ -40,5 +40,5 @@ It intentionally omits implementation chronology and review provenance.
 | Coverage rasterizers as SDF geometry | Not applicable; they produce coverage, not a marchable distance | [Text and glyphs](text-and-glyphs.md) |
 
 Open implementation work is tracked nowhere. The backlog that held it was
-deleted on 2026-08-02 and nothing replaced it, so an "Open" row above is the
+removed and nothing replaced it, so an "Open" row above is the
 full record of that item: no owner, no sequencing, and no plan to start one.

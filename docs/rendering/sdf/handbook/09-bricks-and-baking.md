@@ -201,7 +201,7 @@ to be.
   [`.claude/skills/sdf-world/SKILL.md`](../../../../.claude/skills/sdf-world/SKILL.md)
   and the enum doc in [`src/Puck.SignedDistance/SdfShapeType.cs`](../../../../src/Puck.SignedDistance/SdfShapeType.cs).
 - The clustered-vs-spread penalty and the clustered `views` ceiling the brick
-  targets: the carve ladders that measured both were deleted on 2026-08-02 and
+  targets: the carve ladders that measured both were removed and
   are recorded nowhere else. The motivation for the brick survives in this
   chapter; the numbers that sized it do not.
 - The baked-volume family rejection and its single reconsider-trigger:

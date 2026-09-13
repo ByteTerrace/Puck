@@ -208,7 +208,7 @@ pure fine-march number.
   [`.claude/skills/sdf-world/SKILL.md`](../../../../.claude/skills/sdf-world/SKILL.md)
   ("The MASK-FIRST pass order") and `SdfWorldEngine.PassLabels`.
 - The beam-slope sweep, the mask-first before/after table, and the carve
-  ladders: the bench notes that held those tables were deleted on 2026-08-02
+  ladders: the bench notes that held those tables were removed
   and nothing replaced them. [08-performance.md](08-performance.md) keeps the
   headline shape of each; the underlying tables are gone.
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:

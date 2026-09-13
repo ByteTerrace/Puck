@@ -244,7 +244,7 @@ shading-only detail reuse the primary hit's center distance. See the
 - Shadow culling wins or loses depending on occluder density—that much is
   settled. The measurements that located the win/lose boundary, and the
   correctness finding recorded alongside them, are **gone**: the bench notes
-  holding them were deleted on 2026-08-02 and no other document repeats them.
+  holding them were removed and no other document repeats them.
   Treat the boundary as unmeasured until someone measures it again.
 - The shading feature switches were a swept lever roster. That roster is also
   gone with the bench plan, and `Puck.Bench` is quarantined and cannot supply it—the sweep
