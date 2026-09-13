@@ -17,11 +17,11 @@ each contract lands. This plan owns the intended release policy and sequencing.
 
 ## Implementation status
 
-Reviewed against `ceb993cba`, with the uncommitted working tree
-noted separately because another task is actively extending this work. The
-hosting foundation exists; the operator workflow does not.
+The hosting foundation, retained archive, packaged qualification runner, and
+inspection and finalization commands exist. Production deployment and rollback
+integration remain incomplete.
 
-**Implemented and committed:**
+**Implemented:**
 
 - `WorldReleaseManifest` gives a release one immutable identity over its image
   digest, definition pins, artifact hashes, and persistence and peer contracts.
@@ -36,24 +36,32 @@ hosting foundation exists; the operator workflow does not.
   report `GET /private-healthz`, and freeze retiring activations.
 - `WorldReleaseTransition` computes and reverses a definition delta; the first
   policy refuses changed definitions.
-- The CLI `release` command offers `prepare` and `status`.
+- The CLI `release` command offers `prepare`, `status`, `finalize`, and
+  `qualify`, with `exercise` as the packaged qualification leg.
+- `WorldReleaseArchive` retains exact manifests and package files. The Azure
+  runtime adapter and loopback worker controls exist but are not connected to
+  the production deployment entry point.
+- Docker qualification compares full imports in both packages, then repeats
+  the comparison on candidate-written continuation state. Four control legs
+  using one packaged image passed; this verifies the runner, not compatibility
+  between different releases.
 - Law tests cover manifest identity, guarded group transitions, cutover and
   rollback across two rows, stale fences, lost commit responses, and pre-commit
   recovery restart.
 
-**In the working tree, not yet committed:** a retained release archive
-(`WorldReleaseArchive`) and the Azure release adapter and runtime driver
-(`AzureWorldRelease`, `AzureWorldReleaseRuntime`).
-
 **Remaining:**
 
-- No deploy, rollback, finalize, or restore CLI operation exists, and no
+- No managed deploy, rollback, or restore CLI operation exists, and no
   group-scoped restore operation exists in the coordinator.
 - No definition edit is admitted yet; phase 3's preservation rules are unwritten.
 - `AzureWorld` still writes `artifacts/world-rollback.json` and restores saved
   blob versions on failure, so phase 5's replacement has not happened.
 - No packaged release-pair qualification or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
+- The official world fails the packaged exercise after stepping its machines:
+  the checkpoint contract cannot capture machine cores, addon guest state, or
+  applied screen operations. Those states must become durable before this world
+  can qualify; removing them from the qualification fixture is not a solution.
 
 ## Operator contract
 
@@ -73,8 +81,8 @@ requiring explicit acknowledgement of the target and affected scope.
 Use the existing Puck CLI and Azure deployment entry point. Add release
 preparation, status, rollback, finalization, and restore operations under the
 existing World command family; settle exact command spelling while implementing
-its command tree. Only preparation and status exist today; rollback,
-finalization, and restore are proposed operations.
+its command tree. Preparation, status, and finalization exist today; rollback
+and restore are proposed operations.
 Each mutation accepts or returns an operation identifier. Repeating the same
 request resumes that operation; it does not start another deployment.
 

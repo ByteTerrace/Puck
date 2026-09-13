@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Storage;
 
 namespace Puck.World.Server;
 
@@ -46,13 +47,11 @@ public sealed record WorldReleaseManifest {
         return Encoding.UTF8.GetBytes(json.ToJson());
     }
 
-    /// <summary>Validates a manifest and all artifact hashes in a package directory.</summary>
+    /// <summary>Validates manifest metadata, inventories, portable relative paths, and full content pins.</summary>
     /// <param name="manifest">The manifest to validate.</param>
-    /// <param name="packageDirectory">The package root containing referenced artifacts.</param>
     /// <param name="reason">The refusal reason, empty on success.</param>
-    public static bool TryVerify(WorldReleaseManifest manifest, string packageDirectory, out string reason) {
+    public static bool TryValidate(WorldReleaseManifest manifest, out string reason) {
         ArgumentNullException.ThrowIfNull(manifest);
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageDirectory);
         if (!string.Equals(manifest.Schema, CurrentSchema, StringComparison.Ordinal)) {
             reason = $"unsupported release manifest schema '{manifest.Schema}'";
             return false;
@@ -90,12 +89,12 @@ public sealed record WorldReleaseManifest {
                 reason = $"release definition '{pair.Key}' has no package path";
                 return false;
             }
-            if (!VerifyFile(packageDirectory, definitionPath, pair.Value, "definition", out reason)) {
+            if (!ValidateFilePath(definitionPath, pair.Value, "definition", out reason)) {
                 return false;
             }
         }
         foreach (var pair in manifest.Artifacts.OrderBy(static pair => pair.Key, StringComparer.Ordinal)) {
-            if (!VerifyFile(packageDirectory, pair.Key, pair.Value, "artifact", out reason)) {
+            if (!ValidateFilePath(pair.Key, pair.Value, "artifact", out reason)) {
                 return false;
             }
         }
@@ -103,18 +102,42 @@ public sealed record WorldReleaseManifest {
         return true;
     }
 
-    private static bool VerifyFile(string packageDirectory, string relativeName, string expected, string kind, out string reason) {
-        if (string.IsNullOrWhiteSpace(relativeName) || Path.IsPathRooted(relativeName) || relativeName.Contains('\\') || relativeName.Contains("..", StringComparison.Ordinal)) {
-            reason = $"release {kind} path '{relativeName}' is not package-relative";
+    /// <summary>Validates a manifest and every referenced file's full hash in a package directory.</summary>
+    public static bool TryVerify(WorldReleaseManifest manifest, string packageDirectory, out string reason) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageDirectory);
+        if (!TryValidate(manifest, out reason)) { return false; }
+        foreach (var definition in manifest.Definitions) {
+            if (!VerifyFile(packageDirectory, manifest.DefinitionFiles[definition.Key], definition.Value, "definition", out reason)) { return false; }
+        }
+        foreach (var artifact in manifest.Artifacts) {
+            if (!VerifyFile(packageDirectory, artifact.Key, artifact.Value, "artifact", out reason)) { return false; }
+        }
+        return true;
+    }
+
+    private static bool ValidateFilePath(string relativeName, string expected, string kind, out string reason) {
+        if (string.IsNullOrWhiteSpace(relativeName)) { reason = $"release {kind} path is empty"; return false; }
+        try {
+            if (relativeName.Contains('\\') || relativeName != ObjectBlobAddressPath.GetNormalizedKey(new(Guid.Empty, relativeName))) {
+                reason = $"release {kind} path '{relativeName}' is not a canonical relative path";
+                return false;
+            }
+        } catch (ArgumentException) {
+            reason = $"release {kind} path '{relativeName}' is not a portable relative path";
             return false;
         }
         if (!IsFullHash(expected)) {
             reason = $"release {kind} '{relativeName}' does not carry a full sha256 pin";
             return false;
         }
+        reason = string.Empty;
+        return true;
+    }
+
+    private static bool VerifyFile(string packageDirectory, string relativeName, string expected, string kind, out string reason) {
         var path = Path.GetFullPath(Path.Combine(packageDirectory, relativeName.Replace('/', Path.DirectorySeparatorChar)));
         var packageRoot = Path.GetFullPath(packageDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!path.StartsWith(packageRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(path)) {
+        if (!path.StartsWith(packageRoot, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) || !File.Exists(path)) {
             reason = $"release {kind} '{relativeName}' is missing";
             return false;
         }

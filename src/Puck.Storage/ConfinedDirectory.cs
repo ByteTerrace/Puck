@@ -84,7 +84,7 @@ internal sealed partial class ConfinedDirectory : IDisposable {
 
     internal void Publish(string temporary, string name) {
         if (OperatingSystem.IsWindows()) {
-            if (!MoveFileEx(Path.Combine(m_path, temporary), Path.Combine(m_path, name), 9)) { throw Error("Cannot publish storage blob"); }
+            if (!MoveFileEx(WindowsPath(Path.Combine(m_path, temporary)), WindowsPath(Path.Combine(m_path, name)), 9)) { throw Error("Cannot publish storage blob"); }
         } else {
             if (RenameAt(Fd(Handle), temporary, Fd(Handle), name) != 0 || Fsync(Fd(Handle)) != 0) { throw Error("Cannot publish storage blob"); }
         }

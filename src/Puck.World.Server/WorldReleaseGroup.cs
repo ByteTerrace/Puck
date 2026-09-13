@@ -51,6 +51,10 @@ public static class WorldReleaseFenceClaim {
         ArgumentNullException.ThrowIfNull(fences);
         var census = fences.ToArray();
         if (census.Length == 0) { return Guid.Empty; }
+        if (census.Any(item => item.Identity.Owner == Guid.Empty || string.IsNullOrWhiteSpace(item.Identity.World.Value) ||
+            item.Fence.Epoch <= 0 || item.Fence.Token == Guid.Empty) || census.Select(item => item.Identity).Distinct().Count() != census.Length) {
+            throw new ArgumentException("A fence census requires unique world identities and owned activation fences.", nameof(fences));
+        }
         var canonical = string.Join("\n", census.OrderBy(item => item.Identity.Owner).ThenBy(item => item.Identity.World.Value, StringComparer.Ordinal).Select(item => $"{item.Identity.Owner:D}/{item.Identity.World.Value}/{item.Fence.Epoch}/{item.Fence.Token:D}"));
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return new Guid(hash.AsSpan(0, 16));
@@ -96,7 +100,7 @@ public sealed class WorldReleaseGroupStore {
         return new(record, found.VersionToken ?? throw new InvalidDataException("release group record has no version token"));
     }
 
-    /// <summary>Creates an open serving group. The active identity is established before managed activation starts.</summary>
+    /// <summary>Creates an adopted serving group, or a closed bootstrap group when no active release exists.</summary>
     public async Task<WorldReleaseGroupOutcome> CreateAsync(string deploymentGroup, string? activeRelease, CancellationToken cancellationToken = default) {
         ValidateGroup(deploymentGroup);
         if (activeRelease is not null && string.IsNullOrWhiteSpace(activeRelease)) { throw new ArgumentException("An active release must be non-empty when supplied.", nameof(activeRelease)); }
@@ -110,7 +114,7 @@ public sealed class WorldReleaseGroupStore {
             : new(result.PreconditionFailed ? WorldReleaseOperationOutcomeKind.PreconditionFailed : WorldReleaseOperationOutcomeKind.AlreadyExists, "deployment-group state already exists");
     }
 
-    /// <summary>Begins one operation from the currently active release and closes admission immediately.</summary>
+    /// <summary>Begins one operation from the active release. Prepare preserves source admission until Drain.</summary>
     public async Task<WorldReleaseGroupOutcome> BeginAsync(WorldReleaseGroupSnapshot current, Guid operationId, string targetRelease, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(current.Record);
         ValidateIdentity(current.Record.DeploymentGroup, targetRelease);
@@ -232,7 +236,7 @@ public sealed class WorldReleaseGroupStore {
         if (old.PendingOperationId is null || old.PendingPhase is not WorldReleaseOperationPhase.Verify || old.RecoveryRoots.Count == 0 || freshAuthorityLease == Guid.Empty || freshAuthorityLease == old.AuthorityLease) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "commit requires a verified operation, recovery roots, and a fresh group authority lease"));
         }
-        var next = old with { ActiveRelease = old.PendingTargetRelease!, PreviousRelease = old.PendingSourceRelease, PendingPhase = WorldReleaseOperationPhase.Commit, PendingCommitted = true, Admission = WorldReleaseAdmissionState.Closed, RollbackEligible = true, AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) };
+        var next = old with { ActiveRelease = old.PendingTargetRelease!, PreviousRelease = old.PendingSourceRelease, PendingPhase = WorldReleaseOperationPhase.Commit, PendingCommitted = true, Admission = WorldReleaseAdmissionState.Closed, RollbackEligible = old.PendingSourceRelease is not null, AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) };
         return WriteAsync(current, next, cancellationToken);
     }
 
@@ -252,7 +256,7 @@ public sealed class WorldReleaseGroupStore {
     /// <summary>Rebinds an already serving source after restart under a fresh authority fence.</summary>
     public Task<WorldReleaseGroupOutcome> RebindAdmissionAsync(WorldReleaseGroupSnapshot current, string expectedRelease, Guid freshAuthorityLease, CancellationToken cancellationToken = default) {
         var old = current.Record;
-        if (old.PendingOperationId is not null || old.Admission != WorldReleaseAdmissionState.Open || !string.Equals(old.ActiveRelease, expectedRelease, StringComparison.Ordinal) || freshAuthorityLease == Guid.Empty || freshAuthorityLease == old.AuthorityLease) {
+        if (old.PendingOperationId is not null || old.Admission != WorldReleaseAdmissionState.Open || !string.Equals(old.ActiveRelease, expectedRelease, StringComparison.Ordinal) || freshAuthorityLease == Guid.Empty) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "serving release or authority fence changed before restart rebind"));
         }
         return WriteAsync(current, old with { AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) }, cancellationToken);
@@ -261,7 +265,7 @@ public sealed class WorldReleaseGroupStore {
     /// <summary>Rebinds the still-serving source during prepare, before drain closes admission.</summary>
     public Task<WorldReleaseGroupOutcome> RebindPrepareAdmissionAsync(WorldReleaseGroupSnapshot current, string expectedRelease, Guid freshAuthorityLease, CancellationToken cancellationToken = default) {
         var old = current.Record;
-        if (old.PendingOperationId is null || old.PendingPhase != WorldReleaseOperationPhase.Prepare || old.Admission != WorldReleaseAdmissionState.Open || !string.Equals(old.ActiveRelease, expectedRelease, StringComparison.Ordinal) || freshAuthorityLease == Guid.Empty || freshAuthorityLease == old.AuthorityLease) {
+        if (old.PendingOperationId is null || old.PendingPhase != WorldReleaseOperationPhase.Prepare || old.Admission != WorldReleaseAdmissionState.Open || !string.Equals(old.ActiveRelease, expectedRelease, StringComparison.Ordinal) || freshAuthorityLease == Guid.Empty) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "prepare source or group lease changed before restart rebind"));
         }
         return WriteAsync(current, old with { AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) }, cancellationToken);
@@ -276,9 +280,12 @@ public sealed class WorldReleaseGroupStore {
         return WriteAsync(current, old with { Admission = WorldReleaseAdmissionState.Open, AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) }, cancellationToken);
     }
 
-    /// <summary>Finalizes an open commit, retaining history and the previous artifact while ending rollback eligibility.</summary>
+    /// <summary>Ends the admitted release's rollback window, retaining history and artifacts, including after a failed rollback recovered the source.</summary>
     public Task<WorldReleaseGroupOutcome> FinalizeAsync(WorldReleaseGroupSnapshot current, CancellationToken cancellationToken = default) {
         var old = current.Record;
+        if (old.PendingOperationId is null && old.RollbackEligible && old.Admission == WorldReleaseAdmissionState.Open) {
+            return WriteAsync(current, old with { RollbackEligible = false, Revision = checked(old.Revision + 1) }, cancellationToken);
+        }
         if (old.PendingOperationId is null || old.PendingPhase != WorldReleaseOperationPhase.Commit || !old.PendingCommitted || old.Admission != WorldReleaseAdmissionState.Open) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "only an admitted committed operation can be finalized"));
         }
@@ -287,20 +294,8 @@ public sealed class WorldReleaseGroupStore {
         return WriteAsync(current, next, cancellationToken);
     }
 
-    /// <summary>Completes pre-commit recovery to the source. The failed target is never made active or committed.</summary>
-    public Task<WorldReleaseGroupOutcome> RecoverToSourceAsync(WorldReleaseGroupSnapshot current, string failure, CancellationToken cancellationToken = default) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(failure);
-        var old = current.Record;
-        if (old.PendingOperationId is null || old.PendingCommitted || old.PendingPhase is WorldReleaseOperationPhase.Commit or WorldReleaseOperationPhase.Finalized) {
-            return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "post-commit operations cannot recover to the source release"));
-        }
-        var history = old.History.Append(new WorldReleaseGroupHistoryEntry { OperationId = old.PendingOperationId.Value, SourceRelease = old.PendingSourceRelease!, TargetRelease = old.PendingTargetRelease!, Result = $"recovered: {failure}", RecoveryRoots = old.RecoveryRoots, Revision = old.Revision + 1 }).ToArray();
-        var rollbackAttempt = string.Equals(old.PendingTargetRelease, old.PreviousRelease, StringComparison.Ordinal);
-        var next = old with { PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(StringComparer.Ordinal), Admission = old.Admission, RollbackEligible = rollbackAttempt, History = history, Revision = checked(old.Revision + 1) };
-        return WriteAsync(current, next, cancellationToken);
-    }
-
     private async Task<WorldReleaseGroupOutcome> WriteAsync(WorldReleaseGroupSnapshot current, WorldReleaseGroupRecord next, CancellationToken cancellationToken) {
+        Validate(next, current.Record.DeploymentGroup, m_owner);
         var result = await m_store.WriteAsync(m_target, Address(next.DeploymentGroup), Serialize(next), ObjectBlobWriteMode.Overwrite, current.VersionToken, cancellationToken).ConfigureAwait(false);
         return result.Succeeded ? new(WorldReleaseOperationOutcomeKind.Ok, string.Empty, new(next, result.VersionToken ?? string.Empty)) : new(WorldReleaseOperationOutcomeKind.PreconditionFailed, "deployment-group state changed before the guarded write");
     }
@@ -341,7 +336,9 @@ public sealed class WorldReleaseGroupStore {
         if (record.Admission == WorldReleaseAdmissionState.Open && record.PendingOperationId is not null && record.PendingPhase is not WorldReleaseOperationPhase.Prepare && (record.PendingPhase != WorldReleaseOperationPhase.Commit || !record.PendingCommitted)) { throw new InvalidDataException("open admission requires prepare or a committed pending operation"); }
         if (record.PendingOperationId is null && (record.PendingSourceRelease is not null || record.PendingTargetRelease is not null || record.PendingPhase is not null || record.PendingCommitted || record.RecoveryRoots.Count != 0)) { throw new InvalidDataException("pending operation fields are incomplete"); }
         if (record.PendingOperationId is null && record.PendingFailure is not null) { throw new InvalidDataException("a pending failure requires a pending operation"); }
-        if (record.PendingOperationId is not null && (string.IsNullOrWhiteSpace(record.PendingTargetRelease) || record.PendingPhase is null || !Enum.IsDefined(record.PendingPhase.Value) || (record.PendingSourceRelease is not null && record.PendingSourceRelease == record.PendingTargetRelease) || (record.ActiveRelease is not null && string.IsNullOrWhiteSpace(record.PendingSourceRelease)))) { throw new InvalidDataException("pending operation identity is incomplete"); }
+        if (record.PendingOperationId is not null && (record.PendingOperationId == Guid.Empty || string.IsNullOrWhiteSpace(record.PendingTargetRelease) || record.PendingPhase is null || !Enum.IsDefined(record.PendingPhase.Value) || (record.PendingSourceRelease is not null && record.PendingSourceRelease == record.PendingTargetRelease))) { throw new InvalidDataException("pending operation identity is incomplete"); }
+        if (record.PendingOperationId is not null && record.PendingSourceRelease != (record.PendingCommitted ? record.PreviousRelease : record.ActiveRelease)) { throw new InvalidDataException("pending source must match the durable release pointers"); }
+        if (record.RollbackEligible && record.PreviousRelease is null) { throw new InvalidDataException("rollback eligibility requires a retained predecessor"); }
         if (record.PendingOperationId is not null && (record.PendingPhase == WorldReleaseOperationPhase.Commit) != record.PendingCommitted) { throw new InvalidDataException("only a committed phase may carry the commit marker"); }
         if (record.PendingPhase is WorldReleaseOperationPhase.Recover or WorldReleaseOperationPhase.RecoverActivate && string.IsNullOrWhiteSpace(record.PendingFailure)) { throw new InvalidDataException("recover phase requires a durable failure reason"); }
         if (record.PendingPhase is not (WorldReleaseOperationPhase.Recover or WorldReleaseOperationPhase.RecoverActivate) && record.PendingFailure is not null) { throw new InvalidDataException("only recover phase may carry a pending failure"); }

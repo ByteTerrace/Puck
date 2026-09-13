@@ -6,7 +6,7 @@ namespace Puck.Storage;
 internal sealed partial class ConfinedDirectory {
     private static SafeFileHandle? OpenWindows(string path, bool directory, bool create, bool write, bool exclusive = false, bool newFile = false) {
         // OPEN_REPARSE_POINT opens the link itself for inspection. No truncation occurs before inspection.
-        var handle = CreateFile(path, directory ? 0x80u : write ? 0xC0000000u : 0x80000000u,
+        var handle = CreateFile(WindowsPath(path), directory ? 0x80u : write ? 0xC0000000u : 0x80000000u,
             exclusive ? 0u : 1u, 0, newFile ? 1u : create ? 4u : 3u, 0x02200000, 0);
         if (handle.IsInvalid) {
             var code = Marshal.GetLastPInvokeError();
@@ -22,6 +22,10 @@ internal sealed partial class ConfinedDirectory {
             return handle;
         } catch { handle.Dispose(); throw; }
     }
+
+    // The directory walk has already resolved and confined a local absolute path. Use extended
+    // syntax only at the native boundary so blob and temporary names are not limited by MAX_PATH.
+    private static string WindowsPath(string path) => @"\\?\" + path.Replace('/', '\\');
 
     private static SafeFileHandle? OpenLinux(int parent, string name, bool directory, bool create, bool write, bool exclusive = false, bool newFile = false) {
         const int noFollow = 0x20000, closeOnExec = 0x80000, nonBlock = 0x800, directoryFlag = 0x10000;

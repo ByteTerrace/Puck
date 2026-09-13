@@ -130,7 +130,9 @@ puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <worlds-directory> <output-directory>
 puck world release prepare <package-directory> --silo <silo.json> --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
-puck world release status <group-file>
+puck world release status [group-file] [--json]
+puck world release finalize
+puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -154,9 +156,38 @@ composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest after hashing those definitions and the remaining
 package artifacts. Stable owner/world identities and package paths are recorded
 separately; authored `.puck` inputs are artifacts and are never treated as ready
-definitions. `world release status` is read-only and validates then prints a
-durable deployment-group root from a supplied local file; it does not query a
-live deployment. Rollback, finalization, and restore remain hosted maintenance operations
+definitions. `world release status` reads the managed group for the world silo
+named in the existing Azure deployment outputs. It reports the active and previous
+releases, admission, rollback eligibility, pending phase, recovery scope, and next
+operator action. Supply a saved group file for offline inspection; add `--json`
+for the complete validated record plus the next action. A deployment without a
+managed group is reported explicitly and returns exit code 2.
+`world release finalize` closes the current admitted rollback window with a
+guarded group write. It preserves gameplay, recovery history, and retained
+artifacts. Repeating it after finalization succeeds without another mutation;
+an uncommitted or closed deployment refuses. It uses the same configured Azure
+group as `status`.
+`world release qualify` runs four isolated Docker legs over a marked, coherent
+offline fixture: both packages import the source state, then both import the
+candidate's saved continuation. Complete checkpoint hashes must agree for each
+pair of imports, and every leg must advance simulation and save successfully.
+The runner resolves each image against its manifest digest, uses that immutable
+image identity, disables container networking, and mounts only a fresh fixture
+copy. It retains the copied state and evidence under a unique output directory.
+Equal contract labels or an operator-authored receipt cannot replace these runs.
+
+The fixture contains `qualification.fixture` with `puck.world.qualification.v1`,
+a local `<fixture-directory>/silo.json` with the exact pinned release inventory, per-world signing
+keys inside the fixture, `store/` with coherent authority state and required
+neighbour definitions, and `state/` with the owned-world catalog. It must have
+no production release binding or authentication provider. The inner
+`world release exercise <fixture-directory> [--steps <count>]` command belongs
+to this isolated runner: it opens the fixture's own admission gate and advances
+the normal silo simulation. Do not point it at a live store. These tests cover
+the supplied states; qualifying new gameplay values still requires representative
+fixtures that reach those values. Machine and addon state that the checkpoint
+contract cannot capture rejects qualification.
+Rollback and restore remain hosted maintenance operations
 until their coordinator can perform the corresponding guarded storage and
 admission transitions.
 Azure credentials, deployment ordering, and access restoration belong to

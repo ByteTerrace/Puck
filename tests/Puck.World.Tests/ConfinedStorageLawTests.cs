@@ -10,6 +10,24 @@ public sealed partial class ConfinedStorageLawTests {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task LongPathsSupportAtomicWritesReadBackAndListing() {
+        using var directory = new TempWorldDirectory();
+        var store = PuckStorageTestComposition.BuildStore();
+        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var id = Guid.NewGuid();
+        var key = string.Join('/', Enumerable.Repeat(new string('a', 60), 5)) + "/root.json";
+        Assert.True(Path.Combine(target.RootPath, id.ToString(), key).Length > 260);
+        var address = new ObjectBlobAddress(id, key);
+        var first = await store.WriteAsync(target, address, "original"u8.ToArray(), ObjectBlobWriteMode.CreateOnly, cancellationToken: Cancel);
+        Assert.True(first.Succeeded);
+        var second = await store.WriteAsync(target, address, "replacement"u8.ToArray(), ObjectBlobWriteMode.Overwrite, first.VersionToken, Cancel);
+        Assert.True(second.Succeeded);
+        Assert.Equal("replacement", Encoding.UTF8.GetString((await store.ReadAsync(target, address, Cancel))!.Value.Content.Span));
+        Assert.Equal(new[] { key }, await store.ListAsync(target, id, "", Cancel));
+        Assert.Equal("replacement", Encoding.UTF8.GetString(ConfinedFile.ReadAllBytes(Path.Combine(target.RootPath, id.ToString(), key), 100)));
+    }
+
+    [Fact]
     public void HostConfigurationReadsAreBoundedAndRejectLinkedParents() {
         using var directory = new TempWorldDirectory();
         var file = Path.Combine(directory.RootPath, "extensions.json");

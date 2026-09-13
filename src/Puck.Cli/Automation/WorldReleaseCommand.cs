@@ -1,12 +1,14 @@
 using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Puck.Cli.Azure;
 using Puck.World;
 using Puck.World.Server;
 
 namespace Puck.Cli.Automation;
 
-/// <summary>Operator-facing release preparation and local deployment-group inspection commands.</summary>
+/// <summary>Operator-facing release preparation and durable deployment-group inspection commands.</summary>
 internal static class WorldReleaseCommand {
     public static Command Create() {
         var package = new Argument<string>("package-directory") { Description = "Package directory containing composed worlds and release artifacts." };
@@ -28,12 +30,40 @@ internal static class WorldReleaseCommand {
             persistenceContract: parse.GetRequiredValue(persistence),
             peerProtocolContract: parse.GetRequiredValue(peer)));
 
-        var status = new Command("status", "Show a validated durable deployment-group state file.");
-        var statusPath = new Argument<string>("group-file");
+        var status = new Command("status", "Inspect the configured Azure world deployment, or a saved deployment-group file.");
+        var statusPath = new Argument<string?>("group-file") { Arity = ArgumentArity.ZeroOrOne };
+        var json = new Option<bool>("--json") { Description = "Write the full validated state with named phases and the next operator action." };
         status.Arguments.Add(statusPath);
-        status.SetAction(parse => Status(Path.GetFullPath(parse.GetRequiredValue(statusPath))));
+        status.Options.Add(json);
+        status.SetAction((parse, cancellationToken) => StatusAsync(parse.GetValue(statusPath), parse.GetValue(json), cancellationToken));
 
-        return new Command("release", "Prepare and inspect hosted-world deployment groups.") { prepare, status };
+        var finalize = new Command("finalize", "Close the admitted release's rollback window, retaining recovery history and artifacts.");
+        finalize.SetAction(async (_, token) => {
+            var finalized = await AzureCommand.FinalizeWorldReleaseAsync(token).ConfigureAwait(false);
+            Console.WriteLine($"Finalized {finalized.Record.ActiveRelease}. The previous release is no longer eligible for ordinary rollback; recovery history and artifacts are retained.");
+            return 0;
+        });
+
+        var sourceManifest = new Argument<string>("source-manifest");
+        var targetManifest = new Argument<string>("target-manifest");
+        var fixture = new Argument<string>("fixture-directory");
+        var sourceImage = new Option<string>("--source-image") { Required = true };
+        var targetImage = new Option<string>("--target-image") { Required = true };
+        var evidenceDirectory = new Option<string>("--output") { Required = true, Description = "Directory retaining isolated legs and qualification evidence." };
+        var qualificationSteps = new Option<int>("--steps") { DefaultValueFactory = _ => 60, Description = "Exact continuation steps per packaged leg (1–1024)." };
+        var qualify = new Command("qualify", "Exercise exact packaged releases in both directions against an offline fixture.") {
+            sourceManifest, targetManifest, fixture, sourceImage, targetImage, evidenceDirectory, qualificationSteps
+        };
+        qualify.SetAction(async (parse, token) => {
+            var source = JsonSerializer.Deserialize<WorldReleaseManifest>(File.ReadAllBytes(parse.GetRequiredValue(sourceManifest))) ?? throw new InvalidDataException("missing source manifest");
+            var target = JsonSerializer.Deserialize<WorldReleaseManifest>(File.ReadAllBytes(parse.GetRequiredValue(targetManifest))) ?? throw new InvalidDataException("missing target manifest");
+            var runner = new WorldReleaseQualificationRunner(Path.GetFullPath(parse.GetRequiredValue(fixture)), Path.GetFullPath(parse.GetRequiredValue(evidenceDirectory)),
+                parse.GetRequiredValue(sourceImage), parse.GetRequiredValue(targetImage), parse.GetValue(qualificationSteps));
+            _ = await runner.RunAsync(source, target, token).ConfigureAwait(false);
+            return 0;
+        });
+
+        return new Command("release", "Prepare and inspect hosted-world deployment groups.") { prepare, status, finalize, qualify, WorldReleaseExerciseCommand.Create() };
     }
 
     private static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
@@ -131,12 +161,50 @@ internal static class WorldReleaseCommand {
 
     private static string FullHash(byte[] bytes) => "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes));
 
-    private static int Status(string path) {
-        if (!File.Exists(path)) {
-            throw new FileNotFoundException("deployment-group state file was not found", path);
+    private static async Task<int> StatusAsync(string? path, bool json, CancellationToken cancellationToken) {
+        WorldReleaseGroupRecord record;
+        if (path is not null) {
+            record = WorldReleaseGroupStore.DeserializeValidated(await File.ReadAllBytesAsync(Path.GetFullPath(path), cancellationToken));
+        } else {
+            var snapshot = await AzureCommand.ReadWorldReleaseStatusAsync(cancellationToken);
+            if (snapshot is null) {
+                Console.Error.WriteLine("The configured world deployment has no managed release record. Establish its release identity before a managed deployment.");
+                return 2;
+            }
+            record = snapshot.Value.Record;
         }
-        var record = WorldReleaseGroupStore.DeserializeValidated(File.ReadAllBytes(path));
-        Console.WriteLine(JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
+        var action = NextAction(record);
+        if (json) {
+            var options = new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
+            var document = JsonSerializer.SerializeToNode(record, options)!.AsObject();
+            document["nextAction"] = action;
+            Console.WriteLine(document.ToJsonString(options));
+        } else {
+            Console.WriteLine($"Group: {record.DeploymentGroup}");
+            Console.WriteLine($"Active: {record.ActiveRelease ?? "none (first deployment)"}");
+            Console.WriteLine($"Previous: {record.PreviousRelease ?? "none"}");
+            Console.WriteLine($"Admission: {record.Admission}");
+            Console.WriteLine($"Rollback: {(record.RollbackEligible ? "eligible" : "unavailable")}");
+            Console.WriteLine($"Operation: {record.PendingOperationId?.ToString("D") ?? "none"}");
+            Console.WriteLine($"Phase: {record.PendingPhase?.ToString() ?? "idle"}");
+            Console.WriteLine($"Protected worlds: {record.RecoveryRoots.Count}; retained operations: {record.History.Count}");
+            if (record.PendingFailure is { } failure) { Console.WriteLine($"Failure: {failure}"); }
+            Console.WriteLine($"Next: {action}");
+        }
         return 0;
     }
+
+    private static string NextAction(WorldReleaseGroupRecord record) => record.PendingPhase switch {
+        WorldReleaseOperationPhase.Prepare => "Resume the pending operation; preparation has not drained the source.",
+        WorldReleaseOperationPhase.Drain => "Resume drain and protected-root capture. Keep the source available for a failed-save retry.",
+        WorldReleaseOperationPhase.Activate or WorldReleaseOperationPhase.Verify => "Resume the pending operation and verify the private candidate.",
+        WorldReleaseOperationPhase.Recover => "Resume source recovery from the protected roots. Keep admission closed.",
+        WorldReleaseOperationPhase.RecoverActivate => "Resume the restored source's private activation and admission publication.",
+        WorldReleaseOperationPhase.Commit when record.Admission == WorldReleaseAdmissionState.Closed => "Resume the committed target and its admission publication. The pre-deployment save is no longer an automatic fallback.",
+        _ when record.ActiveRelease is not null && record.Admission == WorldReleaseAdmissionState.Closed => "Resume the active release under fresh authority fences and publish its admission.",
+        _ when record.RollbackEligible => "Roll back to the retained previous release or finalize this rollback window before deploying another release.",
+        WorldReleaseOperationPhase.Commit => "Finalize the first deployment before preparing another release.",
+        _ when record.ActiveRelease is null => "Prepare the first managed deployment.",
+        _ => "Prepare the next release."
+    };
 }

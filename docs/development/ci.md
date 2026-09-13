@@ -571,6 +571,15 @@ adoption or a drained replacement before this transaction can run.
 A failed first deployment restores pre-release persistence and returns the
 scale set to zero, allowing a clean retry.
 
+For a managed release group, `puck world release status` reads the group directly
+from the world owner's private store, using the existing deployment outputs and
+Azure credentials. The group name is the configured world silo name. It reports
+release identities, admission, the pending phase, recovery scope, and the next
+operator action. `--json` includes the full record; an optional group-file argument
+allows offline inspection. An older deployment without a managed group returns
+an explicit refusal. This status command does not convert the deployment or
+replace the Azure rollout transaction described above.
+
 `puck world prepare` packages Puck and its referenced neighbours. Only Puck is
 pinned; Orleans membership is explicitly local. Checkpoints and journals live in
 Azure Blob Storage. The lifecycle extension monitors Azure Scheduled Events

@@ -90,7 +90,9 @@ public sealed class WorldReleaseManagementLawTests {
             PendingPhase = WorldReleaseOperationPhase.Drain, Admission = WorldReleaseAdmissionState.Closed,
             RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:1" }, Revision = started.Snapshot.Value.Record.Revision + 1
         }, TestContext.Current.CancellationToken);
-        var recovered = await groups.RecoverToSourceAsync(drained.Snapshot!.Value, "candidate health failed", TestContext.Current.CancellationToken);
+        var recovering = await groups.BeginRecoveryAsync(drained.Snapshot!.Value, "candidate health failed", TestContext.Current.CancellationToken);
+        var restored = await groups.RecordRecoveryRestoredAsync(recovering.Snapshot!.Value, TestContext.Current.CancellationToken);
+        var recovered = await groups.CompleteRecoveryAsync(restored.Snapshot!.Value, TestContext.Current.CancellationToken);
         Assert.True(recovered.Ok, recovered.Detail);
         Assert.Equal("release-a", recovered.Snapshot!.Value.Record.ActiveRelease);
         Assert.Equal(WorldReleaseAdmissionState.Closed, recovered.Snapshot.Value.Record.Admission);
@@ -123,11 +125,17 @@ public sealed class WorldReleaseManagementLawTests {
         Assert.Equal(source.Identity, rollback.Snapshot!.Value.Record.PendingTargetRelease);
         Assert.Single(rollback.Snapshot.Value.Record.History);
         Assert.Equal("rollback-started", rollback.Snapshot.Value.Record.History[0].Result);
-        var recovered = await coordinator.RecoverToSourceAsync(rollback.Snapshot.Value, "rollback candidate refused", TestContext.Current.CancellationToken);
+        var recovered = await CompleteBookkeepingRecoveryAsync(groups, rollback.Snapshot.Value);
         Assert.True(recovered.Ok, recovered.Detail);
         Assert.True(recovered.Snapshot!.Value.Record.RollbackEligible);
         var retry = await coordinator.BeginRollbackAsync(recovered.Snapshot.Value, target, source, new FixedQualificationRunner(Evidence(target, source)), Guid.NewGuid(), TestContext.Current.CancellationToken);
         Assert.True(retry.Ok, retry.Detail);
+        var retriedRecovery = await CompleteBookkeepingRecoveryAsync(groups, retry.Snapshot!.Value);
+        var finalized = await coordinator.FinalizeAsync(retriedRecovery.Snapshot!.Value, TestContext.Current.CancellationToken);
+        Assert.True(finalized.Ok, finalized.Detail);
+        Assert.False(finalized.Snapshot!.Value.Record.RollbackEligible);
+        Assert.Equal(target.Identity, finalized.Snapshot.Value.Record.ActiveRelease);
+        Assert.Equal(source.Identity, finalized.Snapshot.Value.Record.PreviousRelease);
     }
 
     [Fact]
@@ -159,13 +167,35 @@ public sealed class WorldReleaseManagementLawTests {
 
     private static string FullHash(byte[] bytes) => "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes));
 
+    [Fact]
+    public void QualificationRequiresCompleteMatchingImportsInBothDirections() {
+        var source = Manifest(new Dictionary<string, string> { ["row"] = FullHash("world"u8.ToArray()) }, new Dictionary<string, string>());
+        var target = source with { Label = "candidate", EngineImageDigest = "sha256:" + new string('e', 64) };
+        var evidence = Evidence(source, target);
+        Assert.True(WorldReleaseCoordinator.TryQualifyPair(source, target, evidence, out var reason), reason);
+        Assert.False(WorldReleaseCoordinator.TryQualifyPair(source, target, evidence with { TargetStateHash = FullHash("lost inventory"u8.ToArray()) }, out _));
+        Assert.False(WorldReleaseCoordinator.TryQualifyPair(source, target, evidence with { ReverseReferenceStateHash = FullHash("lost new state"u8.ToArray()) }, out _));
+        Assert.False(WorldReleaseCoordinator.TryQualifyPair(source, target, evidence with { SourceStateHash = "same", TargetStateHash = "same" }, out _));
+        Assert.False(WorldReleaseCoordinator.TryQualifyPair(source, target, evidence with { EvidenceId = "operator says it works" }, out _));
+    }
+
+    // These laws exercise the ledger. WorldReleaseCutoverLawTests separately executes real root restoration.
+    private static async Task<WorldReleaseGroupOutcome> CompleteBookkeepingRecoveryAsync(WorldReleaseGroupStore groups, WorldReleaseGroupSnapshot current) {
+        var token = TestContext.Current.CancellationToken;
+        var drained = await new WorldReleaseCoordinator(groups).RecordDrainAsync(current, new Dictionary<string, string> { ["row"] = "protected-root" }, token);
+        var recovering = await groups.BeginRecoveryAsync(drained.Snapshot!.Value, "rollback candidate refused", token);
+        var restored = await groups.RecordRecoveryRestoredAsync(recovering.Snapshot!.Value, token);
+        return await groups.CompleteRecoveryAsync(restored.Snapshot!.Value, token, Guid.NewGuid());
+    }
+
     private static WorldReleaseQualificationReceipt Evidence(WorldReleaseManifest source, WorldReleaseManifest target) => new() {
         SourceRelease = source.Identity,
         TargetRelease = target.Identity,
-        EvidenceId = "qualification/test",
-        SourceStateHash = "sha256/source",
-        TargetStateHash = "sha256/target",
-        ReverseStateHash = "sha256/reverse",
+        EvidenceId = FullHash("qualification/test"u8.ToArray()),
+        SourceStateHash = FullHash("source import"u8.ToArray()),
+        TargetStateHash = FullHash("source import"u8.ToArray()),
+        ReverseStateHash = FullHash("target continuation import"u8.ToArray()),
+        ReverseReferenceStateHash = FullHash("target continuation import"u8.ToArray()),
     };
 
     private sealed class FixedQualificationRunner(WorldReleaseQualificationReceipt receipt) : IWorldReleaseQualificationRunner {

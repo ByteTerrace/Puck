@@ -4,7 +4,9 @@
 .worktrees
 .claude
 .vs
+.tmp
 artifacts
+roms
 experimental
 **/bin
 **/obj

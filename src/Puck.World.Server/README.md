@@ -125,14 +125,37 @@ private-store CAS. Commit records a fresh group activation claim; the silo
 separately verifies every current per-world fence before its explicit all-row
 publication. Pre-commit recovery clears the failed candidate without marking
 it active, while finalization retains recovery references and closes only the
-rollback window. Azure coordinator switching and operator rollback/restore
+rollback window. The CLI exposes this guarded finalization for the configured
+Azure group. Azure coordinator switching and operator rollback/restore
 commands remain future integration work. The group root is the live hosting
-record; the CLI status verb only validates and displays a supplied local copy
-of that record. `WorldReleaseCoordinator` is the shared guarded transition
+record; the CLI status verb reads the configured Azure group or validates a
+supplied local copy and explains its next action. `WorldReleaseCoordinator` is the shared guarded transition
 driver: it requires a qualification runner receipt, records each durable phase
 before invoking a runtime effect, and persists pre-commit recovery before
 restoring a source. The Azure command adapter still has to supply its runtime
 driver before production deployment can claim this workflow.
+
+`WorldReleaseArchive` retains canonical manifests and exact package files in the
+same private object store. File objects use full SHA-256 pins; the manifest is
+published last, so an interrupted upload cannot expose a partial release.
+Retries reuse matching objects and refuse corrupt retained bytes. A new
+coordinator can recover the package without the original runner's directory.
+Registry image retention and packaged qualification remain separate preflight
+requirements; archiving a manifest does not establish either of them.
+The CLI's Docker runner compares complete imports of one offline fixture in both
+packages, then repeats the comparison over candidate-written continuation state.
+Receipts carry full evidence hashes and matching forward and reverse import
+hashes; the coordinator refuses mismatches. The receipt covers the states actually
+exercised, not every state a changed game might reach. Checkpoints still refuse
+stepped machine cores, pumped addon guests, and applied screen operations, so
+worlds exercising those features cannot pass this qualification yet.
+
+The coordinator's real-host tests cover two-row deployment, subsequent gameplay,
+rollback using that latest state, and interrupted source recovery under fresh
+fences. These tests use one compiled engine and do not establish compatibility
+between independently packaged binaries. Bootstrap commits have no predecessor
+and advertise no rollback target. Finalization also works after a failed rollback
+returns to the source, retaining its history and recovery points.
 
 ## Rule effects land on a frame (`WorldServer.RuleHost.cs`, `WorldServer.RuleFrame.cs`)
 

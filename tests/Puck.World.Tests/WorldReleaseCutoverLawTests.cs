@@ -1,5 +1,8 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Net;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
@@ -13,6 +16,176 @@ namespace Puck.World.Tests;
 /// <summary>Exercises release admission through real hosted rows and the production simulation pump.</summary>
 public sealed class WorldReleaseCutoverLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task CoordinatorDeployAndRollbackRetainLatestGameplayAcrossBothRows() {
+        using var scenario = new Scenario();
+        var a = scenario.Manifest('a');
+        var b = scenario.Manifest('b');
+        await scenario.InitializeAsync(a.Identity);
+        var source = scenario.Host(a.Identity).Host;
+        var candidate = scenario.Host(b.Identity).Host;
+        var rollback = scenario.Host(a.Identity).Host;
+        using var sourceInstances = source.Instances;
+        using var candidateInstances = candidate.Instances;
+        using var rollbackInstances = rollback.Instances;
+        await ActivateAllAsync(source, scenario.Identities);
+        Assert.Equal(WorldReleaseAdmissionPublication.Opened, await PublishAsync(source));
+        Tick(source, 5);
+        var before = Ticks(source, scenario.Identities);
+        var coordinator = new WorldReleaseCoordinator(scenario.Groups);
+        var group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        group = Required(await scenario.Groups.BeginAsync(group, Guid.NewGuid(), b.Identity, Token));
+        var runtime = new LoopbackRuntime(new WorldSiloReleaseRuntime(source, candidate, scenario.Identities, () => throw new InvalidOperationException("successful deploy must not recover")), source, candidate);
+        var deploying = coordinator.ResumeAsync(group, b, runtime, Token);
+        await PumpAllAsync([source, candidate], deploying);
+        Assert.True((await deploying).Completed, (await deploying).Detail);
+        AssertTicks(before, candidate, scenario.Identities);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => source.CaptureReleaseRootsAsync(group.Record.PendingOperationId!.Value, Token));
+        Tick(candidate, 7);
+        var latest = Ticks(candidate, scenario.Identities);
+        foreach (var row in before) { Assert.True(latest[row.Key] > row.Value); }
+
+        group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        group = Required(await scenario.Groups.BeginRollbackAsync(group, Guid.NewGuid(), Token));
+        var rollbackRuntime = new LoopbackRuntime(new WorldSiloReleaseRuntime(candidate, rollback, scenario.Identities, () => throw new InvalidOperationException("successful rollback must not restore an old save")), candidate, rollback);
+        var rollingBack = coordinator.ResumeAsync(group, a, rollbackRuntime, Token);
+        await PumpAllAsync([candidate, rollback], rollingBack);
+        Assert.True((await rollingBack).Completed, (await rollingBack).Detail);
+        AssertTicks(latest, rollback, scenario.Identities);
+        Assert.True(rollback.ReleaseAdmissionOpen);
+        var durable = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        Assert.Equal(a.Identity, durable.Record.ActiveRelease);
+        Assert.Equal(b.Identity, durable.Record.PreviousRelease);
+        Assert.All(durable.Record.RecoveryRoots.Values, pin => Assert.StartsWith("sha256/", pin));
+        Required(await scenario.Groups.FinalizeAsync(durable, Token));
+        await PumpAsync(rollback, rollback.DrainAsync(Token));
+    }
+
+    [Fact]
+    public async Task FailedPrivateCandidateRecoversUnderFreshFencesAndResumesAfterRecoveryRestart() {
+        using var scenario = new Scenario();
+        var a = scenario.Manifest('a');
+        var b = scenario.Manifest('b');
+        await scenario.InitializeAsync(a.Identity);
+        var source = scenario.Host(a.Identity).Host;
+        var candidate = scenario.Host(b.Identity).Host;
+        var recovery = scenario.Host(a.Identity).Host;
+        using var sourceInstances = source.Instances;
+        using var candidateInstances = candidate.Instances;
+        using var recoveryInstances = recovery.Instances;
+        await ActivateAllAsync(source, scenario.Identities);
+        Assert.Equal(WorldReleaseAdmissionPublication.Opened, await PublishAsync(source));
+        Tick(source, 5);
+        var before = Ticks(source, scenario.Identities);
+        var oldFences = await scenario.FencesAsync();
+        var group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        group = Required(await scenario.Groups.BeginAsync(group, Guid.NewGuid(), b.Identity, Token));
+        var runtime = new WorldSiloReleaseRuntime(source, candidate, scenario.Identities, () => recovery);
+        var failing = new FailureRuntime(runtime);
+        var deploying = new WorldReleaseCoordinator(scenario.Groups).ResumeAsync(group, b, failing, Token);
+        await PumpAllAsync([source, candidate, recovery], deploying);
+        Assert.False((await deploying).Completed);
+        Assert.False(candidate.ReleaseAdmissionOpen);
+        group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        Assert.Equal(WorldReleaseOperationPhase.RecoverActivate, group.Record.PendingPhase);
+        Assert.Equal(WorldReleaseAdmissionState.Closed, group.Record.Admission);
+
+        // A new coordinator and adapter reconstruct recovery from the durable phase, without restoring twice.
+        var resumedRuntime = new WorldSiloReleaseRuntime(source, candidate, scenario.Identities, () => recovery);
+        var resuming = new WorldReleaseCoordinator(scenario.Groups).ResumeAsync(group, b, resumedRuntime, Token);
+        await PumpAllAsync([source, candidate, recovery], resuming);
+        var result = await resuming;
+        Assert.False(result.Completed);
+        Assert.True(result.SourceRecovered, result.Detail);
+        AssertTicks(before, recovery, scenario.Identities);
+        Assert.True(recovery.ReleaseAdmissionOpen);
+        group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        Assert.Null(group.Record.PendingOperationId);
+        Assert.Equal(a.Identity, group.Record.ActiveRelease);
+        var newFences = await scenario.FencesAsync();
+        foreach (var old in oldFences) {
+            var fresh = Assert.Single(newFences, row => row.Identity == old.Identity);
+            Assert.True(fresh.Fence.Epoch > old.Fence.Epoch);
+            Assert.NotEqual(old.Fence.Token, fresh.Fence.Token);
+        }
+        await PumpAsync(recovery, recovery.DrainAsync(Token));
+    }
+
+    private sealed class FailureRuntime(IWorldReleaseRuntime inner) : IWorldReleaseRuntime {
+        public Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.DrainSourceAndCaptureAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StartCandidatePrivatelyAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StopCandidateAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Task.FromResult(new WorldReleaseRuntimeResult(false, "injected private probe failure"));
+        public Task<IReadOnlyList<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>> ReadFenceCensusAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.ReadFenceCensusAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishCandidateAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> RecoverSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.RecoverSourceAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> StartRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Task.FromResult(new WorldReleaseRuntimeResult(false, "injected recovery worker interruption"));
+        public Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishRecoveredSourceAsync(operation, cancellationToken);
+    }
+
+    [Fact]
+    public async Task ReleaseControlRejectsRemoteAndWrongOperationBeforeWorkerEffects() {
+        using var scenario = new Scenario();
+        await scenario.InitializeAsync();
+        var host = scenario.Host("release-a").Host;
+        using var instances = host.Instances;
+        var remote = await ControlAsync(host, "GET", "/release/status", IPAddress.Parse("203.0.113.1"));
+        Assert.Equal(404, remote.Status);
+        var stale = await ControlAsync(host, "POST", $"/release/drain/{Guid.NewGuid():D}");
+        Assert.Equal(409, stale.Status);
+        Assert.False(host.IsDraining);
+        var status = await ControlAsync(host, "GET", "/release/status");
+        Assert.Equal(200, status.Status);
+        Assert.Equal("release-a", JsonSerializer.Deserialize<WorldReleaseWorkerStatus>(status.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Release);
+    }
+
+    // The worker-side controls execute against actual hosts; only the Azure transport is replaced by loopback HTTP contexts.
+    private sealed class LoopbackRuntime(IWorldReleaseRuntime inner, WorldSiloHost source, WorldSiloHost candidate) : IWorldReleaseRuntime {
+        private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+        public async Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            var result = await ControlAsync(source, "POST", $"/release/drain/{operation.PendingOperationId:D}");
+            return new(result.Status == 200, result.Body, result.Status == 200 ? JsonSerializer.Deserialize<Dictionary<string, string>>(result.Body, Options) : null);
+        }
+        public async Task<IReadOnlyList<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>> ReadFenceCensusAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            var result = await ControlAsync(candidate, "GET", $"/release/fences/{operation.PendingOperationId:D}");
+            Assert.Equal(200, result.Status);
+            return JsonSerializer.Deserialize<WorldReleaseWorkerFence[]>(result.Body, Options)!.Select(row =>
+                (new WorldAuthorityIdentity(row.Owner, SafeName.Parse(row.World)), new WorldAuthorityFence(row.Epoch, row.Token, row.RootVersion))).ToArray();
+        }
+        public async Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            var result = await ControlAsync(candidate, "POST", $"/release/publish/{operation.PendingOperationId:D}");
+            return result.Status == 200 ? WorldReleaseRuntimePublication.Opened : WorldReleaseRuntimePublication.Refused;
+        }
+        public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StartCandidatePrivatelyAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StopCandidateAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.VerifyCandidatePrivatelyAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> RecoverSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.RecoverSourceAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimeResult> StartRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StartRecoveredSourceAsync(operation, cancellationToken);
+        public Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishRecoveredSourceAsync(operation, cancellationToken);
+    }
+
+    private static async Task<(int Status, string Body)> ControlAsync(WorldSiloHost host, string method, string path, IPAddress? remote = null) {
+        using var services = new ServiceCollection().BuildServiceProvider();
+        using var body = new MemoryStream();
+        var context = new DefaultHttpContext { RequestServices = services, RequestAborted = Token };
+        context.Connection.RemoteIpAddress = remote ?? IPAddress.Loopback;
+        context.Request.Method = method;
+        context.Request.Path = path;
+        context.Response.Body = body;
+        Assert.True(await new WorldSiloReleaseControl(host).HandleAsync(context));
+        return (context.Response.StatusCode, System.Text.Encoding.UTF8.GetString(body.ToArray()));
+    }
+
+    private static async Task PumpAllAsync(IReadOnlyList<WorldSiloHost> hosts, Task operation) {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        while (!operation.IsCompleted) {
+            foreach (var host in hosts) { host.DrainActivationMailbox(); }
+            await Task.Delay(1, deadline.Token);
+        }
+        await operation;
+    }
 
     [Fact]
     public async Task TwoRowCutoverKeepsCandidatesFrozenAndCommittedRestartPreservesProgress() {
@@ -165,12 +338,21 @@ public sealed class WorldReleaseCutoverLawTests {
             Groups = new(m_store, m_target, m_owner);
         }
 
-        public async Task InitializeAsync() {
+        // These laws test orchestration and persistence in one compiled engine. Packaged-pair qualification
+        // is a separate prerequisite and is deliberately not replaced by a fake qualification receipt here.
+        public WorldReleaseManifest Manifest(char image) => new() {
+            Label = "cutover-test", SourceRevision = new string(image, 40), EngineImageDigest = "sha256:" + new string(image, 64),
+            Definitions = Identities.ToDictionary(identity => $"{identity.Owner:D}/{identity.World}", _ => "sha256/" + new string('d', 64)),
+            DefinitionFiles = Identities.ToDictionary(identity => $"{identity.Owner:D}/{identity.World}", identity => $"{identity.World}.world.json"),
+            Artifacts = new Dictionary<string, string>(), PersistenceContract = "puck.world.persistence.v1", PeerProtocolContract = "puck.world.peer.v1"
+        };
+
+        public async Task InitializeAsync(string activeRelease = "release-a") {
             var document = Fixtures.BuildDocument() with {
                 HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None }
             };
             foreach (var identity in Identities) { Assert.True((await Authority.PublishDefinitionAsync(identity, document, Token)).Ok); }
-            Required(await Groups.CreateAsync("primary", "release-a", Token));
+            Required(await Groups.CreateAsync("primary", activeRelease, Token));
         }
 
         public (WorldSiloHost Host, SiloConsoleRouting Routing) Host(string release) {

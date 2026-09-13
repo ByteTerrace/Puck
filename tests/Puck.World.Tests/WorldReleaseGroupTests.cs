@@ -14,6 +14,53 @@ public sealed class WorldReleaseGroupTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri("UseDevelopmentStorage=true");
 
     [Fact]
+    public async Task FirstCommitHasNoRollbackTargetAndCanBeReloadedOpenedAndFinalized() {
+        var token = TestContext.Current.CancellationToken;
+        var owner = Guid.NewGuid();
+        var groups = new WorldReleaseGroupStore(new FakeObjectBlobStore(), Target, owner);
+        var group = (await groups.CreateAsync("primary", null, token)).Snapshot!.Value;
+        group = (await groups.BeginAsync(group, Guid.NewGuid(), "release-a", token)).Snapshot!.Value;
+        var coordinator = new WorldReleaseCoordinator(groups);
+        group = (await coordinator.RecordDrainAsync(group, new Dictionary<string, string> { ["row"] = "protected-empty-root" }, token)).Snapshot!.Value;
+        group = (await coordinator.RecordActivationAsync(group, token)).Snapshot!.Value;
+        group = (await coordinator.RecordVerificationAsync(group, token)).Snapshot!.Value;
+        var committed = await groups.CommitAsync(group, [(new(owner, SafeName.Parse("row")), new(1, Guid.NewGuid(), "root"))], token);
+        Assert.True(committed.Ok, committed.Detail);
+        group = (await groups.LoadAsync("primary", token))!.Value;
+        Assert.Null(group.Record.PreviousRelease);
+        Assert.False(group.Record.RollbackEligible);
+        Assert.Equal("release-a", group.Record.ActiveRelease);
+        var opened = await groups.OpenAdmissionAsync(group, "release-a", group.Record.PendingOperationId!.Value, group.Record.AuthorityLease, token);
+        Assert.True(opened.Ok, opened.Detail);
+        Assert.True((await groups.FinalizeAsync(opened.Snapshot!.Value, token)).Ok);
+    }
+
+    [Fact]
+    public async Task RepeatedSourcePublicationRechecksTheVersionEvenWithTheSameFence() {
+        var token = TestContext.Current.CancellationToken;
+        var groups = new WorldReleaseGroupStore(new FakeObjectBlobStore(), Target, Guid.NewGuid());
+        var group = (await groups.CreateAsync("primary", "release-a", token)).Snapshot!.Value;
+        var claim = Guid.NewGuid();
+        group = (await groups.RebindAdmissionAsync(group, "release-a", claim, token)).Snapshot!.Value;
+        var repeated = await groups.RebindAdmissionAsync(group, "release-a", claim, token);
+        Assert.True(repeated.Ok, repeated.Detail);
+        var stale = group;
+        group = (await groups.BeginAsync(repeated.Snapshot!.Value, Guid.NewGuid(), "release-b", token)).Snapshot!.Value;
+        Assert.Equal(WorldReleaseOperationOutcomeKind.PreconditionFailed, (await groups.RebindAdmissionAsync(stale, "release-a", claim, token)).Kind);
+        var prepared = await groups.RebindPrepareAdmissionAsync(group, "release-a", claim, token);
+        Assert.True(prepared.Ok, prepared.Detail);
+        Assert.True((await groups.RebindPrepareAdmissionAsync(prepared.Snapshot!.Value, "release-a", claim, token)).Ok);
+    }
+
+    [Fact]
+    public void FenceCensusRejectsUnownedAndDuplicateWorlds() {
+        var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("row"));
+        var fence = new WorldAuthorityFence(1, Guid.NewGuid(), "root");
+        Assert.Throws<ArgumentException>(() => WorldReleaseFenceClaim.Compute([(identity, fence), (identity, fence)]));
+        Assert.Throws<ArgumentException>(() => WorldReleaseFenceClaim.Compute([(identity, fence with { Token = Guid.Empty })]));
+    }
+
+    [Fact]
     public async Task GroupStateCommitsFinalizesRetainsHistoryAndAllowsNextOperation() {
         var store = new FakeObjectBlobStore();
         var owner = Guid.NewGuid();
@@ -52,7 +99,10 @@ public sealed class WorldReleaseGroupTests {
         var created = await groups.CreateAsync("primary", "release-a", TestContext.Current.CancellationToken);
         var started = await groups.BeginAsync(created.Snapshot!.Value, Guid.NewGuid(), "release-b", TestContext.Current.CancellationToken);
         var drained = await groups.AdvanceAsync(started.Snapshot!.Value, started.Snapshot.Value.Record with { PendingPhase = WorldReleaseOperationPhase.Drain, Admission = WorldReleaseAdmissionState.Closed, RecoveryRoots = new Dictionary<string, string> { ["row"] = "root-1" }, Revision = started.Snapshot.Value.Record.Revision + 1 }, TestContext.Current.CancellationToken);
-        var recovered = await groups.RecoverToSourceAsync(drained.Snapshot!.Value, "candidate refused", TestContext.Current.CancellationToken);
+        var recovering = await groups.BeginRecoveryAsync(drained.Snapshot!.Value, "candidate refused", TestContext.Current.CancellationToken);
+        Assert.False((await groups.CompleteRecoveryAsync(recovering.Snapshot!.Value, TestContext.Current.CancellationToken)).Ok);
+        var restored = await groups.RecordRecoveryRestoredAsync(recovering.Snapshot.Value, TestContext.Current.CancellationToken);
+        var recovered = await groups.CompleteRecoveryAsync(restored.Snapshot!.Value, TestContext.Current.CancellationToken);
         Assert.True(recovered.Ok, recovered.Detail);
         Assert.Equal("release-a", recovered.Snapshot!.Value.Record.ActiveRelease);
         Assert.Equal(WorldReleaseAdmissionState.Closed, recovered.Snapshot.Value.Record.Admission);

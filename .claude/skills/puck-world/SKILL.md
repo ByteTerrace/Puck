@@ -313,7 +313,7 @@ checks that activation binding; moving an endpoint requires a fresh activation.
 `puck azure test-world-container --image <image>` boots the primary Puck row, verifies a durable
 checkpoint and the expected QUIC key, then replaces the container against the
 same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
-Pinned activation waits for host startup, establishes its initial checkpoint,
+Unmanaged pinned activation waits for host startup, establishes its initial checkpoint,
 and reconciles changed published content through `WorldSiloHost.ReloadAsync` and
 the ordinary rebuild submission. A release marker advances only after its
 checkpoint; retrying failed persistence must not rebuild twice. Drain waits for
@@ -321,6 +321,19 @@ accepted reloads before freezing the pump. `/healthz` includes persistence healt
 `/livez` checks simulation progress independently. `WorldSiloLifecycleLawTests`
 owns reload and drain failure controls. `WorldSiloDefinitionLawTests` checks
 serialized health defaults. Failure during startup stops the host.
+Managed release startup skips ordinary reload, restores privately, and opens all
+rows only through the deployment-group publication barrier. Source recovery
+restores the protected operation roots before recording `RecoverActivate`; a
+restart in that phase activates without restoring again. Run
+`WorldReleaseCutoverLawTests` for the real-host coordinator, latest-state rollback,
+and interrupted recovery, plus `WorldReleaseArchiveLawTests` for retained package
+integrity. These same-binary laws do not qualify a pair of packaged engine images.
+`world release qualify` executes exact Docker images over a copied offline fixture
+with networking disabled; see the CLI README for the fixture and evidence contract.
+Each package must preserve the same source import and candidate-written reverse
+import, advance simulation, and checkpoint successfully. A same-image control proves
+the runner only. Stepped machines, pumped addons, and screen operations remain
+uncapturable and must reject qualification rather than be omitted from its fixture.
 `--authentication-config-file` selects an installed client provider and server
 key pin; no token belongs in world content or checkpoints. Azure's provider
 validates ByteTerrace API membership, while generic protocol code sees only the

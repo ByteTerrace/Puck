@@ -1,6 +1,7 @@
 namespace Puck.Storage;
 
-internal static class ObjectBlobAddressPath {
+/// <summary>Validates portable relative storage paths before a host publishes or materializes content.</summary>
+public static class ObjectBlobAddressPath {
     private static string[] GetSegments(string path, string description) {
         if (path.Length > 4096) { throw new ArgumentException($"The {description} exceeds its length ceiling.", nameof(path)); }
         if (
@@ -45,7 +46,7 @@ internal static class ObjectBlobAddressPath {
         return segments;
     }
 
-    public static string[] GetKeySegments(ObjectBlobAddress address) {
+    internal static string[] GetKeySegments(ObjectBlobAddress address) {
         if (string.IsNullOrWhiteSpace(value: address.Key)) {
             throw new ArgumentException(
                 message: "The storage key must not be empty.",
@@ -58,6 +59,8 @@ internal static class ObjectBlobAddressPath {
             path: address.Key
         );
     }
+    /// <summary>Validates a blob key's portable path segments and returns its forward-slash spelling.
+    /// Rejects rooted paths, dot segments, device names, alternate streams, and reserved storage metadata names.</summary>
     public static string GetNormalizedKey(ObjectBlobAddress address) {
         return string.Join(
             '/',
@@ -67,7 +70,7 @@ internal static class ObjectBlobAddressPath {
     /// <summary>Normalizes a list operation's key prefix: empty means "every key under the object"; a non-empty value
     /// is validated exactly like a key (relative, no dot segments) and rendered back with a trailing slash so it can
     /// only match whole path segments — a prefix "worlds" must not also match a sibling key "worlds2/x.json".</summary>
-    public static string GetNormalizedPrefix(string keyPrefix) {
+    internal static string GetNormalizedPrefix(string keyPrefix) {
         ArgumentNullException.ThrowIfNull(argument: keyPrefix);
 
         if (keyPrefix.Length == 0) {
@@ -84,7 +87,7 @@ internal static class ObjectBlobAddressPath {
             segments
         )}/";
     }
-    public static string GetRoot(Guid objectId) {
+    internal static string GetRoot(Guid objectId) {
         if (objectId == Guid.Empty) {
             throw new ArgumentException(
                 message: "The object id must not be empty.",

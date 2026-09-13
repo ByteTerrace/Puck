@@ -12,6 +12,7 @@ namespace Puck.World.Silo;
 internal sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplicationLifetime lifetime,
     IWorldHostRetirementObserver? observer = null) : BackgroundService, IHostedLifecycleService {
     private readonly WorldSiloLifecycle m_options = silo.Definition.Lifecycle!;
+    private readonly WorldSiloReleaseControl m_releaseControl = new(silo);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         var builder = WebApplication.CreateSlimBuilder();
@@ -27,6 +28,7 @@ internal sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplica
 
     private async Task HandleAsync(HttpContext context) {
         try {
+            if (await m_releaseControl.HandleAsync(context)) { return; }
             if ((context.Request.Method == "POST") && (context.Request.Path == "/drain") && (context.Connection.RemoteIpAddress is { } address) && IPAddress.IsLoopback(address: address)) {
                 using var deadline = new CancellationTokenSource(delay: TimeSpan.FromSeconds(m_options.ShutdownSeconds));
 

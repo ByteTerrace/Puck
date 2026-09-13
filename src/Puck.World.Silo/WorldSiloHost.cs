@@ -179,6 +179,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         if (!IsDraining || m_store is not IWorldAuthorityRecoveryStore recovery) {
             throw new InvalidOperationException("release capture requires a drained host and a recovery-capable authority store");
         }
+        _ = await RequireSourceOperationAsync(operationId, WorldReleaseOperationPhase.Drain, ct).ConfigureAwait(false);
         var roots = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var row in m_definition.Worlds.Where(static row => row.Pinned)) {
             var identity = new WorldAuthorityIdentity(row.Owner, row.World);
@@ -188,35 +189,64 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             }
             roots[$"{identity.Owner:D}/{identity.World.Value}"] = current.Pin;
         }
+        _ = await RequireSourceOperationAsync(operationId, WorldReleaseOperationPhase.Drain, ct).ConfigureAwait(false);
         return roots;
     }
 
     /// <summary>Restores every operation-bound root before this empty host is permitted to activate the source.</summary>
     public async Task RestoreReleaseRootsAsync(WorldReleaseGroupRecord operation, CancellationToken ct = default) {
-        if (m_store is not IWorldAuthorityRecoveryStore recovery || m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
+        if (m_store is not IWorldAuthorityRecoveryStore recovery || m_releaseGroupStore is null || m_releaseManagement is not { } managed) {
             throw new InvalidOperationException("managed recovery requires a recovery-capable authority store");
         }
         var rows = m_definition.Worlds.Where(static row => row.Pinned).ToArray();
         if (operation.PendingOperationId is not { } operationId || operation.RecoveryRoots.Count != rows.Length || operation.DeploymentGroup != managed.Group || operation.Owner != managed.Owner) {
             throw new InvalidOperationException("the recovery inventory does not match this managed group");
         }
-        foreach (var row in rows) {
-            var identity = new WorldAuthorityIdentity(row.Owner, row.World);
-            if (!operation.RecoveryRoots.TryGetValue($"{identity.Owner:D}/{identity.World}", out var pin) ||
-                await recovery.LoadRecoveryRootAsync(identity, pin, operationId, ct).ConfigureAwait(false) is null) {
-                throw new InvalidDataException($"protected root for '{row.World}' is missing");
+        await m_activationGate.WaitAsync(ct).ConfigureAwait(false);
+        try {
+            var empty = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            m_mailbox.Enqueue(() => empty.TrySetResult(m_rows.Count == 0 && !ReleaseAdmissionOpen && !IsDraining));
+            if (!await empty.Task.WaitAsync(ct).ConfigureAwait(false)) { throw new InvalidOperationException("source restoration requires an empty private host"); }
+            foreach (var row in rows) {
+                var identity = new WorldAuthorityIdentity(row.Owner, row.World);
+                if (!operation.RecoveryRoots.TryGetValue($"{identity.Owner:D}/{identity.World}", out var pin) ||
+                    await recovery.LoadRecoveryRootAsync(identity, pin, operationId, ct).ConfigureAwait(false) is null) {
+                    throw new InvalidDataException($"protected root for '{row.World}' is missing");
+                }
             }
-        }
-        foreach (var row in rows) {
-            var state = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
-            if (state?.Record.PendingOperationId != operationId || state.Value.Record.PendingPhase != WorldReleaseOperationPhase.Recover) {
-                throw new InvalidOperationException("the recovery operation changed before root restoration");
+            foreach (var row in rows) {
+                var state = await RequireSourceOperationAsync(operationId, WorldReleaseOperationPhase.Recover, ct).ConfigureAwait(false);
+                if (state.RecoveryRoots.Count != operation.RecoveryRoots.Count || operation.RecoveryRoots.Any(root =>
+                    !state.RecoveryRoots.TryGetValue(root.Key, out var pin) || pin != root.Value)) {
+                    throw new InvalidOperationException("the recovery operation changed before root restoration");
+                }
+                var identity = new WorldAuthorityIdentity(row.Owner, row.World);
+                var fence = await m_store.AcquireActivationAsync(identity, ct).ConfigureAwait(false) ?? throw new IOException("maintenance ownership could not be acquired");
+                var restored = await recovery.RestoreRecoveryRootAsync(identity, operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"], operationId, fence, ct).ConfigureAwait(false);
+                if (!restored.Ok) { throw new IOException($"'{row.World}' restoration refused: {restored.Detail}"); }
             }
-            var identity = new WorldAuthorityIdentity(row.Owner, row.World);
-            var fence = await m_store.AcquireActivationAsync(identity, ct).ConfigureAwait(false) ?? throw new IOException("maintenance ownership could not be acquired");
-            var restored = await recovery.RestoreRecoveryRootAsync(identity, operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"], operationId, fence, ct).ConfigureAwait(false);
-            if (!restored.Ok) { throw new IOException($"'{row.World}' restoration refused: {restored.Detail}"); }
+        } finally { m_activationGate.Release(); }
+    }
+
+    private async Task<WorldReleaseGroupRecord> RequireSourceOperationAsync(Guid operationId, WorldReleaseOperationPhase phase, CancellationToken ct) {
+        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed || operationId == Guid.Empty) {
+            throw new InvalidOperationException("source maintenance requires a managed release operation");
         }
+        var snapshot = await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false);
+        if (snapshot is not { } state || state.Record.PendingOperationId != operationId || state.Record.PendingPhase != phase ||
+            state.Record.PendingCommitted || (state.Record.PendingSourceRelease ?? state.Record.PendingTargetRelease) != managed.ExpectedRelease) {
+            throw new InvalidOperationException("the source release or maintenance operation no longer matches the durable group");
+        }
+        return state.Record;
+    }
+
+    /// <summary>Reads this worker's authoritative deployment group from its configured private store.</summary>
+    public async Task<WorldReleaseGroupSnapshot> ReadManagedReleaseAsync(CancellationToken ct = default) {
+        if (m_releaseGroupStore is not { } groups || m_releaseManagement is not { } managed) {
+            throw new InvalidOperationException("this worker does not have managed release configuration");
+        }
+        return await groups.LoadAsync(managed.Group, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("the managed deployment group is missing");
     }
 
     /// <summary>Stops a private failed candidate without requiring its uncommitted state to checkpoint successfully.</summary>

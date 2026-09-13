@@ -68,6 +68,26 @@ the previous release and its rollback window. Loopback-only `GET /private-health
 reports candidate persistence health without opening admission. A managed
 candidate in an uncommitted operation remains available for private
 verification; it is not ready for public traffic.
+Managed workers also expose loopback-only release control. `GET /release/status`
+reports the configured group, release, pending operation, phase, and admission.
+`POST /release/drain/<operation-id>` freezes the source and returns its protected
+root pins. `GET /release/fences/<operation-id>` reports the privately verified
+candidate's actual row fences. `POST /release/publish/<operation-id>` publishes
+the committed target, or completes restored-source admission. Every operation
+checks the current durable phase and operation identifier; an external caller
+or unmanaged worker receives 404. Drain retains the frozen process for retries.
+Managed source recovery first restores the operation's protected roots into an
+empty private host, then activates under fresh fences. The durable
+`RecoverActivate` phase lets a restarted coordinator continue activation without
+restoring those roots again. Capture and restore check the current operation,
+source identity, and declared world inventory. The shared runtime adapter leaves
+pumping to its host composition; it never advances worlds from storage callbacks.
+
+The official Docker image retains the authored asset layout under `/app` and
+runs from `/app/worlds`, so relative cartridge and other content paths resolve
+beside the composed worlds. Its build context excludes local temporary outputs
+and ROM collections. The packaged qualification runner and its fixture format
+are described in the [CLI guide](../Puck.Cli/README.md).
 `GET /livez/azure` reports the same liveness as Azure's v2 Application Health
 JSON contract, returning HTTP 200 with `Healthy` or `Unhealthy`. The generic
 `/livez` retains its HTTP 200/503 contract.

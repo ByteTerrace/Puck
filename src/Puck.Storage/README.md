@@ -50,6 +50,8 @@ streams, invalid filename characters, surrounding whitespace, and the reserved
 `.puck-` prefix. A key has at most 64 segments and 4096 characters. Separators
 normalize to `/`; a key's case sensitivity still follows its backend. Namespace
 names are separate from keys and have a 1024-byte UTF-8 ceiling.
+`ObjectBlobAddressPath.GetNormalizedKey` exposes the same portable key validation
+to hosts that prepare retained content before it reaches a backend.
 
 ## Local filesystem boundary
 
@@ -60,7 +62,9 @@ and denies write/delete sharing on those handles, preventing directory
 substitution while paths are in use. Linux x64 resolves child entries relative
 to directory descriptors with `openat` and `O_NOFOLLOW`. File handles must name
 regular files with one hard link. Unsupported platforms and Windows network
-roots refuse access.
+roots refuse access. Native Windows opens and atomic replacements use extended
+local paths, so a valid nested blob key and its temporary file can exceed the
+legacy 260-character path limit without depending on process manifest settings.
 
 Conditional writes lock the containing directory across cooperating processes,
 check the existing content token, write and flush a new temporary file, and

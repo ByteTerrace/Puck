@@ -11,6 +11,8 @@ public sealed record WorldReleaseQualificationReceipt {
     public required string SourceStateHash { get; init; }
     public required string TargetStateHash { get; init; }
     public required string ReverseStateHash { get; init; }
+    /// <summary>The target's own import of the target-written continuation, compared with the source's reverse import.</summary>
+    public required string ReverseReferenceStateHash { get; init; }
 }
 
 /// <summary>Runner that performs the packaged, ordered pair qualification outside the deployment transaction.</summary>
@@ -224,8 +226,8 @@ public sealed class WorldReleaseCoordinator {
             return Refused("bootstrap requires a qualification runner for the candidate release");
         }
         var receipt = await qualificationRunner.RunAsync(target, cancellationToken).ConfigureAwait(false);
-        if (receipt is null || !string.Equals(receipt.TargetRelease, target.Identity, StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(receipt.EvidenceId) || string.IsNullOrWhiteSpace(receipt.TargetStateHash)) {
+        if (receipt is null || receipt.SourceRelease is not null || !string.Equals(receipt.TargetRelease, target.Identity, StringComparison.Ordinal) ||
+            !ValidQualificationHashes(receipt)) {
             return Refused("bootstrap qualification did not produce a verified candidate receipt");
         }
         return await m_groups.BeginAsync(current, operationId, target.Identity, cancellationToken).ConfigureAwait(false);
@@ -321,10 +323,6 @@ public sealed class WorldReleaseCoordinator {
     public Task<WorldReleaseGroupOutcome> FinalizeAsync(WorldReleaseGroupSnapshot current, CancellationToken cancellationToken = default) =>
         m_groups.FinalizeAsync(current, cancellationToken);
 
-    /// <summary>Completes pre-commit recovery without ever making the failed target active.</summary>
-    public Task<WorldReleaseGroupOutcome> RecoverToSourceAsync(WorldReleaseGroupSnapshot current, string failure, CancellationToken cancellationToken = default) =>
-        m_groups.RecoverToSourceAsync(current, failure, cancellationToken);
-
     /// <summary>Checks externally supplied qualification evidence for the exact ordered pair.</summary>
     public static bool TryQualifyPair(
         WorldReleaseManifest source,
@@ -337,16 +335,21 @@ public sealed class WorldReleaseCoordinator {
         if (evidence is null ||
             !string.Equals(evidence.SourceRelease, source.Identity, StringComparison.Ordinal) ||
             !string.Equals(evidence.TargetRelease, target.Identity, StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(evidence.EvidenceId) ||
-            string.IsNullOrWhiteSpace(evidence.SourceStateHash) ||
-            string.IsNullOrWhiteSpace(evidence.TargetStateHash) ||
-            string.IsNullOrWhiteSpace(evidence.ReverseStateHash)) {
+            !ValidQualificationHashes(evidence)) {
             reason = "release pair requires a verified qualification runner receipt for both directions before deployment";
             return false;
         }
         reason = string.Empty;
         return true;
     }
+
+    private static bool ValidQualificationHashes(WorldReleaseQualificationReceipt evidence) =>
+        FullPin(evidence.EvidenceId) && FullPin(evidence.SourceStateHash) && FullPin(evidence.ReverseStateHash) &&
+        string.Equals(evidence.SourceStateHash, evidence.TargetStateHash, StringComparison.Ordinal) &&
+        string.Equals(evidence.ReverseStateHash, evidence.ReverseReferenceStateHash, StringComparison.Ordinal);
+
+    private static bool FullPin(string? value) => value is { Length: 71 } && value.StartsWith("sha256/", StringComparison.Ordinal) &&
+        value.AsSpan(7).IndexOfAnyExcept("0123456789abcdef") < 0;
 
     private Task<WorldReleaseGroupOutcome> AdvancePhaseAsync(WorldReleaseGroupSnapshot current, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) =>
         m_groups.AdvanceAsync(current, current.Record with { PendingPhase = phase, Revision = checked(current.Record.Revision + 1) }, cancellationToken);
