@@ -79,13 +79,17 @@ or unmanaged worker receives 404. Drain retains the frozen process for retries.
 `POST /release/fixture/<request-id>` exports the admitted active release when no
 unfinished operation remains. A committed, admitted operation retained for rollback
 permits export; prepare, recovery, and commit before admission require resume first.
-It captures every pinned row in one mailbox action, verifies
-ownership, and uploads an immutable fixture inventory after its checkpoint bytes.
+It captures every pinned row in one mailbox action and inserts a root read into
+each row's publication queue after preceding writes and before later mutations.
+That root selects the exact receipt chain and index; copying their immutable
+objects does not hold the publication queue. Export verifies ownership and uploads
+the fixture inventory after all checkpoint and receipt bytes.
 It preserves source admission and authority roots. Repeating a completed request
 returns the original capture; a partial upload cannot be consumed as a fixture.
 The response contains only the retained inventory identity, not checkpoint payloads
 or signing keys. `WorldReleaseCutoverLawTests` verifies the shared capture boundary
-and continued source gameplay.
+and continued source gameplay, including a delayed root read and cancellation.
+A failed or canceled export read does not poison the serving publication queue.
 Managed source recovery first restores the operation's protected roots into an
 empty private host, then activates under fresh fences. The durable
 `RecoverActivate` phase lets a restarted coordinator continue activation without
@@ -227,9 +231,9 @@ Decoding a world without a catalog proves its document-local facts; provider
 admission requires the deployment's explicit catalog. Loading the silo assembly
 cannot replace another host's machine vocabulary.
 
-The silo currently mounts no machine or addon host (the checkpoint gate refuses
-a row that pumps one). A parsed machine declaration does not imply execution or
-restoration of machine state here.
+A parsed machine declaration does not establish that its provider is installed
+or its runtime state can be checkpointed. Qualification must exercise the
+distribution's supplied machine catalog; pumped addon state still refuses capture.
 
 ## Production deployment
 

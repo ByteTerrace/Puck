@@ -190,7 +190,11 @@ fixture with the captured machine identity and fresh test signing keys. Source
 admission stays open during export and qualification. A lost export response can
 reuse its stable request ID; partial uploads have no published inventory. Bootstrap
 builds its empty fixture from the retained package. Managed deploy does not accept
-a replacement fixture that could omit uncapturable live state.
+a replacement fixture that could omit uncapturable live state. Each export also
+pins the receipt index and chain selected in the checkpoint's publication queue.
+Materialization retains those exact bytes and their sequence meaning under a new
+unowned root. A legacy export without receipt proof requires a fresh capture from
+a source worker that supports receipt history; absence never means empty history.
 
 `world release rollback` selects the retained predecessor, exports current source
 state, and qualifies the reverse pair before entering the same drain and cutover

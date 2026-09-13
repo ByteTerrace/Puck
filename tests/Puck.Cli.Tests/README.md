@@ -23,12 +23,16 @@ not contact a production storage account.
 `WorldReleaseFixtureBuilderTests` covers bootstrap and captured exports, distinct
 test keys, retained checkpoint bytes and machine identity, incomplete-export
 refusal, metadata publication in both directions, and refusal of simulation edits
-before Docker starts. Set `PUCK_TEST_WORLD_IMAGE` to a locally built world-silo
-image to run both an unchanged-definition control and a metadata release pair,
-each through four Docker qualification legs. The metadata control uses the public
+before Docker starts. It checks original receipt lookups and excludes later receipts
+in materialized fixtures. Set `PUCK_TEST_WORLD_IMAGE` to a locally built world-silo
+image to run an unchanged-definition control and a metadata release pair, each
+through four Docker qualification legs. The metadata control uses the public
 `qualify` command, including retention of both packages, and verifies that the
-source export survives unchanged. This optional same-image control verifies the export and runner path;
-compatibility between different releases needs separate pair evidence.
+source export survives unchanged. This optional same-image control verifies the
+export and runner path; compatibility between builds needs separate pair evidence.
+The outer test reads receipt history from container-written forward and rollback
+stores. This is object-preservation evidence; receipt lookup performed by each
+packaged engine still needs its own qualification report.
 Set `PUCK_TEST_RELEASE_EVIDENCE_DIRECTORY` to retain those Docker legs and their
 hash evidence outside the test's temporary directory for inspection.
 

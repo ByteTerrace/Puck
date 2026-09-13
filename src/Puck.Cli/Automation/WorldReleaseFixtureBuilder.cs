@@ -37,20 +37,19 @@ internal sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRe
             token.ThrowIfCancellationRequested();
             var identity = new WorldAuthorityIdentity(owner, SafeName.Parse(world.Key));
             var definitionBytes = await releases.ReadFileAsync(release, world.Value, token).ConfigureAwait(false);
-            var definition = WorldDefinitionSerialization.Deserialize(definitionBytes.ToArray());
             if (snapshot is null) {
                 var written = await blobs.WriteAsync(target, WorldOwnedWorldSync.HostedAddressFor(owner, identity.World, "definition.json"),
                     definitionBytes, ObjectBlobWriteMode.CreateOnly, cancellationToken: token).ConfigureAwait(false);
                 if (!written.Succeeded) { throw new IOException("bootstrap fixture definition could not be published"); }
             } else {
                 var checkpointBytes = await fixtures.ReadCheckpointAsync(snapshot, world.Key, token).ConfigureAwait(false);
-                if (!WorldAuthorityCheckpointCodec.TryDecode(checkpointBytes.Span, out _, out var reason)) {
+                if (!WorldAuthorityCheckpointCodec.TryDecode(checkpointBytes.Span, out var captured, out var reason)) {
                     throw new InvalidDataException("qualification snapshot checkpoint is invalid: " + reason);
                 }
-                var published = await authority.PublishDefinitionAsync(identity, definition, token).ConfigureAwait(false);
+                if (captured!.Server.LastCompletedTick != snapshot.Worlds[world.Key].Tick) { throw new InvalidDataException("qualification checkpoint tick differs from its inventory"); }
+                var receipts = await fixtures.ReadReceiptsAsync(snapshot, world.Key, token).ConfigureAwait(false);
+                var published = await authority.CreateReleaseFixtureAsync(identity, definitionBytes, checkpointBytes, receipts, token).ConfigureAwait(false);
                 if (!published.Ok) { throw new IOException(published.Detail); }
-                var checkpoint = await authority.WriteCheckpointAsync(identity, checkpointBytes, snapshot.Worlds[world.Key].Tick, token).ConfigureAwait(false);
-                if (!checkpoint.Ok) { throw new IOException(checkpoint.Detail); }
             }
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             var keyPath = Path.Combine(keys.FullName, $"{owner:D}-{world.Key}.pk8").Replace('\\', '/');

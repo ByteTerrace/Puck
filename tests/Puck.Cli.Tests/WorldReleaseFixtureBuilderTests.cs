@@ -73,9 +73,23 @@ public sealed class WorldReleaseFixtureBuilderTests {
             var publishing = host.PublishManagedReleaseAdmissionAsync(token);
             await PumpAsync(host, publishing, token);
             Assert.Equal(WorldReleaseAdmissionPublication.Opened, await publishing);
+            var expectedReceipts = new Dictionary<string, WorldAuthorityOperationReceipt>();
+            var laterReceipts = new Dictionary<string, WorldAuthorityOperationReceipt>();
+            foreach (var row in silo.Worlds) {
+                var root = (await authority.LoadRootAsync(new(owner, row.World), token))!.Value;
+                var receipt = new WorldAuthorityOperationReceipt(Guid.NewGuid(), "fixture", "original", "refused", false, 1, null);
+                expectedReceipts.Add(row.World.Value, receipt);
+                Assert.True((await authority.RecordReceiptAsync(new(owner, row.World), receipt, token, new(root.Root.Epoch, root.Root.FenceToken, root.VersionToken))).Ok);
+            }
             var capturing = host.ExportReleaseFixtureAsync(Guid.NewGuid(), token);
             await PumpAsync(host, capturing, token);
             var capture = await capturing;
+            foreach (var row in silo.Worlds) {
+                var root = (await authority.LoadRootAsync(new(owner, row.World), token))!.Value;
+                var receipt = new WorldAuthorityOperationReceipt(Guid.NewGuid(), "fixture", "later", "refused", false, 2, null);
+                laterReceipts.Add(row.World.Value, receipt);
+                Assert.True((await authority.RecordReceiptAsync(new(owner, row.World), receipt, token, new(root.Root.Epoch, root.Root.FenceToken, root.VersionToken))).Ok);
+            }
             var capturedArchive = new WorldReleaseFixtureArchive(blobs, local, owner);
             var complete = Path.Combine(temporary.FullName, "captured");
             await new WorldReleaseFixtureBuilder(blobs, archive, capturedArchive).BuildAsync(release, owner, capture, complete, token);
@@ -84,6 +98,11 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 var saved = await restored.LoadRecoveryAsync(new(owner, row.World), token);
                 Assert.NotNull(saved);
                 Assert.Equal((await capturedArchive.ReadCheckpointAsync(capture, row.World.Value, token)).ToArray(), saved.Value.Checkpoint!.Value.Encoded.ToArray());
+                Assert.Equal(expectedReceipts[row.World.Value], await restored.FindOperationReceiptAsync(new(owner, row.World), expectedReceipts[row.World.Value].OperationId, token));
+                Assert.Null(await restored.FindOperationReceiptAsync(new(owner, row.World), laterReceipts[row.World.Value].OperationId, token));
+                var history = await capturedArchive.ReadReceiptsAsync(capture, row.World.Value, token);
+                Assert.Equal(history.Source.Root.ReceiptHash, saved.Value.Root.Root.ReceiptHash);
+                Assert.Equal(history.Source.Root.ReceiptIndexHash, saved.Value.Root.Root.ReceiptIndexHash);
             }
             Assert.Equal(capture.MachineId.ToString("D"), File.ReadAllText(Path.Combine(complete, "state", "silo-machine.id")));
             var candidateDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "candidate"));
@@ -159,6 +178,8 @@ public sealed class WorldReleaseFixtureBuilderTests {
                         Assert.Equal(expectedTitle, WorldDefinitionSerialization.Deserialize(checkpoint!.Server.DefinitionJson).Metadata?.Title);
                         Assert.Equal(expectedTitle, WorldDefinitionSerialization.Deserialize(checkpoint.Server.BaseDefinitionJson).Metadata?.Title);
                         Assert.Equal(capture.Worlds[row.World.Value].Tick + (leg == "target-import" ? 4UL : 8UL), checkpoint.Server.LastCompletedTick);
+                        Assert.Equal(expectedReceipts[row.World.Value], await legStore.FindOperationReceiptAsync(new(owner, row.World), expectedReceipts[row.World.Value].OperationId, token));
+                        Assert.Null(await legStore.FindOperationReceiptAsync(new(owner, row.World), laterReceipts[row.World.Value].OperationId, token));
                     }
                 }
             }
@@ -168,6 +189,15 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 Assert.Equal(bytes, WorldDefinitionSerialization.Serialize((await restored.LoadDefinitionAsync(new(owner, row.World), token))!));
             }
             await PumpAsync(host, host.DrainAsync(token), token);
+            var legacyRows = new Dictionary<string, WorldReleaseFixtureCheckpoint>();
+            foreach (var row in silo.Worlds) {
+                legacyRows.Add(row.World.Value, new((await capturedArchive.ReadCheckpointAsync(capture, row.World.Value, token)).ToArray(), capture.Worlds[row.World.Value].Tick));
+            }
+            var legacy = await snapshots.SaveAsync(Guid.NewGuid(), "official", release.Identity, capture.MachineId, legacyRows, token);
+            var legacyOutput = Path.Combine(temporary.FullName, "legacy");
+            var legacyError = await Assert.ThrowsAsync<InvalidDataException>(() => builder.BuildAsync(release, owner, legacy, legacyOutput, token));
+            Assert.Contains("receipt history proof", legacyError.Message);
+            Assert.False(File.Exists(Path.Combine(legacyOutput, "qualification.fixture")));
             var invalid = await snapshots.SaveAsync(Guid.NewGuid(), "official", release.Identity, Guid.NewGuid(),
                 new[] { "alpha", "beta" }.ToDictionary(world => world, _ => new WorldReleaseFixtureCheckpoint("invalid checkpoint"u8.ToArray(), 10)), token);
             var partial = Path.Combine(temporary.FullName, "partial");

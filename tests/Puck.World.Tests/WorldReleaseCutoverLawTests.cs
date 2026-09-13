@@ -9,6 +9,7 @@ using Puck.Launcher;
 using Puck.Storage;
 using Puck.World.Server;
 using Puck.World.Silo;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -16,6 +17,66 @@ namespace Puck.World.Tests;
 /// <summary>Exercises release admission through real hosted rows and the production simulation pump.</summary>
 public sealed class WorldReleaseCutoverLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FixtureRootReadExcludesLaterMutationsAndCancellationDoesNotPoisonTheQueue(bool cancel) {
+        var hooked = new FixtureReadStore(PuckStorageTestComposition.BuildStore());
+        using var scenario = new Scenario(hooked);
+        var release = scenario.Manifest('a').Identity;
+        await scenario.InitializeAsync(release);
+        var host = scenario.Host(release).Host;
+        using var instances = host.Instances;
+        await ActivateAllAsync(host, scenario.Identities);
+        Assert.Equal(WorldReleaseAdmissionPublication.Opened, await PublishAsync(host));
+        Tick(host, 3);
+        var identity = scenario.Identities[0];
+        var before = (await scenario.Authority.LoadRootAsync(identity, Token))!.Value;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        hooked.Armed = true;
+        var exporting = host.ExportReleaseFixtureAsync(Guid.NewGuid(), cancellation.Token);
+        await PumpAsync(host, hooked.Entered.Task);
+        WorldReleaseFixtureManifest manifest;
+        if (cancel) {
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => exporting);
+            var retry = host.ExportReleaseFixtureAsync(Guid.NewGuid(), Token);
+            await PumpAsync(host, retry);
+            manifest = await retry;
+        } else {
+            Assert.True(host.Instances.TryGet(identity.World.Value, out var row));
+            row!.Server.EnqueueMutation(new WorldMutation.SetRenderDefaults(WorldPrincipal.Console,
+                row.Server.Definition.Render with { AmbientOcclusion = !row.Server.Definition.Render.AmbientOcclusion }));
+            Tick(host, 1);
+            hooked.Continue.TrySetResult();
+            await PumpAsync(host, exporting);
+            manifest = await exporting;
+        }
+        var history = await scenario.FixtureArchive.ReadReceiptsAsync(manifest, identity.World.Value, Token);
+        Assert.Equal(before.Root.JournalSequence, history.Source.Root.JournalSequence);
+        Assert.Equal(before.Root.ReceiptIndexHash, history.Source.Root.ReceiptIndexHash);
+        Assert.True(host.ReleaseAdmissionOpen);
+        await PumpAsync(host, host.DrainAsync(Token));
+        var final = (await scenario.Authority.LoadRootAsync(identity, Token))!.Value;
+        if (!cancel) { Assert.True(final.Root.JournalSequence > history.Source.Root.JournalSequence); }
+    }
+
+    private sealed class FixtureReadStore(IObjectBlobStore inner) : IObjectBlobStore {
+        public bool Armed;
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async ValueTask<ObjectBlobContent?> ReadAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) {
+            if (Armed && address.Key.EndsWith("/alpha/authority/root", StringComparison.Ordinal)) {
+                Armed = false;
+                Entered.TrySetResult();
+                await Continue.Task.WaitAsync(cancellationToken);
+            }
+            return await inner.ReadAsync(target, address, cancellationToken);
+        }
+        public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid owner, string prefix, CancellationToken cancellationToken = default) => inner.ListAsync(target, owner, prefix, cancellationToken);
+        public ValueTask<ObjectBlobWriteResult> WriteAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> content, ObjectBlobWriteMode mode, string? ifMatchVersion = null, CancellationToken cancellationToken = default) => inner.WriteAsync(target, address, content, mode, ifMatchVersion, cancellationToken);
+    }
 
     [Fact]
     public async Task QualificationExportCapturesBothRowsWithoutDrainingAndRetryRetainsTheOriginalBoundary() {
@@ -371,7 +432,7 @@ public sealed class WorldReleaseCutoverLawTests {
     private sealed class Scenario : IDisposable {
         private readonly TempWorldDirectory m_directory = new();
         private readonly BufferedConsoleOutput m_output = new();
-        private readonly IObjectBlobStore m_store = PuckStorageTestComposition.BuildStore();
+        private readonly IObjectBlobStore m_store;
         private readonly string m_keyFile;
         private readonly Guid m_owner = Guid.NewGuid();
         private readonly DirectoryObjectStorageTarget m_target;
@@ -380,7 +441,8 @@ public sealed class WorldReleaseCutoverLawTests {
         public WorldReleaseGroupStore Groups { get; }
         public WorldReleaseFixtureArchive FixtureArchive { get; }
 
-        public Scenario() {
+        public Scenario(IObjectBlobStore? store = null) {
+            m_store = store ?? PuckStorageTestComposition.BuildStore();
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             m_keyFile = m_directory.WriteBytes("world.key", key.ExportPkcs8PrivateKey());
             m_target = new(m_directory.RootPath);

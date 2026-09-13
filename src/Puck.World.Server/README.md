@@ -150,8 +150,9 @@ checkpoint publication queue. `CreateReleaseFixtureAsync` can create a disposabl
 authority with that history and a complete checkpoint, preserving sequence and
 journal coverage while assigning an unowned epoch. Existing authority refuses.
 Directory laws verify original lookups, duplicate-operation decisions after
-continued gameplay, partial uploads and competing publication. These store methods
-are not yet connected to automatic fixture export or packaged receipt checks.
+continued gameplay, partial uploads and competing publication. Automatic export
+selects these roots in the silo's publication queues, and the CLI uses this fixture
+constructor. Packaged engines still need to report independent receipt-lookup evidence.
 
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes
@@ -193,11 +194,15 @@ roots after its worker stops. This lookup validates retained payloads and never
 captures newer state; an incomplete inventory still requires a successful drain.
 `WorldReleaseFixtureArchive` retains coherent qualification captures supplied by
 the silo's shared pump boundary. Each request publishes its inventory after all
-checkpoint objects pass hash and readback checks. The inventory preserves the
-source release, machine identity, complete world set, and row ticks. It does not
+checkpoint and receipt objects pass hash and readback checks. The inventory preserves the
+source release, machine identity, complete world set, row ticks and receipt snapshot
+pins. Receipt envelopes use `puck.world.receipts.v1`, preserve their original index
+and chain bytes, and reject unsupported or noncanonical input. It does not
 sample mutable authority roots or carry production signing keys. The CLI builds
-a disposable store from those exact checkpoints; incomplete and corrupt captures
-refuse before qualification. Empty worlds with no compiled body kits preserve
+a disposable store from those exact checkpoints and receipt graphs; incomplete and corrupt captures
+refuse before qualification. Older inventories remain readable but cannot become
+fixtures without explicit receipt proof; request a fresh capture from a supporting
+source worker. Empty worlds with no compiled body kits preserve
 their empty population and zero selection sentinel; they cannot restore actual
 bodies or another kit index without a kit.
 Registry image retention and packaged qualification remain separate preflight

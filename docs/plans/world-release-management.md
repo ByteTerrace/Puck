@@ -79,7 +79,9 @@ to metadata and require package-bound qualification.
   selected by one root. Fixture construction can retain those bytes, sequence
   meaning and journal coverage alongside a complete checkpoint. Directory laws
   cover later publications, malformed graphs, duplicate decisions after gameplay,
-  interrupted uploads and competing roots. Automatic export is not yet wired to it.
+  interrupted uploads and competing roots. Automatic export selects roots in each
+  row's publication queue and retains their graphs with the checkpoint inventory;
+  the CLI materializes them unchanged. Delayed-read and cancellation controls pass.
 
 **Remaining:**
 
@@ -96,11 +98,8 @@ to metadata and require package-bound qualification.
   testing, including delayed operations after controller ownership changes.
 - No qualification between different engine builds or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
-- Automatic fixtures reconstruct fresh authority roots around complete checkpoints.
-  They do not yet retain the source storage receipt chain and index. Add explicit
-  capture-boundary root selection and wire the store-level snapshot through the
-  fixture archive and builder, then add
-  receipt-lookup compatibility evidence in both images; matching simulation
+- Automatic fixtures now retain the source storage receipt chain and index.
+  Add receipt-lookup compatibility evidence produced inside both images; matching simulation
   checkpoints alone does not prove storage-level operation deduplication survives.
 - Named handheld machine checkpoints now preserve core state and host pacing,
   with real-core and world continuation tests. Four same-image Docker legs over

@@ -6,10 +6,13 @@ using Puck.Storage;
 namespace Puck.World.Server;
 
 /// <summary>One complete row captured at the host's shared simulation boundary.</summary>
-public sealed record WorldReleaseFixtureCheckpoint(byte[] Encoded, ulong Tick);
+public sealed record WorldReleaseFixtureCheckpoint(byte[] Encoded, ulong Tick, WorldAuthorityReceiptSnapshot? Receipts = null);
 
 /// <summary>A checkpoint object's exact identity and captured row tick.</summary>
-public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick);
+public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick) {
+    /// <summary>The exact receipt snapshot pin. Absence identifies an older, incomplete qualification export.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ReceiptsHash { get; init; }
+}
 
 /// <summary>Immutable inventory for a coherent qualification snapshot. It contains no production signing keys.</summary>
 public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, string Group, string Release,
@@ -18,7 +21,7 @@ public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, 
     [JsonIgnore] public string Identity => WorldReleaseFixtureArchive.Hash(WorldReleaseFixtureArchive.Canonicalize(this));
 }
 
-/// <summary>Publishes a complete fixture inventory only after its captured checkpoints are retained.
+/// <summary>Publishes a complete fixture inventory only after its checkpoints and receipt snapshots are retained.
 /// The host supplies all rows from one pump boundary; this archive never samples live authority roots.</summary>
 public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectStorageTarget target, Guid owner) {
     public const string Schema = "puck.world.release-fixture.v1";
@@ -30,18 +33,28 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         IReadOnlyDictionary<string, WorldReleaseFixtureCheckpoint> checkpoints, CancellationToken cancellationToken = default) {
         // Take ownership before the first await; a caller cannot change bytes behind their published hashes.
         var captured = new SortedDictionary<string, WorldReleaseFixtureCheckpoint>(StringComparer.Ordinal);
-        foreach (var row in checkpoints) { captured.Add(row.Key, new(row.Value.Encoded.ToArray(), row.Value.Tick)); }
-        if (captured.Values.Sum(row => (long)row.Encoded.Length) > MaximumCaptureBytes) { throw new InvalidDataException("release fixture exceeds its capture budget"); }
+        var receipts = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var row in checkpoints) {
+            captured.Add(row.Key, new(row.Value.Encoded.ToArray(), row.Value.Tick));
+            if (row.Value.Receipts is { } history) {
+                if (history.Owner != owner || history.World != row.Key) { throw new InvalidDataException("release fixture receipt snapshot belongs to another world"); }
+                receipts.Add(row.Key, history.Encode());
+            }
+        }
+        if (captured.Values.Sum(row => (long)row.Encoded.Length) + receipts.Values.Sum(bytes => (long)bytes.Length) > MaximumCaptureBytes) { throw new InvalidDataException("release fixture exceeds its capture budget"); }
         var rows = new SortedDictionary<string, WorldReleaseFixtureRow>(StringComparer.Ordinal);
         foreach (var row in captured) {
             if (row.Value.Encoded.Length is 0 or > MaximumCheckpointBytes) { throw new InvalidDataException("release fixture checkpoint exceeds its byte budget"); }
-            rows.Add(row.Key, new(Hash(row.Value.Encoded), row.Value.Tick));
+            rows.Add(row.Key, new(Hash(row.Value.Encoded), row.Value.Tick) { ReceiptsHash = receipts.TryGetValue(row.Key, out var receiptBytes) ? Hash(receiptBytes) : null });
         }
         var manifest = new WorldReleaseFixtureManifest(Schema, requestId, group, release, owner, machineId, rows);
         Validate(manifest);
         var bytes = Canonicalize(manifest);
         foreach (var row in captured) {
             await WriteImmutableAsync(CheckpointAddress(rows[row.Key].Hash), row.Value.Encoded, cancellationToken).ConfigureAwait(false);
+            if (receipts.TryGetValue(row.Key, out var receiptBytes)) {
+                await WriteImmutableAsync(ReceiptsAddress(rows[row.Key].ReceiptsHash!), receiptBytes, cancellationToken).ConfigureAwait(false);
+            }
         }
         await WriteImmutableAsync(ManifestAddress(requestId), bytes, cancellationToken).ConfigureAwait(false);
         return manifest;
@@ -84,7 +97,31 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         }
         _ = SafeName.Parse(manifest.Group);
         _ = Digest(manifest.Release);
-        foreach (var row in manifest.Worlds) { _ = SafeName.Parse(row.Key); _ = Digest(row.Value.Hash); }
+        foreach (var row in manifest.Worlds) {
+            _ = SafeName.Parse(row.Key); _ = Digest(row.Value.Hash);
+            if (row.Value.ReceiptsHash is { } receipts) { _ = Digest(receipts); }
+        }
+    }
+
+    /// <summary>Reads the complete pinned receipt graph; an older export without this proof refuses explicitly.</summary>
+    /// <param name="manifest">The retained fixture inventory.</param>
+    /// <param name="world">The exact row to read.</param>
+    /// <param name="cancellationToken">Cancels the storage read.</param>
+    /// <returns>The validated receipt graph and captured root provenance.</returns>
+    /// <exception cref="InvalidDataException">Receipt proof is absent, incomplete, corrupt or names another world.</exception>
+    public async Task<WorldAuthorityReceiptSnapshot> ReadReceiptsAsync(WorldReleaseFixtureManifest manifest, string world, CancellationToken cancellationToken = default) {
+        Validate(manifest);
+        if (!manifest.Worlds.TryGetValue(world, out var row) || row.ReceiptsHash is not { } pin) {
+            throw new InvalidDataException("release fixture has no receipt history proof; request a fresh export from a source worker with receipt history support");
+        }
+        var content = await store.ReadAsync(target, ReceiptsAddress(pin), cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidDataException("retained release receipt snapshot is missing");
+        if (content.Content.Length > WorldAuthorityReceiptSnapshot.MaximumEncodedBytes || Hash(content.Content.Span) != pin) {
+            throw new InvalidDataException("retained release receipt snapshot is corrupt or oversized");
+        }
+        var snapshot = WorldAuthorityReceiptSnapshot.Decode(content.Content.Span);
+        if (snapshot.Owner != owner || snapshot.World != world) { throw new InvalidDataException("retained receipt snapshot belongs to another world"); }
+        return snapshot;
     }
 
     private async Task WriteImmutableAsync(ObjectBlobAddress address, ReadOnlyMemory<byte> bytes, CancellationToken token) {
@@ -100,6 +137,7 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         return new(owner, $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/fixtures/{requestId:D}.json");
     }
     private ObjectBlobAddress CheckpointAddress(string hash) => new(owner, $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/fixtures/content/{Digest(hash)}.pckp");
+    private ObjectBlobAddress ReceiptsAddress(string hash) => new(owner, $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/fixtures/content/{Digest(hash)}.receipts");
     private static string Digest(string pin) => pin is { Length: 71 } && pin.StartsWith("sha256/", StringComparison.Ordinal) && pin.AsSpan(7).IndexOfAnyExcept("0123456789abcdef") < 0
         ? pin[7..] : throw new InvalidDataException("release fixture requires full lowercase SHA-256 pins");
     internal static string Hash(ReadOnlySpan<byte> bytes) => "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes));

@@ -11,17 +11,45 @@ namespace Puck.World.Server;
 /// <param name="Nodes">Original receipt bytes keyed by their existing content pins.</param>
 public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, WorldAuthorityRootSnapshot Source,
     byte[] Index, IReadOnlyDictionary<string, byte[]> Nodes) {
+    /// <summary>The original receipt snapshot wire contract.</summary>
+    public const string CurrentSchema = "puck.world.receipts.v1";
+    /// <summary>The encoded snapshot's contract.</summary>
+    public string Schema { get; init; } = CurrentSchema;
     /// <summary>The maximum number of receipts accepted in one export.</summary>
     public const int MaximumReceipts = 100_000;
     /// <summary>The combined raw-byte budget for the index and receipt nodes.</summary>
     public const int MaximumBytes = 64 * 1024 * 1024;
+    /// <summary>The encoded envelope budget, including base64 expansion and provenance.</summary>
+    public const int MaximumEncodedBytes = 96 * 1024 * 1024;
+
+    /// <summary>Encodes a validated snapshot in stable node order without changing its original payload bytes.</summary>
+    public byte[] Encode() {
+        _ = Validate();
+        var encoded = JsonSerializer.SerializeToUtf8Bytes(this with { Nodes = new SortedDictionary<string, byte[]>(Nodes.ToDictionary(pair => pair.Key, pair => pair.Value), StringComparer.Ordinal) });
+        if (encoded.Length > MaximumEncodedBytes) { throw new InvalidDataException("receipt snapshot envelope exceeds its byte budget"); }
+        return encoded;
+    }
+
+    /// <summary>Reads a bounded canonical receipt snapshot and validates its complete graph.</summary>
+    /// <param name="bytes">The exact encoded snapshot.</param>
+    /// <returns>The validated snapshot with detached payload bytes.</returns>
+    /// <exception cref="InvalidDataException">The snapshot is unsupported, malformed, noncanonical or oversized.</exception>
+    public static WorldAuthorityReceiptSnapshot Decode(ReadOnlySpan<byte> bytes) {
+        if (bytes.Length is 0 or > MaximumEncodedBytes) { throw new InvalidDataException("receipt snapshot envelope exceeds its byte budget"); }
+        try {
+            var snapshot = JsonSerializer.Deserialize<WorldAuthorityReceiptSnapshot>(bytes) ?? throw new InvalidDataException("receipt snapshot is empty");
+            if (!bytes.SequenceEqual(snapshot.Encode())) { throw new InvalidDataException("receipt snapshot is not canonical"); }
+            return snapshot;
+        } catch (JsonException error) { throw new InvalidDataException("receipt snapshot envelope is malformed", error); }
+    }
 
     /// <summary>Verifies the original pins, complete chain/index agreement, ownership and budgets without
     /// changing or recanonicalizing receipt bytes. Returns every operation for independent lookup checks.</summary>
     /// <returns>The validated operation inventory.</returns>
     /// <exception cref="InvalidDataException">The snapshot is incomplete, corrupt, inconsistent or oversized.</exception>
     public IReadOnlyDictionary<Guid, WorldAuthorityOperationReceipt> Validate() {
-        if (Owner == Guid.Empty || string.IsNullOrWhiteSpace(World) || string.IsNullOrEmpty(Source.VersionToken) ||
+        if (Schema != CurrentSchema) { throw new InvalidDataException($"unsupported receipt snapshot schema '{Schema}'"); }
+        if (Owner == Guid.Empty || string.IsNullOrWhiteSpace(World) || string.IsNullOrWhiteSpace(Source.VersionToken) || Source.VersionToken.Length > 4096 ||
             Index is null || Nodes is null || Nodes.Count > MaximumReceipts ||
             Index.LongLength + Nodes.Values.Sum(bytes => bytes?.LongLength ?? MaximumBytes + 1L) > MaximumBytes) {
             throw new InvalidDataException("receipt snapshot has invalid identity, inventory or byte budget");

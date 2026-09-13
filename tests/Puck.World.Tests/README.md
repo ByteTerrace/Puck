@@ -72,8 +72,11 @@ and complete receipt chain, excludes later publications, and refuses corrupt or
 inconsistent graphs. `WorldReleaseReceiptFixtureLawTests` reconstructs a disposable
 authority around a real checkpoint with journaled edits. It verifies receipt
 lookups and duplicate/conflicting operation decisions after continuation, plus
-interrupted uploads and a competing root writer. Automatic export and Docker
-receipt qualification still need integration; these laws cover the store boundary.
+interrupted uploads and a competing root writer. `WorldReleaseCutoverLawTests`
+also delays the live export's root read while a later mutation arrives, and checks
+that cancellation leaves the publication queue usable. Archive laws cover receipt
+pins, interrupted uploads, canonical decoding and missing legacy proof. Independent
+receipt-lookup evidence inside both packaged engines remains required.
 
 ## What an assertion must prove
 
