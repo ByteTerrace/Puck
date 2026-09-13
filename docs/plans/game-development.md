@@ -6,11 +6,11 @@ carried-forward work in one place. Topic pages hold the detailed decision
 blocks, while this page owns the cross-topic order and shared gates.
 
 See [Reference game design](../game/design.md) for the design decisions.
-For dated evidence, see [Game development milestones](../development/game-milestones.md).
+For milestone evidence, see [Game development milestones](../development/game-milestones.md).
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. Each topic plan carries its own
+Reviewed against `ceb993cba`. Each topic plan carries its own
 status review; this one covers the cross-topic sections below.
 
 **Implemented:**
@@ -142,7 +142,7 @@ each piece:
 - `Puck.Audio` parses no document (the `Puck.Physics` boundary); document families live in world
   projects.
 
-**One World (owner ruling 2026-09-06; supersedes the nexus-as-island and quilt-as-nexus shapes below,
+**One World (owner ruling; supersedes the nexus-as-island and quilt-as-nexus shapes below,
 which stay as the reasoning they recorded).** The waves, each a decision rather than a status — the code
 answers what has landed:
 
@@ -158,7 +158,7 @@ answers what has landed:
   `$identity:<key>` and bound by the HUD, echoed by `identity.facts` — the reveal ladder's carrier. A
   `machine` screen boots a `puck.cartridge.v1` document as readily as a ROM, compiled at bind by the
   brick's own forge, so a cabinet's game is authored data beside the world.
-- **The island.** `puck.world.json` re-authored on the 2026-08-31 rule (one description, rendered and
+- **The island.** `puck.world.json` re-authored on the one-description rule (one description, rendered and
   collided): the floating island above its planetoids, the plaza at its crown with the granary court, the
   arcade, and the market hall; the proving ground and the garden kept as districts; the pool as the dive
   district; a track as the kart district; a course as the jump district; the studio canvas as a district
@@ -169,7 +169,7 @@ answers what has landed:
   `Assets/scenarios/*`, the canaries that booted them (re-recorded against the one world in the same
   change or deleted with a named successor), and `experimental/Puck.Demo` with a ledger naming each
   folder's live successor.
-- **The playthrough's substrate remainder** (what the 2026-09-07 entry above leaves): the state section
+- **The playthrough's substrate remainder**: the state section
   owning its rows so the catalog walk per operand read goes and the idle tick lands under four milliseconds;
   the handheld's attach pair shipped once the rule-work sheet has room for it (a region-scoped pair interaction,
   or a placement-effect cost derived from the population it rebuilds rather than a flat 32,768); the `chance`
@@ -375,7 +375,7 @@ simulations per host. Reading waits until the model stops moving.
 
 ## Work carried forward from retired plans
 
-Retired 2026-08-10 with their decisions moved into the code they govern:
+Retired with their decisions moved into the code they govern:
 `capability-channels-plan.md`, `capability-channels-STATE.md` (whose `Landed?` column was the banned
 per-capability register, and which drifted in *both* directions — closed decisions listed as open
 security risks, and a stale gap list), and `design/navigation-field-spike.md`.

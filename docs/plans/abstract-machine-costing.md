@@ -8,7 +8,7 @@ Disassembly and published processor measurements establish the prices offline;
 the executing computer never chooses them.
 
 This is a proposed implementation brief, based on source analysis at
-`197169025` on 2026-09-07. It does not describe a shipped replacement or a
+`197169025`. It does not describe a shipped replacement or a
 completed calibration. Its scope is the authored simulation work currently
 charged through rules, interactions, decisions, flock affinities, and search,
 including the synchronous work their effects cause. Rendering, physics outside
@@ -20,7 +20,7 @@ or make universal physical deadlines a prerequisite for this work.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The typed scaffolding and the
+Reviewed against `ceb993cba`. The typed scaffolding and the
 accounting split exist; nothing is calibrated, and admission still runs on the
 heuristic work units.
 
@@ -78,7 +78,7 @@ work. Then derive the number of times that operation can execute. An authored
 `multiply` is not necessarily one machine multiply: Int overflow checking and
 Fixed rounding have different implementations.
 
-**Owner clarification, 2026-09-07: the reference is a portable ideal machine,
+**Owner clarification: the reference is a portable ideal machine,
 not a named desktop processor.** Platform names, compiler targets, and measured
 clocks belong in offline evidence. Production pricing carries semantic
 operations and abstract service rates, with no ISA, vendor, console, or

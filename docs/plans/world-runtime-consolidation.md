@@ -9,12 +9,12 @@ existing home whose declared purpose already covers it.
 
 The plan records design decisions and remaining work. Check the owning source
 for implementation status and the [game milestones](../development/game-milestones.md)
-for dated verification. A difference between the plan and the implementation
+for verification. A difference between the plan and the implementation
 needs an explicit decision about whether the plan is stale or work remains.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12.
+Reviewed against `ceb993cba`.
 
 **Implemented:**
 

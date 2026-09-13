@@ -4,11 +4,11 @@ This plan defines the proposed physics and locomotion work for the reference
 game. It keeps authoring decisions, solver constraints, feel settings, and
 their acceptance evidence together so implementation can be checked against
 the experience the game needs. The decisions below describe intended work;
-dated results and current behavior remain in the [milestone records](../development/game-milestones.md).
+recorded results and current behavior remain in the [milestone records](../development/game-milestones.md).
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12: both decisions below are
+Reviewed against `ceb993cba`: both decisions below are
 implemented, and this plan has no open work.
 
 - `WorldRigid` is the `rigid` kit facet (mass, restitution, Coulomb friction,

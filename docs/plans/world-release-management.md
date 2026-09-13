@@ -17,7 +17,7 @@ each contract lands. This plan owns the intended release policy and sequencing.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12, with the uncommitted working tree
+Reviewed against `ceb993cba`, with the uncommitted working tree
 noted separately because another task is actively extending this work. The
 hosting foundation exists; the operator workflow does not.
 

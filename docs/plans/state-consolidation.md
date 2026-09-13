@@ -1,6 +1,6 @@
 # State consolidation
 
-The state duplication pass on 2026-09-06 identified the opportunities below.
+The state duplication pass identified the opportunities below.
 Several foundations now live in the owning projects; this plan proposes the
 remaining consolidation while preserving the distinctions that authors and
 runtime hosts can observe.
@@ -14,7 +14,7 @@ and authority and transaction boundaries.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The foundations named above are in
+Reviewed against `ceb993cba`. The foundations named above are in
 place; the three numbered proposals and the smaller opportunities remain open.
 
 - Section 1: `IValueSourcedEffect` shares effect analysis, but no common compiled

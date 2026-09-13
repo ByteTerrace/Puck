@@ -6,7 +6,7 @@ has local and remote adapter implementations and focused test evidence, while
 live deployment, multi-user placement, and durable delegated jobs remain
 unverified or future work.
 
-The plan was initially reviewed after technical rebuttal on 2026-09-07 against checkout base
+The plan was initially reviewed after technical rebuttal against checkout base
 `621127f0b67a`; the engine prerequisites were reviewed again at `5f63f7a533c4`.
 Local Operator MCP and delegated remote MCP are separate authority surfaces.
 Remote ingress accepts the validated issuer/subject, admits that identity through
@@ -47,7 +47,7 @@ workflow and signed-in operator checks succeed.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12, by milestone from
+Reviewed against `ceb993cba`, by milestone from
 [section 9](#9-implementation-sequence-and-release-gates):
 
 | Milestone | Status |
@@ -59,7 +59,7 @@ Reviewed against `ceb993cba` on 2026-09-12, by milestone from
 | 5a: remote Operator | Implemented locally, with `puck_attach`, `puck_detach`, and `puck_host` for caller-bound gateway attachments. Live Entra consent and deployment are unverified. |
 | 5b: delegated services | Scoped reads implemented as `puck_service_observe`, with `puck_onboard` routed through the Function App. Participant authority bindings and durable delegated mutations are not started. |
 
-## Local Operator implementation, 2026-09-08
+## Local Operator implementation
 
 Implemented from corrected prerequisite base `b1066e2973e0`: neutral
 [Hosting console attachment](../../src/Puck.Hosting/README.md#local-console-attachment)
@@ -97,7 +97,7 @@ GPU-loss event was tested. Participant, document/recording conveniences, parity/
 and downstream services remain milestones 2–5. The acceptance table below remains the release checklist,
 with pipe-specific checks superseded by the selected transport's trust contract.
 
-## Implementation adversarial review, 2026-09-08
+## Implementation adversarial review
 
 The initial happy-path checks missed failures at the asynchronous boundaries.
 The correction keeps the official SDK as the MCP parser and the existing Console
@@ -160,7 +160,7 @@ This is a component allocation result; timing varied and establishes no
 end-to-end latency improvement. Existing MCP interop tests verify the unchanged
 wire results, including equality of structured metadata and JSON text.
 
-## Engine prerequisites implemented on 2026-09-07
+## Engine prerequisites implemented
 
 Commit `5f63f7a533c464021644abdfa87db684f4024750` supplies the engine seams
 for local pairing:

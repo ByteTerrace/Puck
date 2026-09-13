@@ -7,7 +7,7 @@ also preserve the owner's decisions and the gaps that still need evidence.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12.
+Reviewed against `ceb993cba`.
 
 **Implemented:**
 
@@ -46,7 +46,7 @@ Reviewed against `ceb993cba` on 2026-09-12.
 
 ## Decisions
 
-Creature collectives are an owner decision from 2026-09-02. Authorable local laws,
+Creature collectives are an owner decision. Authorable local laws,
 not a prescribed group lifecycle, must allow solitary creatures to form packs,
 split into overlapping subclusters, reunite, and leave again. Explicit orders
 remain possible. Social membership, chosen activity, local steering, shared
@@ -91,7 +91,7 @@ are real and an honest account is what keeps the fold from becoming a pile: **tr
 track 1** (track 1's own proof is a canary), and **track 5's entity-address type gates track 3's
 ghost records**.
 
-The per-body scale primitive is an owner decision from 2026-09-03. A body's live
+The per-body scale primitive is an owner decision. A body's live
 geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
 never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
@@ -177,7 +177,7 @@ are one authored instance of that primitive, not new engine surface of their own
    authored local `body:n` still needs to lower to that address at compile/install time. **Do not reuse `WorldHandle`** — it is a capability-table
    designation stamped with principal and capability, an authority identity, not an entity identity.
 
-The independent Codex/GPT review dated 2026-08-10 recommended five tracks,
+The independent Codex/GPT review recommended five tracks,
 with track 5 aimed at the reference game's design decisions and no sixth
 track. The recommendation was advice at the time; the owner later recorded
 the same five-track decision below. The review found that world rules,
@@ -187,7 +187,7 @@ game, so a sixth horizontal "content later" track would add a lane without
 adding a capability. It also verified that the Phase A nouns survive on the
 rebased tree (`WorldStateAdvance`, `WorldOwnership`, properties, rules,
 interactions) and that `combat.world.json` and `reconnect.world.json` booted
-headlessly at the time (both were deleted 2026-09-06; the arena district
+headlessly at the time (both were deleted; the arena district
 carries combat's rules).
 
 Track 5 must re-verify those findings before relying on them. A later planning

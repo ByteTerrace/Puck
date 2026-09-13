@@ -1,6 +1,6 @@
 # Plans
 
-This directory holds proposed implementation plans and preserved technical decisions. Current architecture lives in the owner documents under `docs/architecture/`; the plans here retain rationale, constraints, dated evidence, and work that remains to be scheduled.
+This directory holds proposed implementation plans and preserved technical decisions. Current architecture lives in the owner documents under `docs/architecture/`; the plans here retain rationale, constraints, evidence, and work that remains to be scheduled.
 
 Each plan opens with an implementation status review that separates what has landed from what remains and names the commit it was checked against. Treat a review as evidence for that commit, and recheck the code before scheduling work from it.
 

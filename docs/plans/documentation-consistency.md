@@ -1,6 +1,6 @@
 # Documentation consistency
 
-This record preserves the 2026-09-12 editorial audit, research, and Luna
+This record preserves the editorial audit, research, and Luna
 assignments for the engine manual and its entry points. The shared conventions
 now live in [Writing documentation](../development/documentation.md). Use that
 guide for new work; the findings and assignment briefs below preserve the
@@ -8,11 +8,11 @@ reasoning and scope of this pass.
 
 ## Completion
 
-The four Luna assignments and lead integration were completed on 2026-09-12.
+The four Luna assignments and lead integration were completed.
 The manual now shares title, prose, terminology, and navigation conventions;
 the four filename changes below include their incoming-reference repairs.
 Source checks also corrected stale machine-hosting and contributor-verification
-guidance. Requirements, unresolved plans, dated evidence, examples, artwork,
+guidance. Requirements, unresolved plans, evidence, examples, artwork,
 and legal text were preserved.
 
 Verification passed for 96 documents and 837 citations, with no failures.

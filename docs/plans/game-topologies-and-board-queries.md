@@ -7,7 +7,7 @@ must support it; proposals remain distinct from the evidence already recorded.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. Every decision below has landed; the
+Reviewed against `ceb993cba`. Every decision below has landed; the
 only open item is the undecided `$symmetry:` lattice question. The compiled
 types have since moved into `Puck.State`: `CompiledWorldTopology` is
 `CompiledTopology`, `WorldStateLatticeTopology` is `LatticeTopology`,

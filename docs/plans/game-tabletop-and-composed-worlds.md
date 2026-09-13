@@ -3,11 +3,11 @@
 This plan extends the reference game into tabletop districts and worlds
 composed from reusable parts. It describes the proposed board, placement,
 search, and game rules work, while retaining the acceptance conditions,
-implementation decisions, and dated evidence that constrain the sequence.
+implementation decisions, and evidence that constrain the sequence.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12.
+Reviewed against `ceb993cba`.
 
 **Implemented:** every primitive the decisions below describe exists. The
 tabletop board facet with `$board:cellOf`, `$upright`, and quiescence gates;
@@ -94,7 +94,7 @@ itself without risking contact; the garden's proof keeps Wren at a safe
 standoff beside the table and moves pieces by console verb, never by having
 her body touch one.
 
-**The hidden-hand poker table (owner decisions, Lane C; re-cut 2026-09-06 into
+**The hidden-hand poker table (owner decisions, Lane C; re-cut into
 heads-up fixed-limit hold'em).** State only, no card bodies: a `cards` token
 domain with `rank` AND `suit` attribute rows, a
 `deck`/`hand1`/`hand2`/`community` zone family, and, since the re-cut, a whole

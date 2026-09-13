@@ -1,6 +1,6 @@
 # DSL and cartridge release hardening
 
-The September 2026 review found semantic inconsistencies across language
+The review found semantic inconsistencies across language
 lowering, editor tooling, and native cartridge generation. The corrected subset
 is the current baseline. This brief proposes the release evidence and shared
 semantic boundaries that should keep those fixes fixed while the language grows;
@@ -15,7 +15,7 @@ regions, interrupts, banking, assets and arithmetic expansion. The
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The corrected review subset and the
+Reviewed against `ceb993cba`. The corrected review subset and the
 two shared metadata homes exist; none of the release-evidence stages is
 recorded as complete.
 

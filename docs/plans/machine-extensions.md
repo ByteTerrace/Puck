@@ -27,7 +27,7 @@ its acceptance evidence appear below.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The
+Reviewed against `ceb993cba`. The
 [current implementation](#what-the-current-implementation-establishes) and
 [limitations](#current-limitations-and-compatibility-boundaries) sections below
 still describe the code accurately, and all five priorities in
@@ -322,8 +322,8 @@ Publishing packages or deploying a server remains a separate authorized action.
 
 ## Verification record and reproduction
 
-The following results were obtained against the integrated shared source on
-2026-09-12. They are evidence for this milestone, not a claim that the remaining
+The following results were obtained against the integrated shared source. They
+are evidence for this milestone, not a claim that the remaining
 acceptance cases passed or that all repository tests were run.
 
 | Check | Recorded result |

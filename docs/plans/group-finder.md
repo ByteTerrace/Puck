@@ -1,7 +1,7 @@
 # Groups and cooperative matchmaking
 
-This is the implementation design for Puck's group finder, requested on
-2026-09-09. The current foundation provides local groups, role-aware grants,
+This is the implementation design for Puck's group finder. The current
+foundation provides local groups, role-aware grants,
 transfer primitives, and external-operation recovery. The proposed finder adds
 consent, matching, durable membership, and cross-world admission around those
 primitives; it does not claim that the complete experience exists. The
@@ -17,7 +17,7 @@ finishing the engine foundation.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The starting point named in
+Reviewed against `ceb993cba`. The starting point named in
 [Foundation completion before the finder](#foundation-completion-before-the-finder)
 exists; none of units A–C or slices 1–7 is complete.
 

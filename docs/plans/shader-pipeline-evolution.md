@@ -7,15 +7,15 @@ The proposed work extends that foundation so several rendering representations
 can contribute to one world while retaining the current one-off and fullscreen
 workflows.
 
-This brief preserves the design decisions and remaining work from the September
-2026 DSL and rendering review. The [shader guide](../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development)
+This brief preserves the design decisions and remaining work from the
+DSL and rendering review. The [shader guide](../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development)
 owns the implemented document and runtime contract; the
 [World guide](../../src/Puck.World/README.md#shader-pipelines) owns commands and
 launch recipes. This plan does not certify a release or replace those guides.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The checkpoint foundation below is in
+Reviewed against `ceb993cba`. The checkpoint foundation below is in
 place; none of P1–P6 is complete.
 
 - P1: `tests/Puck.Shaders.Tests` covers planning, binding, liveness, loading,

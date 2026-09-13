@@ -1,6 +1,6 @@
 # README consistency and branding
 
-This plan defines the repository-wide README pass requested on 2026-09-12.
+This plan defines the repository-wide README pass.
 It covers 105 existing first-party `README.md` files and 38 active .NET project
 directories without one. Inspection also found four Cargo verification crates
 that need local entry points. The final package audit added four dashboard npm
@@ -10,7 +10,7 @@ task; this pass leaves its implementation and working files to that task.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. The pass is complete, including both
+Reviewed against `ceb993cba`. The pass is complete, including both
 items recorded in [Remaining boundaries and findings](#remaining-boundaries-and-findings):
 
 - Every tracked .NET, Cargo, and npm manifest under `src`, `tests`, `wasm`, and
@@ -191,7 +191,7 @@ examples of root, package, nested, test, and branding pages. Run the appropriate
 documentation and packaging checks, not full engine batteries for prose changes.
 Keep findings and completion status here so the plan survives the worker sessions.
 
-## Completion record: 2026-09-12
+## Completion record
 
 The Luna assignments and lead integration are complete, with the editor boundary
 below retained. The final inventory covers 152 README entry points: 85 updated,

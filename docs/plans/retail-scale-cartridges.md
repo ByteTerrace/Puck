@@ -12,14 +12,14 @@ same, not one that assembles to the same bytes. That decision settles the rest o
 the design, because it says the compiler owns encoding and the document owns
 structure.
 
-This document records the decisions and the work they imply, with one dated
-status review below. What has been verified, with the check that produced it,
+This document records the decisions and the work they imply, with the status
+review below. What has been verified, with the check that produced it,
 belongs to [game design](../game/design.md). If this plan and the code disagree,
 the code wins and a line here is wrong.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. None of the seven stages in
+Reviewed against `ceb993cba`. None of the seven stages in
 [Order of work](#order-of-work) has started.
 
 **In place already:** the baseline this plan builds on. `Sm83Emitter` emits

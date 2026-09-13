@@ -7,7 +7,7 @@ behavioral evidence remains limited to a named fixture or replay.
 
 ## Implementation status
 
-Reviewed against `ceb993cba` on 2026-09-12. Every decision below has landed.
+Reviewed against `ceb993cba`. Every decision below has landed.
 Several were later carried into `Puck.State` under new names, so read the type
 names in the decision records as historical:
 
