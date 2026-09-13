@@ -14,6 +14,9 @@ internal static partial class AzureCommand {
         var manifest = JsonSerializer.Deserialize<WorldReleaseManifest>(ConfinedFile.ReadAllBytes(Path.Combine(packageDirectory, "release.json"), 1024 * 1024))
             ?? throw new InvalidDataException("release package contains no manifest");
         if (!WorldReleaseManifest.TryVerify(manifest, packageDirectory, out var reason)) { throw new InvalidDataException(reason); }
+        if (manifest.CoordinatorContract != WorldReleaseManifest.CurrentCoordinatorContract) {
+            throw new InvalidDataException("new official deployments require the closed-group restore coordinator contract");
+        }
         return await WithManagedWorldReleaseAsync(async (context, token) => {
             var current = await context.Groups.LoadAsync(context.Group, token).ConfigureAwait(false);
             if (current is { } pending && pending.Record.PendingOperationId is { } existingOperation) {

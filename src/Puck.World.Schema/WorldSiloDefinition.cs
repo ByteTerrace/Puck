@@ -40,7 +40,11 @@ public sealed record WorldSiloClustering(string Kind);
 /// <param name="Group">The deployment-group key in the private release store.</param>
 /// <param name="Owner">The deployment-group owner's stable container UUID.</param>
 /// <param name="ExpectedRelease">The exact immutable release identity this process may publish.</param>
-public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string ExpectedRelease);
+public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string ExpectedRelease) {
+    /// <summary>Enforces a closed authoritative inventory for intentional rewind. Remote federation and
+    /// outbound authority claims are refused; ordinary authenticated player connections remain available.</summary>
+    public bool ClosedGroupRewind { get; init; }
+}
 /// <summary>Deployment-owned lifecycle observation and local health configuration.</summary>
 /// <param name="ShutdownSeconds">Maximum time allowed for operator or deployment retirement.</param>
 /// <param name="HealthPort">HTTP health port; retirement requests are accepted only from loopback.</param>

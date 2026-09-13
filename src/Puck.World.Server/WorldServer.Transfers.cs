@@ -3,6 +3,15 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    private Func<string, bool>? m_transferAuthorityAllowed;
+
+    /// <summary>Installs the hosting boundary before admission. The predicate admits only authorities restored
+    /// together with this world. It cannot be replaced during an activation.</summary>
+    public void ConstrainTransferAuthorities(Func<string, bool> allowed) {
+        ArgumentNullException.ThrowIfNull(allowed);
+        if (m_transferAuthorityAllowed is not null) { throw new InvalidOperationException("transfer boundary is already installed"); }
+        m_transferAuthorityAllowed = allowed;
+    }
     // Re-materializes every live federation stream's latest device state into this authority tick. A row is
     // accepted only while the same peer principal still occupies its slot; an onward transfer leaves the old row
     // inert, and slot reuse can never inherit it. ApplyIntentSubmission remains the one Drive/grant/input-hold door.
@@ -57,6 +66,9 @@ public sealed partial class WorldServer {
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns>Whether the commit is authoritative at this destination.</returns>
     public bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        if (m_transferAuthorityAllowed is not null && !m_transferAuthorityAllowed(sourceAuthority)) {
+            reason = "closed rewind group refuses an external transfer"; return false;
+        }
         var resolvedReason = string.Empty;
         var accepted = ExecuteAuthorityOperation(operation: () => m_transferEscrow.Commit(
             members: members,
@@ -93,13 +105,15 @@ public sealed partial class WorldServer {
         });
     }
     /// <summary>Releases every device image still owned by one closing federation stream. Lease comparison makes
-    /// reconnect replacement atomic: a superseded stream cannot release the newer writer.</summary>
+    /// reconnect replacement atomic: a superseded stream cannot release the newer writer. A retired destination
+    /// needs no stream cleanup and keeps its frozen checkpoint unchanged.</summary>
     public void ReleaseFederatedIntents(long leaseId) {
         if (leaseId <= 0) {
             return;
         }
 
-        ExecuteAuthorityOperation(operation: () => {
+        lock (m_authorityGate) {
+            if (m_authorityRetiring) { return; }
             for (var index = 0; (index < m_federatedIntents.Length); index++) {
                 if (
                     m_federatedIntents[index].Active &&
@@ -108,14 +122,16 @@ public sealed partial class WorldServer {
                     m_federatedIntents[index] = default;
                 }
             }
-        });
+        }
     }
     /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
     /// colocation and the QUIC authority door; callers never reserve population capacity by inspecting it directly.</summary>
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
     /// <returns>The destination's verdict and assigned body indices.</returns>
     public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) =>
-        ExecuteAuthorityOperation(operation: () => m_transferEscrow.Reserve(request: request));
+        ExecuteAuthorityOperation(operation: () => m_transferAuthorityAllowed is not null && !m_transferAuthorityAllowed(request.SourceAuthority)
+            ? WorldTransferReservationReply.Refused("closed rewind group refuses an external transfer")
+            : m_transferEscrow.Reserve(request: request));
     /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
         var credential = mobility;

@@ -14,6 +14,7 @@ internal static partial class AzureCommand {
             var (activeIdentity, previousIdentity) = GetWorldReleaseRollbackPair(current.Record, operationId);
             var active = await LoadWorldReleaseDeploymentAsync(context, activeIdentity, token).ConfigureAwait(false);
             var previous = await LoadWorldReleaseDeploymentAsync(context, previousIdentity, token).ConfigureAwait(false);
+            if (active.Configuration.ClosedGroupRewind) { RequireClosedRewindDeployment(previous); }
             if (!WorldReleaseTransitionPolicy.TryPrepare(active.Manifest, previous.Manifest, out _, out var reason)) { throw new InvalidDataException(reason); }
             await RetainWorldReleaseImagesAsync([active.Image, previous.Image], token).ConfigureAwait(false);
             var operation = operationId ?? Guid.NewGuid();

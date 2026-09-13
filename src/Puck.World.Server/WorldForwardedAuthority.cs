@@ -87,7 +87,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     private readonly WorldServer m_server;
     private readonly string m_sourceAuthority;
 
-    private bool m_disposed;
+    private int m_disposed;
 
     /// <summary>Initializes a forwarded arm over a colocated destination server.</summary>
     /// <param name="server">The destination authority.</param>
@@ -173,15 +173,10 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
         );
     }
     /// <summary>Releases the held-input lease this arm owns and refuses further intent publication. Release and
-    /// publication are serialized by the destination's authority gate.</summary>
-    public void Dispose() => m_server.ExecuteAuthorityOperation(operation: () => {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_server.ReleaseFederatedIntents(leaseId: m_leaseId);
-    });
+    /// publication are serialized by the destination's authority gate. Retired destinations remain frozen.</summary>
+    public void Dispose() {
+        if (Interlocked.Exchange(ref m_disposed, 1) == 0) { m_server.ReleaseFederatedIntents(leaseId: m_leaseId); }
+    }
     /// <summary>Reports whether a transferred principal still owns its body. MUST be called inside
     /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>, paired with the act it authorizes.</summary>
     /// <param name="server">The authority holding the population.</param>
@@ -354,7 +349,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
         var accepted = m_server.ExecuteAuthorityOperation(operation: () => {
-            if (m_disposed) { return (Accepted: false, Closed: true); }
+            if (Volatile.Read(ref m_disposed) != 0) { return (Accepted: false, Closed: true); }
             if (!IsLiveTransferredPrincipal(
                 principal: principal,
                 server: m_server

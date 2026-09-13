@@ -64,6 +64,18 @@ The publication control also starts with unfilled draws in the published package
 and initialized draws in its gameplay checkpoint. Silo lifecycle controls cover
 local-only rows signing as their stable instance names through replacement and
 stale-writer refusal.
+
+`WorldReleaseRewindProbe.cs` contains one focused local lifecycle check through
+actual hosted rows, release controls, and the directory store. It deploys metadata,
+advances gameplay, rolls back while retaining the latest ticks, and intentionally
+rewinds a later internal transfer. It interrupts restore after the first durable
+world publication, resumes with admission closed, and compares complete restored
+checkpoints. Disconnected players' documented parking is checked explicitly,
+including reconnect; current operation receipts and fresh writer generations
+survive. Restart and completed-operation resume must retain subsequent progress.
+This checks the coordinator and storage behavior in one compiled engine; packaged
+runtime and live Azure acceptance remain separate.
+
 `WorldReleaseCoordinatorContractLawTests` checks immutable coordinator requirements
 and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to a
 `Puck.World.Server.dll` from before coordinator contracts, and

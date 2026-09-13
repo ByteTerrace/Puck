@@ -9,7 +9,11 @@ namespace Puck.Cli.Azure;
 
 /// <summary>Exact deployment inputs retained in a versioned secret. Parameters can contain bootstrap credentials;
 /// only their digest and secret version reference belong in ordinary release storage.</summary>
-internal sealed record WorldReleaseDeploymentConfiguration(string Release, string Group, JsonObject Parameters, string PublicKey, JsonObject ComputeTemplate);
+internal sealed record WorldReleaseDeploymentConfiguration(string Release, string Group, JsonObject Parameters, string PublicKey, JsonObject ComputeTemplate) {
+    /// <summary>The immutable worker configuration enforces the closed inventory required by recovery points.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ClosedGroupRewind { get; init; }
+}
 
 /// <summary>A versioned secret backend. Reads always name one immutable version, never the latest secret value.</summary>
 internal interface IWorldReleaseSecretVersions {

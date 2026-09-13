@@ -30,6 +30,10 @@ public readonly record struct WorldAuthorityRoot(
     [property: JsonPropertyName("durableOrdinal")] long DurableOrdinal,
     [property: JsonPropertyName("durableTick")] ulong DurableTick
 ) {
+    /// <summary>The immutable closed-group rewind policy and inventory pin. Once established, hosting must
+    /// enforce that boundary before admission; older root readers refuse this member.</summary>
+    [JsonPropertyName("rewindBoundary"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RewindBoundary { get; init; }
     /// <summary>Creates an empty, unowned root used by explicit legacy initialization.</summary>
     public static WorldAuthorityRoot Empty => new(
         Version: 1,
@@ -98,7 +102,7 @@ internal static class WorldAuthorityRootCodec {
             var allowed = new HashSet<string>(StringComparer.Ordinal) {
                 "version", "epoch", "fence", "sequence", "definition", "checkpoint", "checkpointOrdinal",
                 "checkpointTick", "journal", "journalCount", "journalSequence", "checkpointCoverageSequence",
-                "receipt", "receiptIndex", "durableOrdinal", "durableTick"
+                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary"
             };
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var property in document.RootElement.EnumerateObject()) {
@@ -122,6 +126,9 @@ internal static class WorldAuthorityRootCodec {
                 }
             }
             root = JsonSerializer.Deserialize<WorldAuthorityRoot>(bytes, Options);
+            if (root.RewindBoundary is { } boundary && !WorldAuthorityRecoveryRootCodec.IsPin(boundary)) {
+                reason = "rewind boundary is not a full SHA-256 policy pin"; root = default; return false;
+            }
             var scalarFieldsValid = root.Version == 1 && root.Epoch >= 0 && root.Sequence >= 0 && root.CheckpointOrdinal >= -1 && root.DurableOrdinal >= -1 && root.JournalEntryCount >= 0 && root.JournalSequence >= -1 && root.CheckpointCoverageSequence >= -1;
             var journalCoverageValid = scalarFieldsValid && root.CheckpointCoverageSequence <= root.JournalSequence &&
                 (root.JournalHash is null

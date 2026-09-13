@@ -134,6 +134,13 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             machineCatalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint
         );
+        if (ClosedGroupRewind) {
+            if (definition.Worlds.Any(row => !row.Pinned || row.Owner != m_releaseManagement!.Owner)) {
+                throw new InvalidDataException("closed rewind group requires every declared world to be pinned under its owner");
+            }
+            Instances.ConstrainTransferInventory(definition.Worlds.Select(row => row.World.Value));
+            foreach (var row in definition.Worlds) { m_rewindAuthorities.Add(row.World.Value); }
+        }
     }
 
     /// <summary>Gets the immutable machine catalog selected for this silo.</summary>
@@ -617,18 +624,22 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             // Match WorldServer.AuthorityIdentity for a colocated row: it signs as its stable instance name
             // and has no remote endpoint. The configured row inventory keeps names unique in this host.
             var subject = definition.Host.Authority ?? worldRow.World.Value;
+            if (ClosedGroupRewind) {
+                lock (m_rewindAuthoritiesGate) { m_rewindAuthorities.Add(subject); }
+                key.Dispose();
+            }
 
             federation = new WorldFederationIdentity(
                 Authenticator: WrapAuthentication(worldRow, new WorldAttestedAuthenticator(
-                    oracle: new LocalKeySigningOracle(
+                    oracle: ClosedGroupRewind ? null : new LocalKeySigningOracle(
                         key: key,
                         subject: subject,
                         validity: WorldAttestedAuthenticator.MaximumClaimAge
                     ),
-                    trustEntries: trustEntries
+                    trustEntries: ClosedGroupRewind ? null : trustEntries
                 )),
                 Subject: subject,
-                Network: new WorldPeerNetwork(identityFile: worldRow.Federation.KeyFile)
+                Network: new WorldPeerNetwork(identityFile: worldRow.Federation.KeyFile, allowOutbound: !ClosedGroupRewind)
             );
             reason = string.Empty;
 
@@ -949,6 +960,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return false;
         }
 
+        await RequireRewindActivationAsync(identity, ct).ConfigureAwait(false);
         var acquired = await m_store.AcquireActivationAsync(identity, ct);
         if (acquired is not { } fence) { return false; }
         var admitted = false;
@@ -1042,6 +1054,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             }
 
             server.Neighbours = origin.Neighbours;
+            if (ClosedGroupRewind) { server.ConstrainTransferAuthorities(ContainsRewindAuthority); }
             // Attached BEFORE journal-tail replay and live admission. TryApplyMutation and ApplyRebuild both refuse an
             // addon-affecting operation outright when NO host is attached at all, so this is not what stops those two —
             // it is what closes world.undo's own gap: WorldServer.AddonsCanPrepare treats a null m_addons as vacuously

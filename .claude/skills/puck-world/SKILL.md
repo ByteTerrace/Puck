@@ -355,9 +355,9 @@ import the reversed candidate continuation. Never reverse the original seed or
 normalize away a checkpoint difference. Standalone `qualify` requires manifests
 at their package roots for changed definitions; managed paths use the archive.
 New package preparation includes `WorldReleaseManifest.CurrentCoordinatorContract`
-(`puck.world.release.receipts.v1`) in the canonical manifest. It requires
-receipt-aware qualification and includes the prior metadata requirement.
-`MetadataCoordinatorContract` remains accepted for existing manifests. Metadata
+(`puck.world.release.restore.v1`) in the canonical manifest. It requires
+closed-group rewind enforcement, receipt-aware qualification and the prior metadata requirement.
+`ReceiptCoordinatorContract` and `MetadataCoordinatorContract` remain readable. Metadata
 publication requires either contract on one side of the pair so older coordinators
 cannot silently skip the transformation on resume or rollback.
 Preserve legacy identities by omitting an absent coordinator contract. Run
@@ -408,8 +408,20 @@ querying geometry; resident trees still bake and validate their recorded static
 edges. Run Physics navigation laws and packaged full-inventory restore controls.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
-and the cutover law's loopback export before rollback. Explicit restore remains
-unfinished. Deploy, rollback, resume, and
+and the cutover law's loopback export before rollback. Explicit restore uses
+`WorldReleaseRestore` and a pinned `RestorePoint` through the ordinary phases.
+`release.closedGroupRewind` blocks remote federation/claims and constrains local
+transfers to the fixed pinned inventory. Capture establishes `RewindBoundary` in
+the publication queue; later hosting must retain its policy. Preserve current
+receipts and journal numbering when restoring old gameplay; never replace them
+with the point's receipt history. Qualification copies explicitly drop the live
+boundary proof. The focused `LocalDeployRollbackRewindAndInterruptedResumePreserveTheirDistinctStateContracts`
+probe drives actual hosts, metadata publication, an internal transfer, interrupted
+rewind, and restart. It compares the entire checkpoint with the explicit reconnect
+parking adjustment, and verifies reconnect and retained current receipts. It is
+not a packaged-image or Azure acceptance substitute.
+Local forwarding disposal must tolerate retired destinations without changing their
+frozen checkpoint. Deploy, rollback, restore, resume, and
 finalization use a renewable controller lease. Run the CLI
 `WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained
 configuration, bootstrap, or controller ownership. The Azure lease law requires

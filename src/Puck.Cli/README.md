@@ -162,8 +162,8 @@ composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest after hashing those definitions and the remaining
 package artifacts. Stable owner/world identities and package paths are recorded
 separately; authored `.puck` inputs are artifacts and are never treated as ready
-definitions. New manifests require `puck.world.release.receipts.v1` coordinator
-support, preventing older tooling from skipping receipt-aware qualification.
+definitions. New manifests require `puck.world.release.restore.v1` coordinator
+support, including receipt-aware qualification and closed-group rewind enforcement.
 Official preparation and bootstrap read composed published definitions, allowing
 unfilled boot draws. Bootstrap retries compare exact published bytes, without
 running those draws or comparing them with a newly initialized world.
@@ -177,6 +177,15 @@ Release command failures print a concise `world release:` diagnostic and return
 exit code 1; cancellation returns 130. A failed or canceled mutation directs the
 operator to inspect `status` and use `resume` for unfinished work. Neither an exit
 code nor a lost response establishes whether the durable operation committed.
+`world release checkpoint [--request <guid>]` captures a coherent recovery point
+without stopping gameplay and prints its request ID, capture time, and world ticks.
+It requires a managed closed group; older qualification captures without durable
+boundary proof cannot be used for intentional rewind. `world release restore
+<recovery-point>` previews the saved release and ticks against current durable
+ticks. Add `--discard-progress` to explicitly rewind the entire group, and optionally
+`--operation <guid>` to identify that operation. Current request receipts survive;
+the same `status` and `resume` commands handle interruption. The implementation is
+under local acceptance and has not been accepted on Azure.
 `world release finalize` closes the current admitted rollback window with a
 guarded group write. It preserves gameplay, recovery history, and retained
 artifacts. Repeating it after finalization succeeds without another mutation;
@@ -211,8 +220,8 @@ a source worker that supports receipt history; absence never means empty history
 state, and qualifies the reverse pair before entering the same drain and cutover
 transaction. It preserves progress earned since deployment. A pending operation
 requires `resume`; an absent or finalized rollback window refuses. `--operation`
-sets a stable operation ID for diagnostics. Explicit restore, which rewinds progress,
-is still unimplemented. The Azure activation adapter has an atomic metadata
+sets a stable operation ID for diagnostics. Explicit restore selects a retained
+closed-group recovery point and requires `--discard-progress`. The Azure activation adapter has an atomic metadata
 definition publisher, guarded by the operation and exact drained root, with
 receipt-based retries. Metadata-only definition changes can proceed after
 packaged qualification exercises the same forward and reverse transformation.

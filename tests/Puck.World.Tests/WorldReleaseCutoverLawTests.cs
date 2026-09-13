@@ -15,7 +15,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Exercises release admission through real hosted rows and the production simulation pump.</summary>
-public sealed class WorldReleaseCutoverLawTests {
+public sealed partial class WorldReleaseCutoverLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Theory]
@@ -252,7 +252,8 @@ public sealed class WorldReleaseCutoverLawTests {
     }
 
     // The worker-side controls execute against actual hosts; only the Azure transport is replaced by loopback HTTP contexts.
-    private sealed class LoopbackRuntime(IWorldReleaseRuntime inner, WorldSiloHost source, WorldSiloHost candidate) : IWorldReleaseRuntime {
+    private sealed class LoopbackRuntime(IWorldReleaseRuntime inner, WorldSiloHost source, WorldSiloHost candidate,
+        Func<WorldReleaseGroupRecord, Task>? prepare = null) : IWorldReleaseRuntime {
         private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
         public async Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
             var result = await ControlAsync(source, "POST", $"/release/drain/{operation.PendingOperationId:D}");
@@ -268,7 +269,10 @@ public sealed class WorldReleaseCutoverLawTests {
             var result = await ControlAsync(candidate, "POST", $"/release/publish/{operation.PendingOperationId:D}");
             return result.Status == 200 ? WorldReleaseRuntimePublication.Opened : WorldReleaseRuntimePublication.Refused;
         }
-        public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StartCandidatePrivatelyAsync(operation, cancellationToken);
+        public async Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            if (prepare is not null && operation.PendingPhase == WorldReleaseOperationPhase.Activate) { await prepare(operation); }
+            return await inner.StartCandidatePrivatelyAsync(operation, cancellationToken);
+        }
         public Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.StopCandidateAsync(operation, cancellationToken);
         public Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.VerifyCandidatePrivatelyAsync(operation, cancellationToken);
         public Task<WorldReleaseRuntimeResult> RecoverSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.RecoverSourceAsync(operation, cancellationToken);

@@ -100,7 +100,8 @@ binary remain separately recorded; they are not silently counted as passing.
 
 The hosting foundation, retained archive, packaged qualification runner, and
 operator commands exist, including managed deployment and rollback. Production
-acceptance and explicit restore remain incomplete. Definition changes are limited
+acceptance remains incomplete. Explicit restore is implemented and undergoing
+focused local verification. Definition changes are limited
 to metadata and require package-bound qualification.
 
 **Implemented:**
@@ -189,11 +190,11 @@ to metadata and require package-bound qualification.
 
 **Remaining:**
 
-- No restore CLI operation or group-scoped restore coordinator operation exists.
-  Current escrow tables retire committed transactions, so an empty table is not
-  proof that no external effect occurred after a recovery point. Restore needs
-  durable evidence covering that interval, or an enforced closed-group boundary
-  established before capture; it must not infer safety from current endpoints alone.
+- Complete local restore acceptance across the full inventory. The implementation
+  now records an enforced closed-group boundary at capture, retains the selected
+  point in the ordinary coordinator, and keeps current receipts through rewind.
+  A focused two-row rewind/restart/resume probe passed; internal-transfer, full
+  checkpoint, interruption and packaged-inventory evidence are still being completed.
 - Only metadata edits have a preservation rule. Further definition edits need
   their own reversible rule and packaged continuation evidence before admission.
 - The legacy blob-version rewind has been removed. Automatic capture, fixture
@@ -234,7 +235,7 @@ Use the existing Puck CLI and Azure deployment entry point. Add release
 preparation, status, rollback, finalization, and restore operations under the
 existing World command family; settle exact command spelling while implementing
 its command tree. Preparation, deployment, rollback, status, resume, and
-finalization exist today; explicit restore remains proposed work.
+finalization and explicit restore exist today; restore acceptance remains in progress.
 Each mutation accepts or returns an operation identifier. Repeating the same
 request resumes that operation; it does not start another deployment.
 
@@ -270,7 +271,7 @@ compatibility shims throughout the engine.
 The [Azure deployment](../../src/Puck.Cli/Azure/AzureWorldReleaseDeploy.cs) now
 enters the durable coordinator and resumes from retained inputs. Its predecessor
 captured mutable blob versions in runner artifacts and restored them on failure;
-that path has been removed. Completion still requires explicit restore,
+that path has been removed. Completion still requires explicit restore acceptance,
 definition-change admission, release-pair qualification, and an exercised cloud
 recovery runbook.
 

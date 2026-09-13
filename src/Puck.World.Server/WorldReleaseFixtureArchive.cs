@@ -17,6 +17,10 @@ public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick) {
 /// <summary>Immutable inventory for a coherent qualification snapshot. It contains no production signing keys.</summary>
 public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, string Group, string Release,
     Guid Owner, Guid MachineId, IReadOnlyDictionary<string, WorldReleaseFixtureRow> Worlds) {
+    /// <summary>Enforced policy/inventory proof. Its absence means this fixture is not an intentional recovery point.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? RewindBoundary { get; init; }
+    /// <summary>Host capture time for the coherent group, distinct from each world's simulation tick.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTimeOffset? CapturedAt { get; init; }
     /// <summary>Full digest of the canonical inventory, including every row's checkpoint hash.</summary>
     [JsonIgnore] public string Identity => WorldReleaseFixtureArchive.Hash(WorldReleaseFixtureArchive.Canonicalize(this));
 }
@@ -30,13 +34,17 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
 
     /// <summary>Retains a detached capture under a stable request ID. A different capture cannot replace it.</summary>
     public async Task<WorldReleaseFixtureManifest> SaveAsync(Guid requestId, string group, string release, Guid machineId,
-        IReadOnlyDictionary<string, WorldReleaseFixtureCheckpoint> checkpoints, CancellationToken cancellationToken = default) {
+        IReadOnlyDictionary<string, WorldReleaseFixtureCheckpoint> checkpoints, CancellationToken cancellationToken = default,
+        string? rewindBoundary = null, DateTimeOffset? capturedAt = null) {
         // Take ownership before the first await; a caller cannot change bytes behind their published hashes.
         var captured = new SortedDictionary<string, WorldReleaseFixtureCheckpoint>(StringComparer.Ordinal);
         var receipts = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var row in checkpoints) {
             captured.Add(row.Key, new(row.Value.Encoded.ToArray(), row.Value.Tick));
             if (row.Value.Receipts is { } history) {
+                if (rewindBoundary is not null && history.Source.Root.RewindBoundary != rewindBoundary) {
+                    throw new InvalidDataException("recovery point has no matching durable boundary proof");
+                }
                 if (history.Owner != owner || history.World != row.Key) { throw new InvalidDataException("release fixture receipt snapshot belongs to another world"); }
                 receipts.Add(row.Key, history.Encode());
             }
@@ -47,7 +55,9 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
             if (row.Value.Encoded.Length is 0 or > MaximumCheckpointBytes) { throw new InvalidDataException("release fixture checkpoint exceeds its byte budget"); }
             rows.Add(row.Key, new(Hash(row.Value.Encoded), row.Value.Tick) { ReceiptsHash = receipts.TryGetValue(row.Key, out var receiptBytes) ? Hash(receiptBytes) : null });
         }
-        var manifest = new WorldReleaseFixtureManifest(Schema, requestId, group, release, owner, machineId, rows);
+        var manifest = new WorldReleaseFixtureManifest(Schema, requestId, group, release, owner, machineId, rows) {
+            RewindBoundary = rewindBoundary, CapturedAt = capturedAt,
+        };
         Validate(manifest);
         var bytes = Canonicalize(manifest);
         foreach (var row in captured) {
@@ -97,6 +107,12 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         }
         _ = SafeName.Parse(manifest.Group);
         _ = Digest(manifest.Release);
+        if (manifest.RewindBoundary is { } boundary) {
+            if (boundary != WorldReleaseRewindBoundary.Compute(owner, manifest.Group, manifest.Worlds.Keys) ||
+                manifest.CapturedAt is null || manifest.Worlds.Values.Any(row => row.ReceiptsHash is null)) {
+                throw new InvalidDataException("recovery point has an incomplete capture or boundary proof");
+            }
+        } else if (manifest.CapturedAt is not null) { throw new InvalidDataException("recovery time requires boundary proof"); }
         foreach (var row in manifest.Worlds) {
             _ = SafeName.Parse(row.Key); _ = Digest(row.Value.Hash);
             if (row.Value.ReceiptsHash is { } receipts) { _ = Digest(receipts); }

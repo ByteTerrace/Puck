@@ -13,7 +13,9 @@ public sealed record WorldReleaseManifest {
     /// <summary>Requires package-qualified metadata transformation and atomic definition/checkpoint publication.</summary>
     public const string MetadataCoordinatorContract = "puck.world.release.metadata.v1";
     /// <summary>Requires receipt-preserving exports and packaged lookup/duplicate qualification as well as metadata publication.</summary>
-    public const string CurrentCoordinatorContract = "puck.world.release.receipts.v1";
+    public const string ReceiptCoordinatorContract = "puck.world.release.receipts.v1";
+    /// <summary>Also requires closed-group rewind boundary enforcement and resumable explicit restore.</summary>
+    public const string CurrentCoordinatorContract = "puck.world.release.restore.v1";
 
     /// <summary>The manifest schema.</summary>
     [JsonPropertyName("schema")] public string Schema { get; init; } = CurrentSchema;
@@ -64,7 +66,7 @@ public sealed record WorldReleaseManifest {
             reason = $"unsupported release manifest schema '{manifest.Schema}'";
             return false;
         }
-        if (manifest.CoordinatorContract is not null && manifest.CoordinatorContract is not (MetadataCoordinatorContract or CurrentCoordinatorContract)) {
+        if (manifest.CoordinatorContract is not null && manifest.CoordinatorContract is not (MetadataCoordinatorContract or ReceiptCoordinatorContract or CurrentCoordinatorContract)) {
             reason = $"unsupported release coordinator contract '{manifest.CoordinatorContract}'; use tooling that supports this package";
             return false;
         }
@@ -210,8 +212,8 @@ public static class WorldReleaseCompatibility {
     /// Both manifests are loaded before runtime effects, so this also protects rollback to a legacy manifest.</summary>
     public static bool TryRequireMetadataCoordinator(WorldReleaseManifest source, WorldReleaseManifest target, out string reason) {
         if (!WorldReleaseManifest.TryValidate(source, out reason) || !WorldReleaseManifest.TryValidate(target, out reason)) { return false; }
-        if (source.CoordinatorContract is not (WorldReleaseManifest.MetadataCoordinatorContract or WorldReleaseManifest.CurrentCoordinatorContract) &&
-            target.CoordinatorContract is not (WorldReleaseManifest.MetadataCoordinatorContract or WorldReleaseManifest.CurrentCoordinatorContract)) {
+        if (source.CoordinatorContract is not (WorldReleaseManifest.MetadataCoordinatorContract or WorldReleaseManifest.ReceiptCoordinatorContract or WorldReleaseManifest.CurrentCoordinatorContract) &&
+            target.CoordinatorContract is not (WorldReleaseManifest.MetadataCoordinatorContract or WorldReleaseManifest.ReceiptCoordinatorContract or WorldReleaseManifest.CurrentCoordinatorContract)) {
             reason = "metadata transitions require a package with the metadata coordinator contract; prepare the new release with current tooling";
             return false;
         }

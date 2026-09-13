@@ -4,6 +4,15 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldInstanceHost {
+    private HashSet<string>? m_closedTransferInventory;
+
+    /// <summary>Restricts transfer destinations to this fixed set of colocated rows. Install before activation;
+    /// remote authorities and dynamically spawned destinations are outside the rewind boundary.</summary>
+    public void ConstrainTransferInventory(IEnumerable<string> names) {
+        if (m_closedTransferInventory is not null || m_instances.Count != 0) { throw new InvalidOperationException("transfer inventory must be installed once before activation"); }
+        m_closedTransferInventory = new(names, StringComparer.Ordinal);
+        if (m_closedTransferInventory.Count == 0) { throw new ArgumentException("transfer inventory cannot be empty", nameof(names)); }
+    }
     private void ReconcileInDoubtTransfers() {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
@@ -547,6 +556,17 @@ public sealed partial class WorldInstanceHost {
         }
     }
     private bool TryResolveWorldPeerCall(in PendingTransfer transfer, WorldInstance source, out WorldPeerCall authority, out string resolvedName, out bool spawned, out string reason) {
+        if (m_closedTransferInventory is { } inventory) {
+            resolvedName = transfer.Destination.Name ?? string.Empty;
+            spawned = false;
+            if (inventory.Contains(resolvedName) && m_instances.ContainsKey(resolvedName) && transfer.Destination.Authority is null) {
+                if (TryResolveDestination(transfer, source, out var contained, out resolvedName, out spawned, out reason)) {
+                    authority = LocalPeerCall(contained!); return true;
+                }
+                authority = default; return false;
+            }
+            authority = default; reason = "closed rewind group refuses a destination outside its running inventory"; return false;
+        }
         if (
             (transfer.Destination.DocumentPath is { } documentPath) &&
             WorldFileOrigin.TryResolveCanonicalPath(

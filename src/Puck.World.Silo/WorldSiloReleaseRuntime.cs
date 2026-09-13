@@ -29,9 +29,12 @@ public sealed class WorldSiloReleaseRuntime : IWorldReleaseRuntime {
         return new(true, "source drained and recovery roots protected", roots);
     }
 
-    public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+    public async Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
         CheckHost(m_candidate, operation, operation.PendingTargetRelease);
-        return ActivateAndVerifyAsync(m_candidate, cancellationToken);
+        if (operation.PendingPhase == WorldReleaseOperationPhase.Activate && operation.RestorePoint is not null) {
+            await m_candidate.ApplyRestorePointAsync(operation, cancellationToken).ConfigureAwait(false);
+        }
+        return await ActivateAndVerifyAsync(m_candidate, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {

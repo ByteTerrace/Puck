@@ -100,7 +100,24 @@ internal static class WorldReleaseCommand {
             Console.WriteLine(result.Detail);
             return result.Completed && !result.SourceRecovered ? 0 : 1;
         }, recovery: true));
-        return new Command("release", "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, deploy, rollback, WorldReleaseExerciseCommand.Create() };
+        var checkpointId = new Option<Guid?>("--request") { Description = "Stable recovery-point request ID for retrying an interrupted capture." };
+        var checkpoint = new Command("checkpoint", "Retain a coherent closed-group recovery point without stopping gameplay.") { checkpointId };
+        checkpoint.SetAction((parse, token) => RunAsync(async () => {
+            var point = await AzureCommand.CaptureWorldReleasePointAsync(parse.GetValue(checkpointId) ?? Guid.NewGuid(), token).ConfigureAwait(false);
+            Console.WriteLine(JsonSerializer.Serialize(point, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine($"Recovery point: {point.RequestId:D}; identity: {point.Identity}");
+            return 0;
+        }));
+        var restorePoint = new Argument<Guid>("recovery-point");
+        var restoreOperation = new Option<Guid?>("--operation");
+        var discardProgress = new Option<bool>("--discard-progress") { Description = "Explicitly acknowledge discarding this entire group's progress after the selected point." };
+        var restore = new Command("restore", "Preview a recovery point, or explicitly rewind the complete deployment group.") { restorePoint, restoreOperation, discardProgress };
+        restore.SetAction((parse, token) => RunAsync(async () => {
+            var result = await AzureCommand.RestoreWorldReleaseAsync(parse.GetRequiredValue(restorePoint), parse.GetValue(restoreOperation), parse.GetValue(discardProgress), token).ConfigureAwait(false);
+            Console.WriteLine(result.Detail);
+            return !parse.GetValue(discardProgress) || result.Completed && !result.SourceRecovered ? 0 : 1;
+        }, recovery: true));
+        return new Command("release", "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, deploy, rollback, checkpoint, restore, WorldReleaseExerciseCommand.Create() };
     }
 
     internal static async Task<int> RunAsync(Func<Task<int>> action, bool recovery = false) {
@@ -234,6 +251,7 @@ internal static class WorldReleaseCommand {
             Console.WriteLine($"Rollback: {(record.RollbackEligible ? "eligible" : "unavailable")}");
             Console.WriteLine($"Operation: {record.PendingOperationId?.ToString("D") ?? "none"}");
             Console.WriteLine($"Phase: {record.PendingPhase?.ToString() ?? "idle"}");
+            if (record.RestorePoint is { } point) { Console.WriteLine($"Intentional rewind: {point.PointId:D} ({point.Identity})"); }
             Console.WriteLine($"Protected worlds: {record.RecoveryRoots.Count}; retained operations: {record.History.Count}");
             if (record.PendingFailure is { } failure) { Console.WriteLine($"Failure: {failure}"); }
             Console.WriteLine($"Next: {action}");

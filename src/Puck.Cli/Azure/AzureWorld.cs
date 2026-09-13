@@ -111,7 +111,8 @@ internal static partial class AzureCommand {
                 }
                 worlds.Add(row);
             }
-            silo["release"] = new JsonObject { ["group"] = scaleSet, ["owner"] = owner, ["expectedRelease"] = manifest.Identity };
+            silo["release"] = new JsonObject { ["group"] = scaleSet, ["owner"] = owner, ["expectedRelease"] = manifest.Identity,
+                ["closedGroupRewind"] = true };
             var authentication = configuration["authentication"]!.DeepClone();
 
             foreach (var row in worlds) { row!["federation"]!["authentication"] = authentication.DeepClone(); }
@@ -180,7 +181,7 @@ internal static partial class AzureCommand {
                 await AzAsync("bicep", "build", "--file", "src/Puck.Azure.Resources/worldSiloCompute.bicep", "--outfile", templatePath);
             }
             return new WorldReleaseDeploymentConfiguration(manifest.Identity, scaleSet, parameters,
-                Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()), CliFiles.ReadJson(templatePath).AsObject());
+                Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()), CliFiles.ReadJson(templatePath).AsObject()) { ClosedGroupRewind = true };
         } finally {
             // This freshly generated path is never derived from arguments or deployment documents.
             Directory.Delete(path: temporary, recursive: true);

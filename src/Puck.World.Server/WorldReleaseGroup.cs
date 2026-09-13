@@ -6,6 +6,12 @@ using Puck.Storage;
 
 namespace Puck.World.Server;
 
+/// <summary>The exact coherent checkpoint selected by an explicitly acknowledged intentional rewind.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldReleaseRestoreSelection(
+    [property: JsonPropertyName("pointId")] Guid PointId,
+    [property: JsonPropertyName("identity")] string Identity);
+
 /// <summary>The durable deployment-group state that fences release publication and admission as one decision.</summary>
 public sealed record WorldReleaseGroupRecord {
     [JsonPropertyName("schema")] public required string Schema { get; init; }
@@ -19,6 +25,8 @@ public sealed record WorldReleaseGroupRecord {
     [JsonPropertyName("pendingPhase")] public WorldReleaseOperationPhase? PendingPhase { get; init; }
     [JsonPropertyName("pendingCommitted")] public bool PendingCommitted { get; init; }
     [JsonPropertyName("pendingFailure")] public string? PendingFailure { get; init; }
+    [JsonPropertyName("restorePoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldReleaseRestoreSelection? RestorePoint { get; init; }
     [JsonPropertyName("recoveryRoots")] public IReadOnlyDictionary<string, string> RecoveryRoots { get; init; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
     [JsonPropertyName("admission")] public WorldReleaseAdmissionState Admission { get; init; }
     [JsonPropertyName("rollbackEligible")] public bool RollbackEligible { get; init; }
@@ -42,6 +50,8 @@ public sealed record WorldReleaseGroupHistoryEntry {
     [JsonPropertyName("sourceRelease")] public string? SourceRelease { get; init; }
     [JsonPropertyName("targetRelease")] public required string TargetRelease { get; init; }
     [JsonPropertyName("result")] public required string Result { get; init; }
+    [JsonPropertyName("restorePoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldReleaseRestoreSelection? RestorePoint { get; init; }
     [JsonPropertyName("recoveryRoots")] public IReadOnlyDictionary<string, string> RecoveryRoots { get; init; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
     [JsonPropertyName("revision")] public long Revision { get; init; }
 }
@@ -74,7 +84,7 @@ public static class WorldReleaseFenceClaim {
 /// Persists the single mutable deployment-group root in the existing private object store. This root is the only
 /// authority for active/previous release pointers, pending operation state, and public admission.
 /// </summary>
-public sealed class WorldReleaseGroupStore {
+public sealed partial class WorldReleaseGroupStore {
     public const string Schema = "puck.world.release-group.v1";
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
@@ -169,12 +179,14 @@ public sealed class WorldReleaseGroupStore {
                 SourceRelease = old.PendingSourceRelease!,
                 TargetRelease = old.PendingTargetRelease!,
                 Result = "rollback-started",
+                RestorePoint = old.RestorePoint,
                 RecoveryRoots = old.RecoveryRoots,
                 Revision = checked(old.Revision + 1),
             }).ToArray()
             : old.History;
         var next = old with {
             PendingOperationId = operationId,
+            RestorePoint = null,
             PendingSourceRelease = old.ActiveRelease,
             PendingTargetRelease = old.PreviousRelease,
             PendingPhase = WorldReleaseOperationPhase.Prepare,
@@ -192,7 +204,7 @@ public sealed class WorldReleaseGroupStore {
     public Task<WorldReleaseGroupOutcome> AdvanceAsync(WorldReleaseGroupSnapshot current, WorldReleaseGroupRecord next, CancellationToken cancellationToken = default) {
         Validate(next, current.Record.DeploymentGroup, m_owner);
         var old = current.Record;
-        if (next.Owner != old.Owner || next.DeploymentGroup != old.DeploymentGroup || next.ActiveRelease != old.ActiveRelease || next.PreviousRelease != old.PreviousRelease || next.PendingOperationId != old.PendingOperationId || next.PendingSourceRelease != old.PendingSourceRelease || next.PendingTargetRelease != old.PendingTargetRelease || next.PendingCommitted != old.PendingCommitted || next.PendingFailure != old.PendingFailure || next.RollbackEligible != old.RollbackEligible || next.Revision != old.Revision + 1 || next.AuthorityLease != old.AuthorityLease || !SameHistory(old.History, next.History)) {
+        if (next.RestorePoint != old.RestorePoint || next.Owner != old.Owner || next.DeploymentGroup != old.DeploymentGroup || next.ActiveRelease != old.ActiveRelease || next.PreviousRelease != old.PreviousRelease || next.PendingOperationId != old.PendingOperationId || next.PendingSourceRelease != old.PendingSourceRelease || next.PendingTargetRelease != old.PendingTargetRelease || next.PendingCommitted != old.PendingCommitted || next.PendingFailure != old.PendingFailure || next.RollbackEligible != old.RollbackEligible || next.Revision != old.Revision + 1 || next.AuthorityLease != old.AuthorityLease || !SameHistory(old.History, next.History)) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "deployment-group identity, pointers, history, or revision is immutable"));
         }
         if (!SameRoots(old.RecoveryRoots, next.RecoveryRoots) && !(old.RecoveryRoots.Count == 0 && next.RecoveryRoots.Count > 0 && ((old.PendingPhase == WorldReleaseOperationPhase.Prepare && next.PendingPhase == WorldReleaseOperationPhase.Drain) || (old.PendingPhase == WorldReleaseOperationPhase.Drain && next.PendingPhase == WorldReleaseOperationPhase.Drain) || (old.PendingPhase == WorldReleaseOperationPhase.Drain && next.PendingPhase == WorldReleaseOperationPhase.Activate)))) {
@@ -237,10 +249,11 @@ public sealed class WorldReleaseGroupStore {
         }
         var history = old.History.Append(new WorldReleaseGroupHistoryEntry {
             OperationId = old.PendingOperationId.Value, SourceRelease = old.PendingSourceRelease!, TargetRelease = old.PendingTargetRelease!,
-            Result = $"recovered: {old.PendingFailure ?? "unspecified failure"}", RecoveryRoots = old.RecoveryRoots, Revision = checked(old.Revision + 1)
+            Result = $"recovered: {old.PendingFailure ?? "unspecified failure"}", RecoveryRoots = old.RecoveryRoots,
+            Revision = checked(old.Revision + 1), RestorePoint = old.RestorePoint,
         }).ToArray();
         var rollbackAttempt = old.PreviousRelease is not null && string.Equals(old.PendingTargetRelease, old.PreviousRelease, StringComparison.Ordinal);
-        var next = old with { PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(StringComparer.Ordinal), Admission = sourceAuthorityLease is null ? WorldReleaseAdmissionState.Closed : WorldReleaseAdmissionState.Open, AuthorityLease = sourceAuthorityLease ?? old.AuthorityLease, RollbackEligible = rollbackAttempt, History = history, Revision = checked(old.Revision + 1) };
+        var next = old with { RestorePoint = null, PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(StringComparer.Ordinal), Admission = sourceAuthorityLease is null ? WorldReleaseAdmissionState.Closed : WorldReleaseAdmissionState.Open, AuthorityLease = sourceAuthorityLease ?? old.AuthorityLease, RollbackEligible = old.RestorePoint is not null ? old.RollbackEligible : rollbackAttempt, History = history, Revision = checked(old.Revision + 1) };
         return WriteAsync(current, next, cancellationToken);
     }
 
@@ -251,7 +264,8 @@ public sealed class WorldReleaseGroupStore {
         if (old.PendingOperationId is null || old.PendingPhase is not WorldReleaseOperationPhase.Verify || old.RecoveryRoots.Count == 0 || freshAuthorityLease == Guid.Empty || freshAuthorityLease == old.AuthorityLease) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "commit requires a verified operation, recovery roots, and a fresh group authority lease"));
         }
-        var next = old with { ActiveRelease = old.PendingTargetRelease!, PreviousRelease = old.PendingSourceRelease, PendingPhase = WorldReleaseOperationPhase.Commit, PendingCommitted = true, Admission = WorldReleaseAdmissionState.Closed, RollbackEligible = old.PendingSourceRelease is not null, AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) };
+        var sameReleaseRestore = old.RestorePoint is not null && old.PendingSourceRelease == old.PendingTargetRelease;
+        var next = old with { ActiveRelease = old.PendingTargetRelease!, PreviousRelease = sameReleaseRestore ? old.PreviousRelease : old.PendingSourceRelease, PendingPhase = WorldReleaseOperationPhase.Commit, PendingCommitted = true, Admission = WorldReleaseAdmissionState.Closed, RollbackEligible = sameReleaseRestore ? old.RollbackEligible : old.PendingSourceRelease is not null, AuthorityLease = freshAuthorityLease, Revision = checked(old.Revision + 1) };
         return WriteAsync(current, next, cancellationToken);
     }
 
@@ -304,8 +318,8 @@ public sealed class WorldReleaseGroupStore {
         if (old.PendingOperationId is null || old.PendingPhase != WorldReleaseOperationPhase.Commit || !old.PendingCommitted || old.Admission != WorldReleaseAdmissionState.Open) {
             return Task.FromResult(new WorldReleaseGroupOutcome(WorldReleaseOperationOutcomeKind.Conflict, "only an admitted committed operation can be finalized"));
         }
-        var history = old.History.Append(new WorldReleaseGroupHistoryEntry { OperationId = old.PendingOperationId.Value, SourceRelease = old.PendingSourceRelease!, TargetRelease = old.PendingTargetRelease!, Result = "committed", RecoveryRoots = old.RecoveryRoots, Revision = old.Revision + 1 }).ToArray();
-        var next = old with { PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(StringComparer.Ordinal), RollbackEligible = false, History = history, Revision = checked(old.Revision + 1) };
+        var history = old.History.Append(new WorldReleaseGroupHistoryEntry { OperationId = old.PendingOperationId.Value, SourceRelease = old.PendingSourceRelease!, TargetRelease = old.PendingTargetRelease!, Result = "committed", RecoveryRoots = old.RecoveryRoots, Revision = old.Revision + 1, RestorePoint = old.RestorePoint }).ToArray();
+        var next = old with { RestorePoint = null, PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(StringComparer.Ordinal), RollbackEligible = false, History = history, Revision = checked(old.Revision + 1) };
         return WriteAsync(current, next, cancellationToken);
     }
 
@@ -328,6 +342,7 @@ public sealed class WorldReleaseGroupStore {
     private static bool SameHistory(IReadOnlyList<WorldReleaseGroupHistoryEntry> left, IReadOnlyList<WorldReleaseGroupHistoryEntry> right) =>
         left.Count == right.Count && left.Zip(right).All(pair =>
             pair.First.OperationId == pair.Second.OperationId &&
+            pair.First.RestorePoint == pair.Second.RestorePoint &&
             string.Equals(pair.First.SourceRelease, pair.Second.SourceRelease, StringComparison.Ordinal) &&
             string.Equals(pair.First.TargetRelease, pair.Second.TargetRelease, StringComparison.Ordinal) &&
             string.Equals(pair.First.Result, pair.Second.Result, StringComparison.Ordinal) &&
@@ -351,8 +366,10 @@ public sealed class WorldReleaseGroupStore {
         if (record.Admission == WorldReleaseAdmissionState.Open && record.PendingOperationId is not null && record.PendingPhase is not WorldReleaseOperationPhase.Prepare && (record.PendingPhase != WorldReleaseOperationPhase.Commit || !record.PendingCommitted)) { throw new InvalidDataException("open admission requires prepare or a committed pending operation"); }
         if (record.PendingOperationId is null && (record.PendingSourceRelease is not null || record.PendingTargetRelease is not null || record.PendingPhase is not null || record.PendingCommitted || record.RecoveryRoots.Count != 0)) { throw new InvalidDataException("pending operation fields are incomplete"); }
         if (record.PendingOperationId is null && record.PendingFailure is not null) { throw new InvalidDataException("a pending failure requires a pending operation"); }
-        if (record.PendingOperationId is not null && (record.PendingOperationId == Guid.Empty || string.IsNullOrWhiteSpace(record.PendingTargetRelease) || record.PendingPhase is null || !Enum.IsDefined(record.PendingPhase.Value) || (record.PendingSourceRelease is not null && record.PendingSourceRelease == record.PendingTargetRelease))) { throw new InvalidDataException("pending operation identity is incomplete"); }
-        if (record.PendingOperationId is not null && record.PendingSourceRelease != (record.PendingCommitted ? record.PreviousRelease : record.ActiveRelease)) { throw new InvalidDataException("pending source must match the durable release pointers"); }
+        if (record.RestorePoint is { } point && (record.PendingOperationId is null || point.PointId == Guid.Empty || !WorldAuthorityRecoveryRootCodec.IsPin(point.Identity))) { throw new InvalidDataException("restore selection requires an exact point and pending operation"); }
+        if (record.PendingOperationId is not null && (record.PendingOperationId == Guid.Empty || string.IsNullOrWhiteSpace(record.PendingTargetRelease) || record.PendingPhase is null || !Enum.IsDefined(record.PendingPhase.Value) || (record.RestorePoint is null && record.PendingSourceRelease is not null && record.PendingSourceRelease == record.PendingTargetRelease))) { throw new InvalidDataException("pending operation identity is incomplete"); }
+        var sameReleaseRestore = record.RestorePoint is not null && record.PendingSourceRelease == record.PendingTargetRelease;
+        if (record.PendingOperationId is not null && record.PendingSourceRelease != (record.PendingCommitted && !sameReleaseRestore ? record.PreviousRelease : record.ActiveRelease)) { throw new InvalidDataException("pending source must match the durable release pointers"); }
         if (record.RollbackEligible && record.PreviousRelease is null) { throw new InvalidDataException("rollback eligibility requires a retained predecessor"); }
         if (record.PendingOperationId is not null && (record.PendingPhase == WorldReleaseOperationPhase.Commit) != record.PendingCommitted) { throw new InvalidDataException("only a committed phase may carry the commit marker"); }
         if (record.PendingPhase is WorldReleaseOperationPhase.Recover or WorldReleaseOperationPhase.RecoverActivate && string.IsNullOrWhiteSpace(record.PendingFailure)) { throw new InvalidDataException("recover phase requires a durable failure reason"); }
@@ -366,7 +383,9 @@ public sealed class WorldReleaseGroupStore {
         if (document.RootElement.ValueKind != JsonValueKind.Object) { throw new InvalidDataException("release group record must be an object"); }
         var allowed = new HashSet<string>(StringComparer.Ordinal) { "schema", "deploymentGroup", "owner", "activeRelease", "previousRelease", "pendingOperationId", "pendingSourceRelease", "pendingTargetRelease", "pendingPhase", "pendingCommitted", "pendingFailure", "recoveryRoots", "admission", "rollbackEligible", "authorityLease", "history", "revision" };
         var required = new HashSet<string>(allowed, StringComparer.Ordinal);
-        foreach (var property in document.RootElement.EnumerateObject()) { if (!allowed.Contains(property.Name)) { throw new InvalidDataException($"release group record contains unknown member '{property.Name}'"); } if (!required.Remove(property.Name)) { throw new InvalidDataException($"release group record contains duplicate member '{property.Name}'"); } }
+        allowed.Add("restorePoint");
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in document.RootElement.EnumerateObject()) { if (!allowed.Contains(property.Name)) { throw new InvalidDataException($"release group record contains unknown member '{property.Name}'"); } if (!seen.Add(property.Name)) { throw new InvalidDataException($"release group record contains duplicate member '{property.Name}'"); } required.Remove(property.Name); }
         if (required.Count != 0) { throw new InvalidDataException($"release group record is missing required member(s): {string.Join(", ", required.Order(StringComparer.Ordinal))}"); }
         var pendingPhase = document.RootElement.GetProperty("pendingPhase");
         if ((pendingPhase.ValueKind != JsonValueKind.Null && !IsDefinedEnum<WorldReleaseOperationPhase>(pendingPhase)) ||
@@ -374,13 +393,28 @@ public sealed class WorldReleaseGroupStore {
             document.RootElement.GetProperty("recoveryRoots").ValueKind != JsonValueKind.Object ||
             document.RootElement.GetProperty("history").ValueKind != JsonValueKind.Array) { throw new InvalidDataException("release group record has invalid field types"); }
         ValidateMapObject(document.RootElement.GetProperty("recoveryRoots"), "release recovery roots");
+        ValidateRestoreSelectionJson(document.RootElement);
         foreach (var entry in document.RootElement.GetProperty("history").EnumerateArray()) {
             if (entry.ValueKind != JsonValueKind.Object) { throw new InvalidDataException("release history entry must be an object"); }
             var historyAllowed = new HashSet<string>(StringComparer.Ordinal) { "operationId", "sourceRelease", "targetRelease", "result", "recoveryRoots", "revision" };
             var historyRequired = new HashSet<string>(historyAllowed, StringComparer.Ordinal);
-            foreach (var property in entry.EnumerateObject()) { if (!historyAllowed.Contains(property.Name) || !historyRequired.Remove(property.Name)) { throw new InvalidDataException("release history contains an unknown or duplicate member"); } }
+            historyAllowed.Add("restorePoint");
+            var historySeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in entry.EnumerateObject()) { if (!historyAllowed.Contains(property.Name) || !historySeen.Add(property.Name)) { throw new InvalidDataException("release history contains an unknown or duplicate member"); } historyRequired.Remove(property.Name); }
             if (historyRequired.Count != 0 || entry.GetProperty("recoveryRoots").ValueKind != JsonValueKind.Object) { throw new InvalidDataException("release history is missing recovery roots"); }
             ValidateMapObject(entry.GetProperty("recoveryRoots"), "release history recovery roots");
+            ValidateRestoreSelectionJson(entry);
+        }
+    }
+    private static void ValidateRestoreSelectionJson(JsonElement parent) {
+        if (!parent.TryGetProperty("restorePoint", out var selection)) { return; }
+        if (selection.ValueKind != JsonValueKind.Object) { throw new InvalidDataException("restore point must be an object"); }
+        var fields = selection.EnumerateObject().Select(row => row.Name).ToArray();
+        if (fields.Length != 2 || !fields.ToHashSet(StringComparer.Ordinal).SetEquals(["pointId", "identity"]) ||
+            !selection.GetProperty("pointId").TryGetGuid(out var id) || id == Guid.Empty ||
+            selection.GetProperty("identity").ValueKind != JsonValueKind.String ||
+            !WorldAuthorityRecoveryRootCodec.IsPin(selection.GetProperty("identity").GetString())) {
+            throw new InvalidDataException("restore point requires a unique point ID and full identity pin");
         }
     }
     private static void ValidateMapObject(JsonElement element, string description) {

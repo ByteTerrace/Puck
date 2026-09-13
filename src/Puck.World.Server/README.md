@@ -110,18 +110,32 @@ transition policy requires a metadata-aware coordinator for changed definitions;
 the packaged runner must qualify their actual preservation rule in both directions.
 Managed silo admission consumes the
 group root and fences its explicit publication barrier. The CLI's Azure adapter
-uses this coordinator for deployment and rollback; explicit restore remains pending.
+uses this coordinator for deployment, rollback, and explicit group restore.
+The restore implementation is undergoing local acceptance; cloud acceptance is
+still outstanding.
 
-New packages include `coordinatorContract: puck.world.release.receipts.v1` in
+New packages include `coordinatorContract: puck.world.release.restore.v1` in
 their canonical identity. Existing manifests without that member retain their
 identities. Metadata publication requires the member on at least one side of the
 pair, protecting rollback to an older manifest as well as forward deployment.
-The current contract requires receipt-aware packaged qualification and includes
-the metadata publication requirement. Existing `puck.world.release.metadata.v1`
+The current contract adds closed-group rewind to receipt-aware packaged
+qualification and metadata publication. Existing receipt and metadata contract
 manifests remain readable. Older archive readers reject the unknown member or
 contract before runtime effects;
 new readers reject unknown coordinator contracts by name. The previous-reader
 control is in `WorldReleaseCoordinatorContractLawTests`.
+
+`WorldReleaseRestore` inspects a complete retained point before starting an
+explicitly acknowledged rewind. `WorldReleaseRewindBoundary` pins the enforced
+policy and group inventory in each authority root. Hosting cannot reopen those
+roots without the same closed group. A recovery point keeps its capture time,
+full checkpoints, and receipt provenance; a legacy qualification export has no
+rewind proof. Restore first protects current state, then publishes the selected
+checkpoints privately. Current operation receipts, journal numbering, and fresh
+writer generations survive the rewind. Pre-commit failure follows the ordinary
+protected-source recovery path; post-commit resume never reapplies the point.
+Disposal of local forwarding arms after retirement releases process resources
+without changing the frozen destination or throwing a stale-authority error.
 
 `WorldReleaseMetadataTransition` supplies the first isolated preservation rule:
 merge only the published author-metadata delta into the checkpoint's live definition

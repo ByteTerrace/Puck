@@ -10,10 +10,16 @@ public sealed class WorldPeerNetwork : IDisposable {
     private readonly Lazy<Peer> m_peer;
     private readonly Lock m_gate = new();
     private bool m_disposed;
+    private readonly bool m_allowOutbound;
 
     /// <summary>Creates a lazily initialized network owner.</summary>
     /// <param name="identityFile">A PKCS8 peer identity file to load or create; null creates an ephemeral identity.</param>
-    public WorldPeerNetwork(string? identityFile = null) => m_peer = new(() => CreatePeer(identityFile));
+    /// <param name="allowOutbound">Whether this authority may initiate remote streams. A closed rewind group
+    /// keeps its player listener but refuses outbound authority connections.</param>
+    public WorldPeerNetwork(string? identityFile = null, bool allowOutbound = true) {
+        m_allowOutbound = allowOutbound;
+        m_peer = new(() => CreatePeer(identityFile));
+    }
 
     /// <summary>Gets the process or hosted authority's shared peer. The owner, not its consumers, disposes it.</summary>
     public Peer Peer {
@@ -43,8 +49,10 @@ public sealed class WorldPeerNetwork : IDisposable {
     /// <param name="endpoint">The remote QUIC endpoint.</param>
     /// <param name="ct">The connection deadline or cancellation.</param>
     /// <returns>A stream owning its peer link.</returns>
-    public async ValueTask<Stream> ConnectAsync(EndPoint endpoint, CancellationToken ct) =>
-        new PeerStream(await Peer.DialAsync(endpoint, ct).ConfigureAwait(false));
+    public async ValueTask<Stream> ConnectAsync(EndPoint endpoint, CancellationToken ct) {
+        if (!m_allowOutbound) { throw new InvalidOperationException("closed rewind group refuses outbound federation"); }
+        return new PeerStream(await Peer.DialAsync(endpoint, ct).ConfigureAwait(false));
+    }
 
     /// <inheritdoc/>
     public void Dispose() {

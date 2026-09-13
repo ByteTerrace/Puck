@@ -583,8 +583,8 @@ objects are uploaded before their inventory; the CLI materializes an isolated
 store with exact checkpoints and test signing keys. Bootstrap uses an empty
 fixture built from the package. The source's uncapturable state refuses deployment.
 
-The integration still needs explicit restore and cloud interruption acceptance
-tests. Do not treat a successful local qualification
+Explicit restore is implemented and undergoing local acceptance. Cloud interruption
+acceptance is still outstanding. Do not treat a successful local qualification
 control as production readiness. Command syntax and fixture requirements live in
 the [CLI reference](../../src/Puck.Cli/README.md#automation-commands).
 
@@ -592,7 +592,7 @@ the [CLI reference](../../src/Puck.Cli/README.md#automation-commands).
 
 Run these commands from the repository root with the deployment outputs for the
 intended group and its Azure credentials. Use a CLI supporting the package's
-coordinator contract; new packages require `puck.world.release.receipts.v1`.
+coordinator contract; new packages require `puck.world.release.restore.v1`.
 Keep the deployment outputs and retained artifact/configuration references
 available to the next operator. Do not delete the previous image or protected
 recovery objects while accepting a release.
@@ -648,6 +648,18 @@ The normal maintenance sequence is:
    next deployment. Finalization closes ordinary rollback eligibility; it does
    not delete retained history or rewind the world.
 
+Intentional rewind uses a retained group recovery point. Run `puck world release
+checkpoint` while the closed group is serving and retain its printed request ID.
+Run `puck world release restore <request-id>` to inspect the saved release, capture
+time and per-world ticks. Repeat with `--discard-progress` only when that entire
+group's later progress should be discarded. Restore protects the current state
+before replacing gameplay, preserves current request receipts, and advances writer
+generations. A point without durable boundary proof refuses. Internal transfers
+are restored with both worlds; external federation is disabled while this closed
+rewind policy is in force. A release that cannot enforce the policy cannot become
+its rollback target. Capture cadence is operator-controlled; this command does
+not manufacture historical points that were never captured.
+
 After a disconnect, cancellation, failed command or controller restart, start
 with `puck world release status`. A failed command or lost response does not tell
 you whether commit happened. A release-command failure returns 1 and cancellation
@@ -666,9 +678,10 @@ action with `puck world release resume`:
 If resume refuses, retain its diagnostic and operation ID, correct the named
 missing input or service failure, and resume the same operation. Do not choose
 another image, replace authority pointers, clear the group record, or run a
-second deployment to bypass maintenance. Intentional rewind is not exposed by
-the current CLI; the [release plan](../plans/world-release-management.md#federation-restore-and-retention)
-records the external-effect proof required before that operation can be supported.
+second deployment to bypass maintenance. Intentional rewind uses the separate
+`puck world release restore <point-id>` preview and explicit `--discard-progress`
+acknowledgement. Only a complete point captured under the enforced closed-group
+boundary is eligible; resume never selects an older point on its own.
 
 ### Hosted worker runtime
 

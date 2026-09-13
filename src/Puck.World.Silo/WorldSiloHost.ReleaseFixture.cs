@@ -5,7 +5,8 @@ namespace Puck.World.Silo;
 public sealed partial class WorldSiloHost {
     private sealed record ReleaseFixtureCapture(WorldAuthorityIdentity Identity, byte[] Checkpoint, ulong Tick, Task<WorldAuthorityRootSnapshot> Root);
     /// <summary>Captures every managed row at one pump boundary and retains an immutable qualification fixture.
-    /// Gameplay and authoritative roots remain unchanged. Repeating a completed request reuses its exact capture.</summary>
+    /// Gameplay remains unchanged. The first rewindable capture records its enforced boundary in the roots;
+    /// repeating a completed request reuses its exact capture.</summary>
     /// <param name="requestId">Stable identity for retrying a lost export response.</param>
     /// <param name="cancellationToken">Cancels capture or upload; an incomplete upload cannot be loaded as a fixture.</param>
     /// <returns>The retained inventory, including the full digest to verify after download.</returns>
@@ -19,6 +20,7 @@ public sealed partial class WorldSiloHost {
             return retained;
         }
         var capture = new TaskCompletionSource<IReadOnlyDictionary<string, ReleaseFixtureCapture>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        DateTimeOffset? capturedAt = null;
         m_mailbox.Enqueue(() => {
             try {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -26,6 +28,10 @@ public sealed partial class WorldSiloHost {
                     throw new InvalidOperationException("fixture export requires the complete admitted, non-retiring inventory");
                 }
                 var rows = new SortedDictionary<string, ReleaseFixtureCapture>(StringComparer.Ordinal);
+                if (ClosedGroupRewind && !Instances.Names.ToHashSet(StringComparer.Ordinal).SetEquals(m_definition.Worlds.Select(row => row.World.Value))) {
+                    throw new InvalidOperationException("rewind capture requires exactly the declared world inventory");
+                }
+                capturedAt = DateTimeOffset.UtcNow;
                 foreach (var declared in m_definition.Worlds) {
                     if (declared.Owner != managed.Owner || !m_rows.TryGetValue(declared.World.Value, out var bookkeeping) ||
                         bookkeeping.Initializing || bookkeeping.Released || bookkeeping.PersistenceBlocked ||
@@ -34,6 +40,10 @@ public sealed partial class WorldSiloHost {
                     }
                     if (!TryCaptureRow(row, out var bytes, out var reason, out var tick)) {
                         throw new InvalidOperationException($"fixture capture refused for '{declared.World}': {reason}");
+                    }
+                    if (ClosedGroupRewind) {
+                        if (!WorldAuthorityCheckpointCodec.TryDecode(bytes, out var checkpoint, out reason)) { throw new InvalidDataException(reason); }
+                        WorldReleaseRewindBoundary.RequireContained(checkpoint!, ContainsRewindAuthority);
                     }
                     var identity = new WorldAuthorityIdentity(declared.Owner, declared.World);
                     // Insert the root read behind this capture's preceding publications and ahead of all later
@@ -56,7 +66,8 @@ public sealed partial class WorldSiloHost {
         }
         _ = await CaptureReleaseFencesAsync(cancellationToken).ConfigureAwait(false);
         await RequireFixtureSourceAsync(cancellationToken).ConfigureAwait(false);
-        var published = await archive.SaveAsync(requestId, managed.Group, managed.ExpectedRelease, m_machineId, captured, cancellationToken).ConfigureAwait(false);
+        var published = await archive.SaveAsync(requestId, managed.Group, managed.ExpectedRelease, m_machineId, captured, cancellationToken,
+            ClosedGroupRewind ? RewindBoundary : null, ClosedGroupRewind ? capturedAt : null).ConfigureAwait(false);
         await RequireFixtureSourceAsync(cancellationToken).ConfigureAwait(false);
         return published;
     }
@@ -70,7 +81,10 @@ public sealed partial class WorldSiloHost {
             root.Root.JournalSequence != bookkeeping.PublishedJournalSequence) {
             throw new InvalidOperationException("fixture capture lost its authority or publication boundary");
         }
-        return root;
+        return ClosedGroupRewind
+            ? await new WorldAuthorityBlobStore(m_blobStore, m_storageTarget).EstablishRewindBoundaryAsync(identity,
+                bookkeeping.Fence, RewindBoundary, token).ConfigureAwait(false)
+            : root;
     }
 
     private static async Task ObserveFixtureReadAsync(Task selected) {

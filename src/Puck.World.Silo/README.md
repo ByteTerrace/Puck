@@ -70,6 +70,16 @@ release admission. Health also checks ongoing simulation
 progress, checkpoint age, journal failures and backlog, and pending release saves.
 `GET /livez` checks simulation progress independently of storage health, so a
 storage outage does not trigger VM replacement. Both refuse during retirement.
+`release.closedGroupRewind` enforces a fixed inventory of pinned worlds under the
+group owner. Internal transfers remain available; remote transfers, outbound
+federation connections, and issued federation claims are refused. The selected
+player-authentication extension still accepts ordinary player connections.
+The first coherent capture records a durable boundary pin in every root. Later
+activations must enforce that same boundary. `ExportReleaseFixtureAsync` then
+retains a rewindable point with a capture time and complete receipt provenance.
+`ApplyRestorePointAsync` checks the captured group and machine identity before
+applying an explicit restore during private activation.
+
 Managed documents may add `release` with a deployment `group`, its private-store
 `owner`, and an exact `expectedRelease`. Such a host restores candidates behind
 the durable group barrier: route registration, listeners, console sessions,

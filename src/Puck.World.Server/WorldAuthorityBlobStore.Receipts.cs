@@ -42,6 +42,8 @@ public sealed partial class WorldAuthorityBlobStore {
         var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(checkpointBytes);
         var ordinal = checked(detached.Source.Root.CheckpointOrdinal + 1);
         var root = detached.Source.Root with {
+            // Qualification is an isolated copy with disposable authority identities, not a live rewind point.
+            RewindBoundary = null,
             Epoch = checked(detached.Source.Root.Epoch + 1), FenceToken = Guid.Empty, Sequence = checked(detached.Source.Root.Sequence + 1),
             CheckpointHash = checkpointHash, CheckpointOrdinal = ordinal, CheckpointTick = tick,
             JournalHash = null, JournalEntryCount = 0, CheckpointCoverageSequence = detached.Source.Root.JournalSequence,
