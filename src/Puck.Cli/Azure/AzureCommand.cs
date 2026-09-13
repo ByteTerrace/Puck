@@ -37,8 +37,14 @@ internal static partial class AzureCommand {
         var deployWorldMcp = new Command(description: "Plan and deploy the world MCP policy against the deployed platform.", name: "deploy-world-mcp") {
             resourceGroupOption, new Option<bool>(name: "--plan-only") { Description = "Stop after the what-if plan." },
         };
-        var deployWorld = new Command(description: "Deploy the primary world transactionally: snapshot persistence, roll the worker, verify, and roll back on failure.", name: "deploy-world") {
+        var prepareWorldRelease = new Command("prepare-world-release", "Bind official endpoints and pin the complete composed world inventory before deployment.") {
+            new Option<string>("--output-directory") { DefaultValueFactory = _ => "artifacts/world-release" },
+        };
+        var deployWorld = new Command(description: "Qualify and deploy the retained world package through the durable maintenance transaction.", name: "deploy-world") {
             new Option<string?>(name: "--resource-group") { Description = "The resource group; defaults to the deployment output." },
+            new Option<string>("--package") { DefaultValueFactory = _ => "artifacts/world-release", Description = "Prepared immutable release package." },
+            new Option<string>("--fixture") { DefaultValueFactory = _ => "artifacts/world-release-fixture", Description = "Coherent offline qualification fixture." },
+            new Option<Guid?>("--operation") { Description = "Optional stable operation ID; repeating the same target resumes its pending operation." },
         };
         var publishStatic = new Command(description: "Publish official content and the website from the bundle.", name: "publish-static") {
             new Option<string>(name: "--bundle-directory") { DefaultValueFactory = _ => "artifacts/azure", Description = "The verified bundle." },
@@ -79,7 +85,7 @@ internal static partial class AzureCommand {
         var stageWorldImage = new Command(description: "Publish the world image and stage its worlds for a deployment; the registry name comes from artifacts/production-parameters.json (build-infrastructure).", name: "stage-world-image") { commitOption };
         var current = new Command(description: "Set the deploy output to whether GITHUB_SHA is still the tip of GITHUB_REF.", name: "current");
         var command = new Command(description: "Build, deploy, publish, and verify Puck's Azure production.", name: "azure") {
-            build, buildInfrastructure, deployInfrastructure, deployApplications, deployWorldPlatform, deployWorldMcp, deployWorld, publishStatic, publishTemplateSpecs, publishContainer,
+            build, buildInfrastructure, deployInfrastructure, deployApplications, deployWorldPlatform, deployWorldMcp, prepareWorldRelease, deployWorld, publishStatic, publishTemplateSpecs, publishContainer,
             functionsAccess, vaultAccess, testProduction, testWorldContainer, testWorldRelease, testWorldMcp, buildActors, stageWorldImage, current,
         };
 
@@ -89,7 +95,13 @@ internal static partial class AzureCommand {
         deployApplications.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployApplicationsAsync(artifacts: parseResult.GetRequiredValue<string>(name: "--artifacts-directory"), commit: parseResult.GetRequiredValue(option: commitOption), group: parseResult.GetRequiredValue(option: resourceGroupOption))));
         deployWorldPlatform.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployWorldPlatformAsync(group: parseResult.GetRequiredValue(option: resourceGroupOption))));
         deployWorldMcp.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployWorldMcpAsync(group: parseResult.GetRequiredValue(option: resourceGroupOption), planOnly: parseResult.GetValue<bool>(name: "--plan-only"))));
-        deployWorld.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployWorldAsync(group: parseResult.GetValue<string?>(name: "--resource-group"))));
+        prepareWorldRelease.SetAction((parse, _) => RunAsync(() => {
+            PrepareOfficialWorldRelease(parse.GetValue<string>("--output-directory")!);
+            return Task.CompletedTask;
+        }));
+        deployWorld.SetAction(action: (parseResult, token) => RunAsync(action: () => DeployWorldAsync(
+            group: parseResult.GetValue<string?>(name: "--resource-group"), package: parseResult.GetValue<string>("--package")!,
+            fixture: parseResult.GetValue<string>("--fixture")!, operation: parseResult.GetValue<Guid?>("--operation"), token: token)));
         publishStatic.SetAction(action: (parseResult, _) => RunAsync(action: () => PublishStaticAsync(bundle: parseResult.GetRequiredValue<string>(name: "--bundle-directory"))));
         publishTemplateSpecs.SetAction(action: (_, _) => RunAsync(action: PublishTemplateSpecsAsync));
         publishContainer.SetAction(action: (parseResult, _) => RunAsync(action: () => PublishContainerAsync(archive: (parseResult.GetValue<string?>(name: "--archive") ?? ""), commit: parseResult.GetRequiredValue(option: commitOption), output: (parseResult.GetValue<string?>(name: "--output-file") ?? ""), registry: parseResult.GetRequiredValue<string>(name: "--registry"), repository: parseResult.GetRequiredValue<string>(name: "--repository"))));

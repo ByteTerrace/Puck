@@ -7,8 +7,12 @@ and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.
 
 The release laws cover immutable deployment configuration references, exclusive
-controller ownership, bootstrap refusal over existing gameplay, and cancellation
-of an owned child process. `WorldReleaseAzureLeaseTests` uses the actual Azure
+controller ownership, complete official package preparation, registry retention
+readback, bootstrap refusal over existing gameplay, and cancellation of an owned
+child process. `WorldReleaseGuestGuardTests` checks the Python guest guard against
+the C# durable group wire format, including stale operations and recovery roles.
+It requires Python 3 on PATH, or `PUCK_TEST_PYTHON` naming the executable.
+`WorldReleaseAzureLeaseTests` uses the actual Azure
 SDK against an isolated local Azurite container. Load
 `mcr.microsoft.com/azure-storage/azurite:3.35.0` and start Docker to run that law;
 it reports an asset-gated skip when the image or Docker is unavailable. It does

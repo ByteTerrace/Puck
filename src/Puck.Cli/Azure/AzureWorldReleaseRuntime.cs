@@ -16,7 +16,7 @@ internal static partial class AzureCommand {
 
     /// <summary>Runs the shared release transaction against the existing single-worker VMSS and private store.</summary>
     private sealed class AzureWorldReleaseRuntime(
-        string resourceGroup, string scaleSet, string temporary,
+        string resourceGroup, string scaleSet, string temporary, string endpoint, string clientId,
         WorldReleaseGroupStore groups, WorldAuthorityBlobStore authority,
         AzureWorldReleaseDeployment? source, AzureWorldReleaseDeployment target,
         Func<CancellationToken, Task> initializeBootstrap) : IWorldReleaseRuntime {
@@ -54,7 +54,8 @@ internal static partial class AzureCommand {
                     roots = retained;
                 } else {
                     if (worker is null) { throw new InvalidOperationException("source disappeared before its complete drain roots were retained"); }
-                    var response = await RequestAsync(worker, source, "POST", $"/release/drain/{operation.PendingOperationId:D}").ConfigureAwait(false);
+                    var response = await RequestAsync(worker, source, "POST", $"/release/drain/{operation.PendingOperationId:D}",
+                        await GuestGuardAsync(operation, [WorldReleaseOperationPhase.Drain], cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
                     roots = response.Deserialize<Dictionary<string, string>>(Json) ?? throw new InvalidDataException("source drain returned no protected roots");
                 }
                 ValidateRoots(roots);
@@ -65,7 +66,9 @@ internal static partial class AzureCommand {
                     if (process["image"]?.GetValue<string>() is { } image && image != source.Image) {
                         throw new InvalidOperationException("source drain found an unknown image; refusing to stop another deployment");
                     }
-                    await WorldGuestAsync(resourceGroup, "systemctl stop puck-world.service", worker).ConfigureAwait(false);
+                    await WorldGuestAsync(resourceGroup,
+                        await GuestGuardAsync(operation, [WorldReleaseOperationPhase.Drain], cancellationToken).ConfigureAwait(false) +
+                        "systemctl stop puck-world.service", worker).ConfigureAwait(false);
                 }
             }
             return new(true, "source drained and protected roots retained", roots);
@@ -89,7 +92,9 @@ internal static partial class AzureCommand {
                     throw new InvalidOperationException("the worker contains an unknown image; refusing to stop another deployment");
                 }
                 // A failed private candidate may be unable to checkpoint. Its protected source roots are already durable.
-                await WorldGuestAsync(resourceGroup, "systemctl stop puck-world.service || true\nif docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world; fi", worker).ConfigureAwait(false);
+                await WorldGuestAsync(resourceGroup,
+                    await GuestGuardAsync(operation, [WorldReleaseOperationPhase.Recover], cancellationToken).ConfigureAwait(false) +
+                    "systemctl stop puck-world.service || true\nif docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world; fi", worker).ConfigureAwait(false);
             }
             return new(true, "private worker stopped");
         }
@@ -144,7 +149,8 @@ internal static partial class AzureCommand {
 
         private async Task<WorldReleaseRuntimePublication> PublishAsync(WorldReleaseGroupRecord operation, AzureWorldReleaseDeployment deployment, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) {
             await RequireAsync(operation, [phase], cancellationToken).ConfigureAwait(false);
-            var response = await RequestAsync(await WorkerAsync().ConfigureAwait(false), deployment, "POST", $"/release/publish/{operation.PendingOperationId:D}").ConfigureAwait(false);
+            var response = await RequestAsync(await WorkerAsync().ConfigureAwait(false), deployment, "POST", $"/release/publish/{operation.PendingOperationId:D}",
+                await GuestGuardAsync(operation, [phase], cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
             var published = response.Deserialize<WorldReleaseWorkerStatus>(Json);
             return published is { AdmissionOpen: true } && published.Group == scaleSet && published.Release == deployment.Manifest.Identity && published.OperationId == operation.PendingOperationId
                 ? WorldReleaseRuntimePublication.Opened : WorldReleaseRuntimePublication.Refused;
@@ -183,8 +189,18 @@ internal static partial class AzureCommand {
             await WorldGuestAsync(resourceGroup, $"curl --fail --silent --show-error --max-time 30 http://127.0.0.1:{deployment.HealthPort}/private-healthz", worker).ConfigureAwait(false);
         }
 
-        private Task<JsonNode> RequestAsync(string worker, AzureWorldReleaseDeployment deployment, string method, string path) =>
-            WorldGuestJsonAsync(resourceGroup, $"curl --fail --silent --show-error --max-time {deployment.ShutdownSeconds} -X {method} http://127.0.0.1:{deployment.HealthPort}{path}", worker);
+        private Task<JsonNode> RequestAsync(string worker, AzureWorldReleaseDeployment deployment, string method, string path, string guard = "") =>
+            WorldGuestJsonAsync(resourceGroup, guard + $"curl --fail --silent --show-error --max-time {deployment.ShutdownSeconds} -X {method} http://127.0.0.1:{deployment.HealthPort}{path}", worker);
+
+        private async Task<string> GuestGuardAsync(WorldReleaseGroupRecord operation, WorldReleaseOperationPhase[] phases, CancellationToken token) {
+            await RequireAsync(operation, phases, token).ConfigureAwait(false);
+            var request = new JsonObject {
+                ["endpoint"] = endpoint, ["owner"] = operation.Owner.ToString("D"), ["group"] = scaleSet, ["clientId"] = clientId,
+                ["operation"] = operation.PendingOperationId!.Value.ToString("D"), ["source"] = operation.PendingSourceRelease,
+                ["target"] = operation.PendingTargetRelease, ["phases"] = new JsonArray(phases.Select(phase => JsonValue.Create((int)phase)).ToArray()),
+            };
+            return WorldReleaseGuestLock + WorldReleaseGuestGuard(request) + "\n";
+        }
 
         private Task<JsonNode> InspectAsync(string worker) => WorldGuestJsonAsync(resourceGroup,
             "if docker inspect puck-world >/dev/null 2>&1; then docker inspect --format '{\"image\":{{json .Config.Image}},\"running\":{{.State.Running}}}' puck-world; else printf '%s' '{\"image\":null,\"running\":false}'; fi", worker);

@@ -555,21 +555,30 @@ source; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
 `puck azure deploy-world` templates) remains separate because it must run before
 Docker and the runtime are ready.
 `puck azure deploy-world-platform` creates the
-runtime identity and its scoped grants. `puck azure deploy-world` publishes composed
-world definitions, deploys the VMSS model and applies it to existing workers.
-The VM extension pulls the immutable image before declaring the release ready.
-The existing process must finish its drain before published content or configuration
-is replaced. Deployment records the current versions of hosted definitions,
-checkpoint pointers, journals, and release markers in `world-rollback.json`.
-After verification, the protected `PuckWorldReleaseState` vault secret retains
-the successful image and compute parameters. A failed subsequent release stops
-the candidate, restores the recorded blob versions and previous parameters,
-and checks the previous public QUIC endpoint. Immutable checkpoint objects remain
-addressed by their content hashes. Blob versioning must be enabled before release.
-An existing worker without a recorded successful release requires operator
-adoption or a drained replacement before this transaction can run.
-A failed first deployment restores pre-release persistence and returns the
-scale set to zero, allowing a clean retry.
+runtime identity and its scoped grants. `puck azure prepare-world-release` binds
+the official endpoint and admission policy before hashing every composed world.
+`puck azure deploy-world` verifies this package and retains exact files, versioned
+Key Vault deployment inputs, and the compiled compute template. It protects the
+source and target ACR manifests from writes and deletion, checks their readability,
+and pulls both digests for qualification using temporary Docker credentials.
+Registry administrators can still change those protection settings; retention
+must remain part of the operator's storage policy.
+
+Deployment now enters the durable maintenance coordinator. The source freezes
+and saves protected roots before its service stops. The candidate starts with
+admission closed, and the VM extension waits for private health. The coordinator
+verifies its identity and ownership before committing and opening admission.
+Pre-commit recovery restores only that operation's protected source roots and
+then restarts the retained source. The removed blob-version rewind path is not
+an alternative rollback mechanism. An unmanaged worker or existing gameplay
+cannot be silently adopted as an empty bootstrap.
+
+This integration remains incomplete: deploy requires a caller-supplied coherent
+offline fixture, and the Release Azure pipeline does not yet prepare and export
+all managed inputs. Operator rollback, explicit restore, and cloud interruption
+acceptance tests remain outstanding. Do not treat a successful local qualification
+control as production readiness. Command syntax and fixture requirements live in
+the [CLI reference](../../src/Puck.Cli/README.md#automation-commands).
 
 For a managed release group, `puck world release status` reads the group directly
 from the world owner's private store, using the existing deployment outputs and
@@ -577,11 +586,17 @@ Azure credentials. The group name is the configured world silo name. It reports
 release identities, admission, the pending phase, recovery scope, and the next
 operator action. `--json` includes the full record; an optional group-file argument
 allows offline inspection. An older deployment without a managed group returns
-an explicit refusal. This status command does not convert the deployment or
-replace the Azure rollout transaction described above.
+an explicit refusal. This status command does not adopt an unmanaged deployment.
+`puck world release resume` continues the pending operation with retained image,
+configuration and template versions. Deploy, resume and finalization hold a
+renewable controller lease. Guest mutations and bootstrap additionally take the
+same VM lock and recheck the operation before acting, rejecting delayed jobs from
+an obsolete phase or release. Azure operations already accepted by the service
+still require cloud recovery verification; local cancellation cannot retract them.
 
-`puck world prepare` packages Puck and its referenced neighbours. Only Puck is
-pinned; Orleans membership is explicitly local. Checkpoints and journals live in
+`puck world prepare` packages Puck and its referenced neighbours. Official release
+preparation pins the complete inventory, with a distinct retained signing key for
+each world and a matching door budget. Orleans membership is explicitly local. Checkpoints and journals live in
 Azure Blob Storage. The lifecycle extension monitors Azure Scheduled Events
 outside simulation. Its drain freezes all rows at one pump boundary, closes
 ingress, waits for outstanding persistence, and writes final checkpoints. The
@@ -592,7 +607,7 @@ emits a Scheduled Event with a [15-minute notice window](https://learn.microsoft
 The world drains when notified, so it remains unavailable while Azure waits to
 reboot the VM. Allow that window before evaluating reboot recovery.
 
-After checkpoint recovery, changed published content passes
+In an unmanaged silo, after checkpoint recovery, changed published content passes
 through the existing world hot-reload submission. The release marker advances
 only after the rebuilt world is checkpointed. An unchanged marker preserves the
 recovered state; a failed checkpoint can be retried without applying the rebuild
@@ -618,7 +633,9 @@ Its name, email receivers, and pet-name tags are authored in
 groups can be supplied through `monitoring.actionGroupResourceIds`.
 The nonroot container has a read-only root filesystem, writable state mount,
 bounded temporary filesystem, no Linux capabilities, and rotating local logs.
-Image cleanup retains the running release and one previous unused release.
+Bootstrap does not prune local world images. Registry retention owns the exact
+active and previous release images; startup never guesses which unused image
+represents a rollback target.
 
 Testers use the existing ByteTerrace API identity and `user_impersonation` scope.
 Membership in ByteTerrace API Users admits a Puck user; the deployed world allows

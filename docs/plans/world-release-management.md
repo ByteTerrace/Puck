@@ -36,13 +36,16 @@ integration remain incomplete.
   report `GET /private-healthz`, and freeze retiring activations.
 - `WorldReleaseTransition` computes and reverses a definition delta; the first
   policy refuses changed definitions.
-- The CLI `release` command offers `prepare`, `status`, `finalize`, `resume`, and
+- The CLI `release` command offers `prepare`, `deploy`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
-  compute template. Resume and finalization acquire an Azure controller lease.
+  compute template. Deploy, resume, and finalization acquire an Azure controller lease.
 - `WorldReleaseArchive` retains exact manifests and package files. The Azure
-  runtime adapter and loopback worker controls exist but are not connected to
-  the production deployment entry point.
+  runtime adapter and loopback worker controls are connected to `azure deploy-world`.
+  Official preparation binds and pins the complete composed inventory. Deploy
+  retains versioned configuration and protects exact registry digests before
+  qualification. Guest effects and bootstrap serialize under a VM lock and
+  recheck the durable operation; bootstrap readiness remains private.
 - Docker qualification compares full imports in both packages, then repeats
   the comparison on candidate-written continuation state. Four control legs
   using one packaged image passed; this verifies the runner, not compatibility
@@ -53,15 +56,13 @@ integration remain incomplete.
 
 **Remaining:**
 
-- No managed deploy, rollback, or restore CLI operation exists, and no
+- No rollback or restore CLI operation exists, and no
   group-scoped restore operation exists in the coordinator.
 - No definition edit is admitted yet; phase 3's preservation rules are unwritten.
-- `AzureWorld` still writes `artifacts/world-rollback.json` and restores saved
-  blob versions on failure, so phase 5's replacement has not happened.
-- The immutable deployment-configuration store and Key Vault version adapter
-  exist, but production deploy still needs to publish them before beginning an
-  operation. Lease loss cancels local child processes; already accepted Azure
-  worker operations still need verification against stale controller execution.
+- The legacy blob-version rewind has been removed. Managed deployment requires
+  a caller-supplied coherent fixture; automated export and pipeline wiring remain
+  unfinished. Registry protection and VM guards still need real cloud acceptance
+  testing, including delayed operations after controller ownership changes.
 - No packaged release-pair qualification or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
 - Named handheld machine checkpoints now preserve core state and host pacing,
@@ -125,13 +126,11 @@ compatibility shims throughout the engine.
 
 ## Existing foundation and gaps
 
-The current [Azure deployment](../../src/Puck.Cli/Azure/AzureWorld.cs) drains the
-worker, captures mutable blob versions, publishes definitions and compute, and
-verifies the candidate. On failure it stops the candidate and restores the saved
-blob versions and previous compute parameters. That is recovery to a
-pre-deployment point, not progress-preserving rollback after a successful release.
-Its recovery manifest is written to the runner's artifacts; the new operation
-record must survive loss of that runner.
+The [Azure deployment](../../src/Puck.Cli/Azure/AzureWorldReleaseDeploy.cs) now
+enters the durable coordinator and resumes from retained inputs. Its predecessor
+captured mutable blob versions in runner artifacts and restored them on failure;
+that path has been removed. Completion still requires coherent fixture export,
+operator rollback and restore commands, and an exercised cloud recovery runbook.
 
 The [silo](../../src/Puck.World.Silo/README.md) already owns drain, frozen final
 checkpoints, readiness, and a serialized persistence queue. The

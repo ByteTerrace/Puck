@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
 
@@ -7,48 +5,24 @@ namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
     /// <summary>Resumes only the durable pending operation, using its retained image, template, and secret versions.</summary>
-    internal static async Task<WorldReleaseRunResult> ResumeWorldReleaseAsync(CancellationToken cancellationToken) {
-        var outputs = Outputs();
-        var configuration = Value(outputs, "worldSiloConfiguration");
-        var owner = Guid.Parse(Text(Value(outputs, "worldSiloOwner")));
-        var endpoint = Text(Value(outputs, "worldSiloStorageEndpoint"));
-        var group = Text(configuration["name"]);
-        var resourceGroup = Text(Value(outputs, "deploymentResourceGroupName"));
-        return await WithWorldReleaseControllerAsync(endpoint, owner, group, async token => {
-            var target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(endpoint);
-            var services = new ServiceCollection();
-            Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services);
-            using var provider = services.BuildServiceProvider();
-            var blobs = provider.GetRequiredService<IObjectBlobStore>();
-            var groups = new WorldReleaseGroupStore(blobs, target, owner);
-            var state = await groups.LoadAsync(group, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("no managed deployment group exists");
-            if (state.Record.PendingOperationId is null) { return new WorldReleaseRunResult(true, false, "no pending release operation", state); }
-            var archive = new WorldReleaseArchive(blobs, target, owner);
-            var deployments = new WorldReleaseDeploymentStore(blobs, target, owner,
-                new AzureWorldReleaseSecretVersions(Text(Value(outputs, "deploymentKeyVaultName")), Text(configuration["releaseStateSecretName"])));
-            var candidate = await LoadDeploymentAsync(state.Record.PendingTargetRelease!).ConfigureAwait(false);
-            var source = state.Record.PendingSourceRelease is { } sourceIdentity ? await LoadDeploymentAsync(sourceIdentity).ConfigureAwait(false) : null;
-            var authority = new WorldAuthorityBlobStore(blobs, target);
-            var temporary = Directory.CreateTempSubdirectory("puck-release-resume-");
-            try {
-                var runtime = new AzureWorldReleaseRuntime(resourceGroup, group, temporary.FullName, groups, authority, source, candidate,
-                    ct => InitializeWorldReleaseBootstrapAsync(candidate.Manifest, archive, authority, owner, ct));
-                return await new WorldReleaseCoordinator(groups).ResumeAsync(state, candidate.Manifest, runtime, token).ConfigureAwait(false);
-            } finally { temporary.Delete(recursive: true); }
+    internal static Task<WorldReleaseRunResult> ResumeWorldReleaseAsync(CancellationToken cancellationToken) =>
+        WithManagedWorldReleaseAsync(ResumeWorldReleaseCoreAsync, cancellationToken);
 
-            async Task<AzureWorldReleaseDeployment> LoadDeploymentAsync(string identity) {
-                var manifest = await archive.LoadAsync(identity, token).ConfigureAwait(false)
-                    ?? throw new InvalidDataException("pending release manifest is missing from retention");
-                await archive.VerifyAsync(manifest, token).ConfigureAwait(false);
-                var retained = await deployments.LoadAsync(manifest, group, token).ConfigureAwait(false)
-                    ?? throw new InvalidDataException("pending release deployment configuration is missing from retention");
-                if (retained.Parameters["configuration"]?["name"]?.GetValue<string>() != group) {
-                    throw new InvalidDataException("retained deployment parameters belong to a different worker group");
-                }
-                return new(manifest, retained);
-            }
-        }, cancellationToken).ConfigureAwait(false);
+    private static async Task<WorldReleaseRunResult> ResumeWorldReleaseCoreAsync(WorldReleaseContext context, CancellationToken token) {
+        var state = await context.Groups.LoadAsync(context.Group, token).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("no managed deployment group exists");
+        if (state.Record.PendingOperationId is null) { return new(true, false, "no pending release operation", state); }
+        var candidate = await LoadWorldReleaseDeploymentAsync(context, state.Record.PendingTargetRelease!, token).ConfigureAwait(false);
+        var source = state.Record.PendingSourceRelease is { } sourceIdentity
+            ? await LoadWorldReleaseDeploymentAsync(context, sourceIdentity, token).ConfigureAwait(false) : null;
+        var temporary = Directory.CreateTempSubdirectory("puck-release-resume-");
+        try {
+            var runtime = new AzureWorldReleaseRuntime(context.ResourceGroup, context.Group, temporary.FullName,
+                Text(Value(context.Outputs, "worldSiloStorageEndpoint")), Text(Value(context.Outputs, "worldSiloClientId")),
+                context.Groups, context.Authority, source, candidate,
+                ct => InitializeWorldReleaseBootstrapAsync(candidate.Manifest, context.Archive, context.Authority, context.Owner, ct));
+            return await new WorldReleaseCoordinator(context.Groups).ResumeAsync(state, candidate.Manifest, runtime, token).ConfigureAwait(false);
+        } finally { temporary.Delete(recursive: true); }
     }
 
     internal static async Task InitializeWorldReleaseBootstrapAsync(WorldReleaseManifest manifest, WorldReleaseArchive archive,

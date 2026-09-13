@@ -328,13 +328,22 @@ restart in that phase activates without restoring again. Run
 `WorldReleaseCutoverLawTests` for the real-host coordinator, latest-state rollback,
 and interrupted recovery, plus `WorldReleaseArchiveLawTests` for retained package
 integrity. These same-binary laws do not qualify a pair of packaged engine images.
-`world release resume` reads the pending operation and pinned deployment inputs;
-production deploy still needs to publish those inputs and enter this coordinator.
-Resume and finalization use a renewable controller lease. Run the CLI
+`world release deploy` and `azure deploy-world` retain exact inputs and enter this
+coordinator after qualification; `resume` reads the pending operation and retained
+configuration. `azure prepare-world-release` binds and pins all composed worlds.
+Deploy still requires a caller-supplied coherent fixture; automatic export and the
+operator rollback/restore commands remain unfinished. Deploy, resume, and
+finalization use a renewable controller lease. Run the CLI
 `WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained
 configuration, bootstrap, or controller ownership. The Azure lease law requires
 Docker and the Azurite image documented in the CLI test README. Cancellation of
 the local Azure CLI does not retract an already accepted remote operation.
+`build/Guard-WorldRelease.py` reads the durable C# group wire format; keep its
+numeric phase mapping synchronized with `WorldReleaseOperationPhase`. Bootstrap
+and guest mutations share a VM flock and reject stale effects after acquiring it.
+With no pending operation, bootstrap permits only the admitted active release,
+so ordinary VM replacement can recover without reopening a release transaction.
+The CLI `WorldReleaseGuestGuardTests` requires Python 3 (or `PUCK_TEST_PYTHON`).
 `world release qualify` executes exact Docker images over a copied offline fixture
 with networking disabled; see the CLI README for the fixture and evidence contract.
 Each package must preserve the same source import and candidate-written reverse

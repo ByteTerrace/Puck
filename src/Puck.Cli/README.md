@@ -133,6 +133,8 @@ puck world release prepare <package-directory> --silo <silo.json> --label <label
 puck world release status [group-file] [--json]
 puck world release finalize
 puck world release resume
+puck world release deploy <package-directory> [--fixture <fixture-directory>] [--operation <id>]
+puck azure prepare-world-release [--output-directory <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
@@ -175,13 +177,30 @@ template. It never substitutes the latest secret value or the current checkout's
 template. Missing or conflicting retained inputs refuse before a worker effect.
 A recovered source is reported as a failed deployment, not a successful upgrade.
 
-Resume and finalization use a renewable Azure Blob lease to exclude competing
+`world release deploy` verifies the package, retains its files and versioned
+deployment inputs, protects and pulls the exact source and target registry
+digests, and runs qualification before entering the coordinator. Repeating a
+pending target resumes it; another target refuses. A previous rollback window
+must be finalized before a third release. Bootstrap refuses existing unmanaged
+workers and persisted gameplay. `azure deploy-world` uses this same transaction.
+Both currently require a coherent offline fixture supplied with `--fixture`;
+automatic export from a live deployment is not implemented.
+
+`azure prepare-world-release` applies the official endpoint and delegated
+admission bindings to the staged composed worlds, then hashes the complete
+inventory. It reads the deployment outputs, `artifacts/release-source.json`, image digest,
+and `artifacts/azure/silo-worlds`. Every world is pinned with its own retained
+signing key at deployment. Temporary preparation keys are never packaged.
+
+Deploy, resume, and finalization use a renewable Azure Blob lease to exclude competing
 controllers. Losing ownership cancels the CLI's child processes and closes its
 next-effect checks; the durable operation remains available for a later resume.
 This controller lease complements the world's authority fences and publication
-barrier. It does not retract an Azure operation already accepted by the service.
-The production deploy path still needs to publish these retained inputs and use
-the managed coordinator before it can claim the same recovery guarantees.
+barrier. Guest mutations also serialize with bootstrap under a VM lock and check
+the durable operation after waiting, refusing stale phases or release identities.
+The bootstrap waits for private health; only the coordinator opens admission.
+These checks do not retract an Azure operation already accepted by the service;
+full cloud interruption acceptance testing remains required.
 
 `world release qualify` runs four isolated Docker legs over a marked, coherent
 offline fixture: both packages import the source state, then both import the

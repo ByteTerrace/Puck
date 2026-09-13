@@ -69,10 +69,19 @@ internal static class WorldReleaseCommand {
             Console.WriteLine(result.Detail);
             return result.Completed && !result.SourceRecovered ? 0 : 1;
         });
-        return new Command("release", "Prepare, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, WorldReleaseExerciseCommand.Create() };
+        var deployPackage = new Argument<string>("package-directory");
+        var deployFixture = new Option<string>("--fixture") { DefaultValueFactory = _ => "artifacts/world-release-fixture" };
+        var deployOperation = new Option<Guid?>("--operation");
+        var deploy = new Command("deploy", "Qualify and deploy an exact package, preserving current authoritative progress.") { deployPackage, deployFixture, deployOperation };
+        deploy.SetAction(async (parse, token) => {
+            var result = await AzureCommand.DeployWorldReleaseAsync(parse.GetRequiredValue(deployPackage), parse.GetValue(deployFixture)!, parse.GetValue(deployOperation), token).ConfigureAwait(false);
+            Console.WriteLine(result.Detail);
+            return result.Completed && !result.SourceRecovered ? 0 : 1;
+        });
+        return new Command("release", "Prepare, deploy, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, deploy, WorldReleaseExerciseCommand.Create() };
     }
 
-    private static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
+    internal static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
         if (!Directory.Exists(packageDirectory)) {
             throw new DirectoryNotFoundException(packageDirectory);
         }
