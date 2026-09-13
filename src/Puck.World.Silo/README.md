@@ -77,7 +77,9 @@ the committed target, or completes restored-source admission. Every operation
 checks the current durable phase and operation identifier; an external caller
 or unmanaged worker receives 404. Drain retains the frozen process for retries.
 `POST /release/fixture/<request-id>` exports the admitted active release when no
-operation is pending. It captures every pinned row in one mailbox action, verifies
+unfinished operation remains. A committed, admitted operation retained for rollback
+permits export; prepare, recovery, and commit before admission require resume first.
+It captures every pinned row in one mailbox action, verifies
 ownership, and uploads an immutable fixture inventory after its checkpoint bytes.
 It preserves source admission and authority roots. Repeating a completed request
 returns the original capture; a partial upload cannot be consumed as a fixture.

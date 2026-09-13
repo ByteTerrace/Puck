@@ -9,7 +9,9 @@ hardware-dependent CLI operation in its intended environment.
 The release laws cover immutable deployment configuration references, exclusive
 controller ownership, complete official package preparation, registry retention
 readback, bootstrap refusal over existing gameplay, and cancellation of an owned
-child process. `WorldReleaseGuestGuardTests` checks the Python guest guard against
+child process. `WorldReleaseRollbackTests` verifies rollback directly from an
+admitted commit, refusal during unfinished maintenance, and finalization closing
+eligibility. `WorldReleaseGuestGuardTests` checks the Python guest guard against
 the C# durable group wire format, including stale operations and recovery roles.
 It requires Python 3 on PATH, or `PUCK_TEST_PYTHON` naming the executable.
 `WorldReleaseAzureLeaseTests` uses the actual Azure

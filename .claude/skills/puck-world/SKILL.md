@@ -340,7 +340,10 @@ cutover laws, and `WorldReleaseFixtureBuilderTests`; set `PUCK_TEST_WORLD_IMAGE`
 for the latter's four Docker control legs. Empty no-kit population checkpoints
 preserve only the zero selection sentinel; `WorldEmptyPopulationCheckpointLawTests`
 also rejects nonempty population and invalid kit selections. The operator
-`rollback` command selects the retained predecessor; explicit restore remains
+`rollback` command selects the retained predecessor directly from an admitted
+commit. A retained pending identifier alone does not mean maintenance is unfinished;
+use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
+and the cutover law's loopback export before rollback. Explicit restore remains
 unfinished. Deploy, rollback, resume, and
 finalization use a renewable controller lease. Run the CLI
 `WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained

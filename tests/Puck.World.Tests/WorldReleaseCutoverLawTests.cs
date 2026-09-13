@@ -86,7 +86,18 @@ public sealed class WorldReleaseCutoverLawTests {
         foreach (var row in before) { Assert.True(latest[row.Key] > row.Value); }
 
         group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        Assert.NotNull(group.Record.PendingOperationId);
+        Assert.False(group.Record.HasUnfinishedOperation);
+        var captureRequest = Guid.NewGuid();
+        var rollbackCapture = ControlAsync(candidate, "POST", $"/release/fixture/{captureRequest:D}");
+        await PumpAsync(candidate, rollbackCapture);
+        Assert.Equal(200, (await rollbackCapture).Status);
+        var rollbackFixture = (await scenario.FixtureArchive.LoadAsync(captureRequest, Token))!;
+        Assert.Equal(b.Identity, rollbackFixture.Release);
+        foreach (var row in latest) { Assert.Equal(row.Value, rollbackFixture.Worlds[row.Key].Tick); }
         group = Required(await scenario.Groups.BeginRollbackAsync(group, Guid.NewGuid(), Token));
+        Assert.True(group.Record.HasUnfinishedOperation);
+        Assert.Equal(409, (await ControlAsync(candidate, "POST", $"/release/fixture/{Guid.NewGuid():D}")).Status);
         var rollbackRuntime = new LoopbackRuntime(new WorldSiloReleaseRuntime(candidate, rollback, scenario.Identities, () => throw new InvalidOperationException("successful rollback must not restore an old save")), candidate, rollback);
         var rollingBack = coordinator.ResumeAsync(group, a, rollbackRuntime, Token);
         await PumpAllAsync([candidate, rollback], rollingBack);

@@ -11,13 +11,7 @@ internal static partial class AzureCommand {
         return WithManagedWorldReleaseAsync(async (context, token) => {
             var current = await context.Groups.LoadAsync(context.Group, token).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("no managed deployment group exists");
-            if (current.Record.PendingOperationId is { } pending) {
-                throw new InvalidOperationException($"operation {pending:D} is already pending; run 'puck world release resume'");
-            }
-            if (!current.Record.RollbackEligible || current.Record.ActiveRelease is not { } activeIdentity ||
-                current.Record.PreviousRelease is not { } previousIdentity) {
-                throw new InvalidOperationException("the deployment has no eligible previous release; a finalized window cannot be reopened by rollback");
-            }
+            var (activeIdentity, previousIdentity) = GetWorldReleaseRollbackPair(current.Record, operationId);
             var active = await LoadWorldReleaseDeploymentAsync(context, activeIdentity, token).ConfigureAwait(false);
             var previous = await LoadWorldReleaseDeploymentAsync(context, previousIdentity, token).ConfigureAwait(false);
             if (!WorldReleaseTransitionPolicy.TryPrepare(active.Manifest, previous.Manifest, out _, out var reason)) { throw new InvalidDataException(reason); }
@@ -30,5 +24,22 @@ internal static partial class AzureCommand {
             if (!begun.Ok) { throw new InvalidOperationException(begun.Detail); }
             return await ResumeWorldReleaseCoreAsync(context, token).ConfigureAwait(false);
         }, cancellationToken);
+    }
+
+    /// <summary>Selects the retained pair before any cloud effects, distinguishing completed retention from maintenance.</summary>
+    internal static (string Active, string Previous) GetWorldReleaseRollbackPair(WorldReleaseGroupRecord record, Guid? operationId = null) {
+        if (record.HasUnfinishedOperation) {
+            throw new InvalidOperationException($"operation {record.PendingOperationId:D} is already pending; run 'puck world release resume'");
+        }
+        if (record.Admission != WorldReleaseAdmissionState.Open) {
+            throw new InvalidOperationException("the deployment is not admitted; run 'puck world release resume' before rollback");
+        }
+        if (operationId is { } requested && record.ContainsOperation(requested)) {
+            throw new InvalidOperationException($"operation {requested:D} already belongs to pending or retained work; inspect 'puck world release status' and use 'resume' for pending work");
+        }
+        if (!record.RollbackEligible || record.ActiveRelease is not { } active || record.PreviousRelease is not { } previous) {
+            throw new InvalidOperationException("the deployment has no eligible previous release; a finalized window cannot be reopened by rollback");
+        }
+        return (active, previous);
     }
 }

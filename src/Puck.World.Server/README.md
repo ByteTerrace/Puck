@@ -108,8 +108,8 @@ activation, verification, and commit boundary; only a durable committed record
 may open admission. A post-commit failure follows the committed release. The
 first transition policy refuses changed definitions until a state-preservation
 rule and packaged rollback evidence exist. Managed silo admission consumes the
-group root and fences its explicit publication barrier; Azure coordinator
-switching and operator rollback/restore remain above this hosting foundation.
+group root and fences its explicit publication barrier. The CLI's Azure adapter
+uses this coordinator for deployment and rollback; explicit restore remains pending.
 
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes
@@ -125,16 +125,20 @@ private-store CAS. Commit records a fresh group activation claim; the silo
 separately verifies every current per-world fence before its explicit all-row
 publication. Pre-commit recovery clears the failed candidate without marking
 it active, while finalization retains recovery references and closes only the
-rollback window. The CLI exposes this guarded finalization for the configured
-Azure group. Azure coordinator switching and operator rollback/restore
-commands remain future integration work. The group root is the live hosting
+rollback window. A committed and admitted operation remains retained but is no
+longer unfinished: it permits fresh qualification export and rollback preflight.
+`HasUnfinishedOperation` exposes that distinction without changing the stored wire
+format. Pending and retained operation identifiers cannot be reused for a new
+operation because their immutable recovery roots already belong to earlier work.
+The CLI exposes guarded finalization for the configured Azure group.
+The group root is the live hosting
 record; the CLI status verb reads the configured Azure group or validates a
 supplied local copy and explains its next action. `WorldReleaseCoordinator` is the shared guarded transition
 driver: it requires a qualification runner receipt, records each durable phase
 before invoking a runtime effect, and persists pre-commit recovery before
-restoring a source. The Azure command adapter still has to supply its runtime
-driver before production deployment can claim this workflow. The CLI's `resume`
-command already selects a pending operation and loads its retained deployment
+restoring a source. The Azure command adapter supplies its worker lifecycle driver;
+cloud failure acceptance remains separate from the local coordinator laws.
+The CLI's `resume` command selects a pending operation and loads its retained deployment
 inputs; it refuses missing packages, secret versions, or compute templates.
 
 `WorldReleaseArchive` retains canonical manifests and exact package files in the

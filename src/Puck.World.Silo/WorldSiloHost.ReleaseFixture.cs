@@ -50,9 +50,9 @@ public sealed partial class WorldSiloHost {
 
     private async Task RequireFixtureSourceAsync(CancellationToken token) {
         var state = (await ReadManagedReleaseAsync(token).ConfigureAwait(false)).Record;
-        if (state.PendingOperationId is not null || state.Admission != WorldReleaseAdmissionState.Open ||
+        if (state.HasUnfinishedOperation || state.Admission != WorldReleaseAdmissionState.Open ||
             state.ActiveRelease != m_releaseManagement!.ExpectedRelease || !ReleaseAdmissionOpen || IsDraining) {
-            throw new InvalidOperationException("fixture export requires the admitted active release with no pending operation");
+            throw new InvalidOperationException("fixture export requires the admitted active release with no unfinished operation");
         }
     }
 

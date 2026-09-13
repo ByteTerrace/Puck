@@ -39,7 +39,7 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
 - The CLI `release` command offers `prepare`, `deploy`, `rollback`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
-  compute template. Deploy, resume, and finalization acquire an Azure controller lease.
+  compute template. Deploy, rollback, resume, and finalization acquire an Azure controller lease.
 - `WorldReleaseArchive` retains exact manifests and package files. The Azure
   runtime adapter and loopback worker controls are connected to `azure deploy-world`.
   Official preparation binds and pins the complete composed inventory. Deploy
@@ -61,6 +61,10 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
 **Remaining:**
 
 - No restore CLI operation or group-scoped restore coordinator operation exists.
+  Current escrow tables retire committed transactions, so an empty table is not
+  proof that no external effect occurred after a recovery point. Restore needs
+  durable evidence covering that interval, or an enforced closed-group boundary
+  established before capture; it must not infer safety from current endpoints alone.
 - No definition edit is admitted yet; phase 3's preservation rules are unwritten.
 - The legacy blob-version rewind has been removed. Automatic capture, fixture
   materialization and rollback are wired in. Registry protection, publication
@@ -95,8 +99,8 @@ requiring explicit acknowledgement of the target and affected scope.
 Use the existing Puck CLI and Azure deployment entry point. Add release
 preparation, status, rollback, finalization, and restore operations under the
 existing World command family; settle exact command spelling while implementing
-its command tree. Preparation, status, and finalization exist today; rollback
-and restore are proposed operations.
+its command tree. Preparation, deployment, rollback, status, resume, and
+finalization exist today; explicit restore remains proposed work.
 Each mutation accepts or returns an operation identifier. Repeating the same
 request resumes that operation; it does not start another deployment.
 

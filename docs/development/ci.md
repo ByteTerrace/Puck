@@ -605,11 +605,15 @@ still require cloud recovery verification; local cancellation cannot retract the
 For an admitted deployment, `puck world release rollback` selects the retained
 previous release and qualifies it against a fresh export of current progress.
 The coordinator then drains and cuts over using that progress. It never selects
-an earlier gameplay save. If another operation is pending, use `status` and
-`resume` to finish that operation first. `puck world release finalize` closes the
+an earlier gameplay save. The completed deployment's retained operation permits
+rollback directly; do not finalize it first. If an operation is unfinished, use
+`status` and `resume` to finish it first. `puck world release finalize` closes the
 rollback window once the current release is accepted, allowing the next deploy.
 Finalization preserves history and retained artifacts. A separate explicit
 restore command is still required for intentional progress rewind.
+Use a fresh `--operation` identifier for a new rollback. Reusing a pending or
+retained identifier refuses instead of toggling releases or reusing older recovery
+roots; inspect `status` and use `resume` for an unfinished transaction.
 
 `puck world prepare` packages Puck and its referenced neighbours. Official release
 preparation pins the complete inventory, with a distinct retained signing key for

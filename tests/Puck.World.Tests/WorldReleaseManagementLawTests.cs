@@ -65,6 +65,7 @@ public sealed class WorldReleaseManagementLawTests {
         Assert.True(finalized.Ok, finalized.Detail);
         Assert.False(finalized.Snapshot!.Value.Record.RollbackEligible);
         Assert.Equal("checkpoint:1", finalized.Snapshot.Value.Record.History[0].RecoveryRoots["row"]);
+        Assert.False((await groups.BeginAsync(finalized.Snapshot.Value, pending.Record.PendingOperationId!.Value, "release-c", TestContext.Current.CancellationToken)).Ok);
         Assert.True((await groups.BeginAsync(finalized.Snapshot.Value, Guid.NewGuid(), "release-c", TestContext.Current.CancellationToken)).Ok);
     }
 
@@ -120,6 +121,7 @@ public sealed class WorldReleaseManagementLawTests {
         var opened = await coordinator.PublishAdmissionAsync(committed.Snapshot!.Value, target.Identity, committed.Snapshot.Value.Record.PendingOperationId!.Value, committed.Snapshot.Value.Record.AuthorityLease, TestContext.Current.CancellationToken);
         Assert.True(opened.Ok, opened.Detail);
 
+        Assert.False((await groups.BeginRollbackAsync(opened.Snapshot!.Value, opened.Snapshot.Value.Record.PendingOperationId!.Value, TestContext.Current.CancellationToken)).Ok);
         var rollback = await coordinator.BeginRollbackAsync(opened.Snapshot!.Value, target, source, new FixedQualificationRunner(Evidence(target, source)), Guid.NewGuid(), TestContext.Current.CancellationToken);
         Assert.True(rollback.Ok, rollback.Detail);
         Assert.Equal(source.Identity, rollback.Snapshot!.Value.Record.PendingTargetRelease);
@@ -128,6 +130,7 @@ public sealed class WorldReleaseManagementLawTests {
         var recovered = await CompleteBookkeepingRecoveryAsync(groups, rollback.Snapshot.Value);
         Assert.True(recovered.Ok, recovered.Detail);
         Assert.True(recovered.Snapshot!.Value.Record.RollbackEligible);
+        Assert.False((await groups.BeginRollbackAsync(recovered.Snapshot.Value, rollback.Snapshot.Value.Record.PendingOperationId!.Value, TestContext.Current.CancellationToken)).Ok);
         var retry = await coordinator.BeginRollbackAsync(recovered.Snapshot.Value, target, source, new FixedQualificationRunner(Evidence(target, source)), Guid.NewGuid(), TestContext.Current.CancellationToken);
         Assert.True(retry.Ok, retry.Detail);
         var retriedRecovery = await CompleteBookkeepingRecoveryAsync(groups, retry.Snapshot!.Value);

@@ -25,6 +25,15 @@ public sealed record WorldReleaseGroupRecord {
     [JsonPropertyName("authorityLease")] public Guid AuthorityLease { get; init; }
     [JsonPropertyName("history")] public IReadOnlyList<WorldReleaseGroupHistoryEntry> History { get; init; } = [];
     [JsonPropertyName("revision")] public long Revision { get; init; }
+
+    /// <summary>Whether the retained operation still requires coordination. A committed, admitted operation
+    /// remains recorded for rollback but does not prevent a fresh qualification capture or rollback preflight.</summary>
+    [JsonIgnore] public bool HasUnfinishedOperation => PendingOperationId is not null &&
+        (PendingPhase != WorldReleaseOperationPhase.Commit || !PendingCommitted || Admission != WorldReleaseAdmissionState.Open);
+
+    /// <summary>Whether an identifier already owns pending or retained work. New operations must never reuse
+    /// an identifier because immutable recovery roots are addressed by that identifier.</summary>
+    public bool ContainsOperation(Guid operationId) => PendingOperationId == operationId || History.Any(entry => entry.OperationId == operationId);
 }
 
 /// <summary>Immutable history retained after an operation is finalized or recovered.</summary>
@@ -121,6 +130,9 @@ public sealed class WorldReleaseGroupStore {
         if (operationId == Guid.Empty || current.Record.PendingOperationId is not null || current.Record.RollbackEligible) {
             return new(WorldReleaseOperationOutcomeKind.Conflict, "the deployment group already owns a pending or retained rollback operation");
         }
+        if (current.Record.ContainsOperation(operationId)) {
+            return new(WorldReleaseOperationOutcomeKind.Conflict, "operation ID already belongs to retained work; inspect status and use a new ID for a new operation");
+        }
         if (string.IsNullOrWhiteSpace(targetRelease)) {
             return new(WorldReleaseOperationOutcomeKind.Conflict, "the target release is required");
         }
@@ -141,6 +153,9 @@ public sealed class WorldReleaseGroupStore {
     /// <summary>Begins a new rollback operation to the retained predecessor while leaving admission open for preflight.</summary>
     public async Task<WorldReleaseGroupOutcome> BeginRollbackAsync(WorldReleaseGroupSnapshot current, Guid operationId, CancellationToken cancellationToken = default) {
         var old = current.Record;
+        if (old.ContainsOperation(operationId)) {
+            return new(WorldReleaseOperationOutcomeKind.Conflict, "operation ID already belongs to pending or retained work; resume that operation instead of beginning another");
+        }
         if (operationId == Guid.Empty || !old.RollbackEligible || old.Admission != WorldReleaseAdmissionState.Open ||
             (old.PendingOperationId is not null && (old.PendingPhase != WorldReleaseOperationPhase.Commit || !old.PendingCommitted)) ||
             string.IsNullOrWhiteSpace(old.PreviousRelease) || string.Equals(old.ActiveRelease, old.PreviousRelease, StringComparison.Ordinal)) {
