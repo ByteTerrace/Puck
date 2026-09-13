@@ -1,6 +1,11 @@
 # Tabletop games and composed worlds
 
-**The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
+This plan extends the reference game into tabletop districts and worlds
+composed from reusable parts. It describes the proposed board, placement,
+search, and game rules work, while retaining the acceptance conditions,
+implementation decisions, and dated evidence that constrain the sequence.
+
+The tabletop primitive is an owner decision for Lane D. Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`
 facet (`WorldPlacementBoard`) anchors a discrete Grid topology (already
@@ -66,7 +71,7 @@ collected back into the deck, and the next hand dealt on request or
 automatically (`house.autoDeal`). Placeholder card backs read
 through `rank`/`suit`'s own public, `Hidden: Placeholder` visibility rather
 than the zone rows themselves: a row's own `visibility.readers` is
-all-or-nothing (`WorldStateDisclosure.Compose` gates the WHOLE row once
+all-or-nothing (`WorldStateDisclosure.Compose` gates the whole row once
 before ever walking cells), so a zone can show every one of its member
 tokens to an admitted reader or none, never a placeholder for the rest,
 while an attribute row keyed over that zone's domain resolves each cell
@@ -108,7 +113,7 @@ seats: the acting seat's pending action is read through `table[bettor]` in a
 `$expr:table[bettor]`; the two `betAction` ingress rows stay separate only so
 each seat's `Edit` grant covers its own, and `poker-discard`, declared last,
 clears and counts whatever no handler accepted in the tick. The garden's
-static work sheet reads LOWER after the re-cut than before it (`world.budget`)
+static work sheet reads lower after the re-cut than before it (`world.budget`)
 with the table doing strictly more, and the one hand per boot the first table
 was limited to is gone: the collect phase returns every card. The law suite
 (`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`) runs the shipped rules
@@ -188,7 +193,7 @@ the split lane had already forked. Combining all four moves the passive 300-tick
 hash to `0xE65582BEA0A09549` (from `0x397968B8F541A2C4` at `ca29ca5e`) and the frozen world's
 720-tick replay to `0xFD0790057330914F` (from `0x1B21350FE4B50E0B`): every one of the four
 changes is independently a pure representation or a deliberate, already-recorded content change,
-and their sum is not separately re-provable against the pre-integration number — the doctrine's
+and their sum is not separately re-provable against the pre-integration number — the relevant
 guarantee is that the replay stays self-consistent (rule-failure-free, MATCH) at the new mapping,
 never that combining independently-correct changes leaves a historical hash standing. Two
 integration-only fixes rode along: `games/chess.world.json` and `games/tictactoe.world.json`

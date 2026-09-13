@@ -45,6 +45,9 @@ Use the topic relevant to the task; game plans are not prerequisite reading for 
 | [docs/plans/world-runtime-consolidation.md](docs/plans/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation approach and remaining implementation work, and what is deliberately excluded. Use the linked development milestones for recorded verification. |
 | [docs/plans/retail-scale-cartridges.md](docs/plans/retail-scale-cartridges.md) | What `puck.cartridge.v1` needs before a retail-scale game is authorable as data: the program model it lacks, the `Puck.State` vocabulary it should adopt rather than restate, which ceilings get re-derived, and the authoring gaps. States no status. |
 
+Use [Writing documentation](docs/development/documentation.md) for human prose,
+titles, filenames, and navigation. Skills retain agent execution procedures.
+
 The manual must explain current behavior and limitations without requiring a
 source investigation first. Keep that explanation separate from verification
 claims: a dated test result is evidence for its recorded candidate, not permanent

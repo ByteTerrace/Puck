@@ -4,7 +4,7 @@ Puck currently traces each output sample in a single compute invocation. This
 keeps instruction state local, preserves a straightforward reference path, and
 maps consistently to Vulkan and Direct3D 12.
 
-## Alternative schedules
+## Alternative march schedules
 
 Wavefront tracing, queue compaction, and persistent-thread schedulers can
 reduce divergence when rays have very different step counts. They also add
@@ -21,7 +21,7 @@ bottleneck. Collect at least:
 - transient-memory requirements; and
 - equivalent measurements on both GPU backends.
 
-## Required invariants
+## Scheduling invariants
 
 Any alternate scheduler must preserve the same ray state, instruction order,
 termination criteria, and output ownership as the reference marcher. Queue
@@ -33,4 +33,4 @@ backend-specific subgroup assumptions unless a portable fallback has the same
 observable behavior.
 
 Wavefront scheduling remains conditional rather than planned work. See
-[the technique index](verdict-index.md) for the reconsideration criteria.
+[the SDF technique index](technique-index.md) for the reconsideration criteria.

@@ -4,7 +4,7 @@ Puck supports two text tiers with different correctness requirements:
 marchable glyph geometry and material-level glyph decals. Both use the shared
 glyph atlas, but they consume different representations of the data.
 
-## Glyph atlas
+## The glyph atlas
 
 `SdfGlyphAtlas` carries the one packed RGBA image the SDF engine binds.
 `Puck.Text` keeps each logical font's metrics and glyph rectangles in a
@@ -38,7 +38,7 @@ world dimensions, extrusion depth, and the atlas-to-world distance scale.
 Layout options ride `TextLayoutOptions` (greedy wrap width, block alignment,
 tracking, line-height scale), and a `dynamicSlot` argument prefixes each glyph
 chain with `TransformDynamic`, so a whole run follows a dynamic transform's
-per-frame pose — how World's replay stamp pool moves lettering with an
+per-frame pose—how World's replay stamp pool moves lettering with an
 animated, inhabited, or attached placement while frame replay moves the
 shapes.
 

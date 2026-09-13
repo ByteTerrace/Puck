@@ -1,13 +1,16 @@
-# The campaign
+# Reference game design
 
-**There is ONE campaign, and everything in this repository serves it.** Puck is a notation for
-worlds ([worlds manual](../architecture/worlds.md)); the campaign is the first official game, whose job is to prove the
-notation expressive enough to be worth having. A change that does not move that proof forward is
-either infrastructure the proof needs, or it is tunnelling.
+The reference game exercises Puck's world document model through playable
+places and authored rules. It is Puck's first official game and a demanding
+example of the expressive model described in the [worlds manual](../architecture/worlds.md),
+with evidence that the underlying primitives work together. Engine work can
+have its own purpose and entry points, while game-specific requirements belong
+here and in the [game development plan](../plans/game-development.md).
 
-Read this before picking up work. It is the only document that says what we are collectively
-building; every other document under `docs/` is a reference you consult *while* building it, never a
-place to start.
+Use this page when you need the reference game's design decisions. Use the
+[manual](../README.md) for engine concepts and current contracts, and use the
+topic plans for proposed implementation work. The dated [milestone records](../development/game-milestones.md)
+show what earlier checks established and what they left unresolved.
 
 For the main character's visual implementation, use the
 [armored chibi hero brief](art/armored-chibi-hero-brief.md). It translates the requested
@@ -19,13 +22,18 @@ It plans portable membership, recoverable group operations and the complete in-w
 the existing authority, storage and transfer systems. This is requested work, not shipped behavior;
 engine prerequisites precede the cooperative experience, with other activity types sharing its foundation.
 
-## The charter (owner-ratified 2026-08-06, binding)
+## Design decisions
+
+The charter was ratified on 2026-08-06 and remains the design authority for
+the reference game. The 2026-09-06 amendment below records the later decision
+to converge the districts into one shipped world; the older four-world wording
+is retained as historical reasoning for those districts.
 
 **Amended 2026-09-06 (owner ruling): one world.** Everything the charter below names, and everything the
 campaign has built toward since the demo, converges on ONE shipped document, `puck.world.json`: the
 floating island IS the nexus, and the dungeons, the studio canvas, the arcade cabinets, the market of
 tabletop games, the creature garden, the proving ground, split-screen seats, and the game-within-a-game
-reveals are DISTRICTS of that island rather than sibling documents. Each district is an importable module
+reveals are districts of that island rather than sibling documents. Each district is an importable module
 (`imports[].as`) the island composes; a district reached by walking is a place on the island, and a
 district that must be instanced (a group dungeon, a user workshop) is the same module minted through a
 `destinations` row. The island is also the operational twin of the platform that hosts it: the
@@ -34,7 +42,7 @@ platform (traffic, queues, compute, gateways, caches) enters the same way, as ob
 module's placements, bodies, and rules read — the engine learns no cloud noun and no game noun for it.
 The roster of retired prototypes (`play`, `nexus`, `dive`, `kart`, `jump`, `studio`, the quilt corners,
 the frozen diorama, the two scenario documents, `granaries.world.json`) is realized inside the one world
-and DELETED as each is realized, never repaired beside it; `experimental/Puck.Demo` retires the same way,
+and deleted as each is realized, never repaired beside it; `experimental/Puck.Demo` retires the same way,
 folder by folder, each deletion beside the landing that eclipses it. The 51-game tabletop roster
 (chess through billiards, Riichi Mahjong, Chinese Checkers) is a real target the market district is
 built toward, and every capability it needs lands as a game-agnostic primitive — chance and
@@ -187,7 +195,7 @@ capability exists. This is the whole reason the old per-capability register was 
 come back.
 
 
-**Chronological verification history.** Detailed test runs, command transcripts, and evidence logs from earlier development waves are preserved in [milestone records](../development/milestones.md).
+**Chronological verification history.** Detailed test runs, command transcripts, and evidence logs from earlier development waves are preserved in [milestone records](../development/game-milestones.md).
 
 **The charter's back half has not started**: the owner feel sitting (the gate declared 2026-08-08,
 never held — and now well behind the motion work, so its recordings want redoing), win conditions,

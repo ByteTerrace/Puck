@@ -1,8 +1,11 @@
 # Groups and cooperative matchmaking
 
-This is the implementation design for Puck's group finder, requested on 2026-09-09.
-It proposes work; it does not claim that the experience exists. The
-[campaign](../game/design.md) owns sequencing and verification status, and the
+This is the implementation design for Puck's group finder, requested on
+2026-09-09. The current foundation provides local groups, role-aware grants,
+transfer primitives, and external-operation recovery. The proposed finder adds
+consent, matching, durable membership, and cross-world admission around those
+primitives; it does not claim that the complete experience exists. The
+[Reference game design](../game/design.md) owns sequencing and verification status, and the
 [worlds manual](../architecture/worlds.md) owns the world model. The source observations below were made
 against `31eab09cbd0b540539a038a5025b86a3f01a23bc`; the membership, role,
 completion and persistence rows were refreshed during the foundation work.
@@ -659,7 +662,7 @@ already committed external action.
 Run schema/registry generation and checks, architecture and length checks, the
 affected builds and tests, and documentation/citation checks for each slice.
 Update XML/source-generated contexts, codecs, relevant READMEs and the owning
-world skill references in the same change. Keep campaign status tied to actual
+world skill references in the same change. Keep game development status tied to actual
 evidence. Use the existing build-once deployment workflow for final Azure proof;
 this plan does not authorize a deployment or a merge.
 

@@ -4,7 +4,7 @@ The SDF instruction stream is ordered: transforms, folds, shapes, field
 operations, and material decisions can affect every later instruction. Pruning
 is valid only when it preserves that ordered semantics.
 
-## Current applicability
+## Current applicability and limits
 
 Per-region tape specialization is not useful for ordinary flat room programs;
 the bookkeeping and specialized dispatch cost outweigh the saved interpreter

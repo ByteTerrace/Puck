@@ -13,7 +13,7 @@ the guided explanation; these pages hold the deeper contracts and evidence.
   covers cone prepasses, grids, and BVH techniques.
 - [Tape pruning and inclusion](tape-pruning-and-inclusion.md) covers interval
   evaluation and region specialization.
-- [LOD and bounds](lod-and-bounds.md) covers proxy nodes and segment bounds.
+- [Level of detail and bounds](lod-and-bounds.md) covers proxy nodes and segment bounds.
 - [March-loop scheduling](march-loop-scheduling.md) covers wavefront scheduling,
   compaction, and persistent threads.
 
@@ -28,7 +28,7 @@ the guided explanation; these pages hold the deeper contracts and evidence.
 
 ## Materials, shading, and content
 
-- [Shading, AO, and shadows](shading-ao-shadows.md) covers lighting, ambient
+- [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) covers lighting, ambient
   occlusion, penumbra estimation, and clustered lights.
 - [Materials and primitives](materials-and-primitives.md) covers composition,
   material ownership, lifted primitives, and domain distortion.
@@ -37,7 +37,7 @@ the guided explanation; these pages hold the deeper contracts and evidence.
 
 ## Decisions and limits
 
-- [Technique verdict index](verdict-index.md) records applicability and status.
+- [SDF technique index](technique-index.md) records applicability and status.
 - [Negative results and rejections](negative-results-and-rejections.md) records
   approaches that are outside the current renderer and the evidence needed to
   reconsider them.

@@ -4,7 +4,7 @@ Puck's default hit normal is evaluated analytically with the field. The SDF VM
 propagates a forward-mode gradient through supported operations and shapes,
 then normalizes the result at the accepted hit point.
 
-## Analytic path
+## Analytic normal path
 
 Analytic gradients avoid the additional field evaluations required by finite
 differences and keep normal behavior tied to the same instruction semantics as
@@ -15,7 +15,7 @@ explicit winner rule rather than an incidental backend result.
 The gradient implementation is a C#↔HLSL contract. Update the instruction
 analysis and every shader interpreter variant together.
 
-## Comparison path
+## Finite-difference comparison path
 
 The renderer retains a four-tap tetrahedral finite-difference path for
 comparison and diagnosis. Authored curvature shading also uses four neighboring
@@ -39,5 +39,4 @@ small features.
 
 Validate normal changes with the analytic/four-tap comparison view, hard and
 smooth blends, transformed primitives, and cross-backend captures.
-
 

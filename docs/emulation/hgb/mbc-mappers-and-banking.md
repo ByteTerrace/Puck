@@ -1,10 +1,14 @@
-# MBC Mappers & Memory Banking
+# MBC mappers and memory banking
+
+The Humble Gaming Brick (HGB) selects a cartridge mapper from the ROM header. A
+mapper controls which ROM and external RAM bytes appear on the bus, so its
+registers and bank state must be captured with the rest of the machine.
 
 The Game Boy's 16-bit address bus allocates only **32 KB for ROM** (`0x0000–0x7FFF`) and **8 KB for external cartridge RAM** (`0xA000–0xBFFF`). To accommodate larger commercial games, cartridges incorporate **Memory Bank Controllers (MBCs)**—custom integrated circuits that intercept bus writes and dynamically switch ROM and RAM banks into the CPU's address space.
 
 ---
 
-## Universal Mapper Principles
+## Universal mapper principles
 
 All standard Game Boy mappers adhere to common bus conventions:
 
@@ -22,9 +26,9 @@ flowchart TD
 
 ---
 
-## Supported Mappers in `Puck.HumbleGamingBrick`
+## Supported mappers in `Puck.HumbleGamingBrick`
 
-### 1. ROM-Only (`RomOnlyCartridge`)
+### 1. ROM-only (`RomOnlyCartridge`)
 - **ROM Capacity**: Exactly 32 KB (Banks 00 and 01 mapped continuously at `0x0000–0x7FFF`).
 - **RAM Capacity**: None or 8 KB non-banked SRAM at `0xA000–0xBFFF`.
 - Used in early launch titles (*Tetris*, *Dr. Mario*).
@@ -61,17 +65,17 @@ The modern workhorse mapper, supporting up to **8 MB ROM** and **128 KB RAM**:
 - **True Bank 0 Mapping**: Completely removes the MBC1 bank-translation bug. Bank 00 can be cleanly mapped to `0x4000–0x7FFF`.
 - **High-Speed RAM**: Supports 16 RAM banks (up to 128 KB) switched via `0x4000–0x4FFF`.
 
-### 6. MBC7 — Accelerometer Tilt Sensor (`Mbc7Cartridge`)
+### 6. MBC7: accelerometer tilt sensor (`Mbc7Cartridge`)
 Featured in *Kirby Tilt 'n' Tumble* and *Command Master*:
 - Integrates an analog 2-axis accelerometer and a 256-byte 93LC56 SPI EEPROM.
 - Cartridge reads return acceleration vectors along X and Y axes, mapped directly into Puck's input and physics bindings.
 
-### 7. HuC-1 & HuC-3 — Infrared Transceiver Mappers (`HuC1Cartridge`, `HuC3Cartridge`)
+### 7. HuC-1 and HuC-3: infrared transceiver mappers (`HuC1Cartridge`, `HuC3Cartridge`)
 Developed by Hudson Soft (*Pokémon Card GB*):
 - Incorporates an infrared LED emitter and photodiode receiver directly into the cartridge shell.
 - HuC-3 adds a sound synth chip and an internal microcontroller handling RTC functions.
 
-### 8. MMM01 — Multi-Game Compilation Mapper (`Mmm01Cartridge`)
+### 8. MMM01: multi-game compilation mapper (`Mmm01Cartridge`)
 Used in compilation cartridges (*Taito Variety Pack*, *Momotarou Collection*):
 - Boots in an initialization mode where the mapper registers configure the base address and size of a sub-cartridge.
 - Once the bootloader selects a game, it locks the mapper configuration; the cartridge subsequently behaves as an immutable MBC1 or ROM-only game until the next hard reset.

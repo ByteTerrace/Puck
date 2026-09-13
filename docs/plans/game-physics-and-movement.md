@@ -1,6 +1,12 @@
 # Game physics and movement
 
-**Authorable rigid dynamics (owner decisions).** A rigid body is a kit facet
+This plan defines the proposed physics and locomotion work for the reference
+game. It keeps authoring decisions, solver constraints, feel settings, and
+their acceptance evidence together so implementation can be checked against
+the experience the game needs. The decisions below describe intended work;
+dated results and current behavior remain in the [milestone records](../development/game-milestones.md).
+
+Authorable rigid dynamics is an owner decision. A rigid body is a kit facet
 (`rigid`), never a second body kind: physics-first authoring derives mass and
 inertia from the kit's own collider and an authored mass, never a free density
 or tensor. A kinematic character contributes its velocity to a rigid contact
@@ -8,7 +14,7 @@ but is never itself pushed unless its own kit says so. Substep count for
 continuous collision is derived per body per tick from speed and collider
 size against an authored ceiling and an authored per-substep travel
 fraction, never a free per-tick knob. Restitution against the static world
-fires only on a genuine impact (the rising edge of contact) on EACH of the
+fires only on a genuine impact (the rising edge of contact) on each of the
 ground and obstruction contact channels independently, never every tick of
 continued rest — the naive per-tick reapplication is a stable non-decaying
 bounce, not a settling body, and conflating the two channels is what let a
@@ -18,17 +24,17 @@ floored to zero below a small closing-speed threshold — the same "settle,
 don't chatter" intent applied to a contact with no rising-edge state of its
 own — the threshold is an authored field, not a C# constant. A contact
 anchor — static (ground/obstruction) or pair alike — is the struck shape's
-own true WITNESS POINT (the real support point of its box/capsule/sphere
+own true witness point (the real support point of its box/capsule/sphere
 geometry oriented by the body's quaternion), never a point on the
 conservative bounding sphere and never the body center, so a strike carries
 the real lever arm its own surface implies. A grounded box or capsule
-resolves over its own support MANIFOLD (up to four box corners, or two
+resolves over its own support manifold (up to four box corners, or two
 capsule cap points when it lies on its side) with a few authored
 sequential-impulse passes rather than one witness point — the thing that
 keeps an upright body's centre of mass over its support polygon without an
 artificial extra damping term standing in for real contact geometry. A
 struck pair's own normal impulse propagates further than one pair-hop per
-tick too: the dynamic-contact solver runs a few EXTRA full broadphase-plus-
+tick too: the dynamic-contact solver runs a few extra full broadphase-plus-
 narrowphase sweeps over the same tick — never a replay of only the pairs the
 first pass happened to find, since a pair's own positional split can move a
 body into a third one only a later sweep discovers — the count itself derived
@@ -42,7 +48,7 @@ response is a real Coulomb impulse
 through the two-body kernel, clamped to the friction coefficient against the
 normal impulse just applied, never an independent rescale of either body's
 whole velocity (which would burn or invent momentum along the normal).
-Friction carries the SAME Coulomb meaning against the static world and
+Friction carries the same Coulomb meaning against the static world and
 against another rigid body — one authored coefficient, one physical model,
 never a decay rate; rolling friction and both damping channels remain
 authored per-second decay rates, not per-tick fractions, so one authored

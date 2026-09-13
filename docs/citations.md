@@ -2,7 +2,7 @@
 
 Puck's emulator cores are validated against public hardware-test corpora and
 independently-written reference emulators used strictly as *evidence* (never as
-gates — see the `gaming-bricks` skill's oracle discipline). This file carries the
+independent hardware proof; see the [emulation guide](emulation/README.md)). This file carries the
 citations for publicly-documented hardware facts that informed the implementation,
 so that identifiers, comments, and XML docs in the code stay free of external
 company / product / emulator proper nouns. General research and library credits live
@@ -13,7 +13,7 @@ they do, so the people and the theorems behind a construction are credited here
 rather than in identifiers. Nothing in this repository claims novelty for the
 results cited below.
 
-## Advanced GamingBrick (ARM7TDMI / GBA-class) — evidence-first accuracy wave
+## Advanced Gaming Brick hardware evidence
 
 - **Direct Sound FIFO ring + playing-buffer model** (the 7-word ring + separate
   32-bit playing buffer, the "two DMA requests need an intervening timer overflow"
@@ -37,23 +37,23 @@ results cited below.
   <https://tcrf.net/Top_Gun:_Combat_Zones_(Game_Boy_Advance)>
 
 - **BIOS pre-flight hash identification** (refusing cycle-parity work on a
-  non-retail BIOS — the documented "phantom cycle drift" trap; mismatched
+  non-retail BIOS—the documented "phantom cycle drift" trap; mismatched
   ROM/BIOS hash is a top cause of divergence):
   <https://mgba.io/2020/01/25/infinite-loop-holy-grail/> ·
   <https://www.smashladder.com/guides/view/26pv/desync-troubleshooting-guide>
 
-## Reference emulators and test suites (co-simulation oracles / evidence)
+## Reference emulators and test suites
 
 Independently-written emulators and community test suites, used as differential
 oracles and conformance evidence only:
 
-- mGBA — <https://github.com/mgba-emu/mgba> (and its test suite,
+- mGBA—<https://github.com/mgba-emu/mgba> (and its test suite,
   <https://github.com/mgba-emu/suite>)
-- ares — <https://ares-emu.net/>
-- jsmolka `gba-tests` — <https://github.com/jsmolka/gba-tests>
-- FuzzARM — <https://github.com/DenSinH/FuzzARM>
-- AGS aging cartridge test spec (AGSTests) — <https://github.com/DenSinH/AGSTests>
-- GBATEK hardware reference — <https://problemkaputt.de/gbatek.htm>
+- ares—<https://ares-emu.net/>
+- jsmolka `gba-tests`—<https://github.com/jsmolka/gba-tests>
+- FuzzARM—<https://github.com/DenSinH/FuzzARM>
+- AGS aging cartridge test spec (AGSTests)—<https://github.com/DenSinH/AGSTests>
+- GBATEK hardware reference—<https://problemkaputt.de/gbatek.htm>
 
 ## Puck.Maths: the presented charged algebra
 
@@ -99,7 +99,7 @@ and refuses.
   which is the algebraic path problem again at another semiring: the maximum
   chooses and the product composes. It is why `MostLikelyPathMaterial` carries no
   kernel of its own and why its answers ride the same guarded sum the tropical
-  material does — the two are carried onto each other by the logarithm, which the
+  material does—the two are carried onto each other by the logarithm, which the
   power-of-two law states as a theorem on the subfamily where both sides are
   exact rather than as an analogy.
   A. J. Viterbi, "Error bounds for convolutional codes and an asymptotically
@@ -115,8 +115,8 @@ and refuses.
   union, the minimum for intersection, and the involution `1 − x` exchanging
   them. It is what makes `FuzzyMaterial` the second material here to carry a
   complement at all, and the pattern lens's complement graded rather than
-  two-valued; the admission condition — a semiring with a De Morgan complement
-  and a top element satisfies `1 + 1 = 1` — is met because the maximum is
+  two-valued; the admission condition—a semiring with a De Morgan complement
+  and a top element satisfies `1 + 1 = 1`—is met because the maximum is
   idempotent. That the minimum is the only idempotent conjunction of this kind is
   owed to the triangular-norm literature rather than to the set theory.
   L. A. Zadeh, "Fuzzy sets", *Information and Control* 8 (1965) 338–353 ·
@@ -129,7 +129,7 @@ and refuses.
   survives only while its steps' shortfalls from certainty still sum to under
   one, so a long chain is cut off outright where the minimum would merely narrow
   it. It is `BoundedSumMaterial`'s product, exact in raw arithmetic, and its
-  associativity — every nesting of three factors is `max(0, a + b + c − 2)` — is
+  associativity—every nesting of three factors is `max(0, a + b + c − 2)`—is
   why the three-factor fused term there needs no wide accumulator.
   J. Łukasiewicz, "O logice trójwartościowej", *Ruch Filozoficzny* 5 (1920)
   170–171 ·
@@ -157,8 +157,8 @@ and refuses.
   order is the alternating count of the chains through it, so it already IS the
   reduced Euler characteristic, and the alternating cell count is an independent
   statement rather than the definition. The same reading is why the Dirichlet
-  window is this order's *reduced* incidence algebra — the quotient by the
-  interval type — and not a specialization of `Presentations.IntervalPoset`.
+  window is this order's *reduced* incidence algebra—the quotient by the
+  interval type—and not a specialization of `Presentations.IntervalPoset`.
   L. Euler, "Elementa doctrinae solidorum", *Novi Commentarii Academiae
   Scientiarum Petropolitanae* 4 (1758) 109–140 ·
   P. Hall, "A contribution to the theory of groups of prime-power order",
@@ -168,7 +168,7 @@ and refuses.
 - **Simplicial chains, cochains, and the discrete Stokes identity.** The oriented
   incidence numbers whose alternating-sign rule makes the boundary of a boundary
   vanish, and the adjunction `⟨dω, c⟩ = ⟨ω, ∂c⟩` that defines the coboundary from
-  the boundary — which in an incidence algebra is not a theorem about two
+  the boundary—which in an incidence algebra is not a theorem about two
   operators but the associativity of one product, since a cochain multiplies the
   incidence element on the right and a chain multiplies it on the left.
   H. Poincaré, "Analysis situs", *Journal de l'École Polytechnique* 1 (1895)
@@ -181,7 +181,7 @@ and refuses.
 - **The elementary-divisor theorem, and the coefficient growth that makes a
   bounded attempt necessary.** Every integer matrix admits unimodular `U` and `V`
   with `U·A·V` diagonal and each diagonal entry dividing the next, which is what
-  `SmithNormalForm` computes and — because the triple is its own certificate —
+  `SmithNormalForm` computes and—because the triple is its own certificate —
   re-multiplies before returning. It is declared a *second kernel* precisely
   because it is not a convolution: it searches for a pivot and divides with
   remainder, so no presentation computes it. That the product of the first `k`
@@ -206,8 +206,8 @@ and refuses.
   change of basis moves neither the kernel nor the image of a boundary operator, so
   the elementary divisors above one ARE the orders of the cyclic torsion summands
   and the free rank is a difference of three counts. The same reading explains why
-  `FieldHomology` — which reads its ranks from the echelon the duality layer
-  already carries — sees strictly less: over a field the homology is a vector space
+  `FieldHomology`—which reads its ranks from the echelon the duality layer
+  already carries—sees strictly less: over a field the homology is a vector space
   and torsion has nowhere to live, so the two answers separate exactly at the
   characteristics dividing a torsion coefficient. The minimal six-vertex
   triangulation of the real projective plane is the smallest complex where that
@@ -310,8 +310,8 @@ and refuses.
   *Journal of Functional Programming* 19 (2009) 173–190
 
 - **Minimization and equivalence by the pairing radical.** The duality reading of
-  a weighted machine — reachable subspace, observation span, and the quotient by
-  the part every readout-after-a-word annihilates — which is what makes
+  a weighted machine—reachable subspace, observation span, and the quotient by
+  the part every readout-after-a-word annihilates—which is what makes
   `MinimizeByPairingRadical` and `AreEquivalent` linear algebra over the material
   rather than an enumeration of words, and what makes the bound the enumeration
   oracle checks against a Myhill bound.
@@ -326,7 +326,7 @@ and refuses.
 
 - **The non-metric complement and the regressive product.** The meet as a
   De Morgan dual of the join through a complement that reads only the ambient
-  grading — no metric, no signature, no hand-authored sign table — which is why
+  grading—no metric, no signature, no hand-authored sign table—which is why
   the top-grade coefficient of a triple join is exactly a determinant and why the
   orientation predicate needs no geometry.
   H. Grassmann, *Die lineale Ausdehnungslehre*, Otto Wigand (1844) ·
@@ -365,7 +365,7 @@ and refuses.
 - **Alphabet refinement and symbolic automata.** The minterm partition of a
   predicate algebra as the generator set the kernel consumes, which is what lets
   an infinite label space be served without the kernel ever learning what a
-  predicate is — the declared second axis, **O2**.
+  predicate is—the declared second axis, **O2**.
   G. van Noord and D. Gerdemann, "Finite state transducers with predicates and
   identities", *Grammars* 4 (2001) 263–286 ·
   M. Veanes, P. de Halleux and N. Tillmann, "Rex: Symbolic regular expression

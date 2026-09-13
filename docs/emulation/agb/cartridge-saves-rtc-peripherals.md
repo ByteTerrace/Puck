@@ -1,5 +1,10 @@
 # Cartridge, saves, RTC, and peripherals
 
+The Advanced Gaming Brick (AGB) identifies cartridge backup hardware and exposes
+its supported peripherals through the Game Pak bus. This page records the
+modeled protocols, their saved state, and the evidence still needed for open
+hardware questions.
+
 ## Backup selection
 
 Cartridges commonly identify SRAM, EEPROM, or Flash through marker strings, but

@@ -140,9 +140,64 @@ public class LspSugarTests {
     [InlineData("let seats = 4\ncount: seats| + 1\n")]
     [InlineData("template tile(size = 2) { width: size }\nwidth: si|ze\n")]
     [InlineData("rule \"x\" {\nbind amount : Int = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
+    [InlineData("let data = { exp|onent: 2.7 }\n")]
+    [InlineData("schema: \"puck.cartridge.v1\"\nshape Box \"x\" { exp|onent: 2.7 }\n")]
+    [InlineData("schema: \"puck.creation.v1\"\nnoise { rough|ness: 0.5 }\n")]
     public async Task HoverDoesNotInventOutOfScopeOrNonCodeSymbols(string source) {
         var response = await HoverMarkedAsync(source);
         Assert.Null(response["result"]);
+    }
+
+    [Theory]
+    [InlineData("na|me: \"weathered-limestone\"", "name", "name")]
+    [InlineData("palette [{ co|lor: \"#888778\" }]", "palette.color", "base color")]
+    [InlineData("palette [{ rough|ness: 0.93 }]", "palette.roughness", "GGX roughness")]
+    [InlineData("palette [{ spec|ular: 0.06 }]", "palette.specular", "specular strength")]
+    [InlineData("noise { freq|uency: 1.8 }", "noise.frequency", "frequency")]
+    [InlineData("noise { amp|litude: 0.04 }", "noise.amplitude", "amplitude")]
+    [InlineData("noise { oct|aves: 2 }", "noise.octaves", "octave")]
+    [InlineData("noise { ga|in: 0.4 }", "noise.gain", "gain")]
+    [InlineData("noise { se|ed: 7341 }", "noise.seed", "seed")]
+    [InlineData("shape Superellipsoid \"stone\" { pos|ition [0, 0.43, 0] }", "shape.position", "position")]
+    [InlineData("shape Superellipsoid \"stone\" { sc|ale [0.95, 0.75, 0.7] }", "shape.scale", "per-axis scale")]
+    [InlineData("shape Superellipsoid \"stone\" { exp|onent: 2.7 }", "shape.exponent", "exponent")]
+    [InlineData("shape Superellipsoid \"stone\" { rot|ation [0, 0, 0, 1] }", "shape.rotation", "orientation")]
+    [InlineData("shape Superellipsoid \"stone\" { mat|erial: 0 }", "shape.material", "palette slot")]
+    [InlineData("shape Superellipsoid \"stone\" { bl|end: SmoothUnion }", "shape.blend", "blend op")]
+    [InlineData("shape Superellipsoid \"stone\" { smo|oth: 0.16 }", "shape.smooth", "smooth-blend radius")]
+    [InlineData("shape Super|ellipsoid \"stone\" { exponent: 2.7 }", "shape.type: Superellipsoid", "Superellipsoid")]
+    [InlineData("shape Superellipsoid \"stone\" { blend: Smooth|Union }", "blend: SmoothUnion", "SmoothUnion")]
+    public async Task HoverExplainsCreationFieldsInsideAWorldPrototype(string body, string field, string description) {
+        var source = "schema: \"puck.world.def.v1\"\nprototypes { prototype \"limestone\" { document {\nschema: \"puck.creation.v1\"\n" + body + "\n} } }\n";
+        var response = await HoverMarkedAsync(source);
+        var text = response["result"]?["contents"]?["value"]?.ToString();
+        Assert.NotNull(text);
+        Assert.Contains(field, text, StringComparison.Ordinal);
+        Assert.Contains(description, text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("schema: \"puck.creation.v1\"\nshape Box \"x\" { mat|erial: 0 }", "palette slot")]
+    [InlineData("host { wi|dth: 1280 }", "width in pixels")]
+    [InlineData("value: orbit(ya|w: 0deg)", "heading in radians")]
+    [InlineData("value: setState(st|ate: \"hp\", value: 3)", "state row name")]
+    public async Task HoverUsesOwningSchemaForFieldsAndCallArguments(string source, string expected) {
+        var response = await HoverMarkedAsync(source);
+        var text = response["result"]?["contents"]?["value"]?.ToString();
+        Assert.NotNull(text);
+        Assert.Contains(expected, text, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
+    public void SchemaExportsCreationHelp() {
+        var schema = WorldSchema.Export([]);
+        var descriptions = string.Join("\n", schema.Sections.Select(section => section.Node.ToJsonString())) + schema.Common.ToJsonString();
+        Assert.Contains("GGX roughness", descriptions, StringComparison.Ordinal);
+        Assert.Contains("x-enumDescriptions", descriptions, StringComparison.Ordinal);
+        var prototypes = schema.Sections.Single(section => section.Name == "prototypes").Node;
+        var name = prototypes["items"]?["properties"]?["document"]?["properties"]?["name"];
+        Assert.NotNull(name?["description"]);
+        // Hover annotations must not activate WorldJsonContext converter constraints in the creation serializer.
+        Assert.Null(name?["type"]);
     }
 
     private static Task<JsonNode> HoverMarkedAsync(string markedSource) {

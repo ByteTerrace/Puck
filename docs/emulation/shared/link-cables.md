@@ -1,10 +1,13 @@
-# Serial Link Cables & Multi-Device Sessions
+# Serial link cables and multi-device sessions
 
-Puck models retro multiplayer connectivity as physical link cables and peripheral attachments between emulated machines. Unlike typical netplay architectures that simply synchronize input vectors, Puck simulates the low-level byte-shifting hardware protocols used by physical consoles.
+Puck models serial links as part of the emulated bus. A linked session owns a
+deterministic interleave for its machines, exchanges the low-level byte shifts
+exposed by the serial hardware, and keeps each host's video, audio, and input
+surfaces separate.
 
 ---
 
-## Serial Cable Architecture
+## Serial cable architecture
 
 In physical hardware (e.g., the Game Boy Serial Port or GBA Serial Communication Port), two consoles connect via a cable containing serial clock (`SC`), serial data in (`SI`), serial data out (`SO`), and ground lines.
 
@@ -25,7 +28,7 @@ sequenceDiagram
     Cable->>M2: Trigger Serial Interrupt (IF bit 3)
 ```
 
-### The Linked Machine Group
+### The linked machine group
 
 When two machines link (e.g. two players sitting at connected arcade cabinets or holding tethered handhelds), the engine constructs a `LinkedMachineGroup`:
 
@@ -33,11 +36,14 @@ When two machines link (e.g. two players sitting at connected arcade cabinets or
 2. **Unified Link Thread**: Both cores lend their execution state to a single shared execution thread.
 3. **Instruction-Atomic Interleaving**: `SerialLinkSession` advances the two machines instruction-by-instruction. When one machine triggers a serial transfer, both cores step in lockstep until the 8-bit shift register exchange completes.
 4. **Individual Output Publishing**: Each linked console continues publishing its own framebuffer, audio stream, and input state through its existing host instance. Spatial audio and display surfaces remain separate in the world.
-5. **Severing the Cable**: Disposing the link detaches the serial peers and returns both machines to their independent worker threads. Any unfinished transfer driven by an external clock remains pending on the port, exactly as on physical hardware.
+5. **Severing the cable**: Disposing the link detaches the serial peers and
+   returns both machines to their independent worker threads. Any unfinished
+   transfer driven by an external clock remains pending on the port, matching
+   the modeled port state.
 
 ---
 
-## Pacing Credits & Overshoot Compensation
+## Pacing credits and overshoot compensation
 
 Because the two emulated consoles may have minor variations in interrupt timing or execution speed, `SerialLinkSession` employs a deterministic pacing credit system (`SerialLinkSession.PacingCredits`):
 
@@ -47,11 +53,11 @@ Because the two emulated consoles may have minor variations in interrupt timing 
 
 ---
 
-## Infrared & Peripheral Emulation
+## Infrared and peripheral emulation
 
 Beyond standard copper link cables, Puck emulates non-serial peripherals through dedicated session adapters:
 
-### Infrared Link (`IrLinkSession`)
+### Infrared link (`IrLinkSession`)
 - Emulates the CGB built-in infrared transceiver (`InfraredPort`) and cartridge-based transceivers (`HuC1Cartridge`, `HuC3Cartridge`).
 - Handles LED pulse modulation, line-of-sight signal attenuation, and half-duplex packet transmission.
 

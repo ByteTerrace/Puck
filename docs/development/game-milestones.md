@@ -1,8 +1,15 @@
-# Campaign milestone verification records
+# Game development milestones
 
-This document preserves the chronological verification logs and empirical test runs recorded during the development waves between August and September 2026.
+This document preserves chronological verification logs and empirical test runs
+recorded during the game development waves between August and September 2026.
+Each entry identifies its candidate, command or test, result, and limits, so a
+dated observation stays evidence for that run rather than becoming an undated
+feature claim.
 
-Per the repository's verification doctrine, each entry names the exact check, command, or test that produced it. For the binding charter and active work plan, see [game design](../game/design.md).
+Per the repository's verification guidance, each entry names the exact check,
+command, or test that produced it. For the binding design decisions, see
+[Reference game design](../game/design.md); for proposed sequencing, see the
+[Game development plan](../plans/game-development.md).
 
 ---
 
@@ -10,7 +17,7 @@ Per the repository's verification doctrine, each entry names the exact check, co
 
 **Verified 2026-08-15, on the branch that split the projects** (rows that described the retired prototype
 worlds, the frozen diorama, the quilt deltas, and the scenario documents are gone with those documents;
-the island's own claims are in the 2026-09-06 entry above):
+the island's own claims are in the 2026-09-06 entry below):
 
 | Claim | The check |
 |---|---|

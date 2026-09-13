@@ -4,16 +4,18 @@ Puck's rendering documentation explains how authored world data becomes a
 displayed frame. It covers the shared shader-pipeline system and the current
 signed-distance-field renderer. Rendering is a presentation concern; the
 deterministic simulation and query contracts remain documented with their
-own owning projects.
+owning projects.
 
 ## Start here
 
 - [SDF renderer](sdf/README.md) introduces the implemented signed-distance
   field renderer and routes to its handbook and technical reference.
+
 - [`Puck.Shaders` README](../../src/Puck.Shaders/README.md) documents shader
   manifests, pipeline graphs, resource bindings, configuration, and live
   loading.
-- [Shader pipeline evolution](../plans/shader-pipeline-evolution.md) records
+
+- [Shader pipelines and hybrid rendering](../plans/shader-pipeline-evolution.md) records
   the planned work beyond the current pipeline foundation, including hybrid
   rendering and shared visibility.
 

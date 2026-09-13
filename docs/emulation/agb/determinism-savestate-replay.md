@@ -1,5 +1,10 @@
 # Determinism, snapshots, and replay
 
+This page describes how the Advanced Gaming Brick (AGB) keeps machine execution
+repeatable, captures complete state, and uses that state for fork, rewind,
+runahead, and divergence diagnostics. It also marks the boundaries of the
+current replay surface.
+
 The native GBA core treats emulation as a pure function of configuration,
 integer cycles, and recorded input. This makes a complete machine snapshot the
 common primitive for restore, fork, rewind, runahead, divergence analysis, and
@@ -43,7 +48,8 @@ behavior and deterministic content, not a private field layout.
 
 `MachineTimeTravel<TInput>` (`src/Puck.GamingBricks/MachineTimeTravel.cs`) is the
 shared, machine-neutral rewind layer both GamingBrick cores drive through
-`ITimeTravelMachineCore<TInput>` — it is not AGB-specific or Demo-specific.
+`ITimeTravelMachineCore<TInput>`; it is machine-neutral rather than
+AGB-specific or Demo-specific.
 It stores periodic full keyframes and, for the frames between two keyframes,
 only the `(input, cycle-budget, host-accumulator)` that produced each one, in
 a fixed-capacity segment ring; a rewind restores the nearest keyframe and
@@ -56,8 +62,8 @@ allocation on bytes a keyframe-plus-replay restore never reads.
 currently wires rewind to a booted screen machine. The deleted `Puck.Demo`
 tree's `AgbDebugCommandModule` (see git history) carried a comment naming an
 aspirational `TimeTravelCommandModule` that was never built, and its own
-verbs — `agb.snap`/`agb.restore` (in-memory savestate slots, a coarser
-mechanism than the ring) and `agb.light`/`agb.poke` — never shipped with a
+verbs `agb.snap`/`agb.restore` (in-memory savestate slots, a coarser
+mechanism than the ring) and `agb.light`/`agb.poke`; none shipped with a
 successor; none of them rewind.
 
 ## Runahead

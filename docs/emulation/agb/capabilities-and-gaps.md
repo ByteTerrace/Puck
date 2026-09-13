@@ -1,4 +1,4 @@
-# GBA capability and gap index
+# GBA capabilities and gaps
 
 This index summarizes the native GBA core. Follow each subsystem link for
 hardware details, sources, and diagnostic procedures.
@@ -15,7 +15,7 @@ hardware details, sources, and diagnostic procedures.
 | Cartridge | EEPROM, SRAM, Flash, save overrides, RTC, undersized-image validation | jsmolka save stages, save round trip |
 | Determinism | full mid-frame snapshot/restore/fork, section-localized hash divergence | Tier A state and fork stages, `--hash-divergence` |
 | Link | Normal and multiplayer SIO, cable identity and partner state, deterministic multi-console session | Tier C `link-replay` and commercial replay |
-| Time travel | machine-neutral rewind (keyframe plus deterministic replay, no delta encode) and two-instance runahead at the host layer — no console verb exposes either yet | `queued-host-time-travel` (Tier A, both batteries), `MachineTimeTravel<TInput>` (`src/Puck.GamingBricks`) |
+| Time travel | machine-neutral rewind (keyframe plus deterministic replay, no delta encode) and two-instance runahead at the host layer; no console verb exposes either yet | `queued-host-time-travel` (Tier A, both batteries), `MachineTimeTravel<TInput>` (`src/Puck.GamingBricks`) |
 
 ## Accuracy work
 

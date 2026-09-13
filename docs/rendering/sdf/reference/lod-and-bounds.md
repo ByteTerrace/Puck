@@ -4,7 +4,7 @@ Puck uses conservative bounds to skip work without changing the rendered
 field. A skip is valid only when the omitted candidate cannot affect the
 accumulated result for the current sample.
 
-## Bound levels
+## Levels of bounds
 
 - Instance bounds cover a contiguous instruction range in world space.
 - Segment analysis identifies portions of an instance that can be bounded and
@@ -73,8 +73,8 @@ simplification should expose its error metric and transition policy in data.
 The contact paths take a domain fold as the finite set of rigid copies
 `SdfDomainExpansion` derives, so every fold is measured against a copy budget
 before it becomes colliders. That budget is judged against the count a branch
-set *would* have, in closed form — `(2l_x+1)(2l_y+1)(2l_z+1)` cells,
-`count·(mirror ? 2 : 1)` sectors — never against a materialized list.
+set *would* have, in closed form—`(2l_x+1)(2l_y+1)(2l_z+1)` cells,
+`count·(mirror ? 2 : 1)` sectors—never against a materialized list.
 
 The values reaching that judgement are authored, so they are hostile-document
 scale: a repeat limit of 120 is fourteen million frames, and any limit at or
@@ -100,5 +100,4 @@ hole.
 
 Per-segment bounds for placed creations remain an open priority, tracked
 nowhere: this paragraph is the whole record of the item.
-
 

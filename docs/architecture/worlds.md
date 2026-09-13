@@ -12,11 +12,11 @@ without keys cannot carry a claim, and an unverifiable claim is refused.
 
 The engine has a one-way flow with explicit ownership at each boundary:
 
-1. **Document.** A versioned puck.world.def.v1 document is the durable input.
+1. **Document.** A versioned `puck.world.def.v1` document is the durable input.
    The [world data guide](../../src/Puck.World/README.md#the-world-as-data)
    and [schema guide](../../src/Puck.World.Schema/README.md#puckworlddefv1--the-world-definition)
    describe its fields and serialization.
-2. **Validation.** WorldDefinitionValidator checks the complete composed
+2. **Validation.** `WorldDefinitionValidator` checks the complete composed
    candidate document before it can become live. Builders consume a valid
    document and do not repeat semantic validation.
 3. **Simulation.** The authoritative server advances the document state in
@@ -37,65 +37,65 @@ The engine has a one-way flow with explicit ownership at each boundary:
    own renderer details.
 
 The document boundary owns durable intent, validation owns semantic admission,
-the server owns truth, snapshots own transportable observations, and
+the server owns accepted simulation state, snapshots own transportable observations, and
 presentation owns timing and visual choices. A layer may consume the previous
 layer output through its contract, but it does not reach around that contract
 to mutate another layer state.
 
 ## World relationships
 
-**The model has one first-class runtime entity: a world.** A zone, a player identity, an alternate character, a hub, and a game are all worlds.
-
-Everything else is a **relationship between worlds**, and every relationship is a document field, a
-capability, or a submission — never a subsystem. (The words are defined below; if any of them are
-unfamiliar, read that section first.)
+The world model represents zones, player identities, alternate characters,
+hubs, and games using the same document model. Ownership, joining, and movement
+between them are relationships expressed through document fields, capabilities,
+and submissions. The terms below explain how those relationships fit together.
 
 | Relationship | What it means | Where it lives |
 |---|---|---|
 | **Ownership** | you hold authority over a document | identity, derived from the hosting platform's stable per-user id |
 | **Joining** | you have the document, a snapshot, and the stream; you can see it | session admission |
-| **Embodiment** | you have a *body* in it — strictly separate from joining | population entry |
+| **Embodiment** | you have a *body* in it—strictly separate from joining | population entry |
 | **Reference** | a world names another definition/address without asserting reachability | document row |
 | **Destination** | a world selects a scoped identity/generation over one reference | document row |
 | **Attestation** | a world signs a claim another world carries | issuer-signed slot |
 | **Transfer** | a body moves from one world's authority to another's | submission |
 | **Display** | a surface shows what a camera produces, in this world or a joined one | placement facet |
 
-**Frames obey the same discipline.** A camera produces, a surface consumes, the pairing is data, and
-the two are duals rather than one thing. But a surface is not its own noun — it is a placement
-carrying a display facet, like solidity or emission. Within a world, placements and cameras are the
-content nouns; a screen is something a placement *does*.
+Frames use a producer and consumer relationship: a camera produces an image,
+and a placement with a display facet consumes it. The pairing is document data.
+A display facet is an optional property of a placement, alongside properties
+such as solidity and emission; it does not introduce a separate content type.
 
-The single most useful consequence: **showing a world is joining it.** A screen displaying another
-world is not a preview mechanism — you have joined that world and are rendering it. Stepping through
-the screen is not joining; it is *acquiring a body*. There is no spectator mode, because a session
-without embodiment already is one.
+Displaying another world's live view requires joining that world and rendering
+its delivered state. Crossing into it acquires a body, a separate operation from
+joining. A participant who has joined without acquiring a body can observe the
+world without a separate spectator mode.
 
-**What you are given when you join is the authority's choice**, and that is a grant decision like any
-other: a full replica where the world has nothing to hide, a redacted projection where it does,
-frames where even that is too much. One relationship, three fidelities — not three mechanisms.
+The authority decides what an observer receives through grants. It can provide
+a full replica, a redacted projection, or rendered frames when state cannot be
+shared. These are different fidelities of the same observation relationship.
 
 ## Terms
 
-Client and server are approximations here rather than definitions. They are per-machine labels for
-what is really a per-world, per-moment role: one machine is the truth for your identity world and a
-follower of four others in the same instant.
+Client and server describe roles relative to a world. A host can be the authority
+for an identity world while following four other worlds at the same time. The
+role therefore belongs to a world relationship, rather than permanently to a
+machine.
 
 | Term | Means |
 |---|---|
-| **World** | a document and the simulation it defines — instantiated when something needs to run it, and durable when nothing does |
+| **World** | a document and the simulation it defines—instantiated when something needs to run it, and durable when nothing does |
 | **Instance** | a running copy of a world's simulation on some machine |
-| **Authority** | the one instance of a world whose results are the truth |
+| **Authority** | the one instance of a world whose results define the accepted state |
 | **Replica** | any other instance of it, ticking the same inputs, whose results are not |
 | **Host** | the machine or process running instances |
 | **Participant** | someone joined to a world; *embodied* if they hold a body in it |
 
-An authority and a replica run **identical code**. A replica is not a thinner client — it is the same
-simulation from the same taped inputs, differing only in whether its answers are the truth. That is
-what determinism buys, and it is why a command-streamed screen, a prediction, a spectator and a
-foreign engine drawing this simulation are all one mechanism rather than four.
+An authority and a replica run the same simulation code and recorded inputs.
+Only the authority decides the accepted state. Determinism allows that shared
+execution model to support command-streamed screens, prediction, spectators,
+and another engine presenting the simulation.
 
-If you already know the usual words, keep using them — each breaks in one specific place:
+Common networking terms remain useful, with the following qualifications:
 
 | You would say | Here it is | Where the analogy breaks |
 |---|---|---|
@@ -103,33 +103,33 @@ If you already know the usual words, keep using them — each breaks in one spec
 | dedicated server | a host whose authorities have no embodied participant | otherwise identical to any other host |
 | listen / player-hosted server | a host that is both an authority and embodied | the ordinary case, not a lesser one |
 | client | a host running replicas, usually embodied | a replica runs the *same* simulation, not a thin viewer |
-| zone, shard, realm | a world | — |
+| zone, shard, realm | a world |—|
 | dungeon instance | another world booted from the same document | needs no instancing system |
-| character, alt | a world you own | — |
+| character, alt | a world you own |—|
 | account | the set of worlds you own | there is no tier above them |
 | spectator | a participant joined but not embodied | not a mode |
 | item, inventory | durable slots on a world you own | the engine never learns what an item is |
 
-The engine words this model leans on:
+The following terms describe the simulation and its document:
 
 | Word | Means |
 |---|---|
 | **tick** | one fixed simulation step; everything deterministic is counted in ticks, never seconds |
 | **taped** | recorded on the replay tape, so the same inputs reproduce the same state exactly |
-| **submission** | a tick-stamped request into a world — intent, a command, a document change |
+| **submission** | a tick-stamped request into a world—intent, a command, a document change |
 | **slot** | a named value on a body or a world; *durable* ones persist for a participant |
 | **placement** | an instance of authored geometry positioned in a world |
-| **facet** | an optional property a placement carries — solid, emitting, a region, a display |
+| **facet** | an optional property a placement carries—solid, emitting, a region, a display |
 | **grant** | permission for a principal to act on a subject; deny by default |
-| **domain** | an issuing authority — *is* its root key's fingerprint, never a name |
+| **domain** | an issuing authority—*is* its root key's fingerprint, never a name |
 
 ## Invariants
 
-Everything below rests on six rules. A design must satisfy all six.
+The model requires the following six invariants.
 
 1. **Exactly one world simulates a given body at a time.** Authority is never shared, never
    overlapped, never negotiated mid-tick.
-2. **Foreign and nondeterministic state enters at one boundary**, tick-stamped and taped — never a
+2. **Foreign and nondeterministic state enters at one boundary**, tick-stamped and taped—never a
    mid-tick read of another document, of storage, or of a clock.
 3. **The engine ships mechanisms; the game supplies names.** No `health`, no `lootTable`, no `quest`,
    no `aggro` in the schema. A level is a durable counter someone called a level.
@@ -191,7 +191,7 @@ and lets its display and transfer consumers address that same resolved session.
 
 ## Adjacency and crossing
 
-Portals are intentional authored travel furniture. Continuous topology is authored independently,
+Portals describe authored transitions between worlds. Continuous topology is authored independently,
 through reciprocal `adjacencies` rows: each names a global persisted destination, the neighbour's
 counterpart row, and an invisible rectangular boundary, and the validator fetches the neighbour
 document and refuses by name an unreachable destination, a missing reverse edge, mismatched extents,
@@ -201,30 +201,30 @@ authority, the compiler derives that corner peer and validation proves both two-
 
 Authors declare physical and interaction envelopes; they never guess a transport strip. The compiler
 derives one symmetric overlap depth from both bodies' reach, interaction/targeting reach, and two
-slower-side delivery periods of closing speed, rounding outward — so weapon reach reaches topology
+slower-side delivery periods of closing speed, rounding outward—so weapon reach reaches topology
 at author time rather than in production.
 
 Ownership changes at the far side of a derived deadband, never at the authored plane, so an arrival
 starts that far inside its new writer and the reciprocal pair closes. The deadband is derived from
-whichever envelope the boundary's own geometry closes against — a wall against two body reaches plus
+whichever envelope the boundary's own geometry closes against—a wall against two body reaches plus
 contact skin, a floor or ceiling against one authority step of the vertical descent envelope plus
 contact skin, which is centimetre-scale and leaves ascent headroom intact. Neither is authored: a
 safety margin a world could set is a safety margin a world could set wrong. The floor case's
 separating property is that the deadband is larger than any descent nobody commanded and smaller
-than any descent somebody did, so a body settling onto ground just past a seam stays put while a
+than any descent somebody did, so a body settling onto ground just past a boundary stays put while a
 body flown back down still crosses.
 
-Crossing maps a traveler through the pair's one isometry, which carries the exact in-plane point its
-swept segment crossed onto the counterpart's corresponding point — a property of the map, not of a
-seam plumbed beside the traveler — so an off-center crossing lands where it should and contiguous
-terrain reads as one continuous surface.
+Crossing maps a traveler through the pair's isometry, a distance-preserving
+transformation. The point where its swept segment intersects the boundary maps
+to the corresponding point on the other side. This preserves off-center arrival
+and continuous terrain without adding a separate crossing transform.
 The depth past the threshold carries through unchanged: a deliberate continuity property. Scanning
 is swept per actual step, so a high-speed body cannot tunnel through a face between samples, and a
 body crossing several faces in one step resolves to exactly one winner. The neighbour arrives over
-the session-mirror observation plane — wire-shaped delivered data, never a reach into a sibling
+the session-mirror observation plane—wire-shaped delivered data, never a reach into a sibling
 instance's live objects.
 
-## Reference, destination and session are different facts
+## References, destinations, and sessions
 
 `WorldReference` is the authored naming/address layer. It asserts naming intent, not durable
 identity, existence, reachability or authority; a document path is a local bootstrap locator, not a
@@ -292,7 +292,7 @@ disposable. An entry reservation is transactional, survives display teardown, an
 and target-clock timeout. Closing a view cannot cancel a transfer already preparing; a failed
 transfer cannot leak an observation or population slot.
 
-## Durability, scope and generation
+## Durability, scope, and generation
 
 `ephemeral|persisted` describes world identity:
 
@@ -374,7 +374,7 @@ Changing step width preserves monotonic step ordinal and elapsed engine time; it
 ordinal as `elapsedTicks / stepTicks`. A rate-zero world remains resident and observable but receives
 no simulation steps until its effective rate becomes nonzero.
 
-Rate zero also gives reconnect parking an honest non-numeric forever state. A parked body's
+At rate zero, reconnect parking uses an explicit state with no expiration. A parked body's
 `ParkedRemainingTicks` is `null` when no simulation tick can expire it, `world.parked` reads that as
 `remaining=never deadline=never`, and the reserved `$parked:` rule fact compares as positive
 infinity: equal to another forever fact, greater than every finite value, and never less than or
@@ -382,7 +382,7 @@ equal to one. Copying a forever fact into a numeric state cell does not fire bec
 representable value to store. No `int.MaxValue` or other finite sentinel participates in comparison,
 copy, deadline or persistence arithmetic.
 
-## Joining, authority and admission
+## Joining, authority, and admission
 
 An unembodied joined session is the ordinary shape behind a portal display. The target chooses a full
 replica, redacted state projection or frames. Body-indexed principals cannot represent that
@@ -428,7 +428,7 @@ An observation feed provides:
 - the destination presentation clock and step width.
 
 A joined-world projection renders the destination from the destination's own delivered snapshots and
-its own measured clock, never through the host's presentation clock — independently scheduled or
+its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. A nested screen inside a projected destination
 binds dark: the explicit depth-one policy.
 
@@ -436,7 +436,7 @@ User/group-scoped destinations make images viewer-dependent. One image per scree
 different destinations to split-screen viewers; per-viewport bindings or distinct render passes are
 required.
 
-## Transfer, determinism and replay
+## Transfer, determinism, and replay
 
 Entry is one transaction over an already-resolved session:
 
@@ -456,7 +456,7 @@ with different rates. Abort restores each body's original pose/state, not merely
 source releases authority only after destination acknowledgement.
 
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids
-issue from a counter in the target resolver's ordered domain, recorded before they are exposed — a
+issue from a counter in the target resolver's ordered domain, recorded before they are exposed—a
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
 
@@ -484,23 +484,24 @@ denominated in the source's own ticks and converted across rates by the exact 50
 and per-border capacity are document fields. Atomicity is not: a field that could break "the body
 exists in exactly one authority at every instant" is a defect with a schema entry.
 
-**A reservation attests more than the destination's face existing** — reciprocal topology, envelope
-and frame compatibility, and the crossing record — so a lying destination cannot admit a traveller at
+**A reservation attests more than the destination's face existing**—reciprocal topology, envelope
+and frame compatibility, and the crossing record—so a lying destination cannot admit a traveller at
 the wrong size. It rides the trust tiers rather than adding a second trust list.
 
 **A vanished source needs no reaper at the destination.** The body is the source's until commit, so
 transfer durability is the source journal's durability, and a reservation held for a source that dies
 expires at its deadline with capacity released. What dies with a host is in-world body state only:
-identity and its attested facts — items, currency, achievements — live on the identity document, so a
+identity and its attested facts—items, currency, achievements—live on the identity document, so a
 player loses position rather than possessions.
 
-**No unembodied session principal at transfer.** Admission assigns the connection's body index, so
-principal and body arrive together; during a transfer the source authority holds the lease, and the
-traveller's identity travels as attested data inside the reservation rather than as an actor at the
-destination. Spectating needs no new kind either — it is an `Observe` grant without `Drive` over an
-admitted body. *This ruling holds only while a spectator or a queued traveller may consume population
-capacity; wanting either to be free of a slot reopens it.*
-
+For population-backed admission, the connection receives a body index, so its
+principal and body arrive together. During transfer, the source authority holds
+the lease, and the traveler's identity is carried as attested reservation data.
+A spectator can use an `Observe` grant without `Drive` over an admitted body.
+This policy assumes that spectators and queued travelers may consume population
+capacity. Slot-free observation instead needs the session-scoped authority
+described under joining and admission above; the population-backed policy cannot
+represent it without that additional admission support.
 **Projection is the crossing record plus the tape's per-tick records**, and the two record kinds stay
 distinct: a definition revision is delivered once, and per-tick records name the revision they were
 produced against. Folding them ships the neighbour's geometry every tick.
@@ -512,21 +513,20 @@ claims others honour is one; the trust tiers are social rather than structural. 
 own authoritative worlds is a goal, so nothing here stops a group agreeing to author a home world for
 two hundred and fifty six bodies and holding a war in it.
 
-**What limits scale is the machine, not the schema.** Authoring capacity does not grant the cycles to
-tick it. And a world that over-commits fails in the fairest way available: it falls behind as ONE
-tick, so everyone in it falls behind identically — shared adversity arriving structurally rather than
-by design, which is the same reason input holds exist. A cluster's authority is chosen at formation
-and never re-evaluated, so a latecomer who does not accept it cannot join.
-
-**What sharding does not buy.** At a genuine melee — everyone within interaction range of everyone —
+Authored capacity must fit the host's available processing time. If the world
+falls behind, its entire simulation step falls behind, so all participants share
+the same delay; input holds preserve their intent across those steps. A cluster's
+authority is selected at formation and is not reconsidered when participants
+arrive. A participant who does not accept that authority cannot join.
+**What sharding does not buy.** At a genuine melee—everyone within interaction range of everyone —
 co-location puts the whole cluster under one authority, so four zones around a junction distribute
 nothing at exactly the place with the most contention. That follows from concentrating a connected
 interaction graph under one authority, which is this model's rule rather than a law: distributed
 lockstep, ordered cross-owner effects and transactional interaction resolution all keep one authority
 per body without simulating twice. They are slower and more complex, which is why they were not
-chosen — not impossible. Clusters also grow by *transitive closure* of the interaction graph, so a
+chosen—not impossible. Clusters also grow by *transitive closure* of the interaction graph, so a
 chain of engagements can sweep in players beyond the visible fight. Both are why bounding the
-cluster, reserving headroom and co-hosting neighbours are work rather than polish — and why the
+cluster, reserving headroom and co-hosting neighbours are work rather than polish—and why the
 authoring guidance is not "put a world wherever people fight", which is reactive topology, but "do
 not run an authority boundary through a place designed to be contested".
 
@@ -534,10 +534,9 @@ not run an authority boundary through a place designed to be contested".
 
 *Issuer-signed slots* and *an authored trust list* both rest on one mechanism: a signed attestation
 whose design rationale, normative wire specification, and reference implementation all live with the
-project that implements them — [src/Puck.Attestation](../../src/Puck.Attestation/README.md). What this model
-keeps is the seam: the engine carries proof and enforces capabilities, while whether a claim *counts*
+project that implements them—[src/Puck.Attestation](../../src/Puck.Attestation/README.md). The world model owns the boundary: the engine carries proof and enforces capabilities, while whether a claim *counts*
 stays the receiving world's policy (invariant 5); minting is randomised and happens outside the tick,
-while verification is offline, far too slow for a tick, and therefore happens at the admission
+while offline verification runs outside the simulation tick at the admission
 boundary with the verdict tick-stamped and taped as state like any other (invariant 2).
 
 ## Compositions supported by the model
@@ -553,20 +552,20 @@ concepts.
   "bring your own" and "everyone wears our art" are the same switch at different settings.
 - **Cross-designer conventions.** Slot, part and register names are chosen by games, so a cooperating
   group interoperates with no engine involvement. Declared envelopes let a visited world *normalize* a
-  foreign value rather than merely clamp it — the difference between conventions that survive contact
+  foreign value rather than merely clamp it—the difference between conventions that survive contact
   and conventions that corrupt state quietly.
 - **A fidelity ladder for hub screens.** A distant cabinet shows a loop, approaching escalates it to a
   live session. Regions and their enter/exit events already express it.
 - **Possession.** A mind-control skill, a remote vehicle, a camera drone: a targeted effect plus
   routing. The engine never learns what possession is.
-- **Loadout presets.** A named set of slot values and something that applies them — authored data plus
+- **Loadout presets.** A named set of slot values and something that applies them—authored data plus
   a batch of writes.
 - **Audio for a multi-viewer.** Authored mixing. A diegetic room gives a spatial mix for free; a
   screen-space quad has no natural answer and should not be given an invented one.
 
 ## Decisions and exclusions
 
-These decisions are excluded from the current design. A principled exclusion
+The following approaches are excluded from the current design. A principled exclusion
 follows from an invariant; a contingent exclusion names the condition that would
 reopen it.
 
@@ -583,13 +582,13 @@ reopen it.
 
 | Rejected | Why |
 |---|---|
-| **The ENGINE learning item semantics** | it never needs to; carrying, trading and lending are compositions (see above). This once read as a refusal of *carryable* things, which was a missing primitive recorded as a decision — the magazine is the direct way to say a fixture has several configurations, never a limit on what authors can build |
+| **Engine-defined item semantics** | it never needs to; carrying, trading and lending are compositions (see above). This once read as a refusal of *carryable* things, which was a missing primitive recorded as a decision—the magazine is the direct way to say a fixture has several configurations, never a limit on what authors can build |
 | **A separate per-player container document** | a second document family for durable state; profile-as-world subsumes it |
 | **An account tier above worlds** | the set of worlds you own already is the account; arrangement is authoring |
 | **Classifying addons cooperative / adversarial** | unenforceable self-declaration, and the grant table already decides what an addon may do |
-| **Unifying magazines with draws via typed element sets** | *Superseded.* The contingency ("reopens if a second typed set appears") landed: the GENERATOR row — weighted alternatives, each naming the context it moves into — is that second typed set. Draws DID absorb into it: a flat weighted draw is a degenerate one-context generator sampling a real `Pcg32XshRr` stream whose position lives in the document. Magazines did NOT: a magazine advances through `screen.select` — a player/gesture-driven screen OPERATION carrying real side effects (auto-insert boot, the save-time fold-back into `Selected`) — while a draw site advances its own cursor under a seeked PRNG. The shared shape is real; folding them would put screen-op state under a sampler that knows nothing about booting a cart |
+| **Unifying magazines with draws via typed element sets** | *Superseded.* The contingency ("reopens if a second typed set appears") landed: the generator row—weighted alternatives, each naming the context it moves into—is that second typed set. Draws were incorporated into it: a flat weighted draw is a degenerate one-context generator sampling a real `Pcg32XshRr` stream whose position lives in the document. Magazines remain separate: a magazine advances through `screen.select`—a player/gesture-driven screen operation carrying real side effects (auto-insert boot, the save-time fold-back into `Selected`)—while a draw site advances its own cursor under a seeked PRNG. The shared shape is real; folding them would put screen-op state under a sampler that knows nothing about booting a cart |
 
-### Destinations, sessions and portals
+### Destinations, sessions, and portals
 
 | Rejected | Why |
 |---|---|
@@ -611,7 +610,7 @@ reopen it.
 | Rejected | Why |
 |---|---|
 | **Merging cameras with screens** | they are producer and consumer, not one thing; the real duplication is that a screen is a placement |
-| **A foreign engine as a render backend** | a whole engine behind the renderer seam means two loops competing for the frame and a scene-graph conversion of every world — a content problem wearing a backend costume. This engine's place is *beneath* a foreign host, through the client wire, not inside one |
+| **A foreign engine as a render backend** | Hosting a complete engine inside a render backend duplicates the frame loop and requires converting every world into its scene graph. Integration with another engine instead uses the client protocol beneath that host |
 | **Video as the default screen source** | *Contingent.* Submissions are smaller, allow a free camera, and render natively. Video remains correct wherever hidden information forbids handing over the tape |
 | **Embedding ROMs in the world file** | creations are embedded because they are small and authored in-engine; a cartridge is large and externally produced, so an address plus a hash gives verifiability and travel without the weight |
 

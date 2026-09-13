@@ -1,17 +1,18 @@
 # World runtime consolidation
 
-The engine plan beneath the game. Rule writes are simulation state; static
-geometry is queried through a baked field instead of marched per query;
-`WorldServer` becomes a facade over owned objects; the runtime subsystems fold
-into the packages that already own their vocabulary. **No new packages** — every
-fold has an existing home whose declared purpose already covers it.
+This plan proposes a consolidation of the world runtime around its existing
+ownership boundaries. Rule writes remain simulation state, static geometry is
+queried through a baked field instead of marched per query, and `WorldServer`
+becomes a facade over owned objects. Runtime subsystems fold into the packages
+that already own their vocabulary. **No new packages**—every fold has an
+existing home whose declared purpose already covers it.
 
-This document records the decisions and the work they still imply. It states no
-status: what is built, the code answers, and what has been verified with the
-check that produced it belongs to [game design](../game/design.md). If this plan and
-the code disagree, the code wins and a line here is wrong.
+The plan records design decisions and remaining work. Check the owning source
+for implementation status and the [game milestones](../development/game-milestones.md)
+for dated verification. A difference between the plan and the implementation
+needs an explicit decision about whether the plan is stale or work remains.
 
-## What the state of the art says, and what it implies here
+## Design comparisons
 
 | Where | The idea | What it implies |
 |---|---|---|
@@ -19,7 +20,7 @@ the code disagree, the code wins and a line here is wrong.
 | Every lockstep engine | The simulation emits events; formatting, logging, and metrics are subscribers outside the core. | Narration through `WorldOutputHub`, with the architecture gate's console denial armed against the compiled assembly rather than a source scan. |
 | Ludii, RBG | Compiled evaluation and bitsets. | Not where the profile is. No emitted evaluation, no bit-packed cells, until a search-rollout measurement names them. |
 
-## The remaining pillars
+## Remaining work
 
 ### `WorldServer` becomes a facade
 
@@ -45,7 +46,7 @@ checkpoint codecs encode records nested inside Server runtime classes, and the
 replay describers are called from `WorldReplaySnapshot`. Un-nesting those
 records is this facade's job, not a codec move.
 
-### Ratchets
+### Maintenance constraints
 
 - **One deadline primitive.** The expiry sweeps for escrows, transfer escrows,
   contribution tenure, and parks become one deadline table the tick sweeps once,
@@ -55,27 +56,27 @@ records is this facade's job, not a codec move.
   touches each one.
 - **File-length ceiling.** Lower it once the facade has split the largest files.
 
-### The crucible gate
+### Composed-game acceptance check
 
 Two chess instances in one world from one rules fragment, one moved by hand on
 the table and one driven by text, producing equivalent accepted histories while
 their physical motion and presentation differ; then two solitaire tables at
-once; then poker with two participant identities in the same roles. That gate
-proves an author can change how a game is encountered without touching its
+once; then poker with two participant identities in the same roles. That check
+demonstrates an author can change how a game is encountered without touching its
 adjudication.
 
 Most games belong in their own documents or as basis deltas over the island,
-with small rule-work footprints and fast boots. A parlour world — a market
-tabletop, an arcade hall — composes several game modules under `imports[].as`
-into one shared diegetic space. The shipped island deliberately composes far
-more than a parlour world would, because a crucible that holds every discipline
-at once is what exposes the engine's cracks under composition; the answer to a
-ceiling it reaches is honest pricing, never a game-specific bypass.
+with small rule-work footprints and fast boots. A shared game room—a market
+tabletop, an arcade hall—composes several game modules under `imports[].as`
+into one shared diegetic space. The shipped island combines more systems than a typical shared game room.
+That composition exposes interactions between the systems and tests their
+combined budgets. A capacity failure needs accurate work pricing or a general
+implementation correction; a game-specific bypass would hide the constraint.
 
-## Deliberately not in this plan
+## Scope limits
 
 - No new packages.
-- No rewrite of `WorldBody`. It reads through a seam and stays.
+- No rewrite of `WorldBody`. Its existing interfaces preserve its ownership boundary.
 - No change to the name grammar. A namespace is a property of an import, never a
   character inside a name.
 - No preservation of retired journal or tape shapes. Re-record and delete the old
@@ -88,7 +89,7 @@ ceiling it reaches is honest pricing, never a game-specific bypass.
 ## Sequence
 
 Each wave is wide and file-disjoint so it integrates in one pass, and each is
-held against the campaign's one milestone: a definitive playthrough from the
+held against the game's acceptance playthrough: a definitive playthrough from the
 studio's front door through the arena, the arcade hearth, the plaza, and off the
 island's edge onto a shard.
 
@@ -100,7 +101,7 @@ island's edge onto a shard.
   playthrough, played, with its captures.
 - **The federation wave.** Provenance signing for carried state, the bilateral
   attestation rows a duel or wager is, a profile world docked at a shard's seam,
-  then the silo-hosted hub. The facade and the remaining ratchets ride behind it.
+  then the silo-hosted hub. The facade and the remaining maintenance constraints ride behind it.
   Held by the four-corners stressor across authorities and the attestation laws.
 
 A wave lands on the working branch after a review with the owner and reaches

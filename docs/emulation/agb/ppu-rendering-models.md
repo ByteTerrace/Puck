@@ -1,5 +1,10 @@
 # PPU rendering models
 
+The Advanced Gaming Brick (AGB)'s PPU produces a 240×160 frame from tiled and affine
+backgrounds, objects, windows, and blending. This page describes the current
+scanline model and the evidence boundary around effects that still need
+per-dot timing.
+
 ## Current model
 
 `AgbPpu` renders one scanline at a time and re-evaluates scanline-visible

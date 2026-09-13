@@ -21,7 +21,7 @@ segment bounds can also provide a safe distance to potentially relevant work.
 The step is the minimum of all applicable conservative limits after converting
 them to a common distance scale.
 
-## Candidate techniques
+## Candidate acceleration techniques
 
 Curvature-guided stepping and non-linear root refinement may reduce work near
 smooth surfaces, but they require stable derivative information and a measured

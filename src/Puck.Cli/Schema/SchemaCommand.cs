@@ -44,7 +44,7 @@ internal static class SchemaCommand {
             Generated from WorldDefinition (src/Puck.World.Schema/WorldDefinition.cs) over the same
             source-generated WorldJsonContext the engine loads a world document through
             (System.Text.Json's JsonSchemaExporter) — never hand-maintained. Descriptions are
-            pulled from Puck.World.Schema.xml beside the assembly; when that file is missing the
+            pulled from the World.Schema, State, World.Authoring, and SignedDistance XML files beside the assemblies; when a file is missing the
             schema still writes, with no descriptions, and this verb says so on stderr.
             render.extensions[] takes its id vocabulary and per-id config schema from the shipped
             puck.shader.v1 manifests under src/*/Assets/Shaders (Puck.Shaders.ShaderSetManifest).
@@ -71,7 +71,7 @@ internal static class SchemaCommand {
 
     private static int Run(bool bundle, string? bundlePath, bool check, bool toStdout) {
         if (!WorldSchema.HasXmlDocumentation) {
-            Console.Error.WriteLine(value: "schema: Puck.World.Schema.xml not found beside the assembly — the generated schema will carry no descriptions.");
+            Console.Error.WriteLine(value: "schema: an XML documentation file is missing beside its assembly — the generated schema will carry no descriptions.");
         }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;

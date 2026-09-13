@@ -1,6 +1,9 @@
-# Remaining state system duplication opportunities
+# State consolidation
 
 The state duplication pass on 2026-09-06 identified the opportunities below.
+Several foundations now live in the owning projects; this plan proposes the
+remaining consolidation while preserving the distinctions that authors and
+runtime hosts can observe.
 Expression-key binding reuse, shared board combination, one transaction effect
 vocabulary, operator metadata, effect source reads, reduction accumulation,
 trait field validation, and validation-to-install compilation reuse now live in the owning

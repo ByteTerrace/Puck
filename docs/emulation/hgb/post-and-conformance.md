@@ -1,4 +1,4 @@
-# Post Harness & Conformance Testing
+# Post harness and conformance testing
 
 `Puck.HumbleGamingBrick.Post` is the executable battery for the Humble
 Gaming Brick's deterministic machine contracts and focused diagnostics. Its
@@ -6,7 +6,7 @@ repository stages and recorded ledger provide repeatable checks. External ROM
 suites and other emulators provide evidence for hardware behavior; a passing
 comparison is not, by itself, proof of physical-hardware parity.
 
-## The Post Test Architecture
+## The Post test architecture
 
 The battery runs ordered stages. Self-contained stages check the core,
 snapshots, hosting, links, firmware boundaries, and other contracts. Ledger
@@ -14,7 +14,7 @@ stages discover ROM cases, dispatch them through `ProbeRunner`, and compare
 their recorded outcomes through `LedgerEvaluator`. The current lane names and
 the complete option table are maintained in the [Humble Post README](../../../src/Puck.HumbleGamingBrick.Post/README.md).
 
-### Execution Lanes
+### Execution lanes
 
 Fetch the pinned external corpora once for a cache, then choose a lane:
 
@@ -36,7 +36,7 @@ Use `--tier A|B|C` or `--filter <text>` to narrow a run. There is no
 row. The project README documents optional commercial-cartridge inputs,
 artifact paths, acceptance controls, exit codes, and the lane-selection rules.
 
-## Test ROM Corpora
+## Test ROM corpora
 
 `corpora.json` names the external archives, versions, SHA-256 values, and roots
 used by the ledger. `--fetch-corpora` downloads and verifies those archives into
@@ -64,7 +64,7 @@ The current project README lists the additional suites, probe kinds, ledger
 fields, and the exact recorded-outcome rules. Do not describe these external
 suites as an independent hardware oracle.
 
-## The Bess Save State Standard
+## The BESS save state standard
 
 The Post executable exposes `--bess-export <path>` and `--bess-import <path>`
 diagnostics for the BESS (Best Effort Save State) interchange format. Puck's
@@ -81,7 +81,7 @@ used for inspection evidence. The diagnostic does not claim a headless,
 cross-emulator gameplay round trip; the implementation records the limits of
 what the BESS scope can restore.
 
-## Hash Divergence Probing
+## Hash divergence probing
 
 `--hash-divergence` runs two Humble machines in lockstep and compares their
 snapshot fingerprints at frame boundaries. `--fine` compares at scanline

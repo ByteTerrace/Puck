@@ -972,7 +972,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
         // beyond what the exporter already understands natively (a plain JsonStringEnumConverter) are the shared
         // Vector2/Vector3/Quaternion array converters.
         var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => DropNullableMembersFromRequired(
+            TransformSchemaNode = (context, node) => WorldSchema.AnnotateCreationDocumentation(context, DropNullableMembersFromRequired(
                 context: context,
                 node: ((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive)
                     ? (context.TypeInfo.Type == typeof(Vector2)
@@ -983,7 +983,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
                                 ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 4)
                                 : node)))
                     : node
-            ),
+            )),
         };
         var schema = options.GetJsonSchemaAsNode(type: typeof(Puck.World.Authoring.CreationDocument), exporterOptions: exporterOptions).AsObject();
 

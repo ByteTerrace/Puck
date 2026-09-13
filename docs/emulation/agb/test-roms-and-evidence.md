@@ -1,5 +1,9 @@
 # GBA test ROMs and evidence
 
+Test ROMs answer narrow questions about the Advanced Gaming Brick (AGB). Use the
+evidence map to choose a diagnostic, record its exact inputs, and keep a suite
+score tied to the ROM, BIOS, and stop condition that produced it.
+
 Reference ROMs answer specific hardware questions. They are optional evidence
 stages, not repository gates, because BIOS identity, suite revision, probe shape,
 and emulator stop conditions can change a reported total.

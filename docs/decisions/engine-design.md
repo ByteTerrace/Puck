@@ -1,6 +1,6 @@
 # Engine design decisions
 
-Puck's design centers on validated documents, an authoritative simulation and
+Puck's design centers on validated documents, an authoritative simulation, and
 separate presentation. These choices guide new work; the
 [overview](../overview.md) introduces the resulting engine, and
 [plans](../plans/README.md) describe proposed extensions.
@@ -25,7 +25,7 @@ new opcode, document shape or addon interface is introduced.
 
 ## Simulation and presentation have different contracts
 
-Replay depends on a fixed code version, a world definition and recorded inputs.
+Replay depends on a fixed code version, a world definition, and recorded inputs.
 Simulation uses defined numeric semantics and reproducible random streams.
 External observations must enter at an ordered, recorded boundary. Presentation
 may interpolate and use floating-point arithmetic without changing authoritative
@@ -47,7 +47,7 @@ separate from presentation devices and their availability.
 ## Producers compose through explicit contracts
 
 A screen consumes an image supplied by a producer. The renderer need not know
-whether it came from an emulator, a camera, another view or a shader pipeline.
+whether it came from an emulator, a camera, another view, or a shader pipeline.
 A surface that participates in shared visibility needs additional contracts;
 an image alone does not imply geometry or depth.
 
@@ -59,7 +59,7 @@ do not replace the primary SDF traversal merely because a device supports them.
 
 The earlier SDF-only scope is a description of the established world-rendering
 path, not a restriction on the programmable pipeline foundation. General mesh
-import, shared mesh/SDF visibility and broader material authoring remain
+import, shared mesh/SDF visibility, and broader material authoring remain
 explicitly sequenced proposals in the
 [rendering evolution plan](../plans/shader-pipeline-evolution.md). That plan
 must update affected contracts when those features become implemented.
@@ -86,7 +86,7 @@ and [game development plan](../plans/game-development.md) own that experience.
 
 Validate physical limits and report useful failures rather than silently
 truncating authored content. A measured capacity, an advisory performance
-estimate and a regression threshold serve different purposes and must be
+estimate, and a regression threshold serve different purposes and must be
 identified as such. Device failures and unsupported features should have
 explicit recovery or refusal behavior.
 
@@ -104,7 +104,7 @@ to learn what the engine does without inspecting source code first.
 ## Internal contracts can be corrected
 
 Puck's internal names and document shapes can be changed with their callers,
-examples and verification. Do not accumulate migration aliases solely to retain
+examples, and verification. Do not accumulate migration aliases solely to retain
 an accidental internal design. Package and release promises, when made, need
 their own explicit compatibility policy rather than being inferred from an
 internal schema's version label.

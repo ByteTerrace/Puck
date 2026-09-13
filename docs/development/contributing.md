@@ -7,14 +7,14 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
 
 ## Start here
 
-- A run is a versioned puck.world.def.v1 JSON document. CLI conveniences
+- A run uses a versioned `puck.world.def.v1` JSON document. CLI conveniences
   synthesize the same model; they do not create a second execution path.
 - Vulkan and Direct3D 12 implement the same neutral GPU contracts. Shared GPU
   changes must be verified on both backends.
-- Puck.World is the greenfield game composition root. Run it to verify game
-  behavior. Coverage is limited: no automated gate currently covers the shared
-  engine contract. The live architecture, parity, emulator, build, and
-  running-world checks below cover specific parts of that contract.
+- `Puck.World` composes the running application. Run it to verify rendering and
+  complete game interaction. The World test suite covers document, protocol,
+  authoritative simulation, and shipped game state programs; other checks below
+  cover their own specific contracts.
 - Emulator cores live under `src/` (`Puck.HumbleGamingBrick`, `Puck.AdvancedGamingBrick`)
   with hosting folded into the cores. Each core has its own POST battery.
 - Authoritative simulation uses fixed-point values and per-tick command
@@ -33,7 +33,7 @@ Prefer the cheapest correct tool:
 
 1. Puck search for orientation and non-C# text.
 2. `puck declarations` for declaration, member, attribute, base-list, and XML-doc
-   inventories — parse-only, no build.
+   inventories—parse-only, no build.
 3. `puck references` for cross-project symbol questions: references,
    implementers, overrides, derived types, dead-code candidacy.
 4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
@@ -72,41 +72,33 @@ point.
 
 ## Verification
 
-### Engine changes and current verification coverage
+### Engine changes and verification coverage
 
-**`Puck.Post` is quarantined** (`experimental/Puck.Post`, owner ruling
-2026-08-02) — out of the solution and out of the build. Read it as prior art;
-do not run it, cite it as coverage, or write a stage for it.
+`Puck.Post` remains quarantined under `experimental/Puck.Post` and outside the
+solution. Its historical stages are prior art, not current verification. Use
+the live checks appropriate to the changed contract and report what remains
+untested; no single check covers the complete engine.
 
-So the shared engine contract it used to gate — the SDF VM ISA, the document
-schemas, the deterministic numerics, the differential fuzzer — **currently has
-no automated gate.** Say that plainly when it matters; do not imply coverage
-that does not exist, and do not reach into `experimental/` to manufacture
-some. An engine change is verified today by running what is still in the build
-and by argument, and a change that would once have been gated should say in
-its own commit what was and was not checked.
+The [World tests](../../tests/Puck.World.Tests/README.md) cover documents,
+protocol, authoritative simulation, and shipped game state programs. The
+architecture gate runs during builds, including `PUCKARCH008`: it rejects a
+compiled dependency denied by `PuckArchitectureDeniedApi` in
+`build/Architecture.props`, such as `System.Console` from `Puck.World.Server`.
+The emulator batteries, Maths laws, build, and running application provide
+additional checks with distinct scopes.
 
-The one narrow cross-backend check that exists is `puck parity`: for each
-authored pattern world under `tests/Puck.Parity/` (gradient, edges,
-modifiers, glyphs, film grain — each stressing one contract slice) plus the
-shipped default world,
-it boots the real `Puck.World` windowed on Vulkan and on Direct3D 12,
-screenshots the same fenced simulation moment in each run, and compares the
-backend pair under the relaxed envelope (benign ±1-LSB shader-codegen noise
-passes; a missing, relocated, or recolored region fails). There are no stored
-baselines, so content changes cannot fail it — only a cross-backend
-divergence can. Two different patterns from the same backend must fail the
-envelope on every run. It needs a display and both GPU devices, so run it on
-hardware for any render-path, shader, presenter, or capture change; it covers
-composed-frame agreement and nothing else.
+`puck parity` boots the [authored parity world](../../tests/Puck.Parity/README.md)
+offscreen once on Vulkan and once on Direct3D 12. Tick-scheduled captures receive
+three verdicts: valid content, exact simulation-state hash agreement, and pixel
+agreement under per-tile thresholds. Missing content or a camera inside geometry
+fails before comparison; state and pixel checks are evaluated separately after
+the content check passes. A failure records frames, a delta heatmap, and verdicts.
 
-Still in the build and still applicable: the architecture gate (every build) —
-including `PUCKARCH008`, which fails a denied project's build when its
-compiled output references an assembly `build/Architecture.props`'s
-`PuckArchitectureDeniedApi` denies it (`Puck.World.Server` and
-`System.Console` today) — the two emulator batteries below,
-`dotnet build Puck.slnx -c Release`, `puck parity`, and running `Puck.World`.
-
+This comparison uses the contract beside the parity world, not a stored image
+baseline. It requires both GPU backends but does not take over a display. Use it
+for render-path, shader, presenter, or capture changes. Its authored stations
+exercise specific contracts; passing them does not establish correctness for
+every possible scene. See `puck parity --help` for the current command surface.
 For changes under `src/Puck.Maths`, also run the maths law suite. The default
 tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:
 
@@ -115,33 +107,31 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
 ```
 
-### Game and demo changes
+### Game changes
 
-Run greenfield composition roots instead of adding engine gates:
+Run the application to check composed game behavior, alongside relevant World tests:
 
 ```powershell
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 ```
 
-`Puck.World` is the only composition root that runs. `Puck.Demo`, the
+Use `Puck.World` for game verification. `Puck.Demo`, the
 composition-root-less library that once sat quarantined at
-`experimental/Puck.Demo`, is deleted — each folder's capability either has a
+`experimental/Puck.Demo`, is deleted—each folder's capability either has a
 live successor in `Puck.World` (see `experimental/README.md`) or is simply
 absent from it, with no plan bringing it over. Do not add a `--validate-*`
 mode or a `Puck.Post` stage for game-specific behavior unless explicitly
 requested.
 
-The console is the scriptable control plane. On-screen input and process stdin
-use the same registry; an ACCEPTED result echoes to stdout and a REFUSED one to
-stderr, so a driver merging the two streams reads submission order while still
-telling the two apart. A run that must prove no step silently no-opped ends with
-`wire.errors` and asserts `[wire.errors: 0 rejected]`. The runnable proofs live
-in the proof suite — which is quarantined under `experimental/` and off
-limits, so those proofs are not runnable today and the console-scripting
-contract they demonstrated has no executable witness.
-
-The `review-creation` scenario — isolated creation turntables with pinned content
-time and camera poses — has no runnable host today, and no plan to get one. It
+The console and process stdin use the same command registry. Accepted results
+are written to stdout and refusals to stderr. A driver that needs their combined
+arrival order can merge the streams. End a run with `wire.errors` and check
+`[wire.errors: 0 rejected]` when the result depends on every command being accepted.
+The [World guide](../../src/Puck.World/README.md) owns the current scripting and
+replay procedures. Historical console proofs in the quarantined engine harness
+are not an executable verification target.
+The `review-creation` scenario—isolated creation turntables with pinned content
+time and camera poses—has no runnable host today, and no plan to get one. It
 does not exist in `Puck.World`; the document that scheduled the move was deleted
 with the quarantine. Treat creation review as an absent capability, not a
 pending one.
@@ -183,9 +173,9 @@ GPU-pass time alone is not the delivered frame rate. See
 
 ### Browser engine changes (`Puck.World.Browser`)
 
-`unset C_INCLUDE_PATH` first if the machine has a Cosmocc toolchain installed
-(see "Hardware and toolchain cautions" below) — otherwise every native asset
-compile in the steps below fails with cryptic libc header collisions that have
+Remove `C_INCLUDE_PATH` from the build shell first if the machine has a Cosmocc toolchain installed
+(see "Hardware and toolchain cautions" below)—otherwise every native asset
+compile in the steps below fails with libc header collisions that have
 nothing to do with the change under test.
 
 ```powershell
@@ -195,7 +185,7 @@ dotnet publish src/Puck.World.Browser -c Release
 ```
 
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
-the ordinary net10.0 test host — no wasm runtime needed to exercise the pure
+the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and Node reached through fnm, since
 Node is not on `PATH` on the reference system
@@ -220,23 +210,23 @@ Remove-Item Env:\PUCK_BROWSER_PARITY_RECORD
 See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
 and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the
 one verified scope boundary (no emulator core, so a document authoring a
-`screens[].source.machine` engine — the shipped island's arcade district among
-them — refuses by name rather than crashing).
+`screens[].source.machine` engine—the shipped island's arcade district among
+them—refuses by name rather than crashing).
 
 ## Working with world documents
 
-The validator is the thick semantic gate. A valid document must be buildable;
+The validator checks the complete document's semantics. A valid document must be buildable;
 builders do not repeat validator checks. When a document field or polymorphic
 kind changes:
 
 1. Update the nullable model and XML documentation.
 2. Add all semantic validation to `WorldDefinitionValidator`, which runs over
    the entire composed candidate document rather than the changed section
-   alone — including an owned identity's document, which is validated the
+   alone—including an owned identity's document, which is validated the
    same way.
 3. Register the type in `WorldJsonContext`; a polymorphic kind also needs its
    `[JsonDerivedType]` line.
-4. Verify by RUNNING `Puck.World` and round-tripping the document over stdin.
+4. Verify by running `Puck.World` and round-tripping the document over stdin.
 
 `src/Puck.World.Schema/README.md` documents the serializer's construction
 behavior; the procedure above is the complete add-a-field procedure.
@@ -271,7 +261,8 @@ and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
 DXC compiles the same HLSL sources to SPIR-V and DXIL during the build. `dxc`
-must be on `PATH`; there is no GLSL or `glslc` path. A change to the SDF C# ISA
+must be on `PATH` for these built-in kernels. Live one-off GLSL/Shadertoy
+authoring uses the separate toolchain described in the [shader guide](../../src/Puck.Shaders/README.md#one-off-shaders). A change to the SDF C# ISA
 must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
 
@@ -315,7 +306,7 @@ framed as unverified when no device run exists.
   `browser-wasm` build or publish shells out to and collides with
   emscripten's own libc headers (`COSMOPOLITAN_C_START_` redefined, `bool32`
   unknown type, dozens of "expected function body after function declarator"
-  errors from `libc/calls/calls.h`). `unset C_INCLUDE_PATH` before building or
+  errors from `libc/calls/calls.h`). Remove `C_INCLUDE_PATH` from the shell environment before building or
   publishing that project; this is host contamination, not a project or
   workload defect.
 
@@ -359,7 +350,7 @@ meant to establish.
   a metric.
 - No source file over 2500 lines: `FileLengthAnalyzer` fails the build (LEN001)
   unless `FileLengths.json` already records the file, and a recorded file may
-  only shrink (LEN002/LEN003). Split, then `puck lengths --write` — the ledger
+  only shrink (LEN002/LEN003). Split, then `puck lengths --write`—the ledger
   never grows.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
@@ -372,7 +363,8 @@ meant to establish.
 
 ## Documentation policy
 
-Keep every document useful to the current tree, and give each fact one
+Follow [Writing documentation](documentation.md) for prose, titles, filenames,
+and navigation. Keep each document useful to the current tree, and give each fact one
 authoritative home. Architecture manuals belong under docs/architecture;
 contributor and CI procedures belong under docs/development; active plans and
 settled cross-project decisions belong under docs/plans and docs/decisions.

@@ -27,9 +27,13 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "The document version tag (puck.creation.v1)."
           },
-          "name": true,
+          "name": {
+            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+            "description": "The creation\u0027s handle, authored literally or through a containing world\u0027s Text state cell; normalization narrows a literal value to letters, digits, dashes, and underscores."
+          },
           "palette": {
             "type": [
               "array",
@@ -42,46 +46,53 @@
               ],
               "properties": {
                 "color": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The base color as #RRGGBB (see HexColor)."
                 },
                 "emissive": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The emissive strength (null = 0 \u2014 optional members are nullable and normalized at load)."
                 },
                 "specular": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The specular strength (null = the material default)."
                 },
                 "roughness": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The GGX roughness in [0, 1] (null = DefaultRoughness) \u2014 see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused."
                 },
                 "sheen": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The fresnel edge-lift strength in [0, 1] (null = 0 \u2014 no lift) \u2014 see SdfMaterial."
                 },
                 "metal": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The metalness in [0, 1] (null = 0 \u2014 dielectric) \u2014 see SdfMaterial."
                 },
                 "coat": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The clearcoat strength in [0, 1] (null = 0 \u2014 no coat) \u2014 see SdfMaterial."
                 },
                 "weathering": {
                   "type": [
@@ -160,7 +171,8 @@
                           "threshold",
                           "surface"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "One ascending coverage threshold and the surface it reveals."
                       },
                       "default": null
                     },
@@ -190,28 +202,32 @@
                     }
                   },
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "Optional generic coverage and reveal surfaces."
                 },
                 "wrap": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The wrap-lighting share in [0, 1] (null = 0 \u2014 the plain Lambert term) \u2014 see Wrap."
                 },
                 "soften": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The shading-normal broadening in [0, 1] (null = 0 \u2014 no broadening) \u2014 see Soften."
                 },
                 "bounce": {
                   "type": [
                     "string",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The bounce tint as #RRGGBB or a state binding (null = black \u2014 no bounce) \u2014 see Bounce."
                 },
                 "inset": {
                   "type": [
@@ -219,8 +235,12 @@
                     "null"
                   ],
                   "properties": {
-                    "origin": true,
-                    "rotation": true,
+                    "origin": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader."
+                    },
+                    "rotation": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader."
+                    },
                     "depth": {
                       "type": "number"
                     },
@@ -249,7 +269,8 @@
                               "radius",
                               "color"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "One ascending radial ramp stop."
                           }
                         },
                         "softness": {
@@ -283,14 +304,17 @@
                     "paint"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "Optional refractive paint layer."
                 }
               },
               "required": [
                 "color"
               ],
-              "additionalProperties": false
-            }
+              "additionalProperties": false,
+              "description": "One palette entry on the wire (mirrors SdfMaterial with document-doctrine nullability)."
+            },
+            "description": "The material palette (null = the default sweep)."
           },
           "shapes": {
             "type": [
@@ -304,9 +328,13 @@
               ],
               "properties": {
                 "id": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "The shape\u0027s stable id."
                 },
-                "name": true,
+                "name": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The optional player-given name, authored literally or through a containing world\u0027s Text state cell."
+                },
                 "type": {
                   "enum": [
                     "Sphere",
@@ -321,16 +349,41 @@
                     "Prism",
                     "Superellipsoid",
                     "Sweep"
-                  ]
+                  ],
+                  "description": "The primitive.",
+                  "x-enumDescriptions": {
+                    "Sphere": "A sphere.",
+                    "Box": "A box.",
+                    "Torus": "A torus.",
+                    "Cylinder": "A cylinder.",
+                    "Capsule": "A capsule.",
+                    "Ellipsoid": "An ellipsoid.",
+                    "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
+                    "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
+                    "Cone": "A sharp circular cone with a flat base, centered along local Y.",
+                    "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
+                    "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid limit \u2014 the two spellings agree bit-for-bit at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+                    "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
+                  }
                 },
-                "position": true,
-                "rotation": true,
-                "scale": true,
+                "position": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The shape\u0027s position (the author frame\u0027s workbench space)."
+                },
+                "rotation": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The orientation."
+                },
+                "scale": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The per-axis scale \u2014 the primitive\u0027s size (see CreationGeometry)."
+                },
                 "material": {
                   "type": [
                     "integer",
                     "null"
-                  ]
+                  ],
+                  "description": "The palette slot (null = 0)."
                 },
                 "blend": {
                   "enum": [
@@ -352,47 +405,70 @@
                     "StairsUnion",
                     "StairsSubtraction",
                     null
-                  ]
+                  ],
+                  "description": "The blend op name (null = Union).",
+                  "x-enumDescriptions": {
+                    "Intersection": "Intersection with everything accumulated so far \u2014 not with the preceding shape alone. See the accumulator rule on SdfBlendOp.",
+                    "Xor": "Symmetric difference: solid where exactly one of the fields is solid (hollow where they overlap).",
+                    "SmoothIntersection": "Intersection with a smooth seam (blend radius = instruction Data1.x). Subject to the accumulator rule on SdfBlendOp.",
+                    "SmoothSubtraction": "Subtraction with a smooth (filleted) carve seam (blend radius = instruction Data1.x).",
+                    "ChamferUnion": "Union with a chamfered (45\u00B0 beveled) seam instead of a round fillet (bevel size = instruction Data1.x) \u2014 the mechanical/CAD look, distinct from SmoothUnion\u0027s organic blob. The chamfer family\u0027s Lipschitz bound can exceed BOTH of its operands: the bevel plane\u0027s gradient is (\u2207a \u00B1 \u2207b)/\u221A2, so composing fields bounded by La and Lb yields max(La, Lb, (La \u002B Lb)/\u221A2). AnalyzeLipschitz therefore folds it once per COMPOSITION, not once per program: the first chamfer against an empty accumulator is the identity, two reach \u221A2, and a longer chain approaches the recurrence\u0027s fixed point 1 \u002B \u221A2. Other composition families retain their own bounds.",
+                    "ChamferIntersection": "Intersection with a chamfered (45\u00B0 beveled) seam (bevel size = instruction Data1.x). Composes through the same Lipschitz recurrence as ChamferUnion.",
+                    "ChamferSubtraction": "Subtraction with a chamfered (45\u00B0 beveled) carve seam (bevel size = instruction Data1.x). Composes through the same Lipschitz recurrence as ChamferUnion.",
+                    "GrooveUnion": "Carves a round seam from the union: max(min(a,b), r - sqrt(a\u00B2\u002Bb\u00B2)). Radius is Data1.x. The tube is measured in field coordinates; its spatial width depends on the surfaces\u0027 angle.",
+                    "PipeUnion": "Adds a round seam to the union: min(a,b,sqrt(a\u00B2\u002Bb\u00B2)-r). Radius is Data1.x. Both round seam blends compose derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
+                    "Morph": "Continuous linear field interpolation between parent accumulator and field scope: (1 - t)\u00B7a \u002B t\u00B7b. t is derived from an instance render lane: t = saturate((lane[Data0.x] - Data0.y) / (Data0.z - Data0.y)). Strictly 1-Lipschitz. PopField compose only.",
+                    "GrooveSubtraction": "Carves a round seam while subtracting: max(a, -b, r - sqrt(a\u00B2\u002Bb\u00B2)). Radius is Data1.x. Composes derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
+                    "PipeSubtraction": "Leaves a round bead while subtracting: min(max(a, -b), sqrt(a\u00B2\u002Bb\u00B2) - r). Radius is Data1.x. Composes derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
+                    "StairsUnion": "Adds continuous steps of radius r (Data1.x) and step count n (Data1.y) to the union. Strictly 1-Lipschitz. PopField compose only.",
+                    "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.y) from the subtraction. Strictly 1-Lipschitz. PopField compose only."
+                  }
                 },
                 "smooth": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The smooth-blend radius (null = 0)."
                 },
                 "group": {
                   "type": [
                     "integer",
                     "null"
-                  ]
+                  ],
+                  "description": "The composition group (null = ungrouped)."
                 },
                 "twist": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s local twist rate (null = 0)."
                 },
                 "onion": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s shell thickness (null = 0, solid)."
                 },
                 "bend": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s local bend rate about Y (null = 0)."
                 },
                 "dilate": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s inflation radius (null = 0)."
                 },
                 "domain": {
                   "type": [
@@ -413,37 +489,48 @@
                           "$type": {
                             "const": "symmetry"
                           },
-                          "normal": true,
+                          "normal": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The plane normal, in the shape\u0027s creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX \u2014 the retired Mirror: true flag\u0027s exact fold)."
+                          },
                           "offset": {
                             "type": [
                               "number",
                               "null"
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "The plane\u0027s signed offset along Normal (null = 0, through the creation origin)."
                           }
                         },
                         "required": [
                           "normal"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "Reflection fold across a plane \u2014 Symmetry. One authored half repeats mirror-imaged across the plane."
                       },
                       {
                         "properties": {
                           "$type": {
                             "const": "repeat"
                           },
-                          "spacing": true,
+                          "spacing": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The per-axis cell spacing, creation units (clamped to \u003E= 0.001 per axis, matching the builder\u0027s own floor)."
+                          },
                           "limit": {
-                            "default": null
+                            "default": null,
+                            "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedLimit per axis, far past any authored reach)."
                           },
                           "origin": {
-                            "default": null
+                            "default": null,
+                            "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold."
                           }
                         },
                         "required": [
                           "spacing"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is UnboundedLimit and does not expand."
                       },
                       {
                         "properties": {
@@ -451,7 +538,8 @@
                             "const": "polar"
                           },
                           "count": {
-                            "type": "integer"
+                            "type": "integer",
+                            "description": "The sector count around the axis (clamped \u003E= 1)."
                           },
                           "axis": {
                             "enum": [
@@ -460,30 +548,40 @@
                               "Z",
                               null
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "The rotation axis (null = Y, the XZ ground plane).",
+                            "x-enumDescriptions": {
+                              "X": "Repeat about the local X axis \u2014 the fold acts in the YZ plane.",
+                              "Y": "Repeat about the local Y axis \u2014 the fold acts in the XZ (ground) plane. The default: the common \u0022arranged on the ground around a centre\u0022 case (columns of a rotunda, spokes of a wheel lying flat).",
+                              "Z": "Repeat about the local Z axis \u2014 the fold acts in the XY plane (a clock face / gear facing \u002BZ)."
+                            }
                           },
                           "mirror": {
                             "type": [
                               "boolean",
                               "null"
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "Whether adjacent sectors mirror across their shared bisector (null = false)."
                           },
                           "materialStride": {
                             "type": [
                               "integer",
                               "null"
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "The per-sector palette stride (null = 0, geometric only)."
                           },
                           "origin": {
-                            "default": null
+                            "default": null,
+                            "description": "The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today\u0027s fold."
                           }
                         },
                         "required": [
                           "count"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "Angular domain repeat \u2014 Polar. Its sectors expand to one rigid copy each, so contact carries the full ring."
                       },
                       {
                         "properties": {
@@ -509,11 +607,35 @@
                               "P31M",
                               "P6",
                               "P6M"
-                            ]
+                            ],
+                            "description": "The wallpaper group.",
+                            "x-enumDescriptions": {
+                              "P1": "Pure lattice translation (bit-identical to a two-axis RepeatLimited).",
+                              "P2": "Half-turns keyed on the cell parity.",
+                              "Pm": "A mirror across the cell\u0027s Y axis.",
+                              "Pg": "A glide reflection.",
+                              "Cm": "A mirror composed with the centered lattice.",
+                              "Pmm": "Perpendicular mirrors (the rectangle kaleidoscope).",
+                              "Pmg": "A mirror crossed with a glide.",
+                              "Pgg": "Perpendicular glides.",
+                              "Cmm": "Perpendicular mirrors on the centered lattice (2-fold centers off the mirrors).",
+                              "P4": "Quarter-turns about the cell corners (square cells only).",
+                              "P4M": "P4 plus mirrors through the 4-fold centers (square cells only).",
+                              "P4G": "P4 plus mirrors off the 4-fold centers (square cells only).",
+                              "P3": "3-fold rotations on the hex lattice.",
+                              "P3M1": "P3 plus mirrors through the hex corners.",
+                              "P31M": "P3 plus mirrors through the hex edge midpoints.",
+                              "P6": "6-fold rotations on the hex lattice.",
+                              "P6M": "The full hex kaleidoscope (6-fold rotations plus both mirror families)."
+                            }
                           },
-                          "cell": true,
+                          "cell": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The lattice cell extents in the fold plane, creation units."
+                          },
                           "limit": {
-                            "default": null
+                            "default": null,
+                            "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis)."
                           },
                           "plane": {
                             "enum": [
@@ -522,32 +644,43 @@
                               "YZ",
                               null
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "The fold plane (null = XZ).",
+                            "x-enumDescriptions": {
+                              "XZ": "Fold X and Z (tile the ground).",
+                              "XY": "Fold X and Y (tile a wall facing Z).",
+                              "YZ": "Fold Y and Z (tile a wall facing X)."
+                            }
                           },
                           "materialStride": {
                             "type": [
                               "integer",
                               "null"
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "The parity-material stride (null = 0, geometric only)."
                           },
                           "lodDistance": {
                             "type": [
                               "number",
                               "null"
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "The symmetry-LOD distance threshold (null = 0, off)."
                           }
                         },
                         "required": [
                           "group",
                           "cell"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "Wallpaper-group lattice fold \u2014 Wallpaper. Render only: it has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
                       }
-                    ]
+                    ],
+                    "description": "One domain operator authored on a ShapeDocument, applied in creation space \u2014 after the creation/placement frame chain (origin/rotation/scale) and before the shape\u0027s own translate/rotate/scale, so every entry in Domain shares one space regardless of kind. The wire form of SdfDomainOp: a $type-discriminated ordered list whose optional members ToDomainOps resolves."
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape\u0027s point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation."
                 },
                 "swings": {
                   "type": [
@@ -561,20 +694,32 @@
                     ],
                     "properties": {
                       "driver": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The Name supplying (\u03C6, w). An unresolvable name is refused at canonicalization."
                       },
-                      "pivot": true,
-                      "axis": true,
-                      "amplitude": true,
+                      "pivot": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The joint the shape turns about, in the creation\u0027s author frame (see CreationFrame) \u2014 a shoulder or a hip, not the shape\u0027s own centre."
+                      },
+                      "axis": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The rotation axis, in the creation\u0027s author frame; normalized at canonicalization. A positive angle turns right-handed about it."
+                      },
+                      "amplitude": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body\u0027s other side reads."
+                      },
                       "phase": {
-                        "default": null
+                        "default": null,
+                        "description": "The phase offset added to the driver\u0027s phase, radians (null = 0) \u2014 how two limbs on one driver are put out of step (contralateral arms differ by \u03C0)."
                       },
                       "wave": {
                         "type": [
                           "string",
                           "null"
                         ],
-                        "default": null
+                        "default": null,
+                        "description": "The waveform name (null = Sine); see CreationWave."
                       }
                     },
                     "required": [
@@ -583,9 +728,11 @@
                       "axis",
                       "amplitude"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "One driver-fed rotation authored on a ShapeDocument: the shape turns about Axis at Pivot by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w. Presentation-only \u2014 nothing downstream of the dynamic transform buffer reads it, so the SDF program, the analytic colliders, the compiled solid field, and every simulation value are untouched by an authored swing."
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none)."
                 },
                 "slides": {
                   "type": [
@@ -599,19 +746,28 @@
                     ],
                     "properties": {
                       "driver": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The Name supplying (\u03C6, w). An unresolvable name is refused at canonicalization."
                       },
-                      "axis": true,
-                      "amplitude": true,
+                      "axis": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The slide direction, in the creation\u0027s author frame; normalized at canonicalization."
+                      },
+                      "amplitude": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The peak offset in creation units, magnitude at most MaxAmplitude."
+                      },
                       "phase": {
-                        "default": null
+                        "default": null,
+                        "description": "The phase offset added to the driver\u0027s phase, radians (null = 0)."
                       },
                       "wave": {
                         "type": [
                           "string",
                           "null"
                         ],
-                        "default": null
+                        "default": null,
+                        "description": "The waveform name (null = Sine); see CreationWave."
                       }
                     },
                     "required": [
@@ -619,26 +775,31 @@
                       "axis",
                       "amplitude"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "One driver-fed translation authored on a ShapeDocument: the shape slides along Axis by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w \u2014 a piston, a hull\u0027s bob, a breathing chest. Presentation-only on the same terms as ShapeSwingDocument."
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The driver-fed translations this shape rides (ShapeSlideDocument), at most MaxSlides (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only \u2014 composed onto the shape\u0027s per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain\u0027s rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation."
                 },
                 "parent": {
                   "type": [
                     "string",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The Name of the shape this one hangs from (null = the creation root): the parent\u0027s animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm\u0027s swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with."
                 },
                 "joint": {
-                  "default": null
+                  "default": null,
+                  "description": "The point this shape hinges about when it acts as a bone of a CreationEffectorDocument chain and declares no Swings (null = the pivot of the first swing, or the shape\u0027s own position when it has neither). Author-frame, like every other point here. Read only by the effector solve, so it changes no pose on its own."
                 },
                 "taper": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper."
                 },
                 "profile": {
                   "type": [
@@ -654,29 +815,42 @@
                         "Ellipse",
                         "ChamferedRectangle",
                         "Convex"
-                      ]
+                      ],
+                      "description": "The profile family.",
+                      "x-enumDescriptions": {
+                        "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
+                        "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
+                        "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
+                        "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
+                        "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
+                        "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection."
+                      }
                     },
                     "cornerRadius": {
                       "type": "number",
-                      "default": 0.15
+                      "default": 0.15,
+                      "description": "A fraction of the profile\u0027s smaller half-extent, in [0, 1]: RoundedRectangle\u0027s corner radius, ChamferedRectangle\u0027s chamfer radius, or Convex\u0027s uniform corner rounding."
                     },
                     "sides": {
                       "type": "integer",
-                      "default": 6
+                      "default": 6,
+                      "description": "Polygon side count, from 3 through 32."
                     },
                     "vertices": {
                       "type": [
                         "array",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind."
                     }
                   },
                   "required": [
                     "kind"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps."
                 },
                 "lift": {
                   "enum": [
@@ -684,14 +858,20 @@
                     "Extrude",
                     null
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset \u2014 zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.",
+                  "x-enumDescriptions": {
+                    "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
+                    "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
+                  }
                 },
                 "rounding": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Only for Prism, Cylinder and Cone: the edge-rounding radius in the creation\u0027s own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet. Refused by name past MaxRounding."
                 },
                 "panel": {
                   "type": [
@@ -700,16 +880,20 @@
                   ],
                   "properties": {
                     "inset": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion: MaxFieldScopeDepth is 1, so nothing is free to isolate a Dilate field op to the copy alone inside the shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere."
                     },
                     "depth": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "How far the panel\u0027s own face sits from the plate\u0027s face along Face, in creation units, exact whatever the Inset. Positive recesses it: the eroded copy is composed with Subtraction so its near face becomes the recess floor exactly Depth below the plate\u0027s face \u2014 the floor and walls shade with Material, the subtraction-shades-with-the-subtrahend convention the Moth\u0027s hood opening rides. Negative raises the panel proud by |Depth| instead: the copy is composed with Union, its far face standing |Depth| past the plate\u0027s own and its back end buried inside the plate. Finite; refused by name past \u00B12\u00B7h\u2032, the eroded copy\u0027s own full extent along Face \u2014 deeper, a recess carves an enclosed void and a raise floats detached, both silent no-ops on the surface. See Resolve for the offset each case translates the copy by."
                     },
                     "material": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "The panel\u0027s own palette slot \u2014 see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization."
                     },
                     "face": {
-                      "default": null
+                      "default": null,
+                      "description": "The local direction the panel erodes and offsets against, read in the primitive\u0027s own local frame \u2014 before its placement transform, the same frame Domain ops read. Null defaults to \u002BZ (the Prism extrude axis / a Box\u0027s front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op\u0027s own normal. Any primitive may author a curved face (a Cylinder\u0027s \u002BX rim, say) \u2014 the erode/translate/blend recipe reads only HalfExtent along the axis, never the primitive\u0027s curvature."
                     }
                   },
                   "required": [
@@ -718,14 +902,16 @@
                     "material"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s second-material inset face region (null = none) \u2014 see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope."
                 },
                 "chamfer": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Only for Box, Cylinder and Prism (an extruded prism only \u2014 a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation\u0027s own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape."
                 },
                 "trims": {
                   "type": [
@@ -739,17 +925,21 @@
                     ],
                     "properties": {
                       "shape": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle \u2014 mirrors Parent\u0027s own rule). A Subtraction cutter riding the host\u0027s own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference\u0027s own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band."
                       },
                       "width": {
-                        "type": "number"
+                        "type": "number",
+                        "description": "How far outward from the reference shape\u0027s own surface the band reaches, in creation units. Finite and positive; refused by name otherwise. Baked into the reference copy\u0027s own scale (a sharp-cornered growth \u2014 the mirror image of, and the same imprecision, Inset\u0027s own erosion already accepts) rather than a field-op dilation: it is the only way the reference\u0027s own offset survives composing through the macro\u0027s Intersection blend inside the one field scope both copies share \u2014 a field op applied after that blend would dilate the ALREADY-INTERSECTED result (eroding the host\u0027s own copy a second time by Width too), not the reference alone."
                       },
                       "material": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "The trim\u0027s own palette slot \u2014 see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization. Used for both copies the macro composes, so whichever term the blend resolves to at a given point still paints the same color."
                       },
                       "inset": {
                         "type": "number",
-                        "default": 0.003
+                        "default": 0.003,
+                        "description": "The margin the trim\u0027s own scope must beat the host\u0027s already-present, unmodified surface by to render at all \u2014 a real Dilate field op at a POSITIVE radius on the host\u0027s own copy (exact and isolated: the copy is alone in the trim\u0027s scope at that point, so nothing else is affected). The scope pops via Union into the accumulator the host\u0027s own plain shape already folded into, and max(a, b) \u003E= a makes a genuine erosion (a negative radius) provably always lose to that plain surface \u2014 the trim would never render \u2014 so the copy is instead nudged narrowly CLOSER than the plain surface by Inset, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins only where the reference\u0027s own dilated copy does not additionally push the Intersection candidate past it, i.e. near the reference. Creation units, finite, in [0, MaxInset]; refused by name otherwise. Default 0.003 \u2014 just enough to clear the plain surface without z-fighting, the pipeline\u0027s own shin margin."
                       }
                     },
                     "required": [
@@ -757,16 +947,19 @@
                       "width",
                       "material"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "A second-material band painted onto a ShapeDocument\u0027s own surface wherever it sits near another, earlier-declared shape in the same creation \u2014 the pipeline\u0027s ivory boot band (max(shin - .003, -ankleCut - .095)) generalized: the host\u0027s surface where it is within Width of the reference shape\u0027s own surface, painted with Material. Where ShapePanelDocument recesses or raises a copy of a shape\u0027s OWN geometry, a trim colors the host\u0027s surface against a REFERENCE shape\u0027s geometry instead \u2014 a Subtraction cutter riding the host\u0027s own Group is the common case (the carve\u0027s own edge becomes the trim\u0027s guide), or a plain plane-like Box authored purely to mark a seam. Authored as one shape against the per-stamp shape budget, counting 2 (the host\u0027s own eroded copy plus the reference\u0027s own dilated copy) \u2014 see StampShapeCount and the shape-field table in documents.md."
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims \u2014 see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope."
                 },
                 "detail": {
                   "type": [
                     "boolean",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Whether this shape is SHADING-ONLY (null = false): skipped by the beam and fine march (so it never carves the silhouette, the contact field, or the collider) and included only in the shading evaluation at an already-found hit, where its own material and its perturbation of the surface normal paint its footprint \u2014 a seam (a thin subtraction) or a rivet (a small union, its own material) that stays a crisp mark at any distance instead of dotting out. Refused by name alongside Panel or Trims on the same shape."
                 },
                 "flare": {
                   "type": [
@@ -775,28 +968,34 @@
                   ],
                   "properties": {
                     "amount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale \u002B Amount). Clamped to [MinAmount, MaxAmount]."
                     },
                     "bulge": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span\u0027s midpoint). Clamped to [-MaxBulge, MaxBulge]."
                     },
                     "span": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation."
                     },
                     "top": {
                       "type": [
                         "number",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The axial coordinate where the profile begins, in creation units (null = 0)."
                     },
                     "axis": {
                       "type": "integer",
-                      "default": 1
+                      "default": 1,
+                      "description": "Profile axis in [0, 2]."
                     },
                     "startScale": {
                       "type": "number",
-                      "default": 1
+                      "default": 1,
+                      "description": "Positive radial scale at the span origin."
                     }
                   },
                   "required": [
@@ -805,21 +1004,24 @@
                     "span"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s radial flare warp (null = none) \u2014 see ShapeFlareDocument. Admitted on every primitive; applies to the shape\u0027s own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive\u0027s own scale. Render-only, like Twist/Bend."
                 },
                 "exponent": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit \u2014 an unauthored Superellipsoid is a plain ellipsoid)."
                 },
                 "secondary": {
                   "type": [
                     "boolean",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Whether this shape casts soft shadows and contributes ambient occlusion (null = true). False excludes it from ONLY the soft-shadow and ambient-occlusion field walks \u2014 it still carves the silhouette, the contact field, and the collider like any ordinary shape, unlike Detail (which excludes from every march). For a small part whose own penumbra/AO cost outweighs its visual contribution (an eyelid, a rivet, a groove) \u2014 see Secondary."
                 },
                 "bumps": {
                   "type": [
@@ -832,18 +1034,29 @@
                       "null"
                     ],
                     "properties": {
-                      "center": true,
-                      "radii": true,
-                      "push": true
+                      "center": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The bump\u0027s local center, in creation units."
+                      },
+                      "radii": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The per-axis Gaussian falloff radii, in creation units \u2014 clamped away from zero at normalization (GaussianPushMinRadius) so the exponent\u0027s divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not)."
+                      },
+                      "push": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The peak displacement at the center, in creation units (zero = an exact identity, still admitted \u2014 it still charges the per-copy instance count)."
+                      }
                     },
                     "required": [
                       "center",
                       "radii",
                       "push"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "The authored form of one GaussianPush bump: a gaussian displacement of the shape\u0027s local point applied before the primitive evaluates \u2014 p -= Push \u00B7 exp(-|(p - Center) / Radii|\u00B2) (see Bumps). The pipeline\u0027s faceOffset cheek/muzzle bumps (pushed along local \u002BZ) are two of these. Render-only, like Twist/Bend: Puck.SignedDistance.Queries.SdfFieldEvaluator does not interpret GaussianPush, so a shape carrying one is unreachable for deterministic field contact."
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s Gaussian domain-push bumps (null = none), at most MaxBumps \u2014 see ShapeBumpDocument. Applied to the shape\u0027s own local point after Shear, before the primitive\u0027s own scale. Render-only, like Twist/Bend/Flare."
                 },
                 "shear": {
                   "type": [
@@ -875,7 +1088,8 @@
                     "linear"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "A polynomial point shear with explicit target and driver axes."
                 },
                 "curve": {
                   "type": [
@@ -883,42 +1097,57 @@
                     "null"
                   ],
                   "properties": {
-                    "a": true,
-                    "b": true,
-                    "c": true,
+                    "a": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The curve\u0027s first control point, in the shape\u0027s local (workbench) frame \u2014 creation units, or a state.\u003Crow\u003E[.\u003Ckey\u003E] reference."
+                    },
+                    "b": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The curve\u0027s middle control point."
+                    },
+                    "c": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The curve\u0027s last control point."
+                    },
                     "radiusStart": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The sweep radius at t = 0; finite and strictly positive."
                     },
                     "radiusEnd": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The sweep radius at t = 1; finite and strictly positive."
                     },
                     "bulge": {
                       "type": [
                         "number",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The mid-span radius bulge amplitude (null = 0), added by bulge\u00B7sin(\u03C0\u00B7t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd)."
                     },
                     "strands": {
                       "type": [
                         "integer",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only \u2014 refused for deterministic field contact by name, matching Sweep\u0027s own status."
                     },
                     "twist": {
                       "type": [
                         "number",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The strand orbit rate, in turns along the curve (null = 0); finite."
                     },
                     "strandOffset": {
                       "type": [
                         "number",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd)."
                     }
                   },
                   "required": [
@@ -929,7 +1158,8 @@
                     "radiusEnd"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s swept-curve geometry (null = none) \u2014 see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape."
                 },
                 "erode": {
                   "type": [
@@ -938,20 +1168,24 @@
                   ],
                   "properties": {
                     "lane": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "Which dynamic-slot lane drives the erosion."
                     },
                     "from": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The lane value where erosion begins (t = 0)."
                     },
                     "to": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises \u2014 the torn-fabric use). Must differ from From."
                     },
                     "noise": {
                       "type": [
                         "number",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The erosion front\u0027s noise lattice frequency, cells per world unit (null = 1)."
                     }
                   },
                   "required": [
@@ -960,7 +1194,8 @@
                     "to"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "The shape\u0027s per-instance lane-driven erosion (null = none) \u2014 see ShapeErodeDocument. Admitted on every primitive; its reach is this shape\u0027s own Reach, so it needs no separate authored magnitude."
                 },
                 "cells": {
                   "type": [
@@ -995,7 +1230,8 @@
                     "randomness"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "Shape-local cellular relief, evaluated after geometry within its own field scope."
                 }
               },
               "required": [
@@ -1005,8 +1241,10 @@
                 "rotation",
                 "scale"
               ],
-              "additionalProperties": false
-            }
+              "additionalProperties": false,
+              "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table."
+            },
+            "description": "The authored shapes (null = empty)."
           },
           "frames": {
             "type": [
@@ -1020,7 +1258,8 @@
               ],
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The frame\u0027s name (rest is the live pose)."
                 },
                 "transforms": {
                   "type": "array",
@@ -1031,11 +1270,21 @@
                     ],
                     "properties": {
                       "id": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "The shape id the snapshot belongs to."
                       },
-                      "position": true,
-                      "rotation": true,
-                      "scale": true
+                      "position": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The pose position."
+                      },
+                      "rotation": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The pose orientation."
+                      },
+                      "scale": {
+                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                        "description": "The pose scale."
+                      }
                     },
                     "required": [
                       "id",
@@ -1043,16 +1292,20 @@
                       "rotation",
                       "scale"
                     ],
-                    "additionalProperties": false
-                  }
+                    "additionalProperties": false,
+                    "description": "One shape\u0027s transform inside a timeline frame."
+                  },
+                  "description": "The per-shape transform snapshots, keyed by shape id."
                 }
               },
               "required": [
                 "name",
                 "transforms"
               ],
-              "additionalProperties": false
-            }
+              "additionalProperties": false,
+              "description": "One timeline frame on the wire: a named full snapshot of every shape\u0027s transform. Part of the hold-style animation timeline \u2014 authored frames replayed with no interpolation."
+            },
+            "description": "The animation timeline frames (null = none)."
           },
           "chains": {
             "type": [
@@ -1066,36 +1319,48 @@
               ],
               "properties": {
                 "id": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "The chain\u0027s stable id."
                 },
                 "name": {
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "description": "The player-given name (null = unnamed)."
                 },
                 "shapes": {
                   "type": "array",
                   "items": {
                     "type": "integer"
-                  }
+                  },
+                  "description": "The member shape ids, root\u2192tip order."
                 },
                 "kind": {
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "description": "KindLimb or KindSpine (null = limb when exactly 3 shapes, else spine)."
                 },
-                "goal": true,
-                "pole": true
+                "goal": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The live goal position (null = the rest tip \u2014 re-seeded at load)."
+                },
+                "pole": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The bend-direction hint (null = above the root \u2014 re-seeded at load)."
+                }
               },
               "required": [
                 "id",
                 "shapes"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "One IK chain on the wire. Carries no rest geometry (joint pivots, bone lengths) of its own \u2014 a chain consumer derives that from the member shapes\u0027 current positions; only the goal/pole live pose and the member list persist here."
             },
-            "default": null
+            "default": null,
+            "description": "The IK rig\u0027s chains (null = none). Shapes stay flat; a chain only references shape ids."
           },
           "cameras": {
             "type": [
@@ -1109,41 +1374,51 @@
               ],
               "properties": {
                 "id": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "The eye\u0027s stable id within the creation."
                 },
                 "shapeId": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "The anchored shape id (a Id). A camera naming a missing shape is dropped at load (its offset frame has no anchor)."
                 },
-                "position": true,
+                "position": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The eye offset from the anchored shape\u0027s frame origin, in the creation\u0027s author frame (see CreationFrame)."
+                },
                 "yaw": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The eye heading offset, degrees (null = 0)."
                 },
                 "pitch": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The eye tilt offset, degrees (null = 0)."
                 },
                 "fov": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The vertical field of view, degrees (null = the engine default)."
                 },
                 "focus": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The look-at target distance ahead (null = 1)."
                 },
                 "feed": {
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "description": "The named feed this eye publishes (null = the eye\u0027s id as a name). A screen face wired to this name shows this eye\u0027s live render \u2014 pure data, no creature-specific channel."
                 }
               },
               "required": [
@@ -1151,9 +1426,11 @@
                 "shapeId",
                 "position"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "One camera eye a creation carries \u2014 a posed viewpoint anchored to one of the creation\u0027s own shapes (a Id), so the eye rides that shape\u0027s live pose through IK/animation frames. This is the creation-side twin of a world document\u0027s placed camera: the lantern-fish\u0027s lens dangling off its lure becomes one entry here rather than a hardcoded engine. The offset pose (position/yaw/pitch) is relative to the anchored shape\u0027s frame; the feed it produces is wired onto a screen by name through the creation\u0027s behavior manifest (see CreationBehaviorDocument) or a world\u0027s wiring table."
             },
-            "default": null
+            "default": null,
+            "description": "The creation\u0027s anchored camera eyes (null = none). Each rides a shape and produces a named feed \u2014 the lantern-fish\u0027s lure lens is one entry here."
           },
           "behavior": {
             "type": [
@@ -1165,7 +1442,8 @@
                 "type": [
                   "string",
                   "null"
-                ]
+                ],
+                "description": "How the creation moves, as a free-text token a consuming world resolves as a kit name: a creation declaring swim inhabits the world\u0027s kit row named swim when a placement\u0027s inhabit facet omits an explicit kit (a world declaring no such kit rejects the placement loudly, naming every kit it declares). It is not a closed enum \u2014 the runtime answer to \u0022how does it move\u0022 is the resolved WorldKit.Model, never this string parsed per frame. Null = walk."
               },
               "faces": {
                 "type": [
@@ -1179,26 +1457,31 @@
                   ],
                   "properties": {
                     "name": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "The face\u0027s name (a wiring handle \u2014 face by default)."
                     },
                     "shapeId": {
                       "type": [
                         "integer",
                         "null"
-                      ]
+                      ],
+                      "description": "The shape whose surface is the screen (a Id; -1/null = the whole creation\u0027s canonical face surface, resolved by the consumer)."
                     },
                     "defaultSource": {
                       "type": [
                         "string",
                         "null"
-                      ]
+                      ],
+                      "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (no signal), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world\u0027s face override wires a feed."
                     }
                   },
                   "required": [
                     "name"
                   ],
-                  "additionalProperties": false
-                }
+                  "additionalProperties": false,
+                  "description": "One screen face a creation declares \u2014 a surface on the creation (backed by one of its shapes) that shows a feed. The robot\u0027s CRT face is one of these: it shows the named host emotes feed by default, and is wirable to any camera feed (a creation camera\u0027s named feed, another creation\u0027s feed, a world camera) purely by naming a different default source. No robot-specific channel exists \u2014 a face is just a screen surface with a default wire, and the wiring model does the rest."
+                },
+                "description": "The declared screen faces (null = none). A creation with a face shows a feed on its body; the face\u0027s default source is pure data, wirable to any camera feed."
               },
               "sounds": {
                 "type": [
@@ -1212,13 +1495,15 @@
                   ],
                   "properties": {
                     "name": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "The sound\u0027s name (a wiring handle \u2014 sound by default; unique within the creation)."
                     },
                     "shapeId": {
                       "type": [
                         "integer",
                         "null"
-                      ]
+                      ],
+                      "description": "The shape the voice emits from (a Id; null = the creation\u0027s root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces)."
                     },
                     "patch": {
                       "type": "object",
@@ -1316,33 +1601,38 @@
                       "required": [
                         "pitchMillihertz"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "description": "The voice\u0027s puck.synth.v1 patch, inline (validated through the synth family\u0027s own canonicalizer as part of creation validation)."
                     },
                     "level": {
                       "type": [
                         "number",
                         "null"
-                      ]
+                      ],
+                      "description": "The emitter level (null = 1 \u2014 unity)."
                     },
                     "radius": {
                       "type": [
                         "number",
                         "null"
-                      ]
+                      ],
+                      "description": "The audible support radius in world units (null = the consuming world\u0027s default speaker radius)."
                     }
                   },
                   "required": [
                     "name",
                     "patch"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "One sound a creation carries \u2014 a creature/phenomenon voice as data, following CreationFaceDocument\u0027s named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the creation\u0027s root), and the puck.synth.v1 patch inline \u2014 creations stay portable, and the existing creation hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an audio emitter anchored to the placement (root or the named shape); the placement row\u0027s own emission facet remains the per-instance override channel."
                 },
-                "default": null
+                "default": null,
+                "description": "The declared sounds (null = none). Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes."
               }
             },
             "additionalProperties": false,
             "default": null,
-            "title": "CreationBehaviorDocument"
+            "description": "The behavior manifest (null = the defaults: walks, no face). Records how the creation moves and any screen faces it declares, so consumers stop re-supplying those facts by hand."
           },
           "textRuns": {
             "type": [
@@ -1356,72 +1646,89 @@
               ],
               "properties": {
                 "text": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The run\u0027s text (whitespace / unmapped code points advance the pen without a glyph)."
                 },
-                "position": true,
-                "rotation": true,
+                "position": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The run\u0027s anchor centre on the host surface (workbench space)."
+                },
+                "rotation": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The run plane\u0027s orientation (local \u002BX advance, \u002BY ascent, \u002BZ the relief normal)."
+                },
                 "emHeight": {
-                  "type": "number"
+                  "type": "number",
+                  "description": "The world height of one em, in the creation\u0027s own (pre-placement) units."
                 },
                 "depth": {
                   "type": [
                     "number",
                     "null"
-                  ]
+                  ],
+                  "description": "The glyph extrude half-depth \u2014 the relief the slab straddles the surface by (null = a thin default)."
                 },
                 "mode": {
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "description": "engrave (Subtraction \u2014 a carved recess) or emboss (Union \u2014 proud relief); null = emboss."
                 },
                 "material": {
                   "type": [
                     "integer",
                     "null"
-                  ]
+                  ],
+                  "description": "The palette slot the letters shade with (null = 0)."
                 },
                 "font": {
                   "type": [
                     "string",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The world text catalog font name; null selects that catalog\u0027s default font."
                 },
                 "maxWidth": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The greedy glyph-level wrap width, in the creation\u0027s own units (null = only explicit line feeds break lines). Must be positive when present."
                 },
                 "align": {
                   "type": [
                     "string",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "left, center, or right \u2014 how lines position against the block\u0027s widest line (null = left)."
                 },
                 "tracking": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Extra advance after every glyph, in em units (null = 0; negative tightens)."
                 },
                 "lineSpacing": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "A multiplier on the font\u0027s line height for the baseline step between lines (null = 1)."
                 },
                 "shapeId": {
                   "type": [
                     "integer",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "The shape the run rides, or null for a run placed in creation space. A riding run\u0027s Position/Rotation are in that shape\u0027s unit-local frame: scaled by the shape\u0027s scale, then rotated and translated with it, so the run stays on the surface as the shape resizes."
                 }
               },
               "required": [
@@ -1430,9 +1737,11 @@
                 "rotation",
                 "emHeight"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "One engraved/embossed text run a creation carries \u2014 a string laid onto one of the creation\u0027s own surfaces (a shop facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into Glyph shapes via the shared font atlas \u002B Puck.Text.TextLayout (never persisted pre-expanded, so the run stays font-independent on the wire). The run sits on its own plane (Position centre \u002B Rotation, in the creation\u0027s workbench space: local \u002BX = advance, \u002BY = ascent, \u002BZ = the relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed (engrave / Subtraction) but never coplanar \u2014 coincident zero-sets speckle (docs/rendering/sdf/reference/text-and-glyphs.md). Position/Rotation are authored in the creation\u0027s author frame (see CreationFrame)."
             },
-            "default": null
+            "default": null,
+            "description": "The engraved/embossed text runs the creation carries (null/empty = none). Each is a string laid onto a surface, expanded at emission into Glyph shapes \u2014 see TextRunDocument. Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes."
           },
           "parts": {
             "type": [
@@ -1446,19 +1755,23 @@
               ],
               "properties": {
                 "id": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The ordinal, case-sensitive identifier an entity-part anchor names."
                 },
                 "shapeId": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "The stable Id whose dynamic pose the part publishes."
                 }
               },
               "required": [
                 "id",
                 "shapeId"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "One authored entity-part identity exported by a creation look."
             },
-            "default": null
+            "default": null,
+            "description": "The authored part identities this creation publishes when used as an entity look (null = none). Each maps a stable identifier to one shape\u0027s dynamic transform."
           },
           "noise": {
             "type": [
@@ -1467,38 +1780,44 @@
             ],
             "properties": {
               "frequency": {
-                "type": "number"
+                "type": "number",
+                "description": "The base lattice frequency, cells per creation unit (clamped to (0, MaxFrequency])."
               },
               "amplitude": {
-                "type": "number"
+                "type": "number",
+                "description": "The peak outward displacement, world units (clamped to (0, MaxAmplitude]; zero drops the facet)."
               },
               "octaves": {
                 "type": [
                   "integer",
                   "null"
                 ],
-                "default": null
+                "default": null,
+                "description": "The fBm octave count (null = 4; clamped to 1..MaxNoiseOctaves)."
               },
               "gain": {
                 "type": [
                   "number",
                   "null"
                 ],
-                "default": null
+                "default": null,
+                "description": "The per-octave amplitude factor (null = 0.5; clamped to [MinGain, MaxGain])."
               },
               "lacunarity": {
                 "type": [
                   "number",
                   "null"
                 ],
-                "default": null
+                "default": null,
+                "description": "The per-octave frequency factor (null = 2; clamped to [MinLacunarity, MaxLacunarity])."
               },
               "seed": {
                 "type": [
                   "integer",
                   "null"
                 ],
-                "default": null
+                "default": null,
+                "description": "The hash seed folded into every lattice corner (null = 0)."
               }
             },
             "required": [
@@ -1507,7 +1826,7 @@
             ],
             "additionalProperties": false,
             "default": null,
-            "title": "CreationNoiseDocument"
+            "description": "The creation-level noise-relief facet (null = none) \u2014 see CreationNoiseDocument. Omitted from the wire when null, so a creation authored without it serializes to unchanged bytes."
           },
           "drivers": {
             "type": [
@@ -1521,12 +1840,17 @@
               ],
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The driver\u0027s name, unique within the creation \u2014 the spelling a facet\u0027s driver member resolves against."
                 },
                 "signal": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, or SignalTurnRate. The first three integrate: \u03C6 accumulates Cadence \u00D7 the signal\u0027s per-frame delta while w \u003E 0, and wraps modulo 2\u03C0 so a wheel spins forever without losing precision. The last three are instantaneous: \u03C6 is set to Cadence \u00D7 the current value, so a facet reading them tracks rather than cycles."
                 },
-                "cadence": true,
+                "cadence": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                  "description": "The signal-to-phase gain: radians per metre for the travel signals, radians per second for SignalTime, radians per metre-per-second for SignalSpeed/SignalVerticalSpeed, and radians per radian-per-second for SignalTurnRate. Magnitude at most MaxCadence."
+                },
                 "when": {
                   "type": [
                     "array",
@@ -1538,21 +1862,24 @@
                       "null"
                     ]
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The gate: every token must hold for the driver\u0027s weight to ease toward 1 (it eases toward 0 otherwise, using the authored blend times or WeightSeconds by default, so a limb returns to rest instead of freezing mid-stride). Authored as one token or an array of them \u2014 a bare string reads as a one-token gate and canonicalizes to the array form. A token is a Puck.Physics.Motion.BodyFacts member name, WhenAlways, TokenMoving, or TokenStill; null is ungated. At most MaxGateTokens. A token no consumer can resolve gates the driver permanently off."
                 },
                 "blendInSeconds": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Gate activation\u0027s exponential time constant in seconds; null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta."
                 },
                 "blendOutSeconds": {
                   "type": [
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "description": "Gate release\u0027s exponential time constant in seconds, on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response."
                 }
               },
               "required": [
@@ -1560,9 +1887,11 @@
                 "signal",
                 "cadence"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "One named animation driver a creation declares: a scalar signal read off the body the creation is stamped on, times a cadence, gated by a conjunction of condition tokens. A driver yields a phase \u03C6 and an eased weight w \u2208 [0, 1]; a shape\u0027s ShapeSwingDocument/ShapeSlideDocument facets name a driver and turn (\u03C6, w) into a rotation or a translation. Three composable parts \u2014 driver (signal \u002B gate), waveform, joint \u2014 cover a walker\u0027s limbs, a wheel, a rotor, a tail, and a bobbing hull without any of them being named in engine code."
             },
-            "default": null
+            "default": null,
+            "description": "The named animation drivers (null = none), at most MaxDrivers \u2014 see CreationDriverDocument. A shape\u0027s Swings/Slides name one of these. Presentation-only, like the facets that read them."
           },
           "effectors": {
             "type": [
@@ -1576,7 +1905,8 @@
               ],
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The effector\u0027s name, unique within the creation \u2014 what a read-back or a refusal spells."
                 },
                 "chain": {
                   "type": "array",
@@ -1585,48 +1915,58 @@
                       "string",
                       "null"
                     ]
-                  }
+                  },
+                  "description": "The bones, root\u2192tip, each the Name of a shape that DESCENDS from the one before it through Parent. A bone\u0027s joint is the pivot of its first Swings entry, or its authored Joint when it swings nothing. Two bones (MinChainBones) solve analytically; three or more \u2014 a tail, a tentacle, a spider leg with a coxa \u2014 solve by cyclic coordinate descent over Iterations sweeps. At most MaxChainBones."
                 },
                 "tip": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The Name of the shape whose posed origin IS the end effector \u2014 the last bone itself, or a shape descending from it (a boot under a shin, a claw under a tarsus)."
                 },
                 "target": {
                   "type": "object",
                   "properties": {
                     "kind": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "One of KindSurface, KindBody, or KindState."
                     },
                     "direction": {
-                      "default": null
+                      "default": null,
+                      "description": "KindSurface: the probe direction in the creation\u0027s author frame (see CreationFrame), so it turns with the body \u2014 [0, -1, 0] is \u0022below the body\u0022, which on a wall-held body points at the wall\u0027s own down. Normalized at canonicalization; zero names no direction and is refused."
                     },
                     "reach": {
-                      "default": null
+                      "default": null,
+                      "description": "KindSurface: how far along Direction the probe searches, world units. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing."
                     },
                     "standoff": {
-                      "default": null
+                      "default": null,
+                      "description": "KindSurface: how far off the hit surface, along its normal, the tip is placed (null = 0 \u2014 the tip lands on the surface). The thickness of a boot\u0027s sole or the gap a claw keeps."
                     },
                     "index": {
                       "type": [
                         "integer",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "KindBody: the population entity index whose root pose is the target."
                     },
                     "offset": {
-                      "default": null
+                      "default": null,
+                      "description": "KindBody: the offset from that body\u0027s root, in the creation\u0027s author frame (null = its root exactly)."
                     },
                     "reference": {
                       "type": [
                         "string",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "KindState: a state.\u003Crow\u003E[.\u003Ckey\u003E] reference to a text cell spelling a world-space [x, y, z], read at the frame\u0027s tick \u2014 a target a rule, a console write, or another system publishes. The containing world refuses a row it does not declare."
                     }
                   },
                   "required": [
                     "kind"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "Where the tip is asked to be."
                 },
                 "when": {
                   "type": [
@@ -1639,10 +1979,12 @@
                       "null"
                     ]
                   },
-                  "default": null
+                  "default": null,
+                  "description": "The gate, in the same vocabulary and with the same easing a driver\u0027s When uses: the correction blends in while every token holds and back out otherwise, so a released effector returns the limb to its driver-posed pose instead of dropping it."
                 },
                 "weight": {
-                  "default": null
+                  "default": null,
+                  "description": "A constant ceiling on the correction, in [0, 1] (null = 1 \u2014 full correction). Multiplied by the gate\u0027s eased weight, so a half-weight effector suggests rather than commands."
                 },
                 "plant": {
                   "type": [
@@ -1651,15 +1993,20 @@
                   ],
                   "properties": {
                     "driver": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "The Name whose wrapped phase the window is read against."
                     },
-                    "window": true,
+                    "window": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The phase interval [from, to] in radians, each in [0, 2\u03C0). A window whose from exceeds its to wraps through 0 \u2014 the half-cycle straddling the phase origin is as authorable as any other."
+                    },
                     "swingWeight": {
                       "type": [
                         "number",
                         "null"
                       ],
-                      "default": null
+                      "default": null,
+                      "description": "The target influence outside the plant window while the driver is active, in [0, 1]. Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to rest, target influence returns to 1 so an idle limb can settle onto its surface."
                     }
                   },
                   "required": [
@@ -1667,7 +2014,8 @@
                     "window"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "description": "The contact latch (null = none) \u2014 see CreationPlantDocument."
                 }
               },
               "required": [
@@ -1676,9 +2024,11 @@
                 "tip",
                 "target"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "One inverse-kinematics effector a creation declares: a chain of its own shapes, root\u2192tip, whose driver-posed pose is corrected so the tip reaches a target. The solve composes after the drivers and the parent chain and bends the pose they produced; it never starts from a rest or default pose. Presentation-only, on exactly the terms ShapeSwingDocument is: the correction composes onto the per-frame dynamic transforms in Puck.World.Client.WorldStampPool and nothing else reads it, so the emitted SDF program, the analytic colliders, the compiled solid field, and every simulation value are blind to it."
             },
-            "default": null
+            "default": null,
+            "description": "The inverse-kinematics effectors (null = none), at most MaxEffectors \u2014 see CreationEffectorDocument. Each corrects a chain of this creation\u0027s own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers."
           },
           "volumes": {
             "type": [
@@ -1694,9 +2044,15 @@
                 "kind": {
                   "type": "string"
                 },
-                "position": true,
-                "rotation": true,
-                "halfExtent": true,
+                "position": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader."
+                },
+                "rotation": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader."
+                },
+                "halfExtent": {
+                  "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader."
+                },
                 "ramp": {
                   "type": "array",
                   "items": {
@@ -1716,7 +2072,8 @@
                       "density",
                       "color"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "One local-density emission ramp stop."
                   }
                 },
                 "parent": {
@@ -1815,7 +2172,8 @@
                   "default": null
                 },
                 "isKnownKind": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Whether the family is supported."
                 }
               },
               "required": [
@@ -1825,9 +2183,11 @@
                 "halfExtent",
                 "ramp"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control."
             },
-            "default": null
+            "default": null,
+            "description": "The bounded participating volumes (null = none), at most MaxVolumes \u2014 see VolumeDocument. Each rides the creation root\u0027s or a named shape\u0027s dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider."
           }
         },
         "additionalProperties": false,

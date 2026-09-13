@@ -1,9 +1,11 @@
 # Shader pipelines and hybrid rendering
 
 A pipeline connects GPU passes through named images and buffers. A one-off
-shader is the smallest such pipeline. This is the foundation for developing
-procedural content in the same environment where it will be used, and for
-letting several rendering representations contribute to one world.
+shader is the smallest such pipeline, and it is the current foundation for
+developing procedural content in the same environment where it will be used.
+The proposed work extends that foundation so several rendering representations
+can contribute to one world while retaining the current one-off and fullscreen
+workflows.
 
 This brief preserves the design decisions and remaining work from the September
 2026 DSL and rendering review. The [shader guide](../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development)
@@ -240,7 +242,7 @@ The [DSL release brief](dsl-release-hardening.md) and
 ## Release and handoff
 
 A completed slice updates its owning guide, schema/examples where applicable,
-and a dated verification entry in the campaign's milestone record. Include the
+and a dated verification entry in the game's milestone record. Include the
 candidate revision, commands, environment, expected results and retained evidence.
 Do not convert this proposal into a hand-maintained capability certification.
 

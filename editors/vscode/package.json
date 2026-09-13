@@ -76,9 +76,37 @@
                     "default": "puck",
                     "description": "Executable used to launch the language server. Use dotnet to launch a Puck.Cli.dll assembly.",
                     "scope": "machine-overridable"
+                },
+                "puck.highlighting.containerColors": {
+                    "type": "boolean",
+                    "description": "Use fixed, theme-aware colors for array [] and object {} delimiters instead of nesting-depth colors.",
+                    "scope": "resource",
+                    "default": true
                 }
             }
-        }
+        },
+        "colors": [
+            {
+                "defaults": {
+                    "dark": "#C586C0",
+                    "highContrast": "#F3A6E8",
+                    "light": "#8A237A",
+                    "highContrastLight": "#7A176B"
+                },
+                "description": "Puck array delimiters [].",
+                "id": "puck.arrayDelimiter"
+            },
+            {
+                "defaults": {
+                    "dark": "#4EC9B0",
+                    "highContrast": "#70E8CB",
+                    "light": "#007A68",
+                    "highContrastLight": "#006B59"
+                },
+                "description": "Puck object delimiters {}.",
+                "id": "puck.objectDelimiter"
+            }
+        ]
     },
     "main": "./dist/extension.js",
     "activationEvents": [
@@ -95,13 +123,16 @@
     "scripts": {
         "build": "esbuild extension.js --bundle --platform=node --external:vscode --outfile=dist/extension.js",
         "package": "vsce package --no-dependencies",
-        "vscode:prepublish": "npm run build"
+        "vscode:prepublish": "npm run build",
+        "test": "node --test test/*.test.js"
     },
     "dependencies": {
         "vscode-languageclient": "9.0.1"
     },
     "devDependencies": {
         "@vscode/vsce": "3.9.2",
-        "esbuild": "0.28.2"
+        "esbuild": "0.28.2",
+        "vscode-oniguruma": "^2.0.1",
+        "vscode-textmate": "^9.3.2"
     }
 }

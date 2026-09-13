@@ -7,7 +7,7 @@ native Game Boy Advance around an ARM7TDMI processor. Both expose synchronous
 cores for direct embedding and adapters for queued hosting.
 
 This documentation separates host integration from hardware detail. Start with
-[shared hosting](shared/machine-hosting.md) when you need to load content,
+[Machine hosting runtime](shared/machine-hosting.md) when you need to load content,
 advance a machine, consume frames or audio, or capture state. Read the
 [Humble Gaming Brick](hgb/README.md) and [Advanced Gaming Brick](agb/README.md)
 entries for the corresponding hardware cores and their detailed topic pages.
@@ -25,7 +25,7 @@ saves, replay, performance, and evidence.
 
 The shared layer supplies machine hosting, integer tick-to-cycle pacing,
 backpressure, snapshots, and link sessions. It does not define either core's
-hardware behavior. The [shared entry](shared/README.md) routes to those
+hardware behavior. [Shared emulation infrastructure](shared/README.md) routes to those
 contracts.
 
 ## Determinism and evidence

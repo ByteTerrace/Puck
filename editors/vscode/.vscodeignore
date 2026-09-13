@@ -6,3 +6,4 @@ test/**
 extension.js
 package-lock.json
 *.vsix
+container-colors.js

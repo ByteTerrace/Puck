@@ -22,5 +22,15 @@ exports.run = async function () {
     assert.ok(variableHover.some(card => card.contents.some(content => content.value.includes('let seats = 4') && content.value.includes('Number of seats.'))), 'Variable declaration and comments reach the popup');
     const functionHover = await vscode.commands.executeCommand('vscode.executeHoverProvider', hoverDocument.uri, new vscode.Position(3, 10));
     assert.ok(functionHover.some(card => card.contents.some(content => content.value.includes('range(start, count)'))), 'Function signature reaches the popup');
+    const courtyard = await vscode.workspace.openTextDocument(require('node:path').resolve(__dirname, '../../../src/Puck.World/Assets/worlds/moth-courtyard.puck'));
+    await vscode.window.showTextDocument(courtyard);
+    const limestoneStart = courtyard.getText().indexOf('name: "weathered-limestone"');
+    assert.ok(limestoneStart >= 0);
+    for (const [token, expected] of [['roughness:', 'GGX roughness'], ['frequency:', 'lattice frequency'], ['exponent:', 'generalizing exponent'], ['material:', 'palette slot'], ['blend:', 'blend op']]) {
+        const offset = courtyard.getText().indexOf(token, limestoneStart);
+        assert.ok(offset >= 0);
+        const cards = await vscode.commands.executeCommand('vscode.executeHoverProvider', courtyard.uri, courtyard.positionAt(offset + 1));
+        assert.ok(cards.some(card => card.contents.some(content => content.value.includes(expected))), `Courtyard hover explains ${token}`);
+    }
     console.log('Puck IntelliSense extension-host checks passed.');
 };

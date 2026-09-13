@@ -1,4 +1,9 @@
-# Emulator Landscape
+# Emulator landscape
+
+No single external emulator answers every hardware question. This page gives
+each comparison implementation a specific role, then explains how Puck
+records disagreements without turning a compatibility result into a hardware
+parity claim.
 
 External emulators serve different engineering roles. Puck uses them as independent
 evidence sources, not as specifications: implementation agreement is meaningful only

@@ -4,7 +4,7 @@ An SDF instruction produces both a distance and a material identity. Composition
 operators determine the winning distance; the shared blend tail applies the
 corresponding material rule.
 
-## Composition
+## Material composition
 
 Hard operations use a strict winner comparison so ties are deterministic.
 Smooth composition blends distance over an authored radius and records the
@@ -54,15 +54,15 @@ products exactly then rounds once, so the squared slant reads zero whenever
 component half a quantum above the real value it came from, the widest real
 slant inside that set is `sqrt(2^15 + 2·181 + 0.5)/2^16 ≈ 0.002778`;
 `SdfProgramBuilder.MinTrapezoidProfileSlant` refuses below `0.003`. The rule is
-a conjunction over both profile directions — equal half-widths with real height
+a conjunction over both profile directions—equal half-widths with real height
 is a cylinder and admissible, a flat profile with unequal half-widths is a disc
-and admissible — so only a sliver vanishing in both directions at once is
+and admissible—so only a sliver vanishing in both directions at once is
 refused.
 
 The refusal sits at the doors that admit a shape: the builder, the packed
-`SdfProgram` constructor — which reads the slant from the lanes exactly as
+`SdfProgram` constructor—which reads the slant from the lanes exactly as
 `sdfTrapezoid2D` reads them, since a caller may hand it an instruction stream
-the builder never authored — and the creation document validator by way of
+the builder never authored—and the creation document validator by way of
 `SdfSolidGeometry.TryValidateScaledPrimitive`, because a cone is spelled as a
 revolved trapezoid and an authored per-axis
 scale reaches its dimensions directly. `SdfProgramBuilder.Ellipse` nudges a
@@ -81,8 +81,8 @@ The axes must therefore be unit and orthogonal. A merely linearly independent
 pair is admissible arithmetic and inadmissible geometry: the UV, the rendered
 solid, and the collided solid stop describing the same object, and the
 disagreement grows without bound as the pair approaches parallel. Orthogonality
-is refused at every door that accepts a frame — the builder, the program
-constructor, and the world document validator — rather than documented as a
+is refused at every door that accepts a frame—the builder, the program
+constructor, and the world document validator—rather than documented as a
 caller obligation, because none of the three consumers can detect the skew from
 what it is handed.
 
@@ -93,7 +93,7 @@ A surface's two half-extents are the second degenerate-divisor case: the UV is
 `dot(local, right)/right.w` and `dot(local, up)/up.w`, so a zero half-extent
 maps every hit on a surface the sentinel band guarantees is reachable to a
 non-finite UV. Positivity is refused at the same three doors as the frame's
-orthogonality. The slab's depth half-extent stays unconstrained — nothing
+orthogonality. The slab's depth half-extent stays unconstrained—nothing
 divides by it, and refusing it would ban a legitimately flat panel.
 
 ## Operand lane finiteness

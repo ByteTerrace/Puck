@@ -1,4 +1,4 @@
-# Armored chibi hero: implementation brief
+# Armored chibi hero implementation brief
 
 Create an original, expressive armored hero whose silhouette, materials, and movement make Puck's main character feel deliberately designed. The character must look excellent in the running game, from the normal camera, using Puck's signed-distance renderer and authored world data.
 

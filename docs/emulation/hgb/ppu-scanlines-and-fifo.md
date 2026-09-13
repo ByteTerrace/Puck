@@ -1,10 +1,15 @@
-# PPU Scanlines & Pixel FIFO
+# PPU scanlines and pixel FIFO
+
+The Humble Gaming Brick (HGB)'s picture processing unit (PPU) produces one line at a
+time while the CPU and DMA share access to video memory. This page follows
+the scanline modes, pixel fetch queue, sprite priority, palettes, and DMA
+boundaries that make those observations deterministic.
 
 The **Picture Processing Unit (PPU)** generates the Game Boy's video signal. It outputs a 160×144 pixel display refreshed at approximately 59.7275 Hz. Rather than drawing full frames in a single pass, the PPU operates as an exact raster scanline state machine synchronized to the dot clock.
 
 ---
 
-## Scanline State Machine & Timing
+## Scanline state machine and timing
 
 A single video frame comprises **154 scanlines** (numbered 0 to 153). Each scanline consumes exactly **456 T-cycles**, yielding **70,224 T-cycles per frame**:
 
@@ -23,14 +28,14 @@ stateDiagram-v2
     Mode1 --> Mode2: LY wraps to 0
 ```
 
-### 1. Mode 2 — OAM Search (80 T-cycles)
+### 1. Mode 2: OAM search (80 T-cycles)
 At the start of lines 0–143, the PPU searches Object Attribute Memory (`0xFE00–0xFE9F`, 40 sprite slots):
 - It evaluates 2 sprites every M-cycle (4 T-cycles).
 - It selects up to **10 sprites** whose vertical span ($Y \le \text{LY} + 16 < Y + \text{SpriteHeight}$) intersects the current scanline.
 - Any remaining sprites on the line are dropped (sprite limit).
 - **Bus Lockout**: The CPU cannot read or write OAM during Mode 2; reads return `0xFF`.
 
-### 2. Mode 3 — Pixel Transfer & FIFO (172–289 T-cycles)
+### 2. Mode 3: pixel transfer and FIFO (172–289 T-cycles)
 The PPU renders the 160 pixels of the scanline using a hardware **Pixel FIFO**:
 - **Variable Duration**: Mode 3 is not fixed in length. Its duration depends on:
   - Fine horizontal scroll offset (`SCX % 8` causes 0 to 7 discarded pixels).
@@ -38,19 +43,19 @@ The PPU renders the 160 pixels of the scanline using a hardware **Pixel FIFO**:
   - Sprite penalties: each active sprite requires pausing the background fetcher for up to 6 cycles to fetch sprite tile patterns.
 - **Bus Lockout**: The CPU cannot read or write VRAM, OAM, or CGB Palette RAM during Mode 3.
 
-### 3. Mode 0 — Horizontal Blanking (87–204 T-cycles)
+### 3. Mode 0: horizontal blanking (87–204 T-cycles)
 Mode 0 covers the remaining cycles of the scanline after pixel 160 is displayed:
 - The CPU has unrestricted access to VRAM and OAM.
 - On Game Boy Color, Mode 0 triggers **HBlank DMA (HDMA)** transfers (copying 16 bytes per scanline).
 
-### 4. Mode 1 — Vertical Blanking (4,560 T-cycles)
+### 4. Mode 1: vertical blanking (4,560 T-cycles)
 Lines 144 to 153 comprise VBlank. The beam resets to the top-left of the screen:
 - At cycle 0 of line 144, the VBlank interrupt flag (`IF` bit 0) is set.
 - The CPU has full unrestricted access to all display memory throughout Mode 1.
 
 ---
 
-## The Pixel FIFO Architecture
+## The pixel FIFO architecture
 
 Physical Game Boy hardware does not rasterize tiles linearly into a frame buffer; it uses an 8-pixel **FIFO queue** connected to a background fetcher and sprite overlay mixer:
 
@@ -70,14 +75,14 @@ flowchart LR
     end
 ```
 
-### The 4-Step Fetcher Loop
+### The four-step fetcher loop
 The fetcher runs every 2 M-cycles (8 T-cycles) to load the next 8 pixels:
 1. **Get Tile Index**: Reads tile number from background map (`0x9800` or `0x9C00`).
 2. **Get Tile Data Low**: Reads the low bitplane byte from VRAM tile pattern table.
 3. **Get Tile Data High**: Reads the high bitplane byte from VRAM tile pattern table.
 4. **Sleep / Push**: Waits until the FIFO has 8 or fewer pixels, then unpacks the two bitplanes into 8 color indices (0–3) and enqueues them.
 
-### Sprite Mixing & Priority
+### Sprite mixing and priority
 When an active sprite reaches the current X coordinate, the fetcher stalls to load sprite tile patterns into the `Sprite FIFO`. The `Pixel Mixer` outputs the winning color:
 - If a sprite pixel has non-zero color and priority over the background (or background pixel is color 0), the sprite pixel is rendered.
 - Otherwise, the background/window pixel is rendered.
@@ -85,7 +90,7 @@ When an active sprite reaches the current X coordinate, the fetcher stalls to lo
 
 ---
 
-## Palette Systems & Color Conversion
+## Palette systems and color conversion
 
 | Feature | DMG (Monochrome) | CGB (Game Boy Color) |
 |---|---|---|
@@ -103,14 +108,14 @@ On CGB, VRAM Bank 1 stores tile attribute bytes defining:
 
 ---
 
-## Direct Memory Access (DMA)
+## Direct memory access (DMA)
 
 ### Standard OAM DMA (`0xFF46`)
 Writing address byte $XX$ to `0xFF46` triggers a high-speed transfer of 160 bytes from source address `$XX00–$XX9F` into OAM (`0xFE00–0xFE9F`):
 - Takes exactly **160 M-cycles** (640 T-cycles).
 - During transfer, the CPU can only execute instructions from High RAM (`HRAM`, `0xFF80–0xFFFE`).
 
-### CGB General DMA (GDMA) & HBlank DMA (HDMA)
+### CGB general DMA (GDMA) and HBlank DMA (HDMA)
 Controlled via registers `HDMA1–HDMA5` (`0xFF51–0xFF55`):
 - **GDMA**: Copies blocks of 16 to 2,048 bytes from ROM/RAM to VRAM continuously, stalling the CPU until transfer completes.
 - **HDMA**: Copies 16 bytes during each HBlank period (Mode 0), allowing games to stream full animated tile patterns without screen tearing or stalling active gameplay.

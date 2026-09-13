@@ -706,7 +706,7 @@ Generates the JSON Schema for `puck.world.def.v1` from the live C# model —
 `System.Text.Json`'s `JsonSchemaExporter`, so `$type` unions, enum values, and
 `additionalProperties: false` all come from the SAME contract the loader
 enforces, never a hand-maintained copy. Descriptions come from
-`Puck.World.Schema.xml`, resolved property `<summary>` first, then the
+`Puck.World.Schema.xml`, `Puck.State.xml`, `Puck.World.Authoring.xml`, and `Puck.SignedDistance.xml`, resolved property `<summary>` first, then the
 declaring record's own `<param>` (most members are documented that way — a
 positional record's XML doc lives on the record declaration, not the
 property), then a type `<summary>` for a node with no containing property
@@ -758,7 +758,7 @@ which already flow to `Puck.World`'s build output (`Assets\**` copies
 `PreserveNewest`), so the schema ships beside the world documents it
 describes. Running `puck schema` also DELETES any section file the current
 model no longer produces, so the checked-in tree never carries an orphan.
-A missing `Puck.World.Schema.xml` still produces a schema, with no
+A missing documentation XML file from that set still produces a schema, with no
 descriptions, and this verb says so on stderr rather than failing. Exit
 codes: **0** wrote or matched, **1** `--check` found drift (reported per file
 — missing, orphan, or the path plus the first differing line), **2** usage

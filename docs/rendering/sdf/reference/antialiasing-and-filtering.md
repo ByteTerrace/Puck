@@ -28,7 +28,7 @@ The current screen path uses explicit sampling contracts shared by Vulkan and
 Direct3D 12. Any derivative-based extension must define equivalent behavior for
 compute shaders and must not rely on implicit pixel-shader derivatives.
 
-## Guidance
+## Practical guidance
 
 - Keep geometric hit tolerance independent from texture sharpness controls.
 - Test temporal stability while the camera and screen surface move.

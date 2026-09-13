@@ -1,10 +1,13 @@
 # Retail-scale cartridges
 
-Whether Puck data can carry a whole retail-scale game. Pokémon Gold/Silver is
-the north star: roughly 250 species, 100 maps, a text engine, a battle engine, a
-save the size of a small filesystem, and a day/night clock.
+This plan asks whether Puck data can carry a whole retail-scale game. Pokémon
+Gold/Silver is the north star: roughly 250 species, 100 maps, a text engine, a
+battle engine, a save the size of a small filesystem, and a day/night clock.
+The current `puck.cartridge.v1` document is frame-shaped, with flat rules and
+byte-oriented state; the proposed result adds the program and memory structures
+needed for that workload without requiring byte-identical ROM output.
 
-The target is **reimplementation, not byte identity** — a document that plays the
+The target is **reimplementation, not byte identity**—a document that plays the
 same, not one that assembles to the same bytes. That decision settles the rest of
 the design, because it says the compiler owns encoding and the document owns
 structure.
@@ -22,7 +25,7 @@ and three absences are the whole of why.
 | Absent | Consequence |
 |---|---|
 | Any notion of a **procedure** | Rules are a flat list evaluated once per frame in declaration order. There is no call, so no behavior can be named, parameterized or reused, and there is no unit for a bank to hold. |
-| Any **typed region** | State is named byte slots and named byte runs. An element is addressable by a computed index, but there is no record layout and no pointer, so a party, an NPC list and a table of pointers have no shape to be declared in — only a flat run and an author-maintained stride. |
+| Any **typed region** | State is named byte slots and named byte runs. An element is addressable by a computed index, but there is no record layout and no pointer, so a party, an NPC list and a table of pointers have no shape to be declared in—only a flat run and an author-maintained stride. |
 | Any **interrupt body** | One implicit frame, with a fixed-capacity vblank write queue and `raster` as the two hard-coded escapes. Nothing else on the machine's timeline is addressable. |
 
 Two facts change what the work costs.
@@ -41,7 +44,7 @@ there. What a cartridge still restates, and the shape that would replace it:
 | Cartridge | `Puck.State` |
 |---|---|
 | `variables` (named bytes) and `arrays` (named byte runs) | `StateRow`, a slot when it holds one cell and a **table** when it holds author-keyed cells, over typed `CellKind` (Int, Fixed, Bool, Text) |
-| Nothing | `StateDomain.Ring`, `CellsOf`, `KeysOf` — ring buffers and lattice-shaped rows |
+| Nothing | `StateDomain.Ring`, `CellsOf`, `KeysOf`—ring buffers and lattice-shaped rows |
 | The backends recognise the reserved button operand themselves | `RuleVocabulary`'s `OperandFamily`/`KeyFamily`, the seam a document project registers its reserved spellings through |
 | Hand-written `CartridgeCost` | `RuleCost`, `RuleDataflow`, `RuleHazards`, `RuleWorkBudget`, `StateFrameHash` |
 
@@ -52,15 +55,15 @@ there. What a cartridge still restates, and the shape that would replace it:
 | Pokémon G/S, the Oracle games | A game-mode byte partitions the frame; each mode dispatches into its own handlers, and only one runs. | `scene` is exactly this, and is the one retail shape the document already has. Keep it unchanged. |
 | Every GB game past 32 KB | Code is banked; the call graph decides placement and a trampoline makes a far call look like a near one. | A procedure must be a named document unit, because banking needs something to place and the author needs to say what is far. |
 | Pokémon's overworld objects | An array of fixed-size records walked by a dispatcher, each carrying position, sprite, a state machine and a script pointer. | Typed regions. An entity primitive would be a second implementation of what a memory model gives. |
-| Pokémon's text | A ROM string table reached through a far pointer, drawn a character at a time across frames, with control codes for pauses, names and breaks. | ROM residency, `Text` cells, and a draw that spans frames — not a `print` step. |
-| Battle damage | 16×16 products with 32-bit intermediates and divides; the PRNG needs a multiply of its own. | Arithmetic completion is load-bearing, not a nicety. |
+| Pokémon's text | A ROM string table reached through a far pointer, drawn a character at a time across frames, with control codes for pauses, names and breaks. | ROM residency, `Text` cells, and a draw that spans frames—not a `print` step. |
+| Battle damage | 16×16 products with 32-bit intermediates and divides; the PRNG needs a multiply of its own. | The arithmetic instruction set must support these intermediate widths and operations. |
 | Every GBA game, and most GB ones | Assets ship compressed; on GBA the BIOS decompressors are the de facto codecs. | A codec is a document concept: the document holds the decompressed asset and the compiler encodes it. |
-| Sappy/M4A, and the per-game GB drivers | Audio is a driver — ROM tables walked by a per-frame update with its own note format and envelopes. | Falls out of procedures over ROM tables. The standing ruling against a tracker primitive survives. |
+| Sappy/M4A, and the per-game GB drivers | Audio is a driver—ROM tables walked by a per-frame update with its own note format and envelopes. | Procedures over ROM tables express this behavior. The standing ruling against a tracker primitive survives. |
 | Raster splits, HDMA streaming, mid-scanline writes | Writes placed at known scanlines within a known cycle budget. | Interrupt bodies with a verified cycle budget, generalizing `raster` and the vblank queue rather than adding a third escape. |
 
 ## Decisions
 
-**D1 — The gate is behavioral determinism, not a byte diff.** Reimplementation
+**D1—The gate is behavioral determinism, not a byte diff.** Reimplementation
 gives up any oracle against a retail image, so "this game works" is carried by
 machinery already here: a forged image replayed from a recorded input script must
 produce identical machine-state hashes on repeated runs of each backend. Cross-target parity compares normalized
@@ -69,42 +72,42 @@ native addresses, registers, timing state and ROM bytes differ between machines.
 tests establish correctness: deterministic replay alone can repeat the same wrong answer. `HashDivergenceProbe`,
 `CosimDiagnostic` and the snapshot paths provide per-target evidence, not interchangeable hardware hashes.
 
-**D2 — A cartridge consumes `Puck.State`'s vocabulary rather than restating it,
+**D2—A cartridge consumes `Puck.State`'s vocabulary rather than restating it,
 and the forges are code-generating backends for it.** No second language, and no
 arm on one side that the other lacks. The expression and the gate come from there;
 the row vocabulary is what the memory model will take next. The step tree stays
 the cartridge's own, because a machine verb is not a state effect and the tree is
-what `if`, `repeat` and `break` need — the cartridge-only verbs belong in this
+what `if`, `repeat` and `break` need—the cartridge-only verbs belong in this
 vocabulary, not as derived arms of the engine's effect list.
 
-**D3 — A procedure is a document row, not a compiler outlining pass.** Outlining
+**D3—A procedure is a document row, not a compiler outlining pass.** Outlining
 recovers code size but leaves the author no way to say what lives far and the
 linker no name to place. Procedures take parameters, declare their stack bound,
 and are placed by a call-graph partition.
 
-**D4 — `template` and a procedure are different tools, and both stay.**
+**D4—`template` and a procedure are different tools, and both stay.**
 `template` is authoring reuse expanded at compile time; a procedure is ROM-size
 reuse called at run time. Macro expansion at retail scale explodes the image, and
 a call at authoring scale costs a name for nothing.
 
-**D5 — Payload leaves the source.** A `.puck` holds structure and references
+**D5—Payload leaves the source.** A `.puck` holds structure and references
 assets; tiles, maps, audio and bulk tables are ingested from asset files rather
 than spelled as scalars in the document text.
 
-**D6 — The frame-shaped ceilings are re-derived, not raised.** `RuleCount`,
+**D6—The frame-shaped ceilings are re-derived, not raised.** `RuleCount`,
 `StatementCount`, `MapWriteCount`, `BlitCellCount` and their neighbours bound the
 shape of one frame. Under a program model the real resources are code bytes per
 bank, cycles per interrupt window, and RAM bytes; raising the old numbers keeps
 measuring the wrong thing.
 
-**D7 — The content engines are a library, not engine features.** Given D2, D3 and
+**D7—The content engines are a library, not engine features.** Given D2, D3 and
 a memory model, a text engine, an entity dispatcher, a script interpreter and an
-audio driver are authored — procedures over typed memory, composed through
+audio driver are authored—procedures over typed memory, composed through
 `import`. That is the payoff, and it is what keeps the forge from growing a
 Pokémon-shaped arm.
 
-**D8 — Cost stays advice.** Validation refuses what makes an image wrong — a
-shape with no room, a map write that would be dropped — never what makes it slow.
+**D8—Cost stays advice.** Validation refuses what makes an image wrong—a
+shape with no room, a map write that would be dropped—never what makes it slow.
 Nothing here reintroduces a cost refusal.
 
 ## Ceilings, and what replaces each
@@ -124,8 +127,8 @@ Nothing here reintroduces a cost refusal.
 Dependency-ordered. Each stage is authorable and verifiable on both machines
 before the next begins.
 
-**1. The memory model.** Declared regions with typed layouts — records, arrays of
-records — and an indirect operand form of base, offset and field. Named slots
+**1. The memory model.** Declared regions with typed layouts—records, arrays of
+records—and an indirect operand form of base, offset and field. Named slots
 become views. Dissolves four ceilings at once and is what every content engine is
 written against. Proved by a record-walking document reading and writing the same
 cells on both machines.
@@ -148,7 +151,7 @@ Proved by a table larger than work RAM read at run time, and a save larger than
 the current mirror surviving a power cycle.
 
 **5. Arithmetic completion.** 16×16 multiply, divide and 32-bit intermediates on
-both backends, total under the rules the current helpers already follow — a zero
+both backends, total under the rules the current helpers already follow—a zero
 divisor yields zero. There is now one expression evaluator per machine to widen
 rather than an operation's worth of scattered arms, which is most of what made
 this stage expensive. Proved by a damage-formula document agreeing with a
@@ -159,7 +162,7 @@ images, maps and audio into that referenced form. A capability nobody can feed i
 theoretical, and this is what makes the content volume tractable.
 
 **7. The content library.** Text, camera-driven tilemap streaming, entity
-dispatch, battle math, an audio driver — `.puck` modules composed through
+dispatch, battle math, an audio driver—`.puck` modules composed through
 `import`. Authored, not engineered; nothing in it should require touching a forge
 project.
 
@@ -168,7 +171,7 @@ project.
 The authoring surface is the binding constraint at scale. Measure the committed
 Tetris source against its document and two things show: the source is barely
 smaller than the JSON it generates, and the overwhelming majority of it is
-payload rather than logic — a few dozen rules against thousands of lines of
+payload rather than logic—a few dozen rules against thousands of lines of
 tiles, maps, arrays and audio, laid out one scalar per line by the canonical
 formatter.
 
@@ -206,7 +209,7 @@ Owed beyond the numbered stages:
   to make a forged image agree.
 - **A DMG target**, unclaimed today and unclaimed here.
 - **A cost refusal**, by D8.
-- **Entity, text, battle or tracker primitives**, by D7 — library content, and
+- **Entity, text, battle or tracker primitives**, by D7—library content, and
   adding any of them to the schema would be a second implementation of a
   mechanism the memory model already provides.
 

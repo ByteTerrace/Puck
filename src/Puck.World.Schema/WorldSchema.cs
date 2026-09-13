@@ -19,8 +19,8 @@ namespace Puck.World;
 /// policy), a <c>$type</c>-discriminated union as <c>anyOf</c> with a <c>const</c> arm per
 /// <see cref="System.Text.Json.Serialization.JsonDerivedTypeAttribute"/>, and a named-value <c>enum</c> for every
 /// <see cref="StrictEnumConverter{TEnum}"/> member. This generator adds only what the exporter cannot infer on its
-/// own: curated hover text pulled from the XML documentation of this assembly and of <c>Puck.State</c>
-/// (<c>Puck.World.Schema.xml</c> and <c>Puck.State.xml</c> beside it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
+/// own: curated hover text pulled from the XML documentation of the model assemblies
+/// (the World.Schema, State, World.Authoring, and SignedDistance XML files beside their assemblies), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
 /// introspect and that opts in via <see cref="IJsonSchemaTypeConverter"/> or
 /// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>), a whole node — required
 /// members, kind-conditional types, exclusivity rules — for a converter that opts into
@@ -43,6 +43,8 @@ public static partial class WorldSchema {
     private static readonly (string FileName, Type Anchor)[] XmlDocumentationFiles = [
         ("Puck.World.Schema.xml", typeof(WorldDefinition)),
         ("Puck.State.xml", typeof(ValueExpression)),
+        ("Puck.World.Authoring.xml", typeof(Puck.World.Authoring.CreationDocument)),
+        ("Puck.SignedDistance.xml", typeof(Puck.SignedDistance.SdfSolidPrimitive)),
     ];
 
     /// <summary>The file name shared shapes live under, inside the sections directory.</summary>
@@ -1336,6 +1338,8 @@ public static partial class WorldSchema {
     // object, ahead of its type/properties/required keywords). JsonObject preserves insertion order, and Clear()
     // detaches every child so each can be re-added to the same object without a "node already has a parent" error.
     private static void Prepend(JsonObject obj, string propertyName, JsonNode value) {
+        // A converter may already supply this annotation; the outer property site replaces it.
+        obj.Remove(propertyName);
         var existing = obj.ToList();
 
         obj.Clear();
@@ -1580,6 +1584,10 @@ public static partial class WorldSchema {
     // node with no resolvable description). Every other node in typesByNode was already fully annotated by
     // Transform itself and is left alone.
     private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+        // Creation documents own their serializer and annotation walk; WorldJsonContext's converter repairs do not apply.
+        if (node is JsonObject creation && creation["$id"]?.ToString() == Puck.World.Authoring.CreationDocument.CurrentSchema) {
+            return;
+        }
         if (node is JsonObject obj) {
             if (
                 typesByNode.TryGetValue(

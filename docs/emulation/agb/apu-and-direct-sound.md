@@ -1,5 +1,9 @@
 # APU and Direct Sound
 
+This page explains the Advanced Gaming Brick (AGB)'s audio processing unit (APU) and
+its two Direct Sound FIFO channels. It focuses on the state and bus behavior
+that affects cartridge execution; host resampling remains presentation work.
+
 ## Direct Sound FIFO
 
 Each Direct Sound channel uses a seven-word queue plus one 32-bit playing

@@ -17,6 +17,9 @@ Legal boilerplate and generated artifacts are outside these registers. Do not
 hand-edit generated Maths registers, generated API output, or other
 machine-written reports; change their source or generator.
 
+Use [Writing documentation](../../../docs/development/documentation.md) for human
+editorial conventions. This skill owns operational verification and routing.
+
 ## Non-negotiable ownership rules
 
 - Give each fact one authoritative home. Other surfaces summarize and link.

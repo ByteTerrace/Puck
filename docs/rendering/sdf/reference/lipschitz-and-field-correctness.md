@@ -5,7 +5,7 @@ change. Puck computes a program-wide conservative `stepScale` from the authored
 instruction stream and applies it in `map()`, and in every other marcher that
 walks the same stream.
 
-## Contract
+## Marching contract
 
 For a field with Lipschitz bound `L`, the safe scale is at most `1 / L`.
 Rigid transforms and exact primitives retain factor 1. Scaling, warps,
@@ -81,12 +81,12 @@ resolve it toward the answer its own consumer can survive being wrong about, and
 that direction is a property of what the verb's true half ASSERTS, not of the
 provider:
 
-- an obstruction verb — cast, sweep, visibility — asserts "something is there",
+- an obstruction verb—cast, sweep, visibility—asserts "something is there",
   so it folds exhaustion to a hit marked bounded rather than exact. Folding it
   into "clear" is a false negative that reaches authoritative simulation:
   contact resolution reads it as "no contact" and visibility reads it as a line
   through solid geometry.
-- a surface verb — ground height — asserts "the terrain is at this Y". It
+- a surface verb—ground height—asserts "the terrain is at this Y". It
   returns a coordinate with no confidence channel to qualify, and a caller that
   grounds a body on a fabricated Y moves it somewhere the world does not have.
   It folds exhaustion to "not found", the same answer an empty column gives.
@@ -124,7 +124,7 @@ relaxed parity envelope (isolated silhouette winner flips only). The
 sine-product `Displace` remains the hash-free periodic sibling.
 
 A field op emitted in a SHAPE-FREE chain (its own `ResetPoint` + transform
-prefix, no shape — the spelling the creation-level `noise` facet's stamp
+prefix, no shape—the spelling the creation-level `noise` facet's stamp
 emission uses) never reaches a `ShapeBlend` compose, so the chain-product path
 alone drops its factor. `AnalyzeLipschitz` pass 2 therefore folds a shape-free
 chain's `Displace`/`NoiseDisplace` factor additively at the op's own
@@ -140,7 +140,7 @@ Two further consequences of scoping the analysis:
   field by it at the pop: a positively scaled distance keeps its zero set, and
   `(1/L)·f` of an `L`-Lipschitz `f` is exactly 1-Lipschitz, so scoped
   relief/warps/eccentricity never tax the global `stepScale`. Anything
-  UNSCOPED still folds globally — a flattened `Ellipsoid` outside a scope
+  UNSCOPED still folds globally—a flattened `Ellipsoid` outside a scope
   slows every march in the program by its eccentricity.
 - **Continuous relief.** `Displace` and `NoiseDisplace` evaluate their basis
   at every distance in both the scalar and gradient interpreters. Replacing

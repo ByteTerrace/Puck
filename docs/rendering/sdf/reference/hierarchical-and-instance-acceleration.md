@@ -5,7 +5,7 @@ prepass identifies candidate instances for a screen region, and a world-space
 uniform grid limits the instances considered by that prepass. The primary
 march then evaluates the packed instance mask for its tile.
 
-## Current structure
+## Current acceleration structure
 
 `SdfProgram` packs finite instance bounds and the uniform-grid metadata. The
 beam shader traverses the grid, tests candidate bounds, and writes per-tile
@@ -39,7 +39,7 @@ mask bit happens to be set, and vanishes wherever the beam culls the winner but
 not the loser.
 
 Overlap is refused at the program constructor rather than resolved. The
-first-match owner resolve stays in place as defence in depth — it keeps the
+first-match owner resolve stays in place as defence in depth—it keeps the
 packed words a total, deterministic function of any range set that reaches it —
 but a deterministic answer to an incoherent declaration is still the wrong
 image, so the door never admits one.

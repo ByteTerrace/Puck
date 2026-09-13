@@ -1,8 +1,12 @@
 # Game development plan
 
-This plan routes the campaign's engineering work and keeps the broad sequencing, future waves, federation remainder, verification rules, and carried-forward work in one place. Topic pages hold the detailed decision blocks.
+This plan routes the reference game's engineering work and keeps the broad
+sequencing, future waves, federation remainder, verification rules, and
+carried-forward work in one place. Topic pages hold the detailed decision
+blocks, while this page owns the cross-topic order and shared gates.
 
-For the binding game design, see [design.md](../game/design.md). For dated verification records, see [milestones.md](../development/milestones.md).
+See [Reference game design](../game/design.md) for the design decisions.
+For dated evidence, see [Game development milestones](../development/game-milestones.md).
 
 ## Topic plans
 
@@ -19,7 +23,7 @@ The detailed decisions from the former campaign work plan are organized as follo
 The following are planned product goals. The destination is one continuous session in which a person can discuss Puck, play it, edit it, generate content inside it, capture the session, and leave with a replay tape that reproduces the run elsewhere. The creative loop is to sculpt a creature in the hub, animate it, bake it into a cartridge, and place it in a dungeon. The authoring model, timeline, inverse-kinematics rig, and cartridge forge exist as libraries; an in-session authoring surface is still planned, and current sculpting is document-row editing through the console. Boot loads into the hub.
 
 A planned recursion places a genuinely simulated and rendered world on a screen inside another world. The open design questions are whether the nested world receives a full server or a reduced one, how its tick relates to the host tick, and what it costs to draw. A live capture of the containing window is already a weaker self-reference case, bounded by a structural self-reference rule. Rendering and content keep separate target representations: a desktop representation, an explicit field proxy, and a cartridge-compatible rendition are distinct products. Arbitrary shaders and meshes do not automatically translate to handheld hardware; the [shader pipeline plan](shader-pipeline-evolution.md) and the [retail cartridge plan](retail-scale-cartridges.md) own that compiler work.
-## After this arc
+## Future waves
 
 This section preserves a historical planning record for later waves. Its dated entries retain their original landed and open distinctions; current implementation is answered by the code and owner documents.
 
@@ -93,13 +97,13 @@ which stay as the reasoning they recorded).** The waves, each a decision rather 
 answers what has landed:
 
 - **The primitives the island refuses without, named as guarantees.** A placement whose instances are
-  DEALT from a keyed state row (one instance per cell, keyed by the cell, laid out by the row's own
+  dealt from a keyed state row (one instance per cell, keyed by the cell, laid out by the row's own
   `distribution` region in cell order, a variant chosen by a second row; instances follow the row live
   through the ordinary placement door) — this replaces the extension host's own column-grid projection,
   which is deleted: an observation writes rows and nothing else. An observation field lands on a row of
   ANY cell kind, parsed by the row's kind and refused by name when it does not parse. A placement's
   `respond` condition reads an ordinary state cell as well as a lattice field. An inhabit facet's count
-  may be a state cell, so a row's value admits and retires bodies live. Identity-carried FACTS: a keyed
+  may be a state cell, so a row's value admits and retires bodies live. Identity-carried facts: a keyed
   row persisted on the owned identity, written by a rule effect scoped to a seat's identity, read by
   `$identity:<key>` and bound by the HUD, echoed by `identity.facts` — the reveal ladder's carrier. A
   `machine` screen boots a `puck.cartridge.v1` document as readily as a ROM, compiled at bind by the
@@ -203,7 +207,7 @@ interleaved with them.
 **Owner-run, still owed:** the C-3/PL-2 live smoke against `Web.Functions` (see the federation remainder
 below), and the track-4 feel sitting.
 
-## The rules that keep this honest
+## Verification rules
 
 These are earned, each from a defect that cost real time.
 
@@ -272,7 +276,7 @@ destination/session resolution on the wire, an unembodied
 session authority (no session principal exists for observation without embodiment — which is also
 why a narrowed `bodies.disclosure` delivers a remote observer nothing until one of its travelers
 lands), and only then optional body reservation/allocation. With them: issuer-qualified
-GROUP/document claims (only per-identity entries exist), entry reservations and idempotent handoff
+group/document claims (only per-identity entries exist), entry reservations and idempotent handoff
 tokens over the wire fenced by epochs/leases and durable commit records, hydrate/suspend/migrate for
 persisted worlds without changing identity, and durable recovery when an authority dies
 mid-transaction rather than merely becoming unavailable.
@@ -280,7 +284,7 @@ mid-transaction rather than merely becoming unavailable.
 **Hardening carried out of the model:** cross-document write-back that survives a retry (an
 operation id so a repeated Add adds once, a precondition or owner version so a delayed Set cannot
 overwrite newer state, atomic persistence, and a receipt the visitor can observe); cloud-catalog
-discovery (a container LIST cannot pass the platform edge, so discovery rides the separately
+discovery (a container list cannot pass the platform edge, so discovery rides the separately
 authored `storage.discoveryEndpoint` direct-to-account — only hermetic verification stands behind
 it); latency equalisation (a hold is applied but nothing measures round-trip time, and the measured
 value is taken from the intent that benefits from it — view holds for parity wait on a real RTT
@@ -291,12 +295,12 @@ target policy must express as enforceable admission semantics before allocation)
 
 | Work | Gated by |
 |---|---|
-| Extension registry as THE selection mechanism (primitive exists; screen-machine engines are its one consumer — the schema stops growing only when renderers and backends select this way too) | — |
+| Extension registry as the selection mechanism (primitive exists; screen-machine engines are its one consumer — the schema stops growing only when renderers and backends select this way too) | — |
 | Extensions validate their own configuration; cartridges become pinned content (address + hash, store wired to the machine host); renderers become extensions; renderer ceilings leave the world document | extension registry |
 | Sinks become first-class (viewport, quadrants, recordings, streams); render extent moves from camera to sink; one view/sink compositor for split-screen, multi-viewer and diegetic screens | sinks |
 | Screen row collapses into a placement facet; screen identity becomes a string id; links stop addressing by index; camera binding as an authored mode (fixed camera = TV, viewer-eye camera = window) | screen/placement collapse |
-| World as a screen source at a target-selected tier (the tier vocabulary and its enforcement exist; what does not is a SCREEN choosing one); a specified client wire (the seam exists, the format is internal); replication — full simulation state, catch-up, resynchronisation, a downstream codec, version agreement | the wire order above |
-| Proximity co-location on the document's interaction flag, bound preemptively while people walk; occlusion-aware candidacy DERIVED from whether every declared interaction respects cover; transfer stability (asymmetric hysteresis + deterministic tie-break); co-location acceptance (a standing declaration in the body's own document, asymmetric, fails closed); junction headroom; contention facts with authored responses — a refusal must carry a consequence, or declining becomes the dominant strategy; adjacency as scheduling affinity; tick health as an observable fact | seamless crossing (shipped) |
+| World as a screen source at a target-selected tier (the tier vocabulary and its enforcement exist; what does not is a screen choosing one); a specified client wire (the seam exists, the format is internal); replication — full simulation state, catch-up, resynchronisation, a downstream codec, version agreement | the wire order above |
+| Proximity co-location on the document's interaction flag, bound preemptively while people walk; occlusion-aware candidacy derived from whether every declared interaction respects cover; transfer stability (asymmetric hysteresis + deterministic tie-break); co-location acceptance (a standing declaration in the body's own document, asymmetric, fails closed); junction headroom; contention facts with authored responses — a refusal must carry a consequence, or declining becomes the dominant strategy; adjacency as scheduling affinity; tick health as an observable fact | seamless crossing (shipped) |
 | Contact-counterpart / region-occupant targets | a body-to-body contact seam |
 | Threat tables | a keyed-table primitive; slots are scalars |
 | Spatial partitioning for proximity — nothing yet establishes the capacity-wide scan as the dominant cost; ranking separate from filtering | reading |
@@ -317,7 +321,7 @@ perceive*.
 mirrored stamps doubling instance-grid contribution, per-tick input-hold bookkeeping, and N
 simulations per host. Reading waits until the model stops moving.
 
-## Work list carried out of retired plans
+## Work carried forward from retired plans
 
 Retired 2026-08-10 with their decisions moved into the code they govern:
 `capability-channels-plan.md`, `capability-channels-STATE.md` (whose `Landed?` column was the banned
@@ -326,8 +330,8 @@ security risks, and a stale gap list), and `design/navigation-field-spike.md`.
 
 What survives them, as work rather than prose:
 
-- **Binding-destination escalation — SECURITY-OPEN-PENDING-WITNESS. TRACK 2 owns the witness;
-  TRACK 5 owns remediation if it comes back red.** (It was open and unowned, which is how a security
+- **Binding-destination escalation — SECURITY-OPEN-PENDING-WITNESS. Track 2 owns the witness;
+  Track 5 owns remediation if it comes back red.** (It was open and unowned, which is how a security
   item quietly becomes nobody's.) `Mutate`/`section:bindings` may still let a binding name any
   registered verb. The plan's stated mechanism (`CommandRegistry.Push` carrying no principal) no
   longer exists — the registry threads `CommandPrincipal` — but that kills the citation, not the

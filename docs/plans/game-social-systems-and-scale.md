@@ -1,6 +1,11 @@
 # Game social systems and scale
 
-**Creature collectives (owner decisions, 2026-09-02).** Authorable local laws,
+This plan describes the proposed social simulation and per-body scale work for
+the reference game. It connects creature behavior, movement constraints, and
+the acceptance workload to the five-track sequence; the detailed paragraphs
+also preserve the owner's decisions and the gaps that still need evidence.
+
+Creature collectives are an owner decision from 2026-09-02. Authorable local laws,
 not a prescribed group lifecycle, must allow solitary creatures to form packs,
 split into overlapping subclusters, reunite, and leave again. Explicit orders
 remain possible. Social membership, chosen activity, local steering, shared
@@ -45,7 +50,7 @@ are real and an honest account is what keeps the fold from becoming a pile: **tr
 track 1** (track 1's own proof is a canary), and **track 5's entity-address type gates track 3's
 ghost records**.
 
-**A per-body scale primitive, not a debuff gimmick (owner decision, 2026-09-03).** A body's live
+The per-body scale primitive is an owner decision from 2026-09-03. A body's live
 geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
 never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
@@ -56,20 +61,20 @@ margin it can no longer absorb; the client reads the same live cell into the ren
 chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to
 a speck on screen. Body-vs-body contact (`WorldPopulation.ResolveDynamicContacts`), overlap events
 (`WorldEventFeed`), the cross-boundary continuum trajectory (`WorldBody.ApplyContinuumTrajectory`), the
-adjacency sweep's LOCAL side (`WorldAdjacencyContactField`), and a rigid body's own static-contact sweep
+adjacency sweep's local side (`WorldAdjacencyContactField`), and a rigid body's own static-contact sweep
 (`WorldBody.AdvanceRigid`) all read each body's live-scaled collider volumes now — a shrunk body's
 contact with another body agrees with its contact with the world. A rigid body's mass and inertia scale
 with it too (mass ∝ Scale³ against the authored mass at scale 1, inertia ∝ Scale⁵, so inverse mass ∝
 Scale⁻³ and inverse inertia ∝ Scale⁻⁵ — `WorldBody.ScaleRigid`), along with its bounding radius, centre
 of mass, and the linear (never angular) rest threshold. The one residual gap: the adjacency sweep's
-REMOTE side still reads a neighbour authority's unscaled shared collider, because a delivered
+remote side still reads a neighbour authority's unscaled shared collider, because a delivered
 `EntitySnapshot`/`IWorldAdjacencyNeighbour` carries no per-entity Scale on the wire yet — a shrunk body's
 contact against a body standing in a neighbouring authority is not yet scale-consistent, unlike every
 same-authority case above. `WorldServer.RestoreCheckpoint` and
 every other door that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot)
 resync the live value from the row, the same catch-up every other admission door already gives a
 freshly minted body — a restored session's bodies never disagree with their own `scale` row cells. A
-`Region` INTERACTION bound to a per-body carrier property is what turns a specific spot into a trigger,
+`Region` interaction bound to a per-body carrier property is what turns a specific spot into a trigger,
 scoped to the one body it affects — never the aggregate `$region:<placement>` occupant count, which
 fires for any body standing in the region regardless of who. Two such interactions, each `Edge` mode
 over its own physically separate region, is the trigger/restore shape — never one region's `Level` write
@@ -79,8 +84,8 @@ are one authored instance of that primitive, not new engine surface of their own
 
 1. **Frames, as the envelope ratification** — one document shape, not two landings. Order: root/single
    frame, sibling frames, body-parented frames only on demand. **The envelope needs two inputs beyond
-   a size and speed band**: an ANGULAR-speed bound, because the solver uses `ω × anchor` and linear
-   speed alone cannot bound contact velocity; and a MINIMUM FEATURE SIZE or aspect-ratio bound,
+    a size and speed band**: an angular-speed bound, because the solver uses `ω × anchor` and linear
+    speed alone cannot bound contact velocity; and a minimum feature size or aspect-ratio bound,
    because one overall body-size band does not bound inertia for an arbitrarily thin box or capsule.
    `FixedMassProperties` is why: inertia scales as the fifth power of extent against mass's third, so
    it exhausts its range first. A third input is a mass-ratio ceiling — a maximum speed cannot bound
@@ -88,8 +93,8 @@ are one authored instance of that primitive, not new engine surface of their own
    which describe today's content rather than what a world may declare.
    An interval proof must name the failed quantity, kernel, frame, and envelope corner. Shift-by-zero
    makes bit identity plausible by construction, but the argument alone protects neither evaluation
-   order, defaulting, nor serialization — the canary still needs a state-sensitive observation, and
-   the read-back must show declared envelope values AND derived placements with proof margins.
+    order, defaulting, nor serialization — the canary still needs a state-sensitive observation, and
+    the read-back must show declared envelope values and derived placements with proof margins.
    **Track 1 also closes the soundness input that adjacency overlap now consumes**: every kit's
    speed is bound by an authored envelope (`WorldSpeed.Envelope`/`ThrustSpeedEnvelope`/
    `TopSpeedEnvelope`). Adjacencies themselves accept no guessed depth; the compiler derives one
@@ -100,9 +105,9 @@ are one authored instance of that primitive, not new engine surface of their own
    discriminating legs against one exact Release build of the real `Puck.World`. Every non-comment
    stdin command declares its accepted or intentionally refused outcome; observations select
    stream, verb, occurrence and exact cardinality, with ordered sequences, named values and small
-   typed comparisons. The runner owns fresh state, separate stream drains, BOM-less closed stdin,
+    typed comparisons. The runner owns fresh state, separate stream drains, BOM-less closed stdin,
    exact `--world` origin, process exit, per-leg timeout/tree kill and a whole-suite budget. It
-   REFUSES a blank binding declaration, but sensitivity comes from the required red leg, not prose.
+    refuses a blank binding declaration, but sensitivity comes from the required red leg, not prose.
    Boot shape is separate from environmental requirements, and only headless proofs with no such
    requirement form the nonempty automatic set. `puck landing` keeps every git-loss check first;
    only a clean git component runs that automatic set, followed by one final component-naming
@@ -115,10 +120,10 @@ are one authored instance of that primitive, not new engine surface of their own
 3. **The neighbour tape, then ghosts** — the ghost read-side now rides the same delivered snapshot
    as adjacency contact and rendering, and snapshots carry `(authority, body index, body generation)`
    addresses. The remaining work is transport determinism: hoist neighbour-field derivation to
-   DELIVERY and tape per-tick records separately from definition revisions. **Pin which delivered
+   delivery and tape per-tick records separately from definition revisions. **Pin which delivered
    revision a consumer tick sees at tick start** — "latest revision when accessed" must never become
    the input. Ghosts remain read-only and never authoritative.
-4. **Playability** — and it OPENS with one seat-lifetime view state: world-owned camera structure,
+4. **Playability** — and it opens with one seat-lifetime view state: world-owned camera structure,
    profile-owned input preference, standard dual-stick movement/look, and one logical basis shared by
    intent composition, local rendering, traveler rendering, cursor capture, and read-back. No
    slot-global orbit, binding-side feel cache, renderer-local orbit cache, or mixed schema survives. Then
@@ -131,22 +136,30 @@ are one authored instance of that primitive, not new engine surface of their own
    authored local `body:n` still needs to lower to that address at compile/install time. **Do not reuse `WorldHandle`** — it is a capability-table
    designation stamped with principal and capability, an authority identity, not an entity identity.
 
-**Reviewed 2026-08-10 (independent, Codex/GPT). Its recommendation, which is advice and not a
-ruling — the call below is still the owner's: ratify the five tracks, aim track 5 at the charter, do
-NOT create a sixth.** Its reasoning: world rules, interactions, the property vocabulary and a local
-combat caller ALREADY EXIST; what is missing is charter-world EXERCISE, so a sixth horizontal
-"content later" track would add a lane without adding a capability. It also verified that the Phase A
-nouns survive on the rebased tree (`WorldStateAdvance`, `WorldOwnership`, properties, rules,
-interactions) and that `combat.world.json` and `reconnect.world.json` booted headlessly at the time (both deleted 2026-09-06; the
-arena district carries combat's rules) —
-track 5 must re-verify this before relying on it: both scenario docs have since drifted behind several
-schema generations (stale basis reference, placement-policy fields, motion shape, kit vocabulary, host
-fields — partially repaired in the garden/w1 integration) and, as things stand, refuse validation
-outright (a kit claims a channel role and a held/action channel that `channels[]` never declares, and
-the document is missing required `collision` and `views` sections entirely). Opening track 5 with
-verification rather than reconstruction still holds ONLY once that drift is repaired; it does NOT by
-itself prove behavioural survival. **If track 5 is aimed at the charter, its completion criterion becomes charter
-EVIDENCE, not landed primitives**, and track 4 owns the feel gate.
+The independent Codex/GPT review dated 2026-08-10 recommended five tracks,
+with track 5 aimed at the reference game's design decisions and no sixth
+track. The recommendation was advice at the time; the owner later recorded
+the same five-track decision below. The review found that world rules,
+interactions, the property vocabulary, and a local combat caller were already
+present. The missing work was exercising those capabilities in the reference
+game, so a sixth horizontal "content later" track would add a lane without
+adding a capability. It also verified that the Phase A nouns survive on the
+rebased tree (`WorldStateAdvance`, `WorldOwnership`, properties, rules,
+interactions) and that `combat.world.json` and `reconnect.world.json` booted
+headlessly at the time (both were deleted 2026-09-06; the arena district
+carries combat's rules).
+
+Track 5 must re-verify those findings before relying on them. A later planning
+update recorded schema drift behind several generations (stale basis reference,
+placement-policy fields, motion shape, kit vocabulary, and host fields; some
+were repaired in the garden/w1 integration) and validation refusals because a
+kit claimed a channel role and a held/action channel that `channels[]` did not
+declare, while the document also lacked required `collision` and `views`
+sections. Opening track 5 with
+verification rather than reconstruction still depends on repairing that drift,
+and the repair alone does not prove behavioral survival. If track 5 is aimed at
+the reference game's design, its completion criterion is evidence from the
+game, not merely landed primitives; track 4 owns the feel gate.
 
 The obsolete portal-border canary was deleted with that model. Its replacement,
 `puck canary seamless-adjacency`, executes both the crossing and stationary discriminating legs on
@@ -157,6 +170,6 @@ distinct binds, remote-authority naming, and zero wire errors on every authority
 handoffs, cross-host body contact, autonomous travellers, retained dual-stick control, and derived
 diagonal peers are not yet exercised by it — widening its scripts is future work, not a runner gap.
 
-**Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
+**Owner decision:** no sixth track. Track 5 is aimed at the reference game's design from the start, so its rule
 primitives land with the content that proves them.
 

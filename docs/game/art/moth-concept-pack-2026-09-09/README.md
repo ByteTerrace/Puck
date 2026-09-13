@@ -1,6 +1,12 @@
 # Moth concept pack
 
-Six concept sheets expand the owner's selected Moth into a visual handoff for character modeling and procedural animation. These images describe the intended quality; the current engine prototype is not the visual reference to reproduce. Generated with the built-in image_gen tool, including targeted image corrections. The complete [prompt set](prompts.md) is included. The September 10 compact-wing sheets follow the owner's preference for two subtle shells and supersede the earlier folding-fan proposal.
+Six concept sheets expand the owner's selected Moth into a visual handoff for
+character modeling and procedural animation. They describe the intended
+quality; the current engine prototype is not the visual reference to reproduce.
+The pack was generated with the built-in image_gen tool, including targeted
+image corrections, and the complete [prompt set](prompts.md) remains available
+as source provenance. The September 10 compact-wing sheets follow the owner's
+preference for two subtle shells and supersede the earlier folding-fan proposal.
 
 ## Read the images in this order
 

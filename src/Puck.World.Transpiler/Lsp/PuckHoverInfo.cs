@@ -6,6 +6,7 @@ namespace Puck.World.Transpiler.Lsp;
 
 // Reads declarations without evaluating user code or expanding templates during a hover request.
 internal static class PuckHoverInfo {
+    private static readonly Lazy<PuckSchemaHover> Schema = new(() => new PuckSchemaHover());
     internal static string? Declaration(string source, string word, int offset) {
         var document = PuckParser.ParseDocumentWithDiagnostics(source).Value;
 
@@ -15,6 +16,9 @@ internal static class PuckHoverInfo {
         var path = new List<SyntaxNode>();
 
         FindPath(node: document, offset: offset, path: path);
+        if (Schema.Value.Describe(document, path, word, offset) is { } fieldCard) {
+            return fieldCard;
+        }
         for (var index = (path.Count - 1); (index >= 0); --index) {
             switch (path[index]) {
                 case LambdaExpressionNode lambda when lambda.Parameters.Contains(value: word):

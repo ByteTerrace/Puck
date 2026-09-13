@@ -1,4 +1,8 @@
-# Performance Techniques
+# Performance techniques
+
+The Advanced Gaming Brick (AGB) must preserve bus timing, event order, and snapshot
+content while it gets faster. The techniques here reduce repeated work only
+where the existing verification surfaces can still observe the same machine.
 
 Performance changes must preserve the machine's observable timing and replay
 contract. Optimize derived work and instance orchestration; do not approximate

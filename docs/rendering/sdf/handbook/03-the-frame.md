@@ -1,18 +1,19 @@
-# The frame
+# SDF frame rendering
 
-After this chapter you'll understand how one world frame turns a program into
-pixels: the compute passes it runs, what each one buys and what it costs on
-the reference GPU, why computing a per-tile instance mask *before* the march is
-the move that flattened the engine's worst scaling wall, how render-scale tiers
-buy frame budget, and how the engine keeps two frames in flight without a
-whole-device stall.
+One world frame turns an SDF program into pixels through a fixed sequence of
+compute passes. Upload and sky filling precede culling; the mask pass builds
+per-tile instance visibility before the beam and primary marches; surface,
+ambient, view, and composite passes finish the image. The sequence exposes
+where GPU time goes, why mask-first processing flattened the worst scaling
+wall, how render-scale tiers trade resolution for frame budget, and how two
+frames stay in flight without stalling the whole device.
 
-## One indirect pipeline
+## One indirect render pipeline
 
 A world frame records its passes into one command buffer. Upload and sky filling
 precede culling; camera traversal, surface evaluation, AO and lighting have separate dispatches:
 
-```
+```text
    upload → sky → mask → beam → cull-args → primary → surface → ambient → views → composite
 ```
 
@@ -21,7 +22,7 @@ passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the hit records shared by the four per-pixel passes.
 
 **mask** (`sdf-instance-cull.comp`) computes, for every 16×16 screen tile, the
-set of instances that could possibly matter to that tile — a bitmask, one bit per
+set of instances that could possibly matter to that tile—a bitmask, one bit per
 instance. It reads a host-built uniform grid (instances binned by center into
 world-space cells) and, for each tile, walks only the grid cells the tile's cone
 overlaps, testing each binned instance's bound sphere against the cone. Dynamic
@@ -35,7 +36,7 @@ should start and, when worthwhile, an empty gap it can teleport across. Programs
 admitted to independent part tracing use a short entry search; their cheaper
 per-part marches finish the work. Other programs also search gap and tail bounds.
 Budget exhaustion leaves the unproven bounds disabled. Because the beam marches
-`mapMasked` — the field with masked-out instances excluded — it never pays for
+`mapMasked`—the field with masked-out instances excluded—it never pays for
 instances the mask already ruled out. Its cost is dominated by the VM evaluations
 performed along the representative cone.
 
@@ -53,16 +54,16 @@ work between kernels can reduce register pressure but adds buffer traffic.
 
 **composite** blits the finished per-view surfaces into the framebuffer, applying
 the per-view render-scale upsample where a view rendered below native. It is
-negligible throughout — well under 0.1 ms.
+negligible throughout—well under 0.1 ms.
 
-## What each pass costs, and where the cost lives
+## What each pass costs
 
 The measurements below predate the traversal, surface and AO split. Their
 `views` label includes all per-pixel field work; current captures report that
 work across four passes. They explain the culling design, not today's pass budgets.
 
-On the reference GPU (a 4070, Vulkan, 1280×800) a single fullscreen shape — no
-instances — spends essentially all of its time in `views`: the `beam` cone-prepass
+On the reference GPU (a 4070, Vulkan, 1280×800) a single fullscreen shape—no
+instances—spends essentially all of its time in `views`: the `beam` cone-prepass
 stays well under a millisecond for every primitive because there's nothing to cull, while
 `views` runs a few milliseconds of per-pixel VM interpretation and shading. The
 lesson holds across the whole bench: **`views` is the scale lever for on-screen
@@ -74,24 +75,24 @@ badly. Measured on a torus instance sweep:
 
 | instances | frame (ms) | beam (ms) | beam share |
 |---|---|---|---|
-| 64 | 8.9 | 3.3 | — (views leads) |
+| 64 | 8.9 | 3.3 | views leads |
 | 256 | 19.2 | 12.5 | 65% |
 | 1024 | 68.3 | 50.7 | 74% |
 | 4096 | 243.9 | 187.3 | 77% |
 
-At 4096 instances the beam alone was 187 ms — the frame was ~4 fps and beam owned
+At 4096 instances the beam alone was 187 ms—the frame was ~4 fps and beam owned
 three-quarters of it. The naive reading was "the per-tile instance *binning* loop
 is O(instances)." Measurement said otherwise: splitting the cull into its own
 kernel showed binning 4096 instances costs ~0.4 ms flat. **The O(instances) cost
-was the cone march's own field evaluation** — roughly 96 march steps × 4000 tiles,
-each `map()` walking every instance segment's bound early-out — about 1.6 billion
+was the cone march's own field evaluation**—roughly 96 march steps × 4000 tiles,
+each `map()` walking every instance segment's bound early-out—about 1.6 billion
 cheap checks, and *that* was the 187 ms.
 
-## Why mask-first flattened the beam wall
+## Why the mask pass flattens beam cost
 
 The insight is that the set of instances a tile's cone actually needs is exactly
 what a spatial cull computes, and it can be computed *once per tile* for about
-0.1 ms — instead of re-derived at every one of the ~96 march steps. So the
+0.1 ms—instead of re-derived at every one of the ~96 march steps. So the
 pipeline puts the mask pass **first**: compute each tile's relevant-instance
 bitmask up front, then let the cone march consume the already-masked field. The
 march stops enumerating instances per sample; it only ever touches the handful
@@ -103,17 +104,18 @@ The results on the same sweep, before → after:
 |---|---|---|---|
 | torus ×1024 | 50.5 ms | 1.9 ms (26×) | 67 → 19 ms |
 | torus ×4096 | 187.8 ms | 6.6 ms (28×) | 244 → 61 ms |
-| torus ×16384 (new cap) | ~750 ms (extrapolated) | 21.8 ms | — → 187 ms |
+| torus ×16384 (new cap) | ~750 ms (extrapolated) | 21.8 ms | not measured → 187 ms |
 | scattered carves ×1024 | 119.0 ms | 1.0 ms (117×) | 131 → 13 ms (60 fps+) |
 
-The `views` cost is *unchanged* at every matched rung — the mask is bit-identical
+The `views` cost is *unchanged* at every matched rung—the mask is bit-identical
 to a full march, so the per-pixel work is byte-for-byte the same. What changed is
 that every frame past ~1024 on-screen instances is now `views`-bound rather than
 `beam`-bound, which is exactly where you want the cost to live: on visible
 shading, not on culling.
 
-Two design choices are load-bearing and were both measured, not guessed. The cull
-is a **separate pass, not fused into the beam** — a fused variant's per-thread
+Two design choices determine both correctness and occupancy, and were both
+measured. The cull
+is a **separate pass, not fused into the beam**—a fused variant's per-thread
 mask scratch taxed the co-resident cone march's occupancy ~12% on both backends
 ([chapter 8](08-performance.md) turns this into the general register-pressure
 lesson). And the mask output uses **direct mask-buffer bit writes** (OR is
@@ -124,18 +126,18 @@ Correctness rides the exact-cull contract from [chapter 2](02-the-program-model.
 instance's bound excludes the tile's whole cone, and a far-neutral blend
 (union/subtraction) returns the accumulator *to the bit* when its member is
 skipped. So `grid == flat` is bit-identical, and the live `sdf.grid on|off` toggle
-is render-invariant — proven by a dedicated parity gate.
+is render-invariant—proven by a dedicated parity gate.
 
 One nuance worth carrying: the cull raises the *total* instance ceiling, not the
-*per-tile* one. Scattered content — a persistently damaged world, carves spread
-across the map — costs almost nothing per frame because each tile's cone touches
+*per-tile* one. Scattered content—a persistently damaged world, carves spread
+across the map—costs almost nothing per frame because each tile's cone touches
 only a few grid cells. But instances **densely stacked in one spot** overlap the
 same tiles and are genuinely un-cullable there; their `views` cost is real and the
 grid rightly doesn't touch it. The honest ceilings after the cull are (a)
-dense per-tile stacking and (b) on-screen visible-instance shading — both
+dense per-tile stacking and (b) on-screen visible-instance shading—both
 per-pixel `views` costs.
 
-## Render-scale tiers — buying budget with resolution
+## Render-scale tiers trade resolution for frame time
 
 When the shading epilogue is the cost and you need the frame to fit a tighter
 budget, the lever is to render a view at *reduced* resolution and upsample it in
@@ -147,8 +149,8 @@ The composite bilinearly upsamples the result back to native.
 The important property is that **native is byte-exact by construction**: the
 maximum scale value takes an exact-copy path with no filtering, so a view at full
 scale is bit-identical to a pipeline with no render-scale machinery at all. You
-pay nothing until you dial it down. Reduced tiers (the demo exposes a ladder of
-them) trade a soft upsample for a large `views` saving — the right knob when a
+pay nothing until you dial it down. Reduced tiers expose a policy ladder that
+trades a soft upsample for a large `views` saving—the right knob when a
 heavy revealed scene needs to reach a frame-rate target that native can't hit.
 Render scale is *presentation only*: it never touches simulation state, and which
 tier a view uses is a policy decision made by the layout director, not baked into
@@ -161,16 +163,16 @@ frame ring** (`FrameRingSize = 2`). Each ring slot owns its own command pool,
 per-frame host-visible buffers (viewports, transforms, screen surfaces and
 lights), descriptor sets, and a submission fence. The host builds and submits
 frame *N* into slot *N mod 2* without waiting for frame *N−1* to finish on the
-GPU; it only waits on slot *k*'s fence — which proves frame *k−2* has retired —
+GPU; it only waits on slot *k*'s fence—which proves frame *k−2* has retired —
 before it rewrites that slot's buffers. This is what lets a moving screen or a
 walking player update its transform in place each frame without racing the GPU
 reading last frame's copy.
 
 There are two distinct submission entry points, and they must never be blurred:
 
-- **`SubmitFrame`** is fire-and-forget — the live path. It records, submits, and
+- **`SubmitFrame`** is fire-and-forget—the live path. It records, submits, and
   returns; the ring's fences do the pacing. The window host orders frames.
-- **`RenderFrame`** is submit-and-wait — the harness/readback path. It submits and
+- **`RenderFrame`** is submit-and-wait—the harness/readback path. It submits and
   blocks until the frame retires so a test can read the pixels back deterministically.
 
 Because the device-local scratch (tile buffers, instance masks, indirect args,
@@ -183,7 +185,9 @@ execution.
 ## Reading per-pass GPU cost
 
 The engine writes GPU timestamp marks around each pass: one frame-start mark, then
-one mark closing each of the five labeled passes. Diff adjacent marks and you have
+one mark closing each of the ten labeled passes (`upload`, `sky`, `mask`, `beam`,
+`cull-args`, `primary`, `surface`, `ambient`, `views`, and `composite`). Diff
+adjacent marks and you have
 per-pass milliseconds. Arm it live (the `gpu.timing` switch / the `world.timing` verb, or the run-doc `host.timing` field); the marks are pixel-neutral,
 so determinism and capture-hash gates are unaffected by timing being on. The
 `sdf.bench` instrument drives this over stdin with a *fixed deterministic camera
@@ -208,13 +212,9 @@ pure fine-march number.
   and nothing replaced them. [08-performance.md](08-performance.md) keeps the
   headline shape of each; the underlying tables are gone.
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:
-  [`docs/rendering/sdf/reference/hierarchical-and-instance-acceleration.md`](../reference/hierarchical-and-instance-acceleration.md).
+  [Hierarchical and instance acceleration](../reference/hierarchical-and-instance-acceleration.md).
 - The two-deep frame ring, its per-slot fences, and the cross-frame scratch
   barrier: `FrameRingSize` and the `Record` method in
   [`src/Puck.SdfVm/SdfWorldEngine.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.cs).
 - Render-scale quantization and the byte-exact native path: the `RenderScale`
   sync-pair row in the sdf-world skill.
-
-
-
-

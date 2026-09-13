@@ -1,7 +1,7 @@
 # Puck
 
 Puck is a C# engine for document-defined interactive worlds. It combines
-reproducible simulation, GPU rendering, programmable shader pipelines and
+reproducible simulation, GPU rendering, programmable shader pipelines, and
 Game Boy/Game Boy Color and Game Boy Advance emulation. `Puck.World` is the
 application that brings these libraries together.
 
@@ -14,12 +14,12 @@ becomes a running world.
 
 | Task | Guide |
 |---|---|
-| Understand runtime boundaries | [Architecture](docs/architecture/README.md) |
-| Author worlds, shaders or cartridges | [Authoring](docs/authoring/README.md) |
+| Understand runtime boundaries | [Engine architecture](docs/architecture/README.md) |
+| Author worlds, shaders, or cartridges | [Authoring content](docs/authoring/README.md) |
 | Work on graphics | [Rendering](docs/rendering/README.md) |
-| Work on handheld emulation | [Emulation](docs/emulation/README.md) |
-| Investigate, test or contribute | [Development](docs/development/README.md) |
-| Find a project or API | [Project map](docs/project-map.md) and [reference](docs/reference/README.md) |
+| Work on handheld emulation | [Machine emulation](docs/emulation/README.md) |
+| Investigate, test, or contribute | [Development](docs/development/README.md) |
+| Find a project or API | [Puck project map](docs/project-map.md) and [Reference](docs/reference/README.md) |
 | Review upcoming work | [Plans](docs/plans/README.md) |
 
 The [reference game](docs/game/README.md) has its own design and artwork.
@@ -31,10 +31,10 @@ library consumer.
 Packable projects use `ByteTerrace.Puck.*` package names with `Puck.*`
 assemblies and namespaces. Each package includes its project README and license
 material. The [release guide](docs/development/ci.md) explains shared versioning,
-package selection and validation.
+package selection, and validation.
 
 Verification depends on the changed subsystem: simulation laws, native emulator
-execution and rendered World behavior answer different questions. Follow the
+execution, and rendered World behavior answer different questions. Follow the
 [development guide](docs/development/README.md) for the appropriate checks and
 the scope of their evidence.
 

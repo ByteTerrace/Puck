@@ -41,6 +41,12 @@
         },
         {
             "include": "#operators"
+        },
+        {
+            "include": "#enums"
+        },
+        {
+            "include": "#containers"
         }
     ],
     "repository": {
@@ -167,8 +173,19 @@
         "sections": {
             "patterns": [
                 {
+                    "captures": {
+                        "1": {
+                            "name": "keyword.declaration.shape.puck"
+                        },
+                        "2": {
+                            "name": "entity.name.type.shape.puck"
+                        }
+                    },
+                    "match": "\\b(shape)\\s+([A-Za-z_][A-Za-z0-9_]*)"
+                },
+                {
                     "match": "\\b(host|views|camera|seatRig|seatControl|motion|render|spawnPoints|screens|rules|state|solids|materials|kits|channels|targetRegisters|bodyMotionPrograms)\\b(?=\\s*(?:[a-zA-Z0-9_\"']+\\s*)?\\{)",
-                    "name": "entity.name.tag.section.puck"
+                    "name": "variable.object.property.puck"
                 }
             ]
         },
@@ -249,7 +266,7 @@
         "properties": {
             "patterns": [
                 {
-                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=:)",
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=[ \\t]*:|[ \\t]+[\\[{])",
                     "name": "variable.object.property.puck"
                 }
             ]
@@ -267,6 +284,26 @@
                 {
                     "match": "(=|:)",
                     "name": "keyword.operator.assignment.puck"
+                }
+            ]
+        },
+        "containers": {
+            "patterns": [
+                {
+                    "match": "[\\[\\]]",
+                    "name": "punctuation.section.array.puck"
+                },
+                {
+                    "match": "[{}]",
+                    "name": "punctuation.section.object.puck"
+                }
+            ]
+        },
+        "enums": {
+            "patterns": [
+                {
+                    "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+                    "name": "constant.other.enum.puck"
                 }
             ]
         }

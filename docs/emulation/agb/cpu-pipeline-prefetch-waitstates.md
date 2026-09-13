@@ -1,4 +1,8 @@
-# CPU pipeline, prefetch, and waitstates
+# CPU pipeline, prefetch, and wait states
+
+The Advanced Gaming Brick (AGB) models an ARM7TDMI pipeline alongside the Game Pak
+prefetch queue and `WAITCNT` timing. These details determine which bus access
+is charged for each instruction and which value a later open-bus read sees.
 
 ## Game Pak prefetch
 

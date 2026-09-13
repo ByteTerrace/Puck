@@ -1,28 +1,25 @@
-# Authoring
+# Authoring SDF scenes
 
-After this chapter you'll be able to build a real scene with
-`SdfProgramBuilder` — shapes, transforms, repeats, and carves composed into
-one program — know when to split a scene into independent emitters instead
-of one long method, and recognize the handful of authoring mistakes that
-produce a scene which *looks* fine until a camera angle, a cull pass, or a
-different GPU backend finds the seam. It assumes the model
-[chapter 2](02-the-program-model.md) teaches: a program is a flat
-instruction stream over one running "nearest surface so far" distance, and
-shapes compose into it through blends like union, subtraction, and
-intersection.
+`SdfProgramBuilder` turns shapes, transforms, repeats, and carves into one SDF
+program. Independent emitters keep large scenes manageable, while coordinate
+spaces, cull bounds, and blend order determine whether the result remains
+correct from every camera angle and on each GPU backend. The builder follows
+the flat instruction stream and running "nearest surface so far" accumulator
+described in [chapter 2](02-the-program-model.md), with union, subtraction, and
+intersection composing shapes into the scene.
 
-## The grammar: point ops and shape ops
+## Point operations and shape operations
 
 `SdfProgramBuilder` instructions come in two families, and the distinction
 matters for ordering:
 
 - **Point ops** move or warp the coordinate frame that the *next* shapes
-  evaluate against — `Translate`, `Rotate`, `Scale`, `Repeat`, `TwistY`,
+  evaluate against—`Translate`, `Rotate`, `Scale`, `Repeat`, `TwistY`,
   `RepeatPolar`, and friends. `ResetPoint` snaps the frame back to world
   space, clearing any transform (and any positional material recolor) built
   up since the last reset.
-- **Shape ops** emit an actual primitive — `Sphere`, `Box`, `Plane`,
-  `Torus`, `Capsule`, and the rest — and immediately compose it into the
+- **Shape ops** emit an actual primitive—`Sphere`, `Box`, `Plane`,
+  `Torus`, `Capsule`, and the rest—and immediately compose it into the
   program's running field with a blend (`Union`, `SmoothUnion`,
   `Subtraction`, `Intersection`, ...).
 
@@ -37,26 +34,26 @@ builder
 ```
 
 Remember the accumulator rule from [chapter 2](02-the-program-model.md):
-there is exactly one running field for the whole program — `ResetPoint`
-resets the *point*, never the accumulated distance — which makes `Union` and
+there is exactly one running field for the whole program—`ResetPoint`
+resets the *point*, never the accumulated distance—which makes `Union` and
 `Subtraction` safe to emit in any order and `Intersection` a scene-wide
 hazard. In authoring terms:
 
 > **Rule: author an intersection pair first, against the empty
 > accumulator.** An intersection annihilates every earlier shape it doesn't
-> overlap — floor included — so it can never safely follow unrelated
+> overlap—floor included—so it can never safely follow unrelated
 > geometry. If you need "the part of A that's inside B," emit `A` then `B`
 > with an `Intersection` blend as the very first thing in the program (or
-> inside a scope — see below) — never after a floor or a wall already
+> inside a scope—see below)—never after a floor or a wall already
 > exists.
 
 A scoped field accumulator (`PushField`/`PopField`) exists precisely so an
 intersection, or a field op like `Onion`/`Dilate`, can be sandboxed to a
-handful of shapes without threatening the rest of the scene — open a scope,
+handful of shapes without threatening the rest of the scene—open a scope,
 emit the shapes it should affect, close it, and the scope composes back
 into the parent as a single ordinary candidate.
 
-## A worked example: building a plaza
+## Worked example: build a plaza
 
 Start with the one thing every scene needs: unbounded world geometry that's
 always evaluated, wherever the camera looks.
@@ -72,7 +69,7 @@ builder
     .Plane(normal: Vector3.UnitY, offset: 0f, material: stoneId);
 ```
 
-A `Plane` has no natural bounding sphere — it's infinite by construction —
+A `Plane` has no natural bounding sphere—it's infinite by construction —
 so it belongs in the **world set**: instructions declared outside any
 `Instance`, always evaluated, never masked out by the tile-cull passes.
 
@@ -95,14 +92,14 @@ builder.Instance(boundCenter: new Vector3(0f, 1f, 0f), boundRadius: 1.6f, emit: 
 ```
 
 A pedestal (`Box`) with a rounded finial (`Sphere`) melted into it with
-`SmoothUnion` — a shaped statue from two primitives and one blend. The
+`SmoothUnion`—a shaped statue from two primitives and one blend. The
 instance's bounding sphere (center, radius) must actually cover the finished
 shape; the tile-cull pass trusts it completely; understating it clips the
 statue at the tiles the pass wrongly decides it can skip.
 
 ### A repeated colonnade
 
-A row of columns is one column's instructions, repeated — not twelve
+A row of columns is one column's instructions, repeated—not twelve
 `Instance` blocks. `RepeatLimited` folds the point onto a finite lattice
 before the column shape evaluates, so one `Cylinder` call becomes a whole
 colonnade:
@@ -123,12 +120,12 @@ instance's bounding sphere just needs to be wide enough to cover the
 outermost columns.
 
 > **Rule: keep repeated content inside its own cell.** `Repeat` and
-> `RepeatLimited` return the *current cell's* copy only — the fold never
+> `RepeatLimited` return the *current cell's* copy only—the fold never
 > checks a neighboring cell for a nearer copy. An on-center column within
 > half the spacing per axis is exact. An off-center or oversized prototype
-> creases the field at the cell wall with an **overestimate** — the nearest
+> creases the field at the cell wall with an **overestimate**—the nearest
 > real surface is one cell over, and nothing catches this (it isn't a
-> Lipschitz violation, it's a missing neighbor check) — so it can hole the
+> Lipschitz violation, it's a missing neighbor check)—so it can hole the
 > march at grazing angles. Size the prototype to fit inside half its
 > spacing on every axis it repeats along, the same rule `CellJitter`'s
 > in-cell containment follows.
@@ -150,16 +147,16 @@ builder.Instance(boundCenter: new Vector3(-6f, 1.5f, 0f), boundRadius: 3.2f, emi
 ```
 
 The second `ResetPoint` re-anchors the frame at world space before
-positioning the window box — a carve's own translate is relative to the
+positioning the window box—a carve's own translate is relative to the
 same world origin as the wall's, not relative to the wall's local frame
 (there is no such thing as a shape's local frame once it's emitted; only the
 point ops between resets carry state).
 
-## The composition layer: many emitters, one program
+## The composition layer combines emitters
 
-The plaza above was one method because it's small. A real world — a room
+The plaza above was one method because it's small. A real world—a room
 full of furniture, a creature pool, a diegetic screen, an editor's live
-preview — is not one method; it's several independent concerns that all
+preview—is not one method; it's several independent concerns that all
 need to land in the same program. `ISdfSceneEmitter` is the seam that lets
 them:
 
@@ -174,8 +171,8 @@ public interface ISdfSceneEmitter {
 }
 ```
 
-Each emitter owns one concern — a room's fixed geometry, a sculpted scene, a
-pool of live creatures — and contributes to a *shared* builder instead of
+Each emitter owns one concern—a room's fixed geometry, a sculpted scene, a
+pool of live creatures—and contributes to a *shared* builder instead of
 building its own program. `SdfCompositionFrameSource` holds a fixed list of
 these, assigns each one a contiguous range of dynamic-transform slots, compares
 their revision components to know when to rebuild, and rebuilds by calling every
@@ -183,8 +180,8 @@ emitter's `Emit` in order against one builder.
 
 An emitter that watches several counters reports them *side by side* rather
 than as one number, and the host compares the flattened vector elementwise.
-That is not fussiness: not every counter is monotonic — one is assigned from a
-server-supplied snapshot value and can move down — so a sum lets one counter
+That is not fussiness: not every counter is monotonic—one is assigned from a
+server-supplied snapshot value and can move down—so a sum lets one counter
 rising cancel another falling, leaving the host holding a stale program with
 nothing to report it. A digest would only make that collision unlikely; keeping
 the components apart makes it impossible.
@@ -198,19 +195,19 @@ that only compound as a world grows:
   counts or material indices.
 - **Dynamic-transform slots assign themselves.** Each emitter declares how
   many per-frame-movable slots it needs (`DynamicSlotCount`); the
-  composition host sums them and hands out non-overlapping ranges — no
+  composition host sums them and hands out non-overlapping ranges—no
   emitter hand-counts where its slots start.
 - **Positional material safety is structural, not a documentation
-  convention** — see the next section.
+  convention**—see the next section.
 
 An emitter that hard-codes a "takeover" mode (a full-scene replacement, like
-a debugger view) doesn't express that inside `Emit` — the host swaps in an
+a debugger view) doesn't express that inside `Emit`—the host swaps in an
 entirely different emitter *list* for that mode instead. `Emit` always
 means "add my content to the shared scene," never "replace it."
 
 ## Materials and scopes
 
-A material is small and shading-only — it never affects distance:
+A material is small and shading-only—it never affects distance:
 
 ```csharp
 public readonly record struct SdfMaterial(
@@ -224,14 +221,14 @@ public readonly record struct SdfMaterial(
 
 `AddMaterial` appends one and returns its index; shapes reference materials
 by that index. Most of the time that's the whole story. It gets more
-interesting when a fold recolors *positionally* — `WallpaperFold` and
+interesting when a fold recolors *positionally*—`WallpaperFold` and
 `RepeatPolar` can take a `materialStride`, so each lattice cell or each
 sector of a repeated ring picks a different row of the palette (a
 checkerboard floor, alternating column colors around a rotunda) from one
 instruction instead of one shape call per copy.
 
 The hazard: a positional stride's reach is computed from the *shape's own*
-material index forward — it has no way to know where one emitter's palette
+material index forward—it has no way to know where one emitter's palette
 ends and another's begins in a builder several emitters share. Left
 unguarded, a stride tuned for one emitter's four materials could reach into
 the next emitter's first material and silently recolor the wrong thing.
@@ -251,17 +248,17 @@ using (builder.BeginMaterialScope()) {
 ```
 
 While the scope is open, any positional stride is clamped so it can only
-ever land on a material *this scope itself added* — never an outer scope's
+ever land on a material *this scope itself added*—never an outer scope's
 material, never a different emitter's. `ISdfSceneEmitter.OwnsMaterialScope`
 tells the composition host to wrap that emitter's whole `Emit` call in one
 of these automatically.
 
 > **Rule: add every material a positional fold will recolor through before
 > emitting the fold and the shapes that use it.** Followed, the scope clamp
-> never triggers — it's a safety net for the case where it isn't, not a new
+> never triggers—it's a safety net for the case where it isn't, not a new
 > step you have to think about on the happy path.
 
-## The capacity-probe doctrine
+## Capacity probes define the envelope
 
 The engine's GPU buffers are sized once, at construction, and never grow —
 `UploadProgram` rejects a program that exceeds them rather than silently
@@ -271,7 +268,7 @@ re-allocating a GPU buffer mid-frame. The price is that the envelope has to
 be *right* before the session starts.
 
 > **Rule: declare your worst case up front.** Every emitter's `Emit` needs a
-> branch — selected by `context.Probe` — that takes its single largest
+> branch—selected by `context.Probe`—that takes its single largest
 > legal form: every optional shape present, every modifier at its worst
 > magnitude, every dynamic slot in use. One construction-time call with
 > `Probe: true` runs every registered emitter's worst-case branch into one
@@ -279,52 +276,48 @@ be *right* before the session starts.
 > dynamic-transform count become the frozen ceiling every live rebuild for
 > the rest of the session is measured against.
 
-The probe program itself is never rendered — it exists purely to be
+The probe program itself is never rendered—it exists purely to be
 measured. The rule this creates for you as an author: when you add a new
 *optional* piece of content to an emitter (a toggleable decoration, an
 occasionally-present dynamic entity), you must grow that emitter's probe
 branch to match, in the same change. Skip it, and the first live session
 that actually uses the new content can outgrow the buffers the probe
-promised — caught loudly (`UploadProgram` throws), but only at the moment
+promised—caught loudly (`UploadProgram` throws), but only at the moment
 someone hits it, not at build time.
 
-## Pitfalls, as rules
+## Authoring rules
 
 - **DO** author an intersection pair first, against the empty accumulator
   (or inside a scope). **DON'T** place an intersection after unrelated
-  geometry — it deletes everything it doesn't overlap, silently.
+  geometry—it deletes everything it doesn't overlap, silently.
 - **DO** keep a `Repeat`/`RepeatLimited`/`CellJitter` prototype within half
-  its spacing per axis. **DON'T** let it overspill a cell — the fold has no
+  its spacing per axis. **DON'T** let it overspill a cell—the fold has no
   neighbor check, so an oversized or off-center prototype creases the field
   at the cell wall with an overestimate that can hole the march at grazing
   angles.
 - **DO** emboss (a proud union) or engrave (a subtraction) a text label
   against its backing surface. **DON'T** ever place a label's field exactly
-  coplanar with a surface it sits on — two surfaces sharing the same
+  coplanar with a surface it sits on—two surfaces sharing the same
   zero-set speckle unpredictably where floating-point rounding decides
   which one "wins" a given sample.
 - **DO** treat a builder as spent the moment an `Instance`/`DynamicInstance`
   callback throws. **DON'T** catch the exception and keep using the same
-  builder — it's left with an instance open and partial state, and nothing
+  builder—it's left with an instance open and partial state, and nothing
   rolls that back; discard it and start over.
 
 ---
 
 ## Related resources
 
-- [docs/rendering/sdf/reference/lipschitz-and-field-correctness.md](../reference/lipschitz-and-field-correctness.md)
-  — domain-repetition exactness and the neighbor-cell discontinuity this
+- [Lipschitz and field correctness](../reference/lipschitz-and-field-correctness.md)
+  —domain-repetition exactness and the neighbor-cell discontinuity this
   chapter's containment rule is built on.
-- [docs/rendering/sdf/reference/text-and-glyphs.md](../reference/text-and-glyphs.md) — the
+- [Text and glyphs](../reference/text-and-glyphs.md)—the
   full engrave/emboss correctness case (C1/C2/C3) behind the never-coplanar
   label rule.
-- [docs/rendering/sdf/reference/materials-and-primitives.md](../reference/materials-and-primitives.md)
-  — the material-blend-at-seams background behind the material-scope
+- [Materials and primitives](../reference/materials-and-primitives.md)
+  —the material-blend-at-seams background behind the material-scope
   mechanism.
 - [.claude/skills/sdf-world/SKILL.md](../../../../.claude/skills/sdf-world/SKILL.md)
-  — the composition/anchor surface contract this chapter's emitter section
+  —the composition/anchor surface contract this chapter's emitter section
   summarizes, and the C#↔HLSL sync-pair table for every op named above.
-
-
-
-

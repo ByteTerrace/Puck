@@ -4,7 +4,7 @@ World shading runs after the marcher accepts a hit. The field, analytic normal,
 material state, and configured lights feed a shared shader path on both GPU
 backends.
 
-## Silhouette coverage
+## Silhouette coverage and filtering
 
 The deferred views pass softens grazing silhouette hits only when a cardinal
 neighbor sees sky. It reads the completed primary pass at the current view's
@@ -34,7 +34,8 @@ field evaluations improve the target scenes.
 ## Shadows
 
 Soft shadows march toward each relevant light and estimate penumbra from the
-occluder distance. A per-pixel grid gather limits the candidate light set.
+occluder distance. An 8×8 workgroup grid gather limits the candidate instance
+set for the shadow ray; each pixel then consumes the shared mask.
 Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
 conservative sampled-region behavior as primary rays.
 

@@ -1,9 +1,10 @@
 # DSL and cartridge release hardening
 
 The September 2026 review found semantic inconsistencies across language
-lowering, editor tooling and native cartridge generation. The fixes should stay
-fixed while the language grows. This brief preserves the release strategy and
-the remaining structural ideas; it is not a new language specification.
+lowering, editor tooling, and native cartridge generation. The corrected subset
+is the current baseline. This brief proposes the release evidence and shared
+semantic boundaries that should keep those fixes fixed while the language grows;
+it is not a new language specification.
 
 The [language guide](../../src/Puck.Transpiler/README.md),
 [cartridge vocabulary](../../src/Puck.GamingBricks.Transpiler/README.md) and
@@ -125,7 +126,7 @@ artifacts and toolchain discovery, including Native AOT if that is the release
 form; a development build is separate evidence.
 
 Keep baseline inputs, expected observations, candidate/tool identities and test
-results in the campaign's dated milestone record. A remaining failure needs a
+results in the game's dated milestone record. A remaining failure needs a
 reproducer and a concrete closure condition. The
 [machine plan](machine-extensions.md), [group and recovery plan](group-finder.md)
-and [campaign](../game/design.md) retain ownership of their wider roadmaps.
+and [Reference game design](../game/design.md) retain ownership of their wider roadmaps.

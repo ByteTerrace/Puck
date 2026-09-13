@@ -1,8 +1,9 @@
-# Abstract-machine costing: implementation brief
+# Abstract-machine costing
 
-Replace Puck's mixed work-unit heuristics with a deterministic cost model for a
-fixed reference machine. The same composed document, input capacities, and
-engine version must receive the same prices on desktop, server, and WASM.
+Puck currently mixes work-unit heuristics with structural limits. The proposed
+result is a deterministic cost model for a fixed reference machine, so the same
+composed document, input capacities, and engine version receive the same prices
+on desktop, server, and WASM.
 Disassembly and published processor measurements establish the prices offline;
 the executing computer never chooses them.
 

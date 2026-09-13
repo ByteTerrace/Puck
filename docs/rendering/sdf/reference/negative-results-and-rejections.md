@@ -1,7 +1,7 @@
 # Rejected and conditional SDF techniques
 
 This page records current non-goals and the evidence required to reconsider
-them. It is not a chronology and it is not a work list — nothing tracks open
+them. It is not a chronology and it is not a work list—nothing tracks open
 SDF implementation work today.
 
 ## Global voxel representation
@@ -16,7 +16,7 @@ authoritative.
 **Reconsider when:** A distinct content source requires large volumetric data
 that cannot be represented or cached as bounded regions.
 
-## General BVH or hardware ray-tracing hierarchy
+## General BVH or hardware ray-tracing hierarchies
 
 **Current decision:** Conditional.
 
@@ -65,7 +65,7 @@ Mirroring already has a spelling: the `SymmetryPlane` domain op, authored as a
 `symmetry` entry in a shape's domain list, which reflects across an arbitrary
 plane, is an exact isometry, and expands to rigid copies so contact matches
 render. A sign on a scale component would be a second spelling of the same
-mechanism, and a strictly weaker one — it can only mirror across the shape's
+mechanism, and a strictly weaker one—it can only mirror across the shape's
 own axis planes.
 
 It also does not mirror anything today. Every emission path reads a scale's
@@ -98,7 +98,7 @@ Noise without a range and derivative bound cannot produce a safe step scale or
 instance bound. Procedural detail is acceptable only when its hash,
 amplitude, derivative, and deterministic replay behavior are explicit —
 `NoiseDisplace` is the admitted form (see
-[Lipschitz correctness](lipschitz-and-field-correctness.md)); this rejection
+[Lipschitz and field correctness](lipschitz-and-field-correctness.md)); this rejection
 continues to bar any unbounded basis.
 
 ## Backend-specific scheduling or shader features

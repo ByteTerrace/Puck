@@ -1,6 +1,12 @@
-# Puck MCP: adversarial review and implementation plan
+# MCP integration
 
-Initially reviewed after technical rebuttal on 2026-09-07 against checkout base
+This plan proposes the local and remote MCP integration, including its authority,
+transport, bounded execution, capture, and release gates. The current baseline
+has local and remote adapter implementations and focused test evidence, while
+live deployment, multi-user placement, and durable delegated jobs remain
+unverified or future work.
+
+The plan was initially reviewed after technical rebuttal on 2026-09-07 against checkout base
 `621127f0b67a`; the engine prerequisites were reviewed again at `5f63f7a533c4`.
 Local Operator MCP and delegated remote MCP are separate authority surfaces.
 Remote ingress accepts the validated issuer/subject, admits that identity through
@@ -38,6 +44,7 @@ within the host's four-slot limits. Local validation passed 46 remote MCP tests,
 filtered-help regression also passed. These results establish local contracts.
 Production deployment and user-flow validation remain pending until the Azure
 workflow and signed-in operator checks succeed.
+
 ## Local Operator implementation, 2026-09-08
 
 Implemented from corrected prerequisite base `b1066e2973e0`: neutral

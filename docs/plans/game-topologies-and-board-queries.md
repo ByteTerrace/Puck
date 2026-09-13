@@ -1,7 +1,12 @@
 # Game topologies and board queries
 
-**Discrete-topology capacity constants are derived, not restated (owner
-decision).** The hex radius ceiling, the document-wide board-storage budget,
+This plan covers the topology and board-query work needed by the reference
+game's movement, tabletop, and composed-world features. Each decision states
+the authoring shape, its compatibility behavior, and the law or replay that
+must support it; proposals remain distinct from the evidence already recorded.
+
+Discrete-topology capacity constants are an owner decision: they are derived,
+not restated. The hex radius ceiling, the document-wide board-storage budget,
 the zone-sort key ceiling, and the transfer-count ceiling were each a bare
 literal restating a relationship the code already knows (a topology's own
 cell-count formula, `MaxTopologies × MaxCells`, the section's own row
@@ -32,7 +37,7 @@ name instead of raw `$board:offset` deltas) without a second mechanism.
 set it always had (Grid's eight compass points, Hex's six, Box's 26, Ring's
 forward/backward — the migration is behavior-preserving by construction, so
 no shipped world needed re-authoring), and an authored list replaces that
-default WHOLESALE — the topology's only directions and the only names
+default wholesale — the topology's only directions and the only names
 `CompiledWorldTopology.Direction` resolves. Validation requires 1..64
 entries (`MaxDirections` derived from the bit width of the `long` mask
 `$match:`'s direction-mask facet packs one bit per direction into), distinct
@@ -75,7 +80,7 @@ author `elementAliases` (`WorldTopologyElementAlias`, name → canonical
 name), resolved by `CompiledWorldTopology.Element` alongside the canonical
 spelling — `"rot90"` for whatever axis permutation a square grid's quarter
 turn actually is — while `ElementName` always answers the canonical form;
-validated against the SAME bare-group enumeration (`ElementNames`, run
+validated against the same bare-group enumeration (`ElementNames`, run
 before any topology cell exists, so an alias can be checked without
 materializing per-cell images) so an alias naming no real element refuses at
 load. Separately, and still undecided: whether the fixed 240-node symmetry
@@ -89,7 +94,7 @@ over a ray (owner decision).** `WorldRuleCompiler.Pattern.cs`'s board-source
 `$match` already walked the identical ray `$board:rayCell`/`rayDistance` did
 (`WorldServer.Patterns.cs`'s `ReadRay`); it now also answers two new facets
 on one direction — `cell` (the first cell one step past the longest accepted
-prefix — the first cell the pattern REJECTS — or -1 when the whole ray is
+prefix — the first cell the pattern rejects — or -1 when the whole ray is
 accepted) and `distance` (the step count to it) — strictly more general than
 the retired queries, since the "blocker" test is any authored pattern rather
 than only "not equal to the board's empty sentinel". `$board:line` (n-in-a-
@@ -100,7 +105,7 @@ plain accept facet over a pattern shaped `<exactly N> <never another>`).
 `rayCell`/`rayDistance`'s 44 garden call sites (`tabletop-shape-rook`/
 `-bishop`/`-queen`, the check/castle-transit-attack probes) are rewritten
 1:1 onto a single shared pattern (`chessRayEmpty`, "zero or more empty cells")
-read with `:cell`/`:distance` — the SAME cell/distance values the retired
+read with `:cell`/`:distance` — the same cell/distance values the retired
 queries answered, since the walk and the empty-run test are identical; the
 garden's 300-tick passive hash is unchanged (`0xCC2D4742992B05CC`). The
 chessBoard topology's `directions` are now authored explicitly in the same

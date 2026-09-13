@@ -1,10 +1,14 @@
-# SM83 CPU & Instruction Timing
+# SM83 CPU and instruction timing
+
+The SM83 is the 8-bit CPU shared by the Humble Gaming Brick (HGB)'s supported Game
+Boy revisions. This page covers its registers, flags, instruction timing,
+interrupts, and the hardware-specific behavior that affects the next fetch.
 
 The **Sharp SM83** is the custom 8-bit processor powering the Game Boy family. A hybrid between the Intel 8080 and Zilog Z80, it omits the Z80's shadow registers (`AF'`, `BC'`, etc.), index registers (`IX`, `IY`), and dedicated I/O instructions (`IN`/`OUT`), while introducing unique 16-bit autoincrement memory addressing (`LD [HL+], A`, `LD [HL-], A`) and high-page I/O access (`LDH [C], A`, `LDH [a8], A`).
 
 ---
 
-## Register File & Flag Architecture
+## Register file and flag architecture
 
 The SM83 provides eight 8-bit general-purpose registers that can be paired into 16-bit composite registers:
 
@@ -24,21 +28,21 @@ classDiagram
     }
 ```
 
-### The Flags Register (`F`)
+### The flags register (`F`)
 The lower 4 bits of register `F` are hardwired to zero. The upper 4 bits indicate arithmetic status:
-- **Bit 7 — Zero Flag (`Z`)**: Set if an ALU result is zero.
-- **Bit 6 — Subtraction Flag (`N`)**: Set if the preceding operation was a subtraction (`SUB`, `SBC`, `CP`, `DEC`).
-- **Bit 5 — Half Carry Flag (`H`)**: Set if carry occurred from bit 3 to bit 4 in an 8-bit operation, or from bit 11 to bit 12 in a 16-bit operation (`ADD HL, rr`).
-- **Bit 4 — Carry Flag (`C`)**: Set if carry occurred from bit 7 (overflow) or bit 15 in 16-bit additions.
+- **Bit 7: zero flag (`Z`)**: Set if an ALU result is zero.
+- **Bit 6: subtraction flag (`N`)**: Set if the preceding operation was a subtraction (`SUB`, `SBC`, `CP`, `DEC`).
+- **Bit 5: half-carry flag (`H`)**: Set if carry occurred from bit 3 to bit 4 in an 8-bit operation, or from bit 11 to bit 12 in a 16-bit operation (`ADD HL, rr`).
+- **Bit 4: carry flag (`C`)**: Set if carry occurred from bit 7 (overflow) or bit 15 in 16-bit additions.
 
-### Decimal Adjust Accumulator (`DAA`)
+### Decimal adjust accumulator (`DAA`)
 The `DAA` instruction adjusts the binary result of an addition or subtraction into valid Packed Binary Coded Decimal (BCD). Puck's `Sm83.Alu.cs` evaluates the exact hardware correction table:
 - If $N=0$ (addition): add $0\text{x}06$ to `A` if $H=1$ or $(A \ \& \ 0\text{x}0\text{F}) > 9$; add $0\text{x}60$ to `A` and set $C$ if $C=1$ or $A > 0\text{x}99$.
 - If $N=1$ (subtraction): subtract $0\text{x}06$ from `A` if $H=1$; subtract $0\text{x}60$ from `A` if $C=1$.
 
 ---
 
-## Cycle Timing & Instruction Decoding
+## Cycle timing and instruction decoding
 
 All SM83 execution timings are exact multiples of **4 T-cycles** (1 M-cycle). The CPU cannot advance or interact with memory faster than 1 M-cycle:
 
@@ -52,7 +56,7 @@ All SM83 execution timings are exact multiples of **4 T-cycles** (1 M-cycle). Th
 | Subroutine Return | 4 | 16 | 8 | `RET` |
 | Conditional Return (Taken) | 5 | 20 | 10 | `RET Z` (taken) |
 
-### Prefix 0xCB Bit Operations
+### Prefix 0xCB bit operations
 Opcode `0xCB` switches the decoder to an alternate 256-instruction table:
 - `RLC`, `RRC`, `RL`, `RR`: Rotate through/without carry.
 - `SLA`, `SRA`, `SRL`: Arithmetic and logical shifts.
@@ -63,7 +67,7 @@ Opcode `0xCB` switches the decoder to an alternate 256-instruction table:
 
 ---
 
-## The Hardware HALT Bug
+## The hardware HALT bug
 
 The `HALT` instruction enters a low-power mode, pausing instruction execution until an interrupt occurs. However, physical SM83 silicon contains a famous pipelining bug:
 
@@ -75,11 +79,13 @@ As a result, the opcode byte immediately following `HALT` is fetched twice:
 2. The `PC` remains unchanged.
 3. The CPU reads the exact same byte at `PC` again as the start of the next instruction.
 
-Puck's `Sm83.cs` faithfully replicates this hardware glitch dot-for-dot; commercial games (and Mooneye test ROMs) that rely on the double-read glitch execute with bit-for-bit parity.
+Puck's `Sm83.cs` models this double-read behavior. Mooneye rows and the
+repository's other CPU checks establish the cases they exercise; they don't
+turn those results into a blanket parity claim for every SM83 revision.
 
 ---
 
-## Interrupt Controller Architecture
+## Interrupt controller architecture
 
 The SM83 features 5 maskable hardware interrupt sources prioritized by address vector:
 
@@ -102,7 +108,7 @@ flowchart LR
 | **4** | Serial | `0x0058` | Serial link 8-bit shift transfer completes. |
 | **5 (Lowest)** | Joypad | `0x0060` | High-to-low pin transition on P10–P13 keypad lines. |
 
-### The 5 M-Cycle Dispatch Schedule
+### The five M-cycle dispatch schedule
 When an interrupt is serviced:
 1. **Cycle 1–2**: Internal latency waitstates; `IME` is reset to zero.
 2. **Cycle 3**: High byte of `PC` is pushed onto the stack; `SP` decrements.
@@ -111,7 +117,7 @@ When an interrupt is serviced:
 
 ---
 
-## Double-Speed Mode (`KEY1` & `STOP`)
+## Double-speed mode (`KEY1` and `STOP`)
 
 On Game Boy Color hardware, the CPU can operate at **8.388608 MHz** (double speed):
 1. Software writes `0x01` to register `KEY1` (`0xFF4D`), arming the speed switch.

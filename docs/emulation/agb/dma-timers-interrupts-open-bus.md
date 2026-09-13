@@ -1,5 +1,9 @@
 # DMA, timers, interrupts, and open bus
 
+The Advanced Gaming Brick (AGB) shares its bus among the CPU, DMA channels, timers,
+and interrupt controller. This page follows the state that crosses those
+boundaries, including the bus values that remain observable as open bus.
+
 ## DMA bus state
 
 Each DMA channel owns its source, destination, count, control, and 32-bit read

@@ -1,7 +1,12 @@
 # Game state and rules
 
-**`ActionEffect.Judge`/the judge asset family collapse into a
-`$clock:<music>:phaseError` operand (owner decision).** `ActionEffect.Judge`,
+This plan defines the proposed state and rules vocabulary that the reference
+game needs for actions, phases, boards, cards, transfer, and social memory. It
+records why each owner decision changes the shape, what has landed, and which
+behavioral evidence remains limited to a named fixture or replay.
+
+The `ActionEffect.Judge` and judge asset family collapse into a
+`$clock:<music>:phaseError` operand as an owner decision. `ActionEffect.Judge`,
 `WorldJudgeRow`/`JudgeDocument` (`puck.judge.v1`), and the rhythm mechanism
 they carried (`Puck.Audio.Simulation.RhythmJudge`, wired through
 `MusicDirectorFactory.cs`) were a hit-window judge — the mechanism
@@ -32,13 +37,13 @@ carrier-declared kit facet (`carry`: a body-local frame offset, a
 mass-equivalent, and a reach) authored the same "presence is the whole
 switch" way `rigid` is. While carried, the target's own rigid integration is
 suspended entirely — never solved — but its pose is not an unconditional
-follow either: TANGIBLE carry sweeps the target's own collider from its
+follow either: tangible carry sweeps the target's own collider from its
 previous pose to the carrier-derived one against static geometry every tick,
 and separately resolves it against every other active solid body on the same
 positional-split terms an ordinary contact pair already uses, so a carried
 body pushes and is blocked rather than passing through walls or other
 bodies — and whichever correction either sweep applies is handed back to the
-CARRIER too, so holding something that cannot advance stops the carrier, not
+carrier too, so holding something that cannot advance stops the carrier, not
 only the object. `body.release` refuses by name, leaving the relationship
 untouched, when the target's current pose still overlaps geometry or another
 body — the backstop for the rare case the continuous sweep above did not
@@ -63,7 +68,7 @@ once at `ResolveOperand`/`ResolveCellRef`/`ResolveBodyRefToken` time and reads t
 `ReadReduction` already used. The vanished-row question is settled the same way for all of
 them: a compiled handle is only ever minted against a row `WorldRuleCompiler.CompileAll`
 already proved present, and every document install revalidates by recompiling every rule
-against the SAME candidate document — so an installed document can never carry a rule whose
+against the same candidate document — so an installed document can never carry a rule whose
 handle addresses a row that has vanished, and `TryReadHandle` throws rather than reading a
 neutral value it should never need to. This is a pure representation change: the passive
 300-tick garden replay and the frozen world's 720-tick replay both hash identically before and
@@ -74,7 +79,7 @@ compiler has it (owner decision). Both halves have landed.**
 `CompiledWorldOperand` and `CompiledWorldEffect` were flattened structs carrying every fact
 kind's parameters at once, copied by value into every predicate, expression token, and
 reader — the shape was wrong, not merely large. `CompiledWorldOperand` is now a carrier
-struct (`WorldOperandUnion.cs`) over one sealed CLASS per `WorldRuleFactKind`
+struct (`WorldOperandUnion.cs`) over one sealed class per `WorldRuleFactKind`
 (`WorldOperandKinds.cs`, 22 cases — never records or structs, since a union boxes a value
 case on store and nothing at runtime compares two operands for equality or identity), written
 to the C# 15 basic union pattern by hand: a `[Union]` struct holding one `object?`, a
@@ -183,7 +188,7 @@ field on `WorldGeneratorAlternative`/`WorldGeneratorWeightedNumeric` (JSON `coun
 renamed with it — `Deals`/`DecksAfter` to `Exhausts`/`MasksAfter`, the private `Deal` method
 to `DrawEntry`, and every `card`/`deck`/`dealt` local variable and doc comment to
 `unit`/`mask`/`drawn` — since a second, unrenamed vocabulary living one layer under the
-public one is the same defect the doctrine names. No shipped world or canary document
+public one is the same duplication that the documentation policy calls out. No shipped world or canary document
 authored the alternatives/weighted vocabulary (the garden's poker table uses the tabletop
 primitive's own token/zone/transfer vocabulary instead, never `WorldGenerator`), so the
 only document fixture touched is `tests/Puck.World.Canaries/lattice-draw-fill/fixture.world.json`
