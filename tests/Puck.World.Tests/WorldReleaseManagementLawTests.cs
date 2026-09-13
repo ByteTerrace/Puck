@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Laws for immutable release identity, guarded operation progress, and the commit boundary.</summary>
+/// <summary>Laws for release identity, structural qualification, and the guarded group root.</summary>
 public sealed class WorldReleaseManagementLawTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri("UseDevelopmentStorage=true");
 
@@ -34,107 +34,116 @@ public sealed class WorldReleaseManagementLawTests {
     }
 
     [Fact]
-    public async Task OperationStoreCreatesResumesAndGuardsRevision() {
+    public async Task GroupRootUsesGuardedSequentialTransitionsAndRetainsHistory() {
         var blobStore = new FakeObjectBlobStore();
         var owner = Guid.NewGuid();
-        var store = new WorldReleaseOperationStore(blobStore, Target, owner);
-        var initial = Operation();
-        var created = await store.CreateAsync(initial, TestContext.Current.CancellationToken);
+        var groups = new WorldReleaseGroupStore(blobStore, Target, owner);
+        var created = await groups.CreateAsync("primary", "release-a", TestContext.Current.CancellationToken);
         Assert.True(created.Ok, created.Detail);
-        var current = (await store.LoadAsync(initial.DeploymentGroup, TestContext.Current.CancellationToken))!.Value;
-        var resumed = await store.ResumeAsync(initial, TestContext.Current.CancellationToken);
-        Assert.True(resumed.Ok, resumed.Detail);
-        var drained = await store.AdvanceAsync(current, current.Record with { Phase = WorldReleaseOperationPhase.Drain, Revision = 1 }, TestContext.Current.CancellationToken);
+        var started = await groups.BeginAsync(created.Snapshot!.Value, Guid.NewGuid(), "release-b", TestContext.Current.CancellationToken);
+        Assert.True(started.Ok, started.Detail);
+        var pending = started.Snapshot!.Value;
+        await Assert.ThrowsAsync<InvalidDataException>(() => groups.AdvanceAsync(pending, pending.Record with { PendingPhase = WorldReleaseOperationPhase.Verify, Revision = pending.Record.Revision + 1 }, TestContext.Current.CancellationToken));
+
+        var roots = new Dictionary<string, string> { ["row"] = "checkpoint:1" };
+        var drained = await groups.AdvanceAsync(pending, pending.Record with { PendingPhase = WorldReleaseOperationPhase.Drain, Admission = WorldReleaseAdmissionState.Closed, RecoveryRoots = roots, Revision = pending.Record.Revision + 1 }, TestContext.Current.CancellationToken);
         Assert.True(drained.Ok, drained.Detail);
-        var activated = await store.AdvanceAsync(drained.Snapshot!.Value, drained.Snapshot.Value.Record with { Phase = WorldReleaseOperationPhase.Activate, Revision = 2 }, TestContext.Current.CancellationToken);
-        Assert.True(activated.Ok, activated.Detail);
-        var verified = await store.AdvanceAsync(activated.Snapshot!.Value, activated.Snapshot.Value.Record with { Phase = WorldReleaseOperationPhase.Verify, Revision = 3 }, TestContext.Current.CancellationToken);
-        Assert.True(verified.Ok, verified.Detail);
-        var advanced = await store.AdvanceAsync(verified.Snapshot!.Value, WorldReleaseRecoveryPolicy.Commit(verified.Snapshot.Value.Record), TestContext.Current.CancellationToken);
-        Assert.True(advanced.Ok, advanced.Detail);
-        var stale = await store.AdvanceAsync(current, current.Record with { Phase = WorldReleaseOperationPhase.Drain, Revision = 1 }, TestContext.Current.CancellationToken);
+        var stale = await groups.AdvanceAsync(pending, pending.Record with { PendingPhase = WorldReleaseOperationPhase.Drain, Admission = WorldReleaseAdmissionState.Closed, RecoveryRoots = roots, Revision = pending.Record.Revision + 1 }, TestContext.Current.CancellationToken);
         Assert.Equal(WorldReleaseOperationOutcomeKind.PreconditionFailed, stale.Kind);
 
-        var committed = (await store.LoadAsync(initial.DeploymentGroup, TestContext.Current.CancellationToken))!.Value;
-        var opened = await store.AdvanceAsync(committed, WorldReleaseRecoveryPolicy.OpenAdmission(committed.Record), TestContext.Current.CancellationToken);
+        var activated = await groups.AdvanceAsync(drained.Snapshot!.Value, drained.Snapshot.Value.Record with { PendingPhase = WorldReleaseOperationPhase.Activate, Revision = drained.Snapshot.Value.Record.Revision + 1 }, TestContext.Current.CancellationToken);
+        Assert.True(activated.Ok, activated.Detail);
+        var verified = await groups.AdvanceAsync(activated.Snapshot!.Value, activated.Snapshot.Value.Record with { PendingPhase = WorldReleaseOperationPhase.Verify, Revision = activated.Snapshot.Value.Record.Revision + 1 }, TestContext.Current.CancellationToken);
+        Assert.True(verified.Ok, verified.Detail);
+        var identity = new WorldAuthorityIdentity(owner, SafeName.Parse("row"));
+        var committed = await groups.CommitAsync(verified.Snapshot!.Value, [(identity, new WorldAuthorityFence(1, Guid.NewGuid(), "root"))], TestContext.Current.CancellationToken);
+        Assert.True(committed.Ok, committed.Detail);
+        var committedState = committed.Snapshot!.Value;
+        var opened = await groups.OpenAdmissionAsync(committedState, "release-b", committedState.Record.PendingOperationId!.Value, committedState.Record.AuthorityLease, TestContext.Current.CancellationToken);
         Assert.True(opened.Ok, opened.Detail);
-        var finalized = await store.FinalizeAsync(opened.Snapshot!.Value, TestContext.Current.CancellationToken);
+        var finalized = await groups.FinalizeAsync(opened.Snapshot!.Value, TestContext.Current.CancellationToken);
         Assert.True(finalized.Ok, finalized.Detail);
-        Assert.Equal(opened.Snapshot.Value.Record.Revision + 1, finalized.Snapshot!.Value.Record.Revision);
-        Assert.Equal(WorldReleaseOperationPhase.Finalized, finalized.Snapshot.Value.Record.Phase);
+        Assert.False(finalized.Snapshot!.Value.Record.RollbackEligible);
+        Assert.Equal("checkpoint:1", finalized.Snapshot.Value.Record.History[0].RecoveryRoots["row"]);
+        Assert.True((await groups.BeginAsync(finalized.Snapshot.Value, Guid.NewGuid(), "release-c", TestContext.Current.CancellationToken)).Ok);
     }
 
     [Fact]
-    public async Task OperationStoreRejectsPhaseSkipAtCreation() {
-        var store = new WorldReleaseOperationStore(new FakeObjectBlobStore(), Target, Guid.NewGuid());
-        await Assert.ThrowsAsync<InvalidDataException>(() => store.CreateAsync(Operation() with { Phase = WorldReleaseOperationPhase.Drain }, TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task OperationStoreCapturesRecoveryRootsOnceAfterDrain() {
-        var store = new WorldReleaseOperationStore(new FakeObjectBlobStore(), Target, Guid.NewGuid());
-        var initial = Operation() with { RecoveryRoots = new Dictionary<string, string>() };
-        var created = await store.CreateAsync(initial, TestContext.Current.CancellationToken);
-        Assert.True(created.Ok, created.Detail);
-        var current = (await store.LoadAsync(initial.DeploymentGroup, TestContext.Current.CancellationToken))!.Value;
-        var drained = current.Record with { Phase = WorldReleaseOperationPhase.Drain, Revision = 1 };
-        var drainedResult = await store.AdvanceAsync(current, drained, TestContext.Current.CancellationToken);
-        Assert.True(drainedResult.Ok, drainedResult.Detail);
-        var captured = drained with { RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:1" }, Revision = 2 };
-        var capturedResult = await store.AdvanceAsync(drainedResult.Snapshot!.Value, captured, TestContext.Current.CancellationToken);
-        Assert.True(capturedResult.Ok, capturedResult.Detail);
-        var changed = captured with { RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:2" }, Revision = 3 };
-        var changedResult = await store.AdvanceAsync(capturedResult.Snapshot!.Value, changed, TestContext.Current.CancellationToken);
-        Assert.Equal(WorldReleaseOperationOutcomeKind.Conflict, changedResult.Kind);
-    }
-
-    [Fact]
-    public async Task OperationStoreRejectsDuplicateAndUndefinedPersistedSchema() {
+    public async Task GroupRootRejectsMalformedDuplicateMembers() {
         var blobStore = new FakeObjectBlobStore();
         var owner = Guid.NewGuid();
-        var store = new WorldReleaseOperationStore(blobStore, Target, owner);
-        var key = "private/puck/hosted/release-operations/primary.json";
+        var groups = new WorldReleaseGroupStore(blobStore, Target, owner);
         var duplicate = "{" +
-            "\"operationId\":\"00000000-0000-0000-0000-000000000001\"," +
-            "\"deploymentGroup\":\"primary\",\"sourceRelease\":\"source\",\"targetRelease\":\"target\"," +
-            "\"phase\":0,\"phase\":99,\"admission\":0,\"committed\":false,\"recoveryRoots\":{},\"failure\":null,\"revision\":0}";
-        blobStore.Seed(owner, key, Encoding.UTF8.GetBytes(duplicate));
-        await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("primary", TestContext.Current.CancellationToken));
+            "\"schema\":\"puck.world.release-group.v1\",\"deploymentGroup\":\"primary\",\"owner\":\"" + owner + "\"," +
+            "\"activeRelease\":\"release-a\",\"previousRelease\":null,\"pendingOperationId\":null,\"pendingSourceRelease\":null,\"pendingTargetRelease\":null,\"pendingPhase\":null,\"pendingCommitted\":false,\"pendingFailure\":null," +
+            "\"recoveryRoots\":{},\"admission\":\"Open\",\"rollbackEligible\":false,\"authorityLease\":\"00000000-0000-0000-0000-000000000000\",\"history\":[],\"revision\":0,\"revision\":0}";
+        blobStore.Seed(owner, "private/puck/hosted/release-groups/primary.json", Encoding.UTF8.GetBytes(duplicate));
+        await Assert.ThrowsAsync<InvalidDataException>(() => groups.LoadAsync("primary", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public void RecoveryPolicyNeverReopensAdmissionBeforeCommitOrRestoresAfterCommit() {
-        var initial = Operation();
-        var preCommit = WorldReleaseRecoveryPolicy.PrepareRecovery(initial, "candidate health failed");
-        Assert.Equal(WorldReleaseOperationPhase.Recover, WorldReleaseRecoveryPolicy.Recover(preCommit));
-        Assert.Equal(WorldReleaseAdmissionState.Closed, preCommit.Admission);
-        Assert.Throws<InvalidOperationException>(() => WorldReleaseRecoveryPolicy.OpenAdmission(preCommit));
-
-        var committed = WorldReleaseRecoveryPolicy.Commit(initial);
-        Assert.Equal(WorldReleaseOperationPhase.Commit, WorldReleaseRecoveryPolicy.Recover(committed));
-        Assert.Throws<InvalidOperationException>(() => WorldReleaseRecoveryPolicy.PrepareRecovery(committed, "late failure"));
-        Assert.Equal(WorldReleaseAdmissionState.Open, WorldReleaseRecoveryPolicy.OpenAdmission(committed).Admission);
+    public async Task PreCommitRecoveryRetainsSourceAndRequiresFreshAdmissionPublication() {
+        var groups = new WorldReleaseGroupStore(new FakeObjectBlobStore(), Target, Guid.NewGuid());
+        var created = await groups.CreateAsync("primary", "release-a", TestContext.Current.CancellationToken);
+        var started = await groups.BeginAsync(created.Snapshot!.Value, Guid.NewGuid(), "release-b", TestContext.Current.CancellationToken);
+        var drained = await groups.AdvanceAsync(started.Snapshot!.Value, started.Snapshot.Value.Record with {
+            PendingPhase = WorldReleaseOperationPhase.Drain, Admission = WorldReleaseAdmissionState.Closed,
+            RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:1" }, Revision = started.Snapshot.Value.Record.Revision + 1
+        }, TestContext.Current.CancellationToken);
+        var recovered = await groups.RecoverToSourceAsync(drained.Snapshot!.Value, "candidate health failed", TestContext.Current.CancellationToken);
+        Assert.True(recovered.Ok, recovered.Detail);
+        Assert.Equal("release-a", recovered.Snapshot!.Value.Record.ActiveRelease);
+        Assert.Equal(WorldReleaseAdmissionState.Closed, recovered.Snapshot.Value.Record.Admission);
+        Assert.True((await groups.OpenRecoveredAdmissionAsync(recovered.Snapshot.Value, "release-a", Guid.NewGuid(), TestContext.Current.CancellationToken)).Ok);
     }
 
     [Fact]
-    public void QualificationRequiresTheSamePersistenceAndPeerContracts() {
-        var source = Manifest(new Dictionary<string, string> { ["world"] = "sha256/" + new string('a', 64) }, new Dictionary<string, string>());
+    public async Task CoordinatorRequiresPairEvidenceAndStartsRollbackFromRetainedPredecessor() {
+        var owner = Guid.NewGuid();
+        var source = Manifest(new Dictionary<string, string> { ["world"] = "sha256/" + new string('a', 64) }, new Dictionary<string, string>()) with { EngineImageDigest = "sha256:" + new string('a', 64) };
         var target = source with { EngineImageDigest = "sha256:" + new string('b', 64) };
-        Assert.True(WorldReleaseTransitionPolicy.TryPrepare(source, target, out var changes, out var reason), reason);
+        var groups = new WorldReleaseGroupStore(new FakeObjectBlobStore(), Target, owner);
+        var created = await groups.CreateAsync("primary", source.Identity, TestContext.Current.CancellationToken);
+        var coordinator = new WorldReleaseCoordinator(groups);
+        var refused = await coordinator.BeginDeploymentAsync(created.Snapshot!.Value, source, target, qualificationRunner: null, Guid.NewGuid(), TestContext.Current.CancellationToken);
+        Assert.Equal(WorldReleaseOperationOutcomeKind.Conflict, refused.Kind);
+        var evidence = Evidence(source, target);
+        var started = await coordinator.BeginDeploymentAsync(created.Snapshot.Value, source, target, new FixedQualificationRunner(evidence), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        Assert.True(started.Ok, started.Detail);
+        var drained = await coordinator.RecordDrainAsync(started.Snapshot!.Value, new Dictionary<string, string> { ["row"] = "root-1" }, TestContext.Current.CancellationToken);
+        var activated = await coordinator.RecordActivationAsync(drained.Snapshot!.Value, TestContext.Current.CancellationToken);
+        var verified = await coordinator.RecordVerificationAsync(activated.Snapshot!.Value, TestContext.Current.CancellationToken);
+        var identity = new WorldAuthorityIdentity(owner, SafeName.Parse("row"));
+        var committed = await coordinator.CommitAsync(verified.Snapshot!.Value, [(identity, new WorldAuthorityFence(1, Guid.NewGuid(), "root"))], TestContext.Current.CancellationToken);
+        var opened = await coordinator.PublishAdmissionAsync(committed.Snapshot!.Value, target.Identity, committed.Snapshot.Value.Record.PendingOperationId!.Value, committed.Snapshot.Value.Record.AuthorityLease, TestContext.Current.CancellationToken);
+        Assert.True(opened.Ok, opened.Detail);
+
+        var rollback = await coordinator.BeginRollbackAsync(opened.Snapshot!.Value, target, source, new FixedQualificationRunner(Evidence(target, source)), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        Assert.True(rollback.Ok, rollback.Detail);
+        Assert.Equal(source.Identity, rollback.Snapshot!.Value.Record.PendingTargetRelease);
+        Assert.Single(rollback.Snapshot.Value.Record.History);
+        Assert.Equal("rollback-started", rollback.Snapshot.Value.Record.History[0].Result);
+        var recovered = await coordinator.RecoverToSourceAsync(rollback.Snapshot.Value, "rollback candidate refused", TestContext.Current.CancellationToken);
+        Assert.True(recovered.Ok, recovered.Detail);
+        Assert.True(recovered.Snapshot!.Value.Record.RollbackEligible);
+        var retry = await coordinator.BeginRollbackAsync(recovered.Snapshot.Value, target, source, new FixedQualificationRunner(Evidence(target, source)), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        Assert.True(retry.Ok, retry.Detail);
+    }
+
+    [Fact]
+    public void StructuralCompatibilityDoesNotAuthorizeChangedDefinitionsOrArtifacts() {
+        var source = Manifest(new Dictionary<string, string> { ["world"] = "sha256/" + new string('a', 64) }, new Dictionary<string, string> { ["neighbor"] = "sha256/" + new string('b', 64) });
+        var same = source with { EngineImageDigest = "sha256:" + new string('b', 64) };
+        Assert.True(WorldReleaseTransitionPolicy.TryPrepare(source, same, out var changes, out var reason), reason);
         Assert.Empty(changes);
-        var changedDefinition = target with { Definitions = new Dictionary<string, string> { ["world"] = "sha256/" + new string('e', 64) } };
+        var changedDefinition = same with { Definitions = new Dictionary<string, string> { ["world"] = "sha256/" + new string('e', 64) } };
         Assert.False(WorldReleaseTransitionPolicy.TryPrepare(source, changedDefinition, out changes, out reason));
         Assert.Contains("state-preservation", reason, StringComparison.Ordinal);
-        Assert.False(WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, target with { PersistenceContract = "other" }, out reason));
-        Assert.Contains("persistence", reason, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void EngineOnlyQualificationRefusesChangedArtifactPins() {
-        var source = Manifest(new Dictionary<string, string> { ["world"] = "sha256/" + new string('a', 64) }, new Dictionary<string, string> { ["neighbor"] = "sha256/" + new string('b', 64) });
-        var changed = source with { Artifacts = new Dictionary<string, string> { ["neighbor"] = "sha256/" + new string('c', 64) } };
-        Assert.False(WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, changed, out var reason));
+        var changedArtifact = source with { Artifacts = new Dictionary<string, string> { ["neighbor"] = "sha256/" + new string('c', 64) } };
+        Assert.False(WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, changedArtifact, out reason));
         Assert.Contains("artifact", reason, StringComparison.Ordinal);
+        Assert.False(WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, same with { PersistenceContract = "other" }, out reason));
+        Assert.Contains("persistence", reason, StringComparison.Ordinal);
     }
 
     private static WorldReleaseManifest Manifest(IReadOnlyDictionary<string, string> definitions, IReadOnlyDictionary<string, string> artifacts) => new() {
@@ -148,15 +157,19 @@ public sealed class WorldReleaseManagementLawTests {
         PeerProtocolContract = "puck.world.peer.v1",
     };
 
-    private static WorldReleaseOperationRecord Operation() => new() {
-        OperationId = Guid.NewGuid(),
-        DeploymentGroup = "primary",
-        SourceRelease = "sha256/" + new string('a', 64),
-        TargetRelease = "sha256/" + new string('b', 64),
-        Phase = WorldReleaseOperationPhase.Prepare,
-        RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:1" },
-        Revision = 0,
+    private static string FullHash(byte[] bytes) => "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+    private static WorldReleaseQualificationReceipt Evidence(WorldReleaseManifest source, WorldReleaseManifest target) => new() {
+        SourceRelease = source.Identity,
+        TargetRelease = target.Identity,
+        EvidenceId = "qualification/test",
+        SourceStateHash = "sha256/source",
+        TargetStateHash = "sha256/target",
+        ReverseStateHash = "sha256/reverse",
     };
 
-    private static string FullHash(byte[] bytes) => "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes));
+    private sealed class FixedQualificationRunner(WorldReleaseQualificationReceipt receipt) : IWorldReleaseQualificationRunner {
+        public Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
+            Task.FromResult<WorldReleaseQualificationReceipt?>(receipt with { SourceRelease = source.Identity, TargetRelease = target.Identity });
+    }
 }

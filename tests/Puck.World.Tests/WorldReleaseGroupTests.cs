@@ -72,10 +72,7 @@ public sealed class WorldReleaseGroupTests {
         var identity = new WorldAuthorityIdentity(owner, SafeName.Parse("row"));
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
-        var document = Fixtures.BuildDocument() with {
-            BodyMotionProgramsRaw = Fixtures.BuildDocument().BodyMotionProgramsRaw!.Select(program => program with { Version = BodyMotionProgram.CurrentVersion }).ToArray(),
-            HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None }
-        };
+        var document = Fixtures.BuildDocument() with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None } };
         var backend = new WorldAuthorityBlobStore(store, target);
         Assert.True((await backend.PublishDefinitionAsync(identity, document, TestContext.Current.CancellationToken)).Ok);
         var groups = new WorldReleaseGroupStore(store, target, owner);
@@ -111,6 +108,43 @@ public sealed class WorldReleaseGroupTests {
         Assert.Equal(WorldReleaseAdmissionPublication.Opened, await replacementPublication);
         Assert.True(replacementRouting.TryGetSession("row", out _));
         await PumpAsync(replacement, replacement.DrainAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ManagedHostResumesCommittedTargetWithFreshFenceClaim() {
+        using var directory = new TempWorldDirectory();
+        using var output = new BufferedConsoleOutput();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var keyFile = directory.WriteBytes("world.key", key.ExportPkcs8PrivateKey());
+        var owner = Guid.NewGuid();
+        var identity = new WorldAuthorityIdentity(owner, SafeName.Parse("row"));
+        var store = PuckStorageTestComposition.BuildStore();
+        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var document = Fixtures.BuildDocument() with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None } };
+        var backend = new WorldAuthorityBlobStore(store, target);
+        Assert.True((await backend.PublishDefinitionAsync(identity, document, TestContext.Current.CancellationToken)).Ok);
+        var groups = new WorldReleaseGroupStore(store, target, owner);
+        var created = await groups.CreateAsync("primary", "release-a", TestContext.Current.CancellationToken);
+        var started = await groups.BeginAsync(created.Snapshot!.Value, Guid.NewGuid(), "release-b", TestContext.Current.CancellationToken);
+        var drained = await groups.AdvanceAsync(started.Snapshot!.Value, started.Snapshot.Value.Record with { PendingPhase = WorldReleaseOperationPhase.Drain, Admission = WorldReleaseAdmissionState.Closed, RecoveryRoots = new Dictionary<string, string> { ["row"] = "root-1" }, Revision = started.Snapshot.Value.Record.Revision + 1 }, TestContext.Current.CancellationToken);
+        var activated = await groups.AdvanceAsync(drained.Snapshot!.Value, drained.Snapshot.Value.Record with { PendingPhase = WorldReleaseOperationPhase.Activate, Revision = drained.Snapshot.Value.Record.Revision + 1 }, TestContext.Current.CancellationToken);
+        var verified = await groups.AdvanceAsync(activated.Snapshot!.Value, activated.Snapshot.Value.Record with { PendingPhase = WorldReleaseOperationPhase.Verify, Revision = activated.Snapshot.Value.Record.Revision + 1 }, TestContext.Current.CancellationToken);
+        var committed = await groups.CommitAsync(verified.Snapshot!.Value, [(identity, new WorldAuthorityFence(1, Guid.NewGuid(), "root"))], TestContext.Current.CancellationToken);
+        Assert.True(committed.Ok, committed.Detail);
+        var source = new TextCommandSource(new CommandRegistry(modules: []));
+        var routing = new SiloConsoleRouting(() => source, new SiloConsoleTagging(output));
+        var definition = new WorldSiloDefinition([new(owner, identity.World, new(keyFile), Pinned: true)], new(1), new("directory", JsonElement.Parse("{}")), directory.RootPath, new("Localhost"), Release: new("primary", owner, "release-b"));
+        var host = new WorldSiloHost(definition, store, routing, target);
+        using var instances = host.Instances;
+        var activation = host.ActivateAsync(identity, TestContext.Current.CancellationToken);
+        await PumpAsync(host, activation);
+        Assert.True(await activation);
+        Assert.False(host.ReleaseAdmissionOpen);
+        var publication = host.PublishManagedReleaseAdmissionAsync(TestContext.Current.CancellationToken);
+        await PumpAsync(host, publication);
+        Assert.Equal(WorldReleaseAdmissionPublication.Opened, await publication);
+        Assert.True(routing.TryGetSession("row", out _));
+        await PumpAsync(host, host.DrainAsync(TestContext.Current.CancellationToken));
     }
 
     private static async Task PumpAsync(WorldSiloHost host, Task operation) {

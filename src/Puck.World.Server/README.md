@@ -100,16 +100,16 @@ definition delivery is `DeliverDefinition` after a shape change or
 
 `WorldReleaseManifest` gives a composed package one immutable identity over its
 engine image digest, stable world definition pins, artifact hashes, and the
-declared persistence and peer contracts. `WorldReleaseOperationStore` persists
-the maintenance operation in the private object store with create-only and
+declared persistence and peer contracts. `WorldReleaseGroupStore` persists the
+single deployment-group root in the private object store with create-only and
 if-match writes, so a coordinator can resume the same operation and a stale
-writer cannot advance it. Its validation enforces closed admission through
-prepare, drain, activation, verification, and commit; only a durable committed
-record may open it. A post-commit failure follows the committed release. The
+writer cannot advance it. Its validation enforces the sequential prepare, drain,
+activation, verification, and commit boundary; only a durable committed record
+may open admission. A post-commit failure follows the committed release. The
 first transition policy refuses changed definitions until a state-preservation
-rule and packaged rollback evidence exist. Managed silo admission now consumes
-the group root and fences its explicit publication barrier; Azure coordinator
-switching and operator rollback/restore remain above these records and policies.
+rule and packaged rollback evidence exist. Managed silo admission consumes the
+group root and fences its explicit publication barrier; Azure coordinator
+switching and operator rollback/restore remain above this hosting foundation.
 
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes
@@ -126,7 +126,13 @@ separately verifies every current per-world fence before its explicit all-row
 publication. Pre-commit recovery clears the failed candidate without marking
 it active, while finalization retains recovery references and closes only the
 rollback window. Azure coordinator switching and operator rollback/restore
-commands remain future integration work.
+commands remain future integration work. The group root is the live hosting
+record; the CLI status verb only validates and displays a supplied local copy
+of that record. `WorldReleaseCoordinator` is the shared guarded transition
+driver: it requires a qualification runner receipt, records each durable phase
+before invoking a runtime effect, and persists pre-commit recovery before
+restoring a source. The Azure command adapter still has to supply its runtime
+driver before production deployment can claim this workflow.
 
 ## Rule effects land on a frame (`WorldServer.RuleHost.cs`, `WorldServer.RuleFrame.cs`)
 
@@ -1564,11 +1570,11 @@ lane the way it does at a durable identity slot.
 
 ## Owned worlds and storage
 
-`WorldOwnedWorlds` loads one `puck.world.def.v1` file per identity from
+`WorldOwnedWorlds` loads one `puck.world.definition.v1` file per identity from
 `owned-worlds` beneath the state root, plus any hand-placed basis chain link
 under its `owned-worlds/basis/` subdirectory (outside the catalog's own
 directory glob, so a link never enumerates as a second owned world). A document
-whose BYTES are not a `puck.world.def.v1` document is DISCARDED, not tolerated:
+whose BYTES are not a `puck.world.definition.v1` document is DISCARDED, not tolerated:
 the file moves once into `owned-worlds/unloadable/` (also outside the glob, so
 it never enumerates again). Nothing distinguishes a retired document shape from
 a corrupt file here, so neither is silently eaten and neither is migrated. A
