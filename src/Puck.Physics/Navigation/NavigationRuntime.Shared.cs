@@ -147,7 +147,6 @@ public sealed partial class NavigationRuntime {
         public NavigationSharedCheckpoint CaptureShared() => new(Cursor: (SharedStale ? 0 : m_sharedCursor),
             Trees: m_sharedTrees.Select(selector: tree => (SharedStale ? new NavigationTreeCheckpoint(Age: 0, Goal: -1, Nodes: [], Pending: []) : tree.Capture())).ToArray());
         public void ValidateShared(NavigationSharedCheckpoint checkpoint) {
-            EnsureBaked();
             if ((checkpoint is null) || (checkpoint.Trees is null) || (checkpoint.Trees.Length != m_sharedTrees.Length) ||
                 (checkpoint.Cursor < 0) || (checkpoint.Cursor >= Math.Max(val1: 1, val2: m_sharedTrees.Length))) {
                 throw new InvalidOperationException(message: "shared navigation checkpoint scheduler shape differs.");
@@ -167,6 +166,9 @@ public sealed partial class NavigationRuntime {
                     }
                     continue;
                 }
+                // Empty slots contain no geometry-dependent work. Restoring an unused domain must retain its
+                // lazy bake; resident trees still prove their recorded successors against the static graph.
+                EnsureBaked();
                 if (!goals.Add(item: tree.Goal)) { throw new InvalidOperationException(message: "shared navigation checkpoint repeats a goal."); }
                 if (!ages.Add(item: tree.Age)) { throw new InvalidOperationException(message: "shared navigation checkpoint repeats a recency rank."); }
                 var nodes = new Dictionary<int, NavigationTreeNode>(capacity: tree.Nodes.Length);

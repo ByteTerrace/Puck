@@ -402,6 +402,10 @@ directory, preserving the image's asset layout. Colocated silo rows with neither
 authority nor listen endpoint sign with the stable instance name, matching the
 server's authority identity; listening rows still require an advertised endpoint.
 Run release bootstrap/preparation/publication and silo lifecycle controls for these seams.
+`NavigationRuntime.Domain.ValidateShared` must leave empty shared-navigation slots
+unbaked during checkpoint restore. Validate scheduler and empty-slot shape without
+querying geometry; resident trees still bake and validate their recorded static
+edges. Run Physics navigation laws and packaged full-inventory restore controls.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains

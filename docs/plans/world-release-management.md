@@ -96,8 +96,10 @@ to metadata and require package-bound qualification.
   need signing identities without invented public endpoints. Both five-world
   forward imports passed; reverse qualification and ordinary worker startup hit
   timeouts. A saved-import profile identified eager navigation graph rebuilding
-  during validation of empty shared-navigation checkpoints; correction and full
-  inventory reruns remain pending.
+  during validation of empty shared-navigation checkpoints. Empty slots now retain
+  lazy geometry; resident trees still validate their edges. Physics navigation
+  laws passed 20 tests; World navigation passed 36 with three failures reproduced
+  using the pre-change Physics binary. Full inventory reruns remain pending.
 - The official image now publishes discoverable Azure, Gaming Brick and MCP
   extensions with their dependencies. Four packaged entry-point controls passed:
   the ordinary silo, silo MCP, CLI MCP, and a conflicting MCP listener that must

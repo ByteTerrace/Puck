@@ -1,5 +1,10 @@
 # Puck.Physics.Tests
 
+`NavigationRuntimeLawTests` also checks checkpoint restoration with a counting
+query: empty shared-navigation state makes no geometry calls, malformed scheduler
+state still refuses, and the first later route matches uninterrupted navigation.
+Resident trees require geometry validation and refuse a forged successor edge.
+
 These tests keep the Physics kernels honest through separate evidence:
 
 - the exact solver proves two-body direction, source/target semantics, refusals, and the bit-identical oracle path;

@@ -114,6 +114,42 @@ public sealed class NavigationRuntimeLawTests {
         Assert.Equal(expected: eager.WalkableCellCount, actual: lazy.WalkableCellCount);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RestoringEmptyNavigationKeepsGeometryLazyAndStillValidatesTheScheduler(bool sharing) {
+        var row = VolumeDomain(shared: sharing ? new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1) : null);
+        var source = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        var checkpoint = source.CaptureShared();
+        var query = new CountingQuery();
+        var restored = new NavigationRuntime([row], query, null, Capacity());
+
+        Assert.Throws<InvalidOperationException>(() => restored.ValidateShared([checkpoint[0] with { Cursor = -1 }]));
+        if (sharing) {
+            var invalid = checkpoint[0] with { Trees = [checkpoint[0].Trees[0] with { Pending = [0] }] };
+            Assert.Throws<InvalidOperationException>(() => restored.ValidateShared([invalid]));
+        }
+        restored.RestoreShared(checkpoint);
+        Assert.Equal(0, query.Calls);
+        var captured = restored.CaptureShared();
+        Assert.Equal(checkpoint[0].Cursor, captured[0].Cursor);
+        Assert.Equal(checkpoint[0].Trees.Length, captured[0].Trees.Length);
+        foreach (var tree in captured[0].Trees) {
+            Assert.Equal(-1, tree.Goal);
+            Assert.Equal(0, tree.Age);
+            Assert.Empty(tree.Nodes);
+            Assert.Empty(tree.Pending);
+        }
+        var originalPath = new int[16];
+        var restoredPath = new int[16];
+        var originalStatus = source[0].FindPath(0, 5, originalPath, out var originalLength, out var originalExpanded);
+        var restoredStatus = restored[0].FindPath(0, 5, restoredPath, out var restoredLength, out var restoredExpanded);
+        Assert.True(query.Calls > 0);
+        Assert.Equal(originalStatus, restoredStatus);
+        Assert.Equal(originalExpanded, restoredExpanded);
+        Assert.Equal(originalPath[..originalLength], restoredPath[..restoredLength]);
+    }
+
     // A minimal live-medium field the kernel drives purely through its own narrow seam.
     private sealed class StubMediumField(Func<FixedVector3, bool> isWet, ulong revision = 0) : INavigationMediumField {
         private readonly ulong m_revision = revision;
@@ -355,6 +391,14 @@ public sealed class NavigationRuntimeLawTests {
         Assert.Equal(expected: 5, actual: path[length - 1]);
 
         var checkpoint = domain.CaptureShared();
+        var query = new CountingQuery();
+        var restored = new NavigationRuntime([VolumeDomain(shared: new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1))], query, null, Capacity());
+        restored.RestoreShared([checkpoint]);
+        Assert.True(query.Calls > 0);
+        var invalid = checkpoint with { Trees = [checkpoint.Trees[0] with {
+            Nodes = checkpoint.Trees[0].Nodes.Select(node => node.Node == 0 ? node with { Next = 5 } : node).ToArray(),
+        }] };
+        Assert.Contains("static edge", Assert.Throws<InvalidOperationException>(() => restored.ValidateShared([invalid])).Message);
         domain.RestoreShared(checkpoint: checkpoint);
         var replay = domain.CaptureShared();
 
