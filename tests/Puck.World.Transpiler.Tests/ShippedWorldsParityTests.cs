@@ -48,11 +48,11 @@ public class ShippedWorldsParityTests {
 
     [Theory]
     [MemberData(nameof(GetShippedWorldSources))]
-    public void TestCommittedSourceCompilesToTheCommittedDocument(string relativePath) {
+    public void TestSourceCompilesToTheGeneratedDocument(string relativePath) {
         var worldsDir = ShippedWorlds.FindDirectory();
         var sourcePath = Path.Combine(worldsDir, relativePath);
         var documentPath = Path.Combine(worldsDir, ShippedWorlds.DocumentOf(relativePath));
-        Assert.True(File.Exists(documentPath), $"{relativePath} has no committed document at {documentPath}");
+        Assert.True(File.Exists(documentPath), $"{relativePath} has no generated document at {documentPath}");
 
         var source = File.ReadAllText(sourcePath);
         var diagnostics = new DiagnosticBag();
@@ -70,7 +70,7 @@ public class ShippedWorldsParityTests {
         Assert.False(diagnostics.HasErrors, $"Compile errors for {relativePath}:{Environment.NewLine}{diagnostics.FormatReport(source)}");
         Assert.NotNull(loweringResult.Value);
 
-        // The regeneration gate: the source is canonical and the document is its committed output, so the two can
+        // The regeneration gate: the source is canonical and the document is its generated output, so the two can
         // never drift apart without failing here. Byte identity is what `puck compile` writes.
         Assert.Equal(File.ReadAllBytes(documentPath), CanonicalJsonDocument.Serialize(loweringResult.Value));
     }

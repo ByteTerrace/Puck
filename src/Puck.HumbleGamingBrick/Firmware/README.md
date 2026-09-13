@@ -3,6 +3,8 @@
 These original Puck boot ROM startup images are generated from
 [`BootRomBuilder`](../../Puck.HumbleGamingBrick.Forge/BootRomBuilder.cs), one
 image per `ConsoleModel`. They are runtime resources, not external downloads.
+They belong to [`Puck.HumbleGamingBrick`](../README.md); this folder owns the
+generated images and their package-local notices.
 The `.bin` images in this directory are distributed under the adjacent
 [Apache-2.0 or MIT licenses](LICENSE); this does not change the license of the emulator or
 the Forge tooling.
@@ -14,3 +16,7 @@ the source change and run the HGB Forge tests and Post firmware/handoff gates.
 The [Forge guide](../../Puck.HumbleGamingBrick.Forge/README.md#the-authored-boot-roms)
 owns presentation, header checks, hardware handoff and the limits of the
 independent conformance evidence.
+
+## Documentation
+
+📚 [Machine emulation manual](../../../docs/emulation/README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

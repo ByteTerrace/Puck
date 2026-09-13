@@ -1,11 +1,8 @@
-# Azure.Resources
+# Puck.Azure.Resources
 
-[![Board Status](https://dev.azure.com/byteterrace/0fdb7e64-61cc-4f63-b6aa-ee63e5426233/e42b904c-8125-438b-8415-988be75611ea/_apis/work/boardbadge/7cc7ad7f-7b3c-4702-8791-ca64a83d02cb?columnOptions=1)](https://dev.azure.com/byteterrace/0fdb7e64-61cc-4f63-b6aa-ee63e5426233/_boards/board/t/e42b904c-8125-438b-8415-988be75611ea/Stories/)  
-[![Release Status](https://dev.azure.com/byteterrace/Koholint/_apis/build/status%2FDeploy%20Infrastructure?branchName=main)](https://dev.azure.com/byteterrace/Koholint/_build/latest?definitionId=88&branchName=main)
+Puck.Azure.Resources defines the Azure infrastructure used by Puck's hosted applications. Its infrastructure-as-code (IaC) modules describe network boundaries, identity, storage, delivery, and application services.
 
-This repository contains a comprehensive **Infrastructure-as-Code (IaC)** foundation for deploying a secure application environment within Microsoft Azure.
-
-## ✨ Key Features
+## Capabilities
 
 - *Zero Trust:* Uses one CI deployment identity and scoped runtime permissions, including repository ABAC, with managed identities and OIDC.
 - *Virtual Networking:* Supports private endpoints, subnet integration, and service-specific network restrictions.
@@ -14,9 +11,9 @@ This repository contains a comprehensive **Infrastructure-as-Code (IaC)** founda
 - *Azure DevOps Integration:* Includes managed agent pools to provide self-hosted CI/CD agents that can securely deploy into the virtual network.
 - *Serverless Compute:* Uses Azure Functions Flex Consumption for scalable, event-driven API logic.
 
-## 📐 Architecture
+## Architecture
 
-::: mermaid
+```mermaid
 graph TB
     AzureDevOps(["🔗 dev.azure.com/&lt;org&gt;"])
     Internet(["🌐 Internet"])
@@ -59,16 +56,15 @@ graph TB
     DevOpsPoolSubnet --> NatGateway
     FunctionAppSubnet --> NatGateway
     NatGateway --> Internet
-:::
-
-## ⚠️ Prerequisites
+```
+## Prerequisites
 
 - An [Azure](https://azure.microsoft.com/en-us/resources/cloud-computing-dictionary/what-is-azure) subscription with the permissions required to create a resource group and assign roles.
 - An [Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/user-guide/what-is-azure-devops) organization that is [integrated with Microsoft Entra ID](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/connect-organization-to-azure-ad) and a project that one has ownership rights to.
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/what-is-azure-cli) v2.70 (or greater) installed.
 - [PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/overview) v7.2 (or greater) installed.
 
-## 🧭 Getting Started
+## Usage
 
 Use the provided [📋checklist](./CHECKLIST.md) to help track your progress.
 
@@ -86,7 +82,7 @@ repository deployment. Their checkout paths and service connections are not
 the GitHub Actions deployment contract. A new platform still needs the identity
 and access setup described in the [checklist](./CHECKLIST.md) and bootstrap below.
 
-### Bootstrap Process
+### Bootstrap process
 
 #### 📦 *.NET*
 
@@ -196,3 +192,9 @@ The publisher compiles sources in dependency order, skips identical published
 versions and rejects changed content under an existing version. Bump the manifest
 version and consuming Bicep references together; existing published versions are
 preserved. Application CI consumes these pins without bootstrapping identities.
+
+## Documentation
+
+📚 [Engine manual](../../docs/README.md) · 🛠️ [Development](../../docs/development/README.md)
+
+[Project board](https://dev.azure.com/byteterrace/0fdb7e64-61cc-4f63-b6aa-ee63e5426233/_boards/board/t/e42b904c-8125-438b-8415-988be75611ea/Stories/) · [Infrastructure release history](https://dev.azure.com/byteterrace/Koholint/_build/latest?definitionId=88&branchName=main)

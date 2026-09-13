@@ -44,12 +44,12 @@ changes the suit mapping while retaining distinct identities for every card.
 | Pile ID | Klondike | Spider | FreeCell |
 |---|---|---|---|
 | 0 | Stock | Stock | Deal staging pile; empty during play |
-| 1 | Waste | — | — |
+| 1 | Waste |—|—|
 | 2–8 | Seven tableau columns | First seven tableau columns | First seven tableau columns |
-| 9 | — | Eighth column | Eighth column |
+| 9 |—| Eighth column | Eighth column |
 | 10–11 | Spade/heart foundations | Ninth/tenth columns | Spade/heart foundations |
 | 12–13 | Club/diamond foundations | Completed runs in 12; no pile 13 | Club/diamond foundations |
-| 14–17 | — | — | Four free cells |
+| 14–17 |—|—| Four free cells |
 
 ## Move or draw
 
@@ -153,13 +153,13 @@ which table a seat stands at, never a second input surface). Holding it charges 
 `$channel:1:attack`); releasing fires `cue-release`, an edge rule whose `applyRigidImpulse` effect
 strikes `placement:cueBall`'s live inhabitant along seat body `0`'s own forward facing, scaled by
 the charged cell, then resets the cell to zero. `applyRigidImpulse` is the world-rule effect family's
-one honest path to a rigid impulse — it calls the same `WorldBody.TryApplyRigidImpulse` `body.impulse`
-does, never a second impulse mechanism — addressed by the same `body:<n>`/`argmax:<row>`/
+one honest path to a rigid impulse—it calls the same `WorldBody.TryApplyRigidImpulse` `body.impulse`
+does, never a second impulse mechanism—addressed by the same `body:<n>`/`argmax:<row>`/
 `placement:<id>` body-reference grammar a spatial rule channel reads, so a struck body and its heading
 body are two independently live-resolved references. A struck body carrying no `rigid` kit facet
 refuses by name (`world.rule.hazards`/`world.rule.trace` read the refusal back); every rack ball
 shares the cue ball's own `billiardBall` kit, so only the placement `applyRigidImpulse` actually
-names — never an arbitrary nearby ball — ever takes the strike.
+names—never an arbitrary nearby ball—ever takes the strike.
 
 Historical context: [Microsoft Solitaire](https://en.wikipedia.org/wiki/Microsoft_Solitaire)
 and [Microsoft Spider Solitaire](https://en.wikipedia.org/wiki/Microsoft_Spider_Solitaire)
@@ -167,7 +167,7 @@ identify the bundled games; the
 [FreeCell FAQ](https://www.solitairelaboratory.com/fcfaq.html) distinguishes legal
 single-card play from limitations in older automatic multi-card shortcuts.
 
-## Backgammon — the chance-node probe
+## Backgammon—the chance-node probe
 
 [backgammon.world.json](backgammon.world.json) is a standalone, self-contained
 document (its own `documentId`, headless `host.presentation: "none"`) rather
@@ -178,20 +178,20 @@ for white, `b0`/`b1` for black; off the ring at `-1` means on the bar), a
 two-cell `dice` row draws `uniformRange 1..6` on each cell (`world.generate
 dice` rerolls it), and `cube` is a plain, inert row standing in for the
 doubling cube. One `ai` search job supplies both seats: `relocate`
-(`displace: false` — checkers share a point, no hitting) and `drop` (bar entry)
+(`displace: false`—checkers share a point, no hitting) and `drop` (bar entry)
 are its shapes, `depth: 2` with a `chance` node at ply 1 averages the position
 over the 36 dice pairs the search's own next roll might be, and `score` reads
 each side's own pip progress. Four per-checker judge rules (`backgammon-legal-*`) compute legality against a
 shadow `origPoint` row: an ordinary rule, `backgammon-sync-orig`, keeps it
 mirrored to `checkerPoint` on every real tick (a hypothetical candidate's own
 scratch copy never persists past its own judge pass, so `origPoint` still
-reads the real pre-move position inside one). The classic backgammon check —
-no other move while a checker of the same side sits on the bar — reads as
+reads the real pre-move position inside one). The classic backgammon check—
+no other move while a checker of the same side sits on the bar—reads as
 `origPoint[<other checker>] != -1` in each of the four expressions.
 
 Two deliberate reductions, stated plainly rather than left to be discovered:
 hitting is not modelled (`displace: false`, no blot/point-ownership check), and
-bearing checkers off the board is not a distinct removal step — a side's
+bearing checkers off the board is not a distinct removal step—a side's
 checkers reaching their own endpoint (23 for white, 0 for black) stands in for
 it. Both are honest simplifications of a probe proving the chance-node
 primitive, not the licensed rules of backgammon. Setting a starting position
@@ -201,34 +201,34 @@ so an external write crosses the same rules the search's own hypothetical walk
 does and flips `turn` for real before anything else runs.
 
 [SearchChanceLawTests](../../../../../tests/Puck.State.Tests/SearchChanceLawTests.cs)
-proves the chance mechanism itself — an expectiminimax value over a two-outcome
+proves the chance mechanism itself—an expectiminimax value over a two-outcome
 chance equalling the hand-computed average, and a `Method: Tree` job's playout
 drawing from the job's own stream so two independently built runtimes with the
 same seed make the same choice.
 [BackgammonLawTests](../../../../../tests/Puck.World.Tests/BackgammonLawTests.cs)
-proves the document: the bar-occupied refusal (with its control — a checker's
+proves the document: the bar-occupied refusal (with its control—a checker's
 own bar entry stays legal) and the same position with a clear bar.
-## Chinese Checkers — chains and many seats
+## Chinese Checkers—chains and many seats
 
 [chinese-checkers.world.json](chinese-checkers.world.json) is the market's probe for two `search`
 primitives: the `jump` shape's chain (a candidate is 1..`maxHops` hops, each over an occupied cell onto an
 empty one, never revisiting a cell) and an n-seat `scores` row (a level maximizes the mover seat's own
-entry rather than negating the reply — max-n, no zero-sum assumption). Unlike its siblings this document
+entry rather than negating the reply—max-n, no zero-sum assumption). Unlike its siblings this document
 is self-bootable (`schema`/`documentId` authored directly) rather than a bare fragment, so `--world` can
 run it standing alone; it is not yet imported into `puck.world.json`.
 
 The board is a `hex` topology of radius 3 (37 cells); three seats (0, 1, 2) each hold two pieces in a
 home cluster near one of the hexagon's corners and race for the cluster at the opposite corner. `pieceCell`
 is the search's `tokens` row; `pieceCellPrev` mirrors it one commit behind so the judge rule can read which
-token moved and by how far without a reserved channel for it — `moverSeat`, `moverFrom`, `moverCell`,
+token moved and by how far without a reserved channel for it—`moverSeat`, `moverFrom`, `moverCell`,
 `movedCount`, and `collisionCount` are that comparison's own terms, all ordinary rows. A candidate is
 accepted when exactly one token moved, it belongs to the seat whose `turn` it is, nothing else already
 stood where it landed, and the hop was either adjacent (a step) or an even distance (a chain the `jump`
-shape's own geometry already verified before the judge ever ran — see the schema's search section for what
+shape's own geometry already verified before the judge ever ran—see the schema's search section for what
 the shape checks and what the judge must). `scores` holds one cell per seat: a piece count on its own
 target cluster times 100, less its pieces' summed `hexDistance` to a representative cell of that cluster.
 `ccSearch`'s landed `best` is applied by a second rule (`cc-apply-best`), gated on `best` differing from
-what was last applied, which also advances the real `turn` and re-syncs `pieceCellPrev` — the judge rule's
+what was last applied, which also advances the real `turn` and re-syncs `pieceCellPrev`—the judge rule's
 own turn flip lives entirely inside the search's hypothetical frame and never needs to reach the real one.
 `home0`/`home1`/`home2` and `winner` are the win-condition read-back: a seat's row reaching its own piece
 count sets `winner` to that seat, checked by
@@ -239,5 +239,11 @@ shape and the max-n fold are exercised in isolation, against hand-built boards w
 Two things this probe does not do: `maxHops` is 2, not deep enough to force the long multi-jump chains a
 tournament board invites, and `Relocate`'s own geometry admits any cell, so a step's adjacency and a
 chain's even distance are both judged after the fact by the rule above rather than by the shape refusing a
-non-adjacent single step outright — a genuine `Relocate` distance-2 move with nothing to jump over reads
+non-adjacent single step outright—a genuine `Relocate` distance-2 move with nothing to jump over reads
 as legal here. Both are probe-scale simplifications, not the shape's own limits.
+
+This collection is part of [Puck.World](../../../README.md).
+
+## Documentation
+
+📚 [Worlds and federation](../../../../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../../../../docs/development/contributing.md)

@@ -8,6 +8,8 @@ subsystem work; skills add operational constraints rather than a second engine
 explanation. Preserve the distinction between exact simulation-state determinism
 and floating-point presentation.
 
+Use forward slashes for Puck paths on every platform and prefer current APIs that accept them directly. Follow the [file-path convention](docs/development/contributing.md#file-paths) at output, storage, and native interop boundaries.
+
 ## Enforcement
 
 The build, the architecture gate, determinism checks, calibrated ceilings, and
@@ -47,6 +49,9 @@ Use the topic relevant to the task; game plans are not prerequisite reading for 
 
 Use [Writing documentation](docs/development/documentation.md) for human prose,
 titles, filenames, and navigation. Skills retain agent execution procedures.
+That guide also defines README ownership and shared branding routes. Active
+projects need a README; package-local contracts stay local and shared workflows
+stay in the manual. Repair consumers when an owning explanation or asset moves.
 
 The manual must explain current behavior and limitations without requiring a
 source investigation first. Keep that explanation separate from verification

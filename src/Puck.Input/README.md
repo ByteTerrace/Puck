@@ -16,7 +16,7 @@ This README is the human entry point. The
 [generated API reference](../../docs/api) owns complete member signatures,
 parameters, return values, and exceptions.
 
-## ✨ Key features
+## Key features
 
 - *One normalized controller model:* Switch Pro, Xbox, DualSense, and both
   Steam Controller families produce the same `GamepadState` shape.
@@ -35,7 +35,7 @@ parameters, return values, and exceptions.
 - *Presentation lighting:* the LampArray legend colors physical keyboard keys
   from the host's current bindings without entering simulation state.
 
-## 📐 How device input reaches a command
+## How device input reaches a command
 
 Two acquisition transports feed one manager. HID devices own an asynchronous
 read/write loop; the Windows Xbox backend polls separately and publishes the
@@ -87,12 +87,12 @@ Registered arbiter lanes provide alternate views without draining again:
 | `Owned` | A device explicitly assigned through `SetLaneDevice`; neutral until assigned. |
 | `Suppressed` | Always neutral. Any other lane can also be muted temporarily. |
 
-## 🎮 Device support
+## Device support
 
 | Family | Transport | Input | Motion | Output |
 |---|---|---|---|---|
 | **Switch Pro** | HID over USB | buttons, sticks, digital triggers | gyro, accelerometer, fused orientation | approximate HD rumble; player LEDs at initialization |
-| **Xbox** | XInput + GameInput | buttons including Guide, sticks, analog triggers | — | four-motor rumble including impulse triggers |
+| **Xbox** | XInput + GameInput | buttons including Guide, sticks, analog triggers |—| four-motor rumble including impulse triggers |
 | **DualSense** | HID over USB or Bluetooth | buttons, sticks, analog triggers, two touches | calibrated gyro, accelerometer, fused orientation | rumble, RGB and player LEDs, adaptive triggers |
 | **Steam Controller** | HID over USB or classic receiver | buttons, analog trigger stages, stick, two trackpads | nominal gyro and accelerometer scales, fused orientation | coarse dual-pad haptic pulses |
 | **Steam Controller Triton** | HID through the 2026 receiver | buttons, four paddles, analog triggers, two sticks, two trackpads | nominal gyro and accelerometer scales, fused orientation | dual-motor rumble |
@@ -100,7 +100,7 @@ Registered arbiter lanes provide alternate views without draining again:
 Support means that a parser and acquisition path exist. Hardware evidence and
 known limitations are recorded below.
 
-## 🚀 Quick start
+## Quick start
 
 Build the platform-neutral project, then run the live Windows host:
 
@@ -164,7 +164,7 @@ reads factory or user stick calibration from SPI flash and falls back to its
 nominal scale if a read is missing or implausible. Switch IMU calibration and
 both Steam families currently use nominal scales.
 
-## ⌨️ Keyboard, mouse commands, text, and pointer browsing
+## Keyboard, mouse commands, text, and pointer browsing
 
 `InputSources` is the single vocabulary for keyboard, mouse, and gamepad control
 names. `InputSourceVocabulary` resolves those names CASE-INSENSITIVELY, in the
@@ -203,7 +203,7 @@ This project contributes only `InputSourceLabels`, which describes a physical
 source using the connected family's labels—for example, the south face button
 is B on Switch, A on Xbox or Steam, and X on DualSense.
 
-## 🔊 Output and haptics
+## Output and haptics
 
 `IGamepadOutput` accepts typed output commands and a raw-report escape hatch.
 The connection advertises capabilities from the interfaces its parser actually
@@ -225,7 +225,7 @@ its logical 78-byte framing and trailing CRC even when Windows advertises a
 larger output buffer. A later rumble or LED update therefore preserves the
 current trigger effects on either transport.
 
-## 💡 Dynamic lighting
+## Dynamic lighting
 
 The bind legend is presentation-only. `Puck.Abstractions` defines the neutral
 LampArray contract, `Puck.Platform` implements the Windows HID LampArray
@@ -247,7 +247,7 @@ vendor software, or a replug reclaims it.
 The transport and composer have been exercised on a Logitech G915 LampArray
 (115 lamps, 33-millisecond minimum update), a G502 mouse, and a POWERPLAY pad.
 
-## ⚠️ Limits and hardware evidence
+## Limits and hardware evidence
 
 - **DualSense USB and Bluetooth are hardware-verified.** Input, motion, rumble,
   LEDs, and adaptive triggers share the current output path. Bluetooth input
@@ -277,7 +277,7 @@ vendor input usage `0xFF00/0x01`. Classic control messages use their classic
 feature framing. Triton feature messages use report id 1 and
 `[type][length][payload]`; report id 0 is rejected with Win32 error 87.
 
-## 📋 Core types
+## Core types
 
 | Type | Role |
 |---|---|
@@ -300,7 +300,7 @@ The concrete controller parsers are `NintendoSwitchController`,
 Windows implementations of `IHidDeviceSource`, `IHidDevice`, and the Xbox
 acquisition source live in `src/Puck.Platform.Windows`.
 
-## 🧪 Testing
+## Testing
 
 Run the dedicated contract and regression suite, then build the production
 projects in Release:
@@ -318,3 +318,9 @@ disposal ordering, touch release, lane lifecycle and deterministic player
 ordering, and empty LampArray behavior. These tests use transport fakes; live
 hardware verification still uses `Puck.World`, its `world.devices` and
 `world.players` verbs, stderr diagnostics, and physical output observation.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

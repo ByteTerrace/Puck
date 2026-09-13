@@ -1,4 +1,4 @@
-# Object storage
+# Puck.Storage
 
 Puck addresses a blob by an object ID and a relative key. The host chooses the
 storage target; the same routed store supports local directories and Azure Blob
@@ -87,3 +87,9 @@ and Linux's [openat](https://man7.org/linux/man-pages/man2/openat.2.html) and
 [rename](https://man7.org/linux/man-pages/man2/rename.2.html) references.
 `ConfinedStorageLawTests` exercises real directories, links, concurrent
 replacement, conditional writes, and namespace revocation in `Puck.World.Tests`.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

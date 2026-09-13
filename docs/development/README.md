@@ -7,7 +7,9 @@ deploying Puck.
   documents, run the relevant verification commands, and account for hardware
   and toolchain constraints.
 - [Writing documentation](documentation.md) describes the shared prose, naming,
-  navigation, and example conventions.
+  navigation, README ownership, and example conventions.
+- [Branding](../../branding/README.md) identifies the maintained logo, visual
+  assets, and distribution process.
 - [CI and releases](ci.md) explains the GitHub Actions workflows, artifact
   boundaries, release batches, and Azure deployment procedures.
 

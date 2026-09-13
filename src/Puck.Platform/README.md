@@ -5,13 +5,13 @@ plus the pieces that need no OS-specific code at all.
 
 ## What lives here
 
-- **Windowing contracts** — `INativeWindow`, `INativeWindowFactory`,
+- **Windowing contracts**—`INativeWindow`, `INativeWindowFactory`,
   `INativeWindowBackend` (the seam `Puck.Platform.Windows`/`.Linux` register
   their concrete window backends against), `IClipboardService`,
   `NativeDisplayEnvironment`/`NativeDisplayKindSelector` (pure environment-variable
   detection), `ConfiguredNativeWindow` (the headless stand-in),
   `NativeWindowOptionsValidator`.
-- **Capture contracts** — `ICameraCaptureService`, `INativeImageCaptureService`,
+- **Capture contracts**—`ICameraCaptureService`, `INativeImageCaptureService`,
   `IAudioRenderDeviceFactory`/`IAudioRenderDevice`. `ICameraCaptureService.EnumerateDevices`
   reports every attached physical camera as a `CameraDeviceInfo` (a platform-stable
   `Id`, a `Name`, and its `Sensors`) from a completed scan, empty only when the
@@ -22,33 +22,33 @@ plus the pieces that need no OS-specific code at all.
   which one opened. A successful pixel open has already published a usable host
   frame from every stream; a successful shared open has validated native GPU
   input before the consumer attaches its target textures.
-- **Camera discovery polling** — `CameraDeviceScanner` runs at most one
+- **Camera discovery polling**—`CameraDeviceScanner` runs at most one
   enumeration on a worker thread and hands completed snapshots back to its
   caller without waiting. The cadence starts after completion; a slow or stuck
   driver cannot queue more scans. Failures stay distinct from an empty device
   list. Disposal ignores a late result without blocking, so the platform service
   must outlive its outstanding scan. Polling and device-table reconciliation
   belong to one caller thread; the worker never mutates a roster or live feed.
-- **`Puck.Memory`** — the unmanaged allocator (mimalloc-backed, with a
+- **`Puck.Memory`**—the unmanaged allocator (mimalloc-backed, with a
   tracking wrapper and a plain native fallback), registered via
   `AddPuckAllocator`.
-- **Null fallbacks** — `NullClipboardService`, `NullCameraCaptureService`,
+- **Null fallbacks**—`NullClipboardService`, `NullCameraCaptureService`,
   `NullNativeImageCaptureService`, and the declining recording factories
   (`Puck.Platform.Recording.DecliningVideoEncoderFactory`/
   `DecliningAudioCaptureSourceFactory`, which resolve a platform-supplied
   decline reason instead of a missing service), used by
   `Puck.Platform.Linux`'s registration (and by anything that never calls a
   platform-specific registration method at all).
-- **Probes contracts** (`Puck.Platform.Probes`) — `ProbeReading`, the
+- **Probes contracts** (`Puck.Platform.Probes`)—`ProbeReading`, the
   neutral fixed-point currency between an probe and every binding that
   consumes it; `ProbeReadingRing`, its triple-buffered seqlock latest-wins
   publication; `ICameraKernelHost`/`IProbeKernelRun`, the seam a kernel-class
   probe attaches to a camera graph through. `ProbeKernelRequest.Inputs` is a
-  socket list of `ProbeKernelInput` arms — `Sensor` (a camera sensor's
+  socket list of `ProbeKernelInput` arms—`Sensor` (a camera sensor's
   converted frame), `StrobePair` (that sensor's lit frame and the unlit frame
   kept beside it), `Ring` (an external `ISharedSlotRing` the host opens
   read-only, e.g. another probe's output or an offscreen view export), or
-  `Unbound` (an optional socket left empty) — flattened to consecutive kernel
+  `Unbound` (an optional socket left empty)—flattened to consecutive kernel
   registers (`ProbeKernelInput.RegisterCount`; a `StrobePair` spans two,
   every other arm one). `ProbeTrackPlayer` is the hardware-free
   recorded-reading substitute for a live probe input.
@@ -64,9 +64,13 @@ A composition root pairs it with exactly one of:
 - `Puck.Platform.Linux.LinuxPlatformServiceRegistration.AddLinuxPlatformWindowing`
 
 Camera capture, recording, and audio-render registration follow the same
-shape (`AddWindowsCameraCapture`/`AddLinuxCameraCapture`, etc.) — this
+shape (`AddWindowsCameraCapture`/`AddLinuxCameraCapture`, etc.)—this
 project holds no `AddCameraCapture`/`AddRecordingPlatform` of its own.
 
 `Puck.World`'s `WorldBootComposition`/`Program.cs` show the composition-root
 side of this: one `OperatingSystem.IsWindows()` branch per seam, picking
 which platform package's method to call.
+
+## Documentation
+
+📚 [Rendering](../../docs/rendering/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

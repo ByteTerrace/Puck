@@ -1100,10 +1100,7 @@ internal static class SuiteCatalog {
     private static string FromRelative(string root, string relative) =>
         Path.Combine(
         path1: root,
-        path2: relative.Replace(
-            newChar: Path.DirectorySeparatorChar,
-            oldChar: '/'
-        )
+        path2: relative
     );
     private static string? FirstExisting(string directory, IEnumerable<string> candidates) =>
         candidates
@@ -1284,10 +1281,7 @@ internal static class SuiteCatalog {
     private static string SuiteDir(string root, string relative) =>
         Path.Combine(
         path1: root,
-        path2: relative.Replace(
-            newChar: Path.DirectorySeparatorChar,
-            oldChar: '/'
-        )
+        path2: relative
     );
     private static IReadOnlyList<LedgerCase> TaggedLedgerCases(string? root, string suite, string suiteRelativeDirectory, bool recurse, int frameCap, ProbeKind probe) {
         if (root is null) {

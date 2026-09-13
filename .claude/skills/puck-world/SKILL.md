@@ -460,7 +460,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `src/Puck.World.Transpiler/Samples/*.synthetic.world.puck` (fixtures) and
   the shipped `Assets/worlds/avatars/moth.puck`, `moth-courtyard.puck`, and
   `tools/hgb-mirror.puck`/`hgb-compare.puck` (real assets, each with a
-  committed JSON twin). `host.presentation` has three values: windowed,
+  generated, ignored JSON twin; `build/WorldAssets.targets` owns generation). `host.presentation` has three values: windowed,
   `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
   `offscreen` (full authority + GPU composition to images, no window —
   what `puck parity` boots). A world may author a `captures` section:

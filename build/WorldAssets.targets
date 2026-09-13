@@ -1,0 +1,19 @@
+<Project>
+    <!-- The CLI owns world compilation. Its build generates these outputs before
+         build-only consumers copy or test them; no game assembly references tooling. -->
+    <PropertyGroup>
+        <PuckWorldAssetDirectory Condition="'$(PuckWorldAssetDirectory)' == ''">$(MSBuildThisFileDirectory)..\src\Puck.World\Assets\worlds</PuckWorldAssetDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\avatars\moth.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\moth-courtyard.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-compare.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-mirror.puck" />
+    </ItemGroup>
+    <Target Name="GenerateWorldAssets" AfterTargets="Build"
+            Condition="'$(DesignTimeBuild)' != 'true'"
+            Inputs="@(PuckGeneratedWorldSource);@(ReferenceCopyLocalPaths);$(TargetPath);$(MSBuildThisFileFullPath)"
+            Outputs="@(PuckGeneratedWorldSource -> '%(RootDir)%(Directory)%(Filename).world.json')">
+        <Exec Command="dotnet &quot;$(TargetPath)&quot; compile &quot;%(PuckGeneratedWorldSource.FullPath)&quot; --output &quot;%(PuckGeneratedWorldSource.RootDir)%(PuckGeneratedWorldSource.Directory)%(PuckGeneratedWorldSource.Filename).world.json&quot;" />
+    </Target>
+</Project>

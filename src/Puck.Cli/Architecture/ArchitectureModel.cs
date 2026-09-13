@@ -86,7 +86,7 @@ internal sealed class ArchitectureModel {
             }
 
             edges.Add(item: Path.GetFileNameWithoutExtension(path: include.Value.Replace(
-                newChar: Path.DirectorySeparatorChar,
+                newChar: '/',
                 oldChar: '\\'
             )));
         }

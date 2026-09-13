@@ -6,11 +6,14 @@ namespace Puck.Transpiler.Formatting;
 
 /// <summary>Opinionated, idempotent source code formatter for the Puck authoring language (.puck).</summary>
 public static class PuckFormatter {
-    /// <summary>Formats Puck source code according to the repository's C# and DSL style guidelines.</summary>
+    /// <summary>Formats Puck source code using the DSL layout rules and requested indentation.</summary>
     /// <param name="source">The raw Puck source code.</param>
-    /// <returns>Clean, idiomatic, idempotently formatted Puck code with Egyptian braces and 4-space indentation.</returns>
-    public static string Format(string source) {
+    /// <param name="tabSize">Spaces per indentation level; defaults to two.</param>
+    /// <param name="insertSpaces">Use spaces when true, or one tab per indentation level when false.</param>
+    /// <returns>Idempotently formatted Puck code with expanded object members and the requested indentation.</returns>
+    public static string Format(string source, int tabSize = 2, bool insertSpaces = true) {
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tabSize);
 
         var marker = LiteralMarker(source);
         var literals = new List<string>();
@@ -26,7 +29,7 @@ public static class PuckFormatter {
                 index = end;
             } else { protectedSource.Append(source[index++]); }
         }
-        var formatted = FormatCore(protectedSource.ToString());
+        var formatted = FormatCore(protectedSource.ToString(), tabSize, insertSpaces);
         var restored = new StringBuilder(formatted.Length);
         var prefix = "\"" + marker;
         var copied = 0;
@@ -64,7 +67,7 @@ public static class PuckFormatter {
         return Prefix + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture) + "_";
     }
 
-    private static string FormatCore(string source) {
+    private static string FormatCore(string source, int tabSize, bool insertSpaces) {
 
         if (string.IsNullOrWhiteSpace(source)) {
             return string.Empty;
@@ -72,7 +75,7 @@ public static class PuckFormatter {
 
         var lines = SplitLines(source);
         var splitLines = SplitCompoundDelimiters(lines);
-        var preprocessed = PreprocessEgyptianBraces(splitLines);
+        var preprocessed = PreprocessEgyptianBraces(SplitLines(ExpandObjects(string.Join("\n", splitLines))));
         var formattedLines = new List<string>();
 
         var indentLevel = 0;
@@ -97,7 +100,7 @@ public static class PuckFormatter {
 
             // Check multiline comment state
             if (inMultiLineComment) {
-                var commentIndent = new string(' ', indentLevel * 4);
+                var commentIndent = new string(insertSpaces ? ' ' : '\t', indentLevel * (insertSpaces ? tabSize : 1));
                 formattedLines.Add(commentIndent + trimmed);
                 if (trimmed.Contains("*/", StringComparison.Ordinal)) {
                     inMultiLineComment = false;
@@ -108,7 +111,7 @@ public static class PuckFormatter {
 
             if (trimmed.StartsWith("/*", StringComparison.Ordinal) && !trimmed.Contains("*/", StringComparison.Ordinal)) {
                 inMultiLineComment = true;
-                var commentIndent = new string(' ', indentLevel * 4);
+                var commentIndent = new string(insertSpaces ? ' ' : '\t', indentLevel * (insertSpaces ? tabSize : 1));
                 formattedLines.Add(commentIndent + trimmed);
                 previousWasEmpty = false;
                 continue;
@@ -121,7 +124,7 @@ public static class PuckFormatter {
             // Normalize line content (spacing around colons, commas, etc.)
             var normalizedContent = NormalizeLineContent(trimmed);
 
-            var indent = new string(' ', effectiveIndent * 4);
+            var indent = new string(insertSpaces ? ' ' : '\t', effectiveIndent * (insertSpaces ? tabSize : 1));
             formattedLines.Add(indent + normalizedContent);
             previousWasEmpty = false;
 
@@ -144,6 +147,48 @@ public static class PuckFormatter {
         return sb.ToString();
     }
 
+    // Object members occupy separate lines; scalar arrays and vectors remain compact.
+    private static string ExpandObjects(string source) {
+        var stack = new Stack<(char Kind, int Open, List<int> Commas)>();
+        var breaks = new SortedSet<int>();
+        for (var index = 0; index < source.Length; index++) {
+            var end = SourceLexemes.End(source, index);
+            if (end > index) {
+                index = end - 1;
+                continue;
+            }
+            var character = source[index];
+            if (character is '{' or '[' or '(') {
+                stack.Push((character, index, []));
+            } else if (character == ',' && stack.TryPeek(out var owner) && owner.Kind == '{') {
+                owner.Commas.Add(index + 1);
+            } else if (character is '}' or ']' or ')' && stack.TryPop(out var opening)) {
+                if (opening.Kind == '{' && character == '}' && !source.AsSpan(opening.Open + 1, index - opening.Open - 1).Trim().IsEmpty) {
+                    breaks.Add(opening.Open + 1);
+                    breaks.Add(index);
+                    var next = index + 1;
+                    while (next < source.Length && source[next] is ' ' or '\t') { next++; }
+                    if (next < source.Length && source[next] is ']' or '}') { breaks.Add(index + 1); }
+                    foreach (var comma in opening.Commas) { breaks.Add(comma); }
+                }
+            }
+        }
+        var result = new StringBuilder(source.Length);
+        var copied = 0;
+        foreach (var position in breaks) {
+            result.Append(source.AsSpan(copied, position - copied));
+            var before = position - 1;
+            var after = position;
+            while (before >= 0 && source[before] is ' ' or '\t' or '\r') { before--; }
+            while (after < source.Length && source[after] is ' ' or '\t' or '\r') { after++; }
+            if (before >= 0 && source[before] != '\n' && after < source.Length && source[after] != '\n') {
+                result.Append('\n');
+            }
+            copied = position;
+        }
+        result.Append(source.AsSpan(copied));
+        return result.ToString();
+    }
     private static List<string> SplitLines(string source) {
         var lines = new List<string>();
         using var reader = new StringReader(source);

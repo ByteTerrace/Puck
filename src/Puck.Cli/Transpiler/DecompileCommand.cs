@@ -65,6 +65,7 @@ internal static class DecompileCommand {
             puckSource = ((System.Text.Json.Nodes.JsonNode.Parse(json: json) is System.Text.Json.Nodes.JsonObject document) && DecompileCartridge.Handles(document: document))
                 ? DecompileCartridge.Run(document: document)
                 : WorldDecompiler.Decompile(jsonText: json);
+            puckSource = Puck.Transpiler.Formatting.PuckFormatter.Format(puckSource);
         }
         catch (Exception ex) {
             Console.Error.WriteLine(value: $"error: Failed to decompile world definition '{fullPath}': {ex.Message}");

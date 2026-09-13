@@ -7,8 +7,8 @@ sequency-domain representations and the convolutions built on them.
 
 Every transform here has one shape:
 
-- A **plan** — `NumberTheoreticTransformPlan`, `FixedFourierTransformPlan`,
-  `FixedCosineTransformPlan` — is built once by `Create(length)` for a
+- A **plan**—`NumberTheoreticTransformPlan`, `FixedFourierTransformPlan`,
+  `FixedCosineTransformPlan`—is built once by `Create(length)` for a
   power-of-two length and caches every table that length needs. Building a
   plan is the only place a transform allocates. The Walsh–Hadamard transform
   needs no table, so it alone takes no plan.
@@ -16,7 +16,7 @@ Every transform here has one shape:
   nothing else. `Forward` is always the unscaled textbook sum; `Inverse` always
   carries the `1/N` normalization, so `Inverse(Forward(x))` is `x` (exactly
   for the exact transforms, within a measured bound for the fixed-point ones).
-- The two spectral transforms — number-theoretic and Fourier — also offer
+- The two spectral transforms—number-theoretic and Fourier—also offer
   `PointwiseMultiply` and `Convolve`, the cyclic convolution as
   forward–forward–pointwise–inverse. A pointwise destination may be exactly
   either operand but may not partially overlap one. Convolution accepts the
@@ -37,7 +37,7 @@ internal `TransformKernels`; no transform carries its own copy.
 | `NumberTheoreticTransform` + `NumberTheoreticTransformPlan` | `ulong` residues of `PrimeField64` at a fixed modulus | Exact | Exact cyclic convolution; polynomial and big-integer products. |
 | `WalshHadamardTransform` | Any `IBinaryInteger<T>`; no plan | Exact inside the carrier | Sequency analysis, spreading and hashing, exact ±1 correlation. |
 | `FixedFourierTransform` + `FixedFourierTransformPlan` | `FixedComplex` | Measured bound | Spectra, filtering and convolution of fixed-point signals. |
-| `FixedCosineTransform` + `FixedCosineTransformPlan` | `FixedQ4816` | Measured bound | Real-signal spectra with energy compaction — audio and image blocks. |
+| `FixedCosineTransform` + `FixedCosineTransformPlan` | `FixedQ4816` | Measured bound | Real-signal spectra with energy compaction—audio and image blocks. |
 
 ## `NumberTheoreticTransform`
 
@@ -53,7 +53,7 @@ to `2^44` divides the multiplicative group's order and has a primitive
 `N`-th root of unity. `PrimitiveRoot` (`3`) generates the whole group; the
 `ntt.prime-and-primitive-root` law proves the primality of both factors and
 the root's order with a Pocklington-style certificate. `Create`'s `length` is
-an `int`, whose largest power of two is `2^30` — far below `2^44` — so every
+an `int`, whose largest power of two is `2^30`—far below `2^44`—so every
 representable length is legal.
 
 **Montgomery form inside.** The butterfly network runs in
@@ -76,7 +76,7 @@ refused, and `destination` must be disjoint from both.
 | `Forward` | `X[k] = sum over n of x[n] * root^(nk)`, in place. |
 | `Inverse` | The exact inverse of `Forward`, in place: the conjugate network, then a multiply by the field inverse of `N`. |
 | `PointwiseMultiply` | The elementwise field product; the destination may be exactly either operand, but shifted overlap is refused. |
-| `Convolve` | Forward, forward, pointwise multiply, inverse — the exact cyclic convolution; exact operand alias is self-convolution, while the destination stays disjoint. |
+| `Convolve` | Forward, forward, pointwise multiply, inverse—the exact cyclic convolution; exact operand alias is self-convolution, while the destination stays disjoint. |
 
 ## `WalshHadamardTransform`
 
@@ -85,7 +85,7 @@ addition and one subtraction, there is no twiddle table, and so there is no
 plan.
 
 **Ordering.** `Forward` produces the Sylvester (natural) ordering,
-`X[k] = sum over n of x[n] * (-1)^popcount(n AND k)` — the ordering the
+`X[k] = sum over n of x[n] * (-1)^popcount(n AND k)`—the ordering the
 recursive doubling `H(2N) = [[H, H], [H, -H]]` produces, not the sequency
 (Walsh) ordering. Bin zero is the plain sum.
 
@@ -103,7 +103,7 @@ lane width, so the two paths return identical bits.
 **Envelope.** Arithmetic is unchecked, the posture `FixedQ4816`'s `+` takes:
 the transform is exact whenever `N * max|x|` fits the carrier and wraps
 silently otherwise. A `FixedQ4816` sequence is transformed by passing its raw
-`Value`s — the transform is linear over the integers, so the grid rides along.
+`Value`s—the transform is linear over the integers, so the grid rides along.
 
 | Operation | Semantics |
 |---|---|
@@ -116,15 +116,15 @@ Fixed-point arithmetic over `FixedComplex`: the twiddle multiplies round
 (one rounding per component, `FixedComplex`'s own one-rounding kernel), so
 round trip, linearity and Parseval's identity hold within a measured bound
 rather than exactly. The three inputs `fft.impulse-dc-nyquist-exact` covers
-are the exception — every twiddle they touch is exactly `±1` or `±i`, so the
+are the exception—every twiddle they touch is exactly `±1` or `±i`, so the
 one-rounding multiply never rounds, and those bins are exact.
 
-**Scaling convention.** `Forward` is unscaled — the textbook DFT sum — so an
+**Scaling convention.** `Forward` is unscaled—the textbook DFT sum—so an
 impulse's spectrum is flat at `One`, a DC input's spectrum is `N * value` at
 bin zero, and Parseval's identity reads in its textbook form. `Inverse`
 halves every component at each of the `log2(N)` butterfly stages, reaching
 the `1/N` normalization by exact bit shifts rather than by one late multiply
-by `1/N` — which underflows to zero once `N > 2^16`, past `FixedQ4816`'s
+by `1/N`—which underflows to zero once `N > 2^16`, past `FixedQ4816`'s
 sixteen fraction bits. Each inverse butterfly rounds once: the twiddle product
 stays at Q32, the other operand is lifted to Q32, and their sum or difference
 rounds to Q16 at a seventeen-bit shift, so the halving costs no rounding of
@@ -150,7 +150,7 @@ against its ideal phase. Inverse twiddles are exact conjugates.
 | `ForwardReal` | Embeds a real sequence (zero imaginary parts) and forwards it. |
 | `InverseReal` | Inverts a spectrum and discards the imaginary part of each restored sample. |
 | `PointwiseMultiply` | The elementwise `FixedComplex` product; the destination may be exactly either operand, but shifted overlap is refused. |
-| `Convolve` | Forward, forward, pointwise multiply, inverse — bounded cyclic convolution; exact operand alias is self-convolution, while the destination stays disjoint. |
+| `Convolve` | Forward, forward, pointwise multiply, inverse—bounded cyclic convolution; exact operand alias is self-convolution, while the destination stays disjoint. |
 
 ## `FixedCosineTransform`
 
@@ -182,7 +182,7 @@ two threads sharing one plan never share a buffer.
 | `Inverse` | The normalized DCT-III, in place over the real span, through the scratch span. |
 
 **Accuracy is measured, not assumed.** For both fixed-point transforms,
-round-trip, linearity and Parseval error scale with operand amplitude — each
+round-trip, linearity and Parseval error scale with operand amplitude—each
 twiddle's own quantization error (from `FixedQ4816.SinCosTurns`) multiplies through
 the signal at every stage. The `fft.*` and `dct.*` laws pin their bounds at a
 documented amplitude envelope (raw `[-2^20, 2^20]`, about `±16.0`; the
@@ -201,7 +201,7 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings
 ```
 
 `ntt.*` and `wht.*` statements are exact identities or exact agreement with an
-O(N^2) definition-form `BigInteger` reference in `Oracles` — nothing in either
+O(N^2) definition-form `BigInteger` reference in `Oracles`—nothing in either
 subject rounds, so nothing there is a bound. `fft.*` and `dct.*` statements
 split between exact bins (an impulse, a constant, the Nyquist alternation),
 measured round-trip, linearity, Parseval and convolution bounds (each with a
@@ -214,3 +214,7 @@ of the real wrappers and the pointwise product, and refusals.
 transform against its O(N^2) baseline. `puck bench --filter
 '*TransformPlanCreation*'` measures the time and allocation cost of building
 the reusable plans; none gates a value.
+
+## Documentation
+
+📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

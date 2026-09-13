@@ -66,10 +66,7 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
 
             var fullPath = Path.Combine(
                 path1: root,
-                path2: floor.RelativePath.Replace(
-                    newChar: Path.DirectorySeparatorChar,
-                    oldChar: '/'
-                )
+                path2: floor.RelativePath
             );
 
             if (File.Exists(path: fullPath)) {

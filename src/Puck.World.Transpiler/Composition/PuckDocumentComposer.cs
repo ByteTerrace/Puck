@@ -12,15 +12,16 @@ namespace Puck.World.Transpiler.Composition;
 /// <see cref="WorldDefinitionFileSource.TryComposeChainWithImports"/> — a plain <c>.json</c> reference passes
 /// through unchanged. Both the game boot path (<c>Puck.World.PuckWorldLoader</c>) and <c>puck compile --validate</c>
 /// (<see cref="Validation.WorldSemanticValidator"/>) compose through this one implementation, so a <c>.puck</c>
-/// source and the running game resolve a basis or import chain identically.</summary>
+/// source and the running game resolve a basis or import chain identically. Resolved names use forward slashes on every platform.</summary>
 public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// <inheritdoc />
     public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
         content = null;
+        referrerName = referrerName.Replace(oldChar: '\\', newChar: '/');
 
         try {
             var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerName)) ?? ".");
-            resolvedName = Path.GetFullPath(path: Path.Combine(path1: directory, path2: name));
+            resolvedName = Path.GetFullPath(path: Path.Combine(path1: directory, path2: name)).Replace(oldChar: '\\', newChar: '/');
         } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
             resolvedName = name;
             reason = $"cannot resolve path '{name}' from {referrerName}: {ex.Message}";
@@ -104,7 +105,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             composed: out composed,
             reason: out reason,
             rootBytes: rootBytes,
-            rootResolvedName: rootResolvedPath,
+            rootResolvedName: rootResolvedPath.Replace(oldChar: '\\', newChar: '/'),
             source: source,
             catalogFingerprint: catalogFingerprint,
             catalog: catalog

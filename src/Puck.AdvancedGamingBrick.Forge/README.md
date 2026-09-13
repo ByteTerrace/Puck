@@ -51,3 +51,7 @@ on both native emulators. Separate emitter probes assert instruction effects.
 `AgbVerifyMachineDriver` provides frame-counted input and clock-free bus
 observations. Compilation validates and emits; it does not pretend to prove
 an arbitrary player's game correct or run a hidden sample-game verifier.
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

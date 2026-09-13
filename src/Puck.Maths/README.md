@@ -1,9 +1,9 @@
 # Puck.Maths
 
 Puck.Maths is the engine's numerics library, and its defining promise is
-determinism: give the same inputs to any program built on it — on a Windows
+determinism: give the same inputs to any program built on it—on a Windows
 desktop, a Linux build server, an ARM laptop, a Vulkan backend or a Direct3D 12
-one — and it returns exactly the same results, down to the last bit. A
+one—and it returns exactly the same results, down to the last bit. A
 simulation built on it can therefore be recorded, replayed, and compared byte
 for byte, and the rest of the engine is designed around that property.
 
@@ -20,10 +20,10 @@ the current culture. Some routines inspect the CPU's feature set so they can
 use faster instructions, but those paths return the same bits as their portable
 fallbacks.
 
-## ✨ Key features
+## Key features
 
 - *Bit-identical everywhere:* the same inputs return the same bits on every
-  machine, operating system, and GPU backend — the hardware-accelerated paths
+  machine, operating system, and GPU backend—the hardware-accelerated paths
   return the same results as their portable fallbacks.
 - *A complete fixed-point family:* signed and unsigned scalars, fractions,
   vectors, rotations, rigid transforms, a planet-scale world position, and
@@ -43,11 +43,11 @@ fallbacks.
 - *Nothing environmental:* deterministic results do not depend on the clock,
   culture, or available CPU features.
 
-## 📐 The determinism boundary
+## The determinism boundary
 
 The library follows one rule: `double` may enter once at an authoring boundary
 and leave for display, but simulation state itself is fixed-point, exact, or
-seeded — and nothing computed for presentation ever flows back:
+seeded—and nothing computed for presentation ever flows back:
 
 ```mermaid
 graph LR
@@ -61,7 +61,7 @@ graph LR
     State -->|"fold per tick with Fnv1aHash"| Replay(["📼 Replay / determinism check"])
 ```
 
-## ⚠️ Deliberately not reproducible
+## Deliberately not reproducible
 
 Three surfaces are deliberately *not* reproducible, and none may be used in
 simulation state:
@@ -84,7 +84,7 @@ process, within the ordinary `GetHashCode` contract. Hashes are for hash tables.
 Never use one as a replay fingerprint, a state hash, an ordering key or a
 snapshot field; use the value's own components, which *are* reproducible.
 
-Types that fold through `Fnv1aHash` instead — the algebra values among them —
+Types that fold through `Fnv1aHash` instead—the algebra values among them—
 happen to be stable across processes, but do not rely on that either: it is not
 a contract, and any of them may move to the framework fold. If you need a stable
 digest, take one explicitly.
@@ -131,14 +131,14 @@ graph TB
 
 | Folder | What lives in it | Read when you need |
 |---|---|---|
-| [`FixedPoint/`](FixedPoint/README.md) | The fixed-point scalars — signed and unsigned Q48.16, meaning 48 integer bits and 16 fraction bits, plus the signed Q16.48 that splits the same word the other way for reciprocal quantities — the three unit-interval fractions, vectors, the planar trio (complex, dual, split), quaternions, rigid transforms, the hierarchical world position, the rate accumulators. | Any value a simulation advances, compares, hashes or replays. |
+| [`FixedPoint/`](FixedPoint/README.md) | The fixed-point scalars—signed and unsigned Q48.16, meaning 48 integer bits and 16 fraction bits, plus the signed Q16.48 that splits the same word the other way for reciprocal quantities—the three unit-interval fractions, vectors, the planar trio (complex, dual, split), quaternions, rigid transforms, the hierarchical world position, the rate accumulators. | Any value a simulation advances, compares, hashes or replays. |
 | [`Sampling/`](Sampling/README.md) | The seeded generator, weighted choice, spatial noise, low-discrepancy sequences and digital nets (point sets that spread evenly by construction), and the two non-simulation paths (`SecureRandom`, `ProbabilityFunctions`). | Anything random, scattered, or noisy. |
 | [`FiniteFields/`](FiniteFields/README.md) | Binary fields over fixed-size bit patterns, prime fields and their extensions, error-correction arithmetic, and exact primality on `ulong`. | Error-correcting codes, checksums, and modular arithmetic. |
 | [`Algebra/`](Algebra/README.md) | Configurable number systems that can add a root, add generators, raise a degree, or double an existing number type. | A relationship chosen at runtime, or a proof that the same operation agrees across number types. |
 | [`Geometry/`](Geometry/README.md) | Square and hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
 | [`Oracle/`](Oracle/README.md) | One configurable product operation evaluated with different rules for combining values, then used to build graphs, geometric algebras, planar tangles, divisor arithmetic, and pattern languages. | Reachability, shortest paths, pattern matching, holes in a structure, or group words. |
 | [`Research/`](Research/README.md) | Exploratory exact tools: continued-fraction and radical tails, positional and Ostrowski automatic sequences, Sturmian and quasicrystal words, Fibonacci and metallic-mean arithmetic, odd-cyclic incidence, and real-quadratic orders. Partly in `namespace Puck.Maths.Research`; that folder README says which types. | Research questions and compiled random-access integer patterns, never the simulation hot path. |
-| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64` and the exact Walsh–Hadamard transform over any binary integer; the fixed-point FFT over `FixedComplex` and the fixed-point DCT over `FixedQ4816` — one plan-then-in-place shape, cached twiddle plans, cyclic convolution on both spectral transforms. | A frequency-domain or sequency-domain transform, or a cyclic convolution. |
+| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64` and the exact Walsh–Hadamard transform over any binary integer; the fixed-point FFT over `FixedComplex` and the fixed-point DCT over `FixedQ4816`—one plan-then-in-place shape, cached twiddle plans, cyclic convolution on both spectral transforms. | A frequency-domain or sequency-domain transform, or a cyclic convolution. |
 
 The [root-level type map](#root-level-types) below introduces the types that do
 not belong to one of those folders: integer routines, exact discrete rates,
@@ -146,42 +146,42 @@ exact real quadratics, hashing, and deterministic routing.
 
 ---
 
-## 🧭 What do I reach for?
+## What do I reach for?
 
 I find the easiest way into a numerics library is to start with the value or
 operation I need. Pick a row, then follow its link for the detailed contract.
 
 | I need… | Reach for | Where |
 |---|---|---|
-| A probability, a certainty, a weight that can say "all the way" | `UnitInterval32` — the closed `[0, 1]` on a `2⁻³²` grid, with a real `1` | [FixedPoint](FixedPoint/README.md#unitinterval32) |
-| A fraction in `[0, 1)` — blend factor, normalized coordinate, sub-pixel offset | `UnitFraction16` (16-bit) or `UnitFraction32` (32-bit). There is no `1.0` in either, by design | [FixedPoint](FixedPoint/README.md#unitfraction16-and-unitfraction32) |
+| A probability, a certainty, a weight that can say "all the way" | `UnitInterval32`—the closed `[0, 1]` on a `2⁻³²` grid, with a real `1` | [FixedPoint](FixedPoint/README.md#unitinterval32) |
+| A fraction in `[0, 1)`—blend factor, normalized coordinate, sub-pixel offset | `UnitFraction16` (16-bit) or `UnitFraction32` (32-bit). There is no `1.0` in either, by design | [FixedPoint](FixedPoint/README.md#unitfraction16-and-unitfraction32) |
 | A general scalar with an integer part | `FixedQ4816` signed, `UFixedQ4816` unsigned. Choose signedness deliberately | [FixedPoint](FixedPoint/README.md#choosing-a-scalar) |
 | A direction, a velocity, a displacement | `FixedVector2` / `FixedVector3`. A vector is a **displacement**, never a position | [FixedPoint](FixedPoint/README.md#fixedvector2-and-fixedvector3) |
-| A world position at planet scale | `FixedPosition` — a coarse 64-bit cell index plus a small centred local offset, so precision is the same everywhere on the map | [FixedPoint](FixedPoint/README.md#fixedposition) |
-| A 2D rotation | `FixedComplex` — `FromAngle`, `*` composes turns, `Rotate` applies one | [FixedPoint](FixedPoint/README.md#fixedcomplex) |
+| A world position at planet scale | `FixedPosition`—a coarse 64-bit cell index plus a small centred local offset, so precision is the same everywhere on the map | [FixedPoint](FixedPoint/README.md#fixedposition) |
+| A 2D rotation | `FixedComplex`—`FromAngle`, `*` composes turns, `Rotate` applies one | [FixedPoint](FixedPoint/README.md#fixedcomplex) |
 | A 3D rotation | `FixedQuaternion`; add a translation and it becomes `FixedRigidTransform` | [FixedPoint](FixedPoint/README.md#fixedquaternion) |
 | To interpolate or clamp | `FixedQ4816.Lerp` / `FixedQ4816.Clamp`, `FixedVector2.Lerp` / `FixedVector3.Lerp`, `FixedQuaternion.Slerp`, `FixedRigidTransform.ScLerp` (the screw) | [FixedPoint](FixedPoint/README.md#fixedq4816) |
-| Drift-free rate integration (velocity → position, acceleration → velocity) | `FixedRateAccumulator` / `FixedVector3RateAccumulator` — the division remainder carries across ticks | [FixedPoint](FixedPoint/README.md#fixedrateaccumulator-and-fixedvector3rateaccumulator) |
-| A pole-matched second-order response — a target that eases, overshoots, or anticipates instead of snapping | `SecondOrderDynamics` — `Create(f, ζ, r)` derives the coefficients, `Compile`+`Step` for per-tick advance, `Evaluate` for a closed-form read from initial conditions | [FixedPoint](FixedPoint/README.md#secondorderdynamics) |
-| A curve authored by knot curvature rather than control points | `CurvatureSpline.Compile` — knots declare position, tangent direction, and signed curvature; the compiled tangent lengths and a Simpson arc-length table come out exactly. `CompiledCurvatureSpline.Evaluate(arcLength)` samples position, tangent, and curvature per tick | [FixedPoint](FixedPoint/README.md#curvaturespline) |
-| A seeded RNG you can snapshot and resume | `Pcg32XshRr` — one stream per system | [Sampling](Sampling/README.md#pcg32xshrr) |
-| To shuffle a list reproducibly | `Pcg32XshRr.Shuffle` — in-place Fisher–Yates from the high end down | [Sampling](Sampling/README.md#pcg32xshrr) |
+| Drift-free rate integration (velocity → position, acceleration → velocity) | `FixedRateAccumulator` / `FixedVector3RateAccumulator`—the division remainder carries across ticks | [FixedPoint](FixedPoint/README.md#fixedrateaccumulator-and-fixedvector3rateaccumulator) |
+| A pole-matched second-order response—a target that eases, overshoots, or anticipates instead of snapping | `SecondOrderDynamics`—`Create(f, ζ, r)` derives the coefficients, `Compile`+`Step` for per-tick advance, `Evaluate` for a closed-form read from initial conditions | [FixedPoint](FixedPoint/README.md#secondorderdynamics) |
+| A curve authored by knot curvature rather than control points | `CurvatureSpline.Compile`—knots declare position, tangent direction, and signed curvature; the compiled tangent lengths and a Simpson arc-length table come out exactly. `CompiledCurvatureSpline.Evaluate(arcLength)` samples position, tangent, and curvature per tick | [FixedPoint](FixedPoint/README.md#curvaturespline) |
+| A seeded RNG you can snapshot and resume | `Pcg32XshRr`—one stream per system | [Sampling](Sampling/README.md#pcg32xshrr) |
+| To shuffle a list reproducibly | `Pcg32XshRr.Shuffle`—in-place Fisher–Yates from the high end down | [Sampling](Sampling/README.md#pcg32xshrr) |
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` in constant time with two generator advances | [Sampling](Sampling/README.md#weightedsampler-and-aliastabletelement) |
-| Smooth spatial noise | `FieldNoise` — a pure function of `(seed, position)`, nothing to persist | [Sampling](Sampling/README.md#fieldnoise) |
+| Smooth spatial noise | `FieldNoise`—a pure function of `(seed, position)`, nothing to persist | [Sampling](Sampling/README.md#fieldnoise) |
 | Points that spread out without clumping | `LowDiscrepancy.R1`/`R2` for an even-looking spread; `DigitalNetSampler` when supported subdivisions must contain an exact share of the samples | [Sampling](Sampling/README.md#choosing-a-primitive) |
-| Cryptographic randomness | `SecureRandom` — and never in simulation state; it is not reproducible | [Sampling](Sampling/README.md#securerandom) |
+| Cryptographic randomness | `SecureRandom`—and never in simulation state; it is not reproducible | [Sampling](Sampling/README.md#securerandom) |
 | Arithmetic over fixed-size bit patterns, written `GF(2^k)` | `BinaryField<T>` over a chosen modulus, or the canonical `BinaryFields.Degree8/16/32/64/128` | [FiniteFields](FiniteFields/README.md#binaryfieldt) |
 | Error-correction symbols over a binary field, and reading a codeword back | `ReedSolomon.BuildGenerator` once, then `ComputeCheckSymbols` per message and `ComputeSyndromes` to verify | [FiniteFields](FiniteFields/README.md#reedsolomon) |
 | Modular arithmetic mod an odd prime, exact square roots, exact primality on `ulong` | `PrimeField64`, or `QuadraticExtensionField64` when each value needs two prime-field parts | [FiniteFields](FiniteFields/README.md#primefield64) |
 | An exact cyclic convolution, or a frequency-domain transform over a finite field | `NumberTheoreticTransformPlan.Create` once, then `NumberTheoreticTransform.Forward` / `.Inverse` / `.Convolve` | [Transforms](Transforms/README.md#numbertheoretictransform) |
-| A fixed-point FFT — forward/inverse over `FixedComplex`, or a real sequence via `ForwardReal`/`InverseReal` | `FixedFourierTransformPlan.Create` once, then `FixedFourierTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedfouriertransform) |
+| A fixed-point FFT—forward/inverse over `FixedComplex`, or a real sequence via `ForwardReal`/`InverseReal` | `FixedFourierTransformPlan.Create` once, then `FixedFourierTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedfouriertransform) |
 | A plan-free exact ±1 transform over integer lanes | `WalshHadamardTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#walshhadamardtransform) |
 | A fixed-point DCT-II/DCT-III pair over real values | `FixedCosineTransformPlan.Create` once, then `FixedCosineTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedcosinetransform) |
-| Reachability, shortest paths, walk counts, best-probability routes | A `Presentations.Quiver` with the matching material — the rules used to combine path values | [Oracle](Oracle/README.md#choosing-an-entry-point) |
+| Reachability, shortest paths, walk counts, best-probability routes | A `Presentations.Quiver` with the matching material—the rules used to combine path values | [Oracle](Oracle/README.md#choosing-an-entry-point) |
 | Pattern matching represented by algebra values | `TokenPattern` then `PatternMatcher.TryCompile` | [Oracle](Oracle/README.md#the-language-axis) |
 | An exact integer allocation over intervals (jobs per frame, samples per video frame) | `DiscreteMeasure`, compiled to `CompiledDiscreteMeasure64` for the hot path | [below](#root-level-types) |
-| An exact value involving a square root — no floating point, no drift | `RealQuadraticField` names the field, `RealQuadratic` carries the value | [below](#root-level-types) |
-| Proof that a quantized slope reproduces exact Beatty floors — and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [Research](Research/README.md) |
+| An exact value involving a square root—no floating point, no drift | `RealQuadraticField` names the field, `RealQuadratic` carries the value | [below](#root-level-types) |
+| Proof that a quantized slope reproduces exact Beatty floors—and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [Research](Research/README.md) |
 | The fraction with the smallest denominator inside an interval | `SimplestRational.InOpenInterval` | [below](#root-level-types) |
 | A hex grid whose 60° rotations are exact | `HexagonalCoordinate` | [Geometry](Geometry/README.md#hexagonalcoordinate) |
 | Dense hex-disk storage with a continuous neighbour walk and ring symmetries | `HexagonalIndex` | [Geometry](Geometry/README.md#hexagonalindex) |
@@ -189,16 +189,16 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | Dense centered square storage with a continuous cardinal walk and direct symmetries | `SquareIndex` | [Geometry](Geometry/README.md#squareindex) |
 | Dense nonnegative square coordinates with direct swap, common translation, scale and component queries | `ElegantPair` / `ElegantUnpair` and `ElegantSwap`, `ElegantTranslate`, `ElegantScale`, `ElegantMinimum`, `ElegantMaximum`, `ElegantDifference`, `ElegantSum` | `UnsignedNumberFunctions` |
 | Cache-coherent tile/chunk ordering | `HilbertCurve` (locality-preserving) rather than Morton order | [Geometry](Geometry/README.md#hilbertcurve) |
-| A layered index space — rings, shells, shards | `LayerSequence` — constant-time index → layer, exact integer result | [Geometry](Geometry/README.md#layersequence) |
+| A layered index space—rings, shells, shards | `LayerSequence`—constant-time index → layer, exact integer result | [Geometry](Geometry/README.md#layersequence) |
 | One algebraic relationship over several number types, or a proof that two number systems agree | `QuadraticAlgebra<TScalar>` and the rest of the configurable algebra types | [Algebra](Algebra/README.md) |
-| To fold a per-tick state hash for a determinism or replay check | `Fnv1aHash` — allocation-free, endianness-independent | [below](#root-level-types) |
-| A restriction that can only narrow — a capability mask under AND, a quantity under minimum, or both paired as one value | `MeetMask64`, `MeetQuantity64`, `MeetProduct<TFirst, TSecond>` | [below](#root-level-types) |
+| To fold a per-tick state hash for a determinism or replay check | `Fnv1aHash`—allocation-free, endianness-independent | [below](#root-level-types) |
+| A restriction that can only narrow—a capability mask under AND, a quantity under minimum, or both paired as one value | `MeetMask64`, `MeetQuantity64`, `MeetProduct<TFirst, TSecond>` | [below](#root-level-types) |
 | Bit tricks, GCD, integer roots, pairing functions, prime factorization | `BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions` | [below](#root-level-types) |
 | Integer square roots, inverses, primality, or factorization beyond 64 bits | `BigIntegerFunctions`; its API documentation states where primality and factorization are proved or refused | [below](#root-level-types) |
 
 ---
 
-## 🚀 Three small programs
+## Three small programs
 
 These small programs show the flavor of the library before you commit to
 reading a folder README.
@@ -271,10 +271,10 @@ for (var tick = 0; (tick < 120); ++tick) {
 
 ---
 
-## 📏 Four rules
+## Four rules
 
 These four rules protect the determinism promise. Each is stated briefly here
-and explained fully — with the evidence behind it — in the folder that owns it.
+and explained fully—with the evidence behind it—in the folder that owns it.
 
 1. **No floating point in simulation state.** A `double` may enter at an
    authoring boundary and leave at a presentation boundary, but the presentation
@@ -311,7 +311,7 @@ and explained fully — with the evidence behind it — in the folder that owns 
 
 ---
 
-## 🧪 Running the tests
+## Running the tests
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
@@ -331,7 +331,7 @@ surface, including parameters, return values, and exceptions.
 
 | Type | Role |
 |------|------|
-| `Rational` / `RealQuadraticField` / `RealQuadratic` / `ContinuedFraction` | The exact rational (reduced on construction); the descriptor of a real quadratic field `ℚ(√d)`, its radicand canonicalized once; the exact value `(a + b·√d)/c` of such a field, with conjugate, norm and trace; and the repeating continued-fraction expansions of those values — including the convergents, the best rational approximations — without floating point. |
+| `Rational` / `RealQuadraticField` / `RealQuadratic` / `ContinuedFraction` | The exact rational (reduced on construction); the descriptor of a real quadratic field `ℚ(√d)`, its radicand canonicalized once; the exact value `(a + b·√d)/c` of such a field, with conjugate, norm and trace; and the repeating continued-fraction expansions of those values—including the convergents, the best rational approximations—without floating point. |
 | `SimplestRational` | Locate the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot descent. |
 | `CostBound` / `CostModelProfile` | Preserve known, unmodeled, and overflowed costs; compute exact budgets and deadline conversions under an authored service-rate policy. These abstract cycles do not measure a processor's frequency or certify hardware performance. |
 | `DiscreteMeasure` / `CompiledDiscreteMeasure64` / `DiscreteMeasureCompilationFailure` | Allocate an exact integer amount across integer intervals, then compile supported measures into a bounded, allocation-free form for frequently run code. |
@@ -439,16 +439,18 @@ The registered laws compare ordering against independent enumeration, check
 large counts with `BigInteger`, and exercise invalid inputs and unchanged
 destinations on failure. The Deep tier checks every five-card hand.
 `CombinationQueries` and `PermutationQueries` in the
-[Maths benchmark harness](../Puck.Cli/README.md#puck-bench--the-puckmaths-microscope)
+[Maths benchmark harness](../Puck.Cli/README.md#puck-benchthe-puckmaths-microscope)
 measure representative small and wide spaces, including an independent
 quadratic permutation-ranking baseline.
 
 ---
 
-## 🗺️ Where to go next
+## Documentation
 
-- The eight folder READMEs linked from [Orientation](#orientation) are the
+- [wing contracts](#orientation)—the eight folder READMEs are the
   per-type contracts.
-- [tests/Puck.Maths.Tests](../../tests/Puck.Maths.Tests/README.md) — the law
+- [Maths test suite](../../tests/Puck.Maths.Tests/README.md)—the law
   suite, and `LawRegistry.cs` inside it is the executable index of what is proved.
-- [The generated API reference](../../docs/api) — member-by-member docs.
+- [API reference](../../docs/api)—member-by-member docs.
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

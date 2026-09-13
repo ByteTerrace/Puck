@@ -16,7 +16,7 @@ The [project map](../../docs/project-map.md) shows where it sits in the wider
 repository; the [generated API reference](../../docs/api) owns complete member
 signatures, parameters, return values, and exceptions.
 
-## ✨ Key features
+## Key features
 
 - *One recursive render contract:* `IRenderNode` produces a `Surface`, may host
   children, and receives device-loss notifications without changing simulation
@@ -40,7 +40,7 @@ signatures, parameters, return values, and exceptions.
 - *Presentation observability:* frame capture, latest-value publication, emitted
   light, and frame-timing samples remain outside the simulation trajectory.
 
-## 📐 The host boundary
+## The host boundary
 
 The fixed-step simulation is authoritative. Rendering, timing diagnostics,
 capture, and GPU upload observe or present its state; they do not decide what
@@ -60,7 +60,7 @@ graph LR
     Context -. "presentation timing only" .-> Timing["📊 FrameTimingHub"]
 ```
 
-## 🚀 Quick start: a render node
+## Quick start: a render node
 
 An `IRenderNode` can return CPU pixels or a GPU image-view handle. This minimal
 node produces a one-pixel CPU surface and has no device-owned resources to
@@ -109,7 +109,7 @@ Surface surface = root.ProduceFrame(context: in context);
 `InterpolationAlpha` is the remainder divided by `StepTicks`. They are useful
 for smooth presentation, but neither value authorizes another simulation step.
 
-## 🌳 Host contexts and capability ownership
+## Host contexts and capability ownership
 
 `IHostContext` exposes two deliberately different policies:
 
@@ -150,7 +150,7 @@ Composition code can collect `HostCapabilityContribution` values before it
 builds the root context. Each contribution states its runtime type, instance,
 and whether the capability is held.
 
-## ⏱️ Clocks and fixed-step timing
+## Clocks and fixed-step timing
 
 `EngineTicks.PerSecond` is 50,400. Common simulation rates—including 24, 25,
 30, 48, 50, 60, 72, 90, 120, 144, and 240 updates per second—divide that base
@@ -189,7 +189,7 @@ its `Published` event synchronously on the render thread. Observers must keep
 event handlers small and non-blocking. None of this timing data belongs in
 simulation decisions.
 
-## 🖼️ Render lifecycle and publication
+## Render lifecycle and publication
 
 Every `IRenderNode` has a stable `NodeDescriptor`, produces one `Surface`, and
 is disposable. Hosting nodes that own children forward `OnDeviceLost` through
@@ -219,7 +219,7 @@ single writer swaps a holder reference and readers snapshot the newest value.
 It is not a FIFO and retains no history, so use it only when skipping obsolete
 intermediate publications is correct.
 
-## 🧱 Core types
+## Core types
 
 | Area | Types | Purpose |
 |---|---|---|
@@ -306,7 +306,7 @@ handlers and GPU readback retain their pump cost.
 Disposal closes connections and removes discovery. It does not stop World,
 cancel recordings or issue an implicit gameplay action. See the verification section below.
 
-## ✅ Verification
+## Verification
 
 The focused Hosting tests cover capture cadence and fault containment,
 capability-revocation cascades, time-correlation validation, and local control:
@@ -323,3 +323,9 @@ dotnet test tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj -c Release
 ```
 
 The in-process control contract carries a validated `ControlIdentity` (issuer and subject). The host must authorize it and select the acting principal; `ConsoleControlSession` supports a live command guard on the ordinary pump. Local capability sessions retain their Console authority. See [remote admission](../Puck.Mcp/README.md#remote-http-and-oauth).
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

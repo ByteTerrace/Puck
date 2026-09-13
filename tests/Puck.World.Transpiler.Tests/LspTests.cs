@@ -57,6 +57,34 @@ public class LspTests {
         return Encoding.UTF8.GetString(body);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FileUrisResolveCanonicalBasis(bool escapeDriveColon) {
+        var sourcePath = Path.Combine(ShippedWorlds.FindDirectory(), "moth-courtyard.puck");
+        var uri = new Uri(sourcePath).AbsoluteUri;
+        if (escapeDriveColon && OperatingSystem.IsWindows()) {
+            var colon = uri.IndexOf(':', "file:///".Length);
+            Assert.True(colon >= 0);
+            uri = uri[..colon] + "%3A" + uri[(colon + 1)..];
+        }
+        using var input = new MemoryStream();
+        using var output = new MemoryStream();
+        WriteRpcMessage(input, System.Text.Json.JsonSerializer.Serialize(new {
+            jsonrpc = "2.0", method = "textDocument/didOpen",
+            @params = new { textDocument = new { uri, languageId = "puck", version = 1,
+                text = "schema: \"puck.world.def.v1\"\nbasis: \"avatars/moth.puck\"\n" } }
+        }));
+        WriteRpcMessage(input, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+        input.Position = 0;
+        await new PuckLanguageServer(input, output).RunAsync(TestContext.Current.CancellationToken);
+        output.Position = 0;
+        var notification = JsonNode.Parse(ReadRpcMessage(output)!);
+        Assert.Equal("textDocument/publishDiagnostics", notification?["method"]?.ToString());
+        var diagnostics = notification?["params"]?["diagnostics"]?.AsArray();
+        Assert.NotNull(diagnostics);
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic?["code"]?.ToString() == "PUCK035");
+    }
     [Fact]
     public async Task TestLspInitializeAndShutdown() {
         using var clientToServer = new MemoryStream();
@@ -143,6 +171,6 @@ public class LspTests {
         Assert.True(edits.Count > 0);
         var newText = edits[0]?["newText"]?.ToString();
         Assert.NotNull(newText);
-        Assert.Contains("    authority: \"test\"", newText);
+        Assert.Contains("  authority: \"test\"", newText);
     }
 }

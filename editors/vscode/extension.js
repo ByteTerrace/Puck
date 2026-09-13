@@ -33,7 +33,7 @@ function queueRestart() {
 }
 
 async function activate(context) {
-    require('./container-colors').registerContainerColors(vscode, context);
+    await require('./container-colors').registerContainerColors(vscode, context);
     context.subscriptions.push(
         vscode.commands.registerCommand('puck.restartLanguageServer', queueRestart),
         vscode.workspace.onDidChangeConfiguration(event => {

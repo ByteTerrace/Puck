@@ -75,6 +75,12 @@ roms/
 worlds/
 # The checked-in world documents are repo content, not runtime saves — exempt them from the bare worlds/ pattern.
 !/src/Puck.World/Assets/worlds/
+# Generated world documents with verified .puck parents. Keep these rules after the
+# authored-world directory exception. Regenerate the JSON for builds and packaging.
+/src/Puck.World/Assets/worlds/avatars/moth.world.json
+/src/Puck.World/Assets/worlds/moth-courtyard.world.json
+/src/Puck.World/Assets/worlds/tools/hgb-compare.world.json
+/src/Puck.World/Assets/worlds/tools/hgb-mirror.world.json
 # A battery's own test world is repo content too, and without it the battery cannot run at all.
 !/wasm/puck-addon-channelwalk/worlds/
 # A battery's own test cartridge is repo content too: a real, synthetic, code-generated Game Boy ROM
@@ -91,3 +97,8 @@ bench-reports/
 .codex
 .tmp
 docs/.obsidian
+# Shader compiler outputs and local freshness records; CI packages the bytecode.
+*.spv
+*.dxil
+*.spv.hash
+*.dxil.hash

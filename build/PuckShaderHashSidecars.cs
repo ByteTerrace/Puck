@@ -60,16 +60,16 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
 /// <summary>
 /// Independently recomputes both hashes <see cref="PuckWriteShaderHashSidecars"/> writes from whatever is on
-/// disk right now and compares them against each committed <c>.hash</c> sidecar — catching a committed
+/// disk right now and compares them against each cached <c>.hash</c> sidecar — catching a cached
 /// bytecode file that is stale relative to its source (an edited <c>.hlsl</c>/<c>.hlsli</c> whose recompiled
-/// bytecode and sidecar were never committed) or relative to its own sidecar (bytecode bytes changed without a
+/// bytecode and sidecar were not refreshed) or relative to its own sidecar (bytecode bytes changed without a
 /// recompile). Deliberately independent of <see cref="PuckWriteShaderHashSidecars"/>'s own run this pass: on a
 /// build where the source changed, the write task above already refreshed the sidecar to match, so this task
-/// passes trivially; on a from-clean-checkout build where nothing recompiled (MSBuild's own Inputs/Outputs
-/// timestamp check saw no textual change), this task is what actually reads the currently-committed sidecar.
+/// passes trivially; on an incremental build where nothing recompiled (MSBuild's own Inputs/Outputs
+/// timestamp check saw no textual change), this task is what actually reads the cached sidecar.
 /// </summary>
 public sealed class PuckValidateShaderBytecodeFresh : Task {
-    /// <summary>Every committed bytecode file (.spv/.dxil); each item's <c>SourcePath</c> metadata names its
+    /// <summary>Every cached bytecode file (.spv/.dxil); each item's <c>SourcePath</c> metadata names its
     /// matching <c>.hlsl</c> (already confirmed to exist by <c>ValidateShaderBytecodeSources</c>).</summary>
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
 
@@ -91,8 +91,8 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
             if (!File.Exists(path: sidecarPath)) {
                 Log.LogError(
                     message: $"Shader bytecode '{bytecode.ItemSpec}' has no '.hash' sidecar. Recompile (edit and " +
-                        "save its source, or delete the bytecode so a rebuild regenerates it) and commit the " +
-                        "refreshed bytecode and sidecar together.");
+                        "save its source, or delete the bytecode so a rebuild regenerates it) to refresh the " +
+                        "bytecode and sidecar together.");
                 continue;
             }
 
@@ -103,15 +103,15 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
             if (!string.Equals(a: recordedSourceHash, b: expectedSourceHash, comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(
                     message: $"Shader bytecode '{bytecode.ItemSpec}' is stale relative to its source (or was not " +
-                        "recompiled after a source or included .hlsli change). Recompile and commit the refreshed " +
+                        "recompiled after a source or included .hlsli change). Recompile to refresh the " +
                         "bytecode and '.hash' sidecar.");
             }
 
             if (!string.Equals(a: recordedBytecodeHash, b: expectedBytecodeHash, comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(
-                    message: $"Shader bytecode '{bytecode.ItemSpec}' does not match its own committed '.hash' " +
-                        "sidecar (the committed bytecode bytes changed without a recompile). Recompile and commit " +
-                        "the refreshed bytecode and '.hash' sidecar.");
+                    message: $"Shader bytecode '{bytecode.ItemSpec}' does not match its own cached '.hash' " +
+                        "sidecar (the cached bytecode bytes changed without a recompile). Recompile to refresh " +
+                        "the bytecode and '.hash' sidecar.");
             }
         }
 

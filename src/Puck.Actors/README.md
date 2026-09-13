@@ -1,7 +1,7 @@
 # Puck.Actors
 
 Orleans actor tier for ByteTerrace. Hosts one `UserGrain` per user (keyed by Entra `oid`) that owns the
-provisioning lifecycle with reminder-driven, verified retries. Design doc: "Orleans at ByteTerrace" —
+provisioning lifecycle with reminder-driven, verified retries. Design doc: "Orleans at ByteTerrace"—
 https://claude.ai/code/artifact/aed8686b-2eff-4595-9ec0-6030489200dc
 
 ## Topology
@@ -10,7 +10,7 @@ https://claude.ai/code/artifact/aed8686b-2eff-4595-9ec0-6030489200dc
   existing managed environment (`bytrccaep000`).
 - Clustering, reminders, and grain state live on the **private** storage account (`bytrcstp000`:
   Azure Tables for membership/reminders, blob container `orleans-state` for grain state). Never the
-  user-writable `bytrcstp001` containers — grain state must not be user-forgeable.
+  user-writable `bytrcstp001` containers—grain state must not be user-forgeable.
 - The Functions edge (`bytrcfuncp000`) keeps the public `POST/GET /api/self-onboard` contract and proxies
   to this tier over the internal API below.
 
@@ -43,7 +43,7 @@ Both return `200` with:
 `Ready` is a grain-memory fast path. A `Faulted` grain resumes from its last completed step on the next
 `ensure-provisioned` call (fresh sign-in ⇒ fresh escrow).
 
-The escrow is protected with purpose `users.tokens` and sub-purposes `[oid, tokenDiscriminator]` — it can
+The escrow is protected with purpose `users.tokens` and sub-purposes `[oid, tokenDiscriminator]`—it can
 only be unprotected by a host in the same DataProtection application, and only for the matching grain.
 
 **Authentication (Entra, no secrets)**: when Azure-hosted, `/users/*` requires a bearer token for the
@@ -51,7 +51,7 @@ shared application registration (`e6a7ab9f…`) carrying the app-only role `Acto
 defined on the app registration and assigned to the Functions edge's managed identity in Bicep; the
 edge acquires the token with its identity for scope `https://api.byteterrace.com/.default`. Locally
 (no Azure fabric configured), the API runs open. Note: the JwtBearer scheme must be registered AFTER
-`UseOrleans` — see the comment in `Program.cs`.
+`UseOrleans`—see the comment in `Program.cs`.
 
 ## Configuration
 
@@ -67,7 +67,7 @@ edge acquires the token with its identity for scope `https://api.byteterrace.com
 | `Authorization:JwtBearer:*` | Entra validation for the internal API (from the shared config store); mandatory when Azure-hosted |
 
 With no `PrivateStorage:*` endpoints configured (local dev) the silo runs localhost clustering with
-in-memory reminders/state and an ephemeral DataProtection key ring — `dotnet run` just works.
+in-memory reminders/state and an ephemeral DataProtection key ring—`dotnet run` just works.
 
 ## Deploy
 
@@ -95,7 +95,7 @@ integration** on subnet `bytrcsnetp003` (outbound egresses the subnet → NAT ga
 and its Front Door route are unaffected. Because ACA has no per-app private inbound on a public
 environment (internal ingress is environment-scoped only), the silo rides the environment's public
 inbound with three stacked guards: ingress IP restrictions allowing only the VNet's NAT egress
-prefix (`bytrcipprep000`, currently `13.66.80.4/31` — resolved from the resource at deploy time),
+prefix (`bytrcipprep000`, currently `13.66.80.4/31`—resolved from the resource at deploy time),
 an Entra app-only bearer token carrying the `Actors.Invoke` role (assigned to the edge's managed
 identity only), and the DataProtection-bound escrow, which is unforgeable without the shared
 DataProtection key ring. The Functions edge is already VNet-integrated
@@ -117,3 +117,6 @@ immutable network change: delete + redeploy `bytrccaep000` (CanNotDelete locks o
 The Azure deployment imports `Onboarding:ActorsBaseUrl` from the current
 `actorsEndpoint` infrastructure output before updating the Actors image.
 
+## Documentation
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

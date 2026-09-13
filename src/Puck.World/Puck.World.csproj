@@ -53,9 +53,15 @@
         <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
      <ItemGroup>
-        <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets\**" Exclude="Assets\worlds\avatars\moth.world.json;Assets\worlds\moth-courtyard.world.json;Assets\worlds\tools\hgb-compare.world.json;Assets\worlds\tools\hgb-mirror.world.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Explicit items exist even when generation occurs after project evaluation. -->
+        <Content Include="Assets\worlds\avatars\moth.world.json;Assets\worlds\moth-courtyard.world.json;Assets\worlds\tools\hgb-compare.world.json;Assets\worlds\tools\hgb-mirror.world.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Build-time world generation only; the CLI is not a runtime dependency. -->
+        <ProjectReference Include="..\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 </Project>

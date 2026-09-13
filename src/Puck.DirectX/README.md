@@ -2,8 +2,8 @@
 
 The low-level Direct3D 12 (DXGI + D3D12) backend for the Puck engine. Where
 `Puck.Vulkan` hand-binds a flat C loader, DirectX is COM-based, so this project leans on
-**[Microsoft.Windows.CsWin32](https://github.com/microsoft/CsWin32)** — Microsoft's actively
-maintained, AOT-friendly P/Invoke + COM source generator — to emit the raw bindings. That
+**[Microsoft.Windows.CsWin32](https://github.com/microsoft/CsWin32)**—Microsoft's actively
+maintained, AOT-friendly P/Invoke + COM source generator—to emit the raw bindings. That
 fits Puck's existing spirit: the engine already uses source-generated interop
 (`[LibraryImport]` in `Puck.Platform`), and CsWin32 generates `unsafe`, pointer-and-vtable,
 zero-marshaling code in the same shape as the rest of the codebase.
@@ -28,14 +28,14 @@ passes. Sampled images permit both pixel and compute shader reads. UAV barriers
 order repeated writes, and raw UAV views clear storage buffers. Temporary clear
 descriptors retire with their fenced command buffers, including reload and reset.
 
-## ✨ Key features
+## Key features
 
 - *Source-generated bindings, not hand-written P/Invoke:* CsWin32 emits the
   raw COM surface from `NativeMethods.txt`, `unsafe` and pointer/vtable-shaped
   in the same style as the rest of the codebase's interop.
 - *No runtime COM marshaling:* `NativeMethods.json` sets `allowMarshaling:
   false`, so COM interfaces come through as `unsafe` structs with
-  function-pointer vtables — no marshaling ceremony, no GC pressure.
+  function-pointer vtables—no marshaling ceremony, no GC pressure.
 - *A WARP fallback for headless verification:* software rendering is always
   available through `IDirectXDeviceApi.CreateWarpDevice`, so CI and
   no-GPU machines can still exercise the device path.
@@ -45,7 +45,7 @@ descriptors retire with their fenced command buffers, including reload and reset
 
 ---
 
-## 📐 Structure
+## Structure
 
 The layering mirrors `Puck.Vulkan` so the two backends read the same way:
 
@@ -53,7 +53,7 @@ The layering mirrors `Puck.Vulkan` so the two backends read the same way:
 |--------|--------|-----------------|
 | `Messages/` | `DirectX*` | `readonly record struct` projections of native data (`DirectXAdapterDescription`). |
 | `Interop/` | `DirectX*`, `Dxgi*` | The `IDisposable` handle owner (`DirectXDevice`) and shared low-level helpers (`DxgiInterop`, `HResultExtensions`). |
-| `Interfaces/` | `IDirectX*Api` | The contracts — the dependency-injection / mocking seam. |
+| `Interfaces/` | `IDirectX*Api` | The contracts—the dependency-injection / mocking seam. |
 | `Apis/` | `DirectXNative*Api` | Thin implementations that marshal to the generated DXGI / D3D12 entry points. |
 
 Top-level helpers: `DirectXException` (carries the failing operation + `HRESULT`) and
@@ -64,12 +64,12 @@ Top-level helpers: `DirectXException` (carries the failing operation + `HRESULT`
 `NativeMethods.txt` lists exactly the APIs to generate; `NativeMethods.json` sets
 `allowMarshaling: false` so COM interfaces come through as `unsafe` structs with
 function-pointer vtables (no runtime COM marshaling, no GC ceremony). The generated
-`Windows.Win32.*` types are `internal` to this assembly — only Puck types cross the public
+`Windows.Win32.*` types are `internal` to this assembly—only Puck types cross the public
 boundary.
 
 ---
 
-## 🚀 Quick start
+## Quick start
 
 ```csharp
 using Puck.DirectX;
@@ -87,10 +87,10 @@ foreach (var adapter in adapterApi.EnumerateAdapters()) {
 using var device = deviceApi.CreateWarpDevice(minimumFeatureLevel: DirectXFeatureLevel.Level110);
 ```
 
-`DirectXDevice` owns its `ID3D12Device` and releases it exactly once on `Dispose` — dispose
+`DirectXDevice` owns its `ID3D12Device` and releases it exactly once on `Dispose`—dispose
 it like any other Puck handle owner.
 
-## 🎛️ Capabilities
+## Capabilities
 
 | Concern | Interface | Native call(s) | Result |
 |---------|-----------|----------------|--------|
@@ -101,12 +101,12 @@ it like any other Puck handle owner.
 
 ---
 
-## ⚠️ Result handling
+## Result handling
 
 Native calls return `HRESULT`. The internal `HResultExtensions.ThrowIfFailed(operation)`
 turns a failing code into a `DirectXException` carrying the operation name and the
 `HRESULT`, matching `Puck.Vulkan`'s `VulkanException` pattern. (`EnumWarpAdapter` has no
-non-throwing overload and surfaces the framework's COM exception directly — it effectively
+non-throwing overload and surfaces the framework's COM exception directly—it effectively
 never fails.)
 
 ---
@@ -122,7 +122,7 @@ never fails.)
   `Release`d. The APIs use `try/finally` around transient factories and adapters; persistent
   objects are owned by an `IDisposable` `Interop` wrapper.
 
-## 📋 Core types
+## Core types
 
 | Type | Role |
 |------|------|
@@ -134,7 +134,7 @@ never fails.)
 | `DirectXException` / `HResultExtensions` | The failing-`HRESULT`-to-exception seam every native call funnels through. |
 | `DirectXGpu*` (`Apis`/`Factories`/`Interop`) | The `Puck.Abstractions` GPU-contract implementations: compute pipelines, descriptor allocation, storage buffers/images, shared-surface export, DXR acceleration structures, queue submission, timestamp pools. |
 
-## 🧪 Verification
+## Verification
 
 There is no dedicated `Puck.DirectX.Tests` project; the backend is verified by
 running the engine on Direct3D 12 and by `puck parity`, which boots the real
@@ -146,11 +146,15 @@ dotnet build Puck.slnx -c Release
 dotnet src/Puck.Cli/publish/Puck.Cli.dll parity
 ```
 
-## 📦 Packaging
+## Packaging
 
 `ByteTerrace.Puck.DirectX` depends on `Puck.Abstractions` (the neutral GPU
 contracts it implements) and, build-only, `Microsoft.Windows.CsWin32`
-(`PrivateAssets="all"` — a source generator, never a runtime dependency of a
+(`PrivateAssets="all"`—a source generator, never a runtime dependency of a
 consumer). `Puck.DirectX.Presentation` and `Puck.World`/`Puck.Launcher.Windows`
 depend on it for the Direct3D 12 backend; presentation, windowing, and shader
 compilation live upstream in `Puck.DirectX.Presentation`.
+
+## Documentation
+
+📚 [Rendering](https://github.com/ByteTerrace/Puck/blob/main/docs/rendering/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

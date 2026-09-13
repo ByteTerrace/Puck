@@ -29,7 +29,7 @@ public sealed class FileUpdateApplier : IUpdateApplier {
         }
 
         foreach (var file in payload.Files) {
-            var filePath = Path.Combine(path1: versionDirectory, path2: file.Path.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+            var filePath = Path.Combine(path1: versionDirectory, path2: file.Path);
 
             if (!File.Exists(path: filePath)) {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' is missing from '{versionDirectory}' — refused rather than applied");

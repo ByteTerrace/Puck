@@ -13,7 +13,7 @@ listed in [NuGet.Config](../NuGet.Config).
 
 The desktop render path needs a compatible Direct3D 12 or Vulkan GPU and the
 DirectX Shader Compiler (`dxc`) on the process search path. Check the
-[World launch guide](../src/Puck.World/README.md#run-it) and the selected
+[World launch guide](../src/Puck.World/README.md#usage) and the selected
 backend's requirements before choosing a device. Live GLSL/Shadertoy editing
 also needs glslang and SPIRV-Cross; the
 [shader compiler guide](../src/Puck.Shaders/README.md#one-off-shaders) explains

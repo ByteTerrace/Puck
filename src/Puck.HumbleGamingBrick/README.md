@@ -1,7 +1,7 @@
 # Puck.HumbleGamingBrick
 
 Puck.HumbleGamingBrick is the shared SM83 machine that plays every DMG, MGB,
-SGB, CGB, and AGB-compatibility hardware revision on one core — CPU, PPU, APU,
+SGB, CGB, and AGB-compatibility hardware revision on one core—CPU, PPU, APU,
 timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer
 link. Hardware differences (Color palette RAM, HDMA, double speed, the boot
 handoff, the fetcher's row latch) are expressed as named capability gates read
@@ -12,14 +12,14 @@ supplies only the SM83-family hardware itself.
 This project is truly open source and dual-licensed under Apache-2.0 or MIT;
 see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
 
-## ✨ Key features
+## Key features
 
 - *One core, every revision:* `ConsoleModel` is revision-valued
   (`Dmg0`…`DmgC`, `Mgb`, `Sgb`, `Sgb2`, `Cgb0`…`CgbE`, `Agb`, `Ags`), and
   components ask `ConsoleModelExtensions` a named question —
   `SupportsColor`, `LatchesFetchRowAtTileStep`, `HasAgbBootHandoff`,
   `SensesOwnInfraredLight`, `SeedsWaveRamOnBoot`, `LeavesBootChimeSounding`,
-  `DeselectsJoypadOnBoot` — instead of comparing against a member. Each
+  `DeselectsJoypadOnBoot`—instead of comparing against a member. Each
   question's documentation states the hardware fact it answers.
 - *A live, no-reboot device swap:* `Machine.SwitchModel` re-gates every
   color-path component and applies the per-ROM `ModePoke` recipes
@@ -39,7 +39,7 @@ see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
   (quarter ticks by default), and `Ppu`/`HdmaController` reproduce the
   STAT/memory-lock schedule dot for dot.
 
-## 📐 Hosting
+## Hosting
 
 ```mermaid
 flowchart LR
@@ -51,10 +51,10 @@ flowchart LR
 
 `GamingBrickEngine` (`Id = "gaming-brick"`) is the `IMachineEngine`
 implementation a host resolves by id; its options string is an
-order-independent, space-separated token set — a model keyword plus an optional
+order-independent, space-separated token set—a model keyword plus an optional
 `dmgspeed` fairness pin that holds the tick-to-cycle budget fixed regardless of
 the KEY1 double-speed latch. A family token (`dmg`/`cgb`/`agb`, default `dmg`)
-selects that family's target revision — `DmgC`, `CgbE`, `Agb` — and a revision
+selects that family's target revision—`DmgC`, `CgbE`, `Agb`—and a revision
 token (`dmg0`, `dmgb`, `dmgc`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgba`, `cgbb`,
 `cgbc`, `cgbd`, `cgbe`, `ags`) names one exactly.
 
@@ -92,8 +92,8 @@ Each member keeps publishing its framebuffer, audio ring, feedback, and step
 count through its own host, so nothing above the seam changes; per-seat pads
 route by cable order. While linked, a member's own `Step`/`Submit` refuses work
 and its peek/poke/reconfigure/flush marshal onto the link thread. Disposing the
-link severs the cable at once — an unfinished externally-clocked transfer stays
-pending on its port, as an unplugged console's does — and returns both cores to
+link severs the cable at once—an unfinished externally-clocked transfer stays
+pending on its port, as an unplugged console's does—and returns both cores to
 their own workers. The cable is point to point, so a set of three or more is
 refused by name rather than partially linked.
 
@@ -106,7 +106,7 @@ interleave, and the medium's own counters together. That image is also the
 whole seam a cross-process transport would have to carry, alongside each
 submitted (tick budget, seat inputs) segment; no such transport exists.
 
-## 🚀 Quick start
+## Quick start
 
 For a .NET 10 application with its own update loop, reference
 `ByteTerrace.Puck.HumbleGamingBrick` and construct the synchronous core.
@@ -163,7 +163,7 @@ directly is the lower-level path `MachineHost` itself builds on. Omitting
 component registration; call `AddHumbleGamingBrickComponents()` there along
 with custom registrations. Forks retain the configuration and composition.
 
-## 🔌 Peripherals and link
+## Peripherals and link
 
 The bus hosts a cartridge (`RomOnlyCartridge`/`Mbc1`–`Mbc7`/`HuC1`/`HuC3`/
 `Mmm01`, selected by `Cartridge.Load` from the ROM header) plus the serial
@@ -177,7 +177,7 @@ at power-on. Its tables are also what the forge's authored boot ROMs
 (`BootRomBuilder`) time themselves against, so the prediction and the program
 that has to satisfy it read the same data.
 
-## 📋 Core types
+## Core types
 
 | Area | Types | Role |
 |---|---|---|
@@ -190,9 +190,9 @@ that has to satisfy it read the same data.
 | Link | `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IInfraredPeer`, `IInfraredCartridge`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions. |
 | Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.GamingBricks`'s queued-host and cable-link substrate. |
 
-## 🧪 Verification
+## Verification
 
-`Puck.HumbleGamingBrick.Post` is the gate — there is no separate unit-test
+`Puck.HumbleGamingBrick.Post` is the gate—there is no separate unit-test
 project for this core:
 
 ```powershell
@@ -207,10 +207,14 @@ conformance/acceptance ROM suites (`--roms`,
 diagnostic switch. `Puck.GamingBricks.Tests` exercises the shared
 serialization/fork/queued-host substrate this core builds on.
 
-## 📦 Packaging
+## Packaging
 
 `ByteTerrace.Puck.HumbleGamingBrick` depends on `Puck.Abstractions` (the
 `IMachineEngine`/`IMachineRuntime` contracts it implements),
 `Puck.GamingBricks` (snapshot, fork, and queued-host substrate), and
 `Puck.Maths` (fixed-point and hashing primitives). `Puck.World.Schema` and
 everything layered above it depend on this package for the SM83 machine family.
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

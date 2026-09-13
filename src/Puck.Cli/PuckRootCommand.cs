@@ -6,6 +6,7 @@ using Puck.Cli.Analysis;
 using Puck.Cli.Architecture;
 using Puck.Cli.Automation;
 using Puck.Cli.Azure;
+using Puck.Cli.Branding;
 using Puck.Cli.Bench;
 using Puck.Cli.Canary;
 using Puck.Cli.Citations;
@@ -44,6 +45,7 @@ internal static class PuckRootCommand {
             ArtifactsCommand.Create(),
             AzureCommand.Create(),
             BenchRunner.Create(),
+            BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),
             CitationsCommand.Create(),

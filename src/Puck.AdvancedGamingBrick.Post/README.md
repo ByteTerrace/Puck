@@ -249,7 +249,7 @@ machines and identifies the first differing snapshot section and byte. Use
   the raw snapshot image plus a `<file>.sections.txt` sidecar (name/offset/
   length per component) to `artifacts/agb-post/snapshot.bin` by default.
   Prints the output paths and the snapshot's FNV-1a fingerprint. Offline input
-  for diffing two builds' snapshot images byte-for-byte — `--hash-divergence`
+  for diffing two builds' snapshot images byte-for-byte—`--hash-divergence`
   only proves a single build's internal determinism.
 
 ## Co-simulation
@@ -290,3 +290,7 @@ comparison runs use normal hardware settings and reject these overrides.
 Reference-suite totals are measurements, not substitute specifications. Record
 itemized failures and preserve the ROM, BIOS profile, and command needed to
 reproduce them.
+
+## Documentation
+
+📚 [Machine emulation manual](../../docs/emulation/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

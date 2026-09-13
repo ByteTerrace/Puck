@@ -38,13 +38,13 @@ by the stage rather than escaping from a background thread.
 | `--link-rom <file>` | A link-capable commercial cartridge for `link-game-replay`; the stage skips without it. |
 | `--trade-rom <file>` | The cross-generation trade cartridge for the scripted trade stages; they skip without it. |
 | `--artifacts <directory>` | Override `artifacts/gb-post`. |
-| `--require-assets` | A suite's own ledger rows not matched by a discovered case fail infra (exit 2) instead of skipping — catches a corpus missing entirely, not just one absent ROM. |
+| `--require-assets` | A suite's own ledger rows not matched by a discovered case fail infra (exit 2) instead of skipping—catches a corpus missing entirely, not just one absent ROM. |
 | `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
 | `--corpus-cache <directory>` | Cache root used for both fetching and resolving corpora. |
 | `--accept` | After the run, promote its candidate ledger to `Expectations.json`; see [Accepting](#accepting). |
 | `--accept-candidate <file>` | Promote a candidate a previous run wrote (a build agent's artifact, say) without running anything. |
-| `--accept-regressions` | With an accept, acknowledge that at least one case regressed from a recorded verdict — otherwise the write is refused. |
-| `--accept-shrink` | With an accept, acknowledge that at least one recorded case is no longer discovered — otherwise the write is refused. |
+| `--accept-regressions` | With an accept, acknowledge that at least one case regressed from a recorded verdict—otherwise the write is refused. |
+| `--accept-shrink` | With an accept, acknowledge that at least one recorded case is no longer discovered—otherwise the write is refused. |
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
 check failed. Exit code 2 means infrastructure prevented a stage from running,
@@ -81,8 +81,8 @@ substrate probes explicitly select fast startup so their timing budgets measure
 the cartridge and host behavior, not startup animation. Bundled cold startup
 has its own [`bundled-firmware` stage](#the-authored-boot-rom).
 
-Every case has a wall-clock budget derived from its frame cap — real time for
-the frames plus a fixed allowance — and a case that exceeds it is an `error`
+Every case has a wall-clock budget derived from its frame cap—real time for
+the frames plus a fixed allowance—and a case that exceeds it is an `error`
 row, which fails the stage and blocks an accept, rather than a hung run.
 Cases inside a stage run on every processor at once; the
 `ledger-parallel-equivalence` stage proves the measured rows do not depend on
@@ -93,7 +93,7 @@ that.
 | Tier | Coverage | Assets |
 |---|---|---|
 | A | determinism; snapshot and battery-save round trips; victory metadata; fork determinism; AGB costume; bundled-firmware startup and restoration; live firmware-reconfiguration boundary; authored-boot-ROM handoff; trio lockstep; camera capture; queued-host substrate contract; live cable-linked queued hosts and their coupled rewind; throughput; zero-alloc-per-frame | none |
-| B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the ledger-gated corpus — every suite under the reference-ROM root, see [Corpus ledger](#corpus-ledger); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
+| B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the ledger-gated corpus—every suite under the reference-ROM root, see [Corpus ledger](#corpus-ledger); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
 | C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; commercial link-game replay; cross-gen trade-cart save acceptance and complete trade | synthetic stages need none; commercial stages need `--link-rom` or `--trade-rom` |
 
 Missing optional assets produce a skip rather than a failure (or, under
@@ -103,89 +103,89 @@ own generated firmware is checked in and bundled by the runtime package.
 
 ## Corpus ledger
 
-Every Tier-B ROM suite under the resolved corpus root — blargg and mooneye's
+Every Tier-B ROM suite under the resolved corpus root—blargg and mooneye's
 `acceptance/` (the original two), plus AGE, both acid tests, mealybug, both
 mooneye-test-suite trees (`acceptance/`, `emulator-only/`, `misc/`,
 `manual-only/`) and the wilbertpol fork of them, SameSuite, GBMicrotest,
 gambatte, little-things-gb, scribbltests, strikethrough, turtle-tests, bully,
-rtc3test, and the MBC3 Bank Tester — is gated the same mechanical way: a
+rtc3test, and the MBC3 Bank Tester—is gated the same mechanical way: a
 per-(suite, ROM path, model) row in `Expectations.json` records what that case
 is expected to do, and each `LedgerRomStage` (`SuiteCatalog` discovers its
 cases, `LedgerEvaluator` applies the rules below, `ProbeRunner` dispatches to
 the probe named on the row) compares the ROM's actual behavior against it.
-`Expectations.json` is generated, never hand-edited — the stage is the runner
+`Expectations.json` is generated, never hand-edited—the stage is the runner
 that fails when it disagrees with its own source, the same shape as
-`FileLengths.json`/`VerifiedCode.json` — and every run writes the candidate
+`FileLengths.json`/`VerifiedCode.json`—and every run writes the candidate
 that would replace it; see [Accepting](#accepting).
 
 A row records the suite, the ROM's path relative to that suite's on-disk root,
-the model (the exact `ConsoleModel` the case ran on — `DmgC`, `CgbE`, `Agb`,
+the model (the exact `ConsoleModel` the case ran on—`DmgC`, `CgbE`, `Agb`,
 `Mgb`, `Sgb2`, and so on, not a coarse family tag), the probe kind, the ROM
 bytes' FNV-1a hash, and the outcome (`pass`/`fail`/`unrunnable`/`inconclusive`),
 with a `Reason` for anything but `pass`, a `DiffPixels` count for a screenshot
-`fail`, and — for a `screenshot` case — an `ExpectedImageHash`: the winning
+`fail`, and—for a `screenshot` case—an `ExpectedImageHash`: the winning
 expected-image candidate's FNV-1a hash, pinned the same way the ROM's is, so a
 swapped or corrupted fixture is a recorded mismatch rather than a silently
 different comparison.
 
 Probe kinds:
 
-- `conformance-serial` — the blargg `$A000` result block (`ConformanceRomProbe`).
-- `acceptance-fibonacci` — the mooneye Fibonacci-or-`0x42` signature over
+- `conformance-serial`—the blargg `$A000` result block (`ConformanceRomProbe`).
+- `acceptance-fibonacci`—the mooneye Fibonacci-or-`0x42` signature over
   serial (`AcceptanceRomProbe`); mooneye's `emulator-only/` and `misc/` trees
   use the same probe as `acceptance/`, since they are built with the same
   harness.
-- `register-signature` — the same Fibonacci-or-`0x42` signature read straight
+- `register-signature`—the same Fibonacci-or-`0x42` signature read straight
   from the register file after every frame instead of over serial
   (`RegisterSignatureProbe`), for suites that never transmit it: the
   wilbertpol fork and SameSuite. A register match is trusted only once the
-  exit itself is corroborated — either the CPU has locked up
+  exit itself is corroborated—either the CPU has locked up
   (`Sm83StateCodec.ReadTail`'s `lockedUp` output, read through the CPU's
   existing `SaveState` seam) or an `0x40 LD B,B` opcode trap has been fetched
-  at an instruction boundary (`ICpuTraceSink`) — since the register file can
+  at an instruction boundary (`ICpuTraceSink`)—since the register file can
   otherwise transiently match mid-computation. The run ends early once
   corroborated rather than burning the rest of the frame budget.
-- `gb-microtest` — GBMicrotest's `$FF80`-`$FF82` result block, read through
+- `gb-microtest`—GBMicrotest's `$FF80`-`$FF82` result block, read through
   `SystemBus.DebugReadByte` (`GbMicrotestProbe`). The suite's own howto is
   explicit that `$FF82` is the sole reliable indicator and that `$FF80`/`$FF81`
   are not always set consistently even on a genuine pass, so this probe never
-  gates on them agreeing — they are read only to annotate a failure's detail.
-- `screenshot` — a fixed-frame-budget framebuffer capture packed through
+  gates on them agreeing—they are read only to annotate a failure's detail.
+- `screenshot`—a fixed-frame-budget framebuffer capture packed through
   `FramebufferRgba`, compared pixel-exact against the first expected PNG (of a
   suite's device-tag fallback list) that exists on disk, decoded through
-  `Puck.Assets.PngDecoder` (`ScreenshotProbe`) — extended in the same change to
+  `Puck.Assets.PngDecoder` (`ScreenshotProbe`)—extended in the same change to
   read the corpus's own sub-8-bit grayscale and palette-indexed screenshots
   (bit depths 1/2/4, color type 3 via `PLTE`/`tRNS`), not just the 8-bit
   RGB/RGBA/grayscale-alpha PngEncoder itself ever writes. This framebuffer's
   DMG shades and CGB `(X<<3)|(X>>2)` channel expansion already match every
   suite's "common palette" convention except gambatte's own CGB screenshots,
-  which are rendered under gambatte's own weighted RGB mix — a case's
+  which are rendered under gambatte's own weighted RGB mix—a case's
   `LedgerCase.Palette` selects that conversion (`GambatteCgbPalette`) before
   the comparison runs. A `ScreenshotProbe` case whose expected image still
   cannot be decoded reports `Inconclusive` instead of throwing, so one bad
   image never takes its whole suite's stage down as an infrastructure
   failure. Before comparing pixels, a shared `LivenessGate` requires the
   machine's program counter to have left a small window around its entry
-  point and retired a minimum instruction count — a machine that never ran
+  point and retired a minimum instruction count—a machine that never ran
   anything (a `jr $-2` reset trap, say) can otherwise leave the framebuffer at
   its power-on color, which coincidentally satisfies a "blank screen"
   expectation without the ROM under test having done anything; that case is
   also `Inconclusive`.
-- `hex-pattern` — gambatte's `_out<hex>` convention: the expected hex digits
+- `hex-pattern`—gambatte's `_out<hex>` convention: the expected hex digits
   are drawn as 8x8 monochrome tiles at the top of the screen, compared against
   a ported copy of `test/testrunner.cpp`'s own glyph table (`HexPatternProbe`).
   A pattern character with no glyph is `Inconclusive` rather than an early
   pass. The cell right after the last digit is deliberately not required to
-  be clear — several real cases tile further hex-shaped content immediately
+  be clear—several real cases tile further hex-shaped content immediately
   past their own result digits as part of the screen they draw.
-- `audio` — gambatte's `_outaudio0`/`_outaudio1` convention: whether the final
+- `audio`—gambatte's `_outaudio0`/`_outaudio1` convention: whether the final
   rendered frame's audio output is constant (silence) or varies (sound),
   drained through `IAudioSink` at half the CPU clock (`AudioProbe`), gated by
-  the same `LivenessGate` a `screenshot` case uses — a dead machine's silent
+  the same `LivenessGate` a `screenshot` case uses—a dead machine's silent
   audio ring would otherwise trivially satisfy `_outaudio0`.
 
 Stage semantics, per case: the gate requires the recorded and actual outcome
-to be **equal** — `pass`, `fail`, and `inconclusive` are three distinct
+to be **equal**—`pass`, `fail`, and `inconclusive` are three distinct
 recorded verdicts, none folded into another, so a regression into
 inconclusiveness (a liveness-gate catch, an undecodable glyph, a vanished
 expected image) is caught exactly like a regression into `fail`.
@@ -193,7 +193,7 @@ expected image) is caught exactly like a regression into `fail`.
 - Actual equals the recorded outcome → counted (`N pass`, `M recorded-fail`,
   `L recorded-inconclusive`, `K unrunnable`).
 - A recorded `fail` that now passes → the stage **fails**
-  (`ratchet: now passes; accept the candidate ledger`) — a fix is a deliberate,
+  (`ratchet: now passes; accept the candidate ledger`)—a fix is a deliberate,
   accepted act, never a silently-loosened gate.
 - Any other change of outcome (most importantly a recorded `pass` that now
   fails or turns inconclusive) → **fails** as a regression.
@@ -218,17 +218,17 @@ There is no recording run. Every run writes a candidate ledger, by default
 the existing ledger with every row this run measured replaced, every row of a
 discovered suite whose ROM is no longer on disk removed, and every row of a
 suite this run did not discover (an unselected `--tier`/`--filter`/`--lane`,
-or a corpus this checkout does not carry) carried over unchanged — so the
+or a corpus this checkout does not carry) carried over unchanged—so the
 diff between the two only ever shows what this run measured. Every changed
 row is printed (`ratchet:` for a recorded `fail` resolving to `pass`,
 `regression:` for any other change of verdict, `dropped:` for a recorded
 case no longer discovered, `added:` for a case with no row), and `--accept`
 promotes the candidate in the same process. `--accept-candidate <file>` does
-the same for a candidate another run wrote — a nightly build's artifact — with
+the same for a candidate another run wrote—a nightly build's artifact—with
 no battery run at all. Either is refused (exit 2, nothing written) when:
 
 - Any stage in the run ended in infrastructure failure, or any case could not
-  be measured — a ledger built from an incomplete run is worse than no ledger.
+  be measured—a ledger built from an incomplete run is worse than no ledger.
 - At least one case regressed from a recorded verdict, unless
   `--accept-regressions` is passed.
 - At least one recorded case is no longer discovered, unless
@@ -313,7 +313,7 @@ serialized machine state remains the determinism surface.
 Use `--hash-divergence [rom] [--frames N] [--fine] [--perturb-at N]` to compare
 two fresh machines and report the first differing section and offset.
 
-## SingleStepTests/sm83 vectors
+## SingleStepTests/SM83 vectors
 
 The `sst-sm83` Tier-B stage drives the shared SM83 core through every vector in
 the [SingleStepTests/sm83](https://github.com/SingleStepTests/sm83) corpus —
@@ -325,18 +325,18 @@ harness), so the corpus's own "64K of flat RAM, no registers or memory
 mapping" assumption holds exactly; setting IME/halted and reading them back
 after the step goes through the CPU's existing `SaveState`/`LoadState` seam
 (`Sm83StateCodec`), not a new one. It validates the one-shared-SM83-core
-doctrine instruction-by-instruction, off-ROM — evidence, never a gate: it
+doctrine instruction-by-instruction, off-ROM—evidence, never a gate: it
 skips cleanly when the corpus is absent. The corpus is the `sm83-sst` entry
 in `corpora.json`; `--sst` names another root. Families run on every
 processor at once, each on its own harness.
 
-Two opcode families are documented ORACLE-CONFLICT skips — excluded from
+Two opcode families are documented ORACLE-CONFLICT skips—excluded from
 pass/fail, reported in the stage output with vector counts and a reason naming
 both oracles, per "external suites are evidence, never gates":
 
 - `10` (STOP): this corpus's reference models STOP as a one-byte
   opcode (PC+1), while this core's `ExecuteStop` deliberately reads a second
-  operand byte (PC+2) — real-hardware STOP behavior is a long-debated
+  operand byte (PC+2)—real-hardware STOP behavior is a long-debated
   two-interpretation question.
 - `fb` (EI): this corpus's reference re-arms EI's delay countdown
   even when IME is already set; this core's EI-as-no-op-when-already-enabled
@@ -350,16 +350,16 @@ divergent field.
 ## BESS savestate interchange
 
 `--bess-export <out> [--rom <path>] [--frames N]` writes a
-BESS ("Best Effort Save State")-compliant file — `NAME`/`INFO`/`CORE`/an optional `MBC `
+BESS ("Best Effort Save State")-compliant file—`NAME`/`INFO`/`CORE`/an optional `MBC `
 block/`END`, over the raw register/memory buffers the `CORE` block's
-size/offset table points to — then proves the export/import round trip is
+size/offset table points to—then proves the export/import round trip is
 self-consistent by importing the bytes into a second, freshly built machine
 and comparing a fingerprint over exactly the BESS-modeled state. `XOAM` is
 legitimately omitted (this core does not model the extra OAM range); `RTC`,
 `HUC3`, `TPP1`, `MBC7`, and `SGB` are out of scope for this first pass. Three
 addresses are deliberately not replayed as plain register writes on import,
 each because the spec itself flags the hazard: DIV (0xFF04, whose write
-resets rather than sets it — restored through the timer's own snapshot seam
+resets rather than sets it—restored through the timer's own snapshot seam
 instead), and DMA-start/HDMA-start (0xFF46/0xFF55, whose write begins a
 transfer). KEY1's double-speed bit is restored the same snapshot-splice way
 DIV is (a plain write can only arm it, not force the live speed). STAT's mode
@@ -367,8 +367,8 @@ bits, LY, and NR52's channel-active bits are hardware-derived read-only status
 the PPU/APU recompute live, so they are captured for interop but excluded from
 the self-consistency fingerprint.
 
-`--bess-import <file> [--rom <path>]` loads a BESS file — ours or a foreign
-one — into a machine and reports the restored registers, IME/IE/IF,
+`--bess-import <file> [--rom <path>]` loads a BESS file—ours or a foreign
+one—into a machine and reports the restored registers, IME/IE/IF,
 LCDC/STAT/LY, and the cartridge's current ROM/RAM bank, so a state can be
 eyeballed against another BESS-compliant tool. A reference emulator ships a
 prebuilt tester binary, but its CLI has no savestate-import flag, so a live
@@ -401,7 +401,7 @@ hand-verified against the BESS spec.
   snapshot image plus a `<file>.sections.txt` sidecar (name/offset/length per
   component) to `artifacts/gb-post/snapshot.bin` by default. Prints the output
   paths and the snapshot's FNV-1a fingerprint. Offline input for diffing two
-  builds' snapshot images byte-for-byte — `--hash-divergence` only proves a
+  builds' snapshot images byte-for-byte—`--hash-divergence` only proves a
   single build's internal determinism.
 
 Every diagnostic must preserve the same machine construction and stepping
@@ -415,7 +415,7 @@ is a gate.
 divergent conceptual event between Puck and a SameBoy oracle for a ROM, so
 PPU/APU accuracy work is trace-led instead of knob-swept. Both sides boot the
 SAME boot ROM image from `<dir>/dmg_boot.bin` or `<dir>/cgb_boot.bin`
-(SameBoy's own `GB_MODEL_DMG_B`/`GB_MODEL_CGB_E` — DMG-B and DMG-C are
+(SameBoy's own `GB_MODEL_DMG_B`/`GB_MODEL_CGB_E`—DMG-B and DMG-C are
 identical for this purpose) rather than Puck's seeded post-boot state, so a
 mismatch cannot be a seeded-state artifact the two paths would otherwise
 disagree about. `--boot puck` substitutes the forge's authored image for the
@@ -423,7 +423,7 @@ model, written to the output directory and handed to both sides, which puts the
 authored boot program itself under the oracle. `--sameboy` names a built `sb-trace.exe` (see below); missing
 ROM, boot ROM, or `sb-trace.exe` skips (exit 0). Exit 0 means no content
 divergence in the requested budget (a trailing run-length difference at the
-`--frames` cutoff is reported but does not fail — see below), exit 1 means a
+`--frames` cutoff is reported but does not fail—see below), exit 1 means a
 content divergence was found, exit 2 means infrastructure (bad arguments, or
 `sb-trace.exe` itself failed).
 
@@ -433,17 +433,17 @@ least 120 frames and confirm that execution reached its entry point. Identical
 record counts from different cartridges are a warning to check that handoff,
 not independent proof that their code ran.
 
-The trace is a stream of conceptual events, not raw internal state — raw
+The trace is a stream of conceptual events, not raw internal state—raw
 fetcher-step equality would flag the documented object-fetcher oracle skew
 (`hardware-and-oracles.md` §4) as a false divergence. Each event carries the
 master T-cycle count since reset and one of:
 
-- **cpu**: an instruction boundary — PC and every register, sampled before the
+- **cpu**: an instruction boundary—PC and every register, sampled before the
   instruction runs (`Sm83.ICpuTraceSink.OnInstructionBoundary`).
 - **ppu**: a polled STAT mode transition (the LY register and the STAT mode
   bits, both as the CPU reads them) or a pixel pop (LY, X, the final packed
   color) (`Ppu.IPpuTraceSink`). Selecting `ppu` also produces the
-  pixel-pop stream, which is large — keep `--frames` small for it.
+  pixel-pop stream, which is large—keep `--frames` small for it.
 - **pcm**: a PCM12/PCM34 sample. `Puck.HumbleGamingBrick` carries a trace seam
   only in `Ppu.cs` and `Sm83.cs`, so PCM has none of its own; a `pcm`-kind run
   polls `IApu.ReadPcm` from inside the CPU instruction-boundary callback
@@ -453,7 +453,7 @@ master T-cycle count since reset and one of:
 
 Puck's own seams (`ICpuTraceSink`/`IPpuTraceSink` in `Sm83.cs`/`Ppu.cs`) are
 dormant nullable fields, each guarded by one predicted-not-taken null test —
-the same shape `SystemBus`'s debug watchpoints already use — so an ordinary
+the same shape `SystemBus`'s debug watchpoints already use—so an ordinary
 boot and the whole battery pay nothing; `--tier A`'s `throughput`/`zero-alloc`
 stages prove it.
 
@@ -462,10 +462,10 @@ walks each group index-by-index. The two PPU sub-streams carry different
 evidence: pixel records are exact and index-aligned on both sides (160 per
 visible line, in order), while SameBoy re-reads STAT once per `GB_run()` call
 and so cannot observe a polled mode that holds for less than the instruction in
-flight — the line-start mode-0 window is one 8 MHz unit wide in
+flight—the line-start mode-0 window is one 8 MHz unit wide in
 `Core/display.c`. The `ppu-mode` walk therefore steps over a record present on
 one side only when the record after it matches, and reports how many it stepped
-over. Only `cpu` events compare their cycle stamp exactly — SameBoy samples
+over. Only `cpu` events compare their cycle stamp exactly—SameBoy samples
 STAT/LY/PCM once per `GB_run()` call rather than once per T-cycle, and a
 pixel-pop record's cycle is the whole scanline's mode-3-exit cycle shared by
 all 160 columns (SameBoy exposes no per-pixel push hook); `ppu-mode`,
@@ -473,7 +473,7 @@ all 160 columns (SameBoy exposes no per-pixel push hook); `ppu-mode`,
 (exact) cycle. A group whose content agrees for
 every record both sides produced, but whose two streams end at slightly
 different lengths, is reported as a `TRAILING LENGTH MISMATCH` and does not
-fail — `sb-trace`'s `GB_run()` loop and Puck's `Machine.StepInstruction()`
+fail—`sb-trace`'s `GB_run()` loop and Puck's `Machine.StepInstruction()`
 loop each finish the whole unit of work in flight rather than stopping exactly
 on the `--frames` cutoff, so the last instruction near the budget can differ
 by a few T-cycles on either side.
@@ -483,9 +483,9 @@ by a few T-cycles on either side.
 `sb-trace.exe` is a custom headless SameBoy build outside this repository,
 extended with an `events` mode
 (`trace_main.c`) that emits the binary record stream `CosimEvent` in
-`CosimTraceRecord.cs` mirrors — keep the two in sync. Rebuild it with:
+`CosimTraceRecord.cs` mirrors—keep the two in sync. Rebuild it with:
 
-```
+```bash
 bash build/sbtrace/build.sh
 ```
 
@@ -506,10 +506,14 @@ by Puck; consult the supplied tracer's own command-line interface. The
 
 SameBoy's `events` mode samples STAT/LY once per `GB_run()` call (the finest
 step SameBoy exposes short of its internal `cycles_since_run` counter, which
-is unreachable from `trace_main.c` — it is compiled without `GB_INTERNAL`, so
+is unreachable from `trace_main.c`—it is compiled without `GB_INTERNAL`, so
 `GB_gameboy_t` is opaque beyond the public accessors). The sample is skipped
 entirely while LCDC.7 is clear, matching `Ppu.Tick()`'s own early return
 before its trace guard, so an LCD disable/enable pair does not show as a
 spurious divergence against a side that emits nothing while off. A finished
 scanline's 160 pixels are written just before the mode event that closes the
 line out, matching the order Puck's own live pixel-by-pixel pops end in.
+
+## Documentation
+
+📚 [Machine emulation manual](../../docs/emulation/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

@@ -14,7 +14,7 @@ The engine has a one-way flow with explicit ownership at each boundary:
 
 1. **Document.** A versioned `puck.world.def.v1` document is the durable input.
    The [world data guide](../../src/Puck.World/README.md#the-world-as-data)
-   and [schema guide](../../src/Puck.World.Schema/README.md#puckworlddefv1--the-world-definition)
+   and [schema guide](../../src/Puck.World.Schema/README.md#puckworlddefv1the-world-definition)
    describe its fields and serialization.
 2. **Validation.** `WorldDefinitionValidator` checks the complete composed
    candidate document before it can become live. Builders consume a valid
@@ -32,7 +32,7 @@ The engine has a one-way flow with explicit ownership at each boundary:
 5. **Presentation.** A client consumes delivered snapshots, binds cameras and
    surfaces, and submits input; it does not become a second authority. The
    [client guide](../../src/Puck.World.Client/README.md#the-entity-view)
-   covers the projection boundary, while [SDF rendering](../../src/Puck.SdfVm/README.md#-the-render-pipeline)
+   covers the projection boundary, while [SDF rendering](../../src/Puck.SdfVm/README.md#the-render-pipeline)
    and [graphics options](../../src/Puck.World/README.md#graphics-options)
    own renderer details.
 

@@ -1,7 +1,7 @@
 # Geometry
 
 Grids, curves, layered index spaces, and the modular group. Everything here has
-**exact results on an index or a lattice point** — no accumulated drift,
+**exact results on an index or a lattice point**—no accumulated drift,
 bit-identical on every platform. These are the
 deterministic value types that are not fixed-point numbers: a hex cell is an
 Eisenstein integer, a Hilbert distance is a bijection, a layer index is the
@@ -18,7 +18,7 @@ the contract for the folder.
 
 | Type | Kind | What it's for |
 |------|------|---------------|
-| [`HexagonalCoordinate`](#hexagonalcoordinate) | `readonly record struct` | An exact hex-grid cell — the Eisenstein integer `Q + R·ω`. 60° rotations are integer multiplies. |
+| [`HexagonalCoordinate`](#hexagonalcoordinate) | `readonly record struct` | An exact hex-grid cell—the Eisenstein integer `Q + R·ω`. 60° rotations are integer multiplies. |
 | [`HexagonalIndex`](#hexagonalindex) | `readonly record struct` | A dense, continuous hex-grid walk in complete rings. Radius, rotation, and reflection act directly on the index. |
 | [`SquareCoordinate`](#squarecoordinate) | `readonly record struct` | A signed integer cell with four cardinal neighbours, exact quarter turns and Gaussian arithmetic. |
 | [`SquareIndex`](#squareindex) | `readonly record struct` | A dense, continuous spiral over complete squares, with direct symmetries, scaling and norm. |
@@ -30,7 +30,7 @@ the contract for the folder.
 
 ## `HexagonalCoordinate`
 
-An exact hexagonal grid coordinate — the Eisenstein integer `Q + R·ω`. Because
+An exact hexagonal grid coordinate—the Eisenstein integer `Q + R·ω`. Because
 it is a genuine number ring, a 60° rotation is an exact integer multiply
 (`RotatedLeft`/`RotatedRight`, order 6) with no drift, unlike `FixedComplex`;
 `Length` (hex-grid distance), the six neighbours (`Direction`/`Neighbor`), the
@@ -189,7 +189,7 @@ increase the deterministic sample. This centered encoding differs from
 ## `HilbertCurve`
 
 The Hilbert space-filling curve: an exact bijection between a 1D distance and a
-2D grid point (`Encode`/`Decode`) that preserves locality — consecutive
+2D grid point (`Encode`/`Decode`) that preserves locality—consecutive
 distances are always grid neighbours, unlike Morton/Z-order
 (`BinaryIntegerFunctions.BitwisePair`), which jumps at power-of-two seams. For
 cache-coherent chunk/tile ordering, spatial hashing, texture swizzling. `order`
@@ -200,7 +200,7 @@ in `[1, 31]`.
 Layered index spaces (the generalized figurate numbers): a `Seed`-sized core
 wrapped by layers that start at `Start` and grow by `Step`, with
 **constant-time** index→layer lookup by inverting the quadratic prefix sum
-`Count(n) = Seed + Start·n + Step·n·(n − 1)/2` — no walking, bit-identical on every
+`Count(n) = Seed + Start·n + Step·n·(n − 1)/2`—no walking, bit-identical on every
 platform over the whole `long` index range. Square sequences and positive
 sequences with `Start == Step` simplify to unsigned 64-bit arithmetic before
 taking a root. For the latter, dividing `(index - Seed)` by `Start` reduces the
@@ -231,7 +231,7 @@ The named shapes:
 | `CenteredHexagonal` | 6 | 6 | 1 | Honeycomb rings around a center cell. |
 | `Centered(k)` | k | k | 1 | Centered k-gonal rings. |
 | `Polygonal(k)` | 1 | k − 2 | 0 | Corner-expanding k-gonal numbers. |
-| `Linear(size, seed)` | size | 0 | seed | Flat layers — ordinary linear indexing. |
+| `Linear(size, seed)` | size | 0 | seed | Flat layers—ordinary linear indexing. |
 | `Create(a, d, c)` | a | d | c | Anything the three constants can say. |
 
 ```csharp
@@ -247,8 +247,8 @@ var probe = arena.Project(index: 20L);            // (Layer 3, Overflow 8, Depth
 
 ## `ModularTransform`
 
-An exact element of the modular group — a 2×2 integer matrix of determinant one
-— acting on the hyperbolic plane by `z ↦ (A·z + B)/(C·z + D)`. The one object
+An exact element of the modular group—a 2×2 integer matrix of determinant one
+—acting on the hyperbolic plane by `z ↦ (A·z + B)/(C·z + D)`. The one object
 beneath the library's three motions: `Classify` sorts it by trace into the
 elliptic rotations (the sixth root of unity of `HexagonalCoordinate`), the
 parabolic tick shear (the kinematics step of `LayerSequence`), and the
@@ -265,3 +265,7 @@ Exact composition and cusp application use wide intermediates; they throw
 `OverflowException` only when the final matrix entry or reduced cusp coordinate
 cannot be represented by `long`. `Inverse` likewise throws when negating a
 `long.MinValue` off-diagonal entry would make its adjugate unrepresentable.
+
+## Documentation
+
+📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

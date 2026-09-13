@@ -123,7 +123,7 @@ Names are unique within each collection, case-sensitive, 1–64 ASCII letters,
 digits, underscores or hyphens, and an array may not reuse a variable's name.
 Initial values run 0 through the slot's declared ceiling.
 
-A value is a `ValueExpression` — the engine's own expression, spelled infix:
+A value is a `ValueExpression`—the engine's own expression, spelled infix:
 
 ```json
 "42"
@@ -138,7 +138,7 @@ A value is a `ValueExpression` — the engine's own expression, spelled infix:
 `CartridgeExpressions.Reads` is the admitted subset: the arithmetic and bitwise
 operations, the six comparisons (each yielding 1 or 0), `minimum`, `maximum`,
 `clamp`, `select`, `sign` and bitwise complement. An operation the rule language
-evaluates and a cartridge does not — a hex lattice, a Hilbert index, a prime — is
+evaluates and a cartridge does not—a hex lattice, a Hilbert index, a prime—is
 refused by that name rather than reported as unknown. Every step evaluates in the
 operand width, so a byte expression wraps modulo 256 at each operation and a
 sub-expression does not widen because it is nested. An expression carries at most
@@ -148,7 +148,7 @@ what is in flight.
 An index is itself an expression, so `field[pointers[cursor] + 1]` nests. An index
 at or beyond the array's length reads zero and discards a write, which keeps every
 access total rather than trapping. A button reads through `$key:<button>:<mode>`,
-yielding 1 while it satisfies the mode — so input composes under `any` and `not`
+yielding 1 while it satisfies the mode—so input composes under `any` and `not`
 like any other operand rather than being a condition kind conjunction alone can
 reach.
 
@@ -196,7 +196,7 @@ writes to that rather than letting the queue drop one: loops multiply, and branc
 arms count once because only one runs. A blit repaints a whole named screen with
 the display off; its row and column are literal expressions. Because no vertical blank
 arrives while the display is off, a blit suspends frame production rather than
-merely costing work, which is why a screen is capped at 120 tiles — measured, the
+merely costing work, which is why a screen is capped at 120 tiles—measured, the
 frame counter stalls entirely near 168.
 
 A `raster` row changes the scroll part way down the picture, which is what puts a
@@ -211,7 +211,7 @@ frame exactly as a map write does.
 A `play` of a recorded sound takes an optional `rate`: the playback rate in
 sixty-fourths of the recording's own, so 64 plays it as recorded, 128 an octave
 up and 32 an octave down. One recording therefore serves a whole instrument's
-range, and a rate read from an array makes an ordinary rule into a sequencer —
+range, and a rate read from an array makes an ordinary rule into a sequencer—
 there is no tracker primitive, and none is needed. A rate of zero sounds
 nothing rather than holding one sample forever. Rates are refused on music and
 effect sounds, which take their pitch from their own rows.
@@ -234,7 +234,7 @@ timer-clocked transfer into a mixer the cartridge runs every frame, and the CGB
 target has no digital sound hardware to stream into. Every other sound kind runs
 on both. `save` writes the declared state to the cartridge's
 battery-backed window behind a magic, version and checksum header, and `load`
-restores it — a block that fails any of those checks leaves the state at its
+restores it—a block that fails any of those checks leaves the state at its
 authored initial values, so a fresh cartridge and a corrupted one behave alike.
 
 Both run on either target. One compiled track drives both machines: the advanced
@@ -246,18 +246,18 @@ between them.
 
 The estimate charges rules that cannot share a frame only once. Rules each
 guarded by one equality of the same variable against a different constant are
-alternatives, so the dearest of them is charged rather than all — which is what a
+alternatives, so the dearest of them is charged rather than all—which is what a
 phase machine is, and summing it would report several times what any frame
 really costs. For an INFERRED guard the saving depends on the guard holding
 still: anything that writes that variable between the first of those rules and
 the last gives it up, so a phase names its successor in a second variable and one
 ungated rule, placed after every arm, adopts it. Declaring the variable as
-`scene` removes that condition entirely — the frame compares every guard on it
+`scene` removes that condition entirely—the frame compares every guard on it
 against a snapshot taken before any rule runs, so the partition holds wherever
 the write sits and the advance step can live inside its own arm.
 
-Compilation refuses a document only for what makes the image wrong — a shape the
-machine has no room for — never for what makes it slow. A cartridge that misses
+Compilation refuses a document only for what makes the image wrong—a shape the
+machine has no room for—never for what makes it slow. A cartridge that misses
 frames still runs, and the machine absorbs that already, so the per-frame work is
 reported rather than refused: `CartridgeDocuments.Estimate` returns the estimate
 and the target's reservation, and an author over it gets a slower cartridge, not
@@ -274,7 +274,7 @@ A `blend` makes one surface translucent over whatever is drawn beneath it.
 `surface` names `background`, `panel`, `middle`, `far`, `sprites` or `backdrop`
 — `middle` and `far` being the two surfaces behind the document's own background,
 which a turning background and the declared layers fill nearest first, and the
-last two being every sprite and the colour behind everything — and `weight` is
+last two being every sprite and the colour behind everything—and `weight` is
 the translucent surface's share in sixteenths, so 16 is opaque and 0 leaves only
 what is below. Weights past 16 are held at 16 rather than wrapping. It is an
 `agb` step: the Color machine has no blend unit, and its `fade` works by rebaking
@@ -312,8 +312,8 @@ The viewports are 160×144 and 240×160 pixels respectively.
 The compiler enforces code/data capacity, and validation bounds the VRAM write queue with saturating arithmetic.
 Scene guards read the frame snapshot even inside array indices. Inferred exclusive guards lose that discount
 when a direct write, saved-state load or clock read can change their variable.
-`CartridgeCost` advises on per-frame work. That model counts abstract work units — one unit is an
-eleventh of a `set` step writing a literal to a variable — and compares the
+`CartridgeCost` advises on per-frame work. That model counts abstract work units—one unit is an
+eleventh of a `set` step writing a literal to a variable—and compares the
 total against a per-frame reservation. The weights are measured, not estimated:
 `CartridgeCostMeasurement` boots documents on both real machines and reports the
 largest per-frame iteration count each sustains at full frame rate, and cost per
@@ -346,7 +346,7 @@ alone determines emitted bytes. The caller owns filesystem I/O and machine
 lifetime. No World service registration, process launch, BIOS download or
 external compiler is required.
 
-`LabelTable` is the shared machine-code label bookkeeping — allocate an id,
+`LabelTable` is the shared machine-code label bookkeeping—allocate an id,
 bind it to a byte offset, resolve it at fixup time, and refuse a branch naming
 a label nothing bound. Both `Sm83Emitter` and `ThumbEmitter` hold one; the
 fixup lists and patch encodings stay per-instruction-set.
@@ -364,3 +364,7 @@ Run the native compiler/editor and emitter tests with:
 dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests -c Release
 dotnet test tests/Puck.HumbleGamingBrick.Forge.Tests -c Release
 ```
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

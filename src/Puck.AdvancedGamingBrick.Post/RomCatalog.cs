@@ -20,10 +20,7 @@ internal static class RomCatalog {
         foreach (var (relativePath, name) in cases) {
             var fullPath = Path.Combine(
                 path1: root,
-                path2: relativePath.Replace(
-                    newChar: Path.DirectorySeparatorChar,
-                    oldChar: '/'
-                )
+                path2: relativePath
             );
 
             if (File.Exists(path: fullPath)) {

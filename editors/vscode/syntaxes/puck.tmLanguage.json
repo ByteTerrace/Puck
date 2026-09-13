@@ -7,6 +7,12 @@
             "include": "#comments"
         },
         {
+            "include": "#control"
+        },
+        {
+            "include": "#namedBlocks"
+        },
+        {
             "include": "#directives"
         },
         {
@@ -19,34 +25,10 @@
             "include": "#addons"
         },
         {
-            "include": "#constants"
-        },
-        {
-            "include": "#strings"
-        },
-        {
-            "include": "#colors"
-        },
-        {
-            "include": "#quantities"
-        },
-        {
-            "include": "#numbers"
-        },
-        {
-            "include": "#functions"
-        },
-        {
             "include": "#properties"
         },
         {
-            "include": "#operators"
-        },
-        {
-            "include": "#enums"
-        },
-        {
-            "include": "#containers"
+            "include": "#expression"
         }
     ],
     "repository": {
@@ -67,18 +49,24 @@
             "patterns": [
                 {
                     "match": "\\b(schema|basis)\\b",
-                    "name": "keyword.control.directive.puck"
+                    "name": "variable.object.property.puck"
                 },
                 {
-                    "match": "\\b(let)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
-                    "captures": {
+                    "begin": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "beginCaptures": {
                         "1": {
                             "name": "keyword.declaration.let.puck"
                         },
                         "2": {
                             "name": "variable.other.constant.puck"
                         }
-                    }
+                    },
+                    "end": "$|(?=;)",
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
                 },
                 {
                     "match": "\\b(import)\\b(?:\\s+(?:(\"[^\"]*\")|([a-zA-Z_][a-zA-Z0-9_]*)))?(?:\\s+(as)\\s+([a-zA-Z_][a-zA-Z0-9_]*))?",
@@ -182,10 +170,6 @@
                         }
                     },
                     "match": "\\b(shape)\\s+([A-Za-z_][A-Za-z0-9_]*)"
-                },
-                {
-                    "match": "\\b(host|views|camera|seatRig|seatControl|motion|render|spawnPoints|screens|rules|state|solids|materials|kits|channels|targetRegisters|bodyMotionPrograms)\\b(?=\\s*(?:[a-zA-Z0-9_\"']+\\s*)?\\{)",
-                    "name": "variable.object.property.puck"
                 }
             ]
         },
@@ -204,6 +188,35 @@
         "strings": {
             "patterns": [
                 {
+                    "name": "string.quoted.triple.interpolated.puck",
+                    "begin": "\\$\"\"\"",
+                    "end": "\"\"\"",
+                    "patterns": [
+                        {
+                            "include": "#interpolation"
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.triple.puck",
+                    "begin": "\"\"\"",
+                    "end": "\"\"\""
+                },
+                {
+                    "name": "string.quoted.double.interpolated.puck",
+                    "begin": "\\$\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "match": "\\\\.",
+                            "name": "constant.character.escape.puck"
+                        },
+                        {
+                            "include": "#interpolation"
+                        }
+                    ]
+                },
+                {
                     "name": "string.quoted.double.puck",
                     "begin": "\"",
                     "end": "\"",
@@ -213,6 +226,11 @@
                             "match": "\\\\."
                         }
                     ]
+                },
+                {
+                    "name": "variable.other.quoted.puck",
+                    "begin": "`",
+                    "end": "`"
                 }
             ]
         },
@@ -254,19 +272,54 @@
         "functions": {
             "patterns": [
                 {
-                    "match": "\\b(orbit|fov|matrix|translate|rotate|scale)\\b(?=\\s*\\()",
-                    "name": "support.function.builtin.puck"
-                },
-                {
-                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=\\s*\\()",
-                    "name": "entity.name.function.call.puck"
+                    "begin": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\()",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "entity.name.function.call.puck"
+                        },
+                        "2": {
+                            "name": "punctuation.section.arguments.puck"
+                        }
+                    },
+                    "end": "\\)",
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.section.arguments.puck"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*:)",
+                            "name": "variable.object.property.puck"
+                        },
+                        {
+                            "include": "#expression"
+                        }
+                    ]
                 }
             ]
         },
         "properties": {
             "patterns": [
                 {
-                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=[ \\t]*:|[ \\t]+[\\[{])",
+                    "begin": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(:)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "variable.object.property.puck"
+                        },
+                        "2": {
+                            "name": "keyword.operator.assignment.puck"
+                        }
+                    },
+                    "end": "(?=[,;}]|$)",
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
+                },
+                {
+                    "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=[ \\t]+[\\[{])",
                     "name": "variable.object.property.puck"
                 }
             ]
@@ -274,28 +327,69 @@
         "operators": {
             "patterns": [
                 {
-                    "match": "(\\.\\.)",
-                    "name": "keyword.operator.range.puck"
-                },
-                {
-                    "match": "(\\+|-|\\*|\\/)",
-                    "name": "keyword.operator.arithmetic.puck"
-                },
-                {
-                    "match": "(=|:)",
-                    "name": "keyword.operator.assignment.puck"
+                    "match": "=>|==|!=|<=|>=|\\.\\.|[+*/%=<>!:&|?-]",
+                    "name": "keyword.operator.puck"
                 }
             ]
         },
         "containers": {
             "patterns": [
                 {
-                    "match": "[\\[\\]]",
-                    "name": "punctuation.section.array.puck"
+                    "begin": "\\[",
+                    "end": "\\]",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.section.array.puck"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.section.array.puck"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
                 },
                 {
-                    "match": "[{}]",
-                    "name": "punctuation.section.object.puck"
+                    "begin": "\\{",
+                    "end": "\\}",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.section.object.puck"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.section.object.puck"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "$self"
+                        }
+                    ]
+                },
+                {
+                    "begin": "\\(",
+                    "end": "\\)",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.section.arguments.puck"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.section.arguments.puck"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
                 }
             ]
         },
@@ -304,6 +398,120 @@
                 {
                     "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
                     "name": "constant.other.enum.puck"
+                }
+            ]
+        },
+        "control": {
+            "patterns": [
+                {
+                    "begin": "\\b(for|repeat|if|when|interrupt)\\b",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "keyword.control.puck"
+                        }
+                    },
+                    "end": "(?=\\{)|$",
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
+                },
+                {
+                    "match": "\\b(in|as|else|and|or|not|transaction|onFailure|onNoChoice|bind|push|countdown|remove|schedule|transform|score)\\b",
+                    "name": "keyword.control.puck"
+                }
+            ]
+        },
+        "namedBlocks": {
+            "patterns": [
+                {
+                    "begin": "\\b(prototype|rule|decision|option|placement|seatRig|layout|addon)\\b",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "keyword.declaration.puck"
+                        }
+                    },
+                    "end": "(?=\\{)|$",
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
+                }
+            ]
+        },
+        "interpolation": {
+            "patterns": [
+                {
+                    "match": "\\{\\{|\\}\\}",
+                    "name": "constant.character.escape.puck"
+                },
+                {
+                    "begin": "\\{",
+                    "end": "\\}",
+                    "name": "meta.interpolation.puck",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.interpolation.puck"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.interpolation.puck"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#expression"
+                        }
+                    ]
+                }
+            ]
+        },
+        "variables": {
+            "patterns": [
+                {
+                    "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+                    "name": "variable.other.readwrite.puck"
+                }
+            ]
+        },
+        "expression": {
+            "patterns": [
+                {
+                    "include": "#comments"
+                },
+                {
+                    "include": "#strings"
+                },
+                {
+                    "match": "\\b(in|as|and|or|not)\\b",
+                    "name": "keyword.control.puck"
+                },
+                {
+                    "include": "#constants"
+                },
+                {
+                    "include": "#quantities"
+                },
+                {
+                    "include": "#numbers"
+                },
+                {
+                    "include": "#functions"
+                },
+                {
+                    "include": "#containers"
+                },
+                {
+                    "include": "#operators"
+                },
+                {
+                    "include": "#enums"
+                },
+                {
+                    "include": "#variables"
                 }
             ]
         }

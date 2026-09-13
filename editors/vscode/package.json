@@ -82,31 +82,144 @@
                     "description": "Use fixed, theme-aware colors for array [] and object {} delimiters instead of nesting-depth colors.",
                     "scope": "resource",
                     "default": true
+                },
+                "puck.highlighting.consistentColors": {
+                    "type": "boolean",
+                    "default": false,
+                    "scope": "resource",
+                    "description": "Opt into Puck’s fixed syntax palette. By default, syntax uses your selected theme. Container colors are controlled separately."
                 }
             }
         },
         "colors": [
             {
                 "defaults": {
-                    "dark": "#C586C0",
-                    "highContrast": "#F3A6E8",
-                    "light": "#8A237A",
-                    "highContrastLight": "#7A176B"
+                    "dark": "editorBracketHighlight.foreground3",
+                    "light": "editorBracketHighlight.foreground3",
+                    "highContrast": "editorBracketHighlight.foreground3",
+                    "highContrastLight": "editorBracketHighlight.foreground3"
                 },
                 "description": "Puck array delimiters [].",
                 "id": "puck.arrayDelimiter"
             },
             {
                 "defaults": {
-                    "dark": "#4EC9B0",
-                    "highContrast": "#70E8CB",
-                    "light": "#007A68",
-                    "highContrastLight": "#006B59"
+                    "dark": "editorBracketHighlight.foreground2",
+                    "light": "editorBracketHighlight.foreground2",
+                    "highContrast": "editorBracketHighlight.foreground2",
+                    "highContrastLight": "editorBracketHighlight.foreground2"
                 },
                 "description": "Puck object delimiters {}.",
                 "id": "puck.objectDelimiter"
+            },
+            {
+                "id": "puck.property",
+                "description": "Puck property syntax.",
+                "defaults": {
+                    "dark": "#9CDCFE",
+                    "light": "#005A86",
+                    "highContrast": "#9CDCFE",
+                    "highContrastLight": "#005A86"
+                }
+            },
+            {
+                "id": "puck.variable",
+                "description": "Puck variable syntax.",
+                "defaults": {
+                    "dark": "#D4D4D4",
+                    "light": "#292929",
+                    "highContrast": "#D4D4D4",
+                    "highContrastLight": "#292929"
+                }
+            },
+            {
+                "id": "puck.keyword",
+                "description": "Puck keyword syntax.",
+                "defaults": {
+                    "dark": "#C586C0",
+                    "light": "#7B2686",
+                    "highContrast": "#C586C0",
+                    "highContrastLight": "#7B2686"
+                }
+            },
+            {
+                "id": "puck.function",
+                "description": "Puck function syntax.",
+                "defaults": {
+                    "dark": "#DCDCAA",
+                    "light": "#715400",
+                    "highContrast": "#DCDCAA",
+                    "highContrastLight": "#715400"
+                }
+            },
+            {
+                "id": "puck.type",
+                "description": "Puck type syntax.",
+                "defaults": {
+                    "dark": "#4EC9B0",
+                    "light": "#006E60",
+                    "highContrast": "#4EC9B0",
+                    "highContrastLight": "#006E60"
+                }
+            },
+            {
+                "id": "puck.string",
+                "description": "Puck string syntax.",
+                "defaults": {
+                    "dark": "#CE9178",
+                    "light": "#9B3D1C",
+                    "highContrast": "#CE9178",
+                    "highContrastLight": "#9B3D1C"
+                }
+            },
+            {
+                "id": "puck.number",
+                "description": "Puck number syntax.",
+                "defaults": {
+                    "dark": "#B5CEA8",
+                    "light": "#386521",
+                    "highContrast": "#B5CEA8",
+                    "highContrastLight": "#386521"
+                }
+            },
+            {
+                "id": "puck.literal",
+                "description": "Puck literal syntax.",
+                "defaults": {
+                    "dark": "#4FC1FF",
+                    "light": "#005D91",
+                    "highContrast": "#4FC1FF",
+                    "highContrastLight": "#005D91"
+                }
+            },
+            {
+                "id": "puck.operator",
+                "description": "Puck operator syntax.",
+                "defaults": {
+                    "dark": "#BFC7D5",
+                    "light": "#454B56",
+                    "highContrast": "#BFC7D5",
+                    "highContrastLight": "#454B56"
+                }
+            },
+            {
+                "id": "puck.comment",
+                "description": "Puck comment syntax.",
+                "defaults": {
+                    "dark": "#879B82",
+                    "light": "#526C47",
+                    "highContrast": "#879B82",
+                    "highContrastLight": "#526C47"
+                }
             }
-        ]
+        ],
+        "configurationDefaults": {
+            "[puck]": {
+                "editor.tabSize": 2,
+                "editor.insertSpaces": true,
+                "editor.detectIndentation": false
+            }
+        }
     },
     "main": "./dist/extension.js",
     "activationEvents": [
@@ -121,18 +234,18 @@
         }
     },
     "scripts": {
-        "build": "esbuild extension.js --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+        "build": "esbuild extension.js --bundle --platform=node --external:vscode --outfile=dist/extension.js && node -e \"require('fs').copyFileSync(require.resolve('vscode-oniguruma/release/onig.wasm'), 'dist/onig.wasm')\"",
         "package": "vsce package --no-dependencies",
         "vscode:prepublish": "npm run build",
         "test": "node --test test/*.test.js"
     },
     "dependencies": {
-        "vscode-languageclient": "9.0.1"
+        "vscode-languageclient": "9.0.1",
+        "vscode-textmate": "^9.3.2",
+        "vscode-oniguruma": "^2.0.1"
     },
     "devDependencies": {
         "@vscode/vsce": "3.9.2",
-        "esbuild": "0.28.2",
-        "vscode-oniguruma": "^2.0.1",
-        "vscode-textmate": "^9.3.2"
+        "esbuild": "0.28.2"
     }
 }

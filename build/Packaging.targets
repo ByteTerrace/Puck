@@ -29,11 +29,11 @@
     <ItemGroup Condition="'$(IsPackable)' == 'true'">
         <!--
             The gallery icon. One shared 200x200 PNG for every packable project (NuGet.org accepts PNG/JPG up to
-            1 MB; this is 41 KB). PackagePath carries the FILENAME, not just the directory: pack derives the packed
+            1 MB; this is 41 KB). The maintained source is owned by branding. PackagePath carries the FILENAME, not just the directory: pack derives the packed
             entry's name from the source file otherwise, and `logo.png` in the root would not be the `icon.png` that
             <PackageIcon> names — NU5046 at pack time. Link only affects how the item shows in an IDE.
         -->
-        <None Include="$(MSBuildThisFileDirectory)..\docs\site\_theme\logo.png" Link="icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)..\branding\assets\puck-logo-200.png" Link="icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
         <None Condition="'$(PuckLicenseKind)' != 'OpenSource'" Include="$(MSBuildThisFileDirectory)..\LICENSE.md" Pack="true" PackagePath="\" Visible="false" />
         <None Condition="'$(PuckLicenseKind)' != 'OpenSource'" Include="$(MSBuildThisFileDirectory)..\LICENSING.md" Pack="true" PackagePath="\" Visible="false" />
         <None Condition="'$(PuckLicenseKind)' == 'OpenSource'" Include="$(MSBuildThisFileDirectory)..\src\Puck.GamingBricks\LICENSE.md" Pack="true" PackagePath="LICENSE.md" Visible="false" />

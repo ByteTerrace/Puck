@@ -1,6 +1,8 @@
 # Puck native AGB boot ROM firmware
 
 This folder owns the source for the bundled 16 KiB ByteTerrace/Puck BIOS.
+It is part of [`Puck.AdvancedGamingBrick`](../README.md), while the generated
+image remains a firmware-owned runtime asset.
 Its ARM exception handlers and Thumb service code execute on the same emulated
 ARM7TDMI as a cartridge. There is no host-side SWI replacement and no dependency
 on a retail BIOS image. The firmware source, original pixel lettering and chime,
@@ -90,3 +92,7 @@ Source reproducibility establishes which firmware was built. It does not
 establish hardware accuracy. Durable service, IRQ, cold/fast boot, frame, and
 PCM checks belong in the [Advanced Post battery](../../Puck.AdvancedGamingBrick.Post/README.md),
 with independent expected values and explicit asset-gated skips.
+
+## Documentation
+
+📚 [Machine emulation manual](../../../docs/emulation/README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

@@ -283,11 +283,11 @@ public sealed class OverlayGlyphSdfPack {
         var extraCount = (extraCodePoints?.Count ?? 0);
         var glyphCount = (AsciiGlyphCount + extraCount);
         var packedSdf = new uint[(glyphCount * cellStride)];
-        var pixels = image.RgbaPixels;
         var imageWidth = image.Width;
         var imageHeight = image.Height;
 
         void CopyGlyphCell(int glyphIndex, FontAtlasBounds bounds) {
+            var pixels = image.RgbaPixels;
             var left = ((int)MathF.Round(x: bounds.Left));
             var top = ((int)MathF.Round(x: bounds.Top));
             var glyphBase = (glyphIndex * cellStride);

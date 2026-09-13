@@ -1,8 +1,8 @@
 # Puck.World.Transpiler
 
 The `puck.world.def.v1` VOCABULARY for the `.puck` authoring language: it compiles a parsed document to world JSON
-and decompiles the other way. The language itself — parser, syntax tree, diagnostics, formatter, import resolver,
-unit arithmetic — is [`Puck.Transpiler`](../Puck.Transpiler/README.md), which knows no schema at all. `.puck` is an
+and decompiles the other way. The language itself—parser, syntax tree, diagnostics, formatter, import resolver,
+unit arithmetic—is [`Puck.Transpiler`](../Puck.Transpiler/README.md), which knows no schema at all. `.puck` is an
 authoring layer: JSON stays the wire form and the checked-in source of every shipped world.
 
 ## Pipeline
@@ -15,9 +15,9 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 
 ### Documents and blocks
 
-```
+```puck
 schema: "puck.world.def.v1"
-basis: "worlds/standard.basis.json"
+basis: "worlds/base.puck"
 
 let name = expression                 // compile-time constant
 template name(param, param2 = default) { ... }
@@ -34,8 +34,8 @@ identifier                                    // a bare flag statement, only whe
                                                // `solid { margin: 0 }`)
 ```
 
-A container value is written as a block and a scalar takes a colon — `host { }`, `cameras [ ]`, `documentId: "puck"`
-— at every depth and inside an object literal too. There is exactly one spelling per shape: a colon in front of a
+A container value is written as a block and a scalar takes a colon—`host { }`, `cameras [ ]`, `documentId: "puck"`
+—at every depth and inside an object literal too. There is exactly one spelling per shape: a colon in front of a
 `{` or a `[` is PUCK040. A name that merely stands for a container keeps its colon (`origin: bounds`), because the
 rule is about the punctuation in front of a literal, not about what the value turns out to be; a call's named
 argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a statement.
@@ -44,21 +44,21 @@ Expressions: `+ - * /` (C precedence via additive/multiplicative), `.` member ac
 `[a, b]` arrays, `{ k: v }` objects, `a..b` ranges, `#rrggbb[aa]` colors, and number literals with an optional unit
 suffix (`s ms hz rad deg m mm cm % pct`), every one of which is checked against the field-dimension table in
 `Lowering/WorldDocumentEmitterUnits` (which says which field is a length or a time; what the suffix is worth is
-the core's `UnitConversion`) — a unit on a field the table does not cover is PUCK024 and a unit the field's
+the core's `UnitConversion`)—a unit on a field the table does not cover is PUCK024 and a unit the field's
 own dimension does not admit is PUCK025, so no suffix ever converts a value silently. A call argument classifies by
 its qualified `call.argument` key, an ordinary property by its bare name: `orbit(yaw: 45deg)` is radians-native and
-converts, a `yaw:` property on any other block is not in the table at all and is refused. A call `name(k: v, ...)` lowers to `{"$type":"name","k":v,...}` — the
+converts, a `yaw:` property on any other block is not in the table at all and is refused. A call `name(k: v, ...)` lowers to `{"$type":"name","k":v,...}`—the
 universal escape hatch for any `$type` object; positional args are special-cased only for `orbit`/`fov`.
 
 The core language's `[a]`/`["k"]` indexing, `for`, and `$"..."`/`"""..."""` string forms are ordinary parts of this
-grammar too — a world document is where they earn their keep: a rigged part authors one `positions`/`rotations`
+grammar too—a world document is where they earn their keep: a rigged part authors one `positions`/`rotations`
 array per bone and a `for i in range(0, n) { shape ... $"name-{i}" { position: positions[i] } }` to place one shape
 per element, rather than n hand-written blocks. They are the core's, not this vocabulary's own, so their rules
 (compile-time-only sequences, no escapes in a raw string, `[` adjacency) are [`Puck.Transpiler`](../Puck.Transpiler/README.md)'s to state.
 
 ### `when` gates
 
-```
+```puck
 when Operand cmp Operand [ (":"|"as") (Int|Fixed) ]     // cmp: == != < <= > >=
 when Gate and Gate and Gate                              // -> one flat `all`
 when Gate or Gate                                         // -> one flat `any`
@@ -67,11 +67,11 @@ when (Gate)                                                // one opaque child; 
 ```
 
 `and`/`or`/`not`/`as`/`when` are reserved only inside a gate. An `Operand` is opaque text handed whole to
-`Puck.State.ExpressionSpelling` — the DSL never re-implements that grammar; `row`/`row[key]` reads, `$name:segment`
+`Puck.State.ExpressionSpelling`—the DSL never re-implements that grammar; `row`/`row[key]` reads, `$name:segment`
 reserved channels, and a `$zones[...]`-folded selector all pass through untouched. A bare comparison between two
 single state reads lowers to `compareState`; anything else, or an explicit `: Int`/`: Fixed`/`as Int`/`as Fixed`
 suffix (which always forces it, even for two simple reads), lowers to `compareValue`. The suffix binds to the one
-comparison it follows, never to an enclosing `and`/`or` chain — but printed bare at the end of a chain it reads as
+comparison it follows, never to an enclosing `and`/`or` chain—but printed bare at the end of a chain it reads as
 though it scoped the whole thing, so wrap the annotated comparison in its own `(Operand cmp Operand : Kind)` (the
 generic `when (Gate)` grouping above) whenever it sits beside `and`/`or`. `WorldDecompiler` always wraps and prints
 an explicit `Int`. `Fixed` is the default and is elided only where the bare text re-lowers to `compareValue` on its
@@ -80,7 +80,7 @@ and a `compareValue` carrying no `kind` at all over two plain reads has no sugar
 
 ### Rules
 
-```
+```puck
 rule "name" {
     when Gate
     bind localName : Int|Fixed = <operand>
@@ -94,7 +94,7 @@ rule "name" {
 
 Effect statements:
 
-```
+```puck
 row[key] = rhs           // setState
 row[key] += rhs          // addState
 push row = rhs           // pushState (no key)
@@ -110,16 +110,16 @@ transaction {
 name(k: v, ...)             // generate(...), or any Puck.World.Schema extension arm — call-form only
 ```
 
-`row[key]` (a *row reference*) is read as one span — a name plus zero or more adjacent `[...]` groups — and
+`row[key]` (a *row reference*) is read as one span—a name plus zero or more adjacent `[...]` groups—and
 resolved through `ExpressionSpelling` to exactly one state-read token; `row[key] = rhs` only means a cell
-assignment inside a rule/transaction/option/onFailure/onNoChoice body — the same `identifier[...]` outside such a
+assignment inside a rule/transaction/option/onFailure/onNoChoice body—the same `identifier[...]` outside such a
 body still means the existing inline-array-property sugar. An `rhs` is a string literal (`Text`), a number carrying
 the `s` unit (`ValueSeconds`), or opaque operand text the lowering stage classifies into `Value` /
 `FromState`+`FromKey` / a verbatim `Expression`.
 
 ### Decisions
 
-```
+```puck
 decision {
     periodSeconds: 1s
     mode: HighestScore
@@ -143,7 +143,7 @@ decision {
 ### Shapes, placements, and prototypes
 
 `shape Type "name" { ... }`, `placements { policy { ... } placement "id" { ... } }`, and
-`prototypes { prototype "id" { document { ... } } }` are ordinary named/targeted blocks — no dedicated grammar
+`prototypes { prototype "id" { document { ... } } }` are ordinary named/targeted blocks—no dedicated grammar
 beyond the bare flag statement above (`solid` inside a `placement` row). `prototypes` admits `prototype` rows only
 (it lowers to a bare array, with no object for a property to land on) and `placements` admits `placement` rows and
 plain properties; anything else inside either is PUCK036, never dropped. The values each elides, and the values the
@@ -160,7 +160,7 @@ path for the whole `prototypes` array or the whole `shapes` array respectively, 
 
 `ShapeDocument.Group` carries no default in that table: the authored corpus omits the key on some shapes and
 carries it on others, so filling one on lowering would add a key the source does not have. (The engine cannot tell
-the two apart — `CreationCanonicalizer` normalizes an absent `group` and an explicit `0` to the same value — but
+the two apart—`CreationCanonicalizer` normalizes an absent `group` and an explicit `0` to the same value—but
 round-trip fidelity is the constraint here, not engine semantics.) It passes through both directions
 unconditionally, like `material` or `parent`.
 
@@ -170,22 +170,22 @@ unconditionally, like `material` or `parent`.
 recovered on a re-run) and inverts `rules`/`shapes`/`placements`/`prototypes` into the sugar above, eliding a
 `shape`'s `blend`/`smooth`/`rotation`/`scale`/`id` and a `placement`'s `yawDegrees`/`scale`/`solid` only on an exact
 match to their emitter-side defaults. A shape's `name` elides onto the block's quoted-name syntax only when it is a
-string; an authored JSON `null` (distinct from an absent key — a shape's own bounding box, say) has no such spelling
+string; an authored JSON `null` (distinct from an absent key—a shape's own bounding box, say) has no such spelling
 and prints as an ordinary `name: null` property instead, alongside the unnamed header form. Anywhere else in the
-document, any object carrying a `$type` key — every
+document, any object carrying a `$type` key—every
 `ActionPredicate`/`ActionEffect`/`StateTransform` shape the dedicated sugar does not cover, and any
-`Puck.World.Schema` extension arm — prints as `type(k: v, ...)` call-form rather than a brace object with a literal
+`Puck.World.Schema` extension arm—prints as `type(k: v, ...)` call-form rather than a brace object with a literal
 `$type` key.
 
 A `when`/`gate:` predicate or a `row[key]`-shaped effect target that would not parse back to the same tree falls
 back to the safer spelling instead of guessing: a rule's `gate` (an ordinary rule-body property) prints as
 `gate: <call-form>` whenever any `compareValue` in it has a `left` starting with `(` (`ParseAtom` would otherwise
-read that opening paren as a parenthesized sub-gate, not the start of the predicate's own operand — a real shape in
+read that opening paren as a parenthesized sub-gate, not the start of the predicate's own operand—a real shape in
 this corpus's own board-legality binds) or any `all`/`any` in it has fewer than two children (the parser's own
 `and`/`or` accumulation never produces that wrapper from source text, so it has no bare-sugar spelling at all); a
 `setState`/`addState`/`push`/`countdown`/`remove`/`schedule` effect prints as call-form whenever its `state`/`key`
 target does not round-trip through `ExpressionSpelling.Print`/`TryParse` unchanged (a `key` shaped like `$expr:X[Y]`
-is the confirmed case — printing strips the `$expr:` prefix, but reparsing then reads `X[Y]` as a `$cell:`
+is the confirmed case—printing strips the `$expr:` prefix, but reparsing then reads `X[Y]` as a `$cell:`
 indirection instead), or whenever its `expression` field is a single token `ExpressionSpelling` would classify as a
 bare `value`/`fromState` and the compiler's own RHS classifier would therefore never leave under `expression`.
 An option's gate and a decision's `interrupt` take the same test and the same way out, spelled `gate: <call-form>`
@@ -193,11 +193,11 @@ and `interrupt: <call-form>`, both of which the option and decision bodies accep
 
 A `compareState` carrying both `value` and `comparandState` (`ActionPredicate.CompareState` admits exactly one)
 also stays call-form rather than having one of the two silently dropped, and so does a `comparison` or `kind`
-spelled in any casing but its own enum member name — the engine's converter accepts those, but the sugar can only
+spelled in any casing but its own enum member name—the engine's converter accepts those, but the sugar can only
 reprint the canonical spelling, which would change the document.
 
-Every sugar spelling reprints the WHOLE node or does not apply: any key it has no slot for — an effect's `target`,
-a second right-hand-side key, a prototype row's non-object `document` — sends the node to call-form. A key present
+Every sugar spelling reprints the WHOLE node or does not apply: any key it has no slot for—an effect's `target`,
+a second right-hand-side key, a prototype row's non-object `document`—sends the node to call-form. A key present
 with an explicit JSON null counts (`SetState.Value` and `CompareState.Value` carry no
 `JsonIgnore(WhenWritingNull)`, so an engine-serialized document does carry `"value": null` beside a `fromState` or
 an `expression`), and a `compareState` whose only comparand key is an explicit null likewise, since the sugar has
@@ -207,7 +207,7 @@ no text that recompiles to a null comparand.
 
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
 state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word), PUCK006 (`bind` missing its kind),
-PUCK007 (`bind` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry — a string
+PUCK007 (`bind` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
 on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
@@ -227,32 +227,32 @@ family (PUCK_LINT_005 onward) live in the lowering/lint stages, not the parser.
 
 `Validation/PuckLinter.LintReferences` walks the LOWERED JSON (not the AST) for candidate reference sites, but a
 document declaring `basis` builds its name catalog from the WHOLE composed basis/import graph
-(`Composition/PuckDocumentComposer`, rooted beside the `sourcePath` argument — the same composition
+(`Composition/PuckDocumentComposer`, rooted beside the `sourcePath` argument—the same composition
 `WorldSemanticValidator.ValidateComposedWorld` and the game boot path run) rather than from the document alone, so a
 name only a basis or import supplies resolves correctly. It still only ever WALKS the document's own tree, never
 the composed one (whose merged array order no longer lines up with the caller's `SourceMap`), so a reported
 finding's JSON pointer always belongs to the document's own source. Whether an unresolvable name is REPORTED turns
 on `WorldSemanticValidator.IsRootDocument` instead: a ROOT declares `schema: "puck.world.def.v1"`, a `basis`, or
-both, and every other document is a MODULE — a fragment some other, unknown root may import — so a name a module
+both, and every other document is a MODULE—a fragment some other, unknown root may import—so a name a module
 cannot resolve standalone is never a finding; it may be a name that root supplies. (`imports` alone does not make a
 root: a module may import sibling modules.) `puck lint` and `compile --validate` apply the same test before
 composing and validating a document as a world. The one check that ignores this distinction entirely is shape-parent resolution: it is
 scoped to sibling shapes in the same `shapes` array, a purely local scope no basis or importer could change, so it
 always runs and always reports. Every other check is Information severity; the shape-parent check is Warning:
 
-- `PUCK_LINT_005` — a `state`/`comparandState`/`fromState` name, or a `State` token inside a `compareValue`
+- `PUCK_LINT_005`—a `state`/`comparandState`/`fromState` name, or a `State` token inside a `compareValue`
   predicate's `left`/`right` operand or any `expression`/`score` operand, that resolves to no declared
-  `state.*[].name` row. `left`/`right` are checked ONLY on a `compareValue`-discriminated object — every other
+  `state.*[].name` row. `left`/`right` are checked ONLY on a `compareValue`-discriminated object—every other
   `left`/`right` pair in the document model (e.g. an interaction row's property/placement-id pair) is a different
   name kind and is never read as an expression.
-- `PUCK_LINT_006` — a `prototypeId` that resolves to no `prototypes[].id`.
-- `PUCK_LINT_007` — a placement row's `parent` that resolves to no `placements.rows[].id`.
-- `PUCK_LINT_008` — a `camera`/`spawnPoint` reference that resolves to no `cameras[].name`/`spawnPoints[].id`.
-- `PUCK_LINT_009` — a `$`-prefixed operand name one edit apart from a `RuleFacts` channel prefix (`$tabl:` for
-  `$table:`) — deliberately narrow: a real extension prefix (`$board`, `$physics`, ...) sits far from every
+- `PUCK_LINT_006`—a `prototypeId` that resolves to no `prototypes[].id`.
+- `PUCK_LINT_007`—a placement row's `parent` that resolves to no `placements.rows[].id`.
+- `PUCK_LINT_008`—a `camera`/`spawnPoint` reference that resolves to no `cameras[].name`/`spawnPoints[].id`.
+- `PUCK_LINT_009`—a `$`-prefixed operand name one edit apart from a `RuleFacts` channel prefix (`$tabl:` for
+  `$table:`)—deliberately narrow: a real extension prefix (`$board`, `$physics`, ...) sits far from every
   `RuleFacts` name and is never flagged. Purely local (a fixed known-prefix list, never the document's own
   catalog), so it runs for a module exactly as it does for a basis-declaring document.
-- `PUCK034` (Warning) — a `shape`'s `parent` that resolves to no sibling `name` in the SAME `shapes` array.
+- `PUCK034` (Warning)—a `shape`'s `parent` that resolves to no sibling `name` in the SAME `shapes` array.
 
 `$`-prefixed and dotted (import-alias) names are never checked against a declared-row set.
 
@@ -279,11 +279,15 @@ Comments, string contents, and whitespace do not trigger symbol hover. Imported 
 expression result types are not resolved by these cards.
 
 `Formatting/PuckFormatter.cs` is a meaning-preserving pass: formatting a document never changes what it compiles
-to. A `$name:segment` reserved channel — including a folded `$zones[...]` selector — is one opaque token, so its
+to. A `$name:segment` reserved channel—including a folded `$zones[...]` selector—is one opaque token, so its
 internal colons never splice `$physics:quiescent` into `$physics: quiescent`; a backquoted name (`` `N,S,E,W` ``,
 `` `seat-1` ``, per `Puck.State.ExpressionSpelling`) is opaque the same way a `"..."` string literal is, so its
 commas never gain the space the comma rule inserts everywhere else. A colon that already carries a single space
-before it — `bind name : Kind`, a `when Gate : Kind`/`as Kind` suffix, and a ternary's `? a : b`, all
-`ExpressionSpelling`'s own spacing — keeps that space rather than being squeezed into an unspaced property colon;
+before it—`bind name : Kind`, a `when Gate : Kind`/`as Kind` suffix, and a ternary's `? a : b`, all
+`ExpressionSpelling`'s own spacing—keeps that space rather than being squeezed into an unspaced property colon;
 only a run of two or more spaces before a colon is ever collapsed. The decompiler's one-time-import header comment,
 and every other comment, survives formatting in place.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

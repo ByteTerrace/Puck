@@ -87,8 +87,9 @@ express.
 **Current decision:** Rejected.
 
 Chamfer masks introduce directional distance error and require an extra safety
-penalty. The deterministic exact Euclidean distance transform used by
-`SdfCoverageAtlas` is the fallback generator.
+penalty. Coverage-to-distance conversion is not a supported replacement for
+the managed outline generator: coverage is appropriate for decals, while
+marchable glyphs require outline-derived fields with documented safety limits.
 
 ## Unbounded procedural displacement
 

@@ -47,7 +47,7 @@ internal static class WasmStdlibCommand {
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
         foreach (var source in WasmStdlibSources.All) {
-            var fullPath = Path.Combine(path1: repositoryRoot, path2: source.RelativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+            var fullPath = Path.Combine(path1: repositoryRoot, path2: source.RelativePath);
             var directory = Path.GetDirectoryName(path: fullPath);
 
             if ((directory is null) || !Directory.Exists(path: directory)) {

@@ -92,10 +92,10 @@ internal static class SchemaCommand {
 
         var (root, sections, common, sectionsDirectory) = BuildFileSet(repositoryRoot: repositoryRoot, split: split);
         var projection = new SchemaFile(
-            FullPath: Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: ProjectionRelativePath)),
+            FullPath: Path.Combine(path1: repositoryRoot, path2: ProjectionRelativePath),
             Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection(postRenderExtensions: postRenderExtensions)));
         var silo = new SchemaFile(
-            FullPath: Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: SiloRelativePath)),
+            FullPath: Path.Combine(path1: repositoryRoot, path2: SiloRelativePath),
             Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportSilo()));
 
         return (check
@@ -123,8 +123,8 @@ internal static class SchemaCommand {
         return 0;
     }
     private static (SchemaFile Root, IReadOnlyList<SchemaFile> Sections, SchemaFile Common, string SectionsDirectory) BuildFileSet(string repositoryRoot, WorldSchema.SplitSchema split) {
-        var rootPath = Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: RootRelativePath));
-        var sectionsDirectory = Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: SectionsRelativeDirectory));
+        var rootPath = Path.Combine(path1: repositoryRoot, path2: RootRelativePath);
+        var sectionsDirectory = Path.Combine(path1: repositoryRoot, path2: SectionsRelativeDirectory);
         var root = new SchemaFile(FullPath: rootPath, Text: WorldSchema.ToCanonicalText(node: split.Root));
         var sections = split.Sections
             .Select(selector: s => new SchemaFile(FullPath: Path.Combine(path1: sectionsDirectory, path2: $"{s.Name}.schema.json"), Text: WorldSchema.ToCanonicalText(node: s.Node)))
@@ -157,8 +157,6 @@ internal static class SchemaCommand {
         return extensions;
     }
 
-    private static string ToNativePath(string relativePath) =>
-        relativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
     private static int Write(SchemaFile root, SchemaFile projection, SchemaFile silo, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
         WriteFile(file: root);
         WriteFile(file: projection);

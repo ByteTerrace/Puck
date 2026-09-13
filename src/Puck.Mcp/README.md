@@ -267,7 +267,7 @@ writer boundary tests remain in Commands, Abstractions and Shaders. A physical
 device-loss event or live Entra deployment is not claimed by this run.
 
 Run `dotnet test tests/Puck.Cli.Tests -c Release` for SDK interop and the
-[Hosting verification](../Puck.Hosting/README.md#-verification) for engine attachment contracts.
+[Hosting verification](../Puck.Hosting/README.md#verification) for engine attachment contracts.
 For a live smoke, edit a parameter through MCP and decode the captured PNG; hold
 this attachment with `world.wait` and confirm human input still answers. Close
 the adapter during the wait, reconnect with the same file, then capture again.
@@ -275,3 +275,7 @@ Stopping control must remove discovery without stopping World; headless hosts
 must refuse capture. These checks run the ordinary engine, with no alternate
 simulation loop. See the
 [remaining plan](../../docs/plans/mcp-integration.md).
+
+## Documentation
+
+📚 [Engine manual](../../docs/README.md) · 🛠️ [Development](../../docs/development/README.md)

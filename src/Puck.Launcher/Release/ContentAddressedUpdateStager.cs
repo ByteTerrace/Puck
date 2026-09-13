@@ -66,7 +66,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
             }
 
-            var destinationPath = Path.Combine(path1: versionDirectory, path2: file.Path.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+            var destinationPath = Path.Combine(path1: versionDirectory, path2: file.Path);
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: destinationPath)!);
             await File.WriteAllBytesAsync(bytes: bytes, cancellationToken: cancellationToken, path: destinationPath).ConfigureAwait(continueOnCapturedContext: false);

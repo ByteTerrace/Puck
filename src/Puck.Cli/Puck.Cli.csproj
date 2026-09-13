@@ -73,4 +73,5 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <Import Project="..\..\build\WorldAssets.targets" />
 </Project>

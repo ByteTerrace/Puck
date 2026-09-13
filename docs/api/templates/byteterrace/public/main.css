@@ -1,13 +1,14 @@
 /*
-  ByteTerrace skin for the DocFX "modern" template. Maps Bootstrap 5.3's
-  variables onto the same palette, fonts and light/dark values as the home page
-  and the essays (blob.byteterrace.com/public/*). The modern template drives
-  light/dark by toggling [data-bs-theme] on <html>; we bind our colours to that
-  so its existing toggle keeps working.
+  ByteTerrace adapter for the DocFX "modern" template. Maps Bootstrap 5.3's
+  variables onto shared branding palette and font tokens while keeping layout
+  rules local. The modern template drives light/dark by toggling [data-bs-theme]
+  on <html>; the shared tokens bind to that state.
 
   Fonts are the self-hosted woff2 deployed to $web/_theme/fonts, referenced by
   absolute same-origin paths so they resolve from /reference/* the same as /.
 */
+@import url("/_theme/tokens.css");
+
 @font-face { font-family: "Lora"; font-style: normal; font-weight: 400; font-display: swap; src: url(/_theme/fonts/lora-400.woff2) format("woff2"); }
 @font-face { font-family: "Lora"; font-style: italic; font-weight: 400; font-display: swap; src: url(/_theme/fonts/lora-400i.woff2) format("woff2"); }
 @font-face { font-family: "Lora"; font-style: normal; font-weight: 500; font-display: swap; src: url(/_theme/fonts/lora-500.woff2) format("woff2"); }
@@ -17,46 +18,46 @@
 
 :root,
 [data-bs-theme="light"] {
-  --bs-body-bg: #e7e4ed;
+  --bs-body-bg: var(--paper);
   --bs-body-bg-rgb: 231, 228, 237;
-  --bs-secondary-bg: #dbd7e4;
-  --bs-tertiary-bg: #dbd7e4;
-  --bs-body-color: #2b2736;
+  --bs-secondary-bg: var(--paper-2);
+  --bs-tertiary-bg: var(--paper-2);
+  --bs-body-color: var(--ink);
   --bs-body-color-rgb: 43, 39, 54;
-  --bs-emphasis-color: #2b2736;
-  --bs-secondary-color: #5a5470;
-  --bs-tertiary-color: #877f99;
-  --bs-border-color: #d0cbdc;
-  --bs-heading-color: #2b2736;
-  --bs-link-color: #ad3a53;
+  --bs-emphasis-color: var(--ink);
+  --bs-secondary-color: var(--ink-soft);
+  --bs-tertiary-color: var(--ink-faint);
+  --bs-border-color: var(--rule);
+  --bs-heading-color: var(--ink);
+  --bs-link-color: var(--accent);
   --bs-link-color-rgb: 173, 58, 83;
-  --bs-link-hover-color: #d15d78;
+  --bs-link-hover-color: var(--accent-bright);
   --bs-link-hover-color-rgb: 209, 93, 120;
-  --bs-code-color: #ad3a53;
+  --bs-code-color: var(--accent);
 }
 
 [data-bs-theme="dark"] {
-  --bs-body-bg: #1b1924;
+  --bs-body-bg: var(--paper);
   --bs-body-bg-rgb: 27, 25, 36;
-  --bs-secondary-bg: #262231;
-  --bs-tertiary-bg: #262231;
-  --bs-body-color: #ebe7f2;
+  --bs-secondary-bg: var(--paper-2);
+  --bs-tertiary-bg: var(--paper-2);
+  --bs-body-color: var(--ink);
   --bs-body-color-rgb: 235, 231, 242;
   --bs-emphasis-color: #ffffff;
-  --bs-secondary-color: #b5aec3;
-  --bs-tertiary-color: #847d93;
-  --bs-border-color: #363145;
-  --bs-heading-color: #ebe7f2;
-  --bs-link-color: #f2879a;
+  --bs-secondary-color: var(--ink-soft);
+  --bs-tertiary-color: var(--ink-faint);
+  --bs-border-color: var(--rule);
+  --bs-heading-color: var(--ink);
+  --bs-link-color: var(--accent);
   --bs-link-color-rgb: 242, 135, 154;
-  --bs-link-hover-color: #ffa3b3;
+  --bs-link-hover-color: var(--accent-bright);
   --bs-link-hover-color-rgb: 255, 163, 179;
-  --bs-code-color: #f2879a;
+  --bs-code-color: var(--accent);
 }
 
 :root {
-  --bs-body-font-family: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  --bs-font-monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --bs-body-font-family: var(--font-body);
+  --bs-font-monospace: var(--font-code);
   --bs-body-font-size: 1.02rem;
   --bs-body-line-height: 1.6;
 }

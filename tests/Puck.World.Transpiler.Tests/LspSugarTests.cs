@@ -200,6 +200,18 @@ public class LspSugarTests {
         Assert.Null(name?["type"]);
     }
 
+    [Theory]
+    [InlineData(2, true, "  ")]
+    [InlineData(4, true, "    ")]
+    [InlineData(4, false, "\t")]
+    public async Task FormattingHonorsClientIndentation(int tabSize, bool insertSpaces, string indent) {
+        var request = System.Text.Json.JsonSerializer.Serialize(new {
+            jsonrpc = "2.0", id = 2, method = "textDocument/formatting",
+            @params = new { textDocument = new { uri = "file:///sugar.puck" }, options = new { tabSize, insertSpaces } }
+        });
+        var response = await SendRequestsAsync("host { width: 1280, height: 720 }", (2, request));
+        Assert.Equal($"host {{\n{indent}width: 1280,\n{indent}height: 720\n}}\n", response["result"]?[0]?["newText"]?.ToString());
+    }
     private static Task<JsonNode> HoverMarkedAsync(string markedSource) {
         var offset = markedSource.IndexOf('|', StringComparison.Ordinal);
         var before = markedSource[..offset];

@@ -50,9 +50,9 @@ components:
         // Egyptian braces: opening brace on same line
         Assert.Contains("host {", formatted);
         Assert.Contains("entities [", formatted);
-        // 4 spaces indentation
-        Assert.Contains("    authority: \"test.host\"", formatted);
-        Assert.Contains("    presentation: windowed", formatted);
+        // Default: two spaces per level
+        Assert.Contains("  authority: \"test.host\"", formatted);
+        Assert.Contains("  presentation: windowed", formatted);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ host {
 
 host {
     authority: ""test.host""
-    presentation: windowed
+  presentation: windowed
 }
 
 entities [
@@ -121,7 +121,7 @@ value: 1
         var formatted = PuckFormatter.Format(unformatted);
         Assert.DoesNotContain("[ {", formatted);
         Assert.DoesNotContain("} {", formatted);
-        Assert.Contains("cells [\n    {\n        key: \"feltColor\"", formatted);
+        Assert.Contains("cells [\n  {\n    key: \"feltColor\"", formatted);
     }
 
     // A ternary's colon carries a space on both sides (Puck.State.ExpressionSpelling's own spelling); stripping the

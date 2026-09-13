@@ -3,7 +3,7 @@
         "prefix": "world",
         "body": [
             "schema: \"puck.world.def.v1\"",
-            "basis: \"${1:worlds/standard.basis.json}\"",
+            "basis: \"${1:worlds/base.puck}\"",
             "documentId: \"${2:world-id-v1}\"",
             "",
             "host {",

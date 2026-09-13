@@ -1,4 +1,4 @@
-# The island's districts
+# World modules
 
 Every district of the one world is a module in this directory: a `puck.world.def.v1` fragment with no
 `basis`, `host`, `bodies` census, `views`, or `channels`, imported by `puck.world.json` under an alias
@@ -10,8 +10,8 @@ spelled bare inside the module and compose as `<alias>_<name>` (`world.state div
 spawn point ids, kit names, and camera names compose as authored, which is how the island restates a
 district's court (`{"id": "diveCourt", "position": [...], "yawDegrees": ...}`) and its arrival spawn without
 naming anything private. A navigation domain can name the court as `parent`, making its origin and grid axes
-local to that court; the granaries use this form. Rows that still carry absolute positions — a `state.lattices`
-origin, an unparented navigation origin, a curve's knots — require translation when the district is placed.
+local to that court; the granaries use this form. Rows that still carry absolute positions—a `state.lattices`
+origin, an unparented navigation origin, a curve's knots—require translation when the district is placed.
 A module authors no world-level tunable (a simulation rate, a seat
 count); it reads the island's.
 
@@ -57,7 +57,7 @@ about granaries.
 
 `granaryStores` is a placement carrying a `deal` facet: a template whose
 children are dealt from the keyed text row `granaryNames`, one child per cell,
-over the template's own `distribution` region — a scatter of 16 offsets, the
+over the template's own `distribution` region—a scatter of 16 offsets, the
 row's capacity. A child is an ordinary placement row named
 `granaryStores/<accountName>`, parented to the template at the offset it was
 dealt, carrying the template's prototype, `solid`, `grip`, `region`, and
@@ -203,7 +203,7 @@ potential private user-data homes. The account inventory is not the active
 Orleans partition count: discovering five accounts does not prove five
 partitions are serving. No bin fill level, traffic, health, grain occupancy, or
 migration status is invented from inventory. A later reading of the platform
-enters the same way — an observation writing a row a placement, body, or rule
+enters the same way—an observation writing a row a placement, body, or rule
 reads.
 
 ### Import and reinterpret
@@ -229,7 +229,7 @@ for projection authority and lifecycle, and the
 
 ## The kart district (`kart.world.json`, alias `kart`)
 
-A closed racing loop: a `curves` row (`kartTrack`, eight knots, constant curvature — an
+A closed racing loop: a `curves` row (`kartTrack`, eight knots, constant curvature—an
 exact circle, never control points) traces the lap direction, and `kartCourt` carries a
 single flat floor creation as the one drivable surface, banked wall dressing and a ramp
 parented to it at fixed local offsets, and three gate placements (`gate0`/`gate1`/`gate2`,
@@ -237,19 +237,19 @@ each an ordinary creation carrying a `region` facet) spaced a quarter-turn apart
 the loop.
 
 **What a kart is, today.** The charter calls for "a rigid kit with a `drive` row"; neither
-exists as a document shape. `WorldRigid` is passive physics furniture — it reads no
-intent, so a rigid body cannot be player-driven — and there is no kit facet literally
+exists as a document shape. `WorldRigid` is passive physics furniture—it reads no
+intent, so a rigid body cannot be player-driven—and there is no kit facet literally
 named `drive`. The vocabulary the schema and server actually carry for this shape is the
 one `Puck.World.Schema/README.md` already documents: a kit's ordinary `motion` row,
 its frame resolved by the `ResolveDriveFrame` body-motion op instead of the walking
 `ResolveYawAttitudeAndPlanarFrame` (steering integrates into the body's own heading at a
 speed-scaled authority curve, `turn.referenceSpeed`/`turn.falloff`, rather than snapping
-to the commanded direction every tick), and a `shaping` row carrying an `across` facet —
+to the commanded direction every tick), and a `shaping` row carrying an `across` facet—
 the anisotropic drive decomposition: longitudinal throttle/brake/coast via `along`,
 lateral grip converging out slip via `across.lateral`. `kart.world.json` authors exactly
 this: kit `kart`, program `kartDrive` (`ResolveDriveFrame`, `ResolveHold`,
 `ComputePlanarTargetVelocity`, `ShapeVelocity`, `RunActionTriggers`, `ApplyHold`,
-`IntegratePlanarAndVerticalVelocity`, `CommitPose` — the walking program's `SnapYawToPlanarIntent`
+`IntegratePlanarAndVerticalVelocity`, `CommitPose`—the walking program's `SnapYawToPlanarIntent`
 dropped, since the drive frame owns heading itself), a `ground`/`air` Gravity hold pair
 copied from the walker's own numbers, and one shaping row (`engage`/`release`/`reversalRate`/
 `backwardSpeed` under `along`, `lateral` under `across`). This module is the first document
@@ -257,30 +257,30 @@ in the repository to author `ResolveDriveFrame` and an `across` shaping row; not
 is a second implementation of an existing mechanism.
 
 **What a kart still lacks.** No drift channel (a held-gated shaping row ahead of the
-ordinary one, the documented spelling for a swappable lateral-grip row) and no boost —
+ordinary one, the documented spelling for a swappable lateral-grip row) and no boost—
 the retired prototype's `dash`/drift tuning is not carried over, since the task asks for
 a track, a kit, gates, and a lap counter, not the full feel pass. No banking FUNCTION:
 the two `bankWall` placements are decorative dressing baked into the creation's own
 shape rotation (a placement's `yawDegrees` turns only about world Y, so a genuine banked
-turn — the floor itself tilting — is out of reach of today's placement transform; it
+turn—the floor itself tilting—is out of reach of today's placement transform; it
 would need either a per-shape roll baked into a curved floor creation authored specially
 for each turn, or a placement-level roll/pitch facet beside `yawDegrees` that does not
-exist). No chassis look — the kit collides as a bare capsule and renders through
+exist). No chassis look—the kit collides as a bare capsule and renders through
 whatever fallback presentation an unlooked body gets; a `looks` row and a matching
 `puck.creation.v1` chassis are future authoring, not a missing primitive. The
 `kartSurface` navigation domain is declared (module contract: every walkable district
-carries one) but unread by anything today — the kit is seat-driven, not
+carries one) but unread by anything today—the kit is seat-driven, not
 `BodyTargetSource.Navigated`; an NPC kart wandering the loop is a future producer wired
 onto the same domain.
 
 **The lap mechanism.** `gateStage` (int, non-negative, starts at 0) advances one gate at
 a time: `kart-gate-0`, `kart-gate-1`, `kart-gate-2` each gate an `Edge`-mode rule on
 `gateStage == <ordinal>` AND the gate's own `$region:gate<n>` occupancy, so a body must
-cross the gates IN ORDER — sitting inside gate 1 first advances nothing, because the
+cross the gates IN ORDER—sitting inside gate 1 first advances nothing, because the
 stage guard is still 0. The third gate additionally increments `lap` and resets
 `gateStage` to 0, so a completed circuit never needs to return exactly to the start
 line. `lapStart` records `$tick` when the first gate fires and `lapTicks` is written once per lap as
-`$tick - lapStart` — a lap timer in engine ticks, read alongside `lap`, that costs the quiet tick nothing
+`$tick - lapStart`—a lap timer in engine ticks, read alongside `lap`, that costs the quiet tick nothing
 (a rule that writes every tick installs the document every tick). `exports` surfaces `lap`/`lapTicks` as reads and
 `lap` as a binding; nothing is exported as an action (nothing outside the module writes
 into a kart row).
@@ -292,7 +292,7 @@ authored direction of travel) drives the seat around the loop; by tick 151 (alre
 past a full circuit) `kart_lap` reads 1 and `kart_gateStage` has been reset to 0. The
 discriminating leg negates only the steer sign (`body.fly 1 0 0 1 0 0 5`): the kart
 drives the opposite way around the SAME loop, in the SAME time, and never opens even the
-first gate — `kart_gateStage` stays 0 and `kart_lap` never reaches 1 — proving the gates
+first gate—`kart_gateStage` stays 0 and `kart_lap` never reaches 1—proving the gates
 discriminate on ORDER, not mere proximity.
 ## The jump district
 
@@ -304,49 +304,49 @@ district's own move-set on today's holds vocabulary (`Puck.World.Schema.WorldHol
 steep overhang band, cone `[112, 150]`) and a `wall` hold (cone `[65, 110]`, narrower than the walker's
 `[60, 120]` at the island level) both release on the `jump` channel exactly as the walker's own wall hold
 does; `ground` and `air` holds carry the walker's fall/rise arc, and BOTH additionally carry `thrust: 0.6`
-on the `MoveUp` role — a hover-assist a plain walker does not have, present so a seat (or `body.fly`, the
+on the `MoveUp` role—a hover-assist a plain walker does not have, present so a seat (or `body.fly`, the
 canary's own verification path) can climb the course under sustained vertical input instead of chaining
 jumps, and left in for play as the district's own feel. `jump` (a double-jump, `jumpCounter` capped at 2,
 resetting on `Grounded`) is bound the same way the shipped walker's own jump is.
 
-## What a district module CANNOT do today — properties do not survive an aliased import
+## What a district module CANNOT do today—properties do not survive an aliased import
 
 The brief's own wording called for "a trophy placement with a region and an interaction whose Edge effect
-writes `reached`" — the generalized `properties` + `interactions` (`WorldInteractionCoOccurrence.Region`)
+writes `reached`"—the generalized `properties` + `interactions` (`WorldInteractionCoOccurrence.Region`)
 primitive `puck.world.json`'s own `wren`/`hound` rows already use. That primitive DOES NOT survive
 composition under a NON-EMPTY import alias, and this module is always imported aliased (`{"document": "…",
 "as": "jump"}` — the island does this for every district). The mechanism (`WorldNameRegistry.cs`,
 `WorldModuleNamespace.cs`) prefixes a module's OWN declared `state` row names with `<alias>_` on import and
-rewrites every registered reference to match — including `WorldInteraction.Left`/`Right` — but
+rewrites every registered reference to match—including `WorldInteraction.Left`/`Right`—but
 `WorldPropertyRegistrySection.Names` is one of the many members `WorldNameRegistry.Exclusions` deliberately
 leaves unprefixed ("property names are the properties section's own namespace"). A property's own backing
 row (a keyed `int` `state` row of the identical name, per `WorldPropertyRegistrySection`'s own contract) DOES
 get the alias prefix like any other declared state row, so after import the declared row is named
 `jump_vaulter` while `properties.names` still reads `["vaulter"]` and the interaction's `left` reference has
-followed the row to `jump_vaulter` too — three spellings that no longer agree, and
+followed the row to `jump_vaulter` too—three spellings that no longer agree, and
 `WorldDefinitionValidator`'s `ValidateProperties`/interaction PropertyUnknown checks correctly refuse the
-mismatch. This was reproduced directly (`puck registry`/`WorldNameRegistry.cs` need no edit to see it —
+mismatch. This was reproduced directly (`puck registry`/`WorldNameRegistry.cs` need no edit to see it—
 author the property + interaction exactly as `puck.world.json` does, import the module under any alias, and
 the composed document is refused at boot) and is a genuine gap in the module system, not a mistake in this
-district's authoring — every future district that wants a property-tagged region interaction on an
+district's authoring—every future district that wants a property-tagged region interaction on an
 ALIASED import hits the identical refusal. It is out of this module's file list to fix (`WorldNameRegistry.cs`
 is shared, edited by other tasks for their own new name sites) and is recorded here so the next district
 that reaches for `properties` under an alias does not re-derive it from a boot refusal.
 
 `reached` and `falls` are therefore plain (non-keyed) `int` rows, each written by an ordinary `rules` entry
 reading the reserved `$region:<placementId>` occupancy count directly (`Puck.World.Schema.WorldRuleFacts.RegionPrefix`
-— no `properties` section, no `interactions` section, entirely self-contained under any alias): `jumpTrophyReached`
+—no `properties` section, no `interactions` section, entirely self-contained under any alias): `jumpTrophyReached`
 sets `reached` to `1` the tick the trophy's region count crosses above zero (`mode: "Edge"`), and
 `jumpFallsCounter` adds one to `falls` the same way whenever a body enters the wide net below the course.
-Neither is keyed by which body triggered it — the region-occupancy read is an aggregate count, not a
-per-body attribution — so "reached" answers "has ANY body reached the trophy", not "which seat's". A design
+Neither is keyed by which body triggered it—the region-occupancy read is an aggregate count, not a
+per-body attribution—so "reached" answers "has ANY body reached the trophy", not "which seat's". A design
 that needs the latter needs the `properties` gap above closed first.
 
 ## Kit and placement names are NOT alias-prefixed either
 
 Unlike `state`/`rules`/`tables`/`patterns`/`topologies`/`generators`/`fields`/`dynamics` row names, a kit's
 own name (`WorldKit.Name`), a placement's id (`WorldPlacement.Id`), a spawn point's id (`WorldSpawnPoint.Id`),
-and a navigation domain's name are ALSO in `WorldNameRegistry.Exclusions` — composing this module under an
+and a navigation domain's name are ALSO in `WorldNameRegistry.Exclusions`—composing this module under an
 alias leaves `vaulter`, `jumpCourt`, `jump-arrival`, and `jumpSurface` exactly as authored, never
 `jump_vaulter`/`jump_jumpCourt`/etc. This is why the module contract's own naming convention
 (`<alias>Court`, `<alias>-arrival`) is a hand-authored discipline rather than something the engine derives:
@@ -359,7 +359,7 @@ alias prefix (`jump_reached`/`jump_falls`).
 
 `tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.basis.json`-based world that
 imports `modules/jump.world.json` under alias `jump` and spawns its one local seat on `jump-arrival` with
-the `vaulter` kit — the same shape a future island import uses. Drive it directly:
+the `vaulter` kit—the same shape a future island import uses. Drive it directly:
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --headless --state-dir <tmp> \
@@ -370,31 +370,31 @@ dotnet run --project src/Puck.World -c Release -- --headless --state-dir <tmp> \
 carries the seat clear of every platform's solid geometry into the trophy's region; `world.state jump_reached`
 then reads `value=1`. A LEFT-Z convention note for whoever authors the next course: a Bipolar `forward`
 channel at `yaw=0` moves the body toward WORLD -Z (observed directly with `body.where`, not assumed), so this
-course runs from the arrival deck at `z=+3` out to the trophy at `z=-10` — a course authored the opposite way
+course runs from the arrival deck at `z=+3` out to the trophy at `z=-10`—a course authored the opposite way
 around would need its `forward` sign flipped in any driving script, never the channel itself.
 ## The studio district
 
 `studio.world.json` is a flat stage for character work: a lit floor, a turntable a
 body stands on, a mirror wall that shows the stage's own camera, and a counter a
 seat cycles by pressing the jump channel while standing on the turntable. It carries
-no bodies of its own — a visiting seat brings its own avatar and kit.
+no bodies of its own—a visiting seat brings its own avatar and kit.
 
 ## Shape
 
-- One creation, `studioStage`, is the floor and the turntable's raised disc marking —
+- One creation, `studioStage`, is the floor and the turntable's raised disc marking—
   rendered and collided from the same shapes, so nothing sits on ground that never
   matched what a body stood on.
 - `studioTurntable` is a child of `studioCourt` carrying a `region` facet (radius 1.6)
-  over an empty (invisible) creation — a sensing volume flush with the floor, not a
+  over an empty (invisible) creation—a sensing volume flush with the floor, not a
   second piece of standing geometry.
 - `studioMirror` is a child wall carrying a `view` screen face (`mirror`) that shows
-  the `studioStage` camera, itself anchored on the turntable and looking back at it —
+  the `studioStage` camera, itself anchored on the turntable and looking back at it—
   the reflection a body on the turntable sees of itself.
 - `studioGate` is a child wall opposite the mirror (local `(0, 1.1, 3.6)`, past the
   arrival spawn) carrying a `respond` facet: its base creation is the solid
   `studioGateClosed` box, and each entry swaps it to the collision-free
   `studioGateOpen` creation once one local seat's own `identity.0-awakened`/
-  `identity.1-awakened` cell reads nonzero — the front door onto whatever the
+  `identity.1-awakened` cell reads nonzero—the front door onto whatever the
   importing world places beyond it.
 - `studioCourt` is the district's one root placement; moving it (position and yaw)
   moves the whole stage, its turntable, its mirror, and its gate together.
@@ -414,24 +414,24 @@ effects: setState look = (look + 1) % 8
          setIdentityFact key:0 fact:awakened value:1
 ```
 
-`awakened` is the reveal ladder's own name for "has cycled its look at least once" —
+`awakened` is the reveal ladder's own name for "has cycled its look at least once"—
 an importing world reads it off `$identity:body:<n>:<fact>` to gate whatever the
 studio's own gate faces, and to re-pose a returning identity elsewhere at boot
 without waiting for it to walk back through the studio at all.
 
 A world-rule channel read is a fixed 1-based seat number, not "whichever body is in
-the region" — so each local seat needs its own rule, and a seat's channel compiles
+the region"—so each local seat needs its own rule, and a seat's channel compiles
 only in a host that declares that seat. The module carries seat 1's rule; the island,
 which seats two, adds seat 2's (`seat2-studio-look-cycle` in `puck.world.json`,
 writing `studio_look` and key `1`). The region predicate reads any occupant, so a
 seat pressing `jump` while the other stands on the turntable advances the counter
 and wakes the pressing seat's identity. `look` is the reveal ladder's future selector into whatever the
-importing world's own `looks.rows` declares (the wren's look among them) — this
+importing world's own `looks.rows` declares (the wren's look among them)—this
 district only counts; nothing here swaps a body's rendered look yet, since no
 document primitive binds a placement or body look to a live state row (that swap is
 reveal-wave work the counter is built to feed).
 
-Exported: `reads: [look]`, `bindings: [look]` — a host may gate a rule on the count
+Exported: `reads: [look]`, `bindings: [look]`—a host may gate a rule on the count
 or bind it to a HUD/overlay element; `actions` is empty, since nothing outside the
 module drives the counter.
 
@@ -439,12 +439,12 @@ module drives the counter.
 
 Import `modules/studio.world.json` under an alias (`{"document": "modules/studio.world.json",
 "as": "studio"}`). `studioCourt`/`studioTurntable`/`studioMirror` and the `studioStage`
-camera are placement/camera names, which the engine never rewrites on import — keep
+camera are placement/camera names, which the engine never rewrites on import—keep
 them distinctive so a second module's own bare names cannot collide with them. The
 module's own declared rows (`look`, the `studio-look-cycle` rule, the `studioFloor`
 navigation domain) still get the alias prefix, so a host reads the counter as
 `<alias>_look` (`world.state studio_look` under alias `studio`) and poses a seat at
-`spawn:<alias>-arrival` (spawn point ids are not rewritten either — the bare name
+`spawn:<alias>-arrival` (spawn point ids are not rewritten either—the bare name
 already carries the alias word, by convention, exactly as the granary placements
 above do).
 
@@ -453,7 +453,7 @@ island already does) and a `placements.policy.derivedFaceScreens` reservation of
 least 1 for the mirror's face to bind; a host authoring neither still boots the rest
 of the district, but the counter never advances and the mirror shows the no-signal
 card. A host that also wants the gate to open and the fact to travel declares a
-keyed `int` row named `identity` in its own `state.world` (`WorldIdentityFactLane`) —
+keyed `int` row named `identity` in its own `state.world` (`WorldIdentityFactLane`)—
 without it `setIdentityFact`/`$identity:` both refuse by name at compile, and
 `studioGate` simply never leaves its authored `studioGateClosed` prototype.
 
@@ -463,7 +463,7 @@ without it `setIdentityFact`/`$identity:` both refuse by name at compile, and
 on a stand, each booting an authored `puck.cartridge.v1` document from
 `src/Puck.World/Assets/cartridges/` rather than a ROM file. The game is the
 same on both bricks: a pip walks a room whose four walls are the district
-colors — dive `#2E6FD9` to the north, kart `#D9552E` east, jump `#3FB950`
+colors—dive `#2E6FD9` to the north, kart `#D9552E` east, jump `#3FB950`
 south, studio `#C9A227` west. The CGB target's palette holds four entries and
 the floor takes one, so its west wall is a checker of the kart and jump
 entries; the AGB cartridge paints all four. The d-pad walks the pip, the walls
@@ -491,7 +491,7 @@ Import it under the alias `arcade`:
 | `state.world` | `handheldHeld` | 0/1: whether seat 1 currently holds the handheld. |
 | `spawnPoints` | `arcade-arrival` | Court-local `(0, 0, 2)`, facing the cabinets. |
 | `navigation.domains` | `arcadeFloor` | A `Surface` domain over the court floor. |
-| `rules` | `handheld-pickup`, `handheld-release` | Toggle the handheld's `attach` facet onto/off seat 1's body — see "The handheld" below. |
+| `rules` | `handheld-pickup`, `handheld-release` | Toggle the handheld's `attach` facet onto/off seat 1's body—see "The handheld" below. |
 
 Declared names and their registered references receive the import alias, including
 machine instances. Screen indices stay numeric; state rows holding those indices
@@ -499,8 +499,8 @@ compose as `arcade_<name>`.
 
 ## How a cabinet is engaged
 
-Each `screens` row is engageable with `engageChannel: "jump"` — the island's
-own channel — and `kit: "arcadePad"`. A seat standing within `engageRadius`
+Each `screens` row is engageable with `engageChannel: "jump"`—the island's
+own channel—and `kit: "arcadePad"`. A seat standing within `engageRadius`
 (2.2 m in the slab's XZ plane) whose jump channel rises is composed onto the
 cabinet captured, so its pad drives the game instead of the avatar; the seat
 leaves with `body.engage off`. `body.engage screen:8` composes the same
@@ -527,7 +527,7 @@ Composition relocates provider-declared asset paths when the module is imported.
 screen at index 10 as its face, cradled on `handheldStand` until a body holds
 it. The primitive a held handheld rides is a placement's `attach` facet
 (`{"bodyIndex", "localOffset", "localYawDegrees"}`): the row's pose follows the
-named body's root pose, colliders and regions included — no new schema member
+named body's root pose, colliders and regions included—no new schema member
 needed, since a body carries no joint transforms `attach` could target in the
 first place (an avatar's rig authors named IK chains and tip joints, e.g.
 `handRight`, for the climbing grip solve alone, resolved client-side in
@@ -535,7 +535,7 @@ presentation float; there is no server-side, deterministic query for a joint's
 current world transform, so `attach`'s local-frame root offset is already the
 most precise anchor the engine can honor today).
 
-An ordinary pair of `rules` toggles `attach` live — the exact idiom
+An ordinary pair of `rules` toggles `attach` live—the exact idiom
 `studio-look-cycle` already ships (`compareState` over a region and a channel,
 `Edge` mode): `handheldStand` carries a `region` (radius 1.5) a rule senses;
 seat 1's body standing in it with the `jump` channel pressed and
@@ -543,7 +543,7 @@ seat 1's body standing in it with the `jump` channel pressed and
 `body:0`; walking back out of the region with `handheldHeld` at 1 upserts it
 back to the stand's authored pose. `Puck.World.UpsertPlacementEffect.Cost`
 derives from what the row's own facets would rebuild rather than a flat
-number (`Puck.World.WorldPlacementEffectCost`) — the handheld carries neither
+number (`Puck.World.WorldPlacementEffectCost`)—the handheld carries neither
 `inhabit` nor `solid`, so each firing costs only the document-write floor
 (`WorldPlacementEffectCost.DocumentCost`), well inside
 `Puck.State.RuleCapacity.MaxWorkUnitsPerTick`'s headroom
@@ -552,11 +552,11 @@ number (`Puck.World.WorldPlacementEffectCost`) — the handheld carries neither
 against an isolated document; `RealArcadeModuleLawTests` in the same file
 proves the shipped pair against the composed island. What still keeps this a
 fixed-index attach: `upsertPlacement`'s embedded placement is a literal,
-compile-time constant — its `attach.bodyIndex` cannot resolve to
+compile-time constant—its `attach.bodyIndex` cannot resolve to
 `$left`/`$right` or any other live carrier the way a
 `setState`/`setBodyVerticalVelocity` effect's `key` can, so the body a rule
 attaches to must be a fixed seat index, never "whichever body engaged the
-screen." A `screens` row still does not ride a placement either — the slab is
+screen." A `screens` row still does not ride a placement either—the slab is
 world-space, so the picture stays on the stand while the chassis leaves with
 the body.
 
@@ -589,26 +589,26 @@ press, and the second `screen.peek` reads a larger `x` than the first.
 ## Dive
 
 `modules/dive.world.json` is the pool: a `diveCourt` root placement (a small wooden
-dock, itself the district's whole moveable frame — every other row below carries
+dock, itself the district's whole moveable frame—every other row below carries
 `parent: "diveCourt"` and moves with it), a `diveBasin` placement (one floor-plus-walls
 creation, open at the top) holding a dedicated `pool` field lattice whose `water` row
 carries the `medium` trait, a `diver` kit (grounded: a `ground` Surface/Gravity hold for
 the dock, a `water` Medium hold with `idleDrift`/`equilibriumOffset`/`settleRate` and
-`thrust: 1` so the world's own `MoveUp`-role channel — whatever a host names it — drives
+`thrust: 1` so the world's own `MoveUp`-role channel—whatever a host names it—drives
 vertical swimming, and an `air` Free/Gravity fallback; no jump hold, no `jump`-channel
 release), and four fish (`fishKit`, `bodyContact: Overlap`, the same `water`/`air` hold
 pair as the diver) inhabiting the pool on a flock producer. A `pool` `Medium` navigation
 domain anchors the fish's `movementDomain`. `dive-arrival` stands on the dock.
 
-**Depth has no direct primitive to read from — this module derives it geometrically.**
+**Depth has no direct primitive to read from—this module derives it geometrically.**
 No reserved rule channel today reads a body's raw world position, or the medium hold's
 own per-tick displacement error, so `depth` cannot be computed by comparing a body's
 height against the water surface directly. `depth` (a Fixed slot row) is instead driven
 by three concentric `region` placements (`diveDepth1`/`2`/`3`, radii 0.8/1.6/2.4, all
 centered on the basin floor) whose live `$region:<id>` occupant counts four mutually
-exclusive `Level` rules sum into a 0/0.8/1.6/2.4 staircase — closer to the floor trips
+exclusive `Level` rules sum into a 0/0.8/1.6/2.4 staircase—closer to the floor trips
 more of the nested spheres, which reads as "deeper". `dived` (an Int slot row) latches to
-1 the first tick `depth` reaches 1.6 and never resets — a reveal-ladder fact for whatever
+1 the first tick `depth` reaches 1.6 and never resets—a reveal-ladder fact for whatever
 reads identity-carried facts. Because `$region:` counts every active body inside the
 sphere, not one seat's own, `depth` genuinely answers "how deep is whatever is nearest
 the floor" rather than "how deep is the diving seat" specifically; the fish spawn off to
@@ -619,7 +619,7 @@ future module drop this geometric workaround; it does not exist today.
 **Body motion program names are not alias-scoped.** Kit names, body-motion-program
 names, and placement ids are excluded from `WorldNameRegistry` (only state rows, rules,
 tables, patterns, topologies, generators, fields, and dynamics rows are prefixed under
-an import's alias — see `WorldNameKind`). The island's own `puck.world.json` already
+an import's alias—see `WorldNameKind`). The island's own `puck.world.json` already
 declares generic `walk`/`fishMotion`/`school` programs for its own creatures, so this
 module deliberately spells its own `diveDiverMotion`/`diveFishMotion`/`diveSchool`
 rather than the shorter generic names, to never collide with a host's own programs of
@@ -629,7 +629,7 @@ namespaced the way state rows are.
 **The pool's field lattice and navigation domain do not ride `diveCourt`'s frame.**
 `WorldPlacement.Parent` composes a placement's transform over another placement's, but
 `state.lattices` topologies and `navigation.domains` carry their own absolute `origin`
-with no parent concept — this module authors them assuming `diveCourt` sits at the
+with no parent concept—this module authors them assuming `diveCourt` sits at the
 module's own local origin `(0, 0, 0)`. An importer that restates `diveCourt`'s position
 to move the whole district (the convention every module here follows) must also
 translate the `pool` lattice's and navigation domain's own `origin` by the same offset;
@@ -640,5 +640,11 @@ alias `dive`, with a one-seat `diver` kit, boots headless, waits, and poses the 
 into the basin (`body.pose 0 -2.6 5 0 0 0` for the shipped basin's own coordinates).
 `body.where` reports `facts=grounded|inmedium`; `world.state dive_depth` reads positive
 (2.399993896484375 at the floor); `world.state dive_dived` reads 1 once depth crosses
-1.6. See `tests/Puck.World.Canaries/dive-medium/` for the full two-leg proof — the
+1.6. See `tests/Puck.World.Canaries/dive-medium/` for the full two-leg proof—the
 successor of the retired `frozen-fish-medium-buoyancy` canary.
+
+This collection is part of [Puck.World](../../../README.md).
+
+## Documentation
+
+📚 [Worlds and federation](../../../../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../../../../docs/development/contributing.md)

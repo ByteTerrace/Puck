@@ -1,4 +1,4 @@
-# Puck.World.Silo — the second substrate driving the moved host engine
+# Puck.World.Silo
 
 An Orleans silo whose grains carry activation lifecycle only. Game traffic
 never rides the Orleans wire: cross-instance effects flow through the same
@@ -7,7 +7,7 @@ thread `Puck.Launcher.HeadlessTickHostedService` pumps.
 
 Run: `dotnet run --project src/Puck.World.Silo -c Release -- --silo <path>`,
 where `<path>` names a `puck.silo.def.v1` document (`WorldSiloDefinition`,
-`Puck.World.Schema`) — the `worlds[]` rows this silo may activate, its
+`Puck.World.Schema`)—the `worlds[]` rows this silo may activate, its
 declared door budget, checkpoint/journal/definition store target, state
 directory, and clustering. The generated schema is
 `Assets/puck.silo.def.v1.schema.json`.
@@ -96,7 +96,7 @@ activation's fence and requires recovery.
 
 ## Types
 
-- `WorldSiloHost : IWorldAuthorityHost` — one boot-free `WorldInstanceHost`
+- `WorldSiloHost : IWorldAuthorityHost`—one boot-free `WorldInstanceHost`
   (`WorldEmbodiedSeats.None`, `admitsSpawn: false`), an activation mailbox
   drained on the tick thread, and per-row bookkeeping (federation identity,
   adjacency resolver, checkpoint outcomes). `ActivateAsync`/`DeactivateAsync`
@@ -104,27 +104,27 @@ activation's fence and requires recovery.
   to touch the host's registry; `TryDescribeRow`/`DescribeRows` read the
   registry directly and must only ever be called from the tick thread itself
   (`SiloCommandModule`'s own handlers run there).
-- `WorldSiloSimulation : IFixedStepSimulation` — `RatePerSecond` is
+- `WorldSiloSimulation : IFixedStepSimulation`—`RatePerSecond` is
   `WorldSiloHost.MasterRateHz` (the fastest active, unpaused, nonzero-rate
   row; 0 while nothing is active). `Step` drains the activation mailbox,
   drains pending transfers, steps every admitted row, then notes the master
   step toward the checkpoint cadence.
-- `WorldSiloActivations : BackgroundService` — activates every `pinned` row
+- `WorldSiloActivations : BackgroundService`—activates every `pinned` row
   from `ExecuteAsync` (never `StartAsync`, which would deadlock waiting on a
   tick thread the headless host has not spawned yet). It waits for application startup, then requires each pinned world to activate and checkpoint; a refusal stops the host with a failing exit code.
-- `IWorldGrain`/`WorldGrain` — the grain interface (`IGrainWithGuidCompoundKey`:
+- `IWorldGrain`/`WorldGrain`—the grain interface (`IGrainWithGuidCompoundKey`:
   owner oid + world id extension) and its thin adapter over `WorldSiloHost`.
   Activation allows three minutes for composition and checkpoint recovery;
   root and neighbour storage reads are awaited without a `Task.Run` wrapper.
-- `WorldGrainStatus` — the Orleans-serializable read-back payload
+- `WorldGrainStatus`—the Orleans-serializable read-back payload
   `IWorldGrain.StatusAsync` and `silo.grains` both answer with.
-- `WorldNoAddonHost : IWorldAddonHost` — the inert host every row's replay
+- `WorldNoAddonHost : IWorldAddonHost`—the inert host every row's replay
   tape carries for its own offline re-drive seam; the silo mounts no addon
   guests, so nothing ever calls it.
-- `WorldSiloBareInputBindings`/`WorldSiloBarePrincipalResolver` — the minimal
+- `WorldSiloBareInputBindings`/`WorldSiloBarePrincipalResolver`—the minimal
   `IInputBindings`/`ICommandPrincipalResolver` pair `Puck.Launcher`'s
   simulation/router pairing rule needs; the silo embodies no local seats.
-- `SiloCommandModule` — `silo.status`, `silo.grains`, `silo.publish <key>
+- `SiloCommandModule`—`silo.status`, `silo.grains`, `silo.publish <key>
   <path>`, `silo.activate <key>`, `silo.deactivate <key>`,
   `silo.checkpoint [<key>]`, `silo.use <key>`. `activate`/`deactivate`/
   `checkpoint` call the grain (`IGrainFactory`) and fire-and-forget: this
@@ -132,7 +132,7 @@ activation's fence and requires recovery.
   blocking here for a grain turn that itself waits on that mailbox would
   deadlock. Read `silo.grains` for the outcome. `<key>` is
   `owner/{oid}/{world}` or the bare world id (`WorldSiloHost.TryResolveKey`).
-- `SiloConsoleRouting` — one `TextCommandSession` per admitted row, created
+- `SiloConsoleRouting`—one `TextCommandSession` per admitted row, created
   and retired in the same tick-thread mailbox action that admits/retires the
   row itself. Each session carries its own `WorldConsoleWaitGate` (`row.
   PublishTick` wired to it at registration) and its own slot, so
@@ -144,13 +144,13 @@ activation's fence and requires recovery.
   work already injected into simulation retains its existing semantics.
   `silo.use <key>` sets which row an untagged line routes to; it never
   refuses admitted-row traffic addressed with an explicit `@<key>` tag.
-- `SiloStdinRouter` — the silo's stdin reader (`AddLauncherHeadlessTerminal
+- `SiloStdinRouter`—the silo's stdin reader (`AddLauncherHeadlessTerminal
   (readStandardInput: false)` disables the launcher's own single-session
   reader). `@<key> <line>` enqueues on that row's session; a `silo.*` line is
   always administrative regardless of `silo.use`; any other untagged line
   goes to the session `silo.use` last selected, refusing by name when none
   is selected or the addressed row is not currently admitted.
-- `SiloConsoleTagging`/`SiloNarrationWriter` — every stdout/stderr line a
+- `SiloConsoleTagging`/`SiloNarrationWriter`—every stdout/stderr line a
   silo run writes starts with `[<world-id>] ` or `[silo] `: verb output is
   tagged by the session's own `onResult` (`SiloConsoleTagging`); engine
   narration written straight to `Console.Out`/`Console.Error` is tagged by
@@ -165,7 +165,7 @@ Every mutation `WorldServer` applies fires `WorldServer.MutationJournalTap`
 entry is never re-appended as a duplicate). `WorldSiloHost.ScheduleJournalAppend`
 re-encodes it (`WorldSubmissionCodec.TryEncodeCommittedMutation`) and schedules the
 store write as a continuation of that row's own append chain
-(`RowBookkeeping.JournalTail`) — never two appends racing concurrently for one
+(`RowBookkeeping.JournalTail`)—never two appends racing concurrently for one
 row, since `WorldAuthorityBlobStore.AppendJournalAsync` rewrites the whole
 journal blob if-match per append and a race would drop one. Appends are
 acknowledged **asynchronously with a bounded lag**, never a block on the tick
@@ -208,6 +208,10 @@ Distributed clustering. Console verbs whose module takes a
 process-wide `IServerLink`/similar singleton rather than resolving it
 through the row `IWorldConsoleAuthority` returns (`WorldGrantCommandModule`,
 `WorldGroupCommandModule`, `WorldLookCommandModule`,
-`WorldRowCommandModule`, `WorldStateCommandModule`) are not registered here — registering them
+`WorldRowCommandModule`, `WorldStateCommandModule`) are not registered here—registering them
 unmodified would misattribute every row's mutation to whichever one
 happened to be resolved into the shared singleton.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

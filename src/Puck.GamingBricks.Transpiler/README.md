@@ -1,7 +1,7 @@
 # Puck.GamingBricks.Transpiler
 
-Authors `puck.cartridge.v1` documents in the Puck DSL. The language itself — parser, syntax tree, diagnostics,
-formatter, units — is [`Puck.Transpiler`](../Puck.Transpiler/README.md); this project is the vocabulary that knows
+Authors `puck.cartridge.v1` documents in the Puck DSL. The language itself—parser, syntax tree, diagnostics,
+formatter, units—is [`Puck.Transpiler`](../Puck.Transpiler/README.md); this project is the vocabulary that knows
 what a cartridge's sections mean, the peer of `Puck.World.Transpiler`.
 
 Both artifacts are committed: the source and the cartridge document it generates. The regeneration gate in
@@ -29,7 +29,7 @@ Compile-time bindings are substituted before native compilation. Byte expression
 larger bare values are admitted only where a wide slot is supported. A wide read cannot be assigned to a byte
 destination implicitly. Empty required sections, including `rules []`, survive decompilation.
 
-Decompiling is one-way, like every Puck decompiler — `let` and `template` are a source-only idea and are gone from
+Decompiling is one-way, like every Puck decompiler—`let` and `template` are a source-only idea and are gone from
 the JSON. The guarantee runs the other way: source written by the decompiler compiles back to the document it was
 read from, byte for byte.
 
@@ -37,7 +37,7 @@ read from, byte for byte.
 
 Everything outside `rule` is the language's ordinary property and block syntax, lowered straight to JSON:
 
-```
+```puck
 schema: "puck.cartridge.v1"
 target: "cgb"
 title: "TETRIS"
@@ -50,10 +50,10 @@ variables [
 ```
 
 The language's collection builtins (`range`, `length`, `concat`, `map`, `filter`, `reduce`, `distinct`, `sort`,
-`groupBy` — [`Puck.Transpiler`](../Puck.Transpiler/README.md#collection-builtins-and-lambdas)) run at compile time,
+`groupBy`—[`Puck.Transpiler`](../Puck.Transpiler/README.md#collection-builtins-and-lambdas)) run at compile time,
 which is what keeps a cartridge's big data sections short:
 
-```
+```puck
 arrays [
     { name: "field", initial: map(range(0, 180), i => 0) }
     { name: "speeds", initial: map(range(0, 21), level => 48 - (level * 2)) }
@@ -62,14 +62,14 @@ arrays [
 
 The named scalar functions (`squareRoot`, `remainder`, `greatestCommonDivisor`, and the rest of
 [`Puck.State`'s shared vocabulary](../Puck.Transpiler/README.md#scalar-functions-come-from-puckstate-not-from-here))
-fold the same way here as in any other document — an integer-domain one exactly, by delegating to
+fold the same way here as in any other document—an integer-domain one exactly, by delegating to
 `ExpressionArithmetic`, everything else in `double`.
 
 `for` is the core language's compile-time loop, and it expands here exactly as it does in a world document: a
 `for` written where a `rule` or a section row belongs emits its body once per element, and the document carries the
 rows it produced, never the loop. An interpolated header names each generated row apart:
 
-```
+```puck
 for (level, index) in [4, 9, 16] {
     variable $"speed{index}" {
         initial: level
@@ -90,7 +90,7 @@ silently lose the row and everything nested in it.
 
 A `rule` carries a gate and a body:
 
-```
+```puck
 rule "soft-drop" {
     when key(down, held) and ph == 2 and dt >= wellFloor
     py += 1
@@ -108,7 +108,7 @@ rule "soft-drop" {
 | `key(<button>, held\|pressed\|released)` | a `key` condition |
 | `a == b` `!=` `<` `<=` `>` `>=` | a `compare` condition |
 
-An operand is an expression — the engine's own `ValueExpression`, in the same infix spelling a world rule uses, so
+An operand is an expression—the engine's own `ValueExpression`, in the same infix spelling a world rule uses, so
 `(score + bonus) * 2` and `field[cursor + 1]` are single operands and the compiler allocates whatever the machine
 holds in flight. A cartridge admits the subset an eight-bit machine spends a few instructions on
 (`CartridgeExpressions.Reads`); an operation the rule language evaluates and a cartridge does not is refused at
@@ -119,7 +119,7 @@ A gate composes through `and`, `or` and `not`, lowering to the engine's `all`, `
 of the reserved `$key:<button>:<mode>` operand compared against one, which is why input sits under `or` and `not`
 like anything else:
 
-```
+```puck
 rule "steer" {
     when (key(left, held) or key(right, held)) and not paused == 1
     dx = $key:right:held - $key:left:held
@@ -130,3 +130,7 @@ rule "steer" {
 
 It compiles no code. A lowered document goes to `HgbCartridgeCompiler` or `AgbCartridgeCompiler` in the per-brick
 forges, which is where SM83 and Thumb live.
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

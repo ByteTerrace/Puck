@@ -18,10 +18,10 @@ connecting peer’s claim against trust entries authored in the world document.
 This README is the human entry point. The
 [generated API reference](../../docs/api) owns complete member signatures,
 parameters, return values, and exceptions. The closing
-[wire contract](#signed-attestation--wire-contract-v1) is the normative
+[wire contract](#signed-attestationwire-contract-v1) is the normative
 wire specification.
 
-## ✨ Key features
+## Key features
 
 - *Offline verification:* the claim and its key bindings travel together, so
   verification needs no external directory, certificate service, or issuer
@@ -45,7 +45,7 @@ wire specification.
   `sealed-attestation-v1` extension, which uses ECDH P-256 for key agreement,
   HKDF-SHA256 for key derivation, and AES-256-GCM for authenticated encryption.
 
-## 📐 How a claim verifies
+## How a claim verifies
 
 The receiver authors a trust list outside the message. Attestation accepts two
 trust shapes: a directly pinned subject key needs no bindings, while a pinned
@@ -84,7 +84,7 @@ graph TB
     end
 ```
 
-## 🚀 Quick start
+## Quick start
 
 The issuing side provisions keys, creates the two bindings, and signs a claim:
 
@@ -206,7 +206,7 @@ admission verdict: a sequenced claim requires
 `TryGetReplayCommit(slot, out var requirement)`, followed by an atomic commit
 of that requirement and the claim’s effect.
 
-## 📋 Core types
+## Core types
 
 This table is a conceptual map. The
 [generated API reference](../../docs/api) owns the complete member-by-member
@@ -224,7 +224,7 @@ surface.
 | `AttestationVerifyResult` / `ReplayCommitRequirement` | Report verification, slot-scoped admission, and the durable replay update required before a sequenced effect is admitted. |
 | `SealedAttestation` / `SealedPayload` | Encrypt and decrypt payloads for a named recipient; sealing provides confidentiality, not sender identity. |
 
-## 🧪 Testing
+## Testing
 
 ```text
 dotnet test tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj -c Release
@@ -290,7 +290,7 @@ sealing identities in their registered roles.
 | **Treating a self-issued claim as domain-issued** | A self-signature proves control of the signing key, not that a domain vouched for the subject. A receiver may trust that exact subject key directly, but it must not confuse direct trust with a domain chain. |
 | **Carrying mutable balances as signed claims** | A signature fixes a value at one moment. Mutable balances remain state owned and updated by their authority. |
 
-## Signed attestation — wire contract v1
+## Signed attestation—wire contract v1
 
 **Normative.** This section is the precise contract `src/Puck.Attestation`
 implements for the signed attestation described in
@@ -300,7 +300,7 @@ The base profile needs CBOR, ECDSA P-256, and SHA-256; the sealed extension
 additionally needs ECDH P-256, HKDF-SHA256, and AES-256-GCM.
 
 Keywords: **MUST**, **MUST NOT**, **MAY**, **REFUSE**. *Refuse* means: produce a
-negative verdict without side effects. It never means throw-or-return — that is
+negative verdict without side effects. It never means throw-or-return—that is
 a language choice.
 
 ### 0. What is fixed and what is not
@@ -312,7 +312,7 @@ security-relevant work happens.
 Not fixed, deliberately: which refusal an implementation *reports* when several
 apply, the text of any message, the in-memory or persisted shape of the trust
 list beyond the entries and policy inputs §7 requires, and what an accepting
-verifier then permits. Trust evaluation is not shared — each side trusts
+verifier then permits. Trust evaluation is not shared—each side trusts
 different things. **Two implementations using
 the same conformance profile and the same policy inputs always agree on
 accept-versus-refuse and MAY disagree on the reason.** Policy inputs include the
@@ -374,14 +374,14 @@ for inputs between the two limits.
 
 An **id** is `(domain, subject, algorithm, keyHash)`.
 
-- `domain` — the SHA-256 fingerprint of the root key at the top of this id's
+- `domain`—the SHA-256 fingerprint of the root key at the top of this id's
   chain, 32 bytes. Constant across every key that chain vouches for. Never a
   name.
-- `subject` — the platform user id this key belongs to, or absent for a **root**
+- `subject`—the platform user id this key belongs to, or absent for a **root**
   or an **issuing** key.
-- `algorithm` — a name from the registry in §4. It fully determines the curve
+- `algorithm`—a name from the registry in §4. It fully determines the curve
   and the hash; nothing else may appear here.
-- `keyHash` — SHA-256 of this key's `SubjectPublicKeyInfo` (SPKI) DER encoding,
+- `keyHash`—SHA-256 of this key's `SubjectPublicKeyInfo` (SPKI) DER encoding,
   32 bytes. Always derived from actual key bytes, never accepted as an
   independent claim. Identity is intentionally over the exact DER bytes, not
   over an abstract EC point: two byte-distinct SPKI encodings are two distinct
@@ -390,7 +390,7 @@ An **id** is `(domain, subject, algorithm, keyHash)`.
   followed by trailing data REFUSES, because the trailing bytes would otherwise
   affect the identity hash without affecting the key the cryptographic API uses.
 
-A **root** id satisfies `domain == keyHash` and has no subject — no flag records
+A **root** id satisfies `domain == keyHash` and has no subject—no flag records
 this, the shape proves it. An **issuing** id shares its root's domain and has no
 subject. A **subject** id shares its root's domain and carries the user id.
 
@@ -453,7 +453,7 @@ outside the set is not a kind.
 **The signed portion travels as an opaque byte string.** The exact bytes that
 were signed arrive verbatim; a verifier MUST check the signature against those
 bytes, never against a re-encoding of what it parsed out of them. §3 makes the
-two identical anyway, and that is the point — the wrapping makes it structural
+two identical anyway, and that is the point—the wrapping makes it structural
 rather than a property of somebody's encoder.
 
 **All eleven signed-portion elements are inside the signature, format version
@@ -465,8 +465,8 @@ free, and the version is what decides how every later byte is read.
 path.
 
 **`subject` always names the SIGNER, never the key being vouched for.** It is
-therefore `null` on both bindings of a chain — a root and an issuing key are not
-platform users — and carries the user id only on a claim. The key a binding
+therefore `null` on both bindings of a chain—a root and an issuing key are not
+platform users—and carries the user id only on a claim. The key a binding
 vouches for lives entirely in its payload. This is the single easiest field to
 get backwards, and getting it backwards produces bindings that verify against
 their own implementation and refuse everywhere else, because §11 step 4 checks
@@ -493,7 +493,7 @@ An encoder MUST produce, and therefore a decoder MUST require:
 3. No CBOR tags anywhere. Times are plain integers.
 4. Text strings in UTF-8.
 5. Nothing after the outer data item, at any nesting level. Trailing bytes are
-   REFUSED, never ignored — a decoder that ignores them hands an attacker a
+   REFUSED, never ignored—a decoder that ignores them hands an attacker a
    family of distinct wire forms that all decode to one accepted claim.
 
 Rules 1 and 2 are what a CBOR library's canonical/deterministic mode already
@@ -510,12 +510,12 @@ the signing input from a parsed model refuses honest bytes for the wrong reason.
 | Name | Role | Curve | Signature hash |
 |---|---|---|---|
 | `ecdsa-p256-sha256` | signing | NIST P-256 | SHA-256 |
-| `ecdh-p256-hkdf-sha256-aes256gcm` | sealing | NIST P-256 | — |
+| `ecdh-p256-hkdf-sha256-aes256gcm` | sealing | NIST P-256 |—|
 
 The name pins curve *and* hash, because a P-256 key can sign under more than one
 digest and the curve alone does not pin the scheme.
 
-A name outside this table MUST be REFUSED wherever it appears — an attestation's
+A name outside this table MUST be REFUSED wherever it appears—an attestation's
 `algorithm`, a binding payload's `targetAlgorithm`, or a trust entry's pinned
 id. Every implementation MUST support `ecdsa-p256-sha256`; the sealing entry is
 available only under its named §0.1 extension. A known registry name whose
@@ -544,8 +544,8 @@ rest on having-seen-these-bytes.
 
 ### 6. The algorithm-from-pin rule
 
-**The algorithm used to verify always comes from the PINNED key — from the trust
-list, or from the binding one hop up — never from the attestation being verified.**
+**The algorithm used to verify always comes from the PINNED key—from the trust
+list, or from the binding one hop up—never from the attestation being verified.**
 
 The attestation's `algorithm` field exists to be *checked against* the pin, and an
 inequality MUST REFUSE. It is never read to select behavior. Letting message
@@ -555,20 +555,20 @@ secret.
 
 ### 7. Trust entries
 
-A trust entry pins an id **and** the actual key bytes it names — offline
+A trust entry pins an id **and** the actual key bytes it names—offline
 verification cannot resolve a hash into a key. An entry declares one of two
 modes:
 
-- **signs-directly** — the pinned id MUST carry a subject. Claims from this key
+- **signs-directly**—the pinned id MUST carry a subject. Claims from this key
   arrive with **zero** bindings.
-- **vouches** — the pinned id MUST be a root (`domain == keyHash`, no subject).
+- **vouches**—the pinned id MUST be a root (`domain == keyHash`, no subject).
   Claims under it arrive with **exactly two** bindings.
 
 An entry whose key bytes do not hash to its own pinned `keyHash` MUST be
 REFUSED at construction: otherwise the bytes do the verifying while the pin sits
 there decorative.
 
-A verifier MAY carry more per-entry policy — independent maximum ages for
+A verifier MAY carry more per-entry policy—independent maximum ages for
 root-to-issuing bindings, issuing-to-subject bindings, and claims (§9), which
 slots the entry reaches, anything else. Each age only tightens the signed window
 at its own layer. A verifier accepting sequenced claims MUST additionally author
@@ -590,7 +590,7 @@ and a mismatch with what the caller expects MUST REFUSE.
 
 **Payload kind** separates what the bytes *mean*, and is checked separately from
 purpose. A claim's kind MUST be 1 or 3; a binding's MUST be 2. A kind outside
-{1, 2, 3} MUST REFUSE — deny by default.
+{1, 2, 3} MUST REFUSE—deny by default.
 
 **Audience and sequence are independent, not alternatives.**
 
@@ -600,9 +600,9 @@ purpose. A claim's kind MUST be 1 or 3; a binding's MUST be 2. A kind outside
 | Bearer | absent | a durable sequence high-water mark | the same mark |
 
 - A directed claim's `audience` MUST equal the verifier's own audience identity.
-- A bearer claim (no audience) with no `sequence` MUST REFUSE — it would have no
+- A bearer claim (no audience) with no `sequence` MUST REFUSE—it would have no
   replay defence at all.
-- **Whenever `sequence` is present — directed or bearer — the verifier MUST
+- **Whenever `sequence` is present—directed or bearer—the verifier MUST
   have a finite replay horizon `H`, derive `epochStart = floor(notBefore / H) ×
   H`, and return a replay-commit requirement containing `(domain, subject,
   epochStart, sequence, retainThrough = epochStart + 2H - 1)`. Verification is
@@ -692,7 +692,7 @@ The same reasoning bars verification from a simulation step: it consumes
 boundary-authored time, and the receiver's later replay/effect commit
 writes durable storage (§8). An implementation with a deterministic tick MUST
 verify at the boundary and carry the verdict inward, never verify inside the
-tick. An implementation with no such constraint — a request-scoped web service —
+tick. An implementation with no such constraint—a request-scoped web service—
 is free to read its clock at the boundary it already has, which is the same
 rule with a boundary that happens to be the request.
 
@@ -704,7 +704,7 @@ minting side disagrees with everyone about its own window.
 
 Both boundaries are **inclusive**, and there is deliberately **no clock-skew
 grace**. An issuer wanting slack backdates `notBefore`, which is authored,
-auditable, and signed — unlike a verifier-side grace window, which every
+auditable, and signed—unlike a verifier-side grace window, which every
 verifier would size differently and which silently widens every window in the
 system by twice its size.
 
@@ -726,13 +726,13 @@ introduction of the split controls from silently removing an existing ceiling.
 
 Re-attestation is the issuer re-signing a binding it already vouches for with a
 fresh window. Its ordinary case is a session resuming after an absence, so the
-binding it acts on has usually **lapsed** — the issuer must be able to verify one
+binding it acts on has usually **lapsed**—the issuer must be able to verify one
 whose window has closed.
 
 An implementation that mints MAY therefore offer a reduced profile in which the
 four window checks above are skipped **and every other check in this document
 still runs in full**. It MUST be a distinct, explicitly named mode requested by
-the caller — never a defaulted flag, never inferred. A verifier admitting a
+the caller—never a defaulted flag, never inferred. A verifier admitting a
 foreign claim MUST NOT offer it.
 
 ### 10. Chain depth
@@ -740,7 +740,7 @@ foreign claim MUST NOT offer it.
 A chain has exactly two admissible lengths and no others:
 
 - **zero** bindings, under a signs-directly entry. Nothing is vouched for, so
-  there is nothing to walk. Bindings arriving anyway MUST REFUSE — accepting
+  there is nothing to walk. Bindings arriving anyway MUST REFUSE—accepting
   unexamined bindings lets an attacker attach whatever they like to a claim that
   verifies.
 - **two** bindings, under a vouching root: `chain[0]` is root-vouches-issuing,
@@ -766,7 +766,7 @@ caller's expectations:
 1. Decode by §2 and §3. Any failure REFUSES.
 2. Check the attestation's `algorithm` equals the pinned id's algorithm (§6).
    REFUSE on inequality.
-3. Check `domain` equals **the pinned entry's own `domain`** — the domain of the
+3. Check `domain` equals **the pinned entry's own `domain`**—the domain of the
    id this verification is pinned on: the trust entry's, for a claim; the id the
    hop above yielded, for a hop. REFUSE on inequality.
 4. Check `subject` equals the pinned id's subject (both may be absent). REFUSE
@@ -804,7 +804,7 @@ A binding hop is §11 with `purpose = "key-binding"`, `payloadKind = 2`, and the
 pinned key of the hop above. After step 10 yields a key-binding payload:
 
 1. REFUSE if `targetAlgorithm` is not in the §4 registry.
-2. REFUSE if `SHA-256(targetKey) != targetKeyHash` — the payload is not
+2. REFUSE if `SHA-256(targetKey) != targetKeyHash`—the payload is not
    self-certifying. This is what lets the next hop trust `targetKey`: a hash
    alone cannot carry the next hop's verification key, so the binding conveys
    both and the verifier catches a lie by recomputing.
@@ -819,7 +819,7 @@ the expected purpose, and the verifier's own audience identity.
 
 1. REFUSE if the caller's expected purpose is blank or `key-binding` (a
    programming error, not an attack).
-2. REFUSE if the claim's `purpose` is `key-binding` — a binding presented as a
+2. REFUSE if the claim's `purpose` is `key-binding`—a binding presented as a
    claim.
 3. REFUSE if the claim's `purpose` is not the expected one.
 4. REFUSE if the claim's `payloadKind` is not 1 or 3.
@@ -842,7 +842,7 @@ the expected purpose, and the verifier's own audience identity.
       domain is not the claim's, or if the target's subject is not the claim's
       subject.
    3. Verify the claim by §11 against the subject id and key that step 7.2
-      yielded — which is where the claim's own `algorithm` is checked against
+      yielded—which is where the claim's own `algorithm` is checked against
       the pin.
 8. Apply the window to the claim using the claim maximum age (§9), and for a
    sequenced claim additionally apply `H` and derive its replay epoch (§8).
@@ -856,8 +856,8 @@ whole chain.
 **Where the domain is actually checked.** Steps 5 and 6 key their lookup on the
 claim's own `domain`. That is what makes §11 step 3 non-circular rather than what
 makes it circular: an entry *found* this way pins that domain by construction, an
-entry *not found* refuses here, and it is the pinned domain — never the claim's
-field re-read — that step 3 compares against at every hop below. A verifier that
+entry *not found* refuses here, and it is the pinned domain—never the claim's
+field re-read—that step 3 compares against at every hop below. A verifier that
 re-read `domain` from the attestation at each hop would compare it with itself three
 times and establish nothing, while looking exactly like a verifier that checked.
 
@@ -878,7 +878,7 @@ key, from being silently accepted in the recipient role.
 
 The recipient id is part of the signed payload and is additionally bound into
 both HKDF info and AEAD associated data. The header component of that associated
-data is the encoding of the **context header** alone — signed-portion elements 1
+data is the encoding of the **context header** alone—signed-portion elements 1
 through 9, with no `payloadKind` and no `payload`. Tampering the header or any
 recipient-id field therefore fails closed.
 
@@ -903,11 +903,11 @@ construction MUST then use exactly these inputs:
 
 | Parameter | Value |
 |---|---|
-| HKDF input keying material | the **raw** secret agreement — the shared point's X coordinate, exactly as the curve produces it, **not** hashed first |
+| HKDF input keying material | the **raw** secret agreement—the shared point's X coordinate, exactly as the curve produces it, **not** hashed first |
 | HKDF salt | **absent** (zero-length; the all-zero default of RFC 5869) |
 | HKDF info | the ASCII bytes `puck.attestation.sealed.v1`, 26 bytes with no terminator, immediately followed by `recipientContext` |
-| Output length | **32** bytes — the AES-256-GCM key |
-| AEAD tag length | **16** bytes. Wherever the AEAD construction takes a tag length — `AesGcm(key, tagSizeInBytes)` and its equivalents — 16 is what MUST be passed |
+| Output length | **32** bytes—the AES-256-GCM key |
+| AEAD tag length | **16** bytes. Wherever the AEAD construction takes a tag length—`AesGcm(key, tagSizeInBytes)` and its equivalents—16 is what MUST be passed |
 | AEAD associated data | ASCII `puck.attestation.sealed.aad.v1` (30 bytes, no terminator), then the header-byte length as an unsigned 64-bit big-endian integer, then the header bytes, then `recipientContext` |
 
 Those two ASCII labels are v1 wire constants. Changing either after release
@@ -939,8 +939,8 @@ it to the agreement, or the recipient's static key becomes an oracle for its own
 private scalar.
 
 - **Key type.** The SPKI's `AlgorithmIdentifier` MUST be `id-ecPublicKey` (OID
-  `1.2.840.10045.2.1`) carrying a named-curve parameter. Any other key type — an
-  RSA key, an Ed25519 or X25519 key, anything under a different OID — MUST
+  `1.2.840.10045.2.1`) carrying a named-curve parameter. Any other key type—an
+  RSA key, an Ed25519 or X25519 key, anything under a different OID—MUST
   REFUSE, and MUST be refused *before* the curve is consulted, because a non-EC
   SPKI has no curve to consult.
 - **Complete encoding.** The import MUST consume the complete SPKI byte string.
@@ -956,7 +956,7 @@ is byte-identical in shape whether its holder means to sign with it or to agree
 with it, so an ephemeral key records no signing-versus-agreement intent and an
 implementation MUST NOT invent one to check. What separates a signing key from a
 sealing key in this specification is the recipient id's §4 algorithm name,
-authenticated inside the sealed payload, never the key bytes — which is also why
+authenticated inside the sealed payload, never the key bytes—which is also why
 §7 refuses a trust entry pinning a sealing algorithm rather than trying to tell
 the keys apart.
 
@@ -970,7 +970,7 @@ interpreted.
 A nonce that is not 12 bytes and a tag that is not 16 MUST REFUSE as format
 errors, before any cryptographic call.
 
-Sealing proves nothing about who sealed — anyone holding the recipient's public
+Sealing proves nothing about who sealed—anyone holding the recipient's public
 sealing key can produce a payload that opens cleanly. Sealed attestation is
 confidentiality only; where the recipient must know who sent it, the sealed
 payload rides inside an ordinary signed attestation and the signature names the
@@ -1007,7 +1007,7 @@ insufficient. The conditions that MUST refuse, gathered:
 | 19 | Bearer claim (no audience) with no `sequence` |
 | 20 | Directed claim whose `audience` is not the verifier's |
 | 21 | A trust entry whose key bytes do not hash to its pinned id, whose SPKI is not consumed completely, whose mode does not match its id's shape, or that pins a sealing algorithm |
-| 22 | Sealed payload with a recipient id/key mismatch, a non-sealing recipient role, a nonce that is not 12 bytes, a tag that is not 16, or an ephemeral key whose SPKI is not consumed completely or is not an `id-ecPublicKey` key on P-256 — complete encoding, key type, and curve are separate checks (§14) |
+| 22 | Sealed payload with a recipient id/key mismatch, a non-sealing recipient role, a nonce that is not 12 bytes, a tag that is not 16, or an ephemeral key whose SPKI is not consumed completely or is not an `id-ecPublicKey` key on P-256—complete encoding, key type, and curve are separate checks (§14) |
 | 23 | A receiver cannot atomically and durably commit the replay requirement together with the semantic effect (§8); verification itself remains pure |
 | 24 | An attestation, signed portion, payload, text field, SPKI, or signature outside the selected profile's §0.1 resource ceilings |
 | 25 | A sealing algorithm or sealed payload when the verifier did not enable `sealed-attestation-v1` |
@@ -1036,9 +1036,9 @@ routine conformance tests.**
 
 - **A concurrency demonstration.** One verified claim carrying a replay-commit
   requirement, presented to at least two receiver commits *simultaneously*, of
-  which **exactly one** MUST apply the effect. The simultaneity MUST be arranged — a
+  which **exactly one** MUST apply the effect. The simultaneity MUST be arranged—a
   rendezvous, a barrier, or a store that holds every caller until all have
-  arrived — so that a non-atomic store fails deterministically. The
+  arrived—so that a non-atomic store fails deterministically. The
   discriminating property is that the same receiver with the compare and
   advance split into two store calls MUST fail the demonstration. The
   demonstration must also assert that pure verification alone performs no
@@ -1064,3 +1064,9 @@ control and a real SQLite transaction. The SQLite case uses a file-backed WAL
 (write-ahead log) with full synchronous writes, applies the semantic effect and
 replay advance in one transaction, reopens the database after success, and
 injects a failure before commit to prove that neither half survives alone.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

@@ -29,10 +29,7 @@ internal static class RomCatalog {
                 path1: root,
                 path2: "blargg"
             ),
-            path2: subPath.Replace(
-                newChar: Path.DirectorySeparatorChar,
-                oldChar: '/'
-            )
+            path2: subPath
         );
 
         if (!Directory.Exists(path: directory)) {
@@ -365,9 +362,6 @@ internal static class RomCatalog {
     private static string SuiteDirectory(string root, string relative) =>
         Path.Combine(
         path1: root,
-        path2: relative.Replace(
-            newChar: Path.DirectorySeparatorChar,
-            oldChar: '/'
-        )
+        path2: relative
     );
 }

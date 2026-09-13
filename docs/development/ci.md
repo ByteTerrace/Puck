@@ -79,7 +79,10 @@ deployment retains its separate serialization and is never cancelled by that rul
 **Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
 and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
-the generated schema, name-registry, and project-map layering checks. The
+the generated schema, name-registry, project-map layering, and branding
+distribution checks. `puck branding --check` verifies the canonical hashes,
+active asset copies, and source wiring recorded in the
+[branding manifest](../../branding/manifest.json). The
 browser job fails if its input bundle
 is missing. Its nightly frontier measures
 known failing or inconclusive HGB cases separately from release gates.
@@ -608,7 +611,7 @@ Testers use the existing ByteTerrace API identity and `user_impersonation` scope
 Membership in ByteTerrace API Users admits a Puck user; the deployed world allows
 up to sixteen network players. The public `world-authentication.json` release
 artifact selects the client authentication extension and pins the server key.
-See [Puck's connection instructions](../../src/Puck.World/README.md#run-it).
+See [Puck's connection instructions](../../src/Puck.World/README.md#usage).
 
 Before enabling Spot or adding workers, implement and exercise exclusive world
 ownership, eligible placement, replacement capacity, and loss of the entire
@@ -654,4 +657,3 @@ infrastructure plan and outputs, and SCM restoration snapshot. Live checks cover
 container versions, the primary world QUIC endpoint, website/docs routes, official
 manifest and engine media types, and API dependency health. These checks do not
 replace interactive browser or GPU qualification.
-

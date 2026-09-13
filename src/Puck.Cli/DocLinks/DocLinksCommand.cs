@@ -196,7 +196,7 @@ internal static class DocLinksCommand {
         var roots = new List<string>();
 
         foreach (var tree in IndexedTrees) {
-            var treePath = Path.Combine(path1: repositoryRoot, path2: tree.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+            var treePath = Path.Combine(path1: repositoryRoot, path2: tree);
 
             if (Directory.Exists(path: treePath)) {
                 roots.Add(item: treePath);

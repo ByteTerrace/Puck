@@ -36,36 +36,24 @@ AOT-compatible, for its own reflection-based document path; those warnings are
 assembly-scoped, and nothing on the binding graph reaches that path, but the
 package cannot promise for what it depends on what it can promise for itself.
 
-## ⚖️ Licensing
+## Licensing
 
-ByteTerrace.Puck is source-available and dual-licensed. It is not open source.
-The default is the
-[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0),
-under which noncommercial use is free: study, hobby projects, research,
-evaluation, and use by any school, university, public research organization,
-charity, or government body. Shipping or operating it commercially requires a
-paid commercial license from ByteTerrace, whatever the size of the user.
+This package uses Puck's source-available dual license. The
+[noncommercial license](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md)
+and [commercial licensing guide](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md)
+own the terms and eligibility details; both files are included in the package.
+The shared [packaging target](https://github.com/ByteTerrace/Puck/blob/main/build/Packaging.targets)
+owns NuGet's license-file declaration and package metadata.
 
-Both documents ride inside the package.
-[`LICENSE.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md) is the
-binding noncommercial license;
-[`LICENSING.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md) is
-the plain-language summary of who needs which, and how to ask for commercial
-terms. PolyForm Noncommercial is not on NuGet.org's allowlist of license
-expressions, which admits only OSI- and FSF-approved licenses, so the package
-declares its license as the packed `LICENSE.md` file instead. The gallery page
-therefore links that file rather than naming a license in its own vocabulary,
-and the two documents above are the terms themselves.
-
-## ✨ Key features
+## Key features
 
 - *One identity, many drivers:* a `CommandDefinition` is the shared identity
-  behind every way an action can be invoked — a bound key, a typed line, a
+  behind every way an action can be invoked—a bound key, a typed line, a
   replayed input stream, an authored interface control.
 - *Deterministic fixed-step input:* `InputRouter` orders captured input into one
   `CommandSnapshot` per logical step. Replaying the same ordered stream rebuilds
   the same snapshot.
-- *Host-owned identity:* a `CommandPrincipal` identifies the actor — a local
+- *Host-owned identity:* a `CommandPrincipal` identifies the actor—a local
   seat, the administrative console, an addon, or a network peer. The router or
   a host-minted `TextCommandSession` stamps that identity before dispatch, and
   handlers read it from `context.Principal`.
@@ -81,7 +69,7 @@ and the two documents above are the terms themselves.
   unbindable, or value-kind-mismatched destinations before a host accepts a
   binding document. `Puck.World` routes its documents through this check.
 
-## 📐 How input becomes a command
+## How input becomes a command
 
 There are two public routes to a handler: the fixed-step router and submitted
 text. Both choose the acting principal before anything dispatches.
@@ -146,10 +134,10 @@ first, while `CommandContext.Principal` answers the second. `DeviceId` is only a
 live, local annotation used for work such as rumble or device assignment; it is
 not part of the deterministic identity that recordings reproduce.
 
-## 🚀 Quick start
+## Quick start
 
 If you want to see the pieces before reading the type table, this small example
-follows one key press into a handler. Define commands in modules — one
+follows one key press into a handler. Define commands in modules—one
 definition per action, whatever drives it:
 
 ```csharp
@@ -292,7 +280,7 @@ An analog producer marks deltas/impulses `Transient`; a transient channel value
 is active for one tick and receives its inactive edge on the next tick instead
 of becoming a stranded stick sample.
 
-## 🔑 Values
+## Values
 
 `CommandValue` packs every shape into one `Vector4`, so the value is small,
 cheap to copy, and does not allocate. Each `CommandDefinition` declares one
@@ -314,7 +302,7 @@ bool held = move.IsActive;        // any non-zero component
 Vector2 v = move.AsAxis2D;        // read it back in its kind
 ```
 
-## 🗺️ Maps
+## Maps
 
 A command map is a static category on a command definition. The input router
 holds an independent active-map set for each logical player slot, so one player
@@ -347,7 +335,7 @@ router.SetActiveMaps(slot: 2, maps: ["Gameplay", "Menu"]); // an overlay
 bool driving = router.IsMapActive(slot: 1, map: "Vehicle");
 ```
 
-## 🎛️ Bindings
+## Bindings
 
 For an ordinary command destination, leave `CommandBinding.Value` `null` to
 pass the input's value through, as when a mouse delta drives `look`. Set it to a
@@ -450,7 +438,7 @@ supplying its registry before accepting authored bindings. This keeps an
 authored page from exposing a protected administrative command that its author
 was not meant to reach.
 
-## 🚪 Who can dispatch a command
+## Who can dispatch a command
 
 Two public paths reach a handler:
 
@@ -594,7 +582,7 @@ than through a half-applied tick. `ApiSurfaceTests` fails the
 suite if a public constructor appears on any of the four, so this is enforced
 rather than merely asserted.
 
-## 📋 Core types
+## Core types
 
 This table is the conceptual map. The
 [generated API reference](https://byteterrace.com/reference/) owns the complete
@@ -603,13 +591,13 @@ member-by-member surface.
 | Type | Role |
 |------|------|
 | `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules and its own three verbs, interns command and map metadata, and dispatches snapshots and text lines. |
-| `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
+| `CommandDefinition` | Named, typed, invokable command—the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |
 | `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries: `Console`, `Seat`, `Addon`, or `Peer`. |
 | `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included — what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
+| `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included—what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
@@ -621,9 +609,9 @@ member-by-member surface.
 | `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
 | `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. Disposable: a host that replaces a router must dispose the old one, or it keeps mutating its held tables on every binding reload and device disconnect. |
 | `CommandEcho` | The bracketed `[verb: key=value …]` echo grammar a read-back or mutation verb writes, defined once rather than hand-spelled per verb. `Field` routes its value through `Quote`, and `SpliceTag(text, prefix, value)` quotes only the VALUE, because the tag's declared literal prefix has to stay readable to the readers that test for it. Either way a reserved character inside a value cannot end the token, the segment, the envelope, or the line. `Quote` emits a value verbatim unless it carries whitespace, a backslash, or one of the grammar's own delimiters, and otherwise as a double-quoted run in which a backslash doubles, newline, carriage return and tab take their short spellings, and every other control character, both Unicode line and paragraph separators, and an interior quote ride as `\uXXXX`. One encoding serves two readers, which is why an interior quote rides as `\u0022` rather than `\"` and a value carrying a backslash is always quoted: the console's resubmit splitter knows quoted runs and no escapes at all, so once it has stripped the run every backslash left is unambiguously an escape for `Unescape` to invert. `Unquote` is the exact inverse of `Quote` for a token already in hand, and `TryReadToken` is what a driver reading a whole echo line wants instead. |
-| `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
+| `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it—ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 
-## 📌 Design notes
+## Design notes
 
 - **One identity, many drivers.** A `CommandDefinition` is resolved both when
   a console line is parsed and when a source dispatches a signal for its
@@ -679,12 +667,12 @@ member-by-member surface.
   pump-thread-only, called after the producers have stopped. A router owned for
   the process lifetime needs no explicit call, since the container that resolved
   it disposes it with the host. Afterward every door refuses with
-  `ObjectDisposedException` — `Capture`, `CaptureFocusExempt`, `Activate`, the
-  `ConsoleTextSink`'s injection path, and `SnapshotForTick` — so a producer
+  `ObjectDisposedException`—`Capture`, `CaptureFocusExempt`, `Activate`, the
+  `ConsoleTextSink`'s injection path, and `SnapshotForTick`—so a producer
   still holding a replaced router learns it is stale instead of quietly
   re-populating tables nothing will read.
 
-## 🧪 Testing
+## Testing
 
 ```text
 dotnet test tests/Puck.Commands.Tests
@@ -735,3 +723,9 @@ See the [generated API reference](https://byteterrace.com/reference/) for full
 member docs.
 
 A host may supply `authorize` when creating a text session. The registry checks the canonical command metadata on the pump before parsing or dispatch, using current policy rather than enqueue-time policy. This guard bounds the session's verb surface; mutation handlers must still enforce the stamped principal's domain grants.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

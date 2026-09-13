@@ -1,0 +1,79 @@
+/*
+  Shared ByteTerrace presentation tokens. The site and DocFX adapters consume
+  this file from the staged /_theme directory so the light/dark palette has one
+  maintained home. Keep layout rules in the consuming adapter.
+*/
+
+:root {
+  --paper:         #e7e4ed;
+  --paper-2:       #dbd7e4;
+  --ink:           #2b2736;
+  --ink-soft:      #5a5470;
+  --ink-faint:     #877f99;
+  --accent:        #ad3a53;
+  --accent-bright: #d15d78;
+  --accent-ink:    #fdf0f3;
+  --accent-2:      #0e7d6b;
+  --rule:          #d0cbdc;
+  --code-bg:       #221f2c;
+  --code-fg:       #e9e5f1;
+  --quote-bg:      #e0dce9;
+  --font-body:     "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --font-code:     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-bs-theme="light"]):not([data-mantine-color-scheme="light"]) {
+    --paper:         #1b1924;
+    --paper-2:       #262231;
+    --ink:           #ebe7f2;
+    --ink-soft:      #b5aec3;
+    --ink-faint:     #847d93;
+    --accent:        #f2879a;
+    --accent-bright: #ffa3b3;
+    --accent-ink:    #2a0d14;
+    --accent-2:      #4fd0b4;
+    --rule:          #363145;
+    --code-bg:       #15131c;
+    --code-fg:       #e8e3f0;
+    --quote-bg:      #262231;
+  }
+}
+
+:root[data-theme="light"],
+:root[data-bs-theme="light"],
+:root[data-mantine-color-scheme="light"] {
+  --paper:         #e7e4ed;
+  --paper-2:       #dbd7e4;
+  --ink:           #2b2736;
+  --ink-soft:      #5a5470;
+  --ink-faint:     #877f99;
+  --accent:        #ad3a53;
+  --accent-bright: #d15d78;
+  --accent-ink:    #fdf0f3;
+  --accent-2:      #0e7d6b;
+  --rule:          #d0cbdc;
+  --code-bg:       #221f2c;
+  --code-fg:       #e9e5f1;
+  --quote-bg:      #e0dce9;
+  --font-body:     "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --font-code:     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root[data-theme="dark"],
+:root[data-bs-theme="dark"],
+:root[data-mantine-color-scheme="dark"] {
+  --paper:         #1b1924;
+  --paper-2:       #262231;
+  --ink:           #ebe7f2;
+  --ink-soft:      #b5aec3;
+  --ink-faint:     #847d93;
+  --accent:        #f2879a;
+  --accent-bright: #ffa3b3;
+  --accent-ink:    #2a0d14;
+  --accent-2:      #4fd0b4;
+  --rule:          #363145;
+  --code-bg:       #15131c;
+  --code-fg:       #e8e3f0;
+  --quote-bg:      #262231;
+}

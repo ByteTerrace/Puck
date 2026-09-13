@@ -19,25 +19,31 @@ internal static class PuckFmtCommand {
             Description = "Check if files are formatted without modifying them (exit code 1 if unformatted)."
         };
 
+        var indentOption = new Option<int>("--indent-size") { DefaultValueFactory = _ => 2, Description = "Spaces per indentation level (positive integer)." };
+        var tabsOption = new Option<bool>("--tabs") { Description = "Indent with tabs instead of spaces." };
+
         var command = new Command(
             name: "fmt",
-            description: "Format Puck source files (.puck) according to opinionated style rules (4-space indent, Egyptian braces)."
+            description: "Format Puck source files (.puck) according to opinionated style rules (2-space indent, expanded objects)."
         ) {
             pathArgument,
-            checkOption
+            checkOption,
+            indentOption,
+            tabsOption
         };
 
         command.SetAction(parseResult => {
             var path = parseResult.GetValue(pathArgument)!;
             var check = parseResult.GetValue(checkOption);
 
-            return Execute(path: path, check: check);
+            return Execute(path: path, check: check, tabSize: parseResult.GetValue(indentOption), insertSpaces: !parseResult.GetValue(tabsOption));
         });
 
         return command;
     }
 
-    public static int Execute(string path, bool check) {
+    public static int Execute(string path, bool check, int tabSize = 2, bool insertSpaces = true) {
+        if (tabSize <= 0) { Console.Error.WriteLine("error: --indent-size must be positive."); return 2; }
         var fullPath = Path.GetFullPath(path);
 
         if (Directory.Exists(fullPath)) {
@@ -45,7 +51,7 @@ internal static class PuckFmtCommand {
             var unformattedCount = 0;
 
             foreach (var file in files) {
-                var code = FormatFile(file, check);
+                var code = FormatFile(file, check, tabSize, insertSpaces);
                 if (code != 0) {
                     unformattedCount++;
                 }
@@ -60,14 +66,14 @@ internal static class PuckFmtCommand {
         }
 
         if (File.Exists(fullPath)) {
-            return FormatFile(fullPath, check);
+            return FormatFile(fullPath, check, tabSize, insertSpaces);
         }
 
         Console.Error.WriteLine($"error: Path '{path}' not found.");
         return 2;
     }
 
-    private static int FormatFile(string filePath, bool check) {
+    private static int FormatFile(string filePath, bool check, int tabSize, bool insertSpaces) {
         string original;
         try {
             original = File.ReadAllText(filePath);
@@ -76,7 +82,7 @@ internal static class PuckFmtCommand {
             return 2;
         }
 
-        var formatted = PuckFormatter.Format(original);
+        var formatted = PuckFormatter.Format(original, tabSize, insertSpaces);
 
         if (string.Equals(original, formatted, StringComparison.Ordinal)) {
             return 0;

@@ -19,13 +19,36 @@ The command and arguments are passed directly without a shell. Changes restart t
 
 Completion currently offers the server's keyword, section, function, and unit suggestions, with cartridge suggestions selected by document schema. It is not yet a complete context-sensitive semantic completion engine. See the [language-server documentation](../../src/Puck.World.Transpiler/README.md#editor-tooling) for server behavior.
 
+## Formatting and source references
+
+Puck files default to two-space indentation. User or workspace language settings can override `editor.tabSize`, `editor.insertSpaces`, and `editor.detectIndentation`; Format Document uses the active editor options. Objects put their properties on separate lines, while scalar arrays and vectors stay compact. `basis` suggestions point to `.puck` sources, which the world composer compiles when resolving inheritance.
+
 ## Syntax colors
 
-Property names use the same styling whether their value follows a colon (`exponent: 2.7`), square brackets (`position [0, 0, 0]`), or braces (`noise { ... }`). Shape declarations and type names have separate scopes; capitalized bare values such as `SmoothUnion` use enum styling. Your theme supplies these syntax colors.
+Puck uses your selected theme’s syntax colors by default. Consistent syntax scopes distinguish properties, variables, keywords, functions, and literals without imposing a palette. It leaves your editor background and other languages alone. The same grammar drives syntax scopes and color application, including nested expressions, multiline raw strings, and interpolation.
 
-Array delimiters `[]` use a fixed purple color and object/block delimiters `{}` use teal in dark themes, with corresponding light and high-contrast colors. The values inside retain their string, number, and enum colors. Comments and quoted text are excluded. Fixed delimiter colors take precedence over nesting-depth colors in Puck editors; bracket matching and nesting guides remain available.
+An optional Puck palette is available by setting `puck.highlighting.consistentColors` to `true`:
 
-Set `puck.highlighting.containerColors` to `false` to return to VS Code's usual bracket coloring. To choose your own colors, set `puck.arrayDelimiter` and `puck.objectDelimiter` under `workbench.colorCustomizations`.
+| Role | Optional dark-palette color | Examples |
+|---|---|---|
+| Properties | Light blue | `palette`, `noise`, `position`, `exponent` |
+| Variables and parameters | Neutral | `tile`, `tileIndex`, `meadowTiles` |
+| Keywords and interpolation boundaries | Purple | `for`, `in`, `prototype`, `{expression}` inside an interpolated string |
+| Functions | Soft gold | `filter`, `sine`, `cosine` |
+| Types | Teal | `Prism`, `Superellipsoid` |
+| Strings | Warm peach | Names, text, and the literal parts of interpolated strings |
+| Numbers | Sage green | Coordinates, counts, and numeric quantities |
+| Enum and boolean literals | Bright blue | `SmoothUnion`, `true`, `null` |
+| Operators and parentheses | Muted neutral | `=>`, `+`, `>`, `()` |
+| Comments | Muted green | `// ...` and `/* ... */` |
+| Array delimiters | Theme bracket color 3 | `[]`, including indexing |
+| Object and block delimiters | Theme bracket color 2 | `{}` outside string interpolation |
+
+Property names share one style whether followed by a colon, an array, or an object. Loop sources are variables, and expressions inside interpolated strings retain their code colors. Capitalized bare identifiers use enum styling unless a declaration identifies them as a type; highlighting does not resolve symbol types.
+
+`puck.highlighting.consistentColors` defaults to `false`. Fixed container colors remain enabled to distinguish arrays from objects, but draw from the active theme’s bracket palette and follow theme changes. Set `puck.highlighting.containerColors` to `false` to restore the theme’s usual nesting-depth coloring. Matching and guides remain available. Switching a document to another language clears Puck decorations; switching back reapplies them.
+
+Customize any role under `workbench.colorCustomizations` using `puck.property`, `puck.variable`, `puck.keyword`, `puck.function`, `puck.type`, `puck.string`, `puck.number`, `puck.literal`, `puck.operator`, `puck.comment`, `puck.arrayDelimiter`, or `puck.objectDelimiter`.
 
 ## Build and install
 

@@ -2,7 +2,7 @@
 
 Puck.SdfVm is the SDF GPU engine: the device-explicit render pipeline that
 walks a compiled signed-distance program on the GPU and composites the
-result — `SdfWorldEngine` (beam cull → per-view render → split-screen
+result—`SdfWorldEngine` (beam cull → per-view render → split-screen
 composite over a viewport table of cameras and regions) and `SdfEngineNode`
 (the host-model `IRenderNode` that wraps it for a generic render tree). The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
@@ -12,14 +12,12 @@ instruction-set contract they decode lives one project away.
 **Depends on [`Puck.SignedDistance`](../Puck.SignedDistance/README.md) for
 the program model.** The instruction ISA, the packed-word `SdfProgram`
 representation, and the fluent `SdfProgramBuilder` authoring API are a
-separate, GPU-free project; this project consumes them to produce frames. If
-you are looking for how a program is BUILT or QUERIED rather than RENDERED,
-that is the other README.
+separate, GPU-free project; this project consumes them to produce frames. See its README for program construction and CPU queries.
 
 Fully backend-neutral: only the `IGpuCompute*` seams from `Puck.Abstractions`,
 never a Vulkan or DirectX type by name.
 
-## ✨ Key features
+## Key features
 
 - *One HLSL source, two backends:* every kernel compiles to SPIR-V and DXIL
   from the same file, so there is exactly one march/composite implementation
@@ -33,8 +31,8 @@ never a Vulkan or DirectX type by name.
   (`SdfWorldEngineOptions`); `UploadProgram` rejects anything exceeding them
   loudly rather than silently truncating.
 - *Composable content:* `ISdfSceneEmitter`/`SdfCompositionFrameSource` let a
-  scene be assembled from independent emitters — fixed geometry, an authoring
-  pool, a debug takeover — as one list instead of one hand-written
+  scene be assembled from independent emitters—fixed geometry, an authoring
+  pool, a debug takeover—as one list instead of one hand-written
   `BuildProgram` method.
 - *Gradient propagation for normals:* one forward-mode walk (`mapGradCore`)
   carries shape gradients through transforms and composition. Common primitives,
@@ -48,21 +46,21 @@ never a Vulkan or DirectX type by name.
 - *Shading-only detail shapes:* a shape instruction flagged
   `SdfInstruction.Detail` is invisible to every march (beam, fine, shadow, AO)
   and appears only in the hit-only normal/material re-evaluation `renderView`
-  runs at an already-found surface point — a seam or rivet too thin for the
+  runs at an already-found surface point—a seam or rivet too thin for the
   footprint-relative march to resolve at distance stays a crisp mark instead
   of dotting out. Compiled rigid leaves retain the same detail and secondary
   mode gates as the generic scalar and gradient interpreters. When packing proves
   that the program contains no Detail shapes, shading reuses the primary hit's
   material, pose lanes and seam values instead of reevaluating the field.
 - *Non-secondary shapes and gradient-scaled shadow/AO:* `SdfInstruction.Secondary`
-  is Detail's opposite exclusion set — false drops a shape from ONLY the
+  is Detail's opposite exclusion set—false drops a shape from ONLY the
   soft-shadow and ambient-occlusion marches, while it still marches for the
   camera and still collides. Both marches also de-scale by the hit's own local
   field gradient magnitude, on top of the program's Lipschitz `stepScale`
   clamp. This corrects the scale near the hit; a conservative field farther
   along the ray can still differ from Euclidean distance and broaden occlusion.
 
-## 🎬 The render pipeline
+## The render pipeline
 
 Ten kernels run per frame: `sdf-frame-upload.comp` (frame data copied to
 device-local buffers) → `sdf-sky.comp` (a direct, un-culled pass that
@@ -158,11 +156,11 @@ again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
 outcomes within the probe's ceilings cannot overrun the program allocation.
 `SdfEngineNode` is the
-`Puck.Hosting.IRenderNode` adapter a generic render tree composes — it owns
+`Puck.Hosting.IRenderNode` adapter a generic render tree composes—it owns
 device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
 also records the last uploaded program's word/instance count and Lipschitz
 step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
-against the frozen `ProgramWordCapacity`) — the live half of `Puck.World`'s
+against the frozen `ProgramWordCapacity`)—the live half of `Puck.World`'s
 `world.budget` cost sheet.
 `LiveVolumes` reports the submitted bounded-media count against the shared
 64-volume ceiling. Flow and cloud media use eleven `float4` rows per entry:
@@ -207,7 +205,7 @@ This is the primary SDF engine's compute-kernel reload. Child engines and
 overlay/postprocess decorators own separate pipelines. Changing host bindings,
 buffer layouts, or the C# ISA requires a host rebuild, not a shader reload.
 
-## 🧩 Composition, anchors, and views
+## Composition, anchors, and views
 
 `ISdfSceneEmitter`/`SdfEmitContext` is the composable content contract: a
 fixed-geometry room, a sculpted scene, an authoring pool, or a debug takeover
@@ -227,15 +225,15 @@ compounding frame over frame. `SdfCameraProgram.cs`'s `dynamics` op names a
 pole-matched second-order response `SdfCameraBoomFollower` applies as the
 seat-rig boom's ease; `Views/SecondOrderFollower.cs` is the presentation-only
 float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
-follower (`Puck.World.Client`) share — document-blind, allocation-free, never
+follower (`Puck.World.Client`) share—document-blind, allocation-free, never
 feeding back into simulation state. `SdfCameraProgram.cs`'s `path` op samples
 a named `curves` row by arc-length fraction and re-seeds the subject/eye
 there, facing the sampled tangent; `Views/SdfCurvePath.cs` is the same kind of
-presentation twin, but of `Puck.Maths.CurvatureSpline` — it converts an
+presentation twin, but of `Puck.Maths.CurvatureSpline`—it converts an
 already-solved `CompiledCurvatureSpline`'s Q32 raws once at construction, so
 it carries no solver of its own and cannot diverge from the fixed-point
 primitive's tangent-length branch pick. Every intermediate (converted control
-points, arc table, wrap/clamp/lookup) is carried in `double`, not `float` — a
+points, arc table, wrap/clamp/lookup) is carried in `double`, not `float`—a
 legal curve can accumulate arc well past `2^24` units, where a `float` ULP
 already exceeds a legal short segment; `float` appears only at the two public
 seams, the total length and `Sample`'s returned position/yaw.
@@ -254,16 +252,16 @@ reader wires `TryBeginExportWrite`/`EndExportWrite`: `Resolve` then holds the
 last completed image while the reader owns its lease and publishes the next
 image only after export-mode submission drains the producer queue.
 
-## 🐛 Debug and bench tooling
+## Debug and bench tooling
 
 `Puck.SdfVm.Debug` carries the fullscreen SDF-debug takeover
 (`SdfDebugMode`/`SdfDebugRenderer`/`SdfDebugScene`), the gallery tour
 (`SdfGalleryScene`), the drift monolith
-(`SdfDriftMonolith` — a calibrated cross-backend parity amplifier), and the
+(`SdfDriftMonolith`—a calibrated cross-backend parity amplifier), and the
 `sdf.bench` synthetic-workload ladder
 (`SdfBenchScene`/`SdfBenchWorkloads`).
 
-## 🚀 Shader build
+## Shader build
 
 `dotnet build src/Puck.SdfVm -c Release` runs the DirectX Shader Compiler
 in place in the source tree and requires `dxc` on the path (override with
@@ -273,14 +271,14 @@ fails the build on any committed bytecode without a matching same-stem `.hlsl`
 source; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
 source or its sidecar. The recipe is `build/Shaders.targets` (`Puck.Shaders`).
 
-## 🧪 Verification
+## Verification
 
 `puck parity` (`dotnet src/Puck.Cli/publish/Puck.Cli.dll parity`) is the one
 live automated GPU check over this engine: it boots the authored parity world
 offscreen on both backends and checks scheduled captures for content, exact
 state hashes, and per-tile pixel differences. The Post battery that once
 exercised every kernel and ISA path is quarantined with `Puck.Post` and is
-not run — say so plainly rather than implying coverage that does not exist.
+not run—say so plainly rather than implying coverage that does not exist.
 The [`sdf-world` skill](../../.claude/skills/sdf-world/SKILL.md) carries the
 settled C#↔HLSL sync-pair contracts and engine semantics this project must
 never re-derive or accidentally fork.
@@ -305,3 +303,7 @@ and waits, then await capture completion off the pump. Cancellation of that
 await leaves the capture accepted; keep its unique path reserved until it
 finishes. GPU readback and PNG writing remain synchronous render work, and
 completion does not promise an exact simulation tick or durable disk storage.
+
+## Documentation
+
+📚 [Rendering](../../docs/rendering/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

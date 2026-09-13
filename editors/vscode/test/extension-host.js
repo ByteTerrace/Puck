@@ -32,5 +32,20 @@ exports.run = async function () {
         const cards = await vscode.commands.executeCommand('vscode.executeHoverProvider', courtyard.uri, courtyard.positionAt(offset + 1));
         assert.ok(cards.some(card => card.contents.some(content => content.value.includes(expected))), `Courtyard hover explains ${token}`);
     }
+    assert.ok(!vscode.languages.getDiagnostics(courtyard.uri).some(diagnostic => diagnostic.code === 'PUCK035'), 'Editor URI resolves the courtyard basis on disk');
+    const layoutSource = 'stations [{ index: 0, p [0, 0, 0], yaw: 0 }]';
+    const layoutDocument = await vscode.workspace.openTextDocument({language:'puck',content:layoutSource});
+    const layoutEditor = await vscode.window.showTextDocument(layoutDocument);
+    assert.equal(layoutEditor.options.tabSize, 2, 'Puck defaults to two spaces in this uncustomized test profile');
+    for (const [tabSize, insertSpaces, indent] of [[2, true, '  '], [4, true, '    '], [4, false, '\t']]) {
+        const layoutEdits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', layoutDocument.uri, {tabSize, insertSpaces});
+        let formatted = layoutSource;
+        for (const edit of [...layoutEdits].sort((a,b)=>layoutDocument.offsetAt(b.range.start)-layoutDocument.offsetAt(a.range.start))) {
+            formatted = formatted.slice(0,layoutDocument.offsetAt(edit.range.start)) + edit.newText + formatted.slice(layoutDocument.offsetAt(edit.range.end));
+        }
+        assert.equal(formatted.replace(/\r\n/g, '\n'), `stations [\n${indent}{\n${indent}${indent}index: 0,\n${indent}${indent}p [0, 0, 0],\n${indent}${indent}yaw: 0\n${indent}}\n]\n`);
+    }
+    const plainDocument = await vscode.languages.setTextDocumentLanguage(layoutDocument, 'plaintext');
+    await vscode.languages.setTextDocumentLanguage(plainDocument, 'puck');
     console.log('Puck IntelliSense extension-host checks passed.');
 };

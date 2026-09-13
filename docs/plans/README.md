@@ -19,6 +19,7 @@ This directory holds proposed implementation plans and preserved technical decis
 
 ## Documentation
 
+- [README consistency and branding](readme-and-branding.md)—repository-wide README ownership, presentation, and shared brand assets.
 - [Documentation consistency](documentation-consistency.md)—editorial conventions, researched findings, and completed assignments for the manual.
 
 ## Reference game

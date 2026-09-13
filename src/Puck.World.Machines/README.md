@@ -89,3 +89,7 @@ formats cannot reconstruct prior hardware execution. Full machine receipts,
 snapshots, authored screen names, explicit control/link routes, and removal of the
 remaining screen-owned compatibility paths are still tracked in
 [the machine extension plan](../../docs/plans/machine-extensions.md).
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

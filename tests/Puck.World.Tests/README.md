@@ -65,3 +65,7 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build
 
 Review slow TRX cases before reducing workloads. Do not make the default run
 fast by silently excluding functional coverage.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

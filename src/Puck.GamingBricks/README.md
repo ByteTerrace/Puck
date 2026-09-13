@@ -5,12 +5,12 @@ SM83 machine and `Puck.AdvancedGamingBrick`'s native ARM7TDMI machine) build
 on: state serialization, forked-instance lifecycle, and the machine-neutral
 queued-host substrate that turns a core into an off-thread, backpressured
 emulation worker. It carries no console-specific CPU, PPU, or cartridge logic
-of its own — that lives in each brick that references it.
+of its own—that lives in each brick that references it.
 
 The GamingBrick projects are truly open source and dual-licensed under
 Apache-2.0 or MIT. See the shared [license notice](LICENSE.md).
 
-## ✨ Key features
+## Key features
 
 - *Little-endian state serialization:* `StateWriter`/`StateReader` write and
   read fixed widths plus `WriteBlock<T>` memcpy spans over a reused buffer, so
@@ -20,7 +20,7 @@ Apache-2.0 or MIT. See the shared [license notice](LICENSE.md).
   differing section and byte offset instead of a bare mismatch.
 - *Pooled forked instances:* `MachineInstance<TMachine, TConfiguration>.Fork()`
   rents a sibling from a bounded per-instance pool and restores this
-  instance's current state into it through a retained scratch writer — no
+  instance's current state into it through a retained scratch writer—no
   container rebuild and no intermediate snapshot image once the pool is warm.
   `MachineFork<,>` is the per-rental owner handle; a generation check closes
   the ABA hole where a stale handle could reach a re-rented sibling.
@@ -36,22 +36,22 @@ Apache-2.0 or MIT. See the shared [license notice](LICENSE.md).
   rewind, persistent-fork runahead, and capped fast-forward over the small
   `ITimeTravelMachineCore<TInput>` adapter.
 - *One deterministic interleave:* `LinkPacer` is the furthest-behind pacer every
-  cable link steps through — always advance whichever machine is furthest behind
+  cable link steps through—always advance whichever machine is furthest behind
   its cumulative target, one CPU step at a time, ties to the lowest cable
-  position — shared by the SM83 pair sessions and the 2–4 console GBA session.
+  position—shared by the SM83 pair sessions and the 2–4 console GBA session.
 - *One exact-rational resampler:* `RationalRateAccumulator` carries both audio
   output stages' emit cadence in integer arithmetic, so the emitted rate is an
   exact rational of emulated time rather than a truncated cycles-per-sample
   constant.
 - *Owned cable links:* `LinkedMachineGroup` takes ownership of two or more
   workers' cores, steps them as one group through an `IMachineGroupCore`
-  medium, and publishes each member back through its own worker — with the
+  medium, and publishes each member back through its own worker—with the
   group's own bounded queue, backpressure, and coupled time travel.
 - *Shared contract proof:* `QueuedHostContractProbe` drives the shared
   `QueuedMachineHost` substrate and its standalone tick/input API through the same checks —
   backpressure, frame publication, audio, coherent memory access,
   deterministic rewind, runahead lead, fast-forward bounds, upload leases,
-  device loss, and disposal serialization — so both cores' Post batteries
+  device loss, and disposal serialization—so both cores' Post batteries
   exercise identical substrate guarantees.
 
 The neutral runtime contract lives in `Puck.Abstractions.Machines` and requires no
@@ -62,7 +62,7 @@ coupled link. Successful state-changing accesses invalidate rewind history in th
 same ordered work item; unavailable or unsupported hardware returns an explicit
 status rather than a substitute zero.
 
-## 🚀 Quick start — forking a machine
+## Quick start—forking a machine
 
 ```csharp
 using var instance = MyMachineFactory.Create(configuration, compose);
@@ -76,14 +76,14 @@ fork.Machine.RunCycles(cycles: 200);
 
 `Fork()` reuses a bounded pool of parked siblings once warm: a disposed fork
 returns its underlying sibling to the pool instead of tearing its container
-down, and the next `Fork()` call rents it back and restores into it — a
+down, and the next `Fork()` call rents it back and restores into it—a
 restore, not a container build.
 
 ## Synchronous core hosting
 
 `IQueuedMachineCore` also works in a host's own synchronous update loop.
-Construct [AdvancedGamingBrickCore](../Puck.AdvancedGamingBrick/README.md#-quick-start)
-or [HumbleGamingBrickCore](../Puck.HumbleGamingBrick/README.md#-quick-start)
+Construct [AdvancedGamingBrickCore](../Puck.AdvancedGamingBrick/README.md#quick-start)
+or [HumbleGamingBrickCore](../Puck.HumbleGamingBrick/README.md#quick-start)
 with ROM bytes and explicit configuration. The name describes the adapter
 contract; constructing a core starts no worker or rendering infrastructure.
 
@@ -164,7 +164,7 @@ selection, privileged hardware access, and configuration authority remain
 separate permissions. Content admission neither establishes copyright status
 nor prevents an authorized program from executing arbitrary instructions.
 
-## 🎮 Queued screen-machine hosting
+## Queued screen-machine hosting
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A
 concrete host has one main job: turn loaded content into an
@@ -226,7 +226,7 @@ The worker owns the cross-thread policy:
 These guarantees matter more than queue throughput: an accepted segment is
 part of authoritative history and must execute exactly once, in order.
 
-## ⏪ Rewind, runahead, and fast-forward
+## Rewind, runahead, and fast-forward
 
 `MachineTimeTravel<TInput>` is built over `ITimeTravelMachineCore<TInput>`, a
 machine-neutral whole-state snapshot and lookahead interface. All operations
@@ -249,12 +249,12 @@ feedback and pixels from the landing. Memory pokes or instruction-granular
 advances that the frame-oriented replay log cannot reproduce invalidate stale
 history rather than pretending it remains safe.
 
-## 🔗 Cable-linked groups
+## Cable-linked groups
 
 A *link* is an object that owns its members' cores. `LinkedMachineGroup` forms
 one by quiescing each member's `QueuedMachineWorker` at a frame boundary
 (`LendCore`) and lending its core to the group's single execution thread, where
-an `IMachineGroupCore` — the medium plus its deterministic interleave — advances
+an `IMachineGroupCore`—the medium plus its deterministic interleave—advances
 every member through one shared cycle budget.
 
 - *One publication path.* After each group step the members publish through
@@ -277,7 +277,7 @@ every member through one shared cycle budget.
   held input.
 - *Severing.* `Dispose` stops the group thread, disconnects the medium at once —
   an unfinished externally-clocked transfer stays pending, as an unplugged
-  cable's does — and returns each core to its own worker with the group's
+  cable's does—and returns each core to its own worker with the group's
   tick-to-cycle accumulator phase, so the conversion carries no drift across the
   seam. Disposing a member while it is lent severs the link first; a second
   concurrent severing caller (typically another member disposing itself at the
@@ -288,7 +288,7 @@ Cross-process transport is out of scope here. The seam it would carry is the
 group core's serializable state image plus each submitted segment; nothing in
 this project reaches beyond the process.
 
-## 📋 Core types
+## Core types
 
 | Area | Types | Purpose |
 |---|---|---|
@@ -303,10 +303,10 @@ this project reaches beyond the process.
 
 Each brick re-exposes the closed generics under its own bare name through a
 `global using` alias (`MachineFork`/`MachineInstance` in `Puck.HumbleGamingBrick`,
-`AgbMachineFork`/`AgbMachineInstance` in `Puck.AdvancedGamingBrick`) — see each
+`AgbMachineFork`/`AgbMachineInstance` in `Puck.AdvancedGamingBrick`)—see each
 project's `GlobalUsings.cs`.
 
-## 🧪 Verification
+## Verification
 
 ```powershell
 dotnet test tests/Puck.GamingBricks.Tests/Puck.GamingBricks.Tests.csproj
@@ -320,10 +320,14 @@ hosts. The forked-instance triad (`MachineInstance<,>`/`MachineFork<,>`/
 `MachineInstancePool<,>`) is exercised through each battery's
 `fork-determinism` stage.
 
-## 📦 Packaging
+## Packaging
 
 `ByteTerrace.Puck.GamingBricks` depends on `Puck.Abstractions` (machine and
 GPU contracts) and `Puck.Hosting` (`EngineTicks`' tick-to-cycle conversion).
 `Puck.HumbleGamingBrick` and `Puck.AdvancedGamingBrick` both depend on it for
 snapshot, fork, and queued-host substrate; it carries no console-specific
 CPU, PPU, or cartridge logic of its own.
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

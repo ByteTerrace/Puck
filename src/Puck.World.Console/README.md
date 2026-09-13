@@ -1,45 +1,51 @@
-# Puck.World.Console — the control plane that follows the authority
+# Puck.World.Console
+
+Puck.World.Console provides the command modules that operate on authoritative
+world state. It resolves the target world for each invocation and uses the
+server's ordinary mutation and authority paths.
+
+## Command modules
 
 This project owns `IWorldConsoleAuthority` (resolves the `WorldInstance` a
 console invocation addresses) and the server-only command modules moved out
 of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
 `.why` (`WorldGrantCommandModule`), `world.contributions`
-(`WorldContributionCommandModule` — the contribution-slot read-back; slots are
+(`WorldContributionCommandModule`—the contribution-slot read-back; slots are
 authored and filled through `world.row.set placements`, so it carries no
 mutating verb), `creation.sculpts`/`creation.sculpt`
-(`WorldSculptCommandModule` — lists/applies a `Puck.World.Authoring.Sculpting.ICreationSculpt`'s
+(`WorldSculptCommandModule`—lists/applies a `Puck.World.Authoring.Sculpting.ICreationSculpt`'s
 patch against the live document by resubmitting each touched row through
-`world.row.set`/`.remove`, never a parallel apply path), `world.dynamics` (`WorldDynamicsCommandModule` — the
+`world.row.set`/`.remove`, never a parallel apply path), `world.dynamics` (`WorldDynamicsCommandModule`—the
 `dynamics` section's read-back: every row's authored triple, the derived
 fixed-point constants, and its live reference count), `world.curves`
-(`WorldCurveCommandModule` — the `curves` section's read-back: every row's
+(`WorldCurveCommandModule`—the `curves` section's read-back: every row's
 authored shape, its compiled segment count and total arc length, and its live
 reference count), `world.group.*`/`world.ownership.*`/
 `world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
 `world.looks` (`WorldLookCommandModule`), `world.peers`/`world.projection`
 (`WorldNetworkCommandModule`), `world.row.*`/`world.kits`/`world.assign`
 (`WorldRowCommandModule`), `world.state.*`/`world.generate`/`world.state`
-(`WorldStateCommandModule`), `world.tabletop` (`WorldTabletopCommandModule` —
+(`WorldStateCommandModule`), `world.tabletop` (`WorldTabletopCommandModule`—
 the tabletop primitive's read-back: every placement carrying a `board` facet,
 its anchored frame, its occupancy row's live cells, and any bound
 `turn`/`verdict`/`move`/`plan` rows; read-only, since a board's rows are
 authored/mutated through the same ordinary state doors any other row uses),
 `world.update` (`WorldUpdateCommandModule`),
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
-arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver` — the row's own
+arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver`—the row's own
 gate, since a host running several rows has one gate per row and a singleton
 would always arm whichever row it was constructed against), `world.timing`
-(`WorldTimingCommandModule` — the live performance-metrics arming verb,
+(`WorldTimingCommandModule`—the live performance-metrics arming verb,
 registered here so a headless boot lights the world-simulation timing digest
 too; `world.gpu`, the GPU per-pass read-back the same arming lights when a
 window is present, stays in `Puck.World`), and `replay.*`
 (`WorldReplayCommandModule.cs`, `WorldReplayCommandModule.Drive.cs`,
-`WorldReplayCommandModule.Inspect.cs` — record/stop/cancel/
+`WorldReplayCommandModule.Inspect.cs`—record/stop/cancel/
 drive/fork/verify/inspect/list/status; a client-local control surface over the
 tape, none of it touching a live player-facing session). The tape mechanism
 itself (`WorldReplayTape`, `WorldReplaySnapshot`, `WorldReplayInspector`,
 `WorldReplayEntryDescriber`) stays in
-[`Puck.World.Server`](../Puck.World.Server/README.md#deterministic-replay-worldreplaytapecs-worldreplaytapedrivecs-worldreplaysnapshotcs) —
+[`Puck.World.Server`](../Puck.World.Server/README.md#deterministic-replay-worldreplaytapecs-worldreplaytapedrivecs-worldreplaysnapshotcs)—
 `WorldReplaySnapshot` reads `WorldReplayInspector.DescribeRate`, a Server-internal
 coupling this project cannot see through, so only the verb surface moves; the
 module reaches the tape, the inspector, and `WorldInstanceHost` by their
@@ -51,7 +57,7 @@ that stayed in `Puck.World` need it too.
 `WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
 `IWorldNarrationSink` implementation every composition root binds so a
 headless script or canary reads byte-identical lines to a direct
-`Console.Error` write — it lives here rather than in `Puck.World.Server`
+`Console.Error` write—it lives here rather than in `Puck.World.Server`
 because `build/Architecture.props` denies that project a reference to
 `System.Console`.
 
@@ -82,7 +88,7 @@ injected `WorldServer` singleton, via the `TryResolveServer` extension that
 hands back the resolved row's `WorldServer` directly and formats a refusal
 echo on failure. `Puck.World`'s own implementation
 (`WorldBootConsoleAuthority`, internal to that project) always answers the
-boot row — none of the moved verbs carry a trailing `instance:<name>` token
+boot row—none of the moved verbs carry a trailing `instance:<name>` token
 the way `player.*`/`world.instance.*` do, so that answer is exact rather than
 a placeholder.
 
@@ -92,11 +98,15 @@ A module moves here when every type its constructor and handlers touch is
 reachable from this project's own reference set. A module whose ctor or
 handlers touch `WorldClient`, `PlayerRoster`, the seat surface (e.g.
 `WorldSeatAuthorityRouter`), views, HUD, screens, audio, or recording
-stays in `Puck.World` instead — those verbs need a live player-facing session
+stays in `Puck.World` instead—those verbs need a live player-facing session
 this project never carries. `Puck.World.Addons` is likewise out of reach (not
 in this project's reference set), so `WorldAddonCommandModule` (the
-`world.addons` cost-surface read-back — mounting/unmounting/reloading/
+`world.addons` cost-surface read-back—mounting/unmounting/reloading/
 enabling/disabling an addon rides `world.row.set addons`/`.remove` instead,
 this project's own door) stays in `Puck.World` too.
 
 Inventory control: `puck declarations src/Puck.World.Console --kind class --name CommandModule`.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

@@ -14,13 +14,13 @@ backend or a host. That is the whole point: the seam is what lets a Vulkan and a
 Direct3D 12 backend, a Windows and a Linux window, or a real machine and a
 headless stand-in be swapped without touching the code that drives them.
 
-## ✨ Key features
+## Key features
 
 - *One seam per capability:* presentation, windowing, machine runtimes, GPU
   compute, capture, recording, lamp arrays, allocation, and pacing each get a
   small, explicit contract instead of a concrete dependency.
 - *Backend- and platform-neutral:* no GPU API types, no OS handles in the public
-  surface — those stay inside the backend and platform projects that implement
+  surface—those stay inside the backend and platform projects that implement
   these interfaces.
 - *Leaf of the dependency graph:* references nothing else in the engine, so it
   can be shared everywhere without creating a cycle or dragging in a backend.
@@ -30,7 +30,7 @@ headless stand-in be swapped without touching the code that drives them.
   are shaped around whole-tick, host-owned advancement rather than wall-clock
   callbacks.
 
-## 📐 The contract seam
+## The contract seam
 
 Shared code depends *down* onto a contract; a backend, platform, or host
 implements it *up*. Nothing in this project reaches sideways to another engine
@@ -58,7 +58,7 @@ graph TD
     Implementors --> Abstractions
 ```
 
-## 📦 What each group contracts
+## What each group contracts
 
 | Group | Primary contracts | Implemented by |
 |---|---|---|
@@ -70,7 +70,7 @@ graph TD
 | **Lighting** | `ILampArrayDevice`, `LampColor`, `LampInfo`, `LampPurposes` | `Puck.Platform` |
 | **Memory / Pacing** | `IAllocator`, `IPrecisionWaiter`, `IDisplayTimingInfo` | `Puck.Platform` |
 
-## 🧩 Depending on a contract
+## Depending on a contract
 
 Machine content admission is also a host-selected contract:
 `IMachineContentAdmissionPolicy` evaluates pinned bytes and provider-verified
@@ -93,22 +93,28 @@ public sealed class RenderNode(ISurfacePresenter presenter)
 }
 ```
 
-The composition root — `Puck.Launcher` or `Puck.World` — is the one place that
+The composition root—`Puck.Launcher` or `Puck.World`—is the one place that
 chooses the concrete `ISurfacePresenter`, `INativeWindowFactory`, and machine
 implementations and hands them to the code that only knows the contracts.
 
-## 📋 Where the implementations live
+## Where the implementations live
 
-- **GPU backends** — `Puck.Vulkan`, `Puck.DirectX` and their `*.Presentation`
+- **GPU backends**—`Puck.Vulkan`, `Puck.DirectX` and their `*.Presentation`
   projects implement `ISurfacePresenter` and `IGpuComputeServices`.
-- **Platform** — `Puck.Platform` implements windowing, clipboard, capture, lamp
+- **Platform**—`Puck.Platform` implements windowing, clipboard, capture, lamp
   arrays, allocation, and pacing against the current OS.
-- **Machines** — `Puck.HumbleGamingBrick` and `Puck.AdvancedGamingBrick`
+- **Machines**—`Puck.HumbleGamingBrick` and `Puck.AdvancedGamingBrick`
   implement runtime and optional hardware/presentation contracts; `Puck.Hosting` drives them.
 
-## 🗺️ Where to go next
+## Documentation
 
-- [`Puck.Hosting`](../Puck.Hosting/README.md) — the fixed-step host boundary that
+- [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md)—
+  the shared concepts and package boundaries.
+- [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)—
+  build and verification guidance.
+- [`Puck.Hosting`](../Puck.Hosting/README.md)—the fixed-step host boundary that
   drives these contracts each tick.
-- [docs/project-map.md](../../docs/project-map.md) — the full dependency layering
-  and the architecture gate that keeps this project a leaf.
+- [project map](../../docs/project-map.md)—the dependency layering and the
+  architecture gate that keeps this project a leaf.
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

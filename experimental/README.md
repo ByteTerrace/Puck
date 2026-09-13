@@ -1,4 +1,8 @@
-# experimental/ — quarantined for work, open for reading
+# Archived projects
+
+This directory preserves retired implementations and their evidence. Start with
+the [engine manual](../docs/README.md) for current behavior. The dated policy and
+retirement records below explain how this reference material can be used.
 
 **Owner ruling, 2026-08-08, superseding the 2026-08-02 blanket ban.** The
 quarantine governs *work*, not *reading*. You are expected to READ the source

@@ -31,7 +31,7 @@ public static class WorldDefinitionFileSource {
 
     // One file a composition read, with the bytes it read from it.
     private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
-    private static string CacheKey(string path, string fingerprint) => path + "\0" + fingerprint;
+    private static string CacheKey(string path, string fingerprint) => path.Replace(oldChar: '\\', newChar: '/') + "\0" + fingerprint;
     // A held image: the chain it composed from, its final tree as UTF-8 JSON (parsed on every reuse, so no reader
     // is ever handed a tree an earlier reader may have edited), and `Reach` — how many further ancestor slots the
     // subtree beneath this document occupies. Reach is what stops reuse from quietly widening the composition-depth
@@ -248,7 +248,7 @@ public static class WorldDefinitionFileSource {
                 resolvedName = Path.GetFullPath(path: Path.Combine(
                     path1: directory,
                     path2: name
-                ));
+                )).Replace(oldChar: '\\', newChar: '/');
             } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
                 resolvedName = name;
                 reason = $"cannot resolve basis path '{name}' from {referrerName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
@@ -443,7 +443,7 @@ public static class WorldDefinitionFileSource {
         ) {
             if (!TryComposeChainWithImports(
                 source: (documents ?? new DirectoryDocumentSource()),
-                rootResolvedName: Path.GetFullPath(path: path),
+                rootResolvedName: Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'),
                 rootBytes: bytes,
                 composed: out var composed,
                 chainBytes: out var chainBytes,
@@ -656,7 +656,7 @@ public static class WorldDefinitionFileSource {
             basisPath = Path.GetFullPath(path: Path.Combine(
                 path1: directory,
                 path2: relative
-            ));
+            )).Replace(oldChar: '\\', newChar: '/');
             reason = string.Empty;
 
             return true;
@@ -1334,7 +1334,7 @@ public static class WorldDefinitionFileSource {
                 composed: out _,
                 reach: out _,
                 reason: out reason,
-                resolvedPath: Path.GetFullPath(path: path),
+                resolvedPath: Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'),
                 serveHeldImage: false,
                 source: new DirectoryDocumentSource(),
                 catalogFingerprint: catalogFingerprint,
@@ -1376,7 +1376,7 @@ public static class WorldDefinitionFileSource {
             return TryComposeDocumentTreeCore(
                 bytes: bytes,
                 reason: out reason,
-                resolvedPath: Path.GetFullPath(path: path),
+                resolvedPath: Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'),
                 source: new DirectoryDocumentSource(),
                 tree: out tree,
                 catalogFingerprint: catalogFingerprint,
@@ -1610,7 +1610,7 @@ public static class WorldDefinitionFileSource {
                 bytes: bytes,
                 layers: collected,
                 reason: out reason,
-                resolvedPath: Path.GetFullPath(path: path),
+                resolvedPath: Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'),
                 source: new DirectoryDocumentSource()
             )) {
                 layers = collected;
@@ -1936,7 +1936,7 @@ public static class WorldDefinitionFileSource {
             return false;
         }
 
-        var rootResolvedName = Path.GetFullPath(path: path);
+        var rootResolvedName = Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/');
 
         if (!TryWalkChain(
             source: new DirectoryDocumentSource(),

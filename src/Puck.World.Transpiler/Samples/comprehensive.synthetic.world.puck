@@ -1,5 +1,5 @@
 schema: "puck.world.def.v1"
-basis: "worlds/standard.basis.json"
+basis: "worlds/base.puck"
 documentId: "comprehensive-synthetic-v1"
 
 // Compile-time constants

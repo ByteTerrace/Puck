@@ -1,9 +1,9 @@
 # Puck.Vulkan
 
-A **from-scratch Vulkan layer** for the Puck engine — no binding generator,
-no third-party wrapper. It loads the native Vulkan loader itself, mirrors the structures it
-needs, and exposes everything through small, interface-driven APIs so the renderer is built
-(and tested) against seams rather than raw `vkXxx` calls.
+Puck.Vulkan provides a self-contained Vulkan layer for the Puck engine. It
+loads the native Vulkan loader, mirrors the structures it needs, and exposes
+small interface-driven APIs so the renderer is built and tested against seams
+rather than raw `vkXxx` calls.
 
 It carries **no windowing and no shader compilation**: native window handles arrive as
 `NativeSurfaceBinding`/`NativeDisplayKind` from `Puck.Abstractions`, and compiled SPIR-V arrives
@@ -24,7 +24,7 @@ deps        Puck.Abstractions (display / surface kinds, IAllocator), Puck.Shader
 > unsafe plumbing. Do not "tidy up" by reducing accessibility. Every public type and member
 > is XML-documented and validated against the official Vulkan specification.
 
-## ✨ Key features
+## Key features
 
 - *No binding generator, no wrapper library:* the loader is resolved and every struct is
   mirrored by hand against the Vulkan spec, behind small, interface-driven APIs.
@@ -41,7 +41,7 @@ deps        Puck.Abstractions (display / surface kinds, IAllocator), Puck.Shader
 
 ---
 
-## 📐 Structure
+## Structure
 
 The library is six cooperating layers, one per folder. Read them as a stack: **Bindings**
 at the bottom (raw data), **Factories** plus the frame presenter at the top (the entry
@@ -51,7 +51,7 @@ points you call into).
 |--------|--------|-----------------|
 | `Bindings/` | `Vk*` | Blittable, P/Invoke-shaped mirrors of Vulkan structs & enums (`VkResult`, `VkImageCreateInfo`, `VkPhysicalDeviceType`, …). |
 | `Messages/` | `Vulkan*Request` / `…Result` | `readonly record struct` parameter / return bundles for factory & API calls. |
-| `Interfaces/` | `IVulkan*Api`, `IVulkan*Factory` | The contracts — the dependency-injection / mocking seam. |
+| `Interfaces/` | `IVulkan*Api`, `IVulkan*Factory` | The contracts—the dependency-injection / mocking seam. |
 | `Apis/` | `VulkanNative*Api` | Thin implementations that marshal to the native `vkXxx` entry points, grouped by concern. |
 | `Factories/` | `Vulkan*Factory` | Build `Interop` objects from request **Messages** by driving the **Apis**. |
 | `Interop/` | `Vulkan*` | `IDisposable` wrappers that **own a native handle** (`VulkanInstance`, `VulkanLogicalDevice`, `VulkanSwapchain`, …). |
@@ -61,7 +61,7 @@ points you call into).
 Every resource follows the same shape, so the whole graph is injectable and the native
 calls are mockable in tests:
 
-```
+```text
 IVulkan{Thing}Factory.Create(request) ─drives→ IVulkan{Thing}Api (vkXxx) ─returns→ Vulkan{Thing}  (IDisposable handle owner)
 ```
 
@@ -82,7 +82,7 @@ Plus a handful of top-level helpers: `VulkanException`, `VulkanResultExtensions`
 |---------|---------|--------|----------------|
 | Instance | `IVulkanInstanceFactory` | `IVulkanInstanceApi` | `VulkanInstance` |
 | Surface | `IVulkanSurfaceFactory` | `IVulkanSurfaceApi` | `VulkanSurface` |
-| Physical device | — (`VulkanPhysicalDeviceSelector`) | `IVulkanPhysicalDeviceApi` | `VkPhysicalDevice` |
+| Physical device |—(`VulkanPhysicalDeviceSelector`) | `IVulkanPhysicalDeviceApi` | `VkPhysicalDevice` |
 | Logical device + queues | `IVulkanLogicalDeviceFactory` | `IVulkanLogicalDeviceApi` | `VulkanLogicalDevice` |
 | Swapchain | `IVulkanSwapchainFactory` | `IVulkanSwapchainApi`, `IVulkanSwapchainSupportApi` | `VulkanSwapchain` |
 | Render pass | `IVulkanRenderPassFactory` | `IVulkanRenderPassApi` | `VulkanRenderPass` |
@@ -93,17 +93,17 @@ Plus a handful of top-level helpers: `VulkanException`, `VulkanResultExtensions`
 | Frame sync | `IVulkanFrameSynchronizationFactory` | `IVulkanFrameSynchronizationApi` | `VulkanFrameSynchronization` |
 | Storage buffer | `IVulkanStorageBufferFactory` | `IVulkanStorageBufferApi` | `VulkanStorageBuffer` |
 | Vertex buffer | `IVulkanVertexBufferFactory` | `IVulkanVertexBufferApi` | `VulkanVertexBuffer` |
-| Descriptors / samplers | — | `IVulkanDescriptorApi` | — |
-| Frame present / readback | — (`VulkanFramePresenter`) | `IVulkanFramePresentationApi`, `IVulkanFrameReadbackApi` | `VulkanFrameReadbackBuffer` |
-| Offscreen image | — | `IVulkanOffscreenImageApi` | — |
-| Timestamps / stats | — | `IVulkanQueryPoolApi`, `IVulkanPipelineStatisticsApi` | — |
-| Ray tracing (optional) | — | `IVulkanAccelerationStructureApi` | — |
+| Descriptors / samplers |—| `IVulkanDescriptorApi` |—|
+| Frame present / readback |—(`VulkanFramePresenter`) | `IVulkanFramePresentationApi`, `IVulkanFrameReadbackApi` | `VulkanFrameReadbackBuffer` |
+| Offscreen image |—| `IVulkanOffscreenImageApi` |—|
+| Timestamps / stats |—| `IVulkanQueryPoolApi`, `IVulkanPipelineStatisticsApi` |—|
+| Ray tracing (optional) |—| `IVulkanAccelerationStructureApi` |—|
 
 ---
 
 ## The native loader
 
-`VulkanNativeLibrary` resolves and lazily loads the platform loader — `vulkan-1` on Windows,
+`VulkanNativeLibrary` resolves and lazily loads the platform loader—`vulkan-1` on Windows,
 `libvulkan.so.1` on Linux and FreeBSD, `libvulkan.1.dylib` on Apple platforms, and
 `libvulkan.so` on Android. Override it **before the first Vulkan call** when you need a
 specific loader (for example, a console SDK backend):
@@ -129,11 +129,11 @@ result.ThrowIfFailed(operation: "vkCreateInstance");  // throws VulkanException 
 
 `VulkanException` carries the failing `Operation` name and the `Result` code. Note that
 swapchain status codes (`SuboptimalKhr`, `ErrorOutOfDateKhr`) and not-ready codes are **not**
-treated as hard failures by the frame presenter — see below.
+treated as hard failures by the frame presenter—see below.
 
 ---
 
-## 🚀 Quick start — bootstrap order
+## Quick start—bootstrap order
 
 Resources must be created in a strict order. Assuming the factories are already wired up
 (each holding the API dependencies it needs):
@@ -171,7 +171,7 @@ VulkanCommandResources     commands = commandResourcesFactory.Create(logicalDevi
 VulkanFrameSynchronization sync     = frameSyncFactory.Create(logicalDevice: device, renderFinishedSemaphoreCount: imageCount);
 ```
 
-Every `Vulkan*` wrapper is `IDisposable` and owns its handle — **dispose in reverse creation
+Every `Vulkan*` wrapper is `IDisposable` and owns its handle—**dispose in reverse creation
 order** (per-frame resources → pipeline → framebuffers → render pass → swapchain → device →
 surface → instance). The swapchain, pipeline, and buffer factories take several more
 parameters, elided as `/* ... */`; consult the factory interface in `Interfaces/` (or the
@@ -222,8 +222,8 @@ switch (outcome.Result) {
 Two design points worth knowing:
 
 - **Lazy per-image recording.** The command buffer for the acquired image is (re)recorded
-  *after* the in-flight fence wait proves prior work retired — via the `recordAcquiredImage`
-  callback — so recording never races in-flight GPU work.
+  *after* the in-flight fence wait proves prior work retired—via the `recordAcquiredImage`
+  callback—so recording never races in-flight GPU work.
 - **Careful suboptimal handling.** `SUBOPTIMAL_KHR` is a success code with a *pending*
   semaphore signal, so the presenter renders and presents the frame anyway (the present call
   reports suboptimal again and recreation routes from there), rather than abandoning a
@@ -241,11 +241,11 @@ The logical-device factory probes and enables these only when the device fully s
 callers still re-probe (for example via `IVulkanAccelerationStructureApi.SupportsDevice`)
 before relying on a path, and fall back otherwise:
 
-- **Ray query** — `VK_KHR_ray_query` plus the acceleration-structure / deferred-host-ops /
+- **Ray query**—`VK_KHR_ray_query` plus the acceleration-structure / deferred-host-ops /
   buffer-device-address bundle, with the matching feature structs chained.
-- **Pipeline executable properties** — `VK_KHR_pipeline_executable_properties` for diagnostics
+- **Pipeline executable properties**—`VK_KHR_pipeline_executable_properties` for diagnostics
   (compiled register counts, etc.); pixel-neutral read-back via `IVulkanPipelineStatisticsApi`.
-- **Storage-image-without-format** — `shaderStorageImage{Read,Write}WithoutFormat`, needed to
+- **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no GLSL format qualifier.
 
 ---
@@ -257,7 +257,7 @@ before relying on a path, and fall back otherwise:
 - **Handles are owned.** Each `Vulkan*` interop type disposes its handle exactly once. Respect
   creation / teardown order; don't double-wrap a handle.
 - **`VkResult` is a value, not always an error.** Use `.ThrowIfFailed(op)` for genuine
-  failures, but let the frame presenter's outcome enum drive swapchain recreation — don't throw
+  failures, but let the frame presenter's outcome enum drive swapchain recreation—don't throw
   on `OutOfDate` / `Suboptimal` / `NotReady`.
 - **Public is intentional.** Wide visibility is a deliberate design choice for this layer; a
   large public surface is not a smell here.
@@ -266,7 +266,7 @@ before relying on a path, and fall back otherwise:
   document and use fields by their Vulkan-spec meaning.
 - See the [generated API reference](../../docs/api) for full member docs.
 
-## 📋 Core types
+## Core types
 
 Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 `VulkanException`, `VulkanResultExtensions` (`.IsSuccess()`/`.ThrowIfFailed(operation)`),
@@ -275,7 +275,7 @@ Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 `VulkanMarshalHelpers`, and the small value types `VulkanQueueFamilySelection`,
 `VulkanPushConstantBinding`, `VulkanVertexBufferBinding`, `VulkanShaderStageFlags`.
 
-## 🧪 Verification
+## Verification
 
 There is no dedicated `Puck.Vulkan.Tests` project; the backend is verified by
 running the engine on Vulkan and by `puck parity`, which boots the real
@@ -287,7 +287,7 @@ dotnet build Puck.slnx -c Release
 dotnet src/Puck.Cli/publish/Puck.Cli.dll parity
 ```
 
-## 📦 Packaging
+## Packaging
 
 `ByteTerrace.Puck.Vulkan` depends on `Puck.Abstractions` (display/surface
 kinds, `IAllocator`) and `Puck.Shaders` (`ShaderStageInfo`, compiled SPIR-V).
@@ -296,3 +296,7 @@ kinds, `IAllocator`) and `Puck.Shaders` (`ShaderStageInfo`, compiled SPIR-V).
 backend; it has no hard dependency on `Puck.Platform` or a concrete
 allocator, and it carries no windowing or shader-compilation dependency of
 its own.
+
+## Documentation
+
+📚 [Rendering](https://github.com/ByteTerrace/Puck/blob/main/docs/rendering/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

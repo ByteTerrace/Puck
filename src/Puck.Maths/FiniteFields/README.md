@@ -1,4 +1,4 @@
-# FiniteFields
+# Finite fields
 
 This folder does exact arithmetic in finite structures. Each folder under
 `Puck.Maths` is called a **wing**, and each wing's README carries the full
@@ -9,7 +9,7 @@ If finite fields are new to you, here is the whole idea in a paragraph. A
 divide by anything except zero, and in which the laws you already trust hold:
 `a·b` equals `b·a`, `(a·b)·c` equals `a·(b·c)`, and `a·(b + c)` equals
 `a·b + a·c`. The rational numbers form a field, and so do the real numbers. A
-**finite field** is a field with only finitely many elements in it — the
+**finite field** is a field with only finitely many elements in it—the
 arithmetic closes up and wraps around inside a fixed set of values, the way the
 hours on a clock face wrap around twelve. Finite fields always have a prime
 power of elements, which is a theorem rather than a design choice, and it is why
@@ -28,19 +28,19 @@ Four public surfaces cover the wing.
 
 - **Polynomials over the two-element field.** That field is written `GF(2)`: its
   only values are `0` and `1`, its addition is exclusive or, and its
-  multiplication is `and`. A polynomial over it — something like `t⁵ + t² + 1` —
+  multiplication is `and`. A polynomial over it—something like `t⁵ + t² + 1`—
   is a list of one-bit coefficients, so it packs one coefficient per bit into a
   machine integer.
-- **The fields of two-power order at every degree from 1 through 128** — the
-  fields with `2^k` elements, written `GF(2^k)` — built over a **modulus** the
+- **The fields of two-power order at every degree from 1 through 128**—the
+  fields with `2^k` elements, written `GF(2^k)`—built over a **modulus** the
   caller chooses or a canonical one shipped here. A modulus is the polynomial
   you divide by and keep the remainder against, and it has to be
   **irreducible**, meaning it cannot be written as a product of two
   lower-degree polynomials. Irreducible is to polynomials what prime is to whole
   numbers, and it is what makes the arithmetic a field rather than something
   weaker.
-- **The odd-prime field below `2⁶²`** — ordinary whole-number arithmetic modulo
-  a prime `p`, where every value is a remainder in `[0, p)` — **together with
+- **The odd-prime field below `2⁶²`**—ordinary whole-number arithmetic modulo
+  a prime `p`, where every value is a remainder in `[0, p)`—**together with
   its quadratic extension**, which adjoins a square root the base field does not
   contain.
 - **The primality toolkit** that decides which moduli are admissible in the
@@ -52,8 +52,8 @@ value path is integer, with no wall clock, no ambient state, and no floating
 point in any result. There is exactly one floating-point touch in the whole
 wing, and it is worth knowing where it is: the integer square root behind the
 Lucas test's square pre-check takes its first estimate from hardware floating
-point, and branchless integer corrections — fixed arithmetic with no branch in
-it, so the same instructions run whatever the input — settle that estimate to
+point, and branchless integer corrections—fixed arithmetic with no branch in
+it, so the same instructions run whatever the input—settle that estimate to
 the exact floor before anything reads it.
 
 The hardware paths exist for throughput and nothing else: the carryless-multiply
@@ -63,28 +63,28 @@ a whole region of values, and the rungs are arranged like a ladder, from the
 plain scalar loop up through progressively wider vector instructions; [the
 region-scaling ladder](#the-region-scaling-ladder) below walks all seven of
 them. Part of the agreement between rungs is structural and part of it has to be
-executed to be believed. Everything above the carryless product — reduction,
-squaring, inversion, division, exponentiation — is one shared implementation, so
+executed to be believed. Everything above the carryless product—reduction,
+squaring, inversion, division, exponentiation—is one shared implementation, so
 no tier can differ there, and every vector rung's tables and matrices are
 computed through the field's own scalar multiply rather than deriving the
 modulus a second time. The product itself is two independent implementations,
 and each vector rung applies its tables through code the scalar rung does not
 share, so agreement at that level is something the verification stage has to
-execute and compare — see [Verifying changes](#verifying-changes) — rather than
+execute and compare—see [Verifying changes](#verifying-changes)—rather than
 something the structure supplies for free.
 
 Three internal types carry the engine, and the public types are thin fronts over
 them.
 
-- `BinaryFieldKernels` — the free functions every binary-field operation
+- `BinaryFieldKernels`—the free functions every binary-field operation
   resolves to.
-- `BinaryFieldRegionTier` — the enum naming the bulk region rungs.
-- `ScaledResidueRing64` — the Montgomery-form residue ring every chain of
+- `BinaryFieldRegionTier`—the enum naming the bulk region rungs.
+- `ScaledResidueRing64`—the Montgomery-form residue ring every chain of
   odd-characteristic multiplications runs in.
 
 A `BinaryField<T>` is its degree and its modulus tail plus delegation, and a
 `PrimeField64` is its modulus plus delegation. The three internal types are
-documented below as **substrate** — the machinery underneath — rather than as
+documented below as **substrate**—the machinery underneath—rather than as
 surface, because a consumer reaches them only through the public types.
 
 The operation tables below carry the arithmetic surface only, so the plain
@@ -105,14 +105,14 @@ The six public types come first, then the three internal ones that
 | Type | Kind | What it's for |
 |---|---|---|
 | `BinaryPolynomial` | `readonly record struct` | Polynomials over the two-element field, with bit `i` carrying the coefficient of `t^i` inside a `ulong` (so degree ≤ 63). It offers exact Euclidean division, a monic gcd, an irreducibility decision, a primitivity decision through degree 32, and the factorization of `tⁿ+1` for odd `n ≤ 31`. It is also the type that carries a modulus for `BinaryField<T>`. |
-| `BinaryField<T>` | `readonly record struct` | The field `GF(2^k)`, formed by dividing by a fixed irreducible modulus and keeping the remainder, for `k` from 1 through the width of the **carrier** — the integer type the bits are packed into: `byte`, `ushort`, `uint`, `ulong`, or `UInt128`, so 1 through 128. Elements are bare packed integers, and the field object describes the structure they live in. Scalar arithmetic plus the bulk region primitives. |
-| `BinaryFields` | `static` | The canonical minimum-weight fields at degrees 8, 16, 32, 64, and 128 — the widths the library accelerates. Every one of them runs its product on the carryless-multiply instruction; only the byte-wide and sixteen-bit ones reach a vector region rung. |
+| `BinaryField<T>` | `readonly record struct` | The field `GF(2^k)`, formed by dividing by a fixed irreducible modulus and keeping the remainder, for `k` from 1 through the width of the **carrier**—the integer type the bits are packed into: `byte`, `ushort`, `uint`, `ulong`, or `UInt128`, so 1 through 128. Elements are bare packed integers, and the field object describes the structure they live in. Scalar arithmetic plus the bulk region primitives. |
+| `BinaryFields` | `static` | The canonical minimum-weight fields at degrees 8, 16, 32, 64, and 128—the widths the library accelerates. Every one of them runs its product on the carryless-multiply instruction; only the byte-wide and sixteen-bit ones reach a vector region rung. |
 | `ReedSolomon` | `static` | Systematic Reed–Solomon coding over any `BinaryField<T>`: the generator polynomial whose roots are consecutive powers of a chosen element, the check symbols a message's division by it leaves behind, and the syndromes that read a codeword back. Generic in the carrier, span-based, and allocation-free. |
 | `PrimeField64` | `readonly record struct` | The prime field `F_p` for an odd prime `p < 2⁶²`, whose elements are bare `ulong` values in `[0, p)`. Field arithmetic, the quadratic character (the test for whether a value is a square), modular square roots, a batch inversion, and the static primality surface. |
 | `QuadraticExtensionField64` | `readonly record struct` | The extension `F_{p²} = F_p(√d)` over a fixed non-square `d`. An element is the pair `(A, B)`, standing for `A + B·√d`. It adds `Frobenius`, `Norm`, `Trace`, and a deterministic chooser for the smallest non-square. |
 | `BinaryFieldKernels` | `internal static` | The free functions beneath `BinaryField<T>`: both carryless-multiply tiers, tail-fold reduction, the inversion chain, the irreducibility criterion, and the region ladder. Seven named tiers become ten kernels, because the sixteen-bit width has a kernel of its own at each of the three affine tiers. |
 | `BinaryFieldRegionTier` | `internal enum` | Names the seven rungs of the bulk region-scaling ladder and does nothing else; dispatch lives in the kernels. |
-| `ScaledResidueRing64` | `internal readonly struct` | The residue ring `Z/nZ` for an odd `n` above one — the arithmetic of remainders modulo `n` — carried in Montgomery form so that a chain of modular multiplications performs no hardware division. It requires oddness only, never primality. |
+| `ScaledResidueRing64` | `internal readonly struct` | The residue ring `Z/nZ` for an odd `n` above one—the arithmetic of remainders modulo `n`—carried in Montgomery form so that a chain of modular multiplications performs no hardware division. It requires oddness only, never primality. |
 
 ---
 
@@ -132,18 +132,18 @@ comparison or ordering interfaces.
 | Operation | Semantics |
 |---|---|
 | `+` / `-` / unary `-` | Exclusive or, exclusive or, and identity. |
-| `*` | The low limb — the lower 64 bits — of the exact carryless product, so coefficients above degree 63 are discarded. |
+| `*` | The low limb—the lower 64 bits—of the exact carryless product, so coefficients above degree 63 are discarded. |
 | `checked *` | The exact product, throwing `OverflowException` when the high limb is non-zero. |
 | `/` / `%` / `DivRem` | Euclidean quotient and remainder, which is long division: they satisfy `(quotient * divisor) + remainder == this` exactly. A zero divisor throws `DivideByZeroException`. |
 | `<<` / `>>` / `>>>` | Multiplication and division by `t^count`; `>>` and `>>>` are the same operation. |
-| `GreatestCommonDivisor` | The monic gcd — leading coefficient one — computed by the Euclidean loop. When one operand is zero, the other is returned. |
+| `GreatestCommonDivisor` | The monic gcd—leading coefficient one—computed by the Euclidean loop. When one operand is zero, the other is returned. |
 | `IsIrreducible()` | Degree below one is `false`, degree one is `true`, and a zero constant term above degree one is `false` (because `t` divides it). Everything else is delegated to `BinaryField<ulong>`. |
 | `IsPrimitive()` | Irreducible **and** the root generates the whole multiplicative group. A zero constant term is never primitive, `t` itself included. |
 | `FactorOddCycle(cycleOrder)` | The distinct monic irreducible factors of `tⁿ+1` for an odd `n` in `[1, 31]`, ordered by degree and then by packed value. |
 | `ToString()` | The conventional written form, such as `t^5+t^2+1`, and `0` for the zero polynomial. |
 
 **Truncation.** Ordinary `*` truncates in the same way every other fixed-width
-operator in the library wraps — the bits that do not fit are simply gone — and
+operator in the library wraps—the bits that do not fit are simply gone—and
 `checked *` reports the loss instead. Both come from one carryless multiply, so
 the truncating form and the reporting form cannot disagree about the product. A
 product that genuinely needs its coefficients above degree 63 is a field
@@ -155,13 +155,13 @@ whose count is masked to the carrier width; that shift would wrap around and
 resurrect exactly the coefficients the operator promises to discard.
 
 **Primitivity.** Primitivity is strictly stronger than irreducibility. It
-additionally says that `t` has order `2^degree − 1` — that is, you must multiply
+additionally says that `t` has order `2^degree − 1`—that is, you must multiply
 `t` by itself that many times before returning to one, rather than some proper
-divisor of that count — which is what makes the polynomial the characteristic
+divisor of that count—which is what makes the polynomial the characteristic
 polynomial of a maximal-period linear recurrence. Those turn up as a shift
 register's direction numbers, a maximal-length sequence, and a full-period
-scrambler. The decision rejects a zero constant term first — `t` divides such a
-polynomial, so its root is zero in the quotient and generates nothing — then a
+scrambler. The decision rejects a zero constant term first—`t` divides such a
+polynomial, so its root is zero in the quotient and generates nothing—then a
 reducible one, and then checks that `t` raised to `(2^degree − 1) / p` is not one
 for every prime `p` dividing the group order. The constant-term rule is the one
 that answers `t` itself: `IsIrreducible` refuses every *other* zero-constant-term
@@ -170,8 +170,8 @@ would otherwise reach a quotient that is not a field. The decision therefore
 needs the group order factored, and the shipped factorization is trial division,
 so the degree is capped at `MaximumPrimitiveDegree` (32) and a larger degree
 throws `NotSupportedException` rather than running. The prime divisors are
-deduplicated into a `stackalloc` —
-a small buffer on the call stack, never the heap — of nine, which is the most
+deduplicated into a `stackalloc`—
+a small buffer on the call stack, never the heap—of nine, which is the most
 distinct primes that can divide a value below `2³²`, since the product of the
 first ten primes already exceeds it. A prime group order is reported by the
 factor enumerator as itself, which is the only prime divisor the check then
@@ -182,7 +182,7 @@ members do allocate: `FactorOddCycle` builds a `List<T>` and returns a sorted
 array, `IsPrimitive` allocates the state machine of the prime-factor enumerator
 it walks over the group order, and `ToString` allocates its builder and the
 string. All three are construction-time or diagnostic work rather than a hot
-path — the inner loop a simulation runs every tick.
+path—the inner loop a simulation runs every tick.
 
 **Diagnostics.** `ToString` is a diagnostic form, and no parsing round trip is
 claimed for it.
@@ -205,7 +205,7 @@ being a value in one, so it carries no arithmetic operators.
 | `FromModulus(modulus)` | The same field, named instead by its whole modulus polynomial, whose leading term is stripped to form the tail. |
 | `Add` | Exclusive or, which is also the difference. |
 | `Multiply` / `Square` | The carryless product, reduced. Squaring runs the same kernel. |
-| `SquareRoot` | The element whose square is the argument — unique under an irreducible modulus — reached by `Degree − 1` further squarings. |
+| `SquareRoot` | The element whose square is the argument—unique under an irreducible modulus—reached by `Degree − 1` further squarings. |
 | `Inverse` / `Divide` | The addition-chain inversion, and a multiply against it. |
 | `Exponentiate` | Square-and-multiply over the exponent's binary expansion. |
 | `Reduce` / `IsReduced` | Fold an arbitrary packed value into the field; test whether one is already reduced. |
@@ -220,14 +220,14 @@ term (then `t` divides the modulus and the quotient is not a field), and a tail
 with a non-zero coefficient at or above the degree. That last check is skipped
 when the degree equals the carrier width, where nothing can sit above it.
 `FromModulus` runs the same rules on the degree and tail it derives from the
-modulus, so a modulus of degree below one — the zero and constant polynomials
-included — lands in the same below-one refusal.
+modulus, so a modulus of degree below one—the zero and constant polynomials
+included—lands in the same below-one refusal.
 
 **What construction deliberately does not validate.** Irreducibility. The test
 costs a real fraction of a millisecond at the top degrees, and callers who had
 already validated their modulus would pay for it twice, so it is offered as
-`IsIrreducible()` and run on demand. Nothing else is precomputed either — the
-value is the degree and the tail — so constructing a field costs nothing and no
+`IsIrreducible()` and run on demand. Nothing else is precomputed either—the
+value is the degree and the tail—so constructing a field costs nothing and no
 class initializer sits in front of any operation.
 
 **What the hot path deliberately does not guard.** `Multiply`, `Square`,
@@ -250,7 +250,7 @@ index: a region laid exactly on top of another is well defined, and only a
 shifted overlap has no defined result. `ScaleRegionInPlace` passes one span as
 both source and destination, so it needs no check at all.
 
-**Allocation.** None, anywhere. Each nibble-split rung — a nibble is four bits —
+**Allocation.** None, anywhere. Each nibble-split rung—a nibble is four bits—
 stages its two tables in two `stackalloc`s of sixteen bytes each; the affine
 rungs carry their matrices in registers, and every other kernel is table-free.
 
@@ -275,7 +275,7 @@ ladder's vector rungs reach only the byte-wide and sixteen-bit ones.
 | `Degree64` | `t⁶⁴ + t⁴ + t³ + t + 1` |
 | `Degree128` | `t¹²⁸ + t⁷ + t² + t + 1` |
 
-Each modulus is the standard minimum-weight irreducible at its degree — weight
+Each modulus is the standard minimum-weight irreducible at its degree—weight
 counts the non-zero terms, and fewer terms means reduction folds less back down,
 completing in two passes. Swan's theorem rules out a trinomial (three terms)
 whenever the degree is a multiple of eight, which every degree here is, so a
@@ -284,7 +284,7 @@ degrees rather than a preference. `Degree64`'s tail coinciding with `Degree8`'s
 is a genuine coincidence of the minimum-weight pattern at those two degrees, and
 not a transcription error. `Degree128`'s modulus is the minimum-weight
 irreducible in the natural, unreflected domain; the near-degree-127 reciprocal
-polynomial you may have seen elsewhere — the same coefficients read backwards —
+polynomial you may have seen elsewhere—the same coefficients read backwards—
 exists only to make a bit-reversed wire format work, and that is a problem this
 library does not have.
 
@@ -304,8 +304,8 @@ it.
 ## `ReedSolomon`
 
 Systematic Reed–Solomon coding over any `BinaryField<T>`. A code is named by
-three data rather than by an object — the field, the element whose consecutive
-powers are the generator's roots, and the exponent the run of roots starts at —
+three data rather than by an object—the field, the element whose consecutive
+powers are the generator's roots, and the exponent the run of roots starts at—
 and everything else is a span the caller owns. Nothing here caches, locks, or
 runs a class initializer, so a consumer that encodes one shape repeatedly builds
 its generator once and keeps it.
@@ -316,8 +316,8 @@ its generator once and keeps it.
 | `ComputeCheckSymbols(field, generator, message, checkSymbols)` | The remainder of the message's division by the generator. The check span's length must be the generator's degree, which is also the bound the remainder's own degree satisfies. |
 | `ComputeSyndromes(field, rootBase, firstRootExponent, codeword, syndromes)` | The codeword evaluated at each root, by Horner. Every syndrome is zero exactly when the codeword is divisible by the generator. |
 
-**The symbol order is highest-order coefficient first everywhere** — generator,
-message, check symbols, and codeword — so a systematic codeword is the message
+**The symbol order is highest-order coefficient first everywhere**—generator,
+message, check symbols, and codeword—so a systematic codeword is the message
 span followed by the check span with no reversal anywhere.
 
 **The division rides the region ladder.** Each message symbol contributes one
@@ -328,15 +328,15 @@ buffer is stack-allocated below 512 symbols and pooled above it, and a pooled
 buffer is cleared before it re-enters the shared pool; nothing reaches the
 managed heap either way.
 
-**Preconditions, documented and not enforced** — the same posture
+**Preconditions, documented and not enforced**—the same posture
 `BinaryField<T>` takes toward irreducibility, and for the same reason. The roots
 must be DISTINCT, which holds when `rootBase`'s multiplicative order exceeds the
 largest root exponent used; a primitive element gives the longest code the field
 admits. Every symbol must already be reduced.
 
 **What is here and what is not.** Encoding and verification are here; LOCATING
-and correcting errors — a key-equation solver, a root search, an error
-evaluator — are not. Syndromes are the honest boundary: they answer "is this
+and correcting errors—a key-equation solver, a root search, an error
+evaluator—are not. Syndromes are the honest boundary: they answer "is this
 codeword intact" on their own, which is the half a consumer needs before it needs
 a decoder, and a decoder is a separate arc rather than an omission.
 
@@ -371,9 +371,9 @@ below `2⁶³` and so never overflow the carrier.
 | `Pow` | Square-and-multiply, run in Montgomery form. |
 | `Inverse` | `value^(p − 2)`. |
 | `LegendreCharacter` | `0` at zero, `1` at a non-zero square, and `-1` at a non-square, decided by the exponentiation criterion. |
-| `TrySqrt` | One of the two roots — a square has two, `r` and `p − r`, so negate the result for the other. It decides the character itself and reports a non-square rather than throwing. |
+| `TrySqrt` | One of the two roots—a square has two, `r` and `p − r`, so negate the result for the other. It decides the character itself and reports a non-square rather than throwing. |
 | `BatchInverse` | A whole region turned over through one field inversion. |
-| `IsPrime` / `IsStrongProbablePrime` / `IsStrongLucasProbablePrime` / `IsBaillieProbablePrime` | The static primality surface — see [Primality](#primality-on-ulong). |
+| `IsPrime` / `IsStrongProbablePrime` / `IsStrongLucasProbablePrime` / `IsBaillieProbablePrime` | The static primality surface—see [Primality](#primality-on-ulong). |
 
 **What construction validates.** `Create` rejects a modulus at or above
 `MaximumModulus` (`ArgumentOutOfRangeException`), an even modulus, and a
@@ -388,7 +388,7 @@ so construction costs only the primality test.
 **What the hot path deliberately does not guard.** Every operation expects
 reduced operands in `[0, p)`, and none of them checks. `Inverse` throws
 `DivideByZeroException` on zero, and `BatchInverse` throws it when any element
-is zero — before writing anything, so the region comes back untouched — because
+is zero—before writing anything, so the region comes back untouched—because
 the shared running product is then zero and has no inverse. `BatchInverse` is a
 chain, so it runs the kernel's three passes in Montgomery form: one encode and
 one decode per element replace a hardware division per product.
@@ -398,9 +398,9 @@ answers `0` rather than reaching the exponentiation as a non-square.
 **One-shot versus chain.** `Multiply` stays on the hardware divide deliberately.
 `ScaledResidueRing64` wins only across a chain of multiplications, and the two
 conversions a one-shot would pay cost more than the divide they replace.
-Everything that is a chain rather than a single product — `Pow` and everything
+Everything that is a chain rather than a single product—`Pow` and everything
 built on it (`Inverse`, `LegendreCharacter`), `TrySqrt`'s descent, and every
-static primality entry point — runs in the ring instead: one ring per call, each
+static primality entry point—runs in the ring instead: one ring per call, each
 value encoded as it enters, at most one decode where an ordinary residue has to
 come back out, and no hardware division inside any chain. `Pow` is the clean
 case, one value in and one out; `IsPrime` never decodes at all, because its
@@ -419,7 +419,7 @@ correction strictly lowers that power, so the loop always halts. The character
 decision, the seeding powers, and the descent's squarings all run inside one
 ring. Every test the descent performs is made against the ring's own one, and
 the walk to the smallest non-square against the ring's minus one; because the
-representation is a bijection — a one-to-one relabelling of the residues —
+representation is a bijection—a one-to-one relabelling of the residues—
 either of those is the same decision as a test against the ordinary `1` or
 `p − 1`.
 
@@ -439,7 +439,7 @@ products never re-enter the shared pool.
 
 ## `QuadraticExtensionField64`
 
-`F_{p²} = F_p(√d)` over a `PrimeField64` and a fixed quadratic non-square `d` —
+`F_{p²} = F_p(√d)` over a `PrimeField64` and a fixed quadratic non-square `d`—
 a value that is not the square of anything in the base field. An element is the
 nested `Element` pair `(A, B)` standing for `A + B·√d`, with both parts reduced
 in the base field. The extension exists precisely because `d` is a non-square:
@@ -453,10 +453,10 @@ non-squares agree.
 | `CreateCanonical(baseField)` | The extension over `SmallestNonSquare`. |
 | `SmallestNonSquare(baseField)` | The least of `2, 3, 5, …` whose quadratic character is `-1`. |
 | `Add` / `Subtract` / `Negate` | Coordinate-wise in the base field. |
-| `Multiply` | Schoolbook over the pair — five base-field products — with the square of the root folded back to the non-square. |
+| `Multiply` | Schoolbook over the pair—five base-field products—with the square of the root folded back to the non-square. |
 | `Inverse` | The conjugate divided by the norm, which costs one base-field inversion. |
 | `Pow` | Square-and-multiply over the exponent's binary expansion. |
-| `Frobenius` | The non-trivial automorphism `A + B·√d ↦ A − B·√d` — a relabelling of the field that preserves both addition and multiplication — which is the `p`-th power map. |
+| `Frobenius` | The non-trivial automorphism `A + B·√d ↦ A − B·√d`—a relabelling of the field that preserves both addition and multiplication—which is the `p`-th power map. |
 | `Norm` / `Trace` | `A² − d·B²` and `2A`, both landing back in the base field. |
 | `FromBase` | The lift of a base-field element, with a zero root coefficient. |
 | `BatchInverse` | A whole region turned over through one base-field inversion. |
@@ -467,16 +467,16 @@ conjugate. The norm always lands in the base field, which is what lets an
 inverse in the extension be computed from a single inversion down there.
 
 **What construction validates.** `Create` rejects a generator that is not a
-reduced base-field element — one at or above the modulus
-(`ArgumentOutOfRangeException`) — and then one that is zero or a square
+reduced base-field element—one at or above the modulus
+(`ArgumentOutOfRangeException`)—and then one that is zero or a square
 (`ArgumentException`), since `t² − nonSquare` then factors and the quotient is
 not a field. The reduced bound is enforced rather than folded, for two reasons.
 It is what makes record equality mean "the supplied reduced generator agrees",
 so `d` and `d + p` cannot become two unequal descriptors of one extension. And
 it is what keeps the modulus itself out: `p` reduces to zero in the residue ring
 the character exponentiates in, where the resulting zero power reads as a
-non-square, and admitting it would build `F_p[t]/(t²)` — the dual numbers, whose
-nonzero `√d` has vanishing norm and no inverse — behind a type that promises a
+non-square, and admitting it would build `F_p[t]/(t²)`—the dual numbers, whose
+nonzero `√d` has vanishing norm and no inverse—behind a type that promises a
 field. Every factory also refuses a default-initialized `baseField`
 (`ArgumentException`), so an uninitialized descriptor is named where it was
 passed. `CreateCanonical` needs no generator check, because the character is
@@ -490,9 +490,9 @@ posture exactly: both coordinates are expected reduced, and nothing checks.
 `Inverse` throws `DivideByZeroException` through the base field when the norm
 vanishes, which for a genuine field element it cannot.
 
-**Chain shape.** A single extension `Multiply` is four base-field products —
+**Chain shape.** A single extension `Multiply` is four base-field products—
 `AA'`, `BB'`, the Karatsuba cross `(A + B)(A' + B') − AA' − BB'`, and the fold of
-`BB'` by the non-square — each on the hardware divide, as a one-shot base
+`BB'` by the non-square—each on the hardware divide, as a one-shot base
 product is. The extension's own `Pow` is a chain, so it enters Montgomery form
 itself: both coordinates and the non-square are encoded once, every product
 along the ladder is one REDC, and the two coordinates decode once at the end.
@@ -526,7 +526,7 @@ hardware kernel without support throws `PlatformNotSupportedException`, which
 only a tier verifier can arrange.
 
 The hardware kernel states its limb-to-lane correspondence in source rather than
-inheriting it from struct layout — a lane is one slot of a vector register.
+inheriting it from struct layout—a lane is one slot of a vector register.
 Operands go in through `Vector128.CreateScalar`, limbs come back out through
 explicit element reads, and the control byte selects the low half of both
 operands, which is the only pairing the scalar code above it ever asks for.
@@ -574,7 +574,7 @@ its high limb has degree at most `degree − 2` and stays inside the carrier.
 
 ### The addition-chain inversion
 
-`Inverse` is the Itoh–Tsujii Frobenius addition chain — a fixed recipe of
+`Inverse` is the Itoh–Tsujii Frobenius addition chain—a fixed recipe of
 squarings and multiplications that reaches a high power in few steps.
 `value^(2^degree − 2)` is assembled from the doubling identity
 `a^(2^2i − 1) = (a^(2^i − 1))^(2^i) · a^(2^i − 1)`, walked over the binary
@@ -610,14 +610,14 @@ There are seven rungs, named by `BinaryFieldRegionTier`: `Scalar`, `Split128`,
 `Affine128`, `Split256`, `Affine256`, `Split512`, and `Affine512`. The enum
 ascends narrowest-first, and within a width it puts the nibble-split byte
 shuffle before the hardware Galois-field affine transform. Dispatch runs in the
-reverse order — widest-first, and affine before split — because region
+reverse order—widest-first, and affine before split—because region
 throughput is dominated by vector width, while both kernel families cost one or
 two vector operations per vector either way. The enum only names the rungs;
 dispatch lives in the kernels, where ten of them implement the seven tiers.
 
 Byte-wide elements reach all seven rungs. Sixteen-bit elements reach the three
-affine tiers — through three kernels of their own, which borrow the tiers only
-to ask the support question — and the scalar loop. There is deliberately no
+affine tiers—through three kernels of their own, which borrow the tiers only
+to ask the support question—and the scalar loop. There is deliberately no
 nibble-split rung at that width: a sixteen-bit product would need four tables of
 sixteen sixteen-bit entries, which costs more setup than the four matrices the
 affine rungs need and buys nothing the affine rungs do not already give. Every
@@ -649,7 +649,7 @@ is what every vector rung is compared against.
   bounds.** Every rung produces the same bytes at every length, so moving a
   threshold can only change how fast the answer arrives. A nibble-split rung is
   preferred from four whole vectors up, because building the two sixteen-entry
-  tables costs about thirty-two scalar field multiplies — one per entry — which a
+  tables costs about thirty-two scalar field multiplies—one per entry—which a
   shorter region never earns back. The affine rungs carry thresholds for the same
   reason and, more importantly, so that **widest-first ranks only rungs that can
   actually run**: a matrix is one field multiply per input bit, eight in all at
@@ -675,7 +675,7 @@ is what every vector rung is compared against.
   since the transform is defined over bytes. Rotating every element by eight
   bits presents the opposite half in each byte lane, so four transforms and a
   lane-parity blend cover all four pieces. The lane assignment rests on the
-  processor being little-endian — storing the least significant byte first —
+  processor being little-endian—storing the least significant byte first—
   which it is on every platform this library targets, and that assumption is
   stated at the mask rather than left implicit.
 - **Accumulation is applied as a mask rather than as a branch.** A zero mask
@@ -684,26 +684,26 @@ is what every vector rung is compared against.
   identical ones. The scalar reference rung is the exception: it branches once
   on the flag and runs one of two loops.
 
-`AddRegion` sits outside the ladder entirely. Addition in characteristic two —
-where adding any element to itself gives zero — is the exclusive or at every
+`AddRegion` sits outside the ladder entirely. Addition in characteristic two—
+where adding any element to itself gives zero—is the exclusive or at every
 degree, so region addition is one degree-independent byte-wise loop rather than
 one implementation per carrier, and its vector width is chosen by hardware
 acceleration alone, because the result is the same at every width. Its byte
 count and every region loop's cursor are pointer-width, so a region of two
-gibibytes or more — reachable as an ordinary managed array of any carrier — is
+gibibytes or more—reachable as an ordinary managed array of any carrier—is
 processed in full rather than wrapping a 32-bit count.
 
 ### The Montgomery-form residue ring
 
 `ScaledResidueRing64` represents a residue `a` by `a · R mod n`, where the radix
-`R` is `2⁶⁴`. In that representation a product reduces by REDC — two widening
+`R` is `2⁶⁴`. In that representation a product reduces by REDC—two widening
 multiplies, one truncated multiply against the modulus inverse, two additions,
-and one conditional subtraction — instead of by the 128-by-64 divide that a
+and one conditional subtraction—instead of by the 128-by-64 divide that a
 direct `(a * b) % n` costs. The saving belongs to the chain rather than to any
 one product: `Encode` and `Decode` each spend a REDC of their own, so a lone
 product is cheaper left on the divide. The pattern is to convert once on the way
 in, stay in the ring for the whole chain, and convert back once at the end. The
-additive operations — `Add`, `Subtract`, and `Halve` — are linear in the
+additive operations—`Add`, `Subtract`, and `Halve`—are linear in the
 representation, so they apply to Montgomery-form elements unchanged, and a
 recurrence that mixes them with products never has to leave the ring.
 
@@ -721,7 +721,7 @@ branch, and each one is stated against the case where the untruncated value no
 longer fits the carrier. `Add` detects the wrap rather than assuming it away
 above `2⁶³`, and folding a wrapped sum lands on the right value anyway because
 the radix vanishes modulo the carrier. `Multiply`'s true quotient is 65 bits
-wide — the sum, plus the radix when that addition wrapped — and is below twice
+wide—the sum, plus the radix when that addition wrapped—and is below twice
 the modulus either way, so one conditional subtraction lands it in range and a
 wrapped difference is already exact. `Subtract` adds the modulus back under a
 borrow mask, for the same reason. `Halve` folds the odd lift into the shifted
@@ -761,7 +761,7 @@ runs strong-probable-prime rounds against the fixed twelve-base witness set
 the candidate against, and a set of them is **complete** below some bound when
 no composite under that bound survives all of them. This set is proven complete
 for every value strictly below `318665857834031151167461` (about `3.18 × 10²³`
-— the exact threshold, quoted rather than rounded, because rounding it up would
+—the exact threshold, quoted rather than rounded, because rounding it up would
 place the one counterexample inside the promise), which is four orders of
 magnitude past `ulong.MaxValue` and far past this field's `2⁶²` ceiling, so the
 decision is deterministic rather than probabilistic. The even candidates are settled before
@@ -780,7 +780,7 @@ proof of primality; a composite that passes one anyway is called a
 
 `IsStrongProbablePrime(value, witness)` is one round. Writing
 `value − 1 = d · 2^s` with `d` odd, it accepts when `witness^d` is one, or when
-`witness^(d · 2^r)` is minus one for some `r` below `s` — the two ways a prime
+`witness^(d · 2^r)` is minus one for some `r` below `s`—the two ways a prime
 modulus allows the square roots of one. A failed round proves compositeness,
 while a passed one proves nothing. A base that reduces to zero carries no
 evidence and passes.
@@ -789,8 +789,8 @@ evidence and passes.
 Method A parameters. It works from a Lucas sequence, which is a two-term
 recurrence whose terms `U` and `V` play the part that powers of a base play in
 a Fermat round.
-Every prime passes it, and so do infinitely many composites — the strong Lucas
-pseudoprimes, of which `5459` is the smallest — so its worth lies not in its own
+Every prime passes it, and so do infinitely many composites—the strong Lucas
+pseudoprimes, of which `5459` is the smallest—so its worth lies not in its own
 strength but in the independence of its failures from a Fermat round's.
 
 - **Parameter search.** `D` is the first of `5, −7, 9, −11, 13, …` whose Jacobi
@@ -798,8 +798,8 @@ strength but in the independence of its failures from a Fermat round's.
   symbol is a `+1`, `-1`, or `0` valued function of a value against an odd
   modulus, and it generalizes the question "is this a square?" to moduli that
   may not be prime. Every candidate is congruent to one modulo four, which is
-  what makes `Q` an integer and what fixes its sign — `Q` is positive exactly
-  when `D` is negative — so the sign is read off the candidate's magnitude
+  what makes `Q` an integer and what fixes its sign—`Q` is positive exactly
+  when `D` is negative—so the sign is read off the candidate's magnitude
   rather than tracked separately. The candidates step by four within each sign,
   so they sweep every residue class modulo an odd value, and every non-square
   has a class whose symbol is `-1`; the search therefore reaches one.
@@ -813,7 +813,7 @@ strength but in the independence of its failures from a Fermat round's.
   anyway.
 - **The vanishing symbol.** A symbol of `0` ends the search in general: the
   candidate and the value share a factor, which is a proper divisor of the value
-  — so the value is composite — unless the value divides the candidate outright,
+—so the value is composite—unless the value divides the candidate outright,
   which leaves the search uninformed and is why the composite verdict is
   conditioned on a non-zero magnitude residue.
 - **The ladder.** With `value + 1 = d · 2^s` and `d` odd, the test accepts when
@@ -828,7 +828,7 @@ strength but in the independence of its failures from a Fermat round's.
 - **One ring, first term to last.** The ladder's additions, subtractions, and
   halvings are linear in the representation and so apply to Montgomery-form
   elements unchanged, its products are the ring's own, and zero represents zero
-  — so the acceptance tests read exactly as they would on ordinary residues, and
+—so the acceptance tests read exactly as they would on ordinary residues, and
   the ladder spends no hardware division. The order `value + 1` is split in
   `UInt128` because the carrier cannot hold it at its own maximum; the narrow
   split is in fact indistinguishable there, but the widened split states the
@@ -841,7 +841,7 @@ primality at any size. What the composition buys is that the two halves fail on
 unrelated composites. One reads the order of a residue in the multiplicative
 group; the other reads a recurrence in the quadratic extension that the value's
 own Jacobi symbol selects, and the parameter search deliberately picks the
-extension in which the value would be inert if it were prime — that is, the
+extension in which the value would be inert if it were prime—that is, the
 extension in which a prime would stay prime. A composite would therefore have to
 be exceptional in two unrelated ways at once, and no such composite is known at
 any size. The cheaper half runs first: it costs one exponentiation and rejects
@@ -850,8 +850,8 @@ all but a vanishing fraction of composites, so the ladder is reached rarely.
 Below `2⁶⁴` the composition is not merely unrefuted but verified
 counterexample-free, and that region is exactly `ulong`, so nothing is
 extrapolated. The complete set of base-two Fermat pseudoprimes below `2⁶⁴` was
-enumerated exhaustively and independently by Feitsma and by Galway — the strong
-ones are a derived subset of it — and no member of that subset is simultaneously
+enumerated exhaustively and independently by Feitsma and by Galway—the strong
+ones are a derived subset of it—and no member of that subset is simultaneously
 a strong Lucas pseudoprime to these parameters. That guarantee rests on a
 third-party exhaustive computation, which puts it in the same epistemic class as
 the `318665857834031151167461` bound the twelve-base witness set rests on:
@@ -862,7 +862,7 @@ runs.
 
 `prime-field.baillie-psw-exhaustive` adds one more comparison, and it is careful
 about what that comparison buys. It runs the composition against
-`PrimeExtensions.IsPrime(uint)` — the exhaustive 32-bit decision — at **every**
+`PrimeExtensions.IsPrime(uint)`—the exhaustive 32-bit decision—at **every**
 32-bit value and finds perfect agreement. Subject and oracle share the base-two
 round, so what the agreement establishes is that the strong Lucas half rejects
 exactly the base-two strong pseudoprimes below `2³²`. That is a real gate on the
@@ -904,7 +904,7 @@ decision, and it has not been taken.
   irreducibility; the catalog expects an external gate to re-prove each modulus
   irreducible at run time.
 - **The Sampling wing consumes this one.** The digital-net direction-number
-  builder — digital nets are point sets that spread evenly by construction —
+  builder—digital nets are point sets that spread evenly by construction—
   requires a primitive generator polynomial, and the shipped plane's generator
   is `t + 1`, the smallest there is. `BinaryPolynomial.IsPrimitive` is the
   decision that certifies one. See
@@ -931,8 +931,8 @@ a change misbehaves.
   and would not fit the element carrier at the largest degree each carrier
   supports, so the leading `t^Degree` term is implicit. The consequence reaches
   the API: `FromModulus` takes a `BinaryPolynomial`, whose packed carrier tops
-  out at degree 63, so the degree-64 through degree-128 fields — including the
-  catalog's own `Degree64` and `Degree128` — can only be built through `Create`.
+  out at degree 63, so the degree-64 through degree-128 fields—including the
+  catalog's own `Degree64` and `Degree128`—can only be built through `Create`.
   The same fact is why the irreducibility gcd can touch the modulus only in
   Euclid's first step.
 - **Construction is free.** A `BinaryField<T>` is exactly its degree and its
@@ -942,10 +942,10 @@ a change misbehaves.
 - **The degree-8 catalog field is the field the hardware Galois-field multiply
   is defined over**, which is why the published byte-field test vectors pin it
   directly. The affine transform the rungs actually run carries no field of its
-  own — it is a bit matrix over the two-element field — and that is what lets an
+  own—it is a bit matrix over the two-element field—and that is what lets an
   affine rung serve any degree and tail the caller supplies.
 - **Squaring has no separate kernel on any tier.** It is the Frobenius map and
-  it is additive — the square of a sum is the sum of the squares — and the square
+  it is additive—the square of a sum is the sum of the squares—and the square
   root is `Degree − 1` further squarings, since under an irreducible modulus
   squaring is a bijection in characteristic two and every element therefore has
   exactly one root.
@@ -962,20 +962,20 @@ a change misbehaves.
   validating constructors are private, so `default(…)`, an unassigned array
   element, and a deserializer can all produce a value that names no field: degree
   zero, modulus zero, generator zero. Every member that performs or asserts field
-  arithmetic — the identities `One` and `Zero` included — throws
+  arithmetic—the identities `One` and `Zero` included—throws
   `InvalidOperationException` there, uniformly across the three types and
   including an empty `BatchInverse`, because the descriptor is read before the
   span is. The one policy replaces what each type used to do on its own: plausible
   carryless answers from a degree-zero binary field, unreduced integer arithmetic
   from `Add`/`Subtract`/`Negate` on a zero-modulus prime field, and an incidental
-  divide by zero from the members that happened to reduce. The alternative —
-  encoding the all-zero backing state as a valid smallest field — was rejected
+  divide by zero from the members that happened to reduce. The alternative—
+  encoding the all-zero backing state as a valid smallest field—was rejected
   because it makes `default` a silent lie about which field a caller is in, and
   because a wrong field is the failure this wing is least able to detect
   downstream. The data readers `Degree`, `ReductionTail`, `Modulus`, `NonSquare`,
   and `BaseField` are deliberately outside the policy and report the uninitialized
   state as it stands, so a default value stays printable, comparable, and
-  inspectable in a debugger. `ToString` prints exactly those data readers — each
+  inspectable in a debugger. `ToString` prints exactly those data readers—each
   type hand-writes its `PrintMembers`, because the compiler-synthesized body
   walks every public readable property, guarded identities included, and would
   throw on the default value the promise covers. It is the same posture
@@ -988,8 +988,8 @@ a change misbehaves.
   policy.
 - **The residue ring needs only an odd modulus above one**, which is what lets
   primality testing run the machinery on candidates not yet proven prime.
-- **A region operation accepts an exactly identical destination and source** —
-  that case is well defined, and it is what in-place scaling rides on — and
+- **A region operation accepts an exactly identical destination and source**—
+  that case is well defined, and it is what in-place scaling rides on—and
   refuses only a shifted overlap. Both region refusals, the shifted overlap and
   the length mismatch, name `source`: a region operation writes what it was told
   to write and reads what it was given, so the supplied region is the one
@@ -1006,15 +1006,15 @@ a change misbehaves.
 ## Verifying changes
 
 **"Bit-identical to the fallback" is something this wing measures rather than
-asserts — and as of the 2026-08-02 quarantine, nothing measures it.** The
+asserts—and as of the 2026-08-02 quarantine, nothing measures it.** The
 `binary-field` battery stage that did left the build, and no replacement has
 been built. Read what follows as the shape of the check that is owed, not as a
 check you can run.
 
 It executed every region rung against the scalar reference rung on the same
-inputs — **including** on machines that support the fast paths, which is
+inputs—**including** on machines that support the fast paths, which is
 possible only because the portable kernels are named separately and query no
-instruction-set support of their own — and then relaunched itself as a child
+instruction-set support of their own—and then relaunched itself as a child
 process with each instruction set suppressed in turn, requiring an identical
 result digest from every relaunch. A rung that agreed only where its
 instructions were absent would fail the first half; a rung whose selection
@@ -1042,3 +1042,7 @@ reaches: a correction inside the shared implementation above the carryless
 product moves every tier at once, while a change confined to one region rung
 moves nothing a caller can observe, because every rung produces the same bytes
 at every length.
+
+## Documentation
+
+📚 [Puck.Maths](../README.md) · 🛠️ [Contributing to Puck](../../../docs/development/contributing.md)

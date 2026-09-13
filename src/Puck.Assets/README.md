@@ -15,7 +15,7 @@ be awkward to read aloud.
 
 The library carries three codec families. `PngEncoder` and `PngDecoder` round-trip 8-bit
 RGBA stills and APNG animations for capture frames and baked font atlases.
-`QrEncoder` goes the other direction — a payload string in, a scannable module
+`QrEncoder` goes the other direction—a payload string in, a scannable module
 grid out; there is no QR decoder here. `AutomaticIntegerSequenceCodec` carries
 compiled numeration/DFAO programs as compact, deterministic, versioned binary,
 validating the byte structure under explicit allocation ceilings. Puck.Assets
@@ -31,7 +31,7 @@ This README is the human entry point. The
 [generated API reference](../../docs/api) owns complete member signatures,
 parameters, return values, and exceptions.
 
-## ✨ Key features
+## Key features
 
 - *Source-independent loading:* `IAssetSource` lets a loader consume a path
   without knowing whether the bytes came from the local file system, an
@@ -47,11 +47,11 @@ parameters, return values, and exceptions.
 - *Readable diagnostics:* `ContentPetname` maps a hash to a deterministic
   three-word label for logs and operator-facing output.
 - *A minimal PNG/APNG codec:* `PngEncoder` and `PngDecoder` write and read
-  8-bit RGBA stills and full-frame APNG animations — just enough to round-trip
+  8-bit RGBA stills and full-frame APNG animations—just enough to round-trip
   the files Puck itself writes and bakes, not a general image library.
 - *A spec-correct QR encoder:* `QrEncoder` builds ISO/IEC 18004 byte-mode
-  symbols — auto version selection, all four error-correction levels, and a
-  CPU-rasterizable module grid — from a payload string.
+  symbols—auto version selection, all four error-correction levels, and a
+  CPU-rasterizable module grid—from a payload string.
 - *Canonical automatic-sequence artifacts:* `AutomaticIntegerSequenceCodec`
   preserves positional or quadratic-Ostrowski numeration, the reachable DFAO
   graph, and its arbitrary-width output alphabet. Re-encoding decoded bytes is
@@ -60,7 +60,7 @@ parameters, return values, and exceptions.
   library, `System.IO.Hashing`, and `Puck.Maths` (the QR encoder's field
   arithmetic), and does not perform dependency-injection wiring.
 
-## 📐 How bytes move through the library
+## How bytes move through the library
 
 The in-process path and the persistent path begin with the same bytes but use
 different identities. A process-lifetime cache wants a small, cheap key; a
@@ -81,7 +81,7 @@ The cache never decodes a value itself. Its `valueFactory` belongs to the
 consumer, so a shader loader can cache bytecode while a font loader caches a
 font atlas without adding either format to this package.
 
-## 🚀 Quick start
+## Quick start
 
 This example reads a UTF-8 asset from disk, hashes its bytes, and decodes it
 only on a cache miss:
@@ -131,7 +131,7 @@ if (
 Writing identical bytes again returns the same address and keeps the existing
 object.
 
-## 📥 Supplying bytes
+## Supplying bytes
 
 `IAssetSource` is deliberately small:
 
@@ -155,7 +155,7 @@ Both `FileSystemAssetSource` methods reject a null, empty, or whitespace path.
 `Exists` reports whether a file is present, while `Read` returns its bytes or
 lets the file-system exception describe why it could not be read.
 
-## 🔎 Choosing a content identity
+## Choosing a content identity
 
 Puck.Assets has two SHA-256 representations because they solve different
 problems:
@@ -175,7 +175,7 @@ negligible for a store that grows over time, but the digest alone still does
 not say who supplied the bytes. When authenticity matters, the expected digest
 must arrive through a trusted or signed channel.
 
-## 🧠 Caching decoded values
+## Caching decoded values
 
 `ContentAddressedLruCache<TValue>` maps `AssetContentHash` values to whatever a
 consumer produced from the bytes. Reading, adding, or replacing an entry marks
@@ -196,7 +196,7 @@ path. It is the natural place to dispose native handles or return pooled
 buffers. The cache is not thread-safe; a caller that shares one instance across
 threads must synchronize access.
 
-## 💾 Persisting objects and refs
+## Persisting objects and refs
 
 A `ContentAddressedStore` creates three directories beneath its root:
 
@@ -220,7 +220,7 @@ which is how the derived-cache helpers use `derived/<kind>`.
 input. `TryResolveDerived` performs the inverse lookup, allowing a build tool
 to skip work while the input content remains unchanged.
 
-## 🏷️ Naming content for people
+## Naming content for people
 
 `ContentPetname.From` turns the leading bytes of a hexadecimal hash into three
 words selected from fixed lists:
@@ -236,11 +236,11 @@ The same hash always gets the same label on every machine and build. A petname
 is only a compact aid for conversation and logs: many hashes share one, so it
 must always remain paired with the real content hash when identity matters.
 
-## 🖼️ PNG stills and animations
+## PNG stills and animations
 
 `PngEncoder.Write` takes tightly packed 8-bit RGBA pixels (row-major, no row
 padding) and writes them as color-type-6 PNG: no row filtering, zlib-compressed
-scanlines. `PngEncoder.WriteAnimation` writes the same pixel shape as an APNG —
+scanlines. `PngEncoder.WriteAnimation` writes the same pixel shape as an APNG—
 `acTL`/`fcTL`/`fdAT`, every frame full-size at a uniform delay, looped
 `playCount` times (0 loops forever).
 
@@ -250,7 +250,7 @@ all five standard scanline filters, every chunk CRC-checked, `tRNS`
 transparent-color metadata applied, and unknown critical chunks refused.
 `PngDecoder.DecodeAnimation` reads an APNG's frames the same way; a
 non-animated PNG decodes as one zero-delay frame. Only full-size,
-source-blended APNG frames are supported — sub-rectangle and `over`-blended
+source-blended APNG frames are supported—sub-rectangle and `over`-blended
 frames are refused.
 
 This is a minimal codec pair, not a general image library: just enough to
@@ -258,30 +258,30 @@ round-trip the files Puck itself writes and bakes, including `Puck.Text`'s
 font atlas artifacts (`FontAtlasArtifactWriter` / `FontAtlasImageDataLoader`)
 and `Puck.Recording`'s capture stills (`CaptureSink`).
 
-## 🔲 QR encoding
+## QR encoding
 
 `Qr/` is a deterministic, spec-correct ISO/IEC 18004 byte-mode encoder:
 `QrEncoder.TryEncode` picks the smallest version (1..10) that holds a payload
 at the requested error-correction level (`QrErrorCorrectionLevel`), builds the
 interleaved data+EC codeword sequence (`QrReedSolomon`, generic Reed–Solomon
 over `Puck.Maths.ReedSolomon`/`BinaryField<T>`), and places it into a
-`QrMatrix` — all eight mask patterns scored by the spec's four penalty rules,
+`QrMatrix`—all eight mask patterns scored by the spec's four penalty rules,
 correct format/version info bits, and a nearest-neighbor B8G8R8A8 raster
 (`QrMatrix.RenderPixels`) for CPU-side upload. Pure integer math throughout:
 the same payload and level always build the identical matrix, so a caller can
 also ask `QrEncoder.TryFindVersion` whether a payload FITS a level without
-building the matrix — the question a document validator asks before an
+building the matrix—the question a document validator asks before an
 authoring-time refusal, and the question `QrEncoder.TryEncode` asks itself
 before building.
 
 The field arithmetic is `Puck.Maths`'s: `QrReedSolomon` binds the standard's
-own choice of field (`GF(256)` under `t⁸+t⁴+t³+t²+1`, `0x11D` — a different
+own choice of field (`GF(256)` under `t⁸+t⁴+t³+t²+1`, `0x11D`—a different
 modulus from the catalog's `BinaryFields.Degree8`, `0x11B`) and generator
 convention to the shared carrier. What stays here is what is genuinely the
 standard's: the block-count and capacity tables, the alignment-pattern
 coordinates, the format/version BCH codes, masking, and matrix placement.
 
-## 📋 Core types
+## Core types
 
 This table is the conceptual map. The
 [generated API reference](../../docs/api) owns the complete member-by-member
@@ -298,11 +298,11 @@ surface.
 | `PngEncoder` / `PngDecoder` | Write and read 8-bit RGBA PNG stills and full-frame APNG animations. |
 | `PngImage` / `PngAnimation` / `PngAnimationFrame` | The decoded still and animation shapes `PngDecoder` returns. |
 | `QrEncoder` | Builds an ISO/IEC 18004 byte-mode `QrMatrix` from a payload string and error-correction level. |
-| `QrMatrix` | The resolved module grid — placement, masking, and a B8G8R8A8 raster. |
+| `QrMatrix` | The resolved module grid—placement, masking, and a B8G8R8A8 raster. |
 | `QrErrorCorrectionLevel` / `QrErrorCorrection` | The four EC levels and their one canonical letter spelling/parse. |
 | `QrCapacityTable` / `QrReedSolomon` | The version/level block-and-capacity tables and the standard's Reed–Solomon binding. |
 
-## 📌 Design notes
+## Design notes
 
 - **Bytes stay mostly untyped.** Beyond the PNG codec, decoders, serializers,
   GPU uploaders, and format validation belong to consumers.
@@ -319,7 +319,7 @@ surface.
   ref replacement are atomic, but a caller coordinating several refs or other
   state must supply its own transaction boundary.
 
-## 🧪 Verification
+## Verification
 
 ```powershell
 dotnet test tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj
@@ -334,7 +334,7 @@ digests, checks byte-identical re-encoding for save and network crossings,
 exercises positional and Ostrowski programs, and proves that malformed or
 over-limit input is refused before mathematical verification.
 
-## 🧪 Building the package
+## Building the package
 
 ```text
 dotnet build src/Puck.Assets/Puck.Assets.csproj -c Release
@@ -343,3 +343,9 @@ dotnet pack src/Puck.Assets/Puck.Assets.csproj -c Release
 
 The package includes this README, the repository's licensing files, symbols,
 and XML API documentation through the shared packaging policy.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

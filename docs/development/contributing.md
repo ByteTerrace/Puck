@@ -39,6 +39,18 @@ Prefer the cheapest correct tool:
 4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
    that changes `cref` values.
 
+## File paths
+
+Use `/` in authored paths, configuration, stored path identities, and path output,
+including on Windows. Prefer current `System.IO` APIs that accept these paths
+directly; do not convert `/` to the platform separator before file access.
+Normalize platform-produced paths to `/` at Puck's output and storage boundaries.
+Keep resolution semantics explicit: `Path.Combine` can replace an earlier base
+with a rooted argument, whereas `Path.Join` only joins components. They are not
+interchangeable. Preserve native device-path syntax only at an interop boundary
+that requires it; backslashes in string escapes and regular expressions are not
+file separators.
+
 ## C# file apps
 
 Repository automation is Puck CLI: `puck --help` lists the verbs and

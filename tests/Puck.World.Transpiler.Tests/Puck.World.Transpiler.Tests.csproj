@@ -16,4 +16,8 @@
         <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Build-time world generation only; the CLI is not a runtime dependency. -->
+        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
+    </ItemGroup>
 </Project>

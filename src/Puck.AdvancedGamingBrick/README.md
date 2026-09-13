@@ -1,9 +1,9 @@
 # Puck.AdvancedGamingBrick
 
-Puck.AdvancedGamingBrick is the native ARM7TDMI machine costumed as AGB
-hardware: CPU (ARM and Thumb instruction sets), PPU, APU, DMA, timers,
+Puck.AdvancedGamingBrick models AGB hardware with a native ARM7TDMI machine:
+CPU (ARM and Thumb instruction sets), PPU, APU, DMA, timers,
 interrupts, cartridge, and link cable. It shares no CPU core with the SM83
-compatibility machine in `Puck.HumbleGamingBrick` — only the master-clock and
+compatibility machine in `Puck.HumbleGamingBrick`—only the master-clock and
 link abstractions are shared where the hardware itself shares them. Snapshot,
 fork, and queued off-thread hosting come from `Puck.GamingBricks`; this
 project supplies only the AGB hardware itself.
@@ -11,7 +11,7 @@ project supplies only the AGB hardware itself.
 This project is truly open source and dual-licensed under Apache-2.0 or MIT;
 see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
 
-## ✨ Key features
+## Key features
 
 - *A complete machine from one DI scope:* `AdvancedGamingBrickMachine` binds
   the CPU, bus, PPU, APU, timers, DMA, interrupt controller, serial
@@ -30,7 +30,7 @@ see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
   code.
 - *A deterministic, instruction-atomic link cable:* `AgbLinkSession` connects
   two to four machines and steps whichever is furthest behind its own
-  cumulative target, one instruction or halted idle cycle at a time, ties to the lowest index — a
+  cumulative target, one instruction or halted idle cycle at a time, ties to the lowest index—a
   state-free rule, so a linked run replays identically. `Suspend`/`Resume`
   give a credit-preserving reconnect that requires every console to be
   transfer-idle first.
@@ -38,7 +38,7 @@ see the shared [GamingBricks license](../Puck.GamingBricks/LICENSE.md).
   `IMachineEngine` adapter, engine id `advanced-gaming-brick`) forwards
   the neutral machine surface to `Puck.GamingBricks`'s `QueuedMachineWorker`.
 
-## 📐 Hosting
+## Hosting
 
 ```mermaid
 flowchart LR
@@ -77,7 +77,7 @@ pending for retry. Restoring or rewinding requests a flush independently of
 the snapshot's dirty flag: the disk does not rewind with emulated memory.
 A forced flush persists the current save even when its emulated flag is clean.
 
-## 🚀 Quick start
+## Quick start
 
 For a .NET 10 application with its own update loop, reference
 `ByteTerrace.Puck.AdvancedGamingBrick` and construct the synchronous core.
@@ -138,13 +138,13 @@ IMachineRuntime machine = engine.Create(
 `AgbMachineFactory.Create` is the lower-level path `AdvancedMachineHost`
 itself builds on: it takes an `AgbMachineConfiguration` (BIOS + ROM bytes + options)
 and an optional composition callback for pre-registering a decorating or
-test-only subsystem — a tracing bus, a flat test bus — before the standard
+test-only subsystem—a tracing bus, a flat test bus—before the standard
 `TryAddScoped` registrations defer to it. The factory returns an unbooted
 machine; call `DirectBoot` for the seeded cartridge handoff or step it from
 reset to execute the supplied BIOS. The synchronous core follows its configured
 startup mode; its bundled-firmware convenience constructor defaults to cold boot.
 
-## 📋 Core types
+## Core types
 
 | Area | Types | Role |
 |---|---|---|
@@ -158,9 +158,9 @@ startup mode; its bundled-firmware convenience constructor defaults to cold boot
 | Link | `AgbLinkCable`, `AgbLinkSession`, `AgbLinkResumeToken`, `IAgbLink`, `NullAgbLink`, `AgbSerialController`, `IAgbSerialController` | The deterministic, instruction-atomic multi-machine link cable. |
 | Hosting | `AdvancedMachineHost`, `AdvancedGamingBrickEngine`, `AdvancedGamingBrickCore`, `AdvancedPad`, `AdvancedGamingBrickLookahead` | The `IMachineEngine` adapter over `Puck.GamingBricks`'s queued-host substrate. |
 
-## 🧪 Verification
+## Verification
 
-`Puck.AdvancedGamingBrick.Post` is the gate — there is no separate unit-test
+`Puck.AdvancedGamingBrick.Post` is the gate—there is no separate unit-test
 project for this core:
 
 ```powershell
@@ -227,7 +227,7 @@ external conformance and frozen-build comparisons; comparing two paths through
 the same hardware model cannot prove hardware accuracy. Future acceleration
 should retain the interpreter and support runtimes without dynamic code.
 
-## 📦 Packaging
+## Packaging
 
 `ByteTerrace.Puck.AdvancedGamingBrick` depends on `Puck.Abstractions` (the
 `IMachineEngine`/`IMachineRuntime` contracts it implements),
@@ -235,3 +235,7 @@ should retain the interpreter and support runtimes without dynamic code.
 `Puck.Maths` (fixed-point and hashing primitives). `Puck.World.Schema` and
 everything layered above it depend on this package for the native AGB
 machine.
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

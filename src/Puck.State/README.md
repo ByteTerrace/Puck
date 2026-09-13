@@ -27,34 +27,26 @@ the package's declared dependencies are the whole closure rather than part of it
 plus whatever another package happens to carry along. `Puck.Physics` references
 this package, never the reverse.
 
-## ⚖️ Licensing
+## Licensing
 
-ByteTerrace.Puck is source-available and dual-licensed. It is not open source.
-The default is the
-[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0),
-under which noncommercial use is free: study, hobby projects, research,
-evaluation, and use by any school, university, public research organization,
-charity, or government body. Shipping or operating it commercially requires a
-paid commercial license from ByteTerrace, whatever the size of the user.
+This package uses Puck's source-available dual license. The
+[noncommercial license](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md)
+and [commercial licensing guide](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md)
+own the terms and eligibility details; both files are included in the package.
+The shared [packaging target](https://github.com/ByteTerrace/Puck/blob/main/build/Packaging.targets)
+owns NuGet's license-file declaration and package metadata.
 
-Both documents ride inside the package.
-[`LICENSE.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md) is the
-binding noncommercial license;
-[`LICENSING.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md) is
-the plain-language summary of who needs which, and how to ask for commercial
-terms.
+## What the package holds
 
-## 📦 What the package holds
-
-Nothing here carries a `World` name — a state library names no world.
+Nothing here carries a `World` name—a state library names no world.
 
 - *The state section:* `IStateSection` is the contract every reader and
-  compiler consumes — the document-owned `Rows`, the `Lattices` they may lie
+  compiler consumes—the document-owned `Rows`, the `Lattices` they may lie
   over, and two per-participant slot lanes (`ParticipantSlots`,
   `IdentitySlots`, each an `IStateSlot`). `StateSection` is the standalone
   document's own record of it; a document project declares its own record
   over the same interface and adds what only it can name.
-- *Rows and cells:* `StateRow` (non-sealed — a document project derives its
+- *Rows and cells:* `StateRow` (non-sealed—a document project derives its
   own row to add traits only it reads) over the `StateCell` substrate, with
   `StateCapacity`, `StateReservedCells`, and the `StateRows` finders. The row
   converter `StateRowJsonConverter<TRow>` owns the wire shape (`value`-vs-
@@ -65,12 +57,12 @@ Nothing here carries a `World` name — a state library names no world.
   (a tick-indexed rotation through a symmetry-lattice word), `StateVisibility`/
   `HiddenCells`/`StateKnowledge`/`StateObservation` (observation policy),
   `StatePhase`/`PhaseGuard` (a guarded submission generation), `StateInverse`
-  (a `cellsOf` row declaring itself the inverse of a keyed token row — see
+  (a `cellsOf` row declaring itself the inverse of a keyed token row—see
   `DerivedBoards`).
 - *Domains:* the `StateDomain` union (`slot`, `keys`, `keysOf`, `cellsOf`,
   `ring`), closed over `Union.cs`' `[Union]` marker.
 - *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box`, `graph`, `tiling`
-  — a host registers its dense `field` case as a further derived record),
+—a host registers its dense `field` case as a further derived record),
   `TopologyKind`/`TopologyWrap`/`TopologyDirection`/`TopologyElementAlias`,
   `CompiledTopology` (adjacency, opposites, point-group images, element
   aliases, cell centres, position-to-cell, axial offsets), and
@@ -82,7 +74,7 @@ Nothing here carries a `World` name — a state library names no world.
   A graph topology is the adjacency table authored directly: `cells` with ids
   and centres (relative to origin, world units), `directions` each naming its
   opposite, and `edges` (`from`, `to`, `direction`, optional `oneWay`) that
-  fill one slot per (cell, direction) and, unless one-way, the reverse slot —
+  fill one slot per (cell, direction) and, unless one-way, the reverse slot—
   a territory map, a star board, or any tiling a tool emits; position-to-cell
   is the nearest centre within half a `cellSize`, there is no axial offset, and
   the symmetry group is the identity. A tiling (`TilingGenerator`) is a graph
@@ -121,7 +113,7 @@ Nothing here carries a `World` name — a state library names no world.
   frame membership cannot leave a stale index. Large indexes rent scratch storage;
   small ones use the stack. Dense frame filters retain their topology key reads.
 - *Expressions:* `ValueExpression` and its `ValueToken` postfix vocabulary,
-  `ExpressionSpelling` (the infix spelling and its inverse — syntax only, no
+  `ExpressionSpelling` (the infix spelling and its inverse—syntax only, no
   second evaluator), `ValueExpressionJsonConverter` (reads either spelling,
   writes each back in its own), `ExpressionOp` (the compiled opcode), and
   `ExpressionArithmetic` (the allocation-free Int and Q48.16 evaluator every
@@ -158,12 +150,12 @@ Nothing here carries a `World` name — a state library names no world.
   `squareTranslate`); `gcd`/`lcm`; the floored `mod(a, m)` with
   `cycleForward(a, b, m)` and `cycleDistance(a, b, m)` over an m-cycle; `smallestMissing(mask)`
   (the smallest non-negative integer missing from a 64-bit set); `isPrime(n)` (exact over 64 bits
-  in bounded work) and `prime(i)` (the first 256 primes, derived once) — never
+  in bounded work) and `prime(i)` (the first 256 primes, derived once)—never
   a next-prime or n-th-prime search, which is unbounded on the tick path and
   belongs to a generator draw source; `choose(n, k)` and `factorial(n)`
   (n ≤ 20); the combinatorial number system over a subset spelled as a bitmask
   (`subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)`,
-  colexicographic, n ≤ 64 — a poker hand is one rank below `choose(52, 5)`);
+  colexicographic, n ≤ 64—a poker hand is one rank below `choose(52, 5)`);
   the factorial number system over a permutation packed as nibbles, position
   i in bits 4i..4i+3 (`arrangementRank(n, packed)`, `arrangementAt(n, rank)`,
   `arrangementMember(n, rank, i)`, lexicographic Lehmer codes, n ≤ 16); the layer family over
@@ -177,13 +169,13 @@ Nothing here carries a `World` name — a state library names no world.
   (`setState`, `addState`, `pushState`, `transformState`, `countdownState`,
   `generate`, `removeStateCell`, `scheduleState`, `transaction`),
   `ActionTarget`, `ActionStateComparison`, and
-  `ActionTriggerMode` — the last two shared with `Puck.Physics`' compiled
+  `ActionTriggerMode`—the last two shared with `Puck.Physics`' compiled
   per-body predicates, so neither can grow an arm the other lacks.
   Transactions contain ordinary effects with compiler-enforced admission;
   registered families opt in only when their host supports bounded rollback.
 - *The compiler:* `RuleCompiler` compiles a `Rule` against a
   `RuleCompileContext` (the section, its catalog, its pinned `TableSource`s,
-  patterns, generators, and the simulation rate) into a `CompiledRule` —
+  patterns, generators, and the simulation rate) into a `CompiledRule`—
   `GateToken`s, `EffectFact`s, `CompiledRuleBinding`s, `CompiledExpressionToken`s.
   Every piece (`CompileGate`, `CompileEffects`, `CompileExpression`,
   `CompileBindings`, `ResolveOperand`, `TryResolveDynamicKey`) is public so a
@@ -203,27 +195,27 @@ Nothing here carries a `World` name — a state library names no world.
   read back through `BindingKeyFact`, a `$bind:` binding, a `$zone:` endpoint,
   or a document project's `KeyFact`). `LiveZone` is its row-side mirror: a
   rule declares a `zones` table (ordered zones over one token domain and kind,
-  in index order, an empty entry a gap), and any row position in the rule — a
+  in index order, an empty entry a gap), and any row position in the rule—a
   `compareState` `state`, a `$reduce:`/`$match:` row, a `$zone:` endpoint's
-  zone, a transfer end, an expression's row — may spell `$zones[<index>]`,
+  zone, a transfer end, an expression's row—may spell `$zones[<index>]`,
   the index an infix key (`game[from]`, `$each`, `$bind:<name>`, or any
   expression), so one rule serves every pile of a game; `forEach: "$zones"`
   iterates the table's own non-empty indices. An evaluation applies only when
   every live index selects an entry: the evaluator resolves each distinct
   spelling once before the gate (`ZoneTable.References`), an index outside the
   table or at a gap reads the gate closed with nothing refused, and the rule
-  trace lists `zones [$zones[game[to]] -> pile3, ...]` — so a table's gaps
+  trace lists `zones [$zones[game[to]] -> pile3, ...]`—so a table's gaps
   state which piles a rule is for. Every channel splits through
   `RuleFacts.SplitChannel`, which keeps a bracketed index whole, and the
   infix lexer keeps `$zones[...]` inside a reserved name.
   `$zone:<ordered-zone>:first|last` preserves the member's original string key
   and reads the active store, including uncommitted frame transfers. An empty
   zone's endpoint names no cell: a read of it is an absent fact
-  (`RuleFact.IsAbsent`) that no comparison holds against — not even
-  `NotEqual` — an expression over it refuses, a copy from it does not fire,
+  (`RuleFact.IsAbsent`) that no comparison holds against—not even
+  `NotEqual`—an expression over it refuses, a copy from it does not fire,
   and a write addressed by it refuses. Outside a rule evaluation an unselected
   live zone reads the same way, and a transfer end through it refuses by name.
-- *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost` —
+- *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost`—
   gates in array order, bindings before the gate, Edge/Level latching per
   binding in a `RuleLatch` (simulation state: it hashes, flattens to a
   checkpoint, restores), a forEach row's keys snapshotted before the first
@@ -235,8 +227,8 @@ Nothing here carries a `World` name — a state library names no world.
   `forEach` accepts a keyed row of any cell kind, including Text: iteration
   visits keys without interpreting their values. Numeric reductions still
   require numeric rows.
-  The evaluator is the evaluation in flight — the tick, the bound forEach key
-  and participants, the binding values — which the host's `IRuleReader`
+  The evaluator is the evaluation in flight—the tick, the bound forEach key
+  and participants, the binding values—which the host's `IRuleReader`
   forwards to its operands. It also owns the trace (`RuleTraceEvaluation`,
   armed per rule name) and the refusal ledger (`RuleRuntimeDiagnostic`, exact
   counts per category; the host narrates a category's first occurrence). A
@@ -246,11 +238,11 @@ Nothing here carries a `World` name — a state library names no world.
   through; `RuleEvaluation` holds `GateHolds`, `TryEvaluateExpression`,
   `ResolveKey`, and the state reads they share.
 - *The store and the frame:* `StateStore` is where a read finds a cell's
-  stored value beneath the rows' structure — `RowStore` over a section's own
+  stored value beneath the rows' structure—`RowStore` over a section's own
   cells (`IRuleReader.Store`), or `StateFrame`, every integer cell of a section
   laid out once by a `FrameLayout` (slot, keyed, board by cell ordinal, ring
-  with its cursor, an ordered zone by capacity — count, member ordinals in pile
-  order, member values — so a `transfer` changes membership inside the frame;
+  with its cursor, an ordered zone by capacity—count, member ordinals in pile
+  order, member values—so a `transfer` changes membership inside the frame;
   text and field rows read through to their cells). `StateStore.CellCount` and
   `TryKeyAt` enumerate a row's live members, which is how a count, an
   arrangement rank, a filtered reduce, and a `$match` word read a moved pile.
@@ -271,9 +263,9 @@ Nothing here carries a `World` name — a state library names no world.
   `OperandFact.HostOnly`,
   `KeyFact.HostOnly`, `EffectFact.ReadsHost`, and `RuleDataflow.ReadsHost`
   name what a frame cannot evaluate.
-- *Scheduling:* every framed row carries a version — a counter
+- *Scheduling:* every framed row carries a version—a counter
   `StateFrame` bumps on any write to any of its cells, including a
-  transform's whole-span write and a journal rewind — read by handle
+  transform's whole-span write and a journal rewind—read by handle
   through `IRuleReader.TryRowVersion` (default: the host cannot say, so the
   evaluator always evaluates; `FrameHost` answers from its frame, refusing a
   text or field row). `RuleSchedule.Build`, cached once per compiled rule and
@@ -294,10 +286,10 @@ Nothing here carries a `World` name — a state library names no world.
   dependency; an open gate and a traced evaluation always run in full. The
   row-version and memoized-value caches live in `RuleLatch` beside the edge
   latch, per rule and per forEach binding, keyed against the exact
-  `RuleSchedule` instance that captured them — a rule recompiled under the
+  `RuleSchedule` instance that captured them—a rule recompiled under the
   same name mints a new schedule, so its stale cache is never mistaken for a
-  match — but are not simulation state — they never enter `AppendStateHash`,
-  `Flatten`, or `Restore` — since the skip only elides a re-derivation
+  match—but are not simulation state—they never enter `AppendStateHash`,
+  `Flatten`, or `Restore`—since the skip only elides a re-derivation
   already proven to answer the same.
 - *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
   (the write-after-read and write-after-write pairs document order decides,
@@ -327,14 +319,14 @@ Nothing here carries a `World` name — a state library names no world.
 - *Reserved channels:* `RuleFacts`, the state-neutral `$`-prefixed channels
   a rule may read instead of a declared row (`$tick`, `$bind:`, `$table:`,
   `$cell:`, `$reduce:`, `$match:`, `$history:`, `$symmetry:`, `$phase:`,
-  `$board:`). The channels only a world can answer — bodies, distance, line
-  of sight, screens, links, regions, the population — are the document
+  `$board:`). The channels only a world can answer—bodies, distance, line
+  of sight, screens, links, regions, the population—are the document
   project's.
 - *Literals and spellings:* `NumericLiteral`, the one decimal→Q48.16
   conversion every authored constant and table value crosses, and
   `StateSpelling`, the one home for how a refusal spells a kind, a generator
   source, or a cycle output.
-- *Search (`Search/`):* `SearchRuntime` — negamax with alpha-beta and a
+- *Search (`Search/`):* `SearchRuntime`—negamax with alpha-beta and a
   transposition table, or UCB1 tree search, walking every (shape, token,
   target or direction) candidate a `SearchPlan` declares and judging each
   through a document project's own compiled rules over a `StateFrame`; a
@@ -344,7 +336,7 @@ Nothing here carries a `World` name — a state library names no world.
   transfer); `SearchCapacity` holds its bounds. A document project resolves
   its own authored rows into a `SearchPlan[]` (row and topology references,
   by name), compiles its own judge rules, and translates a landed job's
-  writes into its own wire vocabulary — the runtime holds no world, document,
+  writes into its own wire vocabulary—the runtime holds no world, document,
   or wire concept.
 
 Numeric `setState`, `addState`, and `pushState` share source resolution. A direct
@@ -352,7 +344,7 @@ source is read once per execution pass; an ordinary write still has separate
 preflight and live passes. Absent and `forever` sources skip the effect, while
 expression faults retain their diagnostic behavior.
 
-## 🔌 How a document project extends it
+## How a document project extends it
 
 Extension is by registration and derivation, never by an edit inside this
 package:
@@ -370,12 +362,12 @@ package:
 - A `RuleCompileContext` is derived to anchor what only the document knows
   (`FindTopology` in a placement's frame, `FindDraw` through a lattice fill)
   and to carry the per-compile scope the families cache into.
-- A host implements `IRuleHost` — `IRuleReader` widened with the mutation
+- A host implements `IRuleHost`—`IRuleReader` widened with the mutation
   door (`TryApply`, composing privately under `BeginPreflight`/`EndPreflight`
   or installing), `FireEffect` for the effect arms it registered,
   `TryEvaluateOwn` for the rule kinds only it understands (which run each
   evaluation back through `RuleEvaluator.EvaluateOnce`, so latch, trace, and
-  ledger stay one mechanism), and `RefusalRecorded` — and widens the reader
+  ledger stay one mechanism), and `RefusalRecorded`—and widens the reader
   further to whatever its registered operands read through; a compiled fact
   casts the reader it is handed. A host owns one `RuleEvaluator` and one
   `RuleLatch` per family it evaluates.
@@ -387,17 +379,17 @@ package:
   the same modifier. `StateRow` is non-sealed on the same terms, with
   `StateRowJsonConverter<TRow>` as its converter base.
 
-## 🧭 What stays a host's
+## What stays a host's
 
-Composing a `StateMutation` against a row — eviction, a numeric upsert's
-advance/dynamics rebase, envelope validation, the journal — is each host's
+Composing a `StateMutation` against a row—eviction, a numeric upsert's
+advance/dynamics rebase, envelope validation, the journal—is each host's
 door; the pieces are here (`StateCellWriter`, `StateAdvance`,
 `StateRow.ClampToEnvelope`), the pipeline is not. Pairwise interactions and
 timed decisions are host-evaluated kinds until a pair domain over rows is
 designed rather than assumed. Refused: a compatibility shim between old and new
 spellings.
 
-## 🔗 Where the rest lives
+## Where the rest lives
 
 The world's registered families (`WorldRuleVocabulary`, `WorldRuleCompileContext`,
 `IWorldRuleReader`), its rule and decision records, and the validators live in
@@ -416,3 +408,9 @@ translates its landed `SearchWrite`s into the world's own mutation door
 (`WorldServer.cs`, `WorldServer.Step.cs` in
 [`src/Puck.World.Server`](../Puck.World.Server/README.md)); the game laws that
 boot a server stay in `tests/Puck.World.Tests`.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

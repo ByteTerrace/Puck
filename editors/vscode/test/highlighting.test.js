@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const textmate = require('vscode-textmate');
 const oniguruma = require('vscode-oniguruma');
-const { collectDelimiterOffsets } = require('../container-colors');
+const { roleForScopes, tokenizeLines } = require('../container-colors');
 
 const grammarReady = (async () => {
     const wasm = fs.readFileSync(require.resolve('vscode-oniguruma/release/onig.wasm'));
@@ -47,12 +47,51 @@ test('declarations, enums, and container delimiters retain distinct scopes', asy
     assert.ok(scopeAt(grammar, 'palette [ {} ]', '{').includes('punctuation.section.object.puck'));
 });
 
-test('fixed delimiter colors skip quoted text and comments, including unfinished input', () => {
-    const source = 'palette [{ color: "[{}]", label: "escaped \\" [ ]" }] // [{}]\n/* [{}] */ noise {}\n`[{}]`';
-    const result = collectDelimiterOffsets(source);
-    assert.equal(result.arrays.map(offset => source[offset]).join(''), '[]');
-    assert.equal(result.objects.map(offset => source[offset]).join(''), '{}{}');
-    for (const source of ['label: "unfinished [ {', '/* unfinished [{', '`unfinished [{']) {
-        assert.deepEqual(collectDelimiterOffsets(source), { arrays: [], objects: [] });
+function roleAt(grammar, line, word) { return roleForScopes(scopeAt(grammar, line, word)); }
+
+test('loop sources are variables and both loop spellings use control keywords', async () => {
+    const grammar = await grammarReady;
+    for (const source of ['for (tile, tileIndex) in meadowTiles {', 'for tile in meadowTiles {']) {
+        assert.equal(roleAt(grammar, source, 'for'), 'keyword');
+        assert.equal(roleAt(grammar, source, 'in '), 'keyword');
+        assert.equal(roleAt(grammar, source, 'meadowTiles'), 'variable');
+    }
+    assert.equal(roleAt(grammar, 'value: items [0]', 'items'), 'variable');
+    assert.equal(roleAt(grammar, 'for blade in filter(meadowBlades, b => b["x"] > 0) {', 'filter'), 'function');
+});
+
+test('interpolated and raw strings distinguish text, expressions, and escaped braces', async () => {
+    const grammar = await grammarReady;
+    for (const line of ['prototype $"meadow-{tileIndex}" {', 'shape Prism $"""stem-{blade["id"]}""" {']) {
+        const variable = line.includes('tileIndex') ? 'tileIndex' : 'blade';
+        assert.equal(roleAt(grammar, line, variable), 'variable');
+        assert.equal(roleAt(grammar, line, line.includes('meadow-') ? 'meadow-' : 'stem-'), 'string');
+    }
+    assert.equal(roleAt(grammar, 'name: $"{{literal}}-{tileIndex}"', 'literal'), 'string');
+    assert.equal(roleAt(grammar, 'name: """literal { blade["id"] }"""', 'blade'), 'string');
+    assert.equal(roleAt(grammar, 'name: $"{tile[0]}"', '['), 'arrayDelimiter');
+    assert.equal(roleAt(grammar, 'name: $"{tile[0]}"', '{'), 'keyword');
+});
+
+test('multiline filter and raw-string state recover for following properties', async () => {
+    const grammar = await grammarReady;
+    const source = 'for blade in filter(meadowBlades, b =>\n  b["x"] > 0) {\n shape Prism $"""stem-{blade["id"]}""" {\n position [-blade["x"], 0, 1]\n }\n}';
+    const tokens = tokenizeLines(grammar, source);
+    const lines = source.split('\n');
+    const role = (line, word) => tokens[line].find(token => token.start <= lines[line].indexOf(word) && token.end > lines[line].indexOf(word)).role;
+    assert.equal(role(1, 'b['), 'variable');
+    assert.equal(role(2, 'blade'), 'variable');
+    assert.equal(role(3, 'position'), 'property');
+    assert.equal(role(3, 'blade'), 'variable');
+    const raw = tokenizeLines(grammar, 'name: """\nnot code [ {\n"""\nposition [0]');
+    assert.ok(raw[1].every(token => token.role === 'string'));
+    assert.equal(raw[3][0].role, 'property');
+});
+
+test('container colors never leak into comments or plain strings', async () => {
+    const grammar = await grammarReady;
+    for (const source of ['label: "unfinished [ {', '/* unfinished [{', '`unfinished [{', 'label: "[{}]" // [{}]', 'label: """[{"quoted"}]"""']) {
+        const roles = tokenizeLines(grammar, source).flat().map(token => token.role);
+        assert.ok(!roles.includes('arrayDelimiter') && !roles.includes('objectDelimiter'), source);
     }
 });

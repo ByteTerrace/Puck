@@ -45,10 +45,7 @@ internal static class PackagesCommand {
     private static int Check(string repositoryRoot, string relativePath, IReadOnlyList<PackageEntry> packages) {
         var fullPath = Path.Combine(
             path1: repositoryRoot,
-            path2: relativePath.Replace(
-                newChar: Path.DirectorySeparatorChar,
-                oldChar: '/'
-            )
+            path2: relativePath
         );
 
         if (!File.Exists(path: fullPath)) {
@@ -210,10 +207,7 @@ internal static class PackagesCommand {
     private static int Write(string repositoryRoot, string relativePath, IReadOnlyList<PackageEntry> packages) {
         var fullPath = Path.Combine(
             path1: repositoryRoot,
-            path2: relativePath.Replace(
-                newChar: Path.DirectorySeparatorChar,
-                oldChar: '/'
-            )
+            path2: relativePath
         );
 
         if (!File.Exists(path: fullPath)) {

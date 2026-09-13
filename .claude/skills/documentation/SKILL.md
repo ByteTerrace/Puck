@@ -19,6 +19,9 @@ machine-written reports; change their source or generator.
 
 Use [Writing documentation](../../../docs/development/documentation.md) for human
 editorial conventions. This skill owns operational verification and routing.
+The guide also owns README organization, documentation placement, and restrained
+navigation symbols. Inspect package rendering and brand distribution consumers
+when changing those surfaces; do not create a second package copy of the prose.
 
 ## Non-negotiable ownership rules
 

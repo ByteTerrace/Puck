@@ -1,0 +1,161 @@
+{
+  "schema": "puck.branding.v1",
+  "provenance": "Canonical rasters were copied byte-for-byte from the existing first-party consumers on 2026-09-12; hashes and dimensions are recorded here so future updates are deliberate.",
+  "selectionPolicy": "Use the authored size closest to the consumer slot. Keep separate entries for intentional size or treatment variants.",
+  "assets": [
+    {
+      "id": "puck-logo-200",
+      "source": "branding/assets/puck-logo-200.png",
+      "sha256": "aa32278ae8696f0e87a37ad63cb1d6349250db26473078f5e44067687bda53e6",
+      "variant": "Primary square product mark for the documentation site and NuGet package icon.",
+      "consumers": ["docs/site/_theme/logo.png", "NuGet package icon (icon.png)"]
+    },
+    {
+      "id": "puck-logo-256",
+      "source": "branding/assets/puck-logo-256.png",
+      "sha256": "a7314521f9677bf53142ebf200f1bb4258a333670ff0635e74b26b721627136c",
+      "variant": "Dashboard portal header mark retained at its authored 256x256 size.",
+      "consumers": ["src/Puck.Dashboard/src/portal/assets/logo.png"]
+    },
+    {
+      "id": "puck-editor-icon-128",
+      "source": "branding/assets/puck-editor-icon-128.png",
+      "sha256": "ada70319c7107154bfd24677a856a1230d8547a58adb3e0d4b25300a77dee55f",
+      "variant": "Editor extension icon retained at its authored 128x128 size; integration is deferred while the extension task is active.",
+      "consumers": ["editors/vscode/icon.png"]
+    },
+    {
+      "id": "puck-palette-tokens",
+      "source": "branding/tokens.css",
+      "sha256": "81d7514bf90af04e015a0e4546b9381e20e005e14a1df916468efba8dbc01019",
+      "variant": "Shared light/dark CSS custom properties consumed by the site, DocFX, and dashboard adapters.",
+      "consumers": ["docs/site/_theme/tokens.css", "docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme.css"]
+    },
+    {
+      "id": "puck-favicon",
+      "source": "branding/assets/puck-favicon.ico",
+      "sha256": "5b986c532c2034eb53b0ff89b031fe1c5cb553569315db5261060e2098f718e7",
+      "variant": "Shared browser favicon.",
+      "consumers": ["docs/site/favicon.ico", "docs/site/icons/favicon.ico", "src/Puck.Dashboard/src/host/public/favicon.ico"]
+    },
+    {
+      "id": "puck-touch-icon-180",
+      "source": "branding/assets/puck-touch-icon-180.png",
+      "sha256": "83609e01814a17cd1c3c0c65773d453a6b770afc2f48a627a4a695bbecb951f8",
+      "variant": "Apple touch icon.",
+      "consumers": ["docs/site/icons/apple-touch-icon.png", "src/Puck.Dashboard/src/host/public/apple-touch-icon.png"]
+    },
+    {
+      "id": "puck-app-icon-16",
+      "source": "branding/assets/puck-app-icon-16.png",
+      "sha256": "e56c39ec97ca829cff0064e5eff038a0cb8cc66f383a6ceb21d365caf80a9fb8",
+      "variant": "Dark application icon at 16x16.",
+      "consumers": ["docs/site/icons/puck-dark-16.png", "src/Puck.Dashboard/src/host/public/puck-dark-16.png"]
+    },
+    {
+      "id": "puck-app-icon-20",
+      "source": "branding/assets/puck-app-icon-20.png",
+      "sha256": "907e96ad73f0d4058b6a3fa573c3af00896f05adbb251164688b035cb9bea5fb",
+      "variant": "Dark application icon at 20x20.",
+      "consumers": ["docs/site/icons/puck-dark-20.png", "src/Puck.Dashboard/src/host/public/puck-dark-20.png"]
+    },
+    {
+      "id": "puck-app-icon-24",
+      "source": "branding/assets/puck-app-icon-24.png",
+      "sha256": "130fa64df39adbf4fe59a9713a76124c058c495b007039c43f907b030e852e99",
+      "variant": "Dark application icon at 24x24.",
+      "consumers": ["docs/site/icons/puck-dark-24.png", "src/Puck.Dashboard/src/host/public/puck-dark-24.png"]
+    },
+    {
+      "id": "puck-app-icon-32",
+      "source": "branding/assets/puck-app-icon-32.png",
+      "sha256": "32c59119068ed26d0f317a2367d5d403d46112d4d4511784622224b016d1da5b",
+      "variant": "Dark application icon at 32x32.",
+      "consumers": ["docs/site/icons/puck-dark-32.png", "src/Puck.Dashboard/src/host/public/puck-dark-32.png"]
+    },
+    {
+      "id": "puck-app-icon-40",
+      "source": "branding/assets/puck-app-icon-40.png",
+      "sha256": "abbf01906a5406b33ccc96409b14cf829b25ae35e224609e7c6da9dc1f6a98f7",
+      "variant": "Dark application icon at 40x40.",
+      "consumers": ["docs/site/icons/puck-dark-40.png", "src/Puck.Dashboard/src/host/public/puck-dark-40.png"]
+    },
+    {
+      "id": "puck-app-icon-48",
+      "source": "branding/assets/puck-app-icon-48.png",
+      "sha256": "73b8f080977690745af35ef66d03aac2865c36b04961ff6433aed7dfd44f1b64",
+      "variant": "Dark application icon at 48x48.",
+      "consumers": ["docs/site/icons/puck-dark-48.png", "src/Puck.Dashboard/src/host/public/puck-dark-48.png"]
+    },
+    {
+      "id": "puck-app-icon-64",
+      "source": "branding/assets/puck-app-icon-64.png",
+      "sha256": "adbe111b8f2cfb9e133b6e14b6a457f2c1fb1ad89beac8d355d2c1b464dafe62",
+      "variant": "Dark application icon at 64x64.",
+      "consumers": ["docs/site/icons/puck-dark-64.png", "src/Puck.Dashboard/src/host/public/puck-dark-64.png"]
+    },
+    {
+      "id": "puck-app-icon-192",
+      "source": "branding/assets/puck-app-icon-192.png",
+      "sha256": "e654dddb3bd9b4d534ef8e115d387ee5010ad07d7518f840c4581a1c48aa2bf9",
+      "variant": "Dark application icon at 192x192 for manifests.",
+      "consumers": ["docs/site/icons/puck-dark-192.png", "src/Puck.Dashboard/src/host/public/puck-dark-192.png"]
+    },
+    {
+      "id": "puck-app-icon-512",
+      "source": "branding/assets/puck-app-icon-512.png",
+      "sha256": "260132909d3f0a6c53f11db4030a73a76a0abb1999b579ecc175bd636c0c5d9b",
+      "variant": "Dark application icon at 512x512 for manifests.",
+      "consumers": ["docs/site/icons/puck-dark-512.png", "src/Puck.Dashboard/src/host/public/puck-dark-512.png"]
+    }
+  ],
+  "copies": [
+    { "asset": "puck-logo-200", "path": "docs/site/_theme/logo.png" },
+    { "asset": "puck-logo-256", "path": "src/Puck.Dashboard/src/portal/assets/logo.png" },
+    { "asset": "puck-editor-icon-128", "path": "editors/vscode/icon.png", "deferred": true },
+    { "asset": "puck-palette-tokens", "path": "docs/site/_theme/tokens.css" },
+    { "asset": "puck-favicon", "path": "docs/site/favicon.ico" },
+    { "asset": "puck-favicon", "path": "docs/site/icons/favicon.ico" },
+    { "asset": "puck-favicon", "path": "src/Puck.Dashboard/src/host/public/favicon.ico" },
+    { "asset": "puck-touch-icon-180", "path": "docs/site/icons/apple-touch-icon.png" },
+    { "asset": "puck-touch-icon-180", "path": "src/Puck.Dashboard/src/host/public/apple-touch-icon.png" },
+    { "asset": "puck-app-icon-16", "path": "docs/site/icons/puck-dark-16.png" },
+    { "asset": "puck-app-icon-16", "path": "src/Puck.Dashboard/src/host/public/puck-dark-16.png" },
+    { "asset": "puck-app-icon-20", "path": "docs/site/icons/puck-dark-20.png" },
+    { "asset": "puck-app-icon-20", "path": "src/Puck.Dashboard/src/host/public/puck-dark-20.png" },
+    { "asset": "puck-app-icon-24", "path": "docs/site/icons/puck-dark-24.png" },
+    { "asset": "puck-app-icon-24", "path": "src/Puck.Dashboard/src/host/public/puck-dark-24.png" },
+    { "asset": "puck-app-icon-32", "path": "docs/site/icons/puck-dark-32.png" },
+    { "asset": "puck-app-icon-32", "path": "src/Puck.Dashboard/src/host/public/puck-dark-32.png" },
+    { "asset": "puck-app-icon-40", "path": "docs/site/icons/puck-dark-40.png" },
+    { "asset": "puck-app-icon-40", "path": "src/Puck.Dashboard/src/host/public/puck-dark-40.png" },
+    { "asset": "puck-app-icon-48", "path": "docs/site/icons/puck-dark-48.png" },
+    { "asset": "puck-app-icon-48", "path": "src/Puck.Dashboard/src/host/public/puck-dark-48.png" },
+    { "asset": "puck-app-icon-64", "path": "docs/site/icons/puck-dark-64.png" },
+    { "asset": "puck-app-icon-64", "path": "src/Puck.Dashboard/src/host/public/puck-dark-64.png" },
+    { "asset": "puck-app-icon-192", "path": "docs/site/icons/puck-dark-192.png" },
+    { "asset": "puck-app-icon-192", "path": "src/Puck.Dashboard/src/host/public/puck-dark-192.png" },
+    { "asset": "puck-app-icon-512", "path": "docs/site/icons/puck-dark-512.png" },
+    { "asset": "puck-app-icon-512", "path": "src/Puck.Dashboard/src/host/public/puck-dark-512.png" }
+  ],
+  "typography": {
+    "fontDirectory": "docs/site/_theme/fonts",
+    "families": ["Lora", "JetBrains Mono"],
+    "licenseNote": "Existing self-hosted font files and their existing license/provenance treatment are retained."
+  },
+  "palette": {
+    "tokens": "branding/tokens.css",
+    "adapters": ["docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme.css"]
+  },
+  "wiring": [
+    { "path": "build/Packaging.targets", "contains": "branding\\assets\\puck-logo-200.png", "description": "NuGet packages consume the canonical product mark." },
+    { "path": "docs/site/_theme/theme.css", "contains": "@import url(\"/_theme/tokens.css\");", "description": "The staged site theme consumes its shared token copy." },
+    { "path": "docs/site/_theme/theme.css", "contains": "font-family: var(--font-body);", "description": "The site consumes the canonical body font stack." },
+    { "path": "docs/site/_theme/theme.css", "contains": "font-family: var(--font-code);", "description": "The site consumes the canonical code font stack." },
+    { "path": "docs/api/templates/byteterrace/public/main.css", "contains": "@import url(\"/_theme/tokens.css\");", "description": "The DocFX adapter consumes the staged shared token copy." },
+    { "path": "docs/api/templates/byteterrace/public/main.css", "contains": "--bs-body-font-family: var(--font-body);", "description": "The DocFX adapter maps the canonical body font stack." },
+    { "path": "docs/api/templates/byteterrace/public/main.css", "contains": "--bs-font-monospace: var(--font-code);", "description": "The DocFX adapter maps the canonical code font stack." },
+    { "path": "src/Puck.Dashboard/src/portal/src/theme.css", "contains": "@import url(\"../../../../../branding/tokens.css\");", "description": "The dashboard adapter consumes the canonical token source directly." },
+    { "path": "src/Puck.Dashboard/src/portal/src/theme.css", "contains": "font-family: var(--font-body);", "description": "The dashboard consumes the canonical body font stack." }
+  ]
+}

@@ -280,7 +280,7 @@ internal static class NamedArgsPhase {
                         continue;
                     }
 
-                    var relative = asset.Name.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
+                    var relative = asset.Name;
                     var resolved = packageRoots
                         .Select(selector: packageRoot => Path.Combine(path1: packageRoot, path2: libraryPath.GetString()!, path3: relative))
                         .FirstOrDefault(predicate: File.Exists);

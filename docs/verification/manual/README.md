@@ -20,7 +20,7 @@ Each script:
 - **Requires exclusive desktop foreground for its whole run.** Close or
   park other windows first. Every script gates on no foreign `Puck.World`
   process being alive before it injects anything, and asserts
-  `GetForegroundWindow()` equals its own window before every injection —
+  `GetForegroundWindow()` equals its own window before every injection—
   but it cannot protect itself from a human moving focus away mid-run, or
   from a *second* manual harness running at the same time.
 - **Injects global mouse/keyboard input.** Don't touch the mouse or

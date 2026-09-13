@@ -1,5 +1,7 @@
 # Puck
 
+![Puck product mark](branding/assets/puck-logo-200.png)
+
 Puck is a C# engine for document-defined interactive worlds. It combines
 reproducible simulation, GPU rendering, programmable shader pipelines, and
 Game Boy/Game Boy Color and Game Boy Advance emulation. `Puck.World` is the
@@ -25,6 +27,8 @@ becomes a running world.
 The [reference game](docs/game/README.md) has its own design and artwork.
 It demonstrates engine features without defining the requirements of every
 library consumer.
+
+📚 [Engine manual](docs/README.md) · 🛠️ [Development](docs/development/README.md) · 🎨 [Branding](branding/README.md)
 
 ## Packages and verification
 

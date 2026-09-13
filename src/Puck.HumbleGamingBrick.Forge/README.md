@@ -21,29 +21,29 @@ existing Tune audio compiler and authored boot-ROM tools remain available.
 
 ## The map
 
-- `Sm83Emitter` — the machine-code emitter every routine is written through:
+- `Sm83Emitter`—the machine-code emitter every routine is written through:
   labels, forward-reference fixups, byte-exact deterministic output.
-- `Framework/` — the game framework: `FrameworkCartridge` (32 KiB
+- `Framework/`—the game framework: `FrameworkCartridge` (32 KiB
   MBC1+RAM+BATTERY, Color-required header, code window 0x0150..0x3FFF and data
   window 0x4000..0x7FFF, both banks visible without a bank switch),
   `FrameworkKernel` (interrupt-driven `halt` main loop, HRAM OAM-DMA
   trampoline, BG write queue), `FrameworkMemoryMap` (the WRAM source of truth
-  — 0xC000..0xC0FF framework state, 0xC100 shadow OAM, 0xC200+ game-owned),
+—0xC000..0xC0FF framework state, 0xC100 shadow OAM, 0xC200+ game-owned),
   `GameFramework` (the facade that wires every module; `BuildRom` assembles),
   the modules (`InputModule`, `BgModule`, `OamManager`, `PrngModule`,
   `SaveModule`, `TextModule`, `GameStateMachine`, `VictoryModule`), the
   declarative `GameManifest`/`AssetLinker` layer, and the sound stack
   (`ISoundDriver`, `ApuSoundDriver`, `SoundTables`).
-- `HgbImage` — pure-C# RGBA8 → 2bpp/RGB555 encoders; every byte layout is the
+- `HgbImage`—pure-C# RGBA8 → 2bpp/RGB555 encoders; every byte layout is the
   inverse of the emulator's PPU decode. No external image library.
-- `AudioDocumentCompiler` — compiles a `puck.audio.v1` document
+- `AudioDocumentCompiler`—compiles a `puck.audio.v1` document
   (`Puck.Assets.Documents.AudioDocument`) into driver streams; shares
   `ApuNotePeriod`'s integer math exactly, so the document path and the
   hand-authored path cannot drift.
-- `Tune/` — the jukebox cart: `TuneRom.Build(AudioDocument, string)` compiles
+- `Tune/`—the jukebox cart: `TuneRom.Build(AudioDocument, string)` compiles
   an audio document into a bootable CGB cart (`Puck.World` steps it for world
   audio).
-- `BootRomBuilder` — the boot ROM a revision executes from reset
+- `BootRomBuilder`—the boot ROM a revision executes from reset
   (`Build(ConsoleModel)`): 256 bytes for a monochrome revision, 2304 for a
   Color one. `BootRomLayout` carries what differs per revision,
   `BootRomProgram`/`BootRomColorTiming` emit it, `BootRomProbeCartridge` builds
@@ -82,7 +82,7 @@ falls into `0x0100`.
 
 **The handoff is timed.** The divider counter a cartridge reads at `0x0100` is
 the boot program's running time, and `BootDivPrediction` holds the counter the
-hardware produces for each revision and header — a constant on the monochrome
+hardware produces for each revision and header—a constant on the monochrome
 revisions, the forwarded set-bit count on the companion console, and a table walk
 on Color. The Color image carries that prediction's own tables, so there is one
 copy of the data: it computes its target from the cartridge header, resets the
@@ -109,7 +109,7 @@ first-party licensee picks a row, the fourth title letter breaks the ties among
 the rows that share a checksum, and the chosen combination names one background
 and two object palettes in the shared pool. Those go out eight bytes at a time
 through BCPD and OCPD's auto-increment, so the index registers land at `0x88` and
-`0x90` — which is what a cartridge reads back as `0xC8` and `0xD0`, and what the
+`0x90`—which is what a cartridge reads back as `0xC8` and `0xD0`, and what the
 seeded handoff carries. The data ports themselves read sealed in compatibility
 mode, so palette RAM's contents are outside the compared surface there and the
 seeded path needs no palette-RAM seed of its own. The selection tables live in
@@ -125,13 +125,13 @@ Color palette RAM where the hardware runs natively (the data ports read sealed i
 compatibility mode, so there is nothing to compare there). High RAM is in the
 comparison because the image clears it: the boot program's stack residue and the
 Color program's staged scratch are unwound before the handoff. Every register the
-seeded state carries is a register the image writes — the wave-RAM pattern and
-the deselected joypad included — so a capability question like
+seeded state carries is a register the image writes—the wave-RAM pattern and
+the deselected joypad included—so a capability question like
 `SeedsWaveRamOnBoot` describes both paths rather than only one.
 
 What does not agree, and cannot: the sub-register phase of the picture
 processor's pixel pipeline and of the audio generators. The seeded handoff sets
-those to captured constants no executing program reaches — the seeded
+those to captured constants no executing program reaches—the seeded
 square-channel timer exceeds its own reload period, and the seeded dot phase is
 odd where every instruction boundary lands on a multiple of four dots. Video RAM
 and the framebuffer also differ, because the boot program drew something.
@@ -165,3 +165,7 @@ cartridge document schema. Tune keeps its separate audio-document path.
 Always settle with `VerifyMachineSettle.SettleOutOfOamDma` after stepping
 CGB frames before reading the bus. A fixed-size run can stop inside OAM DMA,
 where memory reads are gated; `Framework.VerifyMachineDriver` handles this.
+
+## Documentation
+
+📚 [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

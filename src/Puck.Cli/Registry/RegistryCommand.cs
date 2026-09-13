@@ -54,7 +54,7 @@ internal static class RegistryCommand {
             return 1;
         }
 
-        var path = Path.Combine(path1: repositoryRoot, path2: RelativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+        var path = Path.Combine(path1: repositoryRoot, path2: RelativePath);
         var text = WorldNameRegistry.Render();
 
         if (!check) {

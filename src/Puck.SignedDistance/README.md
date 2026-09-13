@@ -1,22 +1,22 @@
 # Puck.SignedDistance
 
-Puck.SignedDistance owns the signed-distance-function field as DATA: the
+Puck.SignedDistance owns the signed-distance-function field as data: the
 instruction ISA, the packed-word program representation a GPU interpreter
 decodes, the fluent authoring builder that emits it, and a warp-free
 deterministic fixed-point CPU interpreter that answers queries against the
 exact same field. Everything here is built on Puck.Maths (and, for text
-authoring, the render-agnostic Puck.Text) — no GPU, presentation, or
+authoring, the render-agnostic Puck.Text)—no GPU, presentation, or
 shader-compiler dependency of any kind.
 
 The library describes and evaluates a field; it does not render one. A GPU
 engine (Puck.SdfVm) consumes the program this library produces to march and
 shade it; this library never names a device, a window, or a shader.
 
-## ✨ Key features
+## Key features
 
 - *One instruction stream, two consumers:* `SdfProgramBuilder` emits the same
   packed `SdfProgram.Words` a GPU interpreter decodes and `SdfFieldEvaluator`
-  walks in fixed point — author once, render and simulate against the
+  walks in fixed point—author once, render and simulate against the
   identical field.
 - *Deterministic to the bit:* the CPU evaluator is `FixedQ4816`/`FixedVector3`
   throughout, with no float, wall-clock, or RNG in its walk; identical ordered
@@ -34,9 +34,9 @@ shade it; this library never names a device, a window, or a shader.
   instead. `SdfDomainExpansion` derives the copies in fixed point, so an
   analytic collider compiler sees every copy the fold draws.
 - *No GPU dependency:* authoring a program and querying it both work headless
-  — no window, no device, no shader compiler.
+—no window, no device, no shader compiler.
 
-## 🧮 The program model
+## The program model
 
 `SdfSolidPrimitive` is the closed vocabulary of solids that carry a unit-size
 law and a finite local bound; `SdfSolidGeometry` is the one place that decides
@@ -49,7 +49,7 @@ points and radii already carry creation-unit dimensions directly (see
 `SdfSolidGeometry.SweepReach`), so only a uniform scale bakes onto it.
 
 `SdfProgramBuilder` builds an `SdfProgram` as an ordered stream of point
-transforms, field operations, shapes, and materials — reset/translate/rotate,
+transforms, field operations, shapes, and materials—reset/translate/rotate,
 union/subtraction/intersection blends (with smooth, chamfer, and round seam variants),
 domain folds (repeat, wallpaper, polar repeat, symmetry planes), warps (bend,
 twist, log-spherical, cell jitter, displacement, domain warp), and the shape
@@ -133,10 +133,10 @@ when a preceding fold cannot supply a global continuous bound.
 [Shape authoring examples](../Puck.World.Authoring/README.md#round-seams-and-cellular-relief)
 show the higher-level scope and placement rules.
 
-## 🔍 The CPU query layer (`Puck.SignedDistance.Queries`)
+## The CPU query layer (`Puck.SignedDistance.Queries`)
 
 `SdfFieldEvaluator` wraps a live `SdfProgram` and interprets its rigid,
-warp-free subset directly in `FixedQ4816`/`FixedVector3` — a SECOND,
+warp-free subset directly in `FixedQ4816`/`FixedVector3`—a SECOND,
 independent interpreter of the same instruction stream a GPU kernel walks,
 never generated shader code. It implements `Puck.Maths`'s `IWorldQuery`
 (`Raycast`/`SphereCast`/`Overlap`/`TryGroundHeight`/`LineOfSight`) and the
@@ -181,7 +181,7 @@ populated program cannot rebase an extreme hierarchical position into Q48.16;
 an unrepresentable point is not evidence of empty space.
 
 The evaluator's constructor walks the instruction stream once, asserting
-every op/shape is in the supported rigid subset — it throws naming the first
+every op/shape is in the supported rigid subset—it throws naming the first
 excluded one rather than silently approximating. Excluded: `TransformDynamic`
 (no per-frame transform table in this evaluator's signature), the runtime-trig
 warps (`BendX/Y/Z`, `TwistY`, `LogSphere`, `CellJitter`, `RepeatPolar`,
@@ -189,7 +189,7 @@ warps (`BendX/Y/Z`, `TwistY`, `LogSphere`, `CellJitter`, `RepeatPolar`,
 transcendentals or texture sampling (`RegularPolygon`, `Star`, `Ellipse`,
 `Glyph`), plus `SampledRegion` (its brick pool is an engine resource unavailable
 to the headless evaluator). `RoundedRectangle`, `ChamferedRectangle`,
-`Superellipsoid`, `ConvexPolygon`, `Sweep` (strands == 1 only — a strand count
+`Superellipsoid`, `ConvexPolygon`, `Sweep` (strands == 1 only—a strand count
 above 1 is render-only and refused for deterministic field contact by name),
 `Repeat`/`RepeatLimited`/`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and
 isotropic `Scale` interpret directly as 1-Lipschitz operations.
@@ -202,13 +202,13 @@ absent from every field it walks; a program whose only shape is flagged
 
 `SdfInstruction.Secondary` is the opposite exclusion set (false marks a shape
 that skips only the GPU's soft-shadow/AO field walks) and has no counterpart
-here either — this evaluator has no shadow/AO concept, so it composes a
+here either—this evaluator has no shadow/AO concept, so it composes a
 non-secondary shape exactly like an ordinary one.
 
 `TryDistance` culls an instance (`SdfProgram.Instances`) whose whole compose
 chain is a plain `SdfBlendOp.Union`: its authored world-space bound proves the
 instance cannot lower the running best-so-far distance, so its instruction
-slice is skipped entirely — bit-identical to evaluating it, never an
+slice is skipped entirely—bit-identical to evaluating it, never an
 approximation. Smooth/chamfer/subtraction/intersection/Xor blends, and any
 instance holding `PushField`/`PopField` or a bare `Onion`/`Dilate`, are never
 culled, since their compose can depend on a candidate farther than the current
@@ -216,15 +216,15 @@ best. Nor is an instance culled unless the instruction right after it (if any)
 is `ResetPoint`: skipping an instance also skips its own point-transform
 chain, so the interpreter's local position and distance scale would otherwise
 carry through unchanged from before the instance instead of what the
-instance's own transforms would have left them as — safe only when a
+instance's own transforms would have left them as—safe only when a
 following `ResetPoint` discards that value before anything reads it. The cull
 needs no opt-in: it inspects whatever instances the caller
-declared, and does nothing when there are none — `WorldSolidField`, below, does
+declared, and does nothing when there are none—`WorldSolidField`, below, does
 not currently call `BeginInstance`/`Instance` for its placements, so today it
 declares zero instances and this cull has no effect on the shipped world's
 contact field until a caller wraps its per-object content in instance bounds.
 
-## 🚀 Basic use
+## Basic use
 
 ```csharp
 using Puck.Maths;
@@ -252,14 +252,14 @@ if (evaluator.TryDistance(position: query, distance: out var distance, material:
 
 `WorldSolidField` (`Puck.World.Server`) is the production shape this mirrors:
 it compiles a world's authored solids into one `SdfProgram` and reads it
-through `SdfFieldEvaluator` — banded over an `SdfDistanceGrid` when the world
-authors `collision.gridCellSize` — so the contact surface a body solves
+through `SdfFieldEvaluator`—banded over an `SdfDistanceGrid` when the world
+authors `collision.gridCellSize`—so the contact surface a body solves
 against is the same field the renderer draws.
 
-## 📐 Determinism
+## Determinism
 
 `SdfFieldEvaluator` converts every instruction's floats to `FixedQ4816` once,
-into a cached array, at construction — never per query. `TryFieldGradient` is
+into a cached array, at construction—never per query. `TryFieldGradient` is
 a 6-tap per-axis central difference over `TryDistance`. Both are pure
 functions of the program and the query point: no wall-clock, no RNG, no
 mutable field state. `tests/Puck.SignedDistance.Tests` directly gates the CPU
@@ -268,26 +268,26 @@ cross-construction determinism and GPU drift (`world-field-evaluator-determinism
 `world-field-drift`) remain quarantined with `Puck.Post`, so cross-backend drift
 still has no live automated gate.
 
-## 📋 Core types
+## Core types
 
-- **The program** — `SdfProgram`, `SdfProgramBuilder`, `SdfInstruction`,
+- **The program**—`SdfProgram`, `SdfProgramBuilder`, `SdfInstruction`,
   `SdfMaterial`, `SdfMaterialScope`, `SdfInstanceRange`, `SdfScreenSurface`.
-- **The ISA vocabulary** — `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfLift`,
+- **The ISA vocabulary**—`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfLift`,
   `SdfPolarAxis`, `SdfNoiseFlavor`, `SdfWallpaperGroup`, `SdfIsa`.
-- **Solid primitives** — `SdfSolidPrimitive`, `SdfSolidGeometry`,
+- **Solid primitives**—`SdfSolidPrimitive`, `SdfSolidGeometry`,
   `SdfSolidBounds`.
-- **Domain operators** — `SdfDomainOp`, `SdfDomainOps`, `SdfDomainExpansion`,
+- **Domain operators**—`SdfDomainOp`, `SdfDomainOps`, `SdfDomainExpansion`,
   `SdfRigidFrame`.
-- **Per-frame data** — `DynamicTransform`.
-- **The instance cull grid** — `SdfInstanceGrid`, `SdfInstanceGridInput`.
-- **Bricks** — `SdfBrickBake`, `SdfBrickPoolLayout`.
-- **Screens** — `SdfScreenDecalLayout`.
-- **Query providers** (the seams themselves are `Puck.Maths`) — `SdfFieldEvaluator`,
+- **Per-frame data**—`DynamicTransform`.
+- **The instance cull grid**—`SdfInstanceGrid`, `SdfInstanceGridInput`.
+- **Bricks**—`SdfBrickBake`, `SdfBrickPoolLayout`.
+- **Screens**—`SdfScreenDecalLayout`.
+- **Query providers** (the seams themselves are `Puck.Maths`)—`SdfFieldEvaluator`,
   `SdfDistanceGrid`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`,
   `WorldQueryArtifact`, `WorldQueryBaker`, `WorldQueryProviders`,
   `WorldQueryConfidence`, `RayHit`.
 
-## 🧪 Verification
+## Verification
 
 Run the library's direct regression gate with:
 
@@ -300,3 +300,7 @@ real `SdfFieldEvaluator`. The two Post stages that once pinned cross-constructio
 determinism and GPU drift are quarantined with `Puck.Post`; `puck parity`
 (cross-backend composed-frame agreement) remains the live check that the packed
 program renders consistently on both GPU backends.
+
+## Documentation
+
+📚 [Rendering](https://github.com/ByteTerrace/Puck/blob/main/docs/rendering/README.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

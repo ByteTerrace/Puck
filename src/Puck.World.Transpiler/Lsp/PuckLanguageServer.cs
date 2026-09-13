@@ -24,7 +24,11 @@ public sealed class PuckLanguageServer {
 
     private static bool TryGetLocalPath(string uri, out string path) {
         if (Uri.TryCreate(uri, UriKind.Absolute, out var parsed) && parsed.IsFile) {
-            path = parsed.LocalPath;
+            path = parsed.LocalPath.Replace(oldChar: '\\', newChar: '/');
+            // VS Code escapes the drive colon (file:///d%3A/...), which Uri.LocalPath treats as /d:/... .
+            if (OperatingSystem.IsWindows() && path.Length >= 4 && path[0] == '/' && char.IsAsciiLetter(path[1]) && path[2] == ':' && path[3] == '/') {
+                path = path[1..];
+            }
             return true;
         }
         path = "";
@@ -244,7 +248,7 @@ public sealed class PuckLanguageServer {
 
         // 1. Directives & Keywords
         AddCompletion(items, "schema", "schema: \"puck.world.def.v1\"", "Directive: Schema declaration", 14);
-        AddCompletion(items, "basis", "basis: \"worlds/standard.basis.json\"", "Directive: Base world inheritance", 14);
+        AddCompletion(items, "basis", "basis: \"worlds/base.puck\"", "Directive: Base world inheritance", 14);
         AddCompletion(items, "documentId", "documentId: \"my-world-id\"", "Directive: Document ID tag", 14);
         AddCompletion(items, "let", "let ${1:name} = ${2:value}", "Keyword: Declare constant", 14);
         AddCompletion(items, "template", "template ${1:name}(${2:params}) {\n    $0\n}", "Keyword: Parametric template", 14);
@@ -565,7 +569,10 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var formatted = PuckFormatter.Format(text);
+        var options = @params?["options"];
+        var tabSize = options?["tabSize"]?.GetValue<int>() ?? 2;
+        var insertSpaces = options?["insertSpaces"]?.GetValue<bool>() ?? true;
+        var formatted = PuckFormatter.Format(text, tabSize > 0 ? tabSize : 2, insertSpaces);
         var lines = text.Split('\n');
         var lastLine = Math.Max(0, lines.Length - 1);
         var lastChar = lines.Length > 0 ? lines[^1].Length : 0;

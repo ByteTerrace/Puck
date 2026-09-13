@@ -38,7 +38,7 @@ they are authored and shipped as raw JSON. Say so plainly rather than treating
 (cartridges) and `tests/Puck.World.Transpiler.Tests/ShippedWorldsParityTests.cs`
 (every `*.puck` under `src/Puck.World/Assets/worlds`) compile each committed
 source and compare it byte-for-byte against the document beside it. After
-editing a `.puck`, recompile it and commit both halves. A world document with a
+editing a `.puck`, recompile it. Commit both halves for cartridges. World JSON listed in `build/WorldAssets.targets` is generated during the CLI build and ignored; commit only its source. A world document with a
 `.puck` source is gated only through that source; the decompile round-trip
 corpus covers the JSON-authored worlds.
 
