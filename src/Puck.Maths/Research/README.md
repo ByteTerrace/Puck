@@ -13,7 +13,7 @@ conflated with a proof or a counterexample.
 files declare `namespace Puck.Maths.Research`; the other twenty still sit flat
 in `namespace Puck.Maths` alongside the rest of the library. Check the declaring
 file before writing a `using`—the compiler is the only authority, and this
-line is a snapshot. As of 2026-08-16 the table below splits like this:
+line is a snapshot. The table below splits like this:
 
 - **`Puck.Maths.Research`**—`QuadraticIntegerArithmetic`;
   `OddCyclicIncidence` / `OddCyclicWordAnalysis`;
@@ -45,7 +45,7 @@ only.
 [Deterministic numerics](../../../docs/reference/maths.md) is the library's entry point;
 this file is the contract for the folder.
 
-> **Provenance note (2026-07-27).** The three write-ups below were moved here
+> **Provenance note.** The three write-ups below were moved here
 > verbatim from the parent README. Several of the verifier and explorer programs
 > they name — `tools/fibonacci-research-verifier.cs`,
 > `tools/fibonacci-return-classification-explorer.cs`,

@@ -170,7 +170,7 @@ its whole authority surface.
 
 - `WorldBodiesLimits` (`Puck.World.Schema`): `CapacityCeiling = 4096`,
   `LocalSeatCount = 4` (indices 0–3) — single-sourced against
-  `WorldClient.EntityCapacity` (the F3 reconciliation, 2026-08-06; see
+  `WorldClient.EntityCapacity` (the F3 reconciliation; see
   [SKILL.md](../SKILL.md)'s "Boundaries" section). There is no
   `MaxPopulation`/`MaxPopulationSimulated` constant. The client reserves full
   catalog detail for the first `DetailedRenderBand` (128) indices and emits

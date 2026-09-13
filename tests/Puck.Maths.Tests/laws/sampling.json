@@ -214,7 +214,7 @@
         "Subject": "the FixedQ4816 and UFixedQ4816 overloads over an eleven-entry weight set carrying zeros, ones, 65536, long.MaxValue and its half \u2014 a length that is deliberately not a power of two, so the padding columns exist",
         "Against": "the raw ulong overload built from the same carrier values, drawn 4096 times from an identically seeded Pcg32XshRr",
         "Shared": "AliasTable\u003CTElement\u003E.CreateCore \u2014 the identical member, not a sibling copy: the fixed-point overloads convert the carrier and delegate the whole Vose partition to it",
-        "Citation": "the twin is carriage evidence and claims exactly that the conversion is the identity on the carrier\u0027s bits; the partition\u0027s own correctness is sampling.alias-table-frequency-at-scale, which measures multi-million-draw distributions against the construction weights over six weight shapes, and the exact-shape probes recorded in docs/reviews/2026-07-28-puck-maths-adversarial-review.md. What this leg adds over that case is that all THREE overloads reach the same table, which a distribution measured on one of them does not state",
+        "Citation": "the twin is carriage evidence and claims exactly that the conversion is the identity on the carrier\u0027s bits; the partition\u0027s own correctness is sampling.alias-table-frequency-at-scale, which measures multi-million-draw distributions against the construction weights over six weight shapes, and the exact-shape probes recorded in the Puck.Maths adversarial review. What this leg adds over that case is that all THREE overloads reach the same table, which a distribution measured on one of them does not state",
         "Absolute": ""
       },
       {

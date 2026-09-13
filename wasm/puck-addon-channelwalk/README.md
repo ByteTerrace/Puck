@@ -3,7 +3,7 @@
 BATTERY-ONLY guest. Never shipped, pinned by no shipped world. Exercises the capability-channel verification
 battery for `Puck.World`'s addon/grant/co-driving-pool model. Templated on `wasm/puck-addon-queryspam`.
 
-**SUPERSEDED IN PART by owner ruling 2026-08-02 (headless P6b, trusted-by-authorship re-cut)**—see
+**SUPERSEDED IN PART by the trusted-by-authorship policy**—see
 `.claude/skills/puck-world/references/authority.md`.
 `channelwalk` is a document-mounted (Simulation-lane) addon, so its contribution class in the fold is now TRUSTED
 (added outside the pool, gated by its OWN declared Reach only—consent does not apply to world logic). Two
@@ -49,7 +49,7 @@ feature)—`bound64`/`bound65` are unaffected by `main`-only changes.
 
 ## Test world
 
-`worlds/channel-walk-world.json`—derived from the `default` world (retired under the 2026-08-06 four-world
+`worlds/channel-walk-world.json`—derived from the `default` world (retired under the Four-World
 charter; `src/Puck.World/Assets/worlds` now ships only `play`/`dive`/`kart`/`jump`—this fixture is
 self-contained and needs no shipped world to exist): same motion/scene/kits/etc., the shipped `default` addon
 row REMOVED (replaced by this crate's three rows), `grants: []`

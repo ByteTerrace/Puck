@@ -1,6 +1,6 @@
 {
   "schema": "puck.branding.v1",
-  "provenance": "Canonical rasters were copied byte-for-byte from the existing first-party consumers on 2026-09-12; hashes and dimensions are recorded here so future updates are deliberate.",
+  "provenance": "Canonical rasters are verified byte-for-byte against first-party consumers; hashes and dimensions are recorded here so future updates are deliberate.",
   "selectionPolicy": "Use the authored size closest to the consumer slot. Keep separate entries for intentional size or treatment variants.",
   "assets": [
     {

@@ -904,7 +904,7 @@ of; the ones that bear on a single type are argued at that type above.
 
 The net's properties are **proved** rather than measured, which is the reason to
 reach for it in the first place. The proving belonged to the `digital-net`
-battery stage, which left the build in the 2026-08-02 quarantine and has no
+battery stage, which left the build in the quarantine and has no
 replacement—so the exhaustive layer described next **cannot be run today**.
 
 It showed that `InvertibleBitMix` is a bijection over all `2³²` words in both

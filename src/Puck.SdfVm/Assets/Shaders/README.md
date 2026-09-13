@@ -54,8 +54,8 @@ for the current hardware matrix.
 These are the kernels loaded by `SdfWorldKernels` and recorded by
 `SdfWorldEngine` every world frame. Runtime ISA probes verify the beam and all
 three views variants during initialization and compiled-shader reload; they do
-not verify rendered-image correctness. The engine battery whose world-path stages exercised every one of them left the build in
-the 2026-08-02 quarantine and has no replacement, so a kernel change is judged
+not verify rendered-image correctness. The engine battery whose world-path stages exercised every one of them left the build with
+the quarantine and has no replacement, so a kernel change is judged
 by running `Puck.World` and looking at the pixels on both backends.
 
 | Shader | Role | Primary C# owner |

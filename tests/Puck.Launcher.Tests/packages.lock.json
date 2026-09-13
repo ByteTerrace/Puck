@@ -536,6 +536,14 @@
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.Input": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "System.IO.Hashing": "[10.*, )"
+        }
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
@@ -563,14 +571,6 @@
           "xunit.v3": "[3.*, )"
         }
       },
-      "puck.input": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "System.IO.Hashing": "[10.*, )"
-        }
-      },
       "puck.launcher": {
         "type": "Project",
         "dependencies": {
@@ -578,8 +578,8 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Input": "[1.0.0, )"
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.Hosting": "[10.*, )"
         }
       },
       "puck.launcher.stub": {
@@ -591,8 +591,8 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
-          "Puck.Input": "[1.0.0, )"
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
         }
       }
     }

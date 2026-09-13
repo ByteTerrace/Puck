@@ -1636,7 +1636,7 @@ bool worldShadowCullEnabled() {
 
 #ifdef SDF_GROUP_SHADOW_GATHER
 // Build the shadow-ray candidate mask into sdfShadowMaskWords for the soft-shadow marches of ONE 8x8 WORKGROUP — the
-// per-tile gather (2026-09-03) that replaced the per-lit-pixel gather. Every lane publishes its hit hitPoint (or none),
+// per-tile gather that replaced the former per-lit-pixel gather. Every lane publishes its hit hitPoint (or none),
 // lane 0 reduces the group's lit points to a apex and the radius R that encloses them, and the 64 lanes then walk
 // the instance grid COOPERATIVELY along the penumbra cone apexed at the apex, testing every bound INFLATED by R
 // (+ ShadowBias, the march origin's normal offset). SUPERSET-PRESERVING for every pixel in the group: a pixel's own

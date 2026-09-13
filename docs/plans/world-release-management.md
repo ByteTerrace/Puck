@@ -83,8 +83,7 @@ Required evidence:
 - Finish a short operator runbook, record exact artifact IDs and acceptance
   results, checkpoint the changes, and state the supported and refused cases.
 
-The two-hour target starts with the reassessment at approximately 11:42 UTC on
-2026-09-13 and ends at 13:42 UTC (08:42 America/Chicago). It does not restart with
+The delivery target operates under a bounded two-hour execution window. It does not restart with
 each clarification. Azure target and budget are authorized; this does not waive
 the local-first acceptance gate.
 
@@ -133,7 +132,7 @@ to metadata and require package-bound qualification.
   cover interrupted publication and competing authority. Packaged qualification
   uses the same publisher on forward and reverse fixture copies, comparing both
   images' complete imports after each transformation. The two-world metadata
-  control passed on 2026-09-13: forward import at tick 0, continuation to tick 4,
+  control passed: forward import at tick 0, continuation to tick 4,
   reverse import at tick 4, then continuation to tick 8. It used one engine image,
   so it proves the metadata workflow, not compatibility between engine builds.
 - New prepared manifests bind the receipt-aware coordinator contract into their
@@ -173,8 +172,7 @@ to metadata and require package-bound qualification.
 - Every packaged leg reads all original receipts after import and continuation,
   then checks duplicate and conflicting retries on its drained authority without
   changing the root. The runner independently computes the expected inventory
-  hash and requires version-2 exercise reports. On 2026-09-13, eight same-image
-  Docker legs passed across unchanged and metadata definitions; an actual older
+  hash and requires version-2 exercise reports. Eight same-image Docker legs passed across unchanged and metadata definitions; an actual older
   image with version-1 reports was refused without producing a qualification
   receipt. The selected world and CLI suites passed 113 tests with no skips.
 - Full-inventory acceptance exposed preparation and boot gaps: published boot
@@ -214,7 +212,7 @@ to metadata and require package-bound qualification.
   different-build release pair alongside its complete checkpoint evidence.
 - Named handheld machine checkpoints now preserve core state and host pacing,
   with real-core and world continuation tests. Four same-image Docker legs over
-  the official world, including its arcade machines, passed on 2026-09-13 with
+  the official world, including its arcade machines, passed with
   four steps per leg. This is a persistence control, not release-pair qualification.
   Addon guest state, applied screen
   operations, live coupled links, and enabled machine rewind history remain

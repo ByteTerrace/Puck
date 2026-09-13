@@ -213,7 +213,7 @@ neither, kinds must match (refused `EffectSourceAmbiguous`/
 `ComparandKindMismatch`). A READ operand — gate subject, comparand, or
 `fromState` — must address a cell its row DECLARES; an undeclared cell would
 read 0 forever with no refusal, so it refuses at compile
-(`StateCellUndeclared`, owner ruling 2026-08-06). Write destinations mint
+(`StateCellUndeclared`). Write destinations mint
 their cells and stay exempt, and because rules recompile under whole-document
 revalidation, removing a cell a rule reads refuses the removal naming the
 rule. This is what closes the round-reset gap a moving

@@ -88,7 +88,7 @@ digest. `--no-restart` publishes the image without updating the app;
 `--container-app` selects another existing app. The registry retains its ABAC
 mode and disabled ARM-audience authentication throughout.
 
-## Networking (decided 2026-08-27: public environment + VNet integration)
+## Networking (public environment + VNet integration)
 
 The managed environment (`bytrccaep000`) is recreated **public, exactly as before, plus VNet
 integration** on subnet `bytrcsnetp003` (outbound egresses the subnet → NAT gateway). vsmarketplace

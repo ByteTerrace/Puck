@@ -67,7 +67,7 @@ float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lig
 // re-spaced to span the SAME 0.01..0.13 reach at double pitch, the per-rung falloff squared (0.95^2 = 0.9025) to hold
 // the same spatial decay, and the gain re-tuned 3.0 -> 5.07 so the fully-occluded floor matches the 5-tap value to
 // ~0.01 (verified analytically over constant-factor and constant-gap occluder models) — a same-look AO at 60% of the
-// taps. The rung loop is a [loop], NOT [unroll] (2026-09-03): every mapDistanceMasked call site inlines a full copy of
+// taps. The rung loop is a [loop], NOT [unroll]: every mapDistanceMasked call site inlines a full copy of
 // the tape interpreter, so three unrolled rungs were three interpreter copies in the hottest kernel — measured on the
 // RTX 2060 shipped world as a 60 ms AO term for three evaluations per lit pixel, ten times the primary march's cost per
 // evaluation; one rolled call site is the fix, not fewer taps. Paid

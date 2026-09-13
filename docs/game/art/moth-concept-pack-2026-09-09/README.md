@@ -5,7 +5,7 @@ character modeling and procedural animation. They describe the intended
 quality; the current engine prototype is not the visual reference to reproduce.
 The pack was generated with the built-in image_gen tool, including targeted
 image corrections, and the complete [prompt set](prompts.md) remains available
-as source provenance. The September 10 compact-wing sheets follow the owner's
+as source provenance. The compact-wing sheets follow the owner's
 preference for two subtle shells and supersede the earlier folding-fan proposal.
 
 ## Read the images in this order
@@ -15,7 +15,7 @@ preference for two subtle shells and supersede the earlier folding-fan proposal.
 | [Owner source](00-owner-source.png) | Character 4, bottom left, is the selected Moth. Other crew members are context, not alternate Moth designs. |
 | [Character model sheet](01-character-model-sheet.png) | Overall silhouette, proportions, front/side/back relationships, palette and compact flight-pack appearance. |
 | [Face and armor](02-face-and-armor.png) | Facial identity and expression, curved hood opening, swept shoulder layers, tapered boots and dark joint gaps. |
-| Compact-wing owner reference | The owner's September 10 reference (from [Owner source](00-owner-source.png)) for the two curved shells, compact size and band placement. |
+| Compact-wing owner reference | The owner's design reference (from [Owner source](00-owner-source.png)) for the two curved shells, compact size and band placement. |
 | [Compact wing views](05-compact-wing-views.png) | Back, side and rear three-quarter views; matching rest and subtle hover opening. Current pack construction reference. |
 | [Compact wing motion](06-compact-wing-motion.png) | Jump preparation, takeoff, hover, forward flight, air brake and touchdown with the same two-shell assembly. Current flight pose reference. |
 | [Earlier flight exploration](03-flight-system.png) | Historical folding-fan proposal, superseded by the compact wing views. Do not implement its extra segments. |

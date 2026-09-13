@@ -61,11 +61,9 @@ headless admission has no GPU capacity lease.
 > implementation of something, read that as: the capability is absent from
 > the running product.
 
-> **ISA admission rule (owner-ratified 2026-07-12).** An op or shape earns a
+> **ISA admission rule.** An op or shape earns a
 > switch case ONLY if it cannot be composed EXACTLY from existing vocabulary —
-> otherwise it ships as a builder macro emitting existing ops. Ratified but
-> never executed, and the SDF backlog that tracked it was deleted 2026-08-02, so
-> nothing schedules this now: `Star`/`RegularPolygon` retire
+> otherwise it ships as a builder macro emitting existing ops: `Star`/`RegularPolygon` retire
 > into `RepeatPolar`-based
 > builder macros; `Ellipse` STAYS as the one exact-curve citizen (`Ellipsoid`
 > #6 remains the approximate path); shapes join ops on the compiled
@@ -138,7 +136,7 @@ measured march or GPU-time multipliers.
 > quietly grows and goes hollow — it reads as "a slightly larger object" and no gate ever tripped on it. Weight review
 > attention accordingly. Corollary: **the forge/bake path is safe by construction, not by care** — a single-object
 > program's accumulator IS the object; the hazard begins the moment a program gains a floor or a second object.
-> (Evidence history: docs/sdf-accumulator-plan.md, retired 2026-07-09 — see git history.)
+> (Evidence history: `docs/sdf-accumulator-plan.md` in git history.)
 >
 > **A subtraction is a bound in its own void.** `max(a, −b)` is the exact distance only where the subject `a` is the
 > nearest solid; inside the carved void, wherever `−b < a`, it returns `a` — the subject's carved-away face — and
@@ -149,7 +147,7 @@ measured march or GPU-time multipliers.
 > carve to extend past every point a body can reach in the void (`puck.world.json`'s `pit` runs from below the safety
 > net to above head height), or build the void from union geometry when it must be exact.
 >
-> **`Xor` is EXEMPT — maskable-exact with a covering, union-margin bound (settled 2026-07-08, real-GPU slice
+> **`Xor` is EXEMPT — maskable-exact with a covering, union-margin bound (verified via real-GPU slice
 > comparison).** `max(min(acc,b), -max(acc,b))` reduces to `min(acc,b)` ≡ plain union everywhere OUTSIDE the candidate
 > (`b > 0`) — the `-max(acc,b)` arm only wins when `acc + b < 0`, deeper inside than a first-hit march ever samples —
 > and the extra surface Xor carves (the overlap hole) lives strictly INSIDE the union hull, so inside any covering
@@ -231,10 +229,10 @@ measured march or GPU-time multipliers.
   (`slot+1` must fit); the float-lane decode compares in DOUBLE because
   `(float)int.MaxValue` rounds up to 2³¹.
 
-## Composition, anchors, views, and queries (SDF VM Worlds arc, 2026-07-10)
+## Composition, anchors, views, and queries
 
 Pure C# — no HLSL counterpart (this layer assembles/consumes programs; it
-does not extend the ISA). Landed across Waves 1-6 of the SDF VM Worlds arc.
+does not extend the ISA). Landed across Waves 1-6 of the SDF VM Worlds architecture.
 
 **Composition (`Puck.SdfVm` root).** `ISdfSceneEmitter`/`SdfEmitContext` is
 the composable content contract — a room's fixed geometry, a sculpted scene,
@@ -564,7 +562,7 @@ kernel variants, pass labels/timing, or descriptor/register wiring.
   GROUPSHARED mask per 8x8 workgroup (`sdfShadowMaskWords`,
   `SDF_SHADOW_MASK_WORDS = ceil(SDF_MAX_INSTANCES/32)` = 2048 words, covering
   all 65536 instance slots, including reserved pools) that `mapMasked`
-  reads via the `sdfShadowMaskActive` static. PER-TILE since 2026-09-03 (it was a
+  reads via the `sdfShadowMaskActive` static. Per-tile cooperative gather (replacing the former
   per-lit-pixel gather into 32 per-thread registers): every lane publishes its
   hit point at the ONE uniform seam in `renderView` between the march and the
   epilogue, lane 0 reduces the lit points to a centroid + enclosing radius R, and
@@ -636,22 +634,22 @@ kernel variants, pass labels/timing, or descriptor/register wiring.
   tile mask may drop an instance because the whole cone misses its sphere; a
   per-SAMPLE test on the same sphere is UNSOUND — a sample just outside the
   sphere still needs the instance's distance to bound its step, and dropping it
-  marches straight through the shape (measured 2026-09-03: the avatar's head and
-  the dragonfly vanished; reverted). The sound per-sample rule is "cannot lower
+  marches straight through the shape (empirically verified: dropping candidate samples caused avatar
+  and dragonfly geometry to vanish). The sound per-sample rule is "cannot lower
   the running minimum", and `mapCore` already applies it per SEGMENT from the
   segment directory (`clearance = acc + r`). Two consequences: (1) a scoped
   segment (`PushField`/`PopField`) is NEVER eligible for that early-out and never
   rigid-planned, so a scope is a real per-sample cost — bake a correction into
   the shape (an ellipsoid's `Data0.w` is free for its `min/max` radius factor)
   before reaching for a scope around a single primitive; (2) a bound short of
-  the true reach clips geometry at tile edges TODAY — the stamp pool's per-shape
-  dynamic bound was `0.9 × max(scale)` until 2026-09-03 and is now
-  `SdfSolidGeometry.Reach` + the shape's field ops (`WorldStampPoolBoundLawTests`).
+  the true reach clips geometry at tile edges — the stamp pool's per-shape
+  dynamic bound requires `SdfSolidGeometry.Reach` + the shape's field ops
+  (`WorldStampPoolBoundLawTests`), rather than an unpadded `0.9 × max(scale)`.
 - **Every `map*` call site is a full copy of the tape interpreter** (DXC has no
   real calls; SM 6.x inlines everything), so the views kernel's cost has a
   FOOTPRINT term beside its evaluation term. Keep call sites ROLLED: `calcAO`'s
-  three rungs went from `[unroll]` to `[loop]` on 2026-09-03 for −11 ms of a
-  38 ms AO term on the RTX 2060 shipped world with identical arithmetic, and a
+  three rungs use `[loop]` rather than `[unroll]` (saving −11 ms of a
+  38 ms AO term on the RTX 2060 shipped world with identical arithmetic), and a
   new epilogue walk should reuse an existing call site through a loop rather
   than add one. Measure with `world.debug-view depth` (march only) against the
   shaded frame: the gap is the epilogue, footprint included.

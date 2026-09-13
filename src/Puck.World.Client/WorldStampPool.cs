@@ -385,8 +385,8 @@ public sealed partial class WorldStampPool {
             // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
             // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
             // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
-            // and per SAMPLE by the interpreter's influence skip: until 2026-09-03 it was 0.9 x max(scale), which
-            // does not cover a unit sphere, let alone a box's corners — the halo hid the deficit at tile
+            // and per SAMPLE by the interpreter's influence skip: a naive 0.9 x max(scale) does not cover
+            // a unit sphere, let alone a box's corners — the halo hid the deficit at tile
             // granularity, and the per-sample skip exposed it on every shape of the avatar.
             // A Sweep carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry
             // creation-unit dimensions — see SdfSolidPrimitive.Sweep's remarks); a panel is refused on it, so

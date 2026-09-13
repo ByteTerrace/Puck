@@ -59,10 +59,7 @@
           "System.CommandLine": "[2.*, )"
         }
       },
-      "ByteTerrace.Puck.Maths": {
-        "type": "Project"
-      },
-      "puck.input": {
+      "ByteTerrace.Puck.Input": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
@@ -70,14 +67,17 @@
           "System.IO.Hashing": "[10.*, )"
         }
       },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
       "puck.platform": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
-          "Microsoft.Extensions.Options": "[10.*, )",
-          "Puck.Input": "[1.0.0, )"
+          "Microsoft.Extensions.Options": "[10.*, )"
         }
       }
     }

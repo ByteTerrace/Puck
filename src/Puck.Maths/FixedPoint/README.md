@@ -1314,7 +1314,7 @@ The proof story lives in [`tests/Puck.Maths.Tests`](../../../tests/Puck.Maths.Te
 —a declaration-first law suite where every test is an entry in
 `LawRegistry.cs`, and every gate statement declares the legs—those named
 pieces of evidence—that it stands on. That suite is the fine-grained gate of
-record, and since the 2026-08-02 quarantine it is the ONLY gate of record: the
+record, and under the quarantine it is the ONLY gate of record: the
 engine battery carried **two** coarse cross-checks beside it—both ahead of the
 determinism stages, because a determinism gate on its own cannot catch an
 operation that is wrong but deterministically so—and both left the build with

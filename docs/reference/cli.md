@@ -1,4 +1,4 @@
-﻿# Puck.Cli
+# Puck.Cli
 
 Normal builds generate the registered world JSON and shader bytecode from their
 tracked parents. See [generated assets](../../build/README.md) for build,
@@ -83,7 +83,7 @@ dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 
 produces `src/Puck.Cli/publish/puck.exe` on Windows or `src/Puck.Cli/publish/puck`
 elsewhere—a framework-dependent .NET executable. A trivial invocation costs
-~0.18 s wall (measured quiet, 2026-07-24), cheap enough to call per query
+~0.18 s wall (measured quiet), cheap enough to call per query
 though not per file.
 Do not attempt AOT: the search engine's F# runtime dependency and the
 BenchmarkDotNet host code both preclude it. `publish/` is git-ignored.

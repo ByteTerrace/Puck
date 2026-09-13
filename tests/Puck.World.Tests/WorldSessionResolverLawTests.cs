@@ -1003,7 +1003,7 @@ public sealed class WorldSessionResolverLawTests {
         );
 
         // DIFFERENT resolved document (a modified copy booted from elsewhere, naming the SAME destination name and
-        // scope) — must NEVER see "boot" as already active; live-verified (2026-08-09) to instead mint a fresh
+        // scope) — must NEVER see "boot" as already active; empirically verified to instead mint a fresh
         // instance rather than adopt.
         Assert.False(
             condition: resolver.TryGetActive(
@@ -1194,7 +1194,7 @@ public sealed class WorldSessionResolverLawTests {
     // naming a 'home' global row, say) collided in this ONE process-wide resolver, and cache-first precedence (see
     // TryGetActive's own remarks) meant whichever document resolved first silently claimed the name for good — a
     // SECOND document's own row could never mint its own generation; it would keep reusing the FIRST document's
-    // instance forever. Live confirmation (independent verification, 2026-08-09): booting a MODIFIED COPY of
+    // instance forever. Live confirmation (independent verification): booting a MODIFIED COPY of
     // nexus.world.json from a different path, with a dungeon whose 'home' destination references the SHIPPED
     // nexus.world.json, the return crossing correctly minted a NEW instance rather than adopting boot — proving the
     // fix must hold BOTH directions: identical resolved document -> adopt/reuse (the shipped boot case, verified

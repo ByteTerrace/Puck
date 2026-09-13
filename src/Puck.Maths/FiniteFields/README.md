@@ -295,8 +295,8 @@ rather than a coincidental one: the multiplicative group has order
 `2⁸ − 1 = 255`, so every non-zero element raised to `255` is the identity.
 
 None of these constants was trusted on its word: the `binary-field` battery
-stage re-proved each one irreducible at run time. That stage left the build on
-2026-08-02, so the constants are on their word again until something replaces
+stage re-proved each one irreducible at run time. That stage left the build with
+the quarantine, so the constants are on their word again until something replaces
 it.
 
 ---
@@ -661,8 +661,7 @@ is what every vector rung is compared against.
   sixty-four and left thirty-six to the scalar tail when a narrower rung would
   have covered all hundred. The byte rungs are preferred from two whole vectors up
   and the sixteen-bit rungs from four, and short-region throughput improved by
-  between 1.4× and 15× across the affected lengths when those thresholds landed on
-  2026-08-05, with lengths above them provably unaffected because they select the
+  between 1.4× and 15× across the affected lengths with these thresholds, with lengths above them provably unaffected because they select the
   same rung as before.
 - **Tables and matrices are computed through the field's own multiply**, so a
   vector rung inherits the scalar rung's correctness rather than deriving the
@@ -1006,7 +1005,7 @@ a change misbehaves.
 ## Verifying changes
 
 **"Bit-identical to the fallback" is something this wing measures rather than
-asserts—and as of the 2026-08-02 quarantine, nothing measures it.** The
+asserts—and under the quarantine, nothing measures it.** The
 `binary-field` battery stage that did left the build, and no replacement has
 been built. Read what follows as the shape of the check that is owed, not as a
 check you can run.

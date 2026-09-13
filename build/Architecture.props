@@ -110,7 +110,7 @@
         would reopen the hole through the .Presentation row, letting an engine service reach a backend by
         referencing a presentation wrapper.
 
-        MEASURED, 2026-08-14: zero exceptions across the live graph. Puck.Post was the sole exception before
+        Empirically verified: zero exceptions across the live graph. Puck.Post was the sole exception before
         its quarantine; experimental projects are now structurally outside this gate, so retaining that entry
         would be dead policy for an assembly the build does not produce. The absent finding remains load-bearing:
         the report proves no Engine-services project reaches a backend, rather than producing an empty sheet by
@@ -320,8 +320,8 @@
         consumers in the tree, holding internals access to a composition root. They were also exactly what an
         analyzer-hosted gate could not have seen, since analyzer injection is off for $(IsFileBasedProgram),
         and a gate whose coverage silently excludes its most privileged consumers is worse than no gate. That
-        argument is why the gate hooks where it does and is kept for it. Both grants are GONE as of the
-        2026-08-02 quarantine: the scripts left the build, so the privilege was dead config that this ledger
+        argument is why the gate hooks where it does and is kept for it. Both grants were removed under the
+        quarantine: the scripts left the build, so the privilege was dead config that this ledger
         would have kept blessing. If those proofs are ever re-homed in a real project, the grant is re-issued
         to THAT assembly and named here — never restored to a file name.
 

@@ -252,7 +252,7 @@ fields are unused and must be zero.
 | `Response` | 3 | yes |
 
 Ordinals 4 and 5 (formerly `Geometry`/`Overlay`, a Presentation-lane pair pinned but never served by
-any host) are RETIRED PERMANENTLY as of the lane-axis deletion (owner ruling, 2026-08-02)—never
+any host) are permanently retired as part of the lane-axis removal—never
 reused. A descriptor naming either byte refuses the mount as an undefined channel kind, through the
 ordinary decode check every unrecognized kind already goes through.
 
@@ -386,7 +386,7 @@ than a break. **No wildcard ordinal exists**—the wire has no spelling for aski
 |---|---|---|
 | `1` | `Drive` | yes |
 | `2` | `Observe` | yes |
-| `4` | `Reserved` | no—PERMANENTLY reserved hole; formerly `Present`, deleted with the rest of the lane axis (owner ruling, 2026-08-02); never compacted, never reused |
+| `4` | `Reserved` | no—permanently reserved hole; formerly `Present`, deleted with the rest of the lane axis; never compacted, never reused |
 | `8` | `Control` | no |
 | `16` | `Mutate` | no |
 | `32` | `Edit` | no |

@@ -1,8 +1,8 @@
 # Moth concept-art prompts
 
-Generated with the built-in image_gen tool. For the original sheets 1–4, input 1 is the owner source (character 4, bottom left); sheets 2–4 also use sheet 1 as the consistency reference. The September 10 prompts below use the new compact-wing owner crop and character sheet. Earlier prompts are preserved as historical generation records; the two-shell direction supersedes their folding-fan proposals. These prompts record requested intent; the images remain concept interpretations rather than exact construction drawings.
+Generated with the built-in image_gen tool. For the original sheets 1–4, input 1 is the owner source (character 4, bottom left); sheets 2–4 also use sheet 1 as the consistency reference. The compact-wing prompts below use the new compact-wing owner crop and character sheet. Earlier prompts are preserved as historical generation records; the two-shell direction supersedes their folding-fan proposals. These prompts record requested intent; the images remain concept interpretations rather than exact construction drawings.
 
-## September 10: compact wing views (sheet 5)
+## Compact wing views (sheet 5)
 
 Inputs: owner crop (reference crop of [00-owner-source.png](00-owner-source.png)), then [character sheet](01-character-model-sheet.png). The motion sheet used the first view-sheet pass; the exhaust-only correction below was applied afterward to produce the saved final view sheet.
 
@@ -26,7 +26,7 @@ Input: the first view-sheet pass. Final output: [compact wing views](05-compact-
 
 Use case: precise-object-edit. Preserve this entire four-view MOTH — COMPACT WING VIEWS sheet exactly: all character geometry, all pack shells and hinges, side and back relationships, text, material, lighting, layout and motion arrows. Change ONLY the two exhaust plumes in the BOTTOM RIGHT "REAR THREE-QUARTER / HOVER" panel. Replace both long straight laser-like streams with SHORT wispy translucent cyan-white jet exhaust. Tiny bright core at each existing recessed nozzle, soft irregular edges fading quickly to empty air. Each visible plume is at most half a thigh length and fades fully above the knee, behind and clear of the leg volume; slight outward cant, keep flow downward. No blue cone geometry, no glowing paint on legs, no additional jets or changed hardware. The other three panels remain exhaust OFF and completely unchanged.
 
-## September 10: compact wing motion (sheet 6)
+## Compact wing motion (sheet 6)
 
 Inputs: owner crop (reference crop of [00-owner-source.png](00-owner-source.png)), the first compact-wing view-sheet pass, then [character sheet](01-character-model-sheet.png).
 

@@ -1,7 +1,7 @@
 # Session lifecycle — join, leave, and reconnect
 
 Local-seat and peer join/leave, and the park-with-grace reconnect primitive
-layered onto them (reconnect-primitives wave, 2026-08-06). Read this before
+layered onto them. Read this before
 touching `WorldPopulation.Entry`'s occupancy fields, `WorldServer.ApplySession`,
 or the `$parked:` reserved rule channel.
 
@@ -164,7 +164,7 @@ gate (see the gotcha below).
 
 Everything past park-with-grace/body-resume/`$parked:` above is an ordinary
 authored `WorldRule` — no further engine surface exists or is needed.
-The retired `reconnect.world.json` scenario (git history; deleted 2026-09-06 with `combat.world.json`,
+The retired `reconnect.world.json` scenario (git history; retired alongside `combat.world.json`,
 whose rules now live in `modules/arena.world.json`) was the worked forcing-function demo: a CC countdown (`stunRemaining`, a plain
 `Level`-mode decrement rule) keeps ticking through a park because rule
 evaluation never consults occupancy (see "Park-with-grace" above); a

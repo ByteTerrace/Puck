@@ -108,7 +108,7 @@ pub extern "C" fn puck_on_tick(input_count: i32) -> i32 {
 
 // "boulder-1" in the `default` world's scene sat at local (X=-1.2, Z=-0.3) — a visible landmark a
 // short, clear walk from body:1's spawn (seat-2, (-3, 0, 2)) — before that world was retired under
-// the 2026-08-06 four-world charter (no shipped world mounts this addon today; it ships as an
+// the Four-World charter (no shipped world mounts this addon today; it ships as an
 // example crate). The raw FixedQ4816 bits below are FixedQ4816::from_double(-1.2) /
 // FixedQ4816::from_double(-0.3) computed by hand: -1.2 * 65536 = -78643.2, rounded to the nearest
 // integer = -78643; -0.3 * 65536 = -19660.8, rounded to the nearest integer = -19661. A pose

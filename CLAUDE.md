@@ -15,7 +15,7 @@ Use forward slashes for Puck paths on every platform and prefer current APIs tha
 The build, the architecture gate, determinism checks, calibrated ceilings, and
 the file-length ledger (`FileLengths.json`, LEN001–LEN004: no source file over
 2500 lines unless already recorded, and a recorded file may only shrink —
-`puck lengths`) are enforced. **POST is quarantined as of 2026-08-02** — `Puck.Post` is in
+`puck lengths`) are enforced. **POST is quarantined** — `Puck.Post` is in
 `experimental/` and out of the build, so nothing it used to gate is enforced
 today; do not cite it, run it, or write a stage for it. The engine-contract
 verification story it carried is a live gap, not a live gate — except the one
@@ -73,7 +73,7 @@ real-World canaries run by `puck landing` are the live gates.
 
 ## `InternalsVisibleTo` is not endorsed — publicity is the better option
 
-**Owner ruling, 2026-08-02.** Reaching for `InternalsVisibleTo` is a signal you
+**Accessibility ruling.** Reaching for `InternalsVisibleTo` is a signal you
 have the wrong accessibility, not a solution to it: if another project needs a
 member, **make the member public**. A TEST project is the one arguable
 exception. This holds in both of IVT's forms — the `Properties/AssemblyInfo.cs`
@@ -87,8 +87,7 @@ the design — say so rather than reaching for a grant to avoid the question.
 
 ## `experimental/` is a reference tree, not a sealed one
 
-**Owner ruling, 2026-08-08, superseding the 2026-08-02 blanket ban.** The
-quarantine governs *work*, not *reading*. Under `experimental/` you are
+**Quarantine policy.** The quarantine governs *work*, not *reading*. Under `experimental/` you are
 expected to READ the source and CITE it as prior art, and to DELETE code there
 once live code has eclipsed it. You may NOT improve it, fix it, build it, run
 it, or run its tests. Expect its builds to break as deletions land — that is
@@ -122,17 +121,15 @@ correct them where they live.
    (pixels, hashes, parity, determinism), never internal structure.
 3. **The game is greenfield; Post gates the engine.** `Puck.World` — the
    overworld and everything under `src/Puck.World/` — is the playground: expected
-   to churn, never settled precedent. (`Puck.Demo` was quarantined under `experimental/` on 2026-08-01 and
-   deleted on 2026-09-06 once every folder had a live home; the ledger naming
-   each folder's successor is in `experimental/README.md`. Its capabilities
-   live in `Puck.World`'s districts and the brick forges, or nowhere.) Verify
-   game/overworld changes by RUNNING `Puck.World`
+   to churn, never settled precedent. (`Puck.Demo` was retired and its capabilities
+   live in `Puck.World`'s districts and the brick forges, or nowhere; see
+   `experimental/README.md`.) Verify game/overworld changes by RUNNING `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
    0 or less runs until the window is closed). Narrow deterministic headless
    canaries MAY gate `puck landing` only by launching that real executable and
    observing its normal stdin/stdout/stderr contract; never substitute a
    build-only gate, add a `--validate-*` flag, or add a Post stage for a game
-   feature. **`Puck.Post` is QUARANTINED** (`experimental/Puck.Post`, 2026-08-02)
+   feature. **`Puck.Post` is QUARANTINED** (`experimental/Puck.Post`)
    — it is not built, not run, and not cited; the shared engine contract it
    used to gate (cross-backend render path, SDF VM ISA, document schemas,
    deterministic numerics) currently has no automated gate; the one narrow

@@ -206,7 +206,7 @@ not recorded directly: the fresh replay `WorldMachineHost` boots from the
 embedded definition, re-applies taped screen operations, and steps from
 re-derived pads. Pixels, camera rigs, overlays, and audio remain excluded.
 
-**Replay verification is side-effect-free (owner ruling, 2026-08-06).** Replay
+**Replay verification is side-effect-free.** Replay
 is faithful re-execution of the captured submission/intent stream from a
 boot-anchored snapshot. A mid-session document edit IS re-applied now, through
 the same buffered mutation door the live session used — which is re-execution,

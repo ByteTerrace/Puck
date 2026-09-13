@@ -65,8 +65,8 @@ same-stem `.hlsl` (Puck.SdfVm only; the other shader-shipping projects lack
 the guard — a known follow-up).
 
 **The MASK-FIRST pass order (the uniform-grid instance-cull arc), now preceded
-by the sky pre-pass.** Ten passes per frame: `sdf-frame-upload.comp` (2026-09-03:
-copies this frame's host-written viewport rows, dynamic transforms, and frame
+by the sky pre-pass.** Ten passes per frame: `sdf-frame-upload.comp` (copies
+this frame's host-written viewport rows, dynamic transforms, and frame
 instance grid from the ring slot's HOST-VISIBLE buffers into single
 DEVICE-LOCAL twins, one uint per thread — `SdfWorldEngine.RecordFrameUpload`,
 the `upload` timing pass, ~0.02 ms — because every march kernel used to bind

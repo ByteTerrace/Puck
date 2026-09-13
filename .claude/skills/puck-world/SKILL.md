@@ -145,15 +145,14 @@ validates, and replays them deterministically. The world is ONE bootable
 experience — no sibling `--flag` modes; durable configuration is document
 fields, live operation is console verbs, and there is no `PUCK_*`
 configuration surface for this game. **A baked C# constant is the same
-violation as a flag, and the commonest one** (owner ruling, 2026-08-03,
-re-issued 2026-08-07): the discriminator is whether Nexus, Dive, Kart, and Jump
+violation as a flag, and the commonest one**: the discriminator is whether Nexus, Dive, Kart, and Jump
 would each want the value different — sensitivities, clamps, radii, timings,
 speeds, which button arms a mode. If yes, it is a document field in its FIRST
 commit, never a constant to migrate later. Before writing any feature carrying
-a tunable number, search `src/Puck.World.Schema` for existing vocabulary: the
-2026-08-07 relapse built a bespoke mouse-orbit with hardcoded sensitivity and
-pitch clamps while the camera program's `orbit`/`clampPitch` ops and the
-authored `views.seatRig` already existed. Legitimate constants: capacity bounds that size memory or the
+a tunable number, search `src/Puck.World.Schema` for existing vocabulary: never build
+a bespoke mouse-orbit with hardcoded sensitivity and
+pitch clamps when the camera program's `orbit`/`clampPitch` ops and the
+authored `views.seatRig` already exist. Legitimate constants: capacity bounds that size memory or the
 wire, representation/determinism constants, and math. The console is the
 control plane:
 process stdin drives verbs, stdout/stderr echo results, and the on-screen
@@ -806,7 +805,7 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3
-  reconciliation 2026-08-06) — so the validator's admitted capacity and the
+  reconciliation) — so the validator's admitted capacity and the
   client's fixed per-entity view arrays are the SAME number by construction; the
   old gap where a document could author past the client bound, validate, and boot
   into an out-of-bounds throw is closed. The client reserves detailed rigs for

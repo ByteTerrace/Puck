@@ -162,7 +162,7 @@ CORE-registered too but resolve their presentation dependency as OPTIONAL and
 refuse BY NAME at use instead of going unregistered—a headless boot that
 left a stock wheel sector unregistered would refuse the SAME boot document a
 windowed boot admits. `screen.*` is
-registered in EVERY shape (owner ruling, 2026-08-03: the machine host is core
+registered in EVERY shape (the machine host is core
 state, not presentation-fed): `screen.insert`/`.eject`/`.select`/`.options`/
 `.link`/`.unlink` apply through the ordered domain headless exactly as
 windowed, and `screen.source <index> camera|capture|desktop|view|qr` still
@@ -952,8 +952,7 @@ recompute drops what is no longer wanted and picks up what changed, closing a
 device's graph once none of its feeds are demanded any more (lazily reopened
 on the next demand, exactly like the first open).
 
-**A booted MACHINE is authoritative server state, not presentation-fed**
-(owner ruling, 2026-08-03). `Puck.World.Server.WorldMachineHost` owns
+**A booted MACHINE is authoritative server state, not presentation-fed.** `Puck.World.Server.WorldMachineHost` owns
 boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
@@ -1319,7 +1318,7 @@ state (an advancing `state` row—deterministic, replayed, settable with
 and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance
-criteria for feature work (owner ruling, 2026-07-20: if a shipped world's
+criteria for feature work (if a shipped world's
 JSON moves as a side effect of a landing, note it and move on; goldens become
 worth building when the data settles).
 
@@ -1369,7 +1368,7 @@ are proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
 `ControlApplicationLawTests` in `tests/Puck.World.Tests`.
 
 The former World proof suite (proof.cs and its standalone harnesses) was quarantined
-out of the build on 2026-08-02 with the rest of `experimental/`; nothing has
+out of the build with the rest of `experimental/`; nothing has
 taken over its coverage, and its subcommand inventory lives in git history,
 not here. Do not cite it or re-derive a gate from it—the current
 verification story is the paragraph above.

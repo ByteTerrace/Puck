@@ -1446,7 +1446,7 @@ generation)`—and one server-side table,
 `(principal, capability, subject)` plus optional exclusivity, an untrusted
 principal's per-tick dispatch budget, and the co-driving reach/consent pair.
 Capabilities are `Drive`, `Observe`, `Control`, `Mutate`, and `Edit`
-(`Present` was deleted 2026-08-02—"contribute to what is drawn" is
+(`Present` was retired—"contribute to what is drawn" is
 `Mutate` over presentation-shaped sections); subjects are the `all`
 wildcard, `body:<n>`, `screen:<n>`, `section:<name>`,
 `state:<name>`, `composition` (the shared window-composition authority),
@@ -1505,9 +1505,8 @@ For untrusted principals, authority travels as handles rather than names:
 `WorldHandleTable.cs` projects a principal's grant rows into per-instance
 slots (never a whole-domain designation), stamped with the minting principal
 and capability, and generation-checked so a revoked or re-sorted handle
-refuses on its next use with a distinct verdict. The campaign that designed
-this model was retired on 2026-08-10, its rulings moved into the code they
-govern; what survives as WORK is carried in
+refuses on its next use with a distinct verdict. The architectural model and
+its rulings are embedded directly in the code they govern; active design work is carried in
 [`docs/game/design.md`](../../docs/game/design.md). This README is the reader-facing
 summary; the CODE outranks it on any point of disagreement.
 
@@ -1740,7 +1739,7 @@ and DISCOVER worlds the catalog has never seen.
 The platform edge (`AzureBlobObjectStorageTarget.EdgeNamespace`) cannot serve a
 container list AT ALL—its path rewrite has no segment for a query-string-only
 List Blobs request to occupy, so it 404s unconditionally before reaching blob
-storage (verified live 2026-08-05). An edge-shaped endpoint therefore never
+storage (verified live). An edge-shaped endpoint therefore never
 sends `ListAsync` through the edge: it routes to
 `AzureBlobObjectStorageTarget.DirectEndpoint`—the world doc's
 `storage.discoveryEndpoint` / its `--storage-discovery-uri` CLI reflection—
