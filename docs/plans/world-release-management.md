@@ -17,6 +17,87 @@ each contract lands. This plan owns the intended release policy and sequencing.
 
 ## Implementation status
 
+### Two-hour completion gate
+
+The operator requires intentional rewind in this delivery. The existing
+implementation is not yet production-qualified. Complete the local behavior
+before running Azure acceptance. Focused probes may guide implementation; run
+the relevant suites once the integrated implementation is ready, rather than
+repeatedly during development.
+
+The required v1 supports one authoritative worker and its complete declared world
+group, one retained predecessor, immutable releases, progress-preserving deploy
+and rollback, explicit recovery-point capture and restore, status, resume, and
+finalization. World-definition edits remain
+metadata-only; engine changes must satisfy the existing persistence and peer
+contracts and pass packaged qualification. Unsupported state or transitions must
+refuse before maintenance changes the serving world. Structural migrations and
+multi-worker coordination remain outside this design; intentional time rewind
+is a required acceptance gate.
+
+The critical implementation work is a coherent, retained recovery point for the
+whole group and durable evidence of its external-effect boundary. An empty escrow
+table or today's endpoint inventory cannot establish that earlier interval. Use
+an enforced closed-group boundary established before capture for the initial
+official deployment; refuse points lacking that evidence. Cover owned-profile
+exports, incoming and outgoing transfers, and issued authority claims as well as
+world state. General compensation across independent external authorities remains
+outside this first restore contract.
+
+Restore must name a recovery point and explicitly acknowledge discarded progress.
+Report the release, capture time, saved ticks, and affected worlds before changing
+admission. Preserve a fresh pre-restore recovery point, fence every writer, apply
+the selected group state privately, and reuse the existing durable phase and
+resume machinery. Keep operation deduplication and authority generations outside
+the discarded gameplay interval so old requests and claims cannot become valid
+again. Never invoke intentional rewind as an automatic rollback fallback.
+
+Required evidence:
+
+- Execute the actual operator commands against two pinned release artifacts and
+  the complete five-world inventory, including the shipped machines. Test the
+  deployment's real qualification defaults, not just the four-step diagnostic
+  controls. Confirm startup through the production worker entry point.
+- Deploy A to B, make observable authoritative progress under B, roll back to A,
+  and restart A. Verify the latest state, original receipt lookup and duplicate
+  handling, exclusive ownership, and the reported image and release identities.
+- Capture a complete local group, make observable progress and an internal world
+  transfer, explicitly restore it, and restart. Verify the saved state across
+  every world, fresh authority generations, rejection of stale requests, and
+  receipt behavior. Demonstrate refusal of missing or invalid boundary evidence
+  and an interrupted restore resuming without exposing a partly restored group.
+- Exercise interrupted pre-commit recovery and post-commit resume. A failed
+  candidate stays private; post-commit recovery never rewinds gameplay. Repeat
+  the operation and verify idempotency. Preserve existing lease-loss, stale-writer,
+  delayed-guest and conditional-write failure tests as supporting evidence.
+- Only after local acceptance passes, run the operator journey on the authorized
+  repository-defined Azure target (`byteterrace` / `bytrcvmssp000`),
+  using real identity, registry, blob storage, worker control and QUIC ingress.
+  Local Docker/Azurite results do not substitute for this gate. Long-duration
+  production soak and unsupported multi-worker behavior are not claimed tested.
+- Finish a short operator runbook, record exact artifact IDs and acceptance
+  results, checkpoint the changes, and state the supported and refused cases.
+
+The two-hour target starts with the reassessment at approximately 11:42 UTC on
+2026-09-13 and ends at 13:42 UTC (08:42 America/Chicago). It does not restart with
+each clarification. Azure target and budget are authorized; this does not waive
+the local-first acceptance gate.
+
+| Window | Work and decision |
+|---|---|
+| 0–65 minutes | Implement the missing recovery-point, boundary, and explicit restore path. Use focused local probes while developing. Resolve the exact Azure target with read-only inspection; do not start Azure acceptance. |
+| 65–95 minutes | Prove the complete local operator journey with the real defaults and full inventory, including rewind, restart, and interruption/resume. Then run the relevant regression suites once. Fix and rerun only checks affected by a failure. |
+| 95–110 minutes | If the local gate passed, run live Azure acceptance using the exact locally proven artifacts and retain its evidence. Provisioning or runtime delays remain visible failures of the delivery target. |
+| 110–120 minutes | Finish documentation and checkpoint; issue a go/no-go result against every gate. |
+
+This is a bounded acceptance attempt, not a guarantee that an unknown critical
+defect or cloud provisioning delay can be repaired within two hours. At the
+deadline, an unmet required gate means no-go with its concrete failure and next
+action, not another unbounded implementation cycle. No general migration
+framework, broad refactoring, or unrelated engine cleanup belongs to this window.
+Existing navigation failures reproduced with the pre-change Physics
+binary remain separately recorded; they are not silently counted as passing.
+
 The hosting foundation, retained archive, packaged qualification runner, and
 operator commands exist, including managed deployment and rollback. Production
 acceptance and explicit restore remain incomplete. Definition changes are limited
