@@ -106,8 +106,9 @@ if-match writes, so a coordinator can resume the same operation and a stale
 writer cannot advance it. Its validation enforces the sequential prepare, drain,
 activation, verification, and commit boundary; only a durable committed record
 may open admission. A post-commit failure follows the committed release. The
-first transition policy refuses changed definitions until a state-preservation
-rule and packaged rollback evidence exist. Managed silo admission consumes the
+transition policy requires a metadata-aware coordinator for changed definitions;
+the packaged runner must qualify their actual preservation rule in both directions.
+Managed silo admission consumes the
 group root and fences its explicit publication barrier. The CLI's Azure adapter
 uses this coordinator for deployment and rollback; explicit restore remains pending.
 
@@ -135,8 +136,10 @@ makes retries read-only even after candidate activation and subsequent saves.
 `WorldReleaseMetadataPublicationLawTests` covers interrupted uploads, lost root
 responses, a competing authority, phase changes, and current-state conflicts.
 The Azure activation adapter calls this publisher for changed definitions.
-Packaged qualification still needs integration, so deployment continues to refuse
-changed definition pins.
+Before live drain, the CLI uses the same publisher on disposable forward and
+reverse fixtures and compares complete imports in both packaged images. Only
+metadata changes can pass; unsupported definition sections and conflicting live
+values refuse. Qualification is repeated for rollback against the latest state.
 
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes

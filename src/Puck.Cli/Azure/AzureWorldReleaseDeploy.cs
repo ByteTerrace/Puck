@@ -58,7 +58,7 @@ internal static partial class AzureCommand {
             Console.WriteLine($"Release operation: {operation:D}");
             var fixtureDirectory = await PrepareWorldReleaseFixtureAsync(context, source, manifest, operation, token).ConfigureAwait(false);
             var runner = new WorldReleaseQualificationRunner(fixtureDirectory, Path.GetFullPath("artifacts/world-release-qualification"),
-                source?.Image ?? candidate.Image, candidate.Image);
+                source?.Image ?? candidate.Image, candidate.Image, archive: context.Archive);
             var coordinator = new WorldReleaseCoordinator(context.Groups);
             var begun = source is null
                 ? await coordinator.BeginBootstrapAsync(state, manifest, runner, operation, token).ConfigureAwait(false)

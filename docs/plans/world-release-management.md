@@ -19,7 +19,8 @@ each contract lands. This plan owns the intended release policy and sequencing.
 
 The hosting foundation, retained archive, packaged qualification runner, and
 operator commands exist, including managed deployment and rollback. Production
-acceptance, explicit restore, and definition-change admission remain incomplete.
+acceptance and explicit restore remain incomplete. Definition changes are limited
+to metadata and require package-bound qualification.
 
 **Implemented:**
 
@@ -34,15 +35,20 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   pre-commit recovery before restoring a source under fresh fences.
 - Managed silos keep candidates private behind an all-row publication barrier,
   report `GET /private-healthz`, and freeze retiring activations.
-- `WorldReleaseTransition` computes and reverses a definition delta; the first
-  policy refuses changed definitions.
+- `WorldReleaseTransition` computes and reverses a definition delta. Changed
+  definitions require the metadata coordinator contract and packaged qualification;
+  changes outside metadata have no admitted preservation rule.
 - `WorldReleaseMetadataTransition` prepares a metadata-only change over a full
   checkpoint and its undo base, preserving unrelated edits and refusing conflicts.
   Its laws cover continued gameplay, reverse application, custom values, and undo.
   Its atomic authority-root publisher is wired into Azure private activation and
   retains operation receipts for read-only retries. Directory-backed failure laws
   cover interrupted publication and competing authority. Packaged qualification
-  still needs the transformed forward and reverse fixtures before admission.
+  uses the same publisher on forward and reverse fixture copies, comparing both
+  images' complete imports after each transformation. The two-world metadata
+  control passed on 2026-09-13: forward import at tick 0, continuation to tick 4,
+  reverse import at tick 4, then continuation to tick 8. It used one engine image,
+  so it proves the metadata workflow, not compatibility between engine builds.
 - New prepared manifests bind the metadata coordinator contract into their
   immutable identities. The atomic publisher requires it on one side of a metadata
   pair. An actual previous archive-reader binary accepted the legacy control and
@@ -77,13 +83,13 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   proof that no external effect occurred after a recovery point. Restore needs
   durable evidence covering that interval, or an enforced closed-group boundary
   established before capture; it must not infer safety from current endpoints alone.
-- No definition edit is admitted yet. The metadata rule and guarded checkpoint
-  publisher need package-bound qualification before admission.
+- Only metadata edits have a preservation rule. Further definition edits need
+  their own reversible rule and packaged continuation evidence before admission.
 - The legacy blob-version rewind has been removed. Automatic capture, fixture
   materialization and rollback are wired in. Registry protection, publication
   retry, and VM guards still need real cloud acceptance
   testing, including delayed operations after controller ownership changes.
-- No packaged release-pair qualification or operator exercise is recorded, and
+- No qualification between different engine builds or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
 - Automatic fixtures reconstruct fresh authority roots around complete checkpoints.
   They do not yet retain the source storage receipt chain and index. Add explicit
@@ -210,7 +216,7 @@ silently overwriting it. Never infer disposable state from an empty value.
 Start with engine-only releases and a narrow, tested set of definition edits.
 Expand that set only with a preservation rule and an exercised rollback case.
 The metadata rule is prepared over an isolated complete checkpoint, including
-its undo base, before either binary imports it. Qualification should make both
+its undo base, before either binary imports it. Qualification makes both
 images import the same transformed state, then apply the reverse authored delta
 to the candidate-written continuation before both reverse imports. Keep evidence
 for the original capture and both transformed copies; do not normalize away an

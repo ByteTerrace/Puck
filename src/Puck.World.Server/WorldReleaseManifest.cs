@@ -236,7 +236,7 @@ public static class WorldReleaseCompatibility {
             return false;
         }
         if (!SameInventory(previous.DefinitionFiles, candidate.DefinitionFiles) || !SameInventory(previous.Artifacts, candidate.Artifacts)) {
-            reason = "release artifact inventory or pins differ; engine-only transitions cannot change packaged dependencies";
+            reason = "release artifact inventory or pins differ; engine and metadata transitions cannot change packaged dependencies";
             return false;
         }
         reason = string.Empty;

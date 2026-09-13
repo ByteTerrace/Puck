@@ -55,8 +55,8 @@ definition, reverse application against latest state, and undo afterward. It che
 every other definition and checkpoint section, named conflicts, and custom null
 presence. JSON object member order may change when a deleted custom key returns;
 its value must survive. These laws establish the isolated preservation rule;
-packaged qualification needs its own integration evidence before deployment may
-admit definition changes. `WorldReleaseMetadataPublicationLawTests` exercises the
+the [CLI fixture tests](../Puck.Cli.Tests/README.md) own packaged qualification
+integration. `WorldReleaseMetadataPublicationLawTests` exercises the
 directory-backed atomic publisher, including interruption before and after the
 root write, competing authority, leaving activation during upload, retained
 receipts, and retries after candidate progress. These do not exercise Azure VMSS.

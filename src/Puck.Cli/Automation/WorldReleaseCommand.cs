@@ -2,7 +2,9 @@ using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Puck.Cli.Azure;
+using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
 
@@ -55,10 +57,24 @@ internal static class WorldReleaseCommand {
             sourceManifest, targetManifest, fixture, sourceImage, targetImage, evidenceDirectory, qualificationSteps
         };
         qualify.SetAction(async (parse, token) => {
-            var source = JsonSerializer.Deserialize<WorldReleaseManifest>(File.ReadAllBytes(parse.GetRequiredValue(sourceManifest))) ?? throw new InvalidDataException("missing source manifest");
-            var target = JsonSerializer.Deserialize<WorldReleaseManifest>(File.ReadAllBytes(parse.GetRequiredValue(targetManifest))) ?? throw new InvalidDataException("missing target manifest");
-            var runner = new WorldReleaseQualificationRunner(Path.GetFullPath(parse.GetRequiredValue(fixture)), Path.GetFullPath(parse.GetRequiredValue(evidenceDirectory)),
-                parse.GetRequiredValue(sourceImage), parse.GetRequiredValue(targetImage), parse.GetValue(qualificationSteps));
+            var sourcePath = Path.GetFullPath(parse.GetRequiredValue(sourceManifest));
+            var targetPath = Path.GetFullPath(parse.GetRequiredValue(targetManifest));
+            var source = JsonSerializer.Deserialize<WorldReleaseManifest>(ConfinedFile.ReadAllBytes(sourcePath, 1024 * 1024)) ?? throw new InvalidDataException("missing source manifest");
+            var target = JsonSerializer.Deserialize<WorldReleaseManifest>(ConfinedFile.ReadAllBytes(targetPath, 1024 * 1024)) ?? throw new InvalidDataException("missing target manifest");
+            if (!WorldReleaseTransitionPolicy.TryPrepare(source, target, out var changes, out var reason)) { throw new InvalidDataException(reason); }
+            var evidence = Path.GetFullPath(parse.GetRequiredValue(evidenceDirectory));
+            var services = new ServiceCollection();
+            Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services);
+            using var provider = services.BuildServiceProvider();
+            WorldReleaseArchive? archive = null;
+            if (changes.Count != 0) {
+                archive = new(provider.GetRequiredService<IObjectBlobStore>(),
+                    new DirectoryObjectStorageTarget(Path.Combine(evidence, "packages", Guid.NewGuid().ToString("N"))), Guid.NewGuid());
+                await archive.SaveAsync(source, Path.GetDirectoryName(sourcePath)!, token).ConfigureAwait(false);
+                await archive.SaveAsync(target, Path.GetDirectoryName(targetPath)!, token).ConfigureAwait(false);
+            }
+            var runner = new WorldReleaseQualificationRunner(Path.GetFullPath(parse.GetRequiredValue(fixture)), evidence,
+                parse.GetRequiredValue(sourceImage), parse.GetRequiredValue(targetImage), parse.GetValue(qualificationSteps), archive);
             _ = await runner.RunAsync(source, target, token).ConfigureAwait(false);
             return 0;
         });

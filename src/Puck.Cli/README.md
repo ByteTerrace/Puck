@@ -199,8 +199,11 @@ requires `resume`; an absent or finalized rollback window refuses. `--operation`
 sets a stable operation ID for diagnostics. Explicit restore, which rewinds progress,
 is still unimplemented. The Azure activation adapter has an atomic metadata
 definition publisher, guarded by the operation and exact drained root, with
-receipt-based retries. Definition changes remain refused until packaged
-qualification exercises the same forward and reverse transformation.
+receipt-based retries. Metadata-only definition changes can proceed after
+packaged qualification exercises the same forward and reverse transformation.
+Changes to other definition sections, packaged dependencies, or metadata conflicts
+found in the exported state refuse before the serving release drains. Activation
+rechecks the actual drained checkpoint; a later conflict follows pre-commit recovery.
 Newly prepared packages carry a coordinator contract automatically. Use current
 tooling to deploy or resume them; an older archive reader can report a noncanonical
 manifest when it encounters this requirement. Update the CLI rather than editing
@@ -226,6 +229,12 @@ full cloud interruption acceptance testing remains required.
 offline fixture: both packages import the source state, then both import the
 candidate's saved continuation. Complete checkpoint hashes must agree for each
 pair of imports, and every leg must advance simulation and save successfully.
+For metadata changes, both manifests must sit at their package roots with their
+declared files present. The command retains and verifies those exact package
+bytes, applies the deployment publisher to a disposable forward copy, and makes
+both images import it. It then reverses the authored delta over B's saved
+continuation before both reverse imports. Evidence retains the original seed,
+both transformed copies and their hashes; the source fixture stays intact.
 The runner resolves each image against its manifest digest, uses that immutable
 image identity, disables container networking, and mounts only a fresh fixture
 copy. It retains the copied state and evidence under a unique output directory.

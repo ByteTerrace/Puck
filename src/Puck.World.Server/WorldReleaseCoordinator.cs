@@ -11,7 +11,8 @@ public sealed record WorldReleaseQualificationReceipt {
     public required string SourceStateHash { get; init; }
     public required string TargetStateHash { get; init; }
     public required string ReverseStateHash { get; init; }
-    /// <summary>The target's own import of the target-written continuation, compared with the source's reverse import.</summary>
+    /// <summary>The target's import of its saved continuation after any reverse metadata transformation,
+    /// compared with the source's import of that same prepared state.</summary>
     public required string ReverseReferenceStateHash { get; init; }
 }
 

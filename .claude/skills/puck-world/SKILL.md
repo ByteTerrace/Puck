@@ -337,7 +337,7 @@ without draining. `WorldReleaseFixtureArchive` publishes its inventory after the
 immutable checkpoints. The CLI materializes exact captured state with test keys
 and preserves machine identity. Run `WorldReleaseFixtureArchiveLawTests`, the
 cutover laws, and `WorldReleaseFixtureBuilderTests`; set `PUCK_TEST_WORLD_IMAGE`
-for the latter's four Docker control legs. Empty no-kit population checkpoints
+for the latter's unchanged-definition and metadata Docker controls. Empty no-kit population checkpoints
 preserve only the zero selection sentinel; `WorldEmptyPopulationCheckpointLawTests`
 also rejects nonempty population and invalid kit selections. The operator
 `rollback` command selects the retained predecessor directly from an admitted
@@ -347,8 +347,13 @@ null presence, and undo after rollback. The Azure activation adapter calls
 `WorldAuthorityBlobStore.PrepareReleaseMetadataAsync` to publish the transformed
 checkpoint and definition in one CAS against the protected drain root, retaining
 receipts and recognizing retries without rewinding candidate progress. Run
-`WorldReleaseMetadataPublicationLawTests` for that boundary. This rule does not
-yet authorize changed definition pins: package qualification still needs wiring.
+`WorldReleaseMetadataPublicationLawTests` for that boundary. Changed definition
+pins require the metadata coordinator contract and the runner's package-bound
+preservation exercise. `WorldReleaseQualificationTransition` uses the real atomic
+publisher on disposable copies; both images import the forward result, then both
+import the reversed candidate continuation. Never reverse the original seed or
+normalize away a checkpoint difference. Standalone `qualify` requires manifests
+at their package roots for changed definitions; managed paths use the archive.
 New package preparation includes `WorldReleaseManifest.MetadataCoordinatorContract`
 in the canonical manifest. Metadata publication requires it on one side of the pair
 so older coordinators cannot silently skip the transformation on resume or rollback.

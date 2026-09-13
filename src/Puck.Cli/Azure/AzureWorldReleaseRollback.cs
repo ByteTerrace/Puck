@@ -19,7 +19,7 @@ internal static partial class AzureCommand {
             var operation = operationId ?? Guid.NewGuid();
             Console.WriteLine($"Rollback operation: {operation:D}");
             var fixture = await PrepareWorldReleaseFixtureAsync(context, active, previous.Manifest, operation, token).ConfigureAwait(false);
-            var runner = new WorldReleaseQualificationRunner(fixture, Path.GetFullPath("artifacts/world-release-qualification"), active.Image, previous.Image);
+            var runner = new WorldReleaseQualificationRunner(fixture, Path.GetFullPath("artifacts/world-release-qualification"), active.Image, previous.Image, archive: context.Archive);
             var begun = await new WorldReleaseCoordinator(context.Groups).BeginRollbackAsync(current, active.Manifest, previous.Manifest, runner, operation, token).ConfigureAwait(false);
             if (!begun.Ok) { throw new InvalidOperationException(begun.Detail); }
             return await ResumeWorldReleaseCoreAsync(context, token).ConfigureAwait(false);

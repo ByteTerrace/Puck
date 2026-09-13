@@ -5,9 +5,12 @@ public readonly record struct WorldReleaseDefinitionChange(string World, string 
 
 /// <summary>Checks release pairs and prepares a reversible authored definition delta.</summary>
 public static class WorldReleaseTransitionPolicy {
-    /// <summary>Computes the structurally compatible definition delta. It refuses removed worlds and incompatible contracts; it does not authorize deployment.</summary>
+    /// <summary>Computes the definition delta requiring package-bound qualification. Changed definitions
+    /// require a metadata-aware coordinator; the runner must verify the actual metadata-only preservation rule
+    /// in both directions. This manifest-level check does not authorize deployment.</summary>
     public static bool TryPrepare(WorldReleaseManifest source, WorldReleaseManifest target, out IReadOnlyList<WorldReleaseDefinitionChange> changes, out string reason) {
-        if (!WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, target, out reason)) {
+        if (!WorldReleaseManifest.TryValidate(source, out reason) || !WorldReleaseManifest.TryValidate(target, out reason) ||
+            !WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, target, out reason)) {
             changes = [];
             return false;
         }
@@ -16,10 +19,12 @@ public static class WorldReleaseTransitionPolicy {
             var before = source.Definitions[world];
             var after = target.Definitions[world];
             if (!string.Equals(before, after, StringComparison.Ordinal)) {
-                changes = [];
-                reason = $"definition transition for '{world}' is unsupported until its state-preservation rule is qualified";
-                return false;
+                result.Add(new(world, before, after));
             }
+        }
+        if (result.Count != 0 && !WorldReleaseCompatibility.TryRequireMetadataCoordinator(source, target, out reason)) {
+            changes = [];
+            return false;
         }
         changes = result;
         reason = string.Empty;

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
@@ -11,7 +12,8 @@ namespace Puck.Cli.Automation;
 
 /// <summary>Executes an ordered package pair against copied state in isolated Docker containers. The fixture
 /// must be a coherent, offline export; the runner never mounts or changes the source store.</summary>
-internal sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceImage, string targetImage, int steps = 60)
+internal sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceImage, string targetImage, int steps = 60,
+    WorldReleaseArchive? archive = null)
     : IWorldReleaseQualificationRunner, IWorldReleaseBootstrapQualificationRunner {
     private const string Marker = "puck.world.qualification.v1";
     private const int MaximumFileBytes = WorldReleaseFixtureArchive.MaximumCheckpointBytes;
@@ -24,9 +26,14 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
 
     private async Task<WorldReleaseQualificationReceipt?> RunPairAsync(WorldReleaseManifest? source, WorldReleaseManifest target, CancellationToken cancellationToken) {
         if (steps is < 1 or > 1024) { throw new ArgumentOutOfRangeException(nameof(steps)); }
+        IReadOnlyList<WorldReleaseDefinitionChange> changes = [];
         if (!WorldReleaseManifest.TryValidate(target, out var reason) ||
-            (source is not null && !WorldReleaseTransitionPolicy.TryPrepare(source, target, out _, out reason))) {
+            (source is not null && !WorldReleaseTransitionPolicy.TryPrepare(source, target, out changes, out reason))) {
             throw new InvalidDataException(reason);
+        }
+        var changesDefinitions = changes.Count != 0;
+        if (changesDefinitions && archive is null) {
+            throw new InvalidDataException("metadata qualification requires both verified release packages");
         }
         if (Encoding.UTF8.GetString(ConfinedFile.ReadAllBytes(Path.Combine(fixture, "qualification.fixture"), 128)).Trim() != Marker) {
             throw new InvalidDataException("qualification requires a marked offline fixture export");
@@ -48,24 +55,43 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
         var seed = Path.Combine(run, "seed");
         CopyFixture(fixture, seed, definition);
         var seedHash = HashTree(seed);
+        var services = new ServiceCollection();
+        Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services);
+        using var provider = services.BuildServiceProvider();
+        var transition = changesDefinitions ? new WorldReleaseQualificationTransition(provider.GetRequiredService<IObjectBlobStore>(), archive!) : null;
+        var forwardSeed = seed;
+        if (transition is not null) {
+            forwardSeed = Path.Combine(run, "forward-seed");
+            CopyFixture(seed, forwardSeed, definition);
+            await transition.ApplyAsync(forwardSeed, definition, source!, target, cancellationToken).ConfigureAwait(false);
+        }
+        var forwardSeedHash = HashTree(forwardSeed);
         var aImage = await ResolveImageAsync(source is null ? targetImage : sourceImage, (source ?? target).EngineImageDigest, cancellationToken).ConfigureAwait(false);
         var bImage = await ResolveImageAsync(targetImage, target.EngineImageDigest, cancellationToken).ConfigureAwait(false);
 
         // Compare two imports of the same state, not a capture with a fresh import: restoration deliberately
         // parks sessions and resolves host bookkeeping. Then make both packages import state actually written by B.
-        var a = await LegAsync(seed, "source-import", aImage, definition, run, cancellationToken).ConfigureAwait(false);
-        var b = await LegAsync(seed, "target-import", bImage, definition, run, cancellationToken).ConfigureAwait(false);
+        var a = await LegAsync(forwardSeed, "source-import", aImage, definition, run, cancellationToken).ConfigureAwait(false);
+        var b = await LegAsync(forwardSeed, "target-import", bImage, definition, run, cancellationToken).ConfigureAwait(false);
         if (a.Result.ImportedStateHash != b.Result.ImportedStateHash) {
             throw new InvalidDataException("candidate import changed the complete source state");
         }
-        var reverse = await LegAsync(b.Directory, "source-reverse-import", aImage, definition, run, cancellationToken).ConfigureAwait(false);
-        var reference = await LegAsync(b.Directory, "target-reverse-reference", bImage, definition, run, cancellationToken).ConfigureAwait(false);
+        var reverseSeed = b.Directory;
+        if (transition is not null) {
+            reverseSeed = Path.Combine(run, "reverse-seed");
+            CopyFixture(b.Directory, reverseSeed, definition);
+            await transition.ApplyAsync(reverseSeed, definition, target, source!, cancellationToken).ConfigureAwait(false);
+        }
+        var reverseSeedHash = HashTree(reverseSeed);
+        var reverse = await LegAsync(reverseSeed, "source-reverse-import", aImage, definition, run, cancellationToken).ConfigureAwait(false);
+        var reference = await LegAsync(reverseSeed, "target-reverse-reference", bImage, definition, run, cancellationToken).ConfigureAwait(false);
         if (reverse.Result.ImportedStateHash != reference.Result.ImportedStateHash) {
             throw new InvalidDataException("source cannot preserve the candidate-written continuation state");
         }
         var evidence = JsonSerializer.SerializeToUtf8Bytes(new {
             Schema = "puck.world.qualification.v1", SourceRelease = source?.Identity, TargetRelease = target.Identity,
-            SourceImage = aImage, TargetImage = bImage, SeedHash = seedHash, Steps = steps,
+            SourceImage = aImage, TargetImage = bImage, SeedHash = seedHash, ForwardSeedHash = forwardSeedHash,
+            ReverseSeedHash = reverseSeedHash, MetadataTransition = changesDefinitions, Steps = steps,
             SourceImport = a.Result, TargetImport = b.Result, ReverseImport = reverse.Result, ReverseReference = reference.Result
         });
         await File.WriteAllBytesAsync(Path.Combine(run, "evidence.json"), evidence, cancellationToken).ConfigureAwait(false);
@@ -185,7 +211,10 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
     private static string HashTree(string directory) {
         var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)) {
-            files.Add(Path.GetRelativePath(directory, file).Replace(Path.DirectorySeparatorChar, '/'), Hash(ConfinedFile.ReadAllBytes(file, MaximumFileBytes)));
+            var relative = Path.GetRelativePath(directory, file).Replace(Path.DirectorySeparatorChar, '/');
+            // Match CopyTree: locks and staging files are not published fixture objects.
+            if (relative.Split('/').Any(segment => segment.StartsWith(".puck-", StringComparison.OrdinalIgnoreCase))) { continue; }
+            files.Add(relative, Hash(ConfinedFile.ReadAllBytes(file, MaximumFileBytes)));
         }
         return Hash(JsonSerializer.SerializeToUtf8Bytes(files));
     }

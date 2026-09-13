@@ -149,7 +149,14 @@ public sealed class WorldReleaseManagementLawTests {
         Assert.Empty(changes);
         var changedDefinition = same with { Definitions = new Dictionary<string, string> { ["world"] = "sha256/" + new string('e', 64) } };
         Assert.False(WorldReleaseTransitionPolicy.TryPrepare(source, changedDefinition, out changes, out reason));
-        Assert.Contains("state-preservation", reason, StringComparison.Ordinal);
+        Assert.Contains("metadata coordinator contract", reason, StringComparison.Ordinal);
+        var coordinated = changedDefinition with { CoordinatorContract = WorldReleaseManifest.MetadataCoordinatorContract };
+        Assert.True(WorldReleaseTransitionPolicy.TryPrepare(source, coordinated, out changes, out reason), reason);
+        Assert.Equal(new WorldReleaseDefinitionChange("world", source.Definitions["world"], coordinated.Definitions["world"]), Assert.Single(changes));
+        Assert.False(WorldReleaseCoordinator.TryQualifyPair(source, coordinated, null, out reason));
+        Assert.Contains("runner receipt", reason, StringComparison.Ordinal);
+        Assert.True(WorldReleaseTransitionPolicy.TryPrepare(coordinated, source, out var reverse, out reason), reason);
+        Assert.Equal(WorldReleaseTransitionPolicy.Reverse(changes), reverse);
         var changedArtifact = source with { Artifacts = new Dictionary<string, string> { ["neighbor"] = "sha256/" + new string('c', 64) } };
         Assert.False(WorldReleaseCompatibility.TryCheckStructuralCompatibility(source, changedArtifact, out reason));
         Assert.Contains("artifact", reason, StringComparison.Ordinal);
