@@ -49,11 +49,12 @@ to metadata and require package-bound qualification.
   control passed on 2026-09-13: forward import at tick 0, continuation to tick 4,
   reverse import at tick 4, then continuation to tick 8. It used one engine image,
   so it proves the metadata workflow, not compatibility between engine builds.
-- New prepared manifests bind the metadata coordinator contract into their
-  immutable identities. The atomic publisher requires it on one side of a metadata
-  pair. An actual previous archive-reader binary accepted the legacy control and
-  refused the new requirement without writing; the same guard protects rollback
-  because resume loads both manifests before worker effects.
+- New prepared manifests bind the receipt-aware coordinator contract into their
+  immutable identities, including the prior metadata requirement. The atomic
+  publisher requires either known contract on one side of a metadata pair.
+  Actual pre-contract and metadata-only archive-reader binaries accepted their
+  supported controls and refused the new requirement without writing; the same
+  guard protects rollback because resume loads both manifests before worker effects.
 - The CLI `release` command offers `prepare`, `deploy`, `rollback`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
@@ -82,6 +83,13 @@ to metadata and require package-bound qualification.
   interrupted uploads and competing roots. Automatic export selects roots in each
   row's publication queue and retains their graphs with the checkpoint inventory;
   the CLI materializes them unchanged. Delayed-read and cancellation controls pass.
+- Every packaged leg reads all original receipts after import and continuation,
+  then checks duplicate and conflicting retries on its drained authority without
+  changing the root. The runner independently computes the expected inventory
+  hash and requires version-2 exercise reports. On 2026-09-13, eight same-image
+  Docker legs passed across unchanged and metadata definitions; an actual older
+  image with version-1 reports was refused without producing a qualification
+  receipt. The selected world and CLI suites passed 113 tests with no skips.
 
 **Remaining:**
 
@@ -98,9 +106,8 @@ to metadata and require package-bound qualification.
   testing, including delayed operations after controller ownership changes.
 - No qualification between different engine builds or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
-- Automatic fixtures now retain the source storage receipt chain and index.
-  Add receipt-lookup compatibility evidence produced inside both images; matching simulation
-  checkpoints alone does not prove storage-level operation deduplication survives.
+- Receipt proof is now part of packaged qualification. Record it for the actual
+  different-build release pair alongside its complete checkpoint evidence.
 - Named handheld machine checkpoints now preserve core state and host pacing,
   with real-core and world continuation tests. Four same-image Docker legs over
   the official world, including its arcade machines, passed on 2026-09-13 with

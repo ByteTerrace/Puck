@@ -112,11 +112,14 @@ Managed silo admission consumes the
 group root and fences its explicit publication barrier. The CLI's Azure adapter
 uses this coordinator for deployment and rollback; explicit restore remains pending.
 
-New packages include `coordinatorContract: puck.world.release.metadata.v1` in
+New packages include `coordinatorContract: puck.world.release.receipts.v1` in
 their canonical identity. Existing manifests without that member retain their
 identities. Metadata publication requires the member on at least one side of the
 pair, protecting rollback to an older manifest as well as forward deployment.
-Older archive readers reject the new canonical member before runtime effects;
+The current contract requires receipt-aware packaged qualification and includes
+the metadata publication requirement. Existing `puck.world.release.metadata.v1`
+manifests remain readable. Older archive readers reject the unknown member or
+contract before runtime effects;
 new readers reject unknown coordinator contracts by name. The previous-reader
 control is in `WorldReleaseCoordinatorContractLawTests`.
 
@@ -152,7 +155,10 @@ journal coverage while assigning an unowned epoch. Existing authority refuses.
 Directory laws verify original lookups, duplicate-operation decisions after
 continued gameplay, partial uploads and competing publication. Automatic export
 selects these roots in the silo's publication queues, and the CLI uses this fixture
-constructor. Packaged engines still need to report independent receipt-lookup evidence.
+constructor. Each packaged qualification leg reads every captured receipt after
+import and continuation, then checks duplicate and conflicting retries against its
+drained disposable authority. The outer runner independently checks its inventory
+hash; exercise reports without this proof refuse.
 
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes

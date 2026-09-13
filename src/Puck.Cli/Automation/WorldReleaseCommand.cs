@@ -164,7 +164,7 @@ internal static class WorldReleaseCommand {
             artifacts[relative] = FullHash(File.ReadAllBytes(path));
         }
         var manifest = new WorldReleaseManifest { Label = label, SourceRevision = sourceRevision, EngineImageDigest = engineImageDigest, Definitions = definitions, DefinitionFiles = definitionFiles, Artifacts = artifacts, PersistenceContract = persistenceContract, PeerProtocolContract = peerProtocolContract,
-            CoordinatorContract = WorldReleaseManifest.MetadataCoordinatorContract };
+            CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract };
         if (!WorldReleaseManifest.TryVerify(manifest, packageDirectory, out var manifestReason)) {
             throw new InvalidDataException(manifestReason);
         }

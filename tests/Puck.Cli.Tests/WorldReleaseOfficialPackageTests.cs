@@ -44,7 +44,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             AzureCommand.PrepareOfficialWorldReleasePackage(outputs, new string('a', 40), image, source, output);
             var first = File.ReadAllBytes(Path.Combine(output, "release.json"));
             var manifest = JsonSerializer.Deserialize<WorldReleaseManifest>(first)!;
-            Assert.Equal(WorldReleaseManifest.MetadataCoordinatorContract, manifest.CoordinatorContract);
+            Assert.Equal(WorldReleaseManifest.CurrentCoordinatorContract, manifest.CoordinatorContract);
             Assert.True(WorldReleaseManifest.TryVerify(manifest, output, out var reason), reason);
             Assert.Equal(new[] { $"{owner:D}/amber", $"{owner:D}/plum" }, manifest.Definitions.Keys.Order(StringComparer.Ordinal));
             var primary = JsonNode.Parse(File.ReadAllBytes(Path.Combine(output, "amber.world.json")))!;

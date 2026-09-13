@@ -71,8 +71,8 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
 
         // Compare two imports of the same state, not a capture with a fresh import: restoration deliberately
         // parks sessions and resolves host bookkeeping. Then make both packages import state actually written by B.
-        var a = await LegAsync(forwardSeed, "source-import", aImage, definition, run, cancellationToken).ConfigureAwait(false);
-        var b = await LegAsync(forwardSeed, "target-import", bImage, definition, run, cancellationToken).ConfigureAwait(false);
+        var a = await LegAsync(forwardSeed, "source-import", aImage, definition, run, cancellationToken, bootstrap: source is null).ConfigureAwait(false);
+        var b = await LegAsync(forwardSeed, "target-import", bImage, definition, run, cancellationToken, bootstrap: source is null).ConfigureAwait(false);
         if (a.Result.ImportedStateHash != b.Result.ImportedStateHash) {
             throw new InvalidDataException("candidate import changed the complete source state");
         }
@@ -106,9 +106,14 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
     }
 
     private async Task<(string Directory, WorldReleaseExerciseResult Result)> LegAsync(string seed, string name, string image,
-        WorldSiloDefinition definition, string run, CancellationToken cancellationToken) {
+        WorldSiloDefinition definition, string run, CancellationToken cancellationToken, bool bootstrap = false) {
         var leg = Path.Combine(run, name);
         CopyFixture(seed, leg, definition);
+        var services = new ServiceCollection();
+        Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services);
+        using var provider = services.BuildServiceProvider();
+        var authority = new WorldAuthorityBlobStore(provider.GetRequiredService<IObjectBlobStore>(), new DirectoryObjectStorageTarget(Path.Combine(leg, "store")));
+        var expectedReceipts = WorldReleaseReceiptProof.Hash(await WorldReleaseReceiptProof.ReadAsync(authority, definition, bootstrap, cancellationToken).ConfigureAwait(false));
         var container = "puck-qualification-" + Guid.NewGuid().ToString("N");
         Console.WriteLine($"Qualification {name}: {image}");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -132,7 +137,11 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
         var result = JsonSerializer.Deserialize<WorldReleaseExerciseResult>(ConfinedFile.ReadAllBytes(Path.Combine(leg, "exercise-result.json"), 1024 * 1024))
             ?? throw new InvalidDataException("qualification leg produced no state report");
         var worlds = definition.Worlds.Select(row => row.World.Value).ToHashSet(StringComparer.Ordinal);
-        if (result.Schema != "puck.world.qualification-exercise.v1" || result.Steps != steps ||
+        if (result.Schema != "puck.world.qualification-exercise.v2" || result.ReceiptSeedHash != expectedReceipts ||
+            result.ImportedReceiptHash != expectedReceipts || result.ContinuedReceiptHash != expectedReceipts) {
+            throw new InvalidDataException("packaged engine did not prove receipt preservation and duplicate handling; qualification requires receipt-aware exercise tooling");
+        }
+        if (result.Steps != steps ||
             result.ImportedTicks is null || result.ContinuedTicks is null ||
             !worlds.SetEquals(result.ImportedTicks.Keys) || !worlds.SetEquals(result.ContinuedTicks.Keys) ||
             !FullPin(result.ImportedStateHash) || !FullPin(result.ContinuedStateHash) ||

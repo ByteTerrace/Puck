@@ -160,7 +160,9 @@ composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest after hashing those definitions and the remaining
 package artifacts. Stable owner/world identities and package paths are recorded
 separately; authored `.puck` inputs are artifacts and are never treated as ready
-definitions. `world release status` reads the managed group for the world silo
+definitions. New manifests require `puck.world.release.receipts.v1` coordinator
+support, preventing older tooling from skipping receipt-aware qualification.
+`world release status` reads the managed group for the world silo
 named in the existing Azure deployment outputs. It reports the active and previous
 releases, admission, rollback eligibility, pending phase, recovery scope, and next
 operator action. Supply a saved group file for offline inspection; add `--json`
@@ -243,6 +245,13 @@ The runner resolves each image against its manifest digest, uses that immutable
 image identity, disables container networking, and mounts only a fresh fixture
 copy. It retains the copied state and evidence under a unique output directory.
 Equal contract labels or an operator-authored receipt cannot replace these runs.
+
+Each image emits `puck.world.qualification-exercise.v2`: it inventories every
+captured receipt before activation, looks up each original decision after import
+and continuation, and checks duplicate and conflicting retries after draining.
+Retries must leave the authority root unchanged. The runner independently computes
+the expected inventory hash before starting each leg and refuses missing or
+mismatched proof. Newly written receipts remain available to the reverse legs.
 
 The fixture contains `qualification.fixture` with `puck.world.qualification.v1`,
 a local `<fixture-directory>/silo.json` with the exact pinned release inventory, per-world signing

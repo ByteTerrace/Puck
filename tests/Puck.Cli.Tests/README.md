@@ -31,8 +31,11 @@ through four Docker qualification legs. The metadata control uses the public
 source export survives unchanged. This optional same-image control verifies the
 export and runner path; compatibility between builds needs separate pair evidence.
 The outer test reads receipt history from container-written forward and rollback
-stores. This is object-preservation evidence; receipt lookup performed by each
-packaged engine still needs its own qualification report.
+stores and checks each image's version-2 receipt proof. `WorldReleaseReceiptProofTests`
+covers complete lookups, duplicate and conflicting retries, unchanged roots, and
+new receipts after continuation. Set `PUCK_TEST_PREVIOUS_WORLD_IMAGE` to a distinct
+older image with version-1 exercise reports to verify its named refusal without a
+qualification receipt; `PUCK_TEST_WORLD_IMAGE` must also be set for this control.
 Set `PUCK_TEST_RELEASE_EVIDENCE_DIRECTORY` to retain those Docker legs and their
 hash evidence outside the test's temporary directory for inspection.
 

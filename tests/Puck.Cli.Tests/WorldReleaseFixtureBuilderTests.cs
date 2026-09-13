@@ -168,6 +168,12 @@ public sealed class WorldReleaseFixtureBuilderTests {
                     .Single(path => JsonNode.Parse(File.ReadAllBytes(path))!["TargetRelease"]!.GetValue<string>() == candidate.Identity);
                 var proof = JsonNode.Parse(File.ReadAllBytes(proofPath))!;
                 Assert.True(proof["MetadataTransition"]!.GetValue<bool>());
+                foreach (var proofLeg in new[] { "SourceImport", "TargetImport", "ReverseImport", "ReverseReference" }) {
+                    var result = proof[proofLeg]!;
+                    Assert.Equal("puck.world.qualification-exercise.v2", result["Schema"]!.GetValue<string>());
+                    Assert.Equal(result["ReceiptSeedHash"]!.GetValue<string>(), result["ImportedReceiptHash"]!.GetValue<string>());
+                    Assert.Equal(result["ReceiptSeedHash"]!.GetValue<string>(), result["ContinuedReceiptHash"]!.GetValue<string>());
+                }
                 Assert.NotEqual(proof["SeedHash"]!.GetValue<string>(), proof["ForwardSeedHash"]!.GetValue<string>());
                 foreach (var leg in new[] { "target-import", "source-reverse-import" }) {
                     var legStore = new WorldAuthorityBlobStore(blobs, new DirectoryObjectStorageTarget(Path.Combine(Path.GetDirectoryName(proofPath)!, leg, "store")));
@@ -181,6 +187,17 @@ public sealed class WorldReleaseFixtureBuilderTests {
                         Assert.Equal(expectedReceipts[row.World.Value], await legStore.FindOperationReceiptAsync(new(owner, row.World), expectedReceipts[row.World.Value].OperationId, token));
                         Assert.Null(await legStore.FindOperationReceiptAsync(new(owner, row.World), laterReceipts[row.World.Value].OperationId, token));
                     }
+                }
+                var previousImage = Environment.GetEnvironmentVariable("PUCK_TEST_PREVIOUS_WORLD_IMAGE");
+                if (previousImage is not null) {
+                    var previousDigest = JsonNode.Parse(await CliProcess.RunCheckedAsync(Environment.CurrentDirectory,
+                        "docker", ["image", "inspect", previousImage], capture: true, cancellationToken: token))![0]!["Id"]!.GetValue<string>();
+                    Assert.NotEqual(digest, previousDigest);
+                    var unsupportedEvidence = Path.Combine(temporary.FullName, "old-exercise-evidence");
+                    var oldRunner = new WorldReleaseQualificationRunner(complete, unsupportedEvidence, previousImage, image, 4);
+                    var oldError = await Assert.ThrowsAsync<InvalidDataException>(() => oldRunner.RunAsync(release with { EngineImageDigest = previousDigest }, release, token));
+                    Assert.Contains("receipt-aware exercise", oldError.Message);
+                    Assert.Empty(Directory.EnumerateFiles(unsupportedEvidence, "receipt.json", SearchOption.AllDirectories));
                 }
             }
             foreach (var row in silo.Worlds) {

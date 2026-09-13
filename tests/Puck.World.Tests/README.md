@@ -61,10 +61,12 @@ directory-backed atomic publisher, including interruption before and after the
 root write, competing authority, leaving activation during upload, retained
 receipts, and retries after candidate progress. These do not exercise Azure VMSS.
 `WorldReleaseCoordinatorContractLawTests` checks immutable coordinator requirements
-and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to an older
-`Puck.World.Server.dll` to run the real previous archive reader in an isolated
-assembly context. It must accept the legacy control and refuse the new requirement
-without writing. That binary-dependent test skips when the variable is absent;
+and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to a
+`Puck.World.Server.dll` from before coordinator contracts, and
+`PUCK_TEST_PREVIOUS_METADATA_SERVER` to one supporting only the metadata contract.
+Each previous archive reader runs in an isolated assembly context, accepts its
+supported control and refuses the new receipt requirement without writing.
+Each binary-dependent case skips when its variable is absent;
 its output records the reader's SHA-256 for provenance.
 
 `WorldAuthorityReceiptSnapshotLawTests` checks a selected root's original index
@@ -76,7 +78,9 @@ interrupted uploads and a competing root writer. `WorldReleaseCutoverLawTests`
 also delays the live export's root read while a later mutation arrives, and checks
 that cancellation leaves the publication queue usable. Archive laws cover receipt
 pins, interrupted uploads, canonical decoding and missing legacy proof. Independent
-receipt-lookup evidence inside both packaged engines remains required.
+receipt lookups and duplicate retries inside each packaged engine are checked by
+the CLI Docker qualification controls; different-build compatibility still needs
+evidence from the actual release pair.
 
 ## What an assertion must prove
 

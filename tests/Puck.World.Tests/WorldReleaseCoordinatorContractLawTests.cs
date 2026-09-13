@@ -19,6 +19,10 @@ public sealed class WorldReleaseCoordinatorContractLawTests {
         Assert.Equal(legacy.Identity, JsonSerializer.Deserialize<WorldReleaseManifest>(WorldReleaseManifest.Canonicalize(legacy))!.Identity);
         Assert.True(WorldReleaseCompatibility.TryRequireMetadataCoordinator(legacy, current, out _));
         Assert.True(WorldReleaseCompatibility.TryRequireMetadataCoordinator(current, legacy, out _));
+        var receipts = legacy with { CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract };
+        Assert.NotEqual(current.Identity, receipts.Identity);
+        Assert.True(WorldReleaseCompatibility.TryRequireMetadataCoordinator(receipts, legacy, out _));
+        Assert.True(WorldReleaseCompatibility.TryRequireMetadataCoordinator(legacy, receipts, out _));
         Assert.False(WorldReleaseCompatibility.TryRequireMetadataCoordinator(legacy, legacy with { Label = "other" }, out var reason));
         Assert.Contains("current tooling", reason);
         Assert.False(WorldReleaseManifest.TryValidate(current with { CoordinatorContract = "unknown-future-contract" }, out reason));
@@ -26,17 +30,19 @@ public sealed class WorldReleaseCoordinatorContractLawTests {
         Assert.False(WorldReleaseCompatibility.TryRequireMetadataCoordinator(current, current with { CoordinatorContract = "unknown" }, out _));
     }
 
-    [Fact]
-    public async Task PreviousArchiveReaderAcceptsLegacyButRefusesCoordinatorRequirementWithoutWriting() {
-        var path = Environment.GetEnvironmentVariable("PUCK_TEST_PREVIOUS_WORLD_SERVER");
-        Assert.SkipWhen(string.IsNullOrWhiteSpace(path), "Set PUCK_TEST_PREVIOUS_WORLD_SERVER to an older Puck.World.Server.dll to exercise the previous reader.");
+    [Theory]
+    [InlineData("PUCK_TEST_PREVIOUS_WORLD_SERVER", null, false, "canonical")]
+    [InlineData("PUCK_TEST_PREVIOUS_METADATA_SERVER", WorldReleaseManifest.MetadataCoordinatorContract, true, "coordinator contract")]
+    public async Task PreviousArchiveReaderAcceptsLegacyButRefusesCoordinatorRequirementWithoutWriting(string variable, string? priorContract, bool hasContractProperty, string refusal) {
+        var path = Environment.GetEnvironmentVariable(variable);
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(path), $"Set {variable} to the previous Puck.World.Server.dll to exercise its reader.");
         Assert.True(File.Exists(path), "The configured previous assembly is missing.");
         using var directory = new TempWorldDirectory();
         var blobs = new FakeObjectBlobStore();
         var storage = new DirectoryObjectStorageTarget(directory.RootPath);
         var owner = Guid.NewGuid();
-        var legacy = Manifest(owner);
-        var current = legacy with { CoordinatorContract = WorldReleaseManifest.MetadataCoordinatorContract };
+        var legacy = Manifest(owner) with { CoordinatorContract = priorContract };
+        var current = legacy with { CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract };
         directory.WriteText("package/world.json", "world");
         var archive = new WorldReleaseArchive(blobs, storage, owner);
         var token = TestContext.Current.CancellationToken;
@@ -48,7 +54,7 @@ public sealed class WorldReleaseCoordinatorContractLawTests {
         try {
             var assembly = context.LoadFromAssemblyPath(Path.GetFullPath(path!));
             var manifestType = assembly.GetType(typeof(WorldReleaseManifest).FullName!)!;
-            Assert.Null(manifestType.GetProperty(nameof(WorldReleaseManifest.CoordinatorContract)));
+            Assert.Equal(hasContractProperty, manifestType.GetProperty(nameof(WorldReleaseManifest.CoordinatorContract)) is not null);
             var archiveType = assembly.GetType(typeof(WorldReleaseArchive).FullName!)!;
             var oldArchive = Activator.CreateInstance(archiveType, blobs, storage, owner, 64 * 1024 * 1024)!;
             async Task<object?> LoadAsync(string identity) {
@@ -60,7 +66,7 @@ public sealed class WorldReleaseCoordinatorContractLawTests {
             Assert.NotNull(oldLegacy);
             Assert.Equal(legacy.Identity, manifestType.GetProperty(nameof(WorldReleaseManifest.Identity))!.GetValue(oldLegacy));
             var error = await Assert.ThrowsAsync<InvalidDataException>(() => LoadAsync(current.Identity));
-            Assert.Contains("canonical", error.Message);
+            Assert.Contains(refusal, error.Message);
             Assert.Equal(writes, blobs.WriteCount);
             TestContext.Current.TestOutputHelper?.WriteLine("Previous reader SHA256: " + Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path!))));
         } finally { context.Unload(); }

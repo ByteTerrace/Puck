@@ -354,12 +354,17 @@ publisher on disposable copies; both images import the forward result, then both
 import the reversed candidate continuation. Never reverse the original seed or
 normalize away a checkpoint difference. Standalone `qualify` requires manifests
 at their package roots for changed definitions; managed paths use the archive.
-New package preparation includes `WorldReleaseManifest.MetadataCoordinatorContract`
-in the canonical manifest. Metadata publication requires it on one side of the pair
-so older coordinators cannot silently skip the transformation on resume or rollback.
+New package preparation includes `WorldReleaseManifest.CurrentCoordinatorContract`
+(`puck.world.release.receipts.v1`) in the canonical manifest. It requires
+receipt-aware qualification and includes the prior metadata requirement.
+`MetadataCoordinatorContract` remains accepted for existing manifests. Metadata
+publication requires either contract on one side of the pair so older coordinators
+cannot silently skip the transformation on resume or rollback.
 Preserve legacy identities by omitting an absent coordinator contract. Run
 `WorldReleaseCoordinatorContractLawTests`; `PUCK_TEST_PREVIOUS_WORLD_SERVER` enables
-its actual previous-reader check and records the assembly hash.
+the pre-contract reader check; `PUCK_TEST_PREVIOUS_METADATA_SERVER` enables the
+metadata-only reader check. Both record the assembly hash and must refuse the
+current contract after accepting their supported control.
 Receipt export uses `CaptureReceiptSnapshotAsync`, which must
 receive a root selected in the checkpoint's publication queue, never a later root
 sampled after capture. `WorldAuthorityReceiptSnapshot` retains and validates the
@@ -371,8 +376,13 @@ root read at the capture boundary, then copies its immutable graph without holdi
 later publications. A canceled read must not poison the queue. `WorldReleaseFixtureArchive`
 pins canonical receipt envelopes; the builder requires them, including explicit
 empty history. Legacy captures without proof refuse. Run cutover, archive and CLI
-fixture tests for this path. Packaged receipt checks remain required; do not equate
-the checkpoint hash with receipt proof.
+fixture tests for this path. Exercise reports use `puck.world.qualification-exercise.v2`:
+each image checks every original receipt after import and continuation, then
+duplicate and conflicting retries on the drained fixture without changing its root.
+The runner independently computes the expected receipt hash before each leg.
+`WorldReleaseReceiptProofTests` covers this helper; set `PUCK_TEST_PREVIOUS_WORLD_IMAGE`
+alongside `PUCK_TEST_WORLD_IMAGE` for the real older-exercise refusal control.
+Do not equate the checkpoint hash with receipt proof.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains

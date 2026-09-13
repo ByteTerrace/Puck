@@ -45,6 +45,9 @@ internal static class WorldReleaseExerciseCommand {
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services);
         using var provider = services.BuildServiceProvider();
         var blobs = provider.GetRequiredService<IObjectBlobStore>();
+        var authority = new WorldAuthorityBlobStore(blobs, target);
+        var receiptInventory = await WorldReleaseReceiptProof.ReadAsync(authority, definition, allowMissingRoots: true, cancellationToken).ConfigureAwait(false);
+        var receiptSeedHash = WorldReleaseReceiptProof.Hash(receiptInventory);
         var groups = new WorldReleaseGroupStore(blobs, target, owner);
         var created = await groups.CreateAsync("qualification", "exercise", cancellationToken).ConfigureAwait(false);
         if (!created.Ok) { throw new InvalidOperationException("qualification fixture already contains a release group; use a fresh leg directory"); }
@@ -66,6 +69,7 @@ internal static class WorldReleaseExerciseCommand {
             throw new InvalidDataException("qualification fixture could not publish its isolated admission gate");
         }
         var imported = Capture(host, definition);
+        var importedReceiptHash = await WorldReleaseReceiptProof.VerifyAsync(authority, definition, receiptInventory, testDuplicates: false, cancellationToken).ConfigureAwait(false);
         var initialTicks = definition.Worlds.ToDictionary(row => row.World.Value, row => RequireRow(host, row.World.Value).CompletedTicks);
         var rate = host.MasterRateHz;
         if (rate == 0) { throw new InvalidDataException("qualification fixture has no advancing world"); }
@@ -82,7 +86,10 @@ internal static class WorldReleaseExerciseCommand {
         if (!initialTicks.Any(row => finalTicks[row.Key] > row.Value)) { throw new InvalidDataException("qualification did not exercise continuation"); }
         var continued = Capture(host, definition);
         await PumpAsync(host, host.DrainAsync(cancellationToken), cancellationToken).ConfigureAwait(false);
-        var report = new WorldReleaseExerciseResult("puck.world.qualification-exercise.v1", Hash(imported), Hash(continued), initialTicks, finalTicks, steps);
+        var continuedReceiptHash = await WorldReleaseReceiptProof.VerifyAsync(authority, definition, receiptInventory, testDuplicates: true, cancellationToken).ConfigureAwait(false);
+        var report = new WorldReleaseExerciseResult("puck.world.qualification-exercise.v2", Hash(imported), Hash(continued), initialTicks, finalTicks, steps) {
+            ReceiptSeedHash = receiptSeedHash, ImportedReceiptHash = importedReceiptHash, ContinuedReceiptHash = continuedReceiptHash,
+        };
         await File.WriteAllBytesAsync(resultPath, JsonSerializer.SerializeToUtf8Bytes(report), cancellationToken).ConfigureAwait(false);
         Console.WriteLine($"Qualification leg restored {definition.Worlds.Count} worlds and advanced {steps} exact steps.");
         return 0;
@@ -116,6 +123,14 @@ internal static class WorldReleaseExerciseCommand {
     }
 }
 
-/// <summary>Evidence from one independently executed packaged engine; hashes cover its complete encoded checkpoint inventory.</summary>
+/// <summary>Evidence from one independently executed packaged engine; separate hashes cover its complete encoded
+/// checkpoint inventory and the original operation receipts checked through its storage API.</summary>
 public sealed record WorldReleaseExerciseResult(string Schema, string ImportedStateHash, string ContinuedStateHash,
-    IReadOnlyDictionary<string, ulong> ImportedTicks, IReadOnlyDictionary<string, ulong> ContinuedTicks, int Steps);
+    IReadOnlyDictionary<string, ulong> ImportedTicks, IReadOnlyDictionary<string, ulong> ContinuedTicks, int Steps) {
+    /// <summary>The packaged store's complete receipt inventory before activation.</summary>
+    public string? ReceiptSeedHash { get; init; }
+    /// <summary>Exact original receipts found through the packaged lookup API after import.</summary>
+    public string? ImportedReceiptHash { get; init; }
+    /// <summary>Original receipts after continued gameplay, with duplicate and conflicting retries checked.</summary>
+    public string? ContinuedReceiptHash { get; init; }
+}
