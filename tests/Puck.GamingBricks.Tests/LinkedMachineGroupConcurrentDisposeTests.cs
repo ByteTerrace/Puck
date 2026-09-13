@@ -147,6 +147,7 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) => m_core;
     }
     private sealed class TestQueuedCore : IQueuedMachineCore {
+        public string CheckpointIdentity => "test/linked-core";
         private readonly uint[] m_framebuffer = [0U];
 
         public long CycleCount => 0L;

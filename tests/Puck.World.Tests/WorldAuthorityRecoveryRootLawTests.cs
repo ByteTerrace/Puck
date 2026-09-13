@@ -20,6 +20,7 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         Assert.NotNull(fence);
         Assert.True((await first.PublishDefinitionAsync(identity, Fixtures.BuildDocument(), cancellation, fence)).Ok);
         Assert.True((await first.WriteCheckpointAsync(identity, "protected-checkpoint"u8.ToArray(), 17, cancellation, fence)).Ok);
+        Assert.Null(await first.FindRecoveryRootAsync(identity, operation, cancellation));
 
         var captured = await first.CaptureRecoveryRootAsync(identity, operation, cancellation);
         Assert.NotNull(captured);
@@ -29,6 +30,10 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var restarted = new WorldAuthorityBlobStore(blobs, target);
         var loaded = await restarted.LoadRecoveryRootAsync(identity, captured.Value.Pin, operation, cancellation);
         Assert.Equal(captured, loaded);
+        Assert.True((await restarted.WriteCheckpointAsync(identity, "later-checkpoint"u8.ToArray(), 18, cancellation, fence)).Ok);
+        var latest = await restarted.LoadRootAsync(identity, cancellation);
+        Assert.Equal(captured, await restarted.FindRecoveryRootAsync(identity, operation, cancellation));
+        Assert.Equal(latest, await restarted.LoadRootAsync(identity, cancellation));
 
         var restored = await restarted.RestoreRecoveryRootAsync(identity, captured.Value.Pin, operation, fence!.Value, cancellation);
         Assert.True(restored.Ok, restored.Detail);
@@ -86,6 +91,7 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         File.WriteAllBytes(path, "tampered"u8.ToArray());
 
         await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadRecoveryRootAsync(identity, pin, operation, cancellation));
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.FindRecoveryRootAsync(identity, operation, cancellation));
         await Assert.ThrowsAsync<InvalidDataException>(() => store.RestoreRecoveryRootAsync(identity, pin, operation, fence!.Value, cancellation));
     }
 }

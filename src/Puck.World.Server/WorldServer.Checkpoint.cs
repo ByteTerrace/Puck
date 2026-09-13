@@ -410,7 +410,8 @@ public sealed partial class WorldServer {
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
     /// against state this record graph cannot represent — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
-    private bool AnyUncapturableStateEverLatched() => (AnyAddonEverPumped || AnyMachineEverPumped || AnyScreenOpEverApplied);
+    private bool AnyUncapturableStateEverLatched() => (AnyAddonEverPumped ||
+        (AnyMachineEverPumped && m_machines is not IWorldMachineCheckpointHost) || AnyScreenOpEverApplied);
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
     /// <see cref="WorldReplaySnapshot.Drive"/> already follows for an offline rehydration (population, machine
@@ -420,8 +421,8 @@ public sealed partial class WorldServer {
     /// <param name="checkpoint">The captured image to restore from.</param>
     /// <param name="profiles">The profile catalog this server's identities resolve against — a fresh instance the
     /// caller loads from this row's own owned-worlds directory, exactly as a boot composition root does.</param>
-    /// <param name="machines">The machine host this server steps — empty for a checkpoint the arm gate has already
-    /// proven never stepped one.</param>
+    /// <param name="machines">A fresh machine host prepared from the captured definition. A nonempty saved machine
+    /// inventory requires <see cref="IWorldMachineCheckpointHost"/> support.</param>
     /// <param name="instanceIdentity">This row's own running-instance identity.</param>
     /// <returns>The restored server and the population it owns.</returns>
     public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity) {
@@ -447,9 +448,9 @@ public sealed partial class WorldServer {
     }
     /// <summary>Captures a full simulation-state image of this server and every subsystem it owns, under
     /// <see cref="m_authorityGate"/>. Refuses by name (returns <see langword="false"/>) when this server has ever
-    /// pumped an addon, stepped a machine, or applied a screen op — machine core state and addon guest state are not
-    /// capturable today (the arm gate <c>replay.record</c> already reuses,
-    /// <see cref="AnyAddonEverPumped"/>/<see cref="AnyMachineEverPumped"/>/<see cref="AnyScreenOpEverApplied"/>) —
+    /// pumped an addon, stepped a machine without durable checkpoint support, or applied a screen operation.
+    /// Supported machine hosts drain accepted steps and capture their complete runtime images; unsupported
+    /// runtime state, including live coupled links and enabled rewind history, refuses capture by name —
     /// or when <see cref="m_pending"/> or <see cref="m_ordered"/> is non-empty at the moment of the call, which the
     /// caller must retry at the NEXT master boundary rather than treat as a hard refusal (a live console submission
     /// landed in the window between this boundary and the last drain).</summary>
@@ -464,7 +465,7 @@ public sealed partial class WorldServer {
         lock (m_authorityGate) {
             if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
-                reason = "a checkpoint cannot capture a server that has ever pumped an addon, stepped a machine, or applied a screen op — machine core and addon guest state are not capturable today";
+                reason = "a checkpoint cannot capture pumped addon guests, a stepped machine without durable checkpoint support, or applied screen operations";
 
                 return false;
             }
@@ -482,6 +483,16 @@ public sealed partial class WorldServer {
             }
 
             m_engagement.AssertCheckpointQuiescent();
+
+            WorldMachineHostCheckpoint? machines = null;
+            if (m_machines is IWorldMachineCheckpointHost machineHost) {
+                try { machines = machineHost.CaptureCheckpoint(); }
+                catch (Exception error) when (error is InvalidOperationException or IOException or ArgumentException) {
+                    checkpoint = null;
+                    reason = $"machine checkpoint refused: {error.Message}";
+                    return false;
+                }
+            }
 
             var journal = new (ulong, WorldMutation)[m_journal.Count];
 
@@ -534,7 +545,8 @@ public sealed partial class WorldServer {
                 HostRow: hostRow,
                 Fields: m_population.Fields?.Capture(),
                 Search: m_search.Capture(),
-                BoardEnforcement: CaptureBoardEnforcement()
+                BoardEnforcement: CaptureBoardEnforcement(),
+                Machines: machines
             );
             reason = string.Empty;
 
@@ -562,6 +574,13 @@ public sealed partial class WorldServer {
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
         m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
         ValidateDecisionCheckpoint(server, restoredDefinition);
+
+        var machineCheckpoint = checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty;
+        if (m_machines is IWorldMachineCheckpointHost machineHost) {
+            machineHost.RestoreCheckpoint(machineCheckpoint);
+        } else if (machineCheckpoint.Instances.Count != 0 || machineCheckpoint.AnyEverPumped) {
+            throw new InvalidOperationException("checkpoint contains machine state that this host cannot restore");
+        }
 
         m_definition = restoredDefinition;
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);

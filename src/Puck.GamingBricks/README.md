@@ -226,6 +226,25 @@ The worker owns the cross-thread policy:
 These guarantees matter more than queue throughput: an accepted segment is
 part of authoritative history and must execute exactly once, in order.
 
+## Durable checkpoints
+
+Queued hosts implement `IMachineCheckpointRuntime`. Capture joins the worker
+queue after accepted steps and returns an owned, checksummed image of the core,
+held input, fractional clock conversion, completed-step count, and playback
+settings. Restore targets a fresh, unstepped host with identical firmware,
+cartridge, behavioral options, and snapshot format. Invalid checksums or content
+identities refuse before changing the core. Discard the fresh host if a core
+restore fails. Audio and uploaded pixels are presentation outputs rebuilt after
+restore; queued audio from the retired host is not replayed.
+
+Enabled rewind history and cores lent to a live link currently refuse capture.
+Their history and shared medium need a complete persistence format before a
+world using them can qualify for release management. Both Post batteries exercise
+checkpoint restoration and matching continuation through `queued-host-time-travel`,
+including nonzero fractional pacing, held input, and identity refusal. HGB core
+snapshots also preserve the cumulative instruction budget: resetting it to the
+completed clock would lose instruction overshoot and change continuation timing.
+
 ## Rewind, runahead, and fast-forward
 
 `MachineTimeTravel<TInput>` is built over `ITimeTravelMachineCore<TInput>`, a

@@ -62,6 +62,10 @@ bundled default and its independent cold/fast selection.
 `embedding` checks the synchronous public core without host infrastructure,
 including per-machine option isolation, trace callbacks, configured forks,
 typed snapshot compatibility, input, video, audio and replay.
+The queued `queued-host-time-travel` stage additionally restores a durable
+checkpoint into a fresh host and compares complete continuation snapshots with
+held input and fractional pacing. It verifies checksum and content-identity
+refusal before the target core changes.
 
 `bundled-firmware` always executes the bundled image, independently of `--bios`.
 It checks image identity and copy isolation, cold/fast startup selection and

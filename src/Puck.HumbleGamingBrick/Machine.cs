@@ -215,6 +215,7 @@ public sealed class Machine : ISnapshotableMachine {
         var offset = 0;
 
         m_stateWriter.WriteUInt64(value: Now.RawBits);
+        m_stateWriter.WriteUInt64(value: m_runTargetCycles);
         sections[0] = new SnapshotSection(
             Name: "clock",
             Offset: offset,
@@ -248,6 +249,7 @@ public sealed class Machine : ISnapshotableMachine {
     public void SerializeState(StateWriter writer) {
         m_componentClock.Settle();
         writer.WriteUInt64(value: Now.RawBits);
+        writer.WriteUInt64(value: m_runTargetCycles);
 
         foreach (var snapshotable in m_snapshotables) {
             snapshotable.SaveState(writer: writer);
@@ -261,6 +263,10 @@ public sealed class Machine : ISnapshotableMachine {
     public void RestoreState(StateReader reader) {
         m_componentClock.Invalidate();
         m_componentClock.Clock.ResetTo(instant: Tick.FromRawBits(rawBits: reader.ReadUInt64()));
+        m_runTargetCycles = reader.ReadUInt64();
+        if (m_runTargetCycles > m_componentClock.Clock.CycleCount) {
+            throw new InvalidOperationException("Snapshot pacing target exceeds the completed machine clock.");
+        }
         m_componentClock.Invalidate();
 
         foreach (var snapshotable in m_snapshotables) {
@@ -273,9 +279,8 @@ public sealed class Machine : ISnapshotableMachine {
         // the component-clock speed no differently than the CPU's own KEY1 re-derive.
         ApplyModel(model: m_modelState.Model);
 
-        // The pacing accumulator is not emulated state; reanchor it to the restored instant so a run after a rewind does
-        // not lose or duplicate a budget.
-        m_runTargetCycles = m_componentClock.Clock.CycleCount;
+        // Preserve the captured pacing target. Reanchoring to the completed instruction's clock would forgive its
+        // overshoot and buy extra cycles on the next Run, diverging from an uninterrupted machine.
     }
     /// <summary>Replaces this machine's entire state with a snapshot's, repositioning the clock and every component.
     /// Rejects a snapshot whose machine identity (format version / model / boot+cartridge ROM) does not match this

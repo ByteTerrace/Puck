@@ -415,7 +415,7 @@ public sealed partial class WorldMachineHost {
     internal sealed class MachineLease(IMachineRuntime runtime, ulong generation,
         IReadOnlyDictionary<string, PreparedMachineAsset> assets) {
         public IMachineRuntime Runtime { get; } = runtime;
-        public ulong Generation { get; } = generation;
+        public ulong Generation { get; set; } = generation;
         public IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; } = assets;
         public long CompletedSteps { get; set; }
     }

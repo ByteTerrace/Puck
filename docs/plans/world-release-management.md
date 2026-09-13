@@ -58,10 +58,14 @@ integration remain incomplete.
   blob versions on failure, so phase 5's replacement has not happened.
 - No packaged release-pair qualification or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
-- The official world fails the packaged exercise after stepping its machines:
-  the checkpoint contract cannot capture machine cores, addon guest state, or
-  applied screen operations. Those states must become durable before this world
-  can qualify; removing them from the qualification fixture is not a solution.
+- Named handheld machine checkpoints now preserve core state and host pacing,
+  with real-core and world continuation tests. Four same-image Docker legs over
+  the official world, including its arcade machines, passed on 2026-09-13 with
+  four steps per leg. This is a persistence control, not release-pair qualification.
+  Addon guest state, applied screen
+  operations, live coupled links, and enabled machine rewind history remain
+  uncapturable; removing live features from a qualification fixture is not a
+  solution.
 
 ## Operator contract
 

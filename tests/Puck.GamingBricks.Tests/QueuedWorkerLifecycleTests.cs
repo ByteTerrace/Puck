@@ -262,6 +262,7 @@ public sealed class QueuedWorkerLifecycleTests {
     }
 
     private sealed class CountingCore : IQueuedMachineCore {
+        public string CheckpointIdentity => "test/counting-core";
         private readonly uint[] m_framebuffer = [0U];
 
         private long m_runCycleCalls;

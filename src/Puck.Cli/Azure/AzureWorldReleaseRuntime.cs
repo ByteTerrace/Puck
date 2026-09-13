@@ -39,13 +39,33 @@ internal static partial class AzureCommand {
                 }
                 roots = captured;
             } else {
-                var worker = await WorkerAsync().ConfigureAwait(false);
-                var response = await RequestAsync(worker, source, "POST", $"/release/drain/{operation.PendingOperationId:D}").ConfigureAwait(false);
-                roots = response.Deserialize<Dictionary<string, string>>(Json) ?? throw new InvalidDataException("source drain returned no protected roots");
+                var retained = new SortedDictionary<string, string>(StringComparer.Ordinal);
+                foreach (var identity in m_identities) {
+                    var saved = await authority.FindRecoveryRootAsync(identity, operation.PendingOperationId!.Value, cancellationToken).ConfigureAwait(false);
+                    if (saved is { } root) { retained[$"{identity.Owner:D}/{identity.World}"] = root.Pin; }
+                }
+                var workers = await WorkersAsync(resourceGroup, scaleSet).ConfigureAwait(false);
+                if (workers.Length > 1) { throw new InvalidOperationException("release drain requires one authoritative worker"); }
+                var worker = workers.Length == 1 ? Text(workers[0]!["name"]) : null;
+                if (retained.Count == m_identities.Length) {
+                    // The drain endpoint writes these only after the whole host is frozen. A retry after source
+                    // stop must reuse them; it must neither contact a stopped endpoint nor recapture newer state.
+                    roots = retained;
+                } else {
+                    if (worker is null) { throw new InvalidOperationException("source disappeared before its complete drain roots were retained"); }
+                    var response = await RequestAsync(worker, source, "POST", $"/release/drain/{operation.PendingOperationId:D}").ConfigureAwait(false);
+                    roots = response.Deserialize<Dictionary<string, string>>(Json) ?? throw new InvalidDataException("source drain returned no protected roots");
+                }
                 ValidateRoots(roots);
                 // The drain endpoint retains the frozen host for retries. Stop only after its immutable roots exist.
                 await RequireAsync(operation, [WorldReleaseOperationPhase.Drain], cancellationToken).ConfigureAwait(false);
-                await WorldGuestAsync(resourceGroup, "systemctl stop puck-world.service", worker).ConfigureAwait(false);
+                if (worker is not null) {
+                    var process = await InspectAsync(worker).ConfigureAwait(false);
+                    if (process["image"]?.GetValue<string>() is { } image && image != source.Image) {
+                        throw new InvalidOperationException("source drain found an unknown image; refusing to stop another deployment");
+                    }
+                    await WorldGuestAsync(resourceGroup, "systemctl stop puck-world.service", worker).ConfigureAwait(false);
+                }
             }
             return new(true, "source drained and protected roots retained", roots);
         }

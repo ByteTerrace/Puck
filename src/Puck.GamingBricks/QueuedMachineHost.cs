@@ -10,7 +10,7 @@ namespace Puck.GamingBricks;
 /// </summary>
 public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime, IMachineContentSlot,
     IMachineVideoOutputs, IMachineVideoOutput, IMachineAudioOutputs, IAudioMachine,
-    IMachineInputPorts, IMachineInputPort, IFeedbackMachine, ITimeTravelMachine {
+    IMachineInputPorts, IMachineInputPort, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime {
     private readonly QueuedMachineWorker m_worker;
     private MachinePadState m_input = MachinePadState.Neutral;
 
@@ -54,6 +54,14 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public MachinePadState State => m_input;
     /// <inheritdoc/>
     public void SetState(in MachinePadState state) => m_input = state;
+    /// <inheritdoc/>
+    public byte[] CaptureCheckpoint() => m_worker.CaptureCheckpoint().Encode(m_input);
+    /// <inheritdoc/>
+    public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
+        var restored = QueuedMachineCheckpoint.Decode(checkpoint);
+        m_worker.RestoreCheckpoint(restored.Checkpoint);
+        m_input = restored.Input;
+    }
     /// <inheritdoc/>
     public bool Advance(ulong deltaTicks) => Step(deltaTicks, in m_input);
     /// <inheritdoc/>

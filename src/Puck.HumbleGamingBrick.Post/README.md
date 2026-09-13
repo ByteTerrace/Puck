@@ -76,6 +76,10 @@ commercial-cartridge stages run only when their cartridge is named.
 The `embedding` Tier-A stage exercises default factory composition and the
 public synchronous core: input, native pixels, stereo audio, nonpositive
 cycle budgets, snapshot replay and lookahead, without host infrastructure.
+The queued `queued-host-time-travel` stage also restores a durable checkpoint
+into a fresh host, compares complete continuation snapshots with held input and
+fractional pacing, and proves checksum and content-identity refusal. HGB snapshots
+retain instruction overshoot through the cumulative cycle target.
 It uses the firmware-free diagnostic configuration. Queued-host and link
 substrate probes explicitly select fast startup so their timing budgets measure
 the cartridge and host behavior, not startup animation. Bundled cold startup

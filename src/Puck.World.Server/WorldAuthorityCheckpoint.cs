@@ -187,5 +187,6 @@ public sealed record WorldAuthorityCheckpoint(
     WorldAuthorityHostRowCheckpoint HostRow,
     FieldLattice.Checkpoint? Fields = null,
     SearchCheckpoint? Search = null,
-    WorldBoardEnforcementCheckpoint? BoardEnforcement = null
+    WorldBoardEnforcementCheckpoint? BoardEnforcement = null,
+    WorldMachineHostCheckpoint? Machines = null
 );

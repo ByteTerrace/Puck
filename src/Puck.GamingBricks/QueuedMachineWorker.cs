@@ -48,6 +48,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     private nint m_boundSourceView;
     private IQueuedMachineCore? m_core;
     private ulong m_cycleRemainder;
+    private long m_checkpointCompletedSteps;
     private int m_disposed;
     private Vector3 m_emittedLight;
     private long m_frameVersion;
@@ -153,7 +154,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         m_lifecycle.BackpressureEvents;
     /// <summary>Gets the number of accepted segments whose emulation has completed.</summary>
     public long CompletedSteps =>
-        m_lifecycle.CompletedSteps;
+        checked(Interlocked.Read(ref m_checkpointCompletedSteps) + m_lifecycle.CompletedSteps);
     /// <summary>Gets the light the framebuffer emits — its average color, normalized 0..1.</summary>
     public Vector3 EmittedLight {
         get {
@@ -348,6 +349,55 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         request.Status = timeTravel.GetStatus();
+    }
+
+    internal QueuedMachineCheckpoint CaptureCheckpoint() => RunCheckpoint(null);
+    internal void RestoreCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(checkpoint);
+
+    private QueuedMachineCheckpoint RunCheckpoint(QueuedMachineCheckpoint? restore) {
+        lock (m_lifecycleLock) {
+            ObjectDisposedException.ThrowIf(m_disposed != 0, this);
+            ThrowIfLent("checkpoint");
+            if (m_core is null) { throw new InvalidOperationException("cannot checkpoint an empty machine"); }
+            var request = new CheckpointRequest { Restore = restore };
+            using var completion = new ManualResetEventSlim(false);
+            if (!m_lifecycle.EnqueueAndWait(new WorkItem(WorkKind.Checkpoint, 0, default, false, false, completion, null, null, null, request))) {
+                m_lifecycle.ThrowIfFaulted();
+                throw new InvalidOperationException("machine checkpoint barrier is closed");
+            }
+            m_lifecycle.ThrowIfFaulted();
+            if (request.Error is { } error) { throw new InvalidOperationException(error); }
+            return request.Result ?? throw new InvalidOperationException("machine checkpoint barrier did not complete");
+        }
+    }
+
+    private void ExecuteCheckpoint(IQueuedMachineCore core, CheckpointRequest request) {
+        if (request.Restore is { } restore) {
+            if (restore.Identity != core.CheckpointIdentity || m_lifecycle.CompletedSteps != 0) {
+                request.Error = "machine restore requires matching content and configuration in an unstepped runtime";
+                return;
+            }
+            core.RestoreState(restore.CoreState, restore.CoreState.Length);
+            m_cycleRemainder = restore.CycleRemainder;
+            Interlocked.Exchange(ref m_checkpointCompletedSteps, restore.CompletedSteps);
+            m_timeTravel!.Reset();
+            m_timeTravel.SetFastForward(restore.FastForwardFactor);
+            m_timeTravel.SetRunahead(restore.RunaheadFrames);
+            ResetAudioRing();
+            lock (m_frameLock) { m_motorLevel = core.MotorLevel; }
+            StageMachineFrame(core);
+            request.Result = restore;
+            return;
+        }
+        var status = m_timeTravel!.GetStatus();
+        if (status.RewindEnabled) {
+            request.Error = "machine checkpoint cannot yet preserve an enabled rewind history";
+            return;
+        }
+        var bytes = Array.Empty<byte>();
+        var length = core.CaptureState(ref bytes);
+        request.Result = new(core.CheckpointIdentity, bytes[..length], m_cycleRemainder,
+            CompletedSteps, status.FastForwardFactor, status.RunaheadFrames);
     }
     private void PublishBackBuffer(Vector3 light) {
         lock (m_frameLock) {
@@ -661,6 +711,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                         );
                         current.Completion!.Set();
                         break;
+                    case WorkKind.Checkpoint:
+                        ExecuteCheckpoint(core, current.Checkpoint!);
+                        current.Completion!.Set();
+                        break;
                     case WorkKind.Memory:
                         ExecuteMemoryAccess(
                             core: core,
@@ -773,6 +827,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 cyclesPerSecond: core.CyclesPerSecond
             );
             m_cycleRemainder = 0UL;
+            Interlocked.Exchange(ref m_checkpointCompletedSteps, 0);
 
             lock (m_frameLock) {
                 m_motorLevel = 0f;
@@ -1174,6 +1229,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         TimeTravel,
         Memory,
         Reconfigure,
+        Checkpoint,
     }
     private enum TimeTravelOp {
         SetRewindEnabled,
@@ -1212,6 +1268,11 @@ public sealed class QueuedMachineWorker : IDisposable {
         public string? Options;
         public string Reason = string.Empty;
     }
+    private sealed class CheckpointRequest {
+        public QueuedMachineCheckpoint? Restore;
+        public QueuedMachineCheckpoint? Result;
+        public string? Error;
+    }
     private readonly record struct WorkItem(
         WorkKind Kind,
         ulong DeltaTicks,
@@ -1221,7 +1282,8 @@ public sealed class QueuedMachineWorker : IDisposable {
         ManualResetEventSlim? Completion,
         TimeTravelRequest? TimeTravel,
         MemoryRequest? Memory,
-        ReconfigureRequest? Reconfigure
+        ReconfigureRequest? Reconfigure,
+        CheckpointRequest? Checkpoint = null
     ) : IQueuedWorkItem<WorkItem> {
         public static WorkItem Barrier(ManualResetEventSlim completion) =>
             new(

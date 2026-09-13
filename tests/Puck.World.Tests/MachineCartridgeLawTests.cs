@@ -21,7 +21,8 @@ namespace Puck.World.Tests;
 /// (<c>WorldMachineCatalog.ContentProviders</c>) and boots the compiled image exactly as it boots a ROM
 /// file; the slot pins the source's canonical hash beside the image's; a document the forge refuses faults the bind
 /// with the forge's own message; a cartridge path on an engine with no forge refuses at validation by name; and the
-/// shipped arcade module boots its three cabinets under alias <c>arcade</c> from a minimal host.
+/// shipped arcade module boots its three cabinets under alias <c>arcade</c> from a minimal host. Durable checkpoints
+/// preserve each handheld's state and continuation, and refuse a mismatched inventory before changing the target.
 /// </summary>
 public sealed class MachineCartridgeLawTests {
     // There is deliberately no pinned frame hash here. Determinism pins the MAPPING, not the values (AGENTS rule 4):
@@ -162,6 +163,39 @@ public sealed class MachineCartridgeLawTests {
             fixture.Step();
         }
 
+    }
+
+    [Theory]
+    [InlineData(CartridgeFile, CgbEngine)]
+    [InlineData("pip.agb.cartridge.json", AgbEngine)]
+    public void WorldCheckpointPreservesSteppedMachineAndItsContinuation(string file, string engine) {
+        var definition = WithMachineScreen(engine, CartridgePath(file), "fast");
+        var catalog = TestHookInstaller.CreateMachineCatalog();
+        using var source = Fixtures.FreshServer(definition, machineCatalog: catalog);
+        using var target = Fixtures.FreshServer(definition, machineCatalog: catalog);
+        for (var step = 0; step < 3; step++) { source.Step(); }
+        Assert.True(source.Server.AnyMachineEverPumped);
+        Assert.True(source.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var saved, out var reason), reason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(saved!);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var decoded, out reason), reason);
+        Assert.Single(decoded!.Machines!.Instances);
+        Assert.True(target.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var beforeRefusal, out reason), reason);
+        var mismatched = decoded with {
+            Machines = decoded.Machines with { Instances = [decoded.Machines.Instances[0] with { Engine = "different-provider" }] },
+        };
+        Assert.Throws<InvalidDataException>(() => target.Server.RestoreCheckpoint(mismatched));
+        Assert.True(target.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var afterRefusal, out reason), reason);
+        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(beforeRefusal!), WorldAuthorityCheckpointCodec.Encode(afterRefusal!));
+        target.Server.RestoreCheckpoint(decoded);
+        Assert.Equal(source.Server.Machines.InstanceState("cabinet"), target.Server.Machines.InstanceState("cabinet"));
+        for (var step = 0; step < 6; step++) {
+            source.Step(); target.Step();
+            Assert.True(source.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var expected, out reason), reason);
+            Assert.True(target.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var actual, out reason), reason);
+            Assert.Equal(expected!.Machines!.Instances[0].RuntimeState, actual!.Machines!.Instances[0].RuntimeState);
+            Assert.Equal(expected.Server.LastCompletedTick, actual.Server.LastCompletedTick);
+            Assert.Equal(source.DefinitionBytes(), target.DefinitionBytes());
+        }
     }
     [Fact]
     public void TheSameDocumentCompilesToByteIdenticalImagesAcrossTwoBinds() {

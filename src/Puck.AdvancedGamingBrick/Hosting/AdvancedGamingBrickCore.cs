@@ -39,6 +39,9 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <param name="configuration">Explicit BIOS, cartridge, startup mode and per-machine options.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     public AdvancedGamingBrickCore(AgbMachineConfiguration configuration, string? savePath = null) {
+        CheckpointIdentity = MachineCheckpointIdentity.Compute(
+            FormattableString.Invariant($"puck.agb.core.v1/{AgbMachineIdentity.CurrentVersion}/{configuration.Options.DisablePrefetch}/{configuration.Options.DisableRtc}"),
+            configuration.Bios.Span, configuration.Rom);
         m_savePath = savePath;
         m_instance = AgbMachineFactory.Create(configuration: configuration);
         m_machine = m_instance.Machine;
@@ -53,6 +56,9 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <summary>Gets the owned machine instance for peripheral, cartridge and link access. Use it only on the
     /// core's owning thread; the core retains responsibility for disposal.</summary>
     public AgbMachineInstance Instance => m_instance;
+
+    /// <inheritdoc/>
+    public string CheckpointIdentity { get; }
 
     /// <inheritdoc/>
     public ulong CyclesPerSecond =>

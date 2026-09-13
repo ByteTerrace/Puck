@@ -140,15 +140,21 @@ same private object store. File objects use full SHA-256 pins; the manifest is
 published last, so an interrupted upload cannot expose a partial release.
 Retries reuse matching objects and refuse corrupt retained bytes. A new
 coordinator can recover the package without the original runner's directory.
+The Azure drain adapter can also rediscover an operation's already protected
+roots after its worker stops. This lookup validates retained payloads and never
+captures newer state; an incomplete inventory still requires a successful drain.
 Registry image retention and packaged qualification remain separate preflight
 requirements; archiving a manifest does not establish either of them.
 The CLI's Docker runner compares complete imports of one offline fixture in both
 packages, then repeats the comparison over candidate-written continuation state.
 Receipts carry full evidence hashes and matching forward and reverse import
 hashes; the coordinator refuses mismatches. The receipt covers the states actually
-exercised, not every state a changed game might reach. Checkpoints still refuse
-stepped machine cores, pumped addon guests, and applied screen operations, so
-worlds exercising those features cannot pass this qualification yet.
+exercised, not every state a changed game might reach. Checkpoints preserve named
+handheld machine cores, held input, exact pacing, and instance generations after
+draining accepted work. Restore requires the same firmware, cartridge, and core
+format identity. Pumped addon guests, applied screen operations, live coupled
+machine links, and enabled machine rewind history still refuse capture by name.
+Worlds exercising those unsupported states cannot pass qualification yet.
 
 The coordinator's real-host tests cover two-row deployment, subsequent gameplay,
 rollback using that latest state, and interrupted source recovery under fresh

@@ -340,6 +340,18 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore, IWorldAuthor
         return await ReadRecoveryReferenceAsync(identity, operationId, durable.Content, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Finds an already protected operation root without capturing current state. A release controller
+    /// uses this after losing the source worker's drain response or restarting after that worker stopped.</summary>
+    /// <param name="identity">The stable world identity.</param>
+    /// <param name="operationId">The exact durable release operation.</param>
+    /// <param name="cancellationToken">Cancels the storage read.</param>
+    /// <returns>The validated immutable root, or null if this operation has not protected the world.</returns>
+    public async Task<WorldRecoveryRootReference?> FindRecoveryRootAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
+        ValidateRecoveryRequest(identity, operationId);
+        var existing = await ReadAsync(RecoveryRootAddress(identity, operationId), cancellationToken).ConfigureAwait(false);
+        return existing is null ? null : await ReadRecoveryReferenceAsync(identity, operationId, existing.Value.Content, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
     public async Task<WorldRecoveryRootReference?> LoadRecoveryRootAsync(WorldAuthorityIdentity identity, string pin, Guid operationId, CancellationToken cancellationToken) {
         ValidateRecoveryRequest(identity, operationId);
