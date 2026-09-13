@@ -118,9 +118,17 @@ and refuses a conflict at its metadata path. Object members merge independently;
 arrays are whole values. Reintroducing a removed custom key may change JSON member
 order, while its value survives. Every other checkpoint section and every other
 definition section stays unchanged. `WorldReleaseMetadataTransitionLawTests`
-exercises continuation, reverse application, and undo after rollback. This rule
-is not yet connected to packaged qualification or the durable activation path;
-deployment continues to refuse changed definition pins.
+exercises continuation, reverse application, and undo after rollback.
+`WorldAuthorityBlobStore.PrepareReleaseMetadataAsync` binds that rule to the exact
+package pair and protected drain root during `Activate`. It publishes the target
+definition, transformed checkpoint, and operation receipt in one root CAS, advances
+the unowned epoch, and retains existing receipt references. A matching receipt
+makes retries read-only even after candidate activation and subsequent saves.
+`WorldReleaseMetadataPublicationLawTests` covers interrupted uploads, lost root
+responses, a competing authority, phase changes, and current-state conflicts.
+The Azure activation adapter calls this publisher for changed definitions.
+Packaged qualification still needs integration, so deployment continues to refuse
+changed definition pins.
 
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes

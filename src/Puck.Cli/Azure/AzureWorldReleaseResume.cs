@@ -19,7 +19,7 @@ internal static partial class AzureCommand {
         try {
             var runtime = new AzureWorldReleaseRuntime(context.ResourceGroup, context.Group, temporary.FullName,
                 Text(Value(context.Outputs, "worldSiloStorageEndpoint")), Text(Value(context.Outputs, "worldSiloClientId")),
-                context.Groups, context.Authority, source, candidate,
+                context.Groups, context.Authority, context.Archive, source, candidate,
                 ct => InitializeWorldReleaseBootstrapAsync(candidate.Manifest, context.Archive, context.Authority, context.Owner, ct));
             return await new WorldReleaseCoordinator(context.Groups).ResumeAsync(state, candidate.Manifest, runtime, token).ConfigureAwait(false);
         } finally { temporary.Delete(recursive: true); }

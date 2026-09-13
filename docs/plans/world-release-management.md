@@ -39,7 +39,10 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
 - `WorldReleaseMetadataTransition` prepares a metadata-only change over a full
   checkpoint and its undo base, preserving unrelated edits and refusing conflicts.
   Its laws cover continued gameplay, reverse application, custom values, and undo.
-  It is not yet wired into packaged qualification or private activation.
+  Its atomic authority-root publisher is wired into Azure private activation and
+  retains operation receipts for read-only retries. Directory-backed failure laws
+  cover interrupted publication and competing authority. Packaged qualification
+  still needs the transformed forward and reverse fixtures before admission.
 - The CLI `release` command offers `prepare`, `deploy`, `rollback`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
@@ -69,14 +72,22 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   proof that no external effect occurred after a recovery point. Restore needs
   durable evidence covering that interval, or an enforced closed-group boundary
   established before capture; it must not infer safety from current endpoints alone.
-- No definition edit is admitted yet. The metadata preservation rule needs
-  package-bound qualification and guarded checkpoint publication before admission.
+- No definition edit is admitted yet. The metadata rule and guarded checkpoint
+  publisher need package-bound qualification before admission.
+  Admission also needs a canonical manifest requirement that older coordinator
+  builds reject: an older `resume` implementation must not skip definition
+  publication and boot the target over unchanged authored state. Exercise that
+  refusal before enabling metadata pairs, including rollback to an older image.
 - The legacy blob-version rewind has been removed. Automatic capture, fixture
   materialization and rollback are wired in. Registry protection, publication
   retry, and VM guards still need real cloud acceptance
   testing, including delayed operations after controller ownership changes.
 - No packaged release-pair qualification or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
+- Automatic fixtures reconstruct fresh authority roots around complete checkpoints.
+  They do not yet retain the source storage receipt chain and index. Add explicit
+  receipt-lookup compatibility evidence in both images; matching simulation
+  checkpoints alone does not prove storage-level operation deduplication survives.
 - Named handheld machine checkpoints now preserve core state and host pacing,
   with real-core and world continuation tests. Four same-image Docker legs over
   the official world, including its arcade machines, passed on 2026-09-13 with

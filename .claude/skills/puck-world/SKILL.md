@@ -343,8 +343,12 @@ also rejects nonempty population and invalid kit selections. The operator
 `rollback` command selects the retained predecessor directly from an admitted
 commit. `WorldReleaseMetadataTransition` prepares metadata-only checkpoint changes
 and their undo bases; its preservation laws include continuation, conflicts, custom
-null presence, and undo after rollback. This rule does not yet authorize changed
-definition pins: package qualification and guarded activation still need wiring.
+null presence, and undo after rollback. The Azure activation adapter calls
+`WorldAuthorityBlobStore.PrepareReleaseMetadataAsync` to publish the transformed
+checkpoint and definition in one CAS against the protected drain root, retaining
+receipts and recognizing retries without rewinding candidate progress. Run
+`WorldReleaseMetadataPublicationLawTests` for that boundary. This rule does not
+yet authorize changed definition pins: package qualification still needs wiring.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains

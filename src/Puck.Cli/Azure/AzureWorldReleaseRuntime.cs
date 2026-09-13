@@ -17,7 +17,7 @@ internal static partial class AzureCommand {
     /// <summary>Runs the shared release transaction against the existing single-worker VMSS and private store.</summary>
     private sealed class AzureWorldReleaseRuntime(
         string resourceGroup, string scaleSet, string temporary, string endpoint, string clientId,
-        WorldReleaseGroupStore groups, WorldAuthorityBlobStore authority,
+        WorldReleaseGroupStore groups, WorldAuthorityBlobStore authority, WorldReleaseArchive archive,
         AzureWorldReleaseDeployment? source, AzureWorldReleaseDeployment target,
         Func<CancellationToken, Task> initializeBootstrap) : IWorldReleaseRuntime {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -76,6 +76,15 @@ internal static partial class AzureCommand {
 
         public async Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
             await RequireAsync(operation, [WorldReleaseOperationPhase.Activate, WorldReleaseOperationPhase.Verify, WorldReleaseOperationPhase.Commit], cancellationToken).ConfigureAwait(false);
+            if (operation.PendingPhase == WorldReleaseOperationPhase.Activate && source is not null) {
+                foreach (var identity in m_identities) {
+                    var key = $"{identity.Owner:D}/{identity.World}";
+                    if (source.Manifest.Definitions[key] == target.Manifest.Definitions[key]) { continue; }
+                    var publication = await authority.PrepareReleaseMetadataAsync(identity, operation, source.Manifest, target.Manifest,
+                        archive, cancellationToken, CliWorldVocabulary.EnsureInstalled()).ConfigureAwait(false);
+                    if (!publication.Ok) { return new(false, $"'{identity.World}' release definition publication refused: {publication.Detail}"); }
+                }
+            }
             await EnsureWorkerAsync(target, cancellationToken).ConfigureAwait(false);
             return new(true, "exact target is running and privately healthy");
         }

@@ -12,7 +12,7 @@ namespace Puck.World.Server;
 /// so a retry that resends identical bytes is idempotent; the private root is the sole mutable publication point and
 /// moves the checkpoint, journal, definition, and receipt references under one if-match compare-and-swap, retried up
 /// to <see cref="MaxCasAttempts"/> times against a concurrent writer before refusing by name.</summary>
-public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore, IWorldAuthorityRecoveryStore {
+public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWorldAuthorityRecoveryStore {
     private const int MaxCasAttempts = 5;
 
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);

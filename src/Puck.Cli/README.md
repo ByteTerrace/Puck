@@ -197,7 +197,10 @@ state, and qualifies the reverse pair before entering the same drain and cutover
 transaction. It preserves progress earned since deployment. A pending operation
 requires `resume`; an absent or finalized rollback window refuses. `--operation`
 sets a stable operation ID for diagnostics. Explicit restore, which rewinds progress,
-is still unimplemented.
+is still unimplemented. The Azure activation adapter has an atomic metadata
+definition publisher, guarded by the operation and exact drained root, with
+receipt-based retries. Definition changes remain refused until packaged
+qualification exercises the same forward and reverse transformation.
 
 `azure prepare-world-release` applies the official endpoint and delegated
 admission bindings to the staged composed worlds, then hashes the complete
