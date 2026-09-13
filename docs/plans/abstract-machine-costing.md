@@ -18,6 +18,58 @@ The owner's contract is an abstract deadline under stated model assumptions.
 Use that contract throughout implementation. Do not add host-dependent pricing
 or make universal physical deadlines a prerequisite for this work.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The typed scaffolding and the
+accounting split exist; nothing is calibrated, and admission still runs on the
+heuristic work units.
+
+**Implemented:**
+
+- `CostBound` (`Known`, `Unmodeled`, `Overflow`) lives in `Puck.Maths`, with law
+  coverage in `tests/Puck.State.Tests/CostBoundLawTests.cs` and the Maths law
+  registry. The forge's `CartridgeCost` already reports frame work through it.
+- `RuleCost` separates setup, checks, and firing effects. `RuleWorkBudget.Tally`
+  always sums every check and applies the exclusion trie only to firing work,
+  including same-step writer counts.
+- The legacy `RuleWorkBudget.OperationCost` accepts a `CellKind` and returns the
+  rejecting `long.MaxValue` sentinel for an unregistered operation instead of 1.
+- `CostModelProfile.Portable` carries the proposed policy (3,000,000,000 cycles
+  per second, half reserved) with exact step period, allowance, engine-tick,
+  step-fraction, rate-zero, and admission arithmetic, tested in
+  `tests/Puck.World.Schema.Tests/WorldCostReportLawTests.cs`.
+- `CostModel` pins the model identifier and defines the memory access classes and
+  the `MemoryClassProfile` service formula from section 3.
+- `ReferenceSchedule.OperationCostBound` and `CostModel.MemoryCycles` exist, but
+  every non-empty result is deliberately `Unmodeled`. `EvidenceDigest` is null.
+- `WorldCostReport.Generate` produces a report for any compilable world with
+  contributors, issues, and the heuristic total kept separate. Its recurring and
+  search bounds are always `Unmodeled`, so it never admits a world.
+- Placement effects no longer carry the flat 32,768 price:
+  `WorldPlacementEffectCost.Of` derives it from the document and population the
+  install rebuilds. Decisions charge candidate-budget gates, retained-candidate
+  scores, grid lookups, and line-of-sight sampling.
+
+**Remaining:**
+
+- No coefficient evidence, State benchmark kernels, disassembly, or memory
+  profile exists. `src/Puck.Cli/Bench` still holds only Maths and whole-world
+  benchmarks.
+- The legacy table ignores `CellKind`; base rules report zero setup.
+- Interaction pricing is still population × min(neighbours, others). The `L * R`
+  scan and nearest-neighbour insertion work are not charged separately. HUD
+  effects keep their flat 4,096 price.
+- Search still derives nodes from `leftover / judgeCost` under
+  `RuleCapacity.MaxWorkUnitsPerTick` (2,000,000). Root and internal chance
+  evaluation remain recursive inside `SearchRuntime.ChanceExpectation`.
+- `WorldCostReport` has no consumer outside its tests: no validator, console,
+  CLI, `BrowserExports`, or portal wiring, and no source-path attribution.
+- The model identifier is not pinned in compiled plans, engine identity, or
+  replay identity.
+- `BenchRunner` still describes tens-of-seconds world construction, and
+  `puck bench world` currently fails before measuring: the harness supplies no
+  machine catalog, so the shipped world's arcade engines are refused at admission.
+
 ## 1. Decision and alternatives
 
 **Implement a weighted semantic execution model.** Price the compiled operation
@@ -75,9 +127,11 @@ measurements useful for checking the selected instruction forms.
 ## 2. Source findings that determine the work
 
 These record the original audit's reasons for the changes, not a live coverage
-inventory. The check/firing split and rejecting unknown-op fallback have since
-been corrected; see the owning State and World Schema READMEs. The remaining
-implementation must derive its complete operation list from the vocabulary.
+inventory. The check/firing split, the rejecting unknown-op fallback, and the
+flat placement price have since been corrected; see
+[Implementation status](#implementation-status) and the owning State and World
+Schema READMEs. The remaining implementation must derive its complete operation
+list from the vocabulary.
 
 | Finding | Evidence and consequence |
 |---|---|

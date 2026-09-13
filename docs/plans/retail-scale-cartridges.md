@@ -12,10 +12,35 @@ same, not one that assembles to the same bytes. That decision settles the rest o
 the design, because it says the compiler owns encoding and the document owns
 structure.
 
-This document records the decisions and the work they imply. It states no status:
-what is built, the code answers, and what has been verified with the check that
-produced it belongs to [game design](../game/design.md). If this plan and the code
-disagree, the code wins and a line here is wrong.
+This document records the decisions and the work they imply, with one dated
+status review below. What has been verified, with the check that produced it,
+belongs to [game design](../game/design.md). If this plan and the code disagree,
+the code wins and a line here is wrong.
+
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. None of the seven stages in
+[Order of work](#order-of-work) has started.
+
+**In place already:** the baseline this plan builds on. `Sm83Emitter` emits
+`Call`, `Return`, and `ReturnFromInterrupt`, and `ThumbEmitter` emits `Call`.
+`CartridgeExpressions.Reads` consumes `Puck.State`'s `ValueExpression`, including
+`Multiply`, `Divide`, and `Modulo`, and `CartridgeCost` reports through
+`CostBound`. `scene` partitions the frame.
+
+**Remaining:**
+
+- `CartridgeDocument` declares no procedures, typed regions, interrupt bodies,
+  ROM-resident tables, or codecs; state is still `Variables` and `Arrays`.
+- Every frame-shaped ceiling in the table below is unchanged in
+  `CartridgeLimits`: `VariableCount` 128, `ArrayCount` 32, `ArrayLength` 256,
+  `RuleCount` 1024, `StatementCount` 64, `MapWriteCount` 24, `RasterRowCount`
+  8, `SaveByteCount` 72, `TileCount` 256, and `WideMaximum` 65535.
+- Expressions evaluate in the operand width; no 16×16 multiply or 32-bit
+  intermediate exists on either backend.
+- No `puck` verb ingests images, maps, or audio.
+- A compile-time `for` still does not reach inside a rule body, per the
+  [cartridge vocabulary](../../src/Puck.GamingBricks.Transpiler/README.md).
 
 ## What the document can say, and what it cannot
 

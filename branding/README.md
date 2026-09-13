@@ -34,7 +34,7 @@ where its local component rules require it.
 | --- | --- | --- |
 | Primary 200 | <img src="assets/puck-logo-200.png" alt="Primary Puck square mark" width="96"> | Documentation site and package icon |
 | Portal 256 | <img src="assets/puck-logo-256.png" alt="Dashboard portal Puck mark" width="96"> | Dashboard header |
-| Editor 128 | <img src="assets/puck-editor-icon-128.png" alt="Puck editor extension mark" width="96"> | VS Code extension; integration deferred |
+| Editor 128 | <img src="assets/puck-editor-icon-128.png" alt="Puck editor extension mark" width="96"> | VS Code extension |
 
 ## Distribution map
 
@@ -42,9 +42,8 @@ where its local component rules require it.
 directory is copied beside the generated API reference by `puck docs build`.
 The NuGet pack target consumes the canonical 200px mark directly as `icon.png`.
 The dashboard host serves the shared favicon, touch icon, and app-icon sizes;
-its portal keeps the 256px header variant. The editor extension currently
-consumes the 128px variant. Its implementation and manifest are being changed
-in a separate task, so any further editor integration remains deferred.
+its portal keeps the 256px header variant. The VS Code extension's `icon.png`
+is a synchronized copy of the 128px variant.
 
 ## Updating an asset
 

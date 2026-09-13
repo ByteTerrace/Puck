@@ -15,6 +15,38 @@ To resume membership work, start with
 The later finder slices are a separate delivery, not hidden prerequisites for
 finishing the engine foundation.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The starting point named in
+[Foundation completion before the finder](#foundation-completion-before-the-finder)
+exists; none of units A–C or slices 1–7 is complete.
+
+**Implemented:**
+
+- `WorldGroups.cs` members carry an identity reference, a nullable role, and a
+  never-reused join ordinal; kinds declare role→capability maps and an
+  `Ephemeral` lifecycle.
+- `group:<id>` parses as a principal, and grant expansion uses the member's role.
+- `WorldSubmissionResult.Mutation` carries a `WorldMutationOutcome` with a
+  `WorldMutationPersistenceStatus` and optional `WorldDurableWatermark`.
+- `WorldAuthorityRoot` binds receipt and receipt-index hashes, and
+  `IWorldAuthorityStore` offers `RecordReceiptAsync` and
+  `FindOperationReceiptAsync` beside fenced checkpoint and journal writes.
+- `WorldGroupCommandModule` has `world.group.form`, `join`, `leave`, `kick`,
+  `world.groups`, and the `world.ownership.offer`, `accept`, and `reclaim` verbs.
+
+**Remaining:**
+
+- Unit A: no server path sets the persistence status to durable, and receipt
+  lookup is not reachable through ordinary ingress for a retried operation.
+- Unit B: `CommandPrincipalKind` has only `Unspecified`, `Console`, `Seat`,
+  `Addon`, and `Peer`; there is no bodyless session principal or session table.
+- Unit C: no invite, revoke, accept, decline, set-role, leadership-transfer, or
+  administrative-removal mutation exists, and no invitation record exists.
+- Slices 3–7: no activity, queue request, proposal, participation claim, or run
+  assignment type exists, and no finder panel or matcher.
+- `IObjectBlobStore` still has no deletion operation.
+
 ## The experience we are building
 
 Friends can form a party, invite people, find compatible strangers, enter one

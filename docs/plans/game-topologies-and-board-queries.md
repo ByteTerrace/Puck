@@ -5,6 +5,20 @@ game's movement, tabletop, and composed-world features. Each decision states
 the authoring shape, its compatibility behavior, and the law or replay that
 must support it; proposals remain distinct from the evidence already recorded.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. Every decision below has landed; the
+only open item is the undecided `$symmetry:` lattice question. The compiled
+types have since moved into `Puck.State`: `CompiledWorldTopology` is
+`CompiledTopology`, `WorldStateLatticeTopology` is `LatticeTopology`,
+`WorldBoardQueryKind` is `BoardQueryKind`, and `MaxDirections` lives in
+`TopologyCompilation`. `CompiledTopology.Opposite` reads a compiled table,
+`ElementAliases` resolves authored aliases, `RayCell`, `RayDistance`, and `Line`
+are gone, chess authors `chessRayEmpty`, and the three cited law-test files
+exist.
+
+## Decisions
+
 Discrete-topology capacity constants are an owner decision: they are derived,
 not restated. The hex radius ceiling, the document-wide board-storage budget,
 the zone-sort key ceiling, and the transfer-count ceiling were each a bare
@@ -84,9 +98,10 @@ validated against the same bare-group enumeration (`ElementNames`, run
 before any topology cell exists, so an alias can be checked without
 materializing per-cell images) so an alias naming no real element refuses at
 load. Separately, and still undecided: whether the fixed 240-node symmetry
-lattice behind `$symmetry:` is an engine primitive or content a world could
-reshape — the `$symmetry:` reserved-channel doc in
-[`references/documents.md`](../../.claude/skills/puck-world/references/documents.md)
+lattice behind `$symmetry:` (the node walk in `Puck.State`'s `StateCycle`) is an
+engine primitive or content a world could reshape — the `$symmetry:`
+reserved-channel doc in
+[`references/documents-rules.md`](../../.claude/skills/puck-world/references/documents-rules.md)
 is where a session picking that up starts.
 
 **`$board:line`/`rayCell`/`rayDistance` are retired in favour of `$match`

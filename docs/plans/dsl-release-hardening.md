@@ -13,6 +13,36 @@ The [retail-scale plan](retail-scale-cartridges.md) owns future procedures, type
 regions, interrupts, banking, assets and arithmetic expansion. The
 [shader evolution plan](shader-pipeline-evolution.md) owns GPU authoring.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The corrected review subset and the
+two shared metadata homes exist; none of the release-evidence stages is
+recorded as complete.
+
+**Implemented:**
+
+- [CartridgeStateLayout](../../src/Puck.GamingBricks.Forge/CartridgeStateLayout.cs)
+  and [CartridgeEffects](../../src/Puck.GamingBricks.Forge/CartridgeEffects.cs)
+  hold storage layout and effect analysis for both native forges.
+- `DocumentEvaluationBudget` bounds language evaluation and text expansion in
+  `Puck.Transpiler`; `distinct` and the other collection builtins live in one
+  `DocumentBuiltins` home.
+- Compile determinism and refusal paths for cartridge binding are covered by
+  `tests/Puck.World.Tests/MachineCartridgeLawTests.cs`, and CLI cartridge tooling
+  by `tests/Puck.Cli.Tests/CartridgeToolingTests.cs`.
+
+**Remaining:**
+
+- D1 has no recorded audit of duplicated metadata across consumers.
+- D2: no test compares CGB and AGB at normalized authored state on matched frame
+  boundaries, and `Puck.Transpiler` has no dedicated test project.
+- D3 has no recorded large-input lowering or cancellation measurement for a
+  current candidate.
+- D4: [Game development milestones](../development/game-milestones.md) holds no
+  packaged release-candidate record, and the pre-first-tick cartridge insertion
+  stall has neither a closure nor a current reproducer.
+- D5 depends on the [retail-scale plan](retail-scale-cartridges.md).
+
 ## Where to resume
 
 The review's follow-up recorded 880 passing tests, three release packages and

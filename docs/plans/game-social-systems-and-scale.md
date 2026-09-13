@@ -5,6 +5,47 @@ the reference game. It connects creature behavior, movement constraints, and
 the acceptance workload to the five-track sequence; the detailed paragraphs
 also preserve the owner's decisions and the gaps that still need evidence.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12.
+
+**Implemented:**
+
+- Per-body scale: `bodies.scaleRow` (`WorldBodiesDefaults.ScaleRow`) drives the
+  server and client consumers described below, including `WorldBody.ScaleRigid`.
+  The `drinkMe` and `eatMe` trigger pair is authored in `puck.world.json`.
+- Decision commitment and rising-edge interruption (`WorldDecision`), flock
+  profiles and affinities, and per-cell `Provenance` and observation fields on
+  `StateCell`. Keyed rows can hold one impression cell per observer pair.
+- Track 2: `puck canary` loads per-id manifests from
+  `tests/Puck.World.Canaries`, and a command claim accepts a `stream` override.
+- Track 5's spine: `WorldEntityAddress(Authority, Index, Generation)` is used by
+  adjacency fields, forwarding, transfer recovery, checkpoints, and the client.
+- Kit speed envelopes (`MotionScalarEnvelope`) bound adjacency overlap.
+
+**Remaining:**
+
+- The remote side of the adjacency sweep is still scale-inconsistent:
+  `WorldSnapshot` carries no per-entity scale.
+- Track 1: no frames document shape exists, and no authored angular-speed or
+  minimum-feature-size envelope input was found.
+- Track 2: the `addon-mutation-seam` canary cited below was deleted in
+  `c0e27fa27`; its grant-door and guest-mutation claims have no canary.
+- Track 3: neighbour-field derivation is not hoisted to delivery, and no
+  per-tick neighbour tape or tick-start revision pin exists.
+- Track 4's single seat-lifetime view state, the owner feel sitting, and the
+  touch-triggered win slice have no recorded completion.
+- Track 5: authored local `body:n` does not yet lower to `WorldEntityAddress`.
+- Directed multi-dimensional relationships, hearsay de-duplication, and
+  personality plasticity have no dedicated vocabulary beyond ordinary keyed
+  rows.
+- The few-thousand-creature, 60 FPS acceptance workload has no recorded run in
+  [Game development milestones](../development/game-milestones.md).
+- `four-corners-sharded` does not yet exercise vertical or island handoffs,
+  cross-host contact, autonomous travellers, or derived diagonal peers.
+
+## Decisions
+
 Creature collectives are an owner decision from 2026-09-02. Authorable local laws,
 not a prescribed group lifecycle, must allow solitary creatures to form packs,
 split into overlapping subclusters, reunite, and leave again. Explicit orders

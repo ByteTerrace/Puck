@@ -6,6 +6,24 @@ their acceptance evidence together so implementation can be checked against
 the experience the game needs. The decisions below describe intended work;
 dated results and current behavior remain in the [milestone records](../development/game-milestones.md).
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12: both decisions below are
+implemented, and this plan has no open work.
+
+- `WorldRigid` is the `rigid` kit facet (mass, restitution, Coulomb friction,
+  rolling friction, and per-second damping), with the server side in
+  `WorldBody.Rigid.cs` and `WorldPopulation.Rigid.cs`.
+- `WorldBodyContactPolicy` authors the substep ceiling, travel fraction and
+  minimum travel, pair restitution speed, rest thresholds, manifold iterations,
+  and the extra-sweep ceiling and budget.
+- `WorldInstanceHost.Transfers` refuses a rigid kit's transfer, and a carrier's
+  own transfer while it holds one, by name.
+- `WorldMotion` carries `groundStick` (default 2), `upTurn`, `obstruction`, and
+  `turn.maxPitch`; `world.kits` echoes them.
+
+## Decisions
+
 Authorable rigid dynamics is an owner decision. A rigid body is a kit facet
 (`rigid`), never a second body kind: physics-first authoring derives mass and
 inertia from the kit's own collider and an authored mass, never a free density
@@ -58,8 +76,8 @@ rolling collider's rendered position does not orbit the root as it spins.
 Cross-world transfer of a rigid body is
 out of scope and refused by name — a carrier holding one refuses its OWN
 transfer for the same reason, rather than dropping or orphaning what it
-holds. The garden's `billiardsTray`/`bowlingLane`/`dominoes`
-placements are the proof fixture; see the
+holds. The `games/billiards`, `games/bowling`, and `games/dominoes` modules that
+`puck.world.json` imports are the proof fixture; see the
 [server](../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
 

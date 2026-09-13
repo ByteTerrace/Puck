@@ -51,15 +51,15 @@ public sealed class BrowserEngineTests {
     }
     [Fact]
     public void Parse_composed_puck_world_defers_its_unregistered_machine_engines() {
-        // The verified, honest boundary: Puck.World.Browser carries no screen-machine engine catalog at all, so a
-        // document whose screens author real gaming-brick engines DEFERS the answer (never refuses, never silently
-        // passes) rather than either booting a slot nothing can run or rejecting a document a cataloged host admits.
+        // The verified, honest boundary: Puck.World.Browser carries no machine catalog at all, so a document whose
+        // machines author real gaming-brick engines DEFERS the answer (never refuses, never silently passes) rather
+        // than either booting a machine nothing can run or rejecting a document a cataloged host admits.
         var result = BrowserParser.Parse(utf8Json: ComposedPuckWorldBytes());
 
         Assert.True(condition: result.Ok, userMessage: string.Join(separator: "; ", values: (result.Errors ?? []).Select(selector: error => error.Message)));
         Assert.NotNull(@object: result.Document);
-        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "validation of engine 'gaming-brick' is deferred", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "validation of engine 'advanced-gaming-brick' is deferred", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "no machine catalog was supplied for 'gaming-brick'", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "no machine catalog was supplied for 'advanced-gaming-brick'", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void Parse_wrong_schema_refuses_by_name() {

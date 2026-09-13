@@ -13,6 +13,23 @@ owns the implemented document and runtime contract; the
 [World guide](../../src/Puck.World/README.md#shader-pipelines) owns commands and
 launch recipes. This plan does not certify a release or replace those guides.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The checkpoint foundation below is in
+place; none of P1–P6 is complete.
+
+- P1: `tests/Puck.Shaders.Tests` covers planning, binding, liveness, loading,
+  push-constant layout, and history-initialization refusals. The GPU feedback,
+  reload, capture, and allocation-failure scenarios listed under P1 are not yet
+  fresh-checkout tests on either backend.
+- P2: `ShaderPipelineRenderNode` implements `IPassTimingSource`, but
+  `TryReadPassTimings` always returns false and the shader guide still reports
+  GPU timings as unavailable.
+- P3 and P4: the pipeline document has no depth attachments, multiple color
+  attachments, or vertex and index inputs, and no mesh path exists in
+  `Puck.SdfVm`.
+- P5 and P6: not started.
+
 ## Start here
 
 The checkpoint preserves the foundation exercised during this work:

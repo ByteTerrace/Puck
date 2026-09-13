@@ -8,6 +8,56 @@ blocks, while this page owns the cross-topic order and shared gates.
 See [Reference game design](../game/design.md) for the design decisions.
 For dated evidence, see [Game development milestones](../development/game-milestones.md).
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. Each topic plan carries its own
+status review; this one covers the cross-topic sections below.
+
+**Implemented:**
+
+- The One World shape: `src/Puck.World/Assets/worlds/puck.world.json` imports the
+  district modules, `world.imports` and `body.pose spawn:<id>` exist, and
+  `granaries.world.json`, the frozen world and basis files, `Assets/scenarios`,
+  `nexus.world.json`, and `play.world.json` are gone. `experimental/Puck.Demo`
+  has no tracked files.
+- The handheld's attach pair ships in `modules/arcade.world.json` as an
+  `upsertPlacement` with an `attach` offset, now that placement effects are
+  priced by `WorldPlacementEffectCost.Of` rather than a flat 32,768.
+- The client seam: `Puck.World.Client` is its own project, and `PlayerRoster`
+  resolves poses, grants, and catalogs through `IServerLink` identically over
+  loopback and a socket.
+- Orleans hosting exists as `Puck.World.Silo`, with an `IWorldGrain` per world
+  authority behind `SiloCommandModule`.
+- Wave 4 audio, voice babble, and the diegetic instrument, with the
+  `voice-babble` and `instrument-clock-source` canaries.
+- Self-update's document, verifier, stager, applier, stub, `puck publish`
+  dry-run, and the `self-update` canary. The launcher still installs
+  `PlaceholderReleaseVerifier` while the trust anchor is the placeholder.
+- The shader set primitive (`build/Shaders.targets`, `puck.shader.v1`) proven by
+  `sdf-film-grain`.
+- The cross-owner `owner/{oid}/{world}` neighbour key and its
+  `WorldApiCounterpartResolver`.
+
+**Remaining:**
+
+- Wave 3: `experimental/scripts` still holds the only audio mixer, overlay frame
+  builder, mux determinism, and audio-device failure coverage.
+- Voice: no producer estimates syllable counts from dialogue text, and babble
+  is not correlated with a live body position.
+- The silo-hosted hub owned by the public-content identity is not started.
+- The live signing chain, `puck publish --sign`, and upload are not started.
+- The playthrough remainder other than the attach pair (the idle-tick target,
+  the `chance` level's hidden operands, and the four-corners re-recording at the
+  2.75× ring) has no recorded completion.
+- The content wave, federation wave, and namespace normalization have not
+  started, and the owner-run `Web.Functions` live smoke and track-4 feel sitting
+  are still owed.
+- Every row of the federation remainder and the gated ladder below remains
+  open, including per-viewport destination images, arrival-side replay taping,
+  first-class sinks, and the screen/placement collapse.
+- No binding-destination escalation witness exists in the tests or canaries,
+  so that item stays security-open.
+
 ## Topic plans
 
 The detailed decisions from the former campaign work plan are organized as follows:
@@ -220,7 +270,9 @@ asking to be believed.
 **Never write a status column.** A status claim duplicates what the code answers better, so it is
 pure liability with a superior substitute always available. A decision records what the code cannot
 answer — why, what was rejected, where a boundary sits — and stays irreplaceable even when stale.
-Keep decisions; delete status; generate inventories or do without them.
+Keep decisions; delete status; generate inventories or do without them. A plan's
+status review is the one exception: it names the commit it was checked against,
+so a reader can tell when it has gone stale.
 
 **Security claims default the other way.** For a feature, unverified means not-done and the cost of
 error is re-planning. For an escalation, unverified means **still open** — the cost of the other

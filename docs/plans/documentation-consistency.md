@@ -24,6 +24,12 @@ Markdown previews were inspected, and all 23 artwork and example assets plus
 the license text remained unchanged. This documentation pass did not run the
 full engine or emulator test suites or establish production-release readiness.
 
+A status review against `ceb993cba` confirmed that the applied naming decisions
+still hold: every renamed page and retitled chapter below carries its recorded
+title, the game design no longer claims to be the only entry point, and no
+tracked file still cites any of the retired filenames. Nothing in this plan
+remains open.
+
 The original briefs remain below as the scope and reasoning for this pass.
 They are completed assignments, not a queue of additional work. Future edits
 follow the shared writing guide and the documentation skill.

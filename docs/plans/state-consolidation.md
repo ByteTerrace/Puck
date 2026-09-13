@@ -12,6 +12,25 @@ trait field validation, and validation-to-install compilation reuse now live in 
 The remaining proposals preserve author expression, deterministic evaluation,
 and authority and transaction boundaries.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The foundations named above are in
+place; the three numbered proposals and the smaller opportunities remain open.
+
+- Section 1: `IValueSourcedEffect` shares effect analysis, but no common compiled
+  value source exists, and `GateToken` still carries separate operand and
+  expression forms.
+- Section 2: scalar and keyed advance, dynamics, and cycle field checks share
+  implementations in `WorldDefinitionValidator.State.cs`, but no shared
+  effective-behavior view exists for readers, conversion, or rebase.
+- Section 3: `CompiledPredicate` in `Puck.Physics` remains a separate Boolean
+  program, and `StateValueKind` still mixes storage kinds with the participant
+  `Counter` and `Timer` kinds.
+- `sortZone` and `sortKeyed` remain two frontends over `FinishSort`, and
+  `WorldStateRow` and `WorldRule` still repeat their base records' fields.
+
+## Principles
+
 Author conveniences can lower into a smaller common representation. Removing
 an operator merely because an author could emulate it with several rules can
 increase program size, exceed a work limit, or change atomicity.

@@ -5,6 +5,31 @@ game needs for actions, phases, boards, cards, transfer, and social memory. It
 records why each owner decision changes the shape, what has landed, and which
 behavioral evidence remains limited to a named fixture or replay.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. Every decision below has landed.
+Several were later carried into `Puck.State` under new names, so read the type
+names in the decision records as historical:
+
+| Named below | Current home |
+|---|---|
+| `WorldStateHandle` | `StateHandle` (`src/Puck.State/StateCatalog.cs`) |
+| `WorldStateDomain` and its `[Union]` marker | `StateDomain`, with the polyfill in `src/Puck.State/Union.cs` |
+| `WorldStatePhase`, `WorldPhaseGuard` | `StatePhase`, `PhaseGuard` |
+| `CompiledWorldOperand`/`CompiledWorldEffect` unions, `WorldOperandUnionLawTests` | Replaced by the `OperandFact` and `EffectFact` class hierarchies described in the [State README](../../src/Puck.State/README.md) |
+| `setRay`, `sortZone`, `sortKeyed` transforms | `StateOperations.SetRay`, `SortZone`, `SortKeyed` |
+| The garden and frozen-island fixtures | Retired; the garden's rules, including `boneHolderTrust`, now live in `puck.world.json` |
+
+The retired judge family, `setMask`/`combine`/`mapBoard`, `moveToken`, the market
+section, and `WorldSocialMemory` have no remaining source references. The law
+tests cited below (`ClockPhaseErrorLawTests`, `DiscreteStateLawTests`,
+`EscrowedTransferRuleLawTests`, `KeyedImpressionDedupLawTests`) exist.
+
+**Remaining:** carry has only its `body.carry` and `body.release` console
+surface; the carry rule effect and authored chord are not built.
+
+## Decisions
+
 The `ActionEffect.Judge` and judge asset family collapse into a
 `$clock:<music>:phaseError` operand as an owner decision. `ActionEffect.Judge`,
 `WorldJudgeRow`/`JudgeDocument` (`puck.judge.v1`), and the rhythm mechanism
@@ -72,7 +97,7 @@ against the same candidate document — so an installed document can never carry
 handle addresses a row that has vanished, and `TryReadHandle` throws rather than reading a
 neutral value it should never need to. This is a pure representation change: the passive
 300-tick garden replay and the frozen world's 720-tick replay both hash identically before and
-after. The case-type/union rewrite below is unstarted; this only clears its stated first step.
+after. This cleared the stated first step of the case-type rewrite below.
 
 **Compiled rule operands and effects are closed unions, built to the union pattern before the
 compiler has it (owner decision). Both halves have landed.**

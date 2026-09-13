@@ -45,6 +45,20 @@ filtered-help regression also passed. These results establish local contracts.
 Production deployment and user-flow validation remain pending until the Azure
 workflow and signed-in operator checks succeed.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12, by milestone from
+[section 9](#9-implementation-sequence-and-release-gates):
+
+| Milestone | Status |
+|---|---|
+| Engine prerequisites, 0, and 1 | Implemented. `Puck.Mcp`'s `OperatorMcpServer` exposes `puck_exec` and `puck_capture_frame` over the Hosting console attachment. |
+| 2: participant tools | Not started. No `puck_affordances`, `puck_observe`, or `puck_act` tool or Participant profile exists; the operator server states that participant access is not provided. |
+| 3: authoring and recording conveniences | Not started. No `puck_doc` or `puck_capture` tool, and no `world.cost` console verb. |
+| 4: parity and ingress | Not started. |
+| 5a: remote Operator | Implemented locally, with `puck_attach`, `puck_detach`, and `puck_host` for caller-bound gateway attachments. Live Entra consent and deployment are unverified. |
+| 5b: delegated services | Scoped reads implemented as `puck_service_observe`, with `puck_onboard` routed through the Function App. Participant authority bindings and durable delegated mutations are not started. |
+
 ## Local Operator implementation, 2026-09-08
 
 Implemented from corrected prerequisite base `b1066e2973e0`: neutral

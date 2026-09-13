@@ -8,6 +8,20 @@ entry points: the workspace, host, portal, and shared source package. Generated 
 retain their source ownership. The editor extension is being changed in another
 task; this pass leaves its implementation and working files to that task.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The pass is complete, including both
+items recorded in [Remaining boundaries and findings](#remaining-boundaries-and-findings):
+
+- Every tracked .NET, Cargo, and npm manifest under `src`, `tests`, `wasm`, and
+  `editors` has a README, and `puck branding --check` exists.
+- The editor icon is now an active manifest copy; its bytes match the canonical
+  128px asset.
+- The three World.Browser failures were stale expectations: machine engine
+  deferrals moved to `machines[i].configuration`, and each machine-sourced screen
+  now defers its output. The tests assert that contract, and a Release run passed
+  all 24.
+
 ## Documentation ownership
 
 Centralization means that readers can find one authoritative explanation for

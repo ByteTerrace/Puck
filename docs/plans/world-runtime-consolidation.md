@@ -12,6 +12,32 @@ for implementation status and the [game milestones](../development/game-mileston
 for dated verification. A difference between the plan and the implementation
 needs an explicit decision about whether the plan is stale or work remains.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12.
+
+**Implemented:**
+
+- Static geometry is baked: `WorldQueryBaker` and `BakedWorldQuery` in
+  `Puck.SignedDistance`, with `WorldSolidField` and the contact census in
+  `Puck.World.Server`.
+- Narration flows through `WorldOutputHub`, and the architecture gate denies
+  `System.Console` against compiled assemblies.
+- `WorldDeadlineTable` exists and serves park, ownership, and transfer-escrow
+  deadlines.
+
+**Remaining:**
+
+- The facade has not started. `WorldServer` still spans 46 partial files, and
+  none of `WorldDocument`, `WorldTick`, `WorldRuleHost`, `WorldExtensions`, or
+  `WorldPersistence` exists. `WorldGrants` already implements `IWorldGrantsView`.
+- Contribution tenure, placement deals, placement responses, and reflow reviews
+  still run their own expiry sweeps outside the deadline table.
+- No comment-smell ledger exists, and `FileLengths.json` still sets the ceiling
+  at 2,500 lines.
+- The composed-game acceptance check and the content and federation waves have
+  no recorded completion.
+
 ## Design comparisons
 
 | Where | The idea | What it implies |

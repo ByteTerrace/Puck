@@ -25,6 +25,27 @@ its acceptance evidence appear below.
   - [Lane C: authoring, receipts, and optional distribution](#lane-c-authoring-receipts-and-optional-distribution)
 - [Acceptance criteria and completion review](#acceptance-criteria-and-completion-review)
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12. The
+[current implementation](#what-the-current-implementation-establishes) and
+[limitations](#current-limitations-and-compatibility-boundaries) sections below
+still describe the code accurately, and all five priorities in
+[Remaining work](#remaining-work-and-recommended-order) are open:
+
+1. Screens are still index-addressed: `WorldScreenOp.Insert` carries an `int
+   Index`, and `WorldMachineCableGroup` groups screen indices rather than machine
+   names. No explicit multiport control route exists.
+2. No generic machine-operation rule effect exists, and addon watches have not
+   moved to named instances.
+3. No execution or content receipt type exists; boot-anchored verified replay
+   is not implemented.
+4. The reusable cabinet module and the three worked-cabinet UX checks are not
+   recorded.
+5. `src/Puck.World/Puck.World.csproj` still references both bricks and both
+   forges directly, and `ScreenCommandModule` and `ForgeCommandModule` still
+   branch on screen indices, so no no-bricks distribution exists.
+
 ## The decision
 
 Keep screens. A screen is a useful authored object: a display surface with a

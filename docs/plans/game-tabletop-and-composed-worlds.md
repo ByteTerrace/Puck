@@ -5,6 +5,39 @@ composed from reusable parts. It describes the proposed board, placement,
 search, and game rules work, while retaining the acceptance conditions,
 implementation decisions, and dated evidence that constrain the sequence.
 
+## Implementation status
+
+Reviewed against `ceb993cba` on 2026-09-12.
+
+**Implemented:** every primitive the decisions below describe exists. The
+tabletop board facet with `$board:cellOf`, `$upright`, and quiescence gates;
+chess, poker (with `house.autoDeal`), dominoes, billiards, bowling, tic-tac-toe,
+and hex lines as imported `games/` fragments, checked by `GardenSplitLawTests`
+and `PokerHandStrengthLawTests`; rule bindings, `puck.table.v1` tables, the
+256-row `StateRow.MaxRows` and 2,000,000-unit work ceilings; infix expressions,
+`world.rule.trace`, `world.rule.hazards`, `world.rule.failures`, and
+`world.budget.rules`; `Puck.State` as the standalone rule library; the Maths
+expression families; hex, `graph`, and `tiling` topologies including Penrose
+rhombs; the `search` section with negamax, transposition, and UCB1 tree
+methods, `WorldBoardEnforcement`, and `inverse` rows; and placement parents
+with `placement:<id>` addressing. The games directory has since grown to
+include backgammon, Chinese checkers, mancala, and the Klondike, Spider, and
+FreeCell solitaire modules.
+
+**Remaining:**
+
+- The shipped chess module declares no `search` rows and no board
+  `enforcement`, so checkmate, stalemate, draws, and a CPU opponent are still
+  not authored there. Backgammon and Chinese checkers are the shipped worlds
+  that use `search`.
+- The two snub tilings wait on a vertex-configuration grower.
+- A plane-native make/unmake for deeper search is an open decision.
+- Interactions and decisions remain host-evaluated until a pair domain over rows
+  is designed.
+- Permutations longer than sixteen elements wait on a reduction operand.
+
+## Decisions
+
 The tabletop primitive is an owner decision for Lane D. Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`

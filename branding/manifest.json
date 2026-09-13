@@ -21,7 +21,7 @@
       "id": "puck-editor-icon-128",
       "source": "branding/assets/puck-editor-icon-128.png",
       "sha256": "ada70319c7107154bfd24677a856a1230d8547a58adb3e0d4b25300a77dee55f",
-      "variant": "Editor extension icon retained at its authored 128x128 size; integration is deferred while the extension task is active.",
+      "variant": "Editor extension icon retained at its authored 128x128 size.",
       "consumers": ["editors/vscode/icon.png"]
     },
     {
@@ -112,7 +112,7 @@
   "copies": [
     { "asset": "puck-logo-200", "path": "docs/site/_theme/logo.png" },
     { "asset": "puck-logo-256", "path": "src/Puck.Dashboard/src/portal/assets/logo.png" },
-    { "asset": "puck-editor-icon-128", "path": "editors/vscode/icon.png", "deferred": true },
+    { "asset": "puck-editor-icon-128", "path": "editors/vscode/icon.png" },
     { "asset": "puck-palette-tokens", "path": "docs/site/_theme/tokens.css" },
     { "asset": "puck-favicon", "path": "docs/site/favicon.ico" },
     { "asset": "puck-favicon", "path": "docs/site/icons/favicon.ico" },

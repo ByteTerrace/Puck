@@ -69,8 +69,8 @@ public sealed class BrowserComposerTests {
         Assert.True(condition: result.Ok, userMessage: string.Join(separator: "; ", values: (result.Errors ?? []).Select(selector: error => error.Message)));
         Assert.NotNull(@object: result.Composed);
         Assert.NotNull(@object: result.Document);
-        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "validation of engine 'gaming-brick' is deferred", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "validation of engine 'advanced-gaming-brick' is deferred", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "no machine catalog was supplied for 'gaming-brick'", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "no machine catalog was supplied for 'advanced-gaming-brick'", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void ComposeTree_reports_an_edited_fragments_own_duplicate_row_by_its_own_path() {
