@@ -168,6 +168,10 @@ releases, admission, rollback eligibility, pending phase, recovery scope, and ne
 operator action. Supply a saved group file for offline inspection; add `--json`
 for the complete validated record plus the next action. A deployment without a
 managed group is reported explicitly and returns exit code 2.
+Release command failures print a concise `world release:` diagnostic and return
+exit code 1; cancellation returns 130. A failed or canceled mutation directs the
+operator to inspect `status` and use `resume` for unfinished work. Neither an exit
+code nor a lost response establishes whether the durable operation committed.
 `world release finalize` closes the current admitted rollback window with a
 guarded group write. It preserves gameplay, recovery history, and retained
 artifacts. Repeating it after finalization succeeds without another mutation;

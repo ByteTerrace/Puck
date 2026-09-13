@@ -39,6 +39,10 @@ qualification receipt; `PUCK_TEST_WORLD_IMAGE` must also be set for this control
 Set `PUCK_TEST_RELEASE_EVIDENCE_DIRECTORY` to retain those Docker legs and their
 hash evidence outside the test's temporary directory for inspection.
 
+`WorldReleaseRollbackTests` also starts real CLI processes for invalid status and
+exercise inputs, checking a concise diagnostic, failure exit code, and no stack
+trace in the operator output.
+
 ## Verification
 
 From the repository root, run in PowerShell or another shell:

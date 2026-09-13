@@ -588,6 +588,15 @@ tests. Do not treat a successful local qualification
 control as production readiness. Command syntax and fixture requirements live in
 the [CLI reference](../../src/Puck.Cli/README.md#automation-commands).
 
+### World maintenance and recovery
+
+Run these commands from the repository root with the deployment outputs for the
+intended group and its Azure credentials. Use a CLI supporting the package's
+coordinator contract; new packages require `puck.world.release.receipts.v1`.
+Keep the deployment outputs and retained artifact/configuration references
+available to the next operator. Do not delete the previous image or protected
+recovery objects while accepting a release.
+
 For a managed release group, `puck world release status` reads the group directly
 from the world owner's private store, using the existing deployment outputs and
 Azure credentials. The group name is the configured world silo name. It reports
@@ -614,6 +623,54 @@ restore command is still required for intentional progress rewind.
 Use a fresh `--operation` identifier for a new rollback. Reusing a pending or
 retained identifier refuses instead of toggling releases or reusing older recovery
 roots; inspect `status` and use `resume` for an unfinished transaction.
+
+The normal maintenance sequence is:
+
+1. Inspect `puck world release status`. Resolve an unfinished operation before
+   starting another. If a previous rollback window remains open, either use it or
+   explicitly accept the current release with `puck world release finalize`.
+2. Let Release Azure prepare and deploy the candidate, or deploy an already
+   prepared package with `puck world release deploy artifacts/world-release`.
+   Preparation verifies the package and runs both images against isolated copies
+   of current state. The serving world stays open during this work. A refused
+   transition reports its reason before the maintenance cutover begins.
+3. Expect a maintenance interruption during drain, private activation and
+   verification. Inspect `puck world release status --json` after the command
+   returns. Confirm the intended active release, open admission and the absence
+   of unfinished work. Preserve the operation ID and qualification evidence
+   printed by deployment with the release record.
+4. Reconnect and check player progress and transfers. Keep the rollback window
+   open while accepting the release. If it must be withdrawn, run
+   `puck world release rollback`, then repeat the status and gameplay checks.
+   This uses the latest progress. It can refuse if current state is incompatible
+   with the predecessor or a live metadata edit conflicts with the reverse change.
+5. Once the release is accepted, run `puck world release finalize` to allow the
+   next deployment. Finalization closes ordinary rollback eligibility; it does
+   not delete retained history or rewind the world.
+
+After a disconnect, cancellation, failed command or controller restart, start
+with `puck world release status`. A failed command or lost response does not tell
+you whether commit happened. A release-command failure returns 1 and cancellation
+returns 130; neither authorizes a manual storage change. Follow the reported next
+action with `puck world release resume`:
+
+| Durable status | What resume follows |
+|---|---|
+| `Prepare` | Recheck the pending inputs; the source has not drained. |
+| `Drain` | Finish the drain and protected capture. Keep the source available so a failed save can retry. |
+| `Activate` or `Verify` | Continue private candidate activation and verification, or enter recorded pre-commit recovery on failure. |
+| `Recover` or `RecoverActivate` | Restore and admit that operation's protected source under fresh fences. Admission stays closed until recovery completes. |
+| `Commit`, admission closed | Resume the committed target and open its admission. The old save is no longer an automatic fallback. |
+| Admission open, no unfinished operation | Inspect the active release and player state; the response may have been lost after success. |
+
+If resume refuses, retain its diagnostic and operation ID, correct the named
+missing input or service failure, and resume the same operation. Do not choose
+another image, replace authority pointers, clear the group record, or run a
+second deployment to bypass maintenance. Intentional rewind is not exposed by
+the current CLI; the [release plan](../plans/world-release-management.md#federation-restore-and-retention)
+records the external-effect proof required before that operation can be supported.
+
+### Hosted worker runtime
 
 `puck world prepare` packages Puck and its referenced neighbours. Official release
 preparation pins the complete inventory, with a distinct retained signing key for

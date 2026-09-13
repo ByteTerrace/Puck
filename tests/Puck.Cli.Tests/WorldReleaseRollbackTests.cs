@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Puck.Cli.Azure;
 using Puck.World.Server;
@@ -6,6 +7,32 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed class WorldReleaseRollbackTests {
+    [Theory]
+    [InlineData("status", "missing")]
+    [InlineData("exercise", "Host configuration directory does not exist")]
+    public async Task OperatorRefusalsReportTheReasonWithoutAnUnhandledException(string verb, string reason) {
+        var temporary = Directory.CreateTempSubdirectory("puck-release-refusal-");
+        try {
+            var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = temporary.FullName };
+            foreach (var argument in new[] { typeof(PuckRootCommand).Assembly.Location, "world", "release", verb, Path.Combine(temporary.FullName, "missing") }) {
+                start.ArgumentList.Add(argument);
+            }
+            using var process = Process.Start(start)!;
+            var token = TestContext.Current.CancellationToken;
+            var output = process.StandardOutput.ReadToEndAsync(token);
+            var errors = process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            Assert.Equal(1, process.ExitCode);
+            Assert.Empty(await output);
+            var diagnostic = await errors;
+            Assert.StartsWith("world release: ", diagnostic);
+            Assert.Contains(reason, diagnostic);
+            Assert.DoesNotContain("Unhandled exception", diagnostic);
+            Assert.DoesNotContain("   at ", diagnostic);
+        } finally { temporary.Delete(recursive: true); }
+    }
+
     private static WorldReleaseGroupRecord Committed => new() {
         Schema = WorldReleaseGroupStore.Schema, DeploymentGroup = "primary", Owner = Guid.NewGuid(),
         ActiveRelease = "release-b", PreviousRelease = "release-a", PendingOperationId = Guid.NewGuid(),

@@ -20,7 +20,7 @@ internal static class WorldReleaseExerciseCommand {
         var fixture = new Argument<string>("fixture-directory");
         var steps = new Option<int>("--steps") { DefaultValueFactory = _ => 60, Description = "Exact simulation steps in this isolated qualification leg (1–1024)." };
         var command = new Command("exercise", "Run one packaged release qualification leg in a marked disposable fixture.") { fixture, steps };
-        command.SetAction((parse, token) => RunAsync(Path.GetFullPath(parse.GetRequiredValue(fixture)), parse.GetValue(steps), token));
+        command.SetAction((parse, token) => WorldReleaseCommand.RunAsync(() => RunAsync(Path.GetFullPath(parse.GetRequiredValue(fixture)), parse.GetValue(steps), token)));
         return command;
     }
 

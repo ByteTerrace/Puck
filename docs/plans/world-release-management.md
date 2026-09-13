@@ -104,8 +104,10 @@ to metadata and require package-bound qualification.
   materialization and rollback are wired in. Registry protection, publication
   retry, and VM guards still need real cloud acceptance
   testing, including delayed operations after controller ownership changes.
-- No qualification between different engine builds or operator exercise is recorded, and
-  the deployment guide has no maintenance and recovery runbook.
+- No qualification between different engine builds or operator exercise is recorded.
+  The [maintenance and recovery runbook](../development/ci.md#world-maintenance-and-recovery)
+  now describes the supported commands and phase-specific recovery; cloud acceptance
+  must exercise it before production readiness is claimed.
 - Receipt proof is now part of packaged qualification. Record it for the actual
   different-build release pair alongside its complete checkpoint evidence.
 - Named handheld machine checkpoints now preserve core state and host pacing,
