@@ -43,7 +43,6 @@ internal static partial class AzureCommand {
         var deployWorld = new Command(description: "Qualify and deploy the retained world package through the durable maintenance transaction.", name: "deploy-world") {
             new Option<string?>(name: "--resource-group") { Description = "The resource group; defaults to the deployment output." },
             new Option<string>("--package") { DefaultValueFactory = _ => "artifacts/world-release", Description = "Prepared immutable release package." },
-            new Option<string>("--fixture") { DefaultValueFactory = _ => "artifacts/world-release-fixture", Description = "Coherent offline qualification fixture." },
             new Option<Guid?>("--operation") { Description = "Optional stable operation ID; repeating the same target resumes its pending operation." },
         };
         var publishStatic = new Command(description: "Publish official content and the website from the bundle.", name: "publish-static") {
@@ -101,7 +100,7 @@ internal static partial class AzureCommand {
         }));
         deployWorld.SetAction(action: (parseResult, token) => RunAsync(action: () => DeployWorldAsync(
             group: parseResult.GetValue<string?>(name: "--resource-group"), package: parseResult.GetValue<string>("--package")!,
-            fixture: parseResult.GetValue<string>("--fixture")!, operation: parseResult.GetValue<Guid?>("--operation"), token: token)));
+            operation: parseResult.GetValue<Guid?>("--operation"), token: token)));
         publishStatic.SetAction(action: (parseResult, _) => RunAsync(action: () => PublishStaticAsync(bundle: parseResult.GetRequiredValue<string>(name: "--bundle-directory"))));
         publishTemplateSpecs.SetAction(action: (_, _) => RunAsync(action: PublishTemplateSpecsAsync));
         publishContainer.SetAction(action: (parseResult, _) => RunAsync(action: () => PublishContainerAsync(archive: (parseResult.GetValue<string?>(name: "--archive") ?? ""), commit: parseResult.GetRequiredValue(option: commitOption), output: (parseResult.GetValue<string?>(name: "--output-file") ?? ""), registry: parseResult.GetRequiredValue<string>(name: "--registry"), repository: parseResult.GetRequiredValue<string>(name: "--repository"))));

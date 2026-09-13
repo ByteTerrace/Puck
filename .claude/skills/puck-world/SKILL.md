@@ -331,8 +331,17 @@ integrity. These same-binary laws do not qualify a pair of packaged engine image
 `world release deploy` and `azure deploy-world` retain exact inputs and enter this
 coordinator after qualification; `resume` reads the pending operation and retained
 configuration. `azure prepare-world-release` binds and pins all composed worlds.
-Deploy still requires a caller-supplied coherent fixture; automatic export and the
-operator rollback/restore commands remain unfinished. Deploy, resume, and
+Deploy and rollback automatically export current source state through loopback
+`POST /release/fixture/<request-id>`; the host captures all rows at one pump boundary
+without draining. `WorldReleaseFixtureArchive` publishes its inventory after the
+immutable checkpoints. The CLI materializes exact captured state with test keys
+and preserves machine identity. Run `WorldReleaseFixtureArchiveLawTests`, the
+cutover laws, and `WorldReleaseFixtureBuilderTests`; set `PUCK_TEST_WORLD_IMAGE`
+for the latter's four Docker control legs. Empty no-kit population checkpoints
+preserve only the zero selection sentinel; `WorldEmptyPopulationCheckpointLawTests`
+also rejects nonempty population and invalid kit selections. The operator
+`rollback` command selects the retained predecessor; explicit restore remains
+unfinished. Deploy, rollback, resume, and
 finalization use a renewable controller lease. Run the CLI
 `WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained
 configuration, bootstrap, or controller ownership. The Azure lease law requires

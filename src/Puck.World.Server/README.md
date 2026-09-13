@@ -145,6 +145,15 @@ coordinator can recover the package without the original runner's directory.
 The Azure drain adapter can also rediscover an operation's already protected
 roots after its worker stops. This lookup validates retained payloads and never
 captures newer state; an incomplete inventory still requires a successful drain.
+`WorldReleaseFixtureArchive` retains coherent qualification captures supplied by
+the silo's shared pump boundary. Each request publishes its inventory after all
+checkpoint objects pass hash and readback checks. The inventory preserves the
+source release, machine identity, complete world set, and row ticks. It does not
+sample mutable authority roots or carry production signing keys. The CLI builds
+a disposable store from those exact checkpoints; incomplete and corrupt captures
+refuse before qualification. Empty worlds with no compiled body kits preserve
+their empty population and zero selection sentinel; they cannot restore actual
+bodies or another kit index without a kit.
 Registry image retention and packaged qualification remain separate preflight
 requirements; archiving a manifest does not establish either of them.
 The CLI's Docker runner compares complete imports of one offline fixture in both

@@ -158,6 +158,10 @@ jobs:
         run: puck azure vault-access
         shell: bash
       - if: steps.current.outputs.deploy == 'true'
+        name: Prepare the complete managed world release
+        run: puck azure prepare-world-release
+        shell: bash
+      - if: steps.current.outputs.deploy == 'true'
         name: Deploy the primary Puck world
         run: puck azure deploy-world
         shell: bash

@@ -9,6 +9,19 @@ namespace Puck.Cli.Tests;
 
 public sealed class WorldReleaseOfficialPackageTests {
     [Fact]
+    public void PublishedCommitReuseChecksTheIdentityExposedByEachDockerStore() {
+        var index = "sha256:" + new string('a', 64);
+        var config = "sha256:" + new string('b', 64);
+        var modern = new JsonObject { ["Id"] = index, ["Descriptor"] = new JsonObject { ["digest"] = index } };
+        Assert.True(AzureCommand.MatchesPublishedContainer(index, modern, new JsonObject { ["manifests"] = new JsonArray() }));
+        Assert.False(AzureCommand.MatchesPublishedContainer(config, modern, new JsonObject { ["config"] = new JsonObject { ["digest"] = index } }));
+        var classic = new JsonObject { ["Id"] = config };
+        Assert.True(AzureCommand.MatchesPublishedContainer(index, classic, new JsonObject { ["config"] = new JsonObject { ["digest"] = config } }));
+        Assert.False(AzureCommand.MatchesPublishedContainer(index, classic, new JsonObject { ["config"] = new JsonObject { ["digest"] = index } }));
+        Assert.False(AzureCommand.MatchesPublishedContainer(index, classic, new JsonObject { ["manifests"] = new JsonArray() }));
+    }
+
+    [Fact]
     public void OfficialPreparationPinsEveryCohostedWorldAndBindsThePrimaryBeforeHashing() {
         var temporary = Directory.CreateTempSubdirectory("puck-official-package-");
         try {
@@ -62,7 +75,8 @@ public sealed class WorldReleaseOfficialPackageTests {
     public void RegistryReadbackMustProveTheExactDigestIsRetainedAndReadable(bool delete, bool write, bool read, bool refuses) {
         var digest = "sha256:" + new string('b', 64);
         var image = AzureCommand.ParseWorldReleaseImage("example.azurecr.io/world-silo@" + digest);
-        Assert.Equal("example", image.Registry);
+        Assert.Equal("example.azurecr.io", image.Server);
+        Assert.Equal("example-dnslabel.azurecr.io", AzureCommand.ParseWorldReleaseImage("example-dnslabel.azurecr.io/world-silo@" + digest).Server);
         Assert.Equal("world-silo@" + digest, image.Reference);
         var result = new JsonObject { ["digest"] = digest, ["changeableAttributes"] = new JsonObject {
             ["deleteEnabled"] = delete, ["writeEnabled"] = write, ["readEnabled"] = read,

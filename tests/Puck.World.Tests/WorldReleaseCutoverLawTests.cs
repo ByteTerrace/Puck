@@ -18,6 +18,45 @@ public sealed class WorldReleaseCutoverLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task QualificationExportCapturesBothRowsWithoutDrainingAndRetryRetainsTheOriginalBoundary() {
+        using var scenario = new Scenario();
+        var release = scenario.Manifest('a').Identity;
+        await scenario.InitializeAsync(release);
+        var host = scenario.Host(release).Host;
+        using var instances = host.Instances;
+        await ActivateAllAsync(host, scenario.Identities);
+        Assert.Equal(WorldReleaseAdmissionPublication.Opened, await PublishAsync(host));
+        Tick(host, 5);
+        var expected = Ticks(host, scenario.Identities);
+        var before = await scenario.FencesAsync();
+        var request = Guid.NewGuid();
+        var exporting = host.ExportReleaseFixtureAsync(request, Token);
+        await PumpAsync(host, exporting);
+        var manifest = await exporting;
+        Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), manifest.Worlds.Keys);
+        Assert.Equal(release, manifest.Release);
+        Assert.False(host.IsDraining);
+        Assert.True(host.ReleaseAdmissionOpen);
+        foreach (var world in manifest.Worlds) {
+            Assert.Equal(expected[world.Key], world.Value.Tick);
+            var bytes = await scenario.FixtureArchive.ReadCheckpointAsync(manifest, world.Key, Token);
+            Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes.Span, out var checkpoint, out var reason), reason);
+            Assert.Equal(expected[world.Key], checkpoint!.Server.LastCompletedTick);
+        }
+        Assert.Equal(before, await scenario.FencesAsync());
+        Tick(host, 3);
+        Assert.All(Ticks(host, scenario.Identities), row => Assert.True(row.Value > expected[row.Key]));
+        var retrying = host.ExportReleaseFixtureAsync(request, Token);
+        await PumpAsync(host, retrying);
+        Assert.Equal(manifest.Identity, (await retrying).Identity);
+        var group = (await scenario.Groups.LoadAsync("primary", Token))!.Value;
+        Required(await scenario.Groups.BeginAsync(group, Guid.NewGuid(), scenario.Manifest('b').Identity, Token));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.ExportReleaseFixtureAsync(Guid.NewGuid(), Token));
+        Assert.False(host.IsDraining);
+        await PumpAsync(host, host.DrainAsync(Token));
+    }
+
+    [Fact]
     public async Task CoordinatorDeployAndRollbackRetainLatestGameplayAcrossBothRows() {
         using var scenario = new Scenario();
         var a = scenario.Manifest('a');
@@ -328,6 +367,7 @@ public sealed class WorldReleaseCutoverLawTests {
         public WorldAuthorityIdentity[] Identities { get; }
         public WorldAuthorityBlobStore Authority { get; }
         public WorldReleaseGroupStore Groups { get; }
+        public WorldReleaseFixtureArchive FixtureArchive { get; }
 
         public Scenario() {
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -336,6 +376,7 @@ public sealed class WorldReleaseCutoverLawTests {
             Identities = [new(m_owner, SafeName.Parse("alpha")), new(m_owner, SafeName.Parse("beta"))];
             Authority = new(m_store, m_target);
             Groups = new(m_store, m_target, m_owner);
+            FixtureArchive = new(m_store, m_target, m_owner);
         }
 
         // These laws test orchestration and persistence in one compiled engine. Packaged-pair qualification

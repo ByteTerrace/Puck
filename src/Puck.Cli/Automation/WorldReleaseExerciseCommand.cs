@@ -39,7 +39,7 @@ internal static class WorldReleaseExerciseCommand {
             throw new InvalidDataException("qualification requires a local single-owner pinned inventory without production release or authentication configuration");
         }
         var owner = definition.Worlds[0].Owner;
-        var target = new DirectoryObjectStorageTarget(Path.Combine(fixture, "store"));
+        var target = new DirectoryObjectStorageTarget(Path.Combine(fixture, "store"), maximumBlobBytes: WorldReleaseFixtureArchive.MaximumCheckpointBytes);
         definition = definition with { StateDir = Path.Combine(fixture, "state"), Release = new("qualification", owner, "exercise") };
         var services = new ServiceCollection();
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services);

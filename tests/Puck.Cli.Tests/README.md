@@ -18,6 +18,15 @@ SDK against an isolated local Azurite container. Load
 it reports an asset-gated skip when the image or Docker is unavailable. It does
 not contact a production storage account.
 
+`WorldReleaseFixtureBuilderTests` covers bootstrap and captured exports, distinct
+test keys, retained checkpoint bytes and machine identity, and incomplete-export
+refusal. Set `PUCK_TEST_WORLD_IMAGE` to a locally built world-silo image to also
+run its materialized two-world capture through all four Docker qualification
+legs. This optional same-image control verifies the export and runner path;
+compatibility between different releases needs separate pair evidence.
+Set `PUCK_TEST_RELEASE_EVIDENCE_DIRECTORY` to retain those Docker legs and their
+hash evidence outside the test's temporary directory for inspection.
+
 ## Verification
 
 From the repository root, run in PowerShell or another shell:

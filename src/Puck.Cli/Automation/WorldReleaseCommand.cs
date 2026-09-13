@@ -70,15 +70,21 @@ internal static class WorldReleaseCommand {
             return result.Completed && !result.SourceRecovered ? 0 : 1;
         });
         var deployPackage = new Argument<string>("package-directory");
-        var deployFixture = new Option<string>("--fixture") { DefaultValueFactory = _ => "artifacts/world-release-fixture" };
         var deployOperation = new Option<Guid?>("--operation");
-        var deploy = new Command("deploy", "Qualify and deploy an exact package, preserving current authoritative progress.") { deployPackage, deployFixture, deployOperation };
+        var deploy = new Command("deploy", "Export current state, qualify, and deploy an exact package while preserving authoritative progress.") { deployPackage, deployOperation };
         deploy.SetAction(async (parse, token) => {
-            var result = await AzureCommand.DeployWorldReleaseAsync(parse.GetRequiredValue(deployPackage), parse.GetValue(deployFixture)!, parse.GetValue(deployOperation), token).ConfigureAwait(false);
+            var result = await AzureCommand.DeployWorldReleaseAsync(parse.GetRequiredValue(deployPackage), parse.GetValue(deployOperation), token).ConfigureAwait(false);
             Console.WriteLine(result.Detail);
             return result.Completed && !result.SourceRecovered ? 0 : 1;
         });
-        return new Command("release", "Prepare, deploy, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, deploy, WorldReleaseExerciseCommand.Create() };
+        var rollbackOperation = new Option<Guid?>("--operation");
+        var rollback = new Command("rollback", "Return to the retained previous release using current player progress.") { rollbackOperation };
+        rollback.SetAction(async (parse, token) => {
+            var result = await AzureCommand.RollbackWorldReleaseAsync(parse.GetValue(rollbackOperation), token).ConfigureAwait(false);
+            Console.WriteLine(result.Detail);
+            return result.Completed && !result.SourceRecovered ? 0 : 1;
+        });
+        return new Command("release", "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.") { prepare, status, finalize, qualify, resume, deploy, rollback, WorldReleaseExerciseCommand.Create() };
     }
 
     internal static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {

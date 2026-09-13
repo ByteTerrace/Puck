@@ -22,6 +22,12 @@ internal static partial class AzureCommand {
         try {
             await RunAsync(arguments: ["login", server, "--username", "00000000-0000-0000-0000-000000000000", "--password-stdin"], executable: "docker", input: (refresh + "\n"));
             if (archive.Length != 0) { await DockerAsync("load", "--input", archive); }
+            var reused = await ReusePublishedContainerAsync(registry, repository, commit, server).ConfigureAwait(false);
+            if (reused is not null) {
+                if (output.Length != 0) { File.WriteAllText(output, reused + "\n"); }
+                Console.WriteLine(reused);
+                return;
+            }
             await DockerAsync("tag", $"puck/{repository}:{commit}", image);
             await DockerAsync("push", image);
             var inspected = JsonNode.Parse(json: await DockerAsync("image", "inspect", image))!;

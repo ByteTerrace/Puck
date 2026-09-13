@@ -18,8 +18,8 @@ each contract lands. This plan owns the intended release policy and sequencing.
 ## Implementation status
 
 The hosting foundation, retained archive, packaged qualification runner, and
-inspection and finalization commands exist. Production deployment and rollback
-integration remain incomplete.
+operator commands exist, including managed deployment and rollback. Production
+acceptance, explicit restore, and definition-change admission remain incomplete.
 
 **Implemented:**
 
@@ -36,7 +36,7 @@ integration remain incomplete.
   report `GET /private-healthz`, and freeze retiring activations.
 - `WorldReleaseTransition` computes and reverses a definition delta; the first
   policy refuses changed definitions.
-- The CLI `release` command offers `prepare`, `deploy`, `status`, `finalize`, `resume`, and
+- The CLI `release` command offers `prepare`, `deploy`, `rollback`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
   compute template. Deploy, resume, and finalization acquire an Azure controller lease.
@@ -46,6 +46,10 @@ integration remain incomplete.
   retains versioned configuration and protects exact registry digests before
   qualification. Guest effects and bootstrap serialize under a VM lock and
   recheck the durable operation; bootstrap readiness remains private.
+- Deploy and rollback export the source automatically. The host captures all rows
+  at one pump boundary and retains exact checkpoints without draining or changing
+  authority roots. Fixtures retain machine identity and use disposable signing
+  keys. Release Azure prepares the package before entering managed deployment.
 - Docker qualification compares full imports in both packages, then repeats
   the comparison on candidate-written continuation state. Four control legs
   using one packaged image passed; this verifies the runner, not compatibility
@@ -56,12 +60,11 @@ integration remain incomplete.
 
 **Remaining:**
 
-- No rollback or restore CLI operation exists, and no
-  group-scoped restore operation exists in the coordinator.
+- No restore CLI operation or group-scoped restore coordinator operation exists.
 - No definition edit is admitted yet; phase 3's preservation rules are unwritten.
-- The legacy blob-version rewind has been removed. Managed deployment requires
-  a caller-supplied coherent fixture; automated export and pipeline wiring remain
-  unfinished. Registry protection and VM guards still need real cloud acceptance
+- The legacy blob-version rewind has been removed. Automatic capture, fixture
+  materialization and rollback are wired in. Registry protection, publication
+  retry, and VM guards still need real cloud acceptance
   testing, including delayed operations after controller ownership changes.
 - No packaged release-pair qualification or operator exercise is recorded, and
   the deployment guide has no maintenance and recovery runbook.
@@ -129,8 +132,9 @@ compatibility shims throughout the engine.
 The [Azure deployment](../../src/Puck.Cli/Azure/AzureWorldReleaseDeploy.cs) now
 enters the durable coordinator and resumes from retained inputs. Its predecessor
 captured mutable blob versions in runner artifacts and restored them on failure;
-that path has been removed. Completion still requires coherent fixture export,
-operator rollback and restore commands, and an exercised cloud recovery runbook.
+that path has been removed. Completion still requires explicit restore,
+definition-change admission, release-pair qualification, and an exercised cloud
+recovery runbook.
 
 The [silo](../../src/Puck.World.Silo/README.md) already owns drain, frozen final
 checkpoints, readiness, and a serialized persistence queue. The

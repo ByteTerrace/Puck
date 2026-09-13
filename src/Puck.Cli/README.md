@@ -133,7 +133,8 @@ puck world release prepare <package-directory> --silo <silo.json> --label <label
 puck world release status [group-file] [--json]
 puck world release finalize
 puck world release resume
-puck world release deploy <package-directory> [--fixture <fixture-directory>] [--operation <id>]
+puck world release deploy <package-directory> [--operation <id>]
+puck world release rollback [--operation <id>]
 puck azure prepare-world-release [--output-directory <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
 puck world probe <host> <port> <public-key-file>
@@ -183,8 +184,20 @@ digests, and runs qualification before entering the coordinator. Repeating a
 pending target resumes it; another target refuses. A previous rollback window
 must be finalized before a third release. Bootstrap refuses existing unmanaged
 workers and persisted gameplay. `azure deploy-world` uses this same transaction.
-Both currently require a coherent offline fixture supplied with `--fixture`;
-automatic export from a live deployment is not implemented.
+Deployment automatically exports all source worlds at one simulation boundary.
+The worker retains complete immutable checkpoints, and the CLI builds an isolated
+fixture with the captured machine identity and fresh test signing keys. Source
+admission stays open during export and qualification. A lost export response can
+reuse its stable request ID; partial uploads have no published inventory. Bootstrap
+builds its empty fixture from the retained package. Managed deploy does not accept
+a replacement fixture that could omit uncapturable live state.
+
+`world release rollback` selects the retained predecessor, exports current source
+state, and qualifies the reverse pair before entering the same drain and cutover
+transaction. It preserves progress earned since deployment. A pending operation
+requires `resume`; an absent or finalized rollback window refuses. `--operation`
+sets a stable operation ID for diagnostics. Explicit restore, which rewinds progress,
+is still unimplemented.
 
 `azure prepare-world-release` applies the official endpoint and delegated
 admission bindings to the staged composed worlds, then hashes the complete
@@ -192,7 +205,7 @@ inventory. It reads the deployment outputs, `artifacts/release-source.json`, ima
 and `artifacts/azure/silo-worlds`. Every world is pinned with its own retained
 signing key at deployment. Temporary preparation keys are never packaged.
 
-Deploy, resume, and finalization use a renewable Azure Blob lease to exclude competing
+Deploy, rollback, resume, and finalization use a renewable Azure Blob lease to exclude competing
 controllers. Losing ownership cancels the CLI's child processes and closes its
 next-effect checks; the durable operation remains available for a later resume.
 This controller lease complements the world's authority fences and publication

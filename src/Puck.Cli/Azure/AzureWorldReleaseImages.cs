@@ -8,17 +8,20 @@ internal static partial class AzureCommand {
     /// Docker credentials are isolated from the operator's existing configuration.</summary>
     private static async Task RetainWorldReleaseImagesAsync(IEnumerable<string> images, CancellationToken cancellationToken) {
         var inventory = images.Distinct(StringComparer.Ordinal).Select(ParseWorldReleaseImage).ToArray();
+        var registryName = ResourceName("containerRegistry", "name");
+        var registryServer = await AzAsync("acr", "show", "--name", registryName, "--query", "loginServer", "-o", "tsv").ConfigureAwait(false);
+        if (inventory.Any(image => image.Server != registryServer)) { throw new InvalidDataException("release images must belong to the configured official registry"); }
         var directory = Directory.CreateTempSubdirectory("puck-release-registry-");
         try {
-            foreach (var registry in inventory.GroupBy(image => image.Registry, StringComparer.Ordinal)) {
+            foreach (var registry in inventory.GroupBy(image => image.Server, StringComparer.Ordinal)) {
                 cancellationToken.ThrowIfCancellationRequested();
                 foreach (var image in registry) {
-                    await AzAsync("acr", "repository", "update", "--name", image.Registry, "--image", image.Reference,
+                    await AzAsync("acr", "repository", "update", "--name", registryName, "--image", image.Reference,
                         "--delete-enabled", "false", "--write-enabled", "false", "-o", "none").ConfigureAwait(false);
-                    var retained = await AzJsonAsync("acr", "repository", "show", "--name", image.Registry, "--image", image.Reference, "-o", "json").ConfigureAwait(false);
+                    var retained = await AzJsonAsync("acr", "repository", "show", "--name", registryName, "--image", image.Reference, "-o", "json").ConfigureAwait(false);
                     ValidateRetainedWorldReleaseImage(image.Digest, retained);
                 }
-                var server = registry.Key + ".azurecr.io";
+                var server = registry.Key;
                 var tenant = await AzAsync("account", "show", "--query", "tenantId", "-o", "tsv").ConfigureAwait(false);
                 var token = await TokenAsync("https://containerregistry.azure.net").ConfigureAwait(false);
                 using var form = new FormUrlEncodedContent(new Dictionary<string, string> {
@@ -36,11 +39,11 @@ internal static partial class AzureCommand {
         } finally { directory.Delete(recursive: true); }
     }
 
-    internal static (string Registry, string Reference, string Digest) ParseWorldReleaseImage(string image) {
-        var match = Regex.Match(image, @"\A(?<registry>[a-z0-9]{5,50})\.azurecr\.io/(?<repository>[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*)@(?<digest>sha256:[a-f0-9]{64})\z");
+    internal static (string Server, string Reference, string Digest) ParseWorldReleaseImage(string image) {
+        var match = Regex.Match(image, @"\A(?<server>[a-z0-9][a-z0-9-]{3,61}[a-z0-9]\.azurecr\.io)/(?<repository>[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*)@(?<digest>sha256:[a-f0-9]{64})\z");
         if (!match.Success) { throw new InvalidDataException("managed world releases require an exact Azure Container Registry repository digest"); }
         var digest = match.Groups["digest"].Value;
-        return (match.Groups["registry"].Value, match.Groups["repository"].Value + "@" + digest, digest);
+        return (match.Groups["server"].Value, match.Groups["repository"].Value + "@" + digest, digest);
     }
 
     internal static void ValidateRetainedWorldReleaseImage(string digest, JsonNode retained) {

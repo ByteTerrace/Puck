@@ -561,6 +561,9 @@ the official endpoint and admission policy before hashing every composed world.
 Key Vault deployment inputs, and the compiled compute template. It protects the
 source and target ACR manifests from writes and deletion, checks their readability,
 and pulls both digests for qualification using temporary Docker credentials.
+On a pipeline retry, container publication verifies and reuses the existing
+commit's immutable image identity; it refuses different image bytes under the
+same commit instead of pushing through a retained release's write protection.
 Registry administrators can still change those protection settings; retention
 must remain part of the operator's storage policy.
 
@@ -573,10 +576,15 @@ then restarts the retained source. The removed blob-version rewind path is not
 an alternative rollback mechanism. An unmanaged worker or existing gameplay
 cannot be silently adopted as an empty bootstrap.
 
-This integration remains incomplete: deploy requires a caller-supplied coherent
-offline fixture, and the Release Azure pipeline does not yet prepare and export
-all managed inputs. Operator rollback, explicit restore, and cloud interruption
-acceptance tests remain outstanding. Do not treat a successful local qualification
+Release Azure prepares the package before deploying it. Deploy automatically
+exports a coherent capture from the active source, preserving admission while
+all hosted rows are captured at one simulation boundary. Immutable fixture
+objects are uploaded before their inventory; the CLI materializes an isolated
+store with exact checkpoints and test signing keys. Bootstrap uses an empty
+fixture built from the package. The source's uncapturable state refuses deployment.
+
+The integration still needs explicit restore and cloud interruption acceptance
+tests. Do not treat a successful local qualification
 control as production readiness. Command syntax and fixture requirements live in
 the [CLI reference](../../src/Puck.Cli/README.md#automation-commands).
 
@@ -588,11 +596,20 @@ operator action. `--json` includes the full record; an optional group-file argum
 allows offline inspection. An older deployment without a managed group returns
 an explicit refusal. This status command does not adopt an unmanaged deployment.
 `puck world release resume` continues the pending operation with retained image,
-configuration and template versions. Deploy, resume and finalization hold a
+configuration and template versions. Deploy, rollback, resume and finalization hold a
 renewable controller lease. Guest mutations and bootstrap additionally take the
 same VM lock and recheck the operation before acting, rejecting delayed jobs from
 an obsolete phase or release. Azure operations already accepted by the service
 still require cloud recovery verification; local cancellation cannot retract them.
+
+For an admitted deployment, `puck world release rollback` selects the retained
+previous release and qualifies it against a fresh export of current progress.
+The coordinator then drains and cuts over using that progress. It never selects
+an earlier gameplay save. If another operation is pending, use `status` and
+`resume` to finish that operation first. `puck world release finalize` closes the
+rollback window once the current release is accepted, allowing the next deploy.
+Finalization preserves history and retained artifacts. A separate explicit
+restore command is still required for intentional progress rewind.
 
 `puck world prepare` packages Puck and its referenced neighbours. Official release
 preparation pins the complete inventory, with a distinct retained signing key for

@@ -7,7 +7,8 @@ namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
     private sealed record WorldReleaseContext(JsonNode Outputs, Guid Owner, string Group, string ResourceGroup,
-        WorldReleaseGroupStore Groups, WorldReleaseArchive Archive, WorldReleaseDeploymentStore Deployments, WorldAuthorityBlobStore Authority);
+        WorldReleaseGroupStore Groups, WorldReleaseArchive Archive, WorldReleaseDeploymentStore Deployments, WorldAuthorityBlobStore Authority,
+        IObjectBlobStore Blobs, WorldReleaseFixtureArchive Fixtures);
 
     private static async Task<T> WithManagedWorldReleaseAsync<T>(Func<WorldReleaseContext, CancellationToken, Task<T>> action,
         CancellationToken cancellationToken, string? resourceGroup = null) {
@@ -25,7 +26,7 @@ internal static partial class AzureCommand {
             var context = new WorldReleaseContext(outputs, owner, group, resourceGroup ?? Text(Value(outputs, "deploymentResourceGroupName")),
                 new(blobs, target, owner), new(blobs, target, owner),
                 new(blobs, target, owner, new AzureWorldReleaseSecretVersions(Text(Value(outputs, "deploymentKeyVaultName")), Text(configuration["releaseStateSecretName"]))),
-                new(blobs, target));
+                new(blobs, target), blobs, new(blobs, target, owner));
             return await action(context, token).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
     }

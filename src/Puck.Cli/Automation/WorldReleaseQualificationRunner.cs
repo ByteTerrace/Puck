@@ -14,7 +14,7 @@ namespace Puck.Cli.Automation;
 internal sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceImage, string targetImage, int steps = 60)
     : IWorldReleaseQualificationRunner, IWorldReleaseBootstrapQualificationRunner {
     private const string Marker = "puck.world.qualification.v1";
-    private const int MaximumFileBytes = 128 * 1024 * 1024;
+    private const int MaximumFileBytes = WorldReleaseFixtureArchive.MaximumCheckpointBytes;
 
     public Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
         RunPairAsync(null, target, cancellationToken);

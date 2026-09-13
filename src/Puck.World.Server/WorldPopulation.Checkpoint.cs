@@ -368,7 +368,10 @@ public sealed partial class WorldPopulation {
         if (checkpoint.Entries is null) {
             throw new InvalidOperationException("population checkpoint entries are null.");
         }
-        if ((uint)checkpoint.SeatKit >= (uint)m_kits.Length) {
+        // An empty document has no kits and retains the constructor's zero selection sentinel.
+        // It can round-trip only an empty population; any actual body still requires a compiled kit.
+        var emptyKitSelection = m_kits.Length == 0 && checkpoint.SeatKit == 0 && checkpoint.Entries.Count == 0 && checkpoint.SimulatedCount == 0;
+        if (!emptyKitSelection && (uint)checkpoint.SeatKit >= (uint)m_kits.Length) {
             throw new InvalidOperationException($"population checkpoint seat kit {checkpoint.SeatKit} lies outside {m_kits.Length} compiled kits.");
         }
         if (checkpoint.SimulatedCount < 0 || checkpoint.SimulatedCount > PeerCapacity) {

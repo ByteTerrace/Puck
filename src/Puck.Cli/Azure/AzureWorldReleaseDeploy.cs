@@ -7,11 +7,10 @@ namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
     /// <summary>Retains and qualifies an exact package before entering the durable maintenance transaction.</summary>
-    internal static async Task<WorldReleaseRunResult> DeployWorldReleaseAsync(string packageDirectory, string fixtureDirectory,
+    internal static async Task<WorldReleaseRunResult> DeployWorldReleaseAsync(string packageDirectory,
         Guid? operationId, CancellationToken cancellationToken, string? resourceGroup = null) {
         if (operationId == Guid.Empty) { throw new ArgumentException("release operation ID must not be empty", nameof(operationId)); }
         packageDirectory = Path.GetFullPath(packageDirectory);
-        fixtureDirectory = Path.GetFullPath(fixtureDirectory);
         var manifest = JsonSerializer.Deserialize<WorldReleaseManifest>(ConfinedFile.ReadAllBytes(Path.Combine(packageDirectory, "release.json"), 1024 * 1024))
             ?? throw new InvalidDataException("release package contains no manifest");
         if (!WorldReleaseManifest.TryVerify(manifest, packageDirectory, out var reason)) { throw new InvalidDataException(reason); }
@@ -45,7 +44,6 @@ internal static partial class AzureCommand {
                 source = await LoadWorldReleaseDeploymentAsync(context, sourceIdentity, token).ConfigureAwait(false);
                 if (!WorldReleaseTransitionPolicy.TryPrepare(source.Manifest, manifest, out _, out reason)) { throw new InvalidDataException(reason); }
             }
-            if (!Directory.Exists(fixtureDirectory)) { throw new DirectoryNotFoundException("release qualification requires a coherent offline fixture directory"); }
             // Reuse already retained inputs on retry. Regenerating SSH material or reading today's template would
             // otherwise turn a lost preflight response into a conflicting configuration for the same release.
             await context.Archive.SaveAsync(manifest, packageDirectory, token).ConfigureAwait(false);
@@ -56,11 +54,12 @@ internal static partial class AzureCommand {
             }
             var candidate = await LoadWorldReleaseDeploymentAsync(context, manifest.Identity, token).ConfigureAwait(false);
             await RetainWorldReleaseImagesAsync(source is null ? [candidate.Image] : [source.Image, candidate.Image], token).ConfigureAwait(false);
+            var operation = operationId ?? Guid.NewGuid();
+            Console.WriteLine($"Release operation: {operation:D}");
+            var fixtureDirectory = await PrepareWorldReleaseFixtureAsync(context, source, manifest, operation, token).ConfigureAwait(false);
             var runner = new WorldReleaseQualificationRunner(fixtureDirectory, Path.GetFullPath("artifacts/world-release-qualification"),
                 source?.Image ?? candidate.Image, candidate.Image);
             var coordinator = new WorldReleaseCoordinator(context.Groups);
-            var operation = operationId ?? Guid.NewGuid();
-            Console.WriteLine($"Release operation: {operation:D}");
             var begun = source is null
                 ? await coordinator.BeginBootstrapAsync(state, manifest, runner, operation, token).ConfigureAwait(false)
                 : await coordinator.BeginDeploymentAsync(state, source.Manifest, manifest, runner, operation, token).ConfigureAwait(false);
@@ -69,8 +68,8 @@ internal static partial class AzureCommand {
         }, cancellationToken, resourceGroup).ConfigureAwait(false);
     }
 
-    private static async Task DeployWorldAsync(string? group, string package, string fixture, Guid? operation, CancellationToken token) {
-        var result = await DeployWorldReleaseAsync(package, fixture, operation, token, group).ConfigureAwait(false);
+    private static async Task DeployWorldAsync(string? group, string package, Guid? operation, CancellationToken token) {
+        var result = await DeployWorldReleaseAsync(package, operation, token, group).ConfigureAwait(false);
         Console.WriteLine(result.Detail);
         if (!result.Completed || result.SourceRecovered) { throw new InvalidOperationException("release did not complete; inspect 'puck world release status' and resume its durable operation"); }
     }

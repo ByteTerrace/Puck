@@ -26,7 +26,16 @@ public sealed class WorldSiloReleaseControl(WorldSiloHost silo) {
                 return true;
             }
             var parts = context.Request.Path.Value!.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 3 || !Guid.TryParseExact(parts[2], "D", out var operation) || operation == Guid.Empty || operation != state.PendingOperationId) {
+            if (parts.Length != 3 || !Guid.TryParseExact(parts[2], "D", out var operation) || operation == Guid.Empty) {
+                context.Response.StatusCode = StatusCodes.Status409Conflict;
+                return true;
+            }
+            if (parts[1] == "fixture" && HttpMethods.IsPost(context.Request.Method)) {
+                var fixture = await silo.ExportReleaseFixtureAsync(operation, token).ConfigureAwait(false);
+                await context.Response.WriteAsJsonAsync(new { fixture.RequestId, fixture.Identity, fixture.Release }, token).ConfigureAwait(false);
+                return true;
+            }
+            if (operation != state.PendingOperationId) {
                 context.Response.StatusCode = StatusCodes.Status409Conflict;
                 return true;
             }

@@ -76,6 +76,14 @@ candidate's actual row fences. `POST /release/publish/<operation-id>` publishes
 the committed target, or completes restored-source admission. Every operation
 checks the current durable phase and operation identifier; an external caller
 or unmanaged worker receives 404. Drain retains the frozen process for retries.
+`POST /release/fixture/<request-id>` exports the admitted active release when no
+operation is pending. It captures every pinned row in one mailbox action, verifies
+ownership, and uploads an immutable fixture inventory after its checkpoint bytes.
+It preserves source admission and authority roots. Repeating a completed request
+returns the original capture; a partial upload cannot be consumed as a fixture.
+The response contains only the retained inventory identity, not checkpoint payloads
+or signing keys. `WorldReleaseCutoverLawTests` verifies the shared capture boundary
+and continued source gameplay.
 Managed source recovery first restores the operation's protected roots into an
 empty private host, then activates under fresh fences. The durable
 `RecoverActivate` phase lets a restarted coordinator continue activation without
