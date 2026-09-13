@@ -213,6 +213,14 @@ public sealed partial class NavigationRuntime {
             }
         }
         public void RestoreShared(NavigationSharedCheckpoint checkpoint) {
+            // Direct domain restores also install geometry-dependent state. Do not rely on the runtime wrapper's
+            // validation to establish the bake before a later TryRebind decides whether it needs a geometry proof.
+            foreach (var tree in checkpoint.Trees) {
+                if (tree.Goal >= 0) {
+                    EnsureBaked();
+                    break;
+                }
+            }
             m_sharedCursor = checkpoint.Cursor;
             m_sharedFieldRevision = MediumRevision;
             for (var index = 0; (index < m_sharedTrees.Length); index++) { m_sharedTrees[index].Restore(state: checkpoint.Trees[index]); }

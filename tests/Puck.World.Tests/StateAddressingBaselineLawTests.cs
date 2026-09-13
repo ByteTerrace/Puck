@@ -1,0 +1,116 @@
+using Puck.Hosting;
+using Puck.World.Server;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
+    [Fact]
+    public void ShippedWorldStateHashesAndOperandDistribution() {
+        var definition = AuthoredGameFixtures.Nexus;
+        var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var hash31 = 0UL;
+        var hash151 = 0UL;
+
+        for (var tick = 1; tick <= 151; tick++) {
+            fixture.Step(stepTicks: width);
+            if (tick == 31) {
+                hash31 = WorldRuntimeStateHash.Hash(scope: WorldStateHashScope.Capture, server: fixture.Server, tick: 31);
+            } else if (tick == 151) {
+                hash151 = WorldRuntimeStateHash.Hash(scope: WorldStateHashScope.Capture, server: fixture.Server, tick: 151);
+            }
+        }
+
+        output.WriteLine($"puck.world.json state hash at tick 31:  {hash31:x16}");
+        output.WriteLine($"puck.world.json state hash at tick 151: {hash151:x16}");
+
+        var compilation = WorldRuleCompilation.Compile(definition);
+        var allRules = compilation.Rules.Concat(compilation.Interactions).ToArray();
+
+        var operands = new List<OperandFact>();
+        void CollectTokens(CompiledExpressionToken[]? tokens) {
+            if (tokens is null) {
+                return;
+            }
+            foreach (var token in tokens) {
+                if (token.Operand is not null) {
+                    operands.Add(token.Operand);
+                }
+            }
+        }
+        void CollectGate(GateToken[] gate) {
+            foreach (var token in gate) {
+                if (token.Left is not null) {
+                    operands.Add(token.Left);
+                }
+                if (token.Comparand is not null) {
+                    operands.Add(token.Comparand);
+                }
+                CollectTokens(token.LeftExpression);
+                CollectTokens(token.RightExpression);
+            }
+        }
+
+        foreach (var rule in allRules) {
+            CollectGate(rule.Gate);
+            if (rule.Bindings is not null) {
+                foreach (var binding in rule.Bindings) {
+                    CollectTokens(binding.Expression);
+                }
+            }
+            if (rule.Decision is not null) {
+                if (rule.Decision.Interrupt is not null) {
+                    CollectGate(rule.Decision.Interrupt);
+                }
+                foreach (var opt in rule.Decision.Options) {
+                    CollectGate(opt.Gate);
+                    CollectTokens(opt.Score);
+                }
+            }
+        }
+
+        var fixedLiteralCellOps = 0;
+        var dynamicKeyCellOps = 0;
+        var liveZoneCellOps = 0;
+        var boardOps = 0;
+        var symmetryOps = 0;
+        var patternOps = 0;
+        var otherOps = 0;
+
+        foreach (var op in operands) {
+            if (op is StateCellOperand cellOp) {
+                if (cellOp.RowFrom is not null) {
+                    liveZoneCellOps++;
+                } else if (cellOp.KeyFrom is not null) {
+                    dynamicKeyCellOps++;
+                } else {
+                    fixedLiteralCellOps++;
+                }
+            } else if (op is BoardOperand) {
+                boardOps++;
+            } else if (op is SymmetryOperand) {
+                symmetryOps++;
+            } else if (op is PatternOperand) {
+                patternOps++;
+            } else {
+                otherOps++;
+            }
+        }
+
+        output.WriteLine($"Total compiled operands inspected: {operands.Count}");
+        output.WriteLine($"  StateCellOperand fixed row & literal key: {fixedLiteralCellOps}");
+        output.WriteLine($"  StateCellOperand dynamic key ($cell:, etc): {dynamicKeyCellOps}");
+        output.WriteLine($"  StateCellOperand live zone:               {liveZoneCellOps}");
+        output.WriteLine($"  BoardOperand:                             {boardOps}");
+        output.WriteLine($"  SymmetryOperand:                          {symmetryOps}");
+        output.WriteLine($"  PatternOperand:                           {patternOps}");
+        output.WriteLine($"  Other operands (binding, tick, etc):      {otherOps}");
+
+        Assert.Equal(0x05ed666c0438fb08UL, hash31);
+        Assert.Equal(0x92dd209305359d13UL, hash151);
+        Assert.True(fixedLiteralCellOps > 0);
+    }
+}

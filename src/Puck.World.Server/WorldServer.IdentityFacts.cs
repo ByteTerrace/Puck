@@ -13,6 +13,20 @@ public sealed partial class WorldServer {
 
     private WorldIdentity?[] m_identityLaneBound = [];
     private int[] m_identityLaneRevision = [];
+    private StateCatalog? m_cachedIdentityLaneCatalog;
+    private StateHandle m_cachedIdentityLaneHandle;
+
+    private StateHandle IdentityLaneHandle {
+        get {
+            var catalog = RuleReadCatalog;
+            if (ReferenceEquals(m_cachedIdentityLaneCatalog, catalog)) {
+                return m_cachedIdentityLaneHandle;
+            }
+            m_cachedIdentityLaneCatalog = catalog;
+            _ = catalog.TryResolve(lane: StateLane.Document, name: WorldIdentityFactLane.RowName, handle: out m_cachedIdentityLaneHandle);
+            return m_cachedIdentityLaneHandle;
+        }
+    }
 
     // A fact written inside a transaction's preflight persists only when the transaction commits.
     private readonly record struct PendingIdentityFact(WorldIdentity Identity, CellName Key, long Value);
@@ -98,7 +112,7 @@ public sealed partial class WorldServer {
         if (frame.TryStored(row: lane, key: key, value: out var stored, text: out _) && (stored == value)) {
             return true;
         }
-        if (((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set), tick: tick, preflight: false, reason: out var reason)) {
+        if (((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set, Handle: IdentityLaneHandle, CellKey: key), tick: tick, preflight: false, reason: out var reason)) {
             return true;
         }
         if (m_output.HasNarrationSink) {
@@ -154,7 +168,7 @@ public sealed partial class WorldServer {
         var key = effect.LaneKey(bodyIndex: bodyIndex, capacity: m_population.Capacity);
         var unchanged = (frame.TryStored(row: lane, key: key, value: out var stored, text: out _) && (stored == value));
 
-        if (!unchanged && !((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set), tick: tick, preflight: preflight, reason: out var reason)) {
+        if (!unchanged && !((IRuleHost)this).TryApply(mutation: new StateMutation.UpsertCell(Row: WorldIdentityFactLane.RowName, Key: key.Value, Value: value, Write: StateWriteKind.Set, Handle: IdentityLaneHandle, CellKey: key), tick: tick, preflight: preflight, reason: out var reason)) {
             m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.IdentityFactUnwritable, ruleName: ruleName, effect: effect, tick: tick, detail: reason);
 
             return EffectOutcome.Refused;

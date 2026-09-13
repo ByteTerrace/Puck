@@ -330,6 +330,11 @@ public sealed partial class WorldPopulation {
                 if (navigation.Path.Length != 0) {
                     navigation.Path.AsSpan().CopyTo(destination: entry.NavigationState.WritablePath());
                 }
+                if (navigation.DomainIndex >= 0) {
+                    // Even a failed search retains its domain, goal, and status. The source baked that domain
+                    // before searching; preserve the same retention proof after restore, including an empty path.
+                    m_navigation[navigation.DomainIndex].EnsureBaked();
+                }
             }
 
             if (

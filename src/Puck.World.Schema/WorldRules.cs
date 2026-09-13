@@ -89,6 +89,7 @@ public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ481
 /// <param name="Decision">The compiled choice policy, or <see langword="null"/>.</param>
 /// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
 /// <param name="Zones">The compiled zone table, or <see langword="null"/>.</param>
+/// <param name="ForEachHandle">The pre-resolved handle of <paramref name="ForEach"/>, or <see langword="default"/>.</param>
 public sealed record CompiledWorldRule(
     string Name,
     ActionTriggerMode Mode,
@@ -98,8 +99,9 @@ public sealed record CompiledWorldRule(
     CompiledInteraction? Interaction = null,
     CompiledWorldDecision? Decision = null,
     CompiledRuleBinding[]? Bindings = null,
-    ZoneTable? Zones = null
-) : CompiledRule(Name: Name, Mode: Mode, Gate: Gate, Effects: Effects, ForEach: ForEach, Bindings: Bindings, Zones: Zones) {
+    ZoneTable? Zones = null,
+    StateHandle ForEachHandle = default
+) : CompiledRule(Name: Name, Mode: Mode, Gate: Gate, Effects: Effects, ForEach: ForEach, Bindings: Bindings, Zones: Zones, ForEachHandle: ForEachHandle) {
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         base.CollectReads(into: into);

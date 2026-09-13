@@ -19,6 +19,11 @@ public interface IRuleReader {
     /// <summary>Gets the cell key bound to <see cref="BoundKey.Each"/> for the evaluation in flight, or
     /// <see langword="null"/> outside a <see cref="Rule.ForEach"/> evaluation.</summary>
     string? BoundEachKey { get; }
+    /// <summary>Gets the bound cell's position in the forEach sweep's key snapshot, or -1 outside a sweep.
+    /// A positional read must verify that the current row still holds <see cref="BoundEachKey"/> at that position.</summary>
+    int BoundEachPosition => -1;
+    /// <summary>Gets the compiled handle of the row being iterated by <see cref="Rule.ForEach"/>, or default outside a forEach evaluation.</summary>
+    StateHandle BoundEachRowHandle => default;
     /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Token"/> — set by a pattern's tuple-word read
     /// for the duration of one token's value expression, <see langword="null"/> otherwise.</summary>
     string? BoundTokenKey { get; set; }

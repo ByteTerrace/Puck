@@ -128,8 +128,10 @@ public static partial class RuleCompiler {
             );
         }
 
+        var cellKey = (CellName.TryParse(candidate: resolvedKey, name: out var parsedKey, reason: out _) ? parsedKey : default);
+
         return new ResolvedOperand(
-            operand: new StateCellOperand(row: name, key: resolvedKey, keyFrom: null, stateHandle: ResolveHandle(context: context, name: name), valueKind: row.Kind),
+            operand: new StateCellOperand(row: name, key: resolvedKey, keyFrom: null, stateHandle: ResolveHandle(context: context, name: name), valueKind: row.Kind, cellKey: cellKey),
             describe: describe
         );
     }
@@ -159,7 +161,7 @@ public static partial class RuleCompiler {
         }
 
         return new ResolvedOperand(
-            operand: new StateCellOperand(row: live.Spelling, key: parsed.Value, keyFrom: null, stateHandle: default, valueKind: live.Table.Kind, rowFrom: live),
+            operand: new StateCellOperand(row: live.Spelling, key: parsed.Value, keyFrom: null, stateHandle: default, valueKind: live.Table.Kind, rowFrom: live, cellKey: parsed),
             describe: describe
         );
     }

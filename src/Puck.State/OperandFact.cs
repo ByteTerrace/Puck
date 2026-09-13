@@ -103,8 +103,10 @@ public sealed class BindingKeyFact : KeyFact {
 /// current binding names, never a compile-time-fixed <paramref name="Key"/> (left empty in this case).
 /// <see cref="BoundKey.None"/> for an ordinary literal-keyed <c>$cell:</c> indirection. Distinct from
 /// <paramref name="Binding"/>, which spells "the whole key is the binding, no row at all" — this spells "the row is
-/// fixed, only its key is bound".</param>
-public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None);
+/// known, the cell is the binding".</param>
+/// <param name="CellKey">The pre-parsed literal <paramref name="Key"/> of the source cell, or default.
+/// An indirection reads that cell's value to obtain the destination key.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellName CellKey = default);
 
 /// <summary>One state cell a rule reads or writes — a literal <c>row.key</c>, or a whole row when the key is resolved
 /// live (a <c>$cell:</c> indirection, a bound <c>$each</c>, a push, a generate, a transform).</summary>

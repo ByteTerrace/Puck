@@ -54,8 +54,9 @@ public static class RuleEvaluation {
             : indirection.Key
         );
 
-        return IndexKeyCache.Get(index: IntegerOf(value: ReadFixed(reader: reader, handle: indirection.Handle, key: innerKey)));
+        return IndexKeyCache.Get(index: IntegerOf(value: (indirection.CellKey != default && indirection.InnerKeyBinding == BoundKey.None) ? ReadFixed(reader: reader, handle: indirection.Handle, key: indirection.CellKey) : ReadFixed(reader: reader, handle: indirection.Handle, key: innerKey)));
     }
+
 
     /// <summary>Resolves a key indirection as an integer index for the evaluation in flight — what a live zone's
     /// table index and a table's key read through. A <c>$cell:</c> indirection answers its cell's integer, a bound
@@ -126,6 +127,24 @@ public static class RuleEvaluation {
         );
     }
 
+    /// <summary>Reads a declared cell as fixed point through its compiled handle by pre-parsed cell key.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="handle">The compiled row handle.</param>
+    /// <param name="key">The pre-parsed cell key.</param>
+    public static FixedQ4816 ReadFixed(IRuleReader reader, StateHandle handle, CellName key) {
+        if (
+            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
+            (rawValue is not { } raw)
+        ) {
+            return FixedQ4816.Zero;
+        }
+
+        return ((declared.Kind == CellKind.Fixed)
+            ? FixedQ4816.FromRawBits(value: raw)
+            : StateReader.LiftSaturating(raw: raw)
+        );
+    }
+
     /// <summary>Reads a declared cell as a fact in the row's own encoding. A declared cell the row does not hold reads
     /// as integer zero; a key no cell can carry — the empty key a <see cref="KeyFact"/> resolves for an empty zone's
     /// endpoint, which no literal, bound, or indirected spelling ever produces — reads as
@@ -137,6 +156,21 @@ public static class RuleEvaluation {
         if (key.Length == 0) {
             return RuleFact.Absent(kind: CellKind.Int);
         }
+        if (
+            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
+            (rawValue is not { } raw)
+        ) {
+            return RuleFact.Finite(value: 0L, kind: CellKind.Int);
+        }
+
+        return RuleFact.Finite(value: raw, kind: declared.Kind);
+    }
+
+    /// <summary>Reads a declared cell as a fact in the row's own encoding by pre-parsed cell key.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="handle">The compiled row handle.</param>
+    /// <param name="key">The pre-parsed cell key.</param>
+    public static RuleFact ReadStateFact(IRuleReader reader, StateHandle handle, CellName key) {
         if (
             !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
             (rawValue is not { } raw)

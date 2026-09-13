@@ -229,10 +229,58 @@ public sealed class NavigationRuntimeLawTests {
         Assert.True(condition: domain.AdmitsLocomotion(from: origin, to: shortOfTheWall));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnUnroutedDomainAdoptsAReplacementQueryWithoutSamplingEitherProvider(bool sharing) {
+        var row = VolumeDomain(shared: sharing ? new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1) : null);
+        var previousQuery = new CountingQuery();
+        var previous = new NavigationRuntime([row], previousQuery, null, Capacity());
+        var replacementQuery = new CountingQuery();
+
+        var replacement = new NavigationRuntime([row], replacementQuery, null, Capacity(), previous);
+
+        Assert.Equal(1, replacement.RetainedDomainCount);
+        Assert.Same(previous[0], replacement[0]);
+        Assert.Equal(0, previousQuery.Calls);
+        Assert.Equal(0, replacementQuery.Calls);
+
+        replacement.BeginStep();
+        Assert.Equal(0, replacementQuery.Calls);
+        Assert.Equal(6, replacement[0].WalkableCellCount);
+        Assert.True(replacementQuery.Calls > 0);
+        Assert.Equal(0, previousQuery.Calls);
+    }
+
+    [Fact]
+    public void AnUnroutedDomainRetainedAcrossChangedGeometryRoutesAsAFreshCompileWould() {
+        var row = VolumeDomain(width: 4);
+        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        var retained = new NavigationRuntime([row], ThinWallAt(x: 2f), null, Capacity(), previous);
+        var fresh = new NavigationRuntime([row], ThinWallAt(x: 2f), null, Capacity());
+
+        Assert.Same(previous[0], retained[0]);
+        Assert.Equal(fresh[0].WalkableCellCount, retained[0].WalkableCellCount);
+        Assert.Equal(3, retained[0].WalkableCellCount);
+        for (var node = 0; node < row.Width; node++) {
+            Assert.Equal(fresh[0].IsWalkable(node), retained[0].IsWalkable(node));
+        }
+        var freshPath = new int[16];
+        var retainedPath = new int[16];
+        var freshStatus = fresh[0].FindPath(0, 1, freshPath, out var freshLength, out var freshExpanded);
+        var retainedStatus = retained[0].FindPath(0, 1, retainedPath, out var retainedLength, out var retainedExpanded);
+        Assert.Equal(NavigationStatus.Active, retainedStatus);
+        Assert.Equal(freshStatus, retainedStatus);
+        Assert.Equal(freshExpanded, retainedExpanded);
+        Assert.Equal(freshPath[..freshLength], retainedPath[..retainedLength]);
+        Assert.Equal(NavigationStatus.Unreachable, retained[0].FindPath(0, 3, retainedPath, out _, out _));
+    }
+
     [Fact]
     public void RetainsEquivalentBakeAndForwardsOffGridQueriesToTheNewProvider() {
         var row = VolumeDomain(width: 4);
         var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        _ = previous[0].WalkableCellCount;
         var replacementQuery = ThinWallAt(x: 2.5f);
         var replacement = new NavigationRuntime([row], replacementQuery, null, Capacity(), previous);
 
@@ -244,10 +292,18 @@ public sealed class NavigationRuntimeLawTests {
             to: new FixedVector3(X: FixedQ4816.FromInteger(value: 3), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)));
     }
 
-    [Fact]
-    public void RebuildsWhenACompileTimeCellBakeChanges() {
-        var row = VolumeDomain(width: 4);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARoutedDomainRebuildsWhenACompileTimeCellBakeChanges(bool sharing) {
+        var row = VolumeDomain(width: 4, shared: sharing ? new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1) : null);
         var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        Span<int> path = stackalloc int[16];
+        if (sharing) {
+            Assert.Equal(NavigationStatus.Pending, previous[0].RequestShared(0, 3, path, out _));
+        } else {
+            Assert.Equal(NavigationStatus.Active, previous[0].FindPath(0, 3, path, out _, out _));
+        }
         var replacement = new NavigationRuntime([row], ThinWallAt(x: 0f), null, Capacity(), previous);
 
         Assert.Equal(0, replacement.RetainedDomainCount);
@@ -263,6 +319,8 @@ public sealed class NavigationRuntimeLawTests {
             Origin = new FixedVector3(X: FixedQ4816.FromInteger(value: 100), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)
         };
         var previous = new NavigationRuntime([affected, unaffected], new OpenQuery(), null, Capacity());
+        _ = previous[0].WalkableCellCount;
+        _ = previous[1].WalkableCellCount;
         var replacement = new NavigationRuntime([affected, unaffected], ThinWallAt(x: 0f), null, Capacity(), previous);
 
         Assert.Equal(1, replacement.RetainedDomainCount);

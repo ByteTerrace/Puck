@@ -391,6 +391,42 @@ public sealed partial class NavigationLawTests {
         Assert.Equal(expected: expected, actual: actual);
     }
 
+    // Raising the far-below floor into the domain changes its occupancy, so only a domain with nothing baked may be
+    // retained.
+    [Fact]
+    public void ASolidRebuildRetainsAnUnroutedDomainButRebuildsARestoredRoutesChangedDomain() {
+        var floored = WithFloor(definition: NavigationDocument(domain: VolumeDomain()));
+        var definition = floored with {
+            PlacementsRaw = floored.PlacementsRaw! with { Rows = [floored.Placements[0] with { Position = new Vector3(x: 0f, y: -20f, z: 0f) }] },
+        };
+        static void RaiseFloor(WorldFixture fixture) {
+            var floor = fixture.Server.Definition.Placements.Single(placement => placement.Id == "navigation-floor");
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, floor with { Position = new Vector3(x: 0f, y: 2f, z: 0f) }));
+            fixture.Step();
+            Assert.Equal(expected: new DocumentVector3(x: 0f, y: 2f, z: 0f), actual: fixture.Server.Definition.Placements.Single(placement => placement.Id == "navigation-floor").Position);
+        }
+
+        using (var unrouted = Fixtures.FreshServer(definition: definition)) {
+            unrouted.Step();
+            RaiseFloor(fixture: unrouted);
+            Assert.Equal(expected: 1, actual: unrouted.Server.Population.NavigationRetainedDomainCount);
+            Assert.Equal(expected: 0, actual: unrouted.Server.Population.NavigationRebuiltDomainCount);
+        }
+
+        using var source = Fixtures.FreshServer(definition: definition);
+        _ = JoinNavigator(fixture: source, goal: new FixedVector3(X: FixedQ4816.FromInteger(value: 4), Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.Zero));
+        source.Step();
+        Assert.True(condition: source.Server.TryCaptureCheckpoint(checkpoint: out var captured, hostRow: EmptyHostRow(), reason: out var reason), userMessage: reason);
+        Assert.NotEmpty(collection: Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(row => row.Index == 0).Navigation).Path);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: captured), checkpoint: out var decoded, reason: out reason), userMessage: reason);
+
+        using var restored = Fixtures.FreshServer(definition: definition);
+        restored.Server.RestoreCheckpoint(checkpoint: decoded!);
+        RaiseFloor(fixture: restored);
+        Assert.Equal(expected: 0, actual: restored.Server.Population.NavigationRetainedDomainCount);
+        Assert.Equal(expected: 1, actual: restored.Server.Population.NavigationRebuiltDomainCount);
+    }
+
     [Fact]
     public void DryingALiveMediumInvalidatesTheCachedSwimRoute() {
         var domain = VolumeDomain(name: "swim", kind: WorldNavigationKind.Medium, medium: "water");

@@ -84,7 +84,11 @@ public abstract record StateMutation {
     /// <param name="Value">The raw value in the row's encoding.</param>
     /// <param name="Write">Set or add.</param>
     /// <param name="Text">The text payload for a text row, or <see langword="null"/>.</param>
-    public sealed record UpsertCell(string Row, string Key, long Value, StateWriteKind Write, string? Text = null) : StateMutation;
+    /// <param name="Handle">The pre-resolved handle of <paramref name="Row"/> in the current catalog, or default.
+    /// A host using the handle must verify that it names the same row as the replayable string address.</param>
+    /// <param name="CellKey">The pre-parsed form of <paramref name="Key"/>, or default. A host using this value must
+    /// verify that it matches the string key, so frame writes and replay address the same cell.</param>
+    public sealed record UpsertCell(string Row, string Key, long Value, StateWriteKind Write, string? Text = null, StateHandle Handle = default, CellName CellKey = default) : StateMutation;
     /// <summary>Removes one cell of a keyed row.</summary>
     /// <param name="Row">The row.</param>
     /// <param name="Key">The cell key, resolved.</param>

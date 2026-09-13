@@ -19,6 +19,8 @@ Each plan opens with an implementation status review that separates what has lan
 - [MCP integration](mcp-integration.md)—MCP hosting, tools, trust, capture, and release gates.
 - [Abstract-machine costing](abstract-machine-costing.md)—deterministic instruction pricing and bounded work.
 - [State consolidation](state-consolidation.md)—remaining state-system reuse opportunities.
+- [Compiled worlds](compiled-worlds.md)—a binary file of everything a world derives from its document, so boot, restore, and replay stop re-deriving it.
+- [State addressing on the tick path](state-addressing.md)—removing name lookups, key parsing, and cell scans from rule reads and writes without binding rules to frame layout.
 
 ## Documentation
 

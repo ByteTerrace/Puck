@@ -53,6 +53,10 @@ public sealed class FrameHost : IRuleHost {
     /// <inheritdoc/>
     public string? BoundEachKey => Evaluator.BoundEachKey;
     /// <inheritdoc/>
+    public int BoundEachPosition => Evaluator.BoundEachPosition;
+    /// <inheritdoc/>
+    public StateHandle BoundEachRowHandle => Evaluator.BoundEachRowHandle;
+    /// <inheritdoc/>
     public string? BoundTokenKey { get; set; }
     /// <inheritdoc/>
     public string? BoundPreviousKey { get; set; }
@@ -165,14 +169,36 @@ public sealed class FrameHost : IRuleHost {
     public void RefusalRecorded(in RuleRuntimeDiagnostic diagnostic) => Refusals++;
 
     private bool TryUpsert(StateMutation.UpsertCell cell, out string reason) {
-        if (Frame.Find(name: cell.Row) is not { } row) {
+        var handle = cell.Handle;
+
+        if (handle == default) {
+            _ = Catalog.TryResolve(lane: StateLane.Document, name: cell.Row, handle: out handle);
+        }
+
+        if (handle == default || !Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) || (descriptor.Ownership != StateLane.Document) || !string.Equals(a: cell.Row, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
             return Refuse(message: $"row '{cell.Row}' is not in the frame", reason: out reason);
         }
-        if (!CellName.TryParse(candidate: cell.Key, name: out var key, reason: out reason)) {
+
+        var ordinal = descriptor.LaneOrdinal;
+        var rows = Frame.Rows;
+
+        if ((((uint)ordinal) >= ((uint)rows.Count)) || (rows[ordinal] is not { } resolved) || !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+            return Refuse(message: $"row '{cell.Row}' is not in the frame", reason: out reason);
+        }
+
+        CellName key;
+
+        if (cell.CellKey != default) {
+            if (!string.Equals(a: cell.Key, b: cell.CellKey.Value, comparisonType: StringComparison.Ordinal)) {
+                return Refuse(message: "the parsed cell key does not match the mutation key", reason: out reason);
+            }
+            key = cell.CellKey;
+            reason = string.Empty;
+        } else if (!CellName.TryParse(candidate: cell.Key, name: out key, reason: out reason)) {
             return false;
         }
 
-        return Frame.TryWrite(row: row, key: key, value: cell.Value, write: cell.Write, reason: out reason);
+        return Frame.TryWrite(rowOrdinal: ordinal, key: key, value: cell.Value, write: cell.Write, reason: out reason);
     }
 
     private static bool Refuse(string message, out string reason) {

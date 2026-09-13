@@ -85,6 +85,8 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
     StateCatalog IRuleReader.Catalog => m_frameHost.Catalog;
     CompiledPatterns IRuleReader.Patterns => m_frameHost.Patterns;
     string? IRuleReader.BoundEachKey => Evaluator.BoundEachKey;
+    int IRuleReader.BoundEachPosition => Evaluator.BoundEachPosition;
+    StateHandle IRuleReader.BoundEachRowHandle => Evaluator.BoundEachRowHandle;
     string? IRuleReader.BoundTokenKey { get => m_boundTokenKey; set => m_boundTokenKey = value; }
     string? IRuleReader.BoundPreviousKey { get => m_boundPreviousKey; set => m_boundPreviousKey = value; }
     bool IRuleReader.TableKeyMissing { get => m_tableKeyMissing; set => m_tableKeyMissing = value; }

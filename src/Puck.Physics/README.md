@@ -263,11 +263,16 @@ through that seam (see [its README](../Puck.World.Server/README.md#navigation)).
 A domain's constructor only sizes its workspace arrays: the occupancy sweep
 and edge bake against the host's query run once, lazily, the first time a
 route request, an off-grid locomotion check, a `WalkableCellCount` read, or a
-retention proof (`TryRebind`) genuinely needs the answer. A domain a host
-never routes through never sweeps the query. Restoring a shared-navigation
+host's `EnsureBaked` call genuinely needs the answer. A host calls `EnsureBaked`
+when it restores a stored route or search result, including a failed search with
+an empty path: the recorded domain, goal, and status depend on a bake the kernel
+cannot see. A domain a host never routes through never sweeps the query, including
+across query replacements. Restoring a shared-navigation
 checkpoint with no resident trees preserves that deferral. Scheduler and empty-slot
 shape checks still run; a resident tree triggers the bake to validate its recorded
 successor edges.
+Restoring resident trees directly through `Domain.RestoreShared` also establishes
+the bake before those trees can be retained across a query replacement.
 
 A `Surface` domain samples ground through the host's `IWorldQuery.TryGroundHeight`,
 proving lower/head clearance, slope, and step limits; every admitted edge is
@@ -288,7 +293,9 @@ expansion/path ceilings. Domain search workspace allocates once at
 construction; per-body route storage is a host concern, so a steady-state
 search allocates nothing here.
 
-When a host replaces its solid query, a domain workspace may be retained only
+When a host replaces its solid query, an unbaked domain is retained without
+sampling either provider: nothing cached depends on the old one, and its later
+bake samples the replacement. A baked domain workspace may be retained only
 after the replacement provider returns the same ground, occupancy, clearance,
 and every static edge result for the domain's complete grid. The retained
 workspace forwards later off-grid segment checks to the replacement provider;

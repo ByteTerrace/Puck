@@ -25,7 +25,7 @@ internal static class BenchRunner {
             (Bench/klondike.fixture.world.json) and prints one row per number — shipped-world server construction
             time, idle-tick time and quiet-tick allocation (median over a sampled window, after a warmup), and a
             scripted Klondike deal's per-tick time and per-mutation allocation. A server construction against the
-            shipped world costs tens of seconds, past what an iteration-based job can amortize honestly, which is
+            shipped world costs hundreds of milliseconds, past what an iteration-based job can amortize honestly, which is
             why this lane sits beside the switcher rather than inside it.
             """, name: "world");
         var command = new Command(description: """

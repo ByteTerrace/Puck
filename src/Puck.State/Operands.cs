@@ -12,13 +12,15 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
     /// <param name="stateHandle">The compiled row handle, for a fixed row.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
     /// <param name="rowFrom">The live zone, or <see langword="null"/> for a fixed row.</param>
-    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null)
+    /// <param name="cellKey">The pre-parsed cell key for a literal key, or default.</param>
+    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null, CellName cellKey = default)
         : base(valueKind) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
         StateHandle = stateHandle;
         RowFrom = rowFrom;
+        CellKey = (cellKey != default ? cellKey : (key is null ? StateRow.SlotKey : (CellName.TryParse(candidate: key, name: out var parsed, reason: out _) ? parsed : default)));
     }
 
     /// <inheritdoc/>
@@ -27,16 +29,41 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets the pre-parsed literal cell key, the slot key for a null key, or default when the key cannot be parsed.</summary>
+    public CellName CellKey { get; }
     /// <summary>Gets the compiled row handle, for a fixed row.</summary>
     public StateHandle StateHandle { get; }
     /// <summary>Gets the live zone, or <see langword="null"/> for a fixed row.</summary>
     public LiveZone? RowFrom { get; }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) =>
-        (RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)
-            ? RuleEvaluation.ReadStateFact(reader: reader, handle: handle, key: RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom))
-            : RuleFact.Absent(kind: ValueKind));
+    public override RuleFact Read(IRuleReader reader) {
+        if (!RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)) {
+            return RuleFact.Absent(kind: ValueKind);
+        }
+
+        // Fast path for $each on the iterated row: answer by position without key parsing or cell scanning,
+        // guarded by checking that the key at that position still matches the bound key.
+        if ((KeyFrom is { Binding: BoundKey.Each }) && (handle == reader.BoundEachRowHandle) && (reader.BoundEachPosition >= 0) && (reader.BoundEachKey is { } boundEachKey)) {
+            if (reader.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) && (descriptor.Ownership == StateLane.Document)) {
+                var rows = reader.Store.Rows;
+                if ((((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) && (rows[descriptor.LaneOrdinal] is { } resolved) && string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+                    if (reader.Store.TryKeyAt(rowOrdinal: descriptor.LaneOrdinal, index: reader.BoundEachPosition, key: out var liveKey) && string.Equals(a: liveKey.Value, b: boundEachKey, comparisonType: StringComparison.Ordinal)) {
+                        var liveValue = StateReader.LiveAt(store: reader.Store, rowOrdinal: descriptor.LaneOrdinal, row: resolved, index: reader.BoundEachPosition, tick: reader.Tick);
+                        return RuleFact.Finite(value: liveValue, kind: ValueKind);
+                    }
+                }
+            }
+        }
+
+        if ((KeyFrom is null) && (CellKey != default)) {
+            return RuleEvaluation.ReadStateFact(reader: reader, handle: handle, key: CellKey);
+        }
+
+        // Keep the string reader's distinction between an empty key (absent) and a missing cell (zero).
+        var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
+        return RuleEvaluation.ReadStateFact(reader: reader, handle: handle, key: key);
+    }
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
     /// <inheritdoc/>
@@ -208,10 +235,17 @@ public sealed class ReductionOperand : OperandFact {
             return RuleFact.Finite(value: StateReader.ArrangementRank(store: reader.Store, zone: declared), kind: ValueKind);
         }
         StateRow? filter = null;
-        if (FilterRow is not null && !StateReader.TryReadHandle(reader.Store, reader.Catalog, FilterHandle, null, reader.Tick, out filter, out _, out _)) {
-            return RuleFact.Finite(0L, ValueKind);
+        var filterOrdinal = -1;
+        if (FilterRow is not null) {
+            if (!StateReader.TryReadHandle(reader.Store, reader.Catalog, FilterHandle, null, reader.Tick, out filter, out _, out _)) {
+                return RuleFact.Finite(0L, ValueKind);
+            }
+            if (reader.Catalog.TryGetDescriptor(descriptor: out var filterDesc, handle: FilterHandle)) {
+                filterOrdinal = filterDesc.LaneOrdinal;
+            }
         }
-        return RuleFact.Finite(StateReader.ReduceRaw(reader.Store, declared, Reduce, reader.Tick, filter, Range), ValueKind);
+        var rowOrdinal = (reader.Catalog.TryGetDescriptor(descriptor: out var rowDesc, handle: handle)) ? rowDesc.LaneOrdinal : -1;
+        return RuleFact.Finite(StateReader.ReduceRaw(reader.Store, rowOrdinal, declared, Reduce, reader.Tick, filterOrdinal, filter, Range), ValueKind);
     }
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => (RowFrom?.Table.Capacity ?? context.RowCapacity(name: Row)) * (Range is null ? 1L : 3L);
@@ -383,8 +417,13 @@ public sealed class BoardOperand : OperandFact, IStateAddressedOperand {
             var origin = ((originKey is not null) && query.Topology.TryCell(originKey, out var originCell)) ? originCell : -1;
             return ((origin >= 0) && query.Topology.TryOffset(origin, offsetQuery.Dx, offsetQuery.Dz, out var offset)) ? offset : -1;
         }
+        var rowOrdinal = (reader.Catalog.TryGetDescriptor(descriptor: out var rowDesc, handle: StateHandle)) ? rowDesc.LaneOrdinal : -1;
         var values = reader.BoardScratch(cells: query.Topology.CellCount);
-        reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
+        if (rowOrdinal >= 0) {
+            reader.Store.ReadBoard(rowOrdinal: rowOrdinal, topology: query.Topology, values: values);
+        } else {
+            reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
+        }
         var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
         var source = ((key is not null) && query.Topology.TryCell(key, out var sourceCell)) ? sourceCell : -1;
         // A pathCost query's live target resolves on the same terms as a '$cell:' key indirection — the same
@@ -521,8 +560,13 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
                 return 0L;
             }
 
+            var rowOrdinal = (reader.Catalog.TryGetDescriptor(descriptor: out var rowDesc, handle: handle)) ? rowDesc.LaneOrdinal : -1;
             var values = reader.BoardScratch(cells: query.Topology.CellCount);
-            reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
+            if (rowOrdinal >= 0) {
+                reader.Store.ReadBoard(rowOrdinal: rowOrdinal, topology: query.Topology, values: values);
+            } else {
+                reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
+            }
             var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
             var origin = (((key is not null) && query.Topology.TryCell(key, out var cell)) ? cell : -1);
 

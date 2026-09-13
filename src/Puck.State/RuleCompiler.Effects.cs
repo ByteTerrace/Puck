@@ -97,7 +97,10 @@ public static partial class RuleCompiler {
             key = ResolveKey(key: effect.Key, keyFieldLabel: "key", row: row, ruleName: ruleName, verb: "removeStateCell");
         }
 
-        return new RemoveStateCellEffect(row: effect.State, key: key, keyFrom: keyFrom, describe: $"removeStateCell {effect.State}.{key}");
+        var handle = ResolveHandle(context: context, name: effect.State);
+        var cellKey = ((keyFrom is null) && CellName.TryParse(candidate: key, name: out var pk, reason: out _) ? pk : default);
+
+        return new RemoveStateCellEffect(row: effect.State, key: key, keyFrom: keyFrom, describe: $"removeStateCell {effect.State}.{key}", handle: handle, cellKey: cellKey);
     }
 
     private static EffectFact ResolveScheduleState(ActionEffect.ScheduleState effect, string ruleName, RuleCompileContext context) {
@@ -122,12 +125,17 @@ public static partial class RuleCompiler {
             key = ResolveKey(key: effect.Key, keyFieldLabel: "key", row: row, ruleName: ruleName, verb: "scheduleState");
         }
 
+        var handle = ResolveHandle(context: context, name: effect.State);
+        var cellKey = ((keyFrom is null) && CellName.TryParse(candidate: key, name: out var pk, reason: out _) ? pk : default);
+
         return new ScheduleStateEffect(
             row: effect.State,
             key: key,
             keyFrom: keyFrom,
             delayTicks: checked((long)ticks),
-            describe: $"scheduleState {effect.State}.{key} after {effect.DelaySeconds.ToString(provider: CultureInfo.InvariantCulture)}s"
+            describe: $"scheduleState {effect.State}.{key} after {effect.DelaySeconds.ToString(provider: CultureInfo.InvariantCulture)}s",
+            handle: handle,
+            cellKey: cellKey
         );
     }
 
@@ -200,7 +208,10 @@ public static partial class RuleCompiler {
             resolvedKey = ResolveKey(row: row, key: effect.Key, ruleName: ruleName, verb: "countdownState", keyFieldLabel: "key");
         }
 
-        return new CountdownEffect(row: effect.State, key: resolvedKey, keyFrom: keyFrom, describe: $"countdownState {effect.State}.{resolvedKey} by runtime step");
+        var handle = ResolveHandle(context: context, name: effect.State);
+        var cellKey = ((keyFrom is null) && CellName.TryParse(candidate: resolvedKey, name: out var pk, reason: out _) ? pk : default);
+
+        return new CountdownEffect(row: effect.State, key: resolvedKey, keyFrom: keyFrom, describe: $"countdownState {effect.State}.{resolvedKey} by runtime step", handle: handle, cellKey: cellKey);
     }
 
     // A 'generate' effect names one thing: the site to redraw. The source is the site's own facet (named or
@@ -233,7 +244,9 @@ public static partial class RuleCompiler {
             throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"state row '{generate.Row}': {kindReason}");
         }
 
-        return new GenerateEffect(row: generate.Row, generator: generate.Row, describe: $"generate {generate.Row}");
+        var handle = ResolveHandle(context: context, name: generate.Row);
+
+        return new GenerateEffect(row: generate.Row, generator: generate.Row, describe: $"generate {generate.Row}", handle: handle);
     }
 
     // pushState is a write whose destination is the ring's next slot rather than a named cell: it borrows the
@@ -334,6 +347,9 @@ public static partial class RuleCompiler {
             resolvedKey = ResolveKey(key: key, keyFieldLabel: "key", row: row, ruleName: ruleName, verb: verb);
         }
 
+        var handle = ResolveHandle(context: context, name: rowName);
+        var cellKey = ((destinationKeyFrom is null) && CellName.TryParse(candidate: resolvedKey, name: out var pk, reason: out _) ? pk : default);
+
         var hasValue = (value is not null);
         var hasFrom = (fromState is not null);
         var hasValueSeconds = (valueSeconds is not null);
@@ -344,7 +360,7 @@ public static partial class RuleCompiler {
                 throw new RuleException(refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName, detail: $"'{verb}' names 'text' beside 'value'/'valueSeconds'/'fromState' — a text write has exactly one spelling");
             }
 
-            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: 0L, from: null, text: text, expression: null, describe: $"{verb} {rowName}.{resolvedKey} = \"{text}\"");
+            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: 0L, from: null, text: text, expression: null, describe: $"{verb} {rowName}.{resolvedKey} = \"{text}\"", handle: handle, cellKey: cellKey);
         }
 
         if ((fromKey is not null) && (fromState is null)) {
@@ -381,14 +397,14 @@ public static partial class RuleCompiler {
                 throw new RuleException(refusal: RuleRefusal.DurationNotExactEngineTicks, ruleName: ruleName, detail: DescribeInexactDuration(literalSeconds: literalSeconds, rowName: rowName, verb: verb));
             }
 
-            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: checked((long)ticks), from: null, text: null, expression: null, describe: $"{verb} {rowName}.{resolvedKey} = {literalSeconds.ToString(provider: CultureInfo.InvariantCulture)}s ({ticks} engine ticks)");
+            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: checked((long)ticks), from: null, text: null, expression: null, describe: $"{verb} {rowName}.{resolvedKey} = {literalSeconds.ToString(provider: CultureInfo.InvariantCulture)}s ({ticks} engine ticks)", handle: handle, cellKey: cellKey);
         }
 
         if (hasValue) {
             var literal = value!.Value;
             var raw = LiteralToRaw(kind: row.Kind, literal: literal, ruleName: ruleName, verb: verb);
 
-            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: raw, from: null, text: null, expression: null, describe: $"{verb} {rowName}.{resolvedKey} = {literal.ToString(provider: CultureInfo.InvariantCulture)}");
+            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: raw, from: null, text: null, expression: null, describe: $"{verb} {rowName}.{resolvedKey} = {literal.ToString(provider: CultureInfo.InvariantCulture)}", handle: handle, cellKey: cellKey);
         }
 
         if (hasExpression) {
@@ -398,7 +414,7 @@ public static partial class RuleCompiler {
 
             var program = CompileExpression(context: context, expression: expression, kind: row.Kind, ruleName: ruleName, verb: verb);
 
-            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: 0L, from: null, text: null, expression: program, describe: $"{verb} {rowName}.{resolvedKey} := expression[{program.Length}]");
+            return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: 0L, from: null, text: null, expression: program, describe: $"{verb} {rowName}.{resolvedKey} := expression[{program.Length}]", handle: handle, cellKey: cellKey);
         }
 
         var source = ResolveOperand(name: fromState!, key: fromKey, site: new OperandSite(RuleName: ruleName, Verb: verb, FieldLabel: "fromState", KeyFieldLabel: "fromKey", AllowText: isTextRow), context: context);
@@ -411,7 +427,7 @@ public static partial class RuleCompiler {
             );
         }
 
-        return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: 0L, from: source.Operand, text: null, expression: null, describe: $"{verb} {rowName}.{resolvedKey} := {source.Describe}");
+        return new WriteEffect(row: rowName, key: resolvedKey, keyFrom: destinationKeyFrom, write: write, rawValue: 0L, from: source.Operand, text: null, expression: null, describe: $"{verb} {rowName}.{resolvedKey} := {source.Describe}", handle: handle, cellKey: cellKey);
     }
 
     private static EffectFact ResolveStateTransform(StateTransform transform, string ruleName, RuleCompileContext context) {

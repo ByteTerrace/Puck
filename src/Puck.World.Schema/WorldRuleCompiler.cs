@@ -36,6 +36,12 @@ public static partial class WorldRuleCompiler {
                 ? CompileDecisionEffects(effects: rule.Effects, ruleName: rule.Name, context: context)
                 : RuleCompiler.CompileEffects(effects: rule.Effects, ruleName: rule.Name, context: context, subject: "rule"));
 
+            var forEachHandle = default(StateHandle);
+
+            if ((rule.ForEach is { } forEachName) && !string.Equals(a: forEachName, b: RuleFacts.ForEachZones, comparisonType: StringComparison.Ordinal)) {
+                context.Catalog.TryResolve(lane: StateLane.Document, name: forEachName, handle: out forEachHandle);
+            }
+
             return new CompiledWorldRule(
                 Name: rule.Name,
                 Mode: rule.Mode,
@@ -44,7 +50,8 @@ public static partial class WorldRuleCompiler {
                 ForEach: rule.ForEach,
                 Decision: CompileDecision(rule: rule, context: context),
                 Bindings: RuleCompiler.AllBindings(declared: bindings, context: context),
-                Zones: context.Zones
+                Zones: context.Zones,
+                ForEachHandle: forEachHandle
             );
         } finally {
             context.ClearScope();

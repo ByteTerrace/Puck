@@ -435,13 +435,17 @@ lattice's own representation.
 A domain's own occupancy sweep and edge bake are lazy: `Domain`'s constructor
 only sizes its workspace arrays, and the kernel samples the solid field the
 first time something genuinely needs the answer—a route request, an
-off-grid locomotion check, a direct `WalkableCellCount` read, or a live-edit
-reconcile proving retention. A domain nobody ever routes through never
-sweeps the field; `puck bench world`'s construction row measures this.
+off-grid locomotion check, a direct `WalkableCellCount` read (including the
+`world.navigation` read-back), or a checkpoint restore of a stored route or search
+result. Failed searches with empty paths also restore the bake, so a later geometry
+edit invalidates their recorded domain, goal, and status as it would before restore. A domain
+nobody ever routes through never sweeps the field, even across solid-field rebuilds;
+`puck bench world`'s construction row measures this.
 
 A domain's optional `parent` resolves its local origin and X/Z axes through the placement frame compilation;
 surface probes remain vertical. `world.navigation` includes the resolved origin and yaw. Moving a court thus
-rebuilds the domain in its new frame. This is not incremental SDF invalidation: a domain is retained only when the
+rebuilds the domain in its new frame. This is not incremental SDF invalidation: an unbaked domain is retained
+without a proof, and a baked one only when the
 replacement solid query proves every cell, clearance probe, and static edge query unchanged; later off-grid segment
 checks use the replacement query, and medium domains require the same field provider and synchronized revision.
 Capacity changes rebuild as well. The [granary authoring example](../Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)

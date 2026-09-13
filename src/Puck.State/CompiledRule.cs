@@ -60,7 +60,8 @@ public readonly record struct CompiledExpressionToken(ExpressionOp Operation, lo
 /// <param name="ForEach">The keyed row a rule iterates (<see cref="Rule.ForEach"/>), or <see langword="null"/>.</param>
 /// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
 /// <param name="Zones">The compiled <see cref="Rule.Zones"/> table, or <see langword="null"/>.</param>
-public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, EffectFact[] Effects, string? ForEach = null, CompiledRuleBinding[]? Bindings = null, ZoneTable? Zones = null) {
+/// <param name="ForEachHandle">The pre-resolved handle of <paramref name="ForEach"/>, or <see langword="default"/>.</param>
+public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, EffectFact[] Effects, string? ForEach = null, CompiledRuleBinding[]? Bindings = null, ZoneTable? Zones = null, StateHandle ForEachHandle = default) {
     private RuleSchedule? m_schedule;
 
     /// <summary>Gets the rule's memoized read schedule — its gate's and bindings' distinct row reads, and whether

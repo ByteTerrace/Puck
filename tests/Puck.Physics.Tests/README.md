@@ -4,6 +4,9 @@
 query: empty shared-navigation state makes no geometry calls, malformed scheduler
 state still refuses, and the first later route matches uninterrupted navigation.
 Resident trees require geometry validation and refuse a forged successor edge.
+The same counting query shows an unrouted domain retained across a query
+replacement without sampling either provider, then baking against the
+replacement; a routed domain still rebuilds when that geometry changed.
 
 These tests keep the Physics kernels honest through separate evidence:
 

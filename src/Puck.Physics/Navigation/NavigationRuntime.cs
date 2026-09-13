@@ -31,9 +31,10 @@ public sealed partial class NavigationRuntime {
     /// medium-kind.</param>
     /// <param name="capacity">Representation ceilings the host's own authoring vocabulary declares.</param>
     /// <param name="previous">The prior runtime, when a host is replacing its document-derived query provider.
-    /// A domain is reused only after it proves that every compile-time occupancy, ground, clearance, and static-edge
-    /// query has the same result against the candidate provider; the reused domain then forwards all future queries
-    /// to <paramref name="query"/>.</param>
+    /// An unbaked domain with compatible tuning adopts the replacement query without sampling either provider.
+    /// A baked domain must prove that its occupancy, ground, clearance, and static-edge results are unchanged.
+    /// Reused domains forward all future queries to <paramref name="query"/>; medium domains also require the
+    /// same field provider and synchronized revision.</param>
     public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IWorldQuery? query, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null) {
         if (domains.Count != 0 && query is null) {
             throw new InvalidOperationException(message: "navigation domains require the deterministic solid-field query provider.");
@@ -94,8 +95,9 @@ public sealed partial class NavigationRuntime {
         // Whether this domain's occupancy and edges have been sampled against m_query yet. Bake is deferred past
         // construction to whichever caller genuinely needs the answer first — a route request (FindPath/TryCell/
         // AdmitsLocomotion/IsTraversableEdge/RequestShared, all through IsWalkable), a direct read-back
-        // (WalkableCellCount), or a live-edit reconcile proving retention (TryRebind) — so a domain nobody ever
-        // routes through never pays its own sweep of the solid field.
+        // (WalkableCellCount), resident shared-tree validation, or a host restoring a route (EnsureBaked) — so a
+        // domain nobody ever routes through never pays its own sweep of the solid field. While false, no cached
+        // state depends on the bake, which is what lets TryRebind adopt a replacement query without proof.
         private bool m_baked;
         private int m_walkableCellCount;
 
@@ -133,9 +135,11 @@ public sealed partial class NavigationRuntime {
             InitializeSharing();
         }
 
-        // The occupancy sweep and edge bake, run exactly once against whichever query is current at the first
-        // genuine need — never at construction, so a domain nobody routes through never sweeps the solid field.
-        private void EnsureBaked() {
+        /// <summary>Runs the occupancy sweep and static edge bake against the current query, once.</summary>
+        /// <remarks>Every kernel read that depends on the bake calls this itself. A host calls it only when it
+        /// restores state computed from a bake the kernel cannot see — a stored route or a failed search result —
+        /// so a later query replacement must prove its geometry unchanged before retaining the domain.</remarks>
+        public void EnsureBaked() {
             if (m_baked) {
                 return;
             }
@@ -159,15 +163,12 @@ public sealed partial class NavigationRuntime {
             if (row != Tuning || capacity != m_capacity || (Tuning.Kind == NavigationKind.Medium && !SameMediumRevision(fields))) {
                 return false;
             }
-            // The proof needs real occupancy/edge data to compare against the candidate provider — bake now,
-            // against the old provider, before it is replaced below. A domain nobody has routed through yet has
-            // nothing to invalidate, so it never pays this cost either: the geometry proof only runs when the
-            // query reference actually changed.
-            if (!ReferenceEquals(m_query, query)) {
-                EnsureBaked();
-                if (!HasSameStaticGeometry(query)) {
-                    return false;
-                }
+            // Only a baked domain holds occupancy/edge data (and shared trees or host routes built from it) that the
+            // candidate provider could invalidate, so only a baked domain whose query reference changed pays the
+            // geometry proof. An unbaked domain has nothing cached: adopting the candidate leaves it exactly as a
+            // fresh compile would, and its eventual bake samples the candidate instead of the provider it replaces.
+            if (m_baked && !ReferenceEquals(m_query, query) && !HasSameStaticGeometry(query)) {
+                return false;
             }
             m_query = query;
             m_fields = fields;

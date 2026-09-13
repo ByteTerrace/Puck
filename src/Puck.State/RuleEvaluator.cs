@@ -40,6 +40,8 @@ public sealed partial class RuleEvaluator {
     /// <summary>Gets or sets the forEach loop's own 0-based position, or -1 outside a forEach evaluation — what a
     /// host's position-indexed binding resolves against, in the same order <see cref="EachKeys"/> walks.</summary>
     public int BoundEachPosition { get; set; } = -1;
+    /// <summary>Gets or sets the compiled handle of the row being iterated by <see cref="Rule.ForEach"/>, or default outside a forEach evaluation.</summary>
+    public StateHandle BoundEachRowHandle { get; set; } = default;
     /// <summary>Gets or sets the participant index bound to <see cref="BoundKey.Left"/>, or -1.</summary>
     public int BoundLeft { get; set; } = -1;
     /// <summary>Gets or sets the participant index bound to <see cref="BoundKey.Right"/>, or -1.</summary>
@@ -124,17 +126,25 @@ public sealed partial class RuleEvaluator {
         return open;
     }
 
-    /// <summary>Fills the iteration set of a forEach rule: every cell key of the iterated row in cell order. The
-    /// keys are snapshotted before the first evaluation, so an effect minting a cell starts ticking next tick, never
-    /// mid-iteration.</summary>
+    /// <summary>Snapshots the authored cell keys of <paramref name="row"/> in cell order before a forEach sweep.
+    /// Cells minted during the sweep join the next sweep; removals and reordering do not change its bound keys.</summary>
     /// <param name="row">The iterated row.</param>
     /// <param name="into">The caller's scratch list.</param>
-    public void EachKeys(string row, List<CellName> into) {
+    /// <param name="handle">The pre-resolved row handle, or default to resolve <paramref name="row"/> in the current catalog.</param>
+    public void EachKeys(string row, List<CellName> into, StateHandle handle = default) {
         into.Clear();
 
-        if (m_host.Store.Find(name: row) is { Cells: { } cells }) {
-            for (var index = 0; index < cells.Count; index++) {
-                into.Add(item: cells[index].Key);
+        if (handle == default) {
+            _ = m_host.Catalog.TryResolve(lane: StateLane.Document, name: row, handle: out handle);
+        }
+
+        if (handle != default && m_host.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) && (descriptor.Ownership == StateLane.Document) && string.Equals(a: row, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+            var rows = m_host.Store.Rows;
+
+            if ((((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) && (rows[descriptor.LaneOrdinal] is { Cells: { } cells }) && string.Equals(a: rows[descriptor.LaneOrdinal].Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+                for (var index = 0; index < cells.Count; index++) {
+                    into.Add(item: cells[index].Key);
+                }
             }
         }
     }
@@ -165,7 +175,7 @@ public sealed partial class RuleEvaluator {
                     m_eachKeyScratch.Clear();
                     m_eachKeyScratch.AddRange(collection: zones.Indices);
                 } else {
-                    EachKeys(row: forEach, into: m_eachKeyScratch);
+                    EachKeys(row: forEach, into: m_eachKeyScratch, handle: rule.ForEachHandle);
                 }
                 latch.BeginSweep();
 
@@ -175,6 +185,7 @@ public sealed partial class RuleEvaluator {
                     BoundEach = (numeric ? index : -1);
                     BoundEachKey = key.Value;
                     BoundEachPosition = position;
+                    BoundEachRowHandle = rule.ForEachHandle;
                     applied |= EvaluateOnce(
                         rule: rule,
                         latch: latch,
@@ -188,6 +199,7 @@ public sealed partial class RuleEvaluator {
                 BoundEach = -1;
                 BoundEachKey = null;
                 BoundEachPosition = -1;
+                BoundEachRowHandle = default;
                 latch.EndSweep(name: rule.Name, bindings: bindings);
 
                 continue;

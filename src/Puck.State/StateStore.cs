@@ -42,7 +42,7 @@ public abstract class StateStore {
     /// <param name="row">The row.</param>
     public virtual int CellCount(StateRow row) => (row?.Cells?.Count ?? 0);
 
-    /// <summary>Reads the key of a row's cell by position — the ordinal that <see cref="TryStoredAt"/> reads the
+    /// <summary>Reads the key of a row's cell by position — the ordinal that <see cref="TryStoredAt(Puck.State.StateRow, int, out long)"/> reads the
     /// value of, so a zone's members enumerate in pile order through a frame that has moved them.</summary>
     /// <param name="row">The row.</param>
     /// <param name="index">The cell's position.</param>
@@ -61,6 +61,22 @@ public abstract class StateStore {
         return true;
     }
 
+    /// <summary>Reads the key of a row's cell by position using the row's ordinal.</summary>
+    /// <param name="rowOrdinal">The row's lane ordinal.</param>
+    /// <param name="index">The cell's position.</param>
+    /// <param name="key">The cell's key.</param>
+    public virtual bool TryKeyAt(int rowOrdinal, int index, out CellName key) {
+        var rows = Rows;
+
+        if (((uint)rowOrdinal) < ((uint)rows.Count)) {
+            return TryKeyAt(row: rows[rowOrdinal], index: index, out key);
+        }
+
+        key = default;
+
+        return false;
+    }
+
     /// <summary>Returns how many values a ring row has ever been pushed.</summary>
     /// <param name="row">The ring row.</param>
     public abstract long HistoryCursor(StateRow row);
@@ -70,6 +86,77 @@ public abstract class StateStore {
     /// <param name="topology">The row's topology.</param>
     /// <param name="values">Scratch of at least the topology's cell count.</param>
     public abstract void ReadBoard(StateRow row, CompiledTopology topology, Span<long> values);
+
+    /// <summary>Reads the stored raw value and text beneath a key by row ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="value">The stored raw value, in the row's encoding.</param>
+    /// <param name="text">The stored text of a text row's cell, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row holds a cell under that key.</returns>
+    public virtual bool TryStored(int rowOrdinal, CellName key, out long value, out string? text) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
+            value = 0L;
+            text = null;
+            return false;
+        }
+        return TryStored(row: rows[rowOrdinal], key: key, value: out value, text: out text);
+    }
+
+    /// <summary>Reads a stored value together with its authored cell metadata by row ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="value">The stored raw value.</param>
+    /// <param name="text">The stored text, or null.</param>
+    /// <param name="cell">The authored cell carrying behavior traits, or null.</param>
+    /// <returns>Whether the store holds the cell.</returns>
+    public virtual bool TryStored(int rowOrdinal, CellName key, out long value, out string? text, out StateCell? cell) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
+            value = 0L;
+            text = null;
+            cell = null;
+            return false;
+        }
+        return TryStored(row: rows[rowOrdinal], key: key, value: out value, text: out text, cell: out cell);
+    }
+
+    /// <summary>Reads the stored raw value of the cell at a position of the row's cell order by row ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <param name="index">The position in <see cref="StateRow.Cells"/> order — for a ring, the slot.</param>
+    /// <param name="value">The stored raw value.</param>
+    /// <returns><see langword="true"/> when the store holds a cell at that position.</returns>
+    public virtual bool TryStoredAt(int rowOrdinal, int index, out long value) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
+            value = 0L;
+            return false;
+        }
+        return TryStoredAt(row: rows[rowOrdinal], index: index, out value);
+    }
+
+    /// <summary>Writes one cell of a row by ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="value">The operand, in the row's encoding.</param>
+    /// <param name="write">Set or add.</param>
+    /// <param name="reason">Why the write refused, or empty.</param>
+    /// <returns><see langword="true"/> when the write succeeded.</returns>
+    public virtual bool TryWrite(int rowOrdinal, CellName key, long value, StateWriteKind write, out string reason) {
+        reason = "store does not support writing";
+        return false;
+    }
+
+    /// <summary>Reads a board row as one value per topology cell by row ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <param name="topology">The row's topology.</param>
+    /// <param name="values">Scratch of at least the topology's cell count.</param>
+    public virtual void ReadBoard(int rowOrdinal, CompiledTopology topology, Span<long> values) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) < ((uint)rows.Count)) {
+            ReadBoard(row: rows[rowOrdinal], topology: topology, values: values);
+        }
+    }
 
     /// <summary>Finds a row by name.</summary>
     /// <param name="name">The row name.</param>
@@ -126,6 +213,46 @@ public sealed class RowStore : StateStore {
     public override long HistoryCursor(StateRow row) => row.HistoryCursor;
     /// <inheritdoc/>
     public override void ReadBoard(StateRow row, CompiledTopology topology, Span<long> values) => BoardQueries.Read(row: row, topology: topology, values: values);
+    /// <inheritdoc/>
+    public override bool TryStored(int rowOrdinal, CellName key, out long value, out string? text) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
+            value = 0L;
+            text = null;
+            return false;
+        }
+        return Stored(row: rows[rowOrdinal], key: key, value: out value, text: out text);
+    }
+    /// <inheritdoc/>
+    public override bool TryStored(int rowOrdinal, CellName key, out long value, out string? text, out StateCell? cell) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
+            cell = null;
+            value = 0L;
+            text = null;
+            return false;
+        }
+        cell = StateRows.FindCell(cells: rows[rowOrdinal].Cells, key: key);
+        value = cell?.Value ?? 0L;
+        text = cell?.Text;
+        return cell is not null;
+    }
+    /// <inheritdoc/>
+    public override bool TryStoredAt(int rowOrdinal, int index, out long value) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
+            value = 0L;
+            return false;
+        }
+        return TryStoredAt(row: rows[rowOrdinal], index: index, out value);
+    }
+    /// <inheritdoc/>
+    public override void ReadBoard(int rowOrdinal, CompiledTopology topology, Span<long> values) {
+        var rows = Rows;
+        if (((uint)rowOrdinal) < ((uint)rows.Count)) {
+            ReadBoard(row: rows[rowOrdinal], topology: topology, values: values);
+        }
+    }
 
     /// <summary>Reads the stored value beneath a key of a row's own cell list.</summary>
     /// <param name="row">The row.</param>

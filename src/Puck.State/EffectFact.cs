@@ -63,6 +63,10 @@ public interface IStateAddressedEffect {
     /// <summary>The live key indirection (<see cref="RuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
     /// a literal <see cref="Key"/>.</summary>
     CompiledCellRef? KeyFrom { get; }
+    /// <summary>The pre-resolved row handle, or <see langword="default"/>.</summary>
+    StateHandle Handle => default;
+    /// <summary>The pre-parsed cell key for a literal key, or <see langword="default"/>.</summary>
+    CellName CellKey => default;
 }
 
 /// <summary>Widens <see cref="IStateAddressedEffect"/> with the set/add write mode — <see cref="WriteEffect"/>,
@@ -99,7 +103,9 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     /// <param name="text">The text literal for a kind=Text row, or <see langword="null"/> for a numeric write.</param>
     /// <param name="expression">The compiled numeric expression, or <see langword="null"/> for another source spelling.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WriteEffect(string row, string key, CompiledCellRef? keyFrom, StateWriteKind write, long rawValue, OperandFact? from, string? text, CompiledExpressionToken[]? expression, string describe)
+    /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
+    /// <param name="cellKey">The pre-parsed destination cell key for a literal key, or <see langword="default"/>.</param>
+    public WriteEffect(string row, string key, CompiledCellRef? keyFrom, StateWriteKind write, long rawValue, OperandFact? from, string? text, CompiledExpressionToken[]? expression, string describe, StateHandle handle = default, CellName cellKey = default)
         : base(describe) {
         Row = row;
         Key = key;
@@ -109,6 +115,8 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
         From = from;
         Text = text;
         Expression = expression;
+        Handle = handle;
+        CellKey = ((cellKey != default) ? cellKey : (((key is not null) && CellName.TryParse(candidate: key, name: out var parsed, reason: out _)) ? parsed : default));
     }
 
     /// <inheritdoc/>
@@ -117,6 +125,10 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     public string Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public StateHandle Handle { get; }
+    /// <inheritdoc/>
+    public CellName CellKey { get; }
     /// <inheritdoc/>
     public StateWriteKind Write { get; }
     /// <inheritdoc/>
@@ -147,10 +159,14 @@ public sealed class CountdownEffect : EffectFact, IStateWriteEffect {
     /// <param name="key">The destination cell key.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public CountdownEffect(string row, string key, CompiledCellRef? keyFrom, string describe) : base(describe) {
+    /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
+    /// <param name="cellKey">The pre-parsed destination cell key for a literal key, or <see langword="default"/>.</param>
+    public CountdownEffect(string row, string key, CompiledCellRef? keyFrom, string describe, StateHandle handle = default, CellName cellKey = default) : base(describe) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
+        Handle = handle;
+        CellKey = ((cellKey != default) ? cellKey : (((key is not null) && CellName.TryParse(candidate: key, name: out var parsed, reason: out _)) ? parsed : default));
     }
 
     /// <inheritdoc/>
@@ -159,6 +175,10 @@ public sealed class CountdownEffect : EffectFact, IStateWriteEffect {
     public string Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public StateHandle Handle { get; }
+    /// <inheritdoc/>
+    public CellName CellKey { get; }
     /// <summary>Always <see cref="StateWriteKind.Add"/> — a countdown subtracts from the current value.</summary>
     public StateWriteKind Write => StateWriteKind.Add;
 
@@ -177,9 +197,11 @@ public sealed class GenerateEffect : EffectFact, IStateAddressedEffect {
     /// <param name="row">The draw site's state row.</param>
     /// <param name="generator">The generator row name.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public GenerateEffect(string row, string generator, string describe) : base(describe) {
+    /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
+    public GenerateEffect(string row, string generator, string describe, StateHandle handle = default) : base(describe) {
         Row = row;
         Generator = generator;
+        Handle = handle;
     }
 
     /// <inheritdoc/>
@@ -189,7 +211,11 @@ public sealed class GenerateEffect : EffectFact, IStateAddressedEffect {
     /// <summary>Always the row's own slot cell — a draw site is a scalar slot by construction.</summary>
     public string Key => StateRow.SlotKey;
     /// <inheritdoc/>
+    public CellName CellKey => StateRow.SlotKey;
+    /// <inheritdoc/>
     public CompiledCellRef? KeyFrom => null;
+    /// <inheritdoc/>
+    public StateHandle Handle { get; }
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 4_096L;
@@ -203,10 +229,14 @@ public sealed class RemoveStateCellEffect : EffectFact, IStateAddressedEffect {
     /// <param name="key">The destination cell key.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public RemoveStateCellEffect(string row, string key, CompiledCellRef? keyFrom, string describe) : base(describe) {
+    /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
+    /// <param name="cellKey">The pre-parsed destination cell key for a literal key, or <see langword="default"/>.</param>
+    public RemoveStateCellEffect(string row, string key, CompiledCellRef? keyFrom, string describe, StateHandle handle = default, CellName cellKey = default) : base(describe) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
+        Handle = handle;
+        CellKey = ((cellKey != default) ? cellKey : (((key is not null) && CellName.TryParse(candidate: key, name: out var parsed, reason: out _)) ? parsed : default));
     }
 
     /// <inheritdoc/>
@@ -215,6 +245,10 @@ public sealed class RemoveStateCellEffect : EffectFact, IStateAddressedEffect {
     public string Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public StateHandle Handle { get; }
+    /// <inheritdoc/>
+    public CellName CellKey { get; }
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 512L;
@@ -233,11 +267,15 @@ public sealed class ScheduleStateEffect : EffectFact, IStateWriteEffect {
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
     /// <param name="delayTicks">The authored delay, in simulation ticks, added to the firing tick at runtime.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public ScheduleStateEffect(string row, string key, CompiledCellRef? keyFrom, long delayTicks, string describe) : base(describe) {
+    /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
+    /// <param name="cellKey">The pre-parsed destination cell key for a literal key, or <see langword="default"/>.</param>
+    public ScheduleStateEffect(string row, string key, CompiledCellRef? keyFrom, long delayTicks, string describe, StateHandle handle = default, CellName cellKey = default) : base(describe) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
         DelayTicks = delayTicks;
+        Handle = handle;
+        CellKey = ((cellKey != default) ? cellKey : (((key is not null) && CellName.TryParse(candidate: key, name: out var parsed, reason: out _)) ? parsed : default));
     }
 
     /// <inheritdoc/>
@@ -246,6 +284,10 @@ public sealed class ScheduleStateEffect : EffectFact, IStateWriteEffect {
     public string Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public StateHandle Handle { get; }
+    /// <inheritdoc/>
+    public CellName CellKey { get; }
     /// <summary>Gets the authored delay, in simulation ticks, added to the firing tick at runtime.</summary>
     public long DelayTicks { get; }
     /// <summary>Always <see cref="StateWriteKind.Set"/> — a schedule overwrites the due tick.</summary>

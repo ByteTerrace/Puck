@@ -38,8 +38,11 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
 
         return false;
     }
+
     CompiledPatterns IRuleReader.Patterns => m_patterns;
     string? IRuleReader.BoundEachKey => m_evaluator.BoundEachKey;
+    int IRuleReader.BoundEachPosition => m_evaluator.BoundEachPosition;
+    StateHandle IRuleReader.BoundEachRowHandle => m_evaluator.BoundEachRowHandle;
     string? IRuleReader.BoundTokenKey {
         get => m_patternTokenKey;
         set => m_patternTokenKey = value;
@@ -79,16 +82,48 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                 // frame already holds (or could never mint) the cell, a TryWrite refusal is a real one (envelope,
                 // kind, an off-topology key) — trusted as-is rather than retried, so a later effect's refusal never
                 // resurrects an earlier sibling's write by routing it through a batch that could fail as a whole.
-                if (
-                    (frame.Find(name: cell.Row) is { } row) &&
-                    CellName.TryParse(candidate: cell.Key, name: out var key, reason: out reason)
-                ) {
-                    var keyed = (frame.Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) && (frame.Layout[ordinal].Kind == FrameRowKind.Keyed));
+                var handle = cell.Handle;
 
-                    if (keyed && !frame.TryStored(row: row, key: key, value: out _, text: out _)) {
+                if (handle == default) {
+                    _ = RuleReadCatalog.TryResolve(lane: StateLane.Document, name: cell.Row, handle: out handle);
+                }
+
+                var ordinal = -1;
+                StateRow? row = null;
+
+                if (handle != default && RuleReadCatalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) && (descriptor.Ownership == StateLane.Document)) {
+                    if (!string.Equals(a: cell.Row, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+                        reason = "the state handle does not match the mutation row";
+                        return false;
+                    }
+                    var rows = frame.Rows;
+
+                    if ((((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) && (rows[descriptor.LaneOrdinal] is { } resolved) && string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)) {
+                        ordinal = descriptor.LaneOrdinal;
+                        row = resolved;
+                    }
+                }
+
+                if (row is not null) {
+                    CellName key;
+
+                    if (cell.CellKey != default) {
+                        if (!string.Equals(a: cell.Key, b: cell.CellKey.Value, comparisonType: StringComparison.Ordinal)) {
+                            reason = "the parsed cell key does not match the mutation key";
+                            return false;
+                        }
+                        key = cell.CellKey;
+                        reason = string.Empty;
+                    } else if (!CellName.TryParse(candidate: cell.Key, name: out key, reason: out reason)) {
                         return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
                     }
-                    if (!frame.TryWrite(row: row, key: key, value: cell.Value, write: cell.Write, reason: out reason)) {
+
+                    var keyed = ((ordinal >= 0) && (frame.Layout[ordinal].Kind == FrameRowKind.Keyed));
+
+                    if (keyed && !frame.TryStored(rowOrdinal: ordinal, key: key, value: out _, text: out _)) {
+                        return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
+                    }
+                    if (!frame.TryWrite(rowOrdinal: ordinal, key: key, value: cell.Value, write: cell.Write, reason: out reason)) {
                         return false;
                     }
 

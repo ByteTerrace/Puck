@@ -227,6 +227,11 @@ Nothing here carries a `World` name—a state library names no world.
   `forEach` accepts a keyed row of any cell kind, including Text: iteration
   visits keys without interpreting their values. Numeric reductions still
   require numeric rows.
+  A compiled iteration handle avoids a name lookup; a caller that omits it
+  resolves the row through the current catalog. The position shortcut checks
+  the live key before reading, so removal or reordering cannot redirect `$each`
+  to another cell. Literal operands retain null-as-slot and empty-as-absent
+  semantics while using pre-parsed keys when available.
   The evaluator is the evaluation in flight—the tick, the bound forEach key
   and participants, the binding values—which the host's `IRuleReader`
   forwards to its operands. It also owns the trace (`RuleTraceEvaluation`,
@@ -246,6 +251,11 @@ Nothing here carries a `World` name—a state library names no world.
   text and field rows read through to their cells). `StateStore.CellCount` and
   `TryKeyAt` enumerate a row's live members, which is how a count, an
   arrangement rank, a filtered reduce, and a `$match` word read a moved pile.
+  Handle reads and writes use document-lane row ordinals, checked against the
+  catalog's row names. A pre-resolved mutation address must match its row and
+  key strings, which the host records for replay. The layout records whether
+  a row has time traits; reads by key or position skip authored trait metadata
+  when none exists, while board reads retain their empty-cell presence check.
   A frame copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
   `writeSet`, `push`, `clearEnclosed`, and `transfer` (first, last, or key; never a draw) densely.
   A board declaring `Inverse` is derived,

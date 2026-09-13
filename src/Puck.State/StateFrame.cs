@@ -30,7 +30,8 @@ public enum FrameRowKind : byte {
 /// same terms as <see cref="InverseTokensOrdinal"/>.</param>
 /// <param name="DomainOrdinal">For a <see cref="FrameRowKind.Zone"/>, the ordinal of the token domain row its member
 /// ordinals index; -1 on every other kind.</param>
-public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1, int DomainOrdinal = -1) {
+/// <param name="HasTraits">Whether this row or any of its cells declares advance or cycle traits.</param>
+public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1, int DomainOrdinal = -1, bool HasTraits = false) {
     /// <summary>Gets how many members a <see cref="FrameRowKind.Zone"/> row can hold.</summary>
     public int ZoneCapacity => ((Kind == FrameRowKind.Zone) ? ((Length - 1) / 2) : 0);
     /// <summary>Gets a value indicating whether this board's cells are derived from a token row rather than
@@ -125,6 +126,8 @@ public sealed class FrameLayout {
     public int Length { get; }
     /// <summary>Gets how many rows the layout covers.</summary>
     public int RowCount => m_rows.Length;
+    /// <summary>Gets how many rows the layout covers.</summary>
+    public int Count => m_rows.Length;
     /// <summary>Gets a row's layout by ordinal.</summary>
     /// <param name="ordinal">The row's position in the laid-out rows.</param>
     public FrameRowLayout this[int ordinal] => m_rows[ordinal];
@@ -158,6 +161,7 @@ public sealed class FrameLayout {
 
             if (
                 (candidate.Kind != m_rows[index].Kind) || (candidate.Length != m_rows[index].Length) || (candidate.Empty != m_rows[index].Empty) ||
+                (candidate.HasTraits != m_rows[index].HasTraits) ||
                 !ReferenceEquals(objA: candidate.Topology, objB: m_rows[index].Topology) ||
                 (candidate.InverseTokensOrdinal != m_rows[index].InverseTokensOrdinal) || (candidate.InverseCodesOrdinal != m_rows[index].InverseCodesOrdinal) ||
                 (candidate.DomainOrdinal != m_rows[index].DomainOrdinal)
@@ -169,19 +173,38 @@ public sealed class FrameLayout {
         return true;
     }
 
+    private static bool HasTraits(StateRow row) {
+        if ((row.Advance is not null) || (row.Cycle is not null)) {
+            return true;
+        }
+
+        if (row.Cells is { } cells) {
+            for (var index = 0; index < cells.Count; index++) {
+                var cell = cells[index];
+                if ((cell.Advance is not null) || (cell.Cycle is not null)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static FrameRowLayout Layout(StateRow row, IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, int offset, Dictionary<string, int> ordinals) {
+        var hasTraits = HasTraits(row: row);
+
         if (row.Kind == CellKind.Text) {
-            return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
+            return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L, HasTraits: hasTraits);
         }
 
         switch (row.EffectiveDomain) {
             case StateDomain.Slot:
-                return new FrameRowLayout(Kind: FrameRowKind.Slot, Offset: offset, Length: 1, Topology: null, Empty: 0L);
+                return new FrameRowLayout(Kind: FrameRowKind.Slot, Offset: offset, Length: 1, Topology: null, Empty: 0L, HasTraits: hasTraits);
             case StateDomain.CellsOf board:
                 var compiled = topology(board.Topology);
 
                 if ((compiled is null) || (row.Kind == CellKind.Fixed)) {
-                    return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
+                    return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L, HasTraits: hasTraits);
                 }
 
                 var tokensOrdinal = -1;
@@ -192,22 +215,22 @@ public sealed class FrameLayout {
                     codesOrdinal = (ordinals.TryGetValue(key: inverse.Codes.Value, value: out var codes) ? codes : -1);
                 }
 
-                return new FrameRowLayout(Kind: FrameRowKind.Board, Offset: offset, Length: compiled.CellCount, Topology: compiled, Empty: board.Empty, InverseTokensOrdinal: tokensOrdinal, InverseCodesOrdinal: codesOrdinal);
+                return new FrameRowLayout(Kind: FrameRowKind.Board, Offset: offset, Length: compiled.CellCount, Topology: compiled, Empty: board.Empty, InverseTokensOrdinal: tokensOrdinal, InverseCodesOrdinal: codesOrdinal, HasTraits: hasTraits);
             case StateDomain.Ring ring:
-                return new FrameRowLayout(Kind: FrameRowKind.Ring, Offset: offset, Length: (ring.Capacity + 1), Topology: null, Empty: ring.Empty);
+                return new FrameRowLayout(Kind: FrameRowKind.Ring, Offset: offset, Length: (ring.Capacity + 1), Topology: null, Empty: ring.Empty, HasTraits: hasTraits);
             case StateDomain.KeysOf { Ordered: true } zone: {
                 // A zone holds at most every token of its domain, and at most its own declared capacity: the frame
                 // sizes it by the smaller, so membership can change without the layout changing.
                 if (!ordinals.TryGetValue(key: zone.Row.Value, value: out var domainOrdinal)) {
-                    return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
+                    return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L, HasTraits: hasTraits);
                 }
 
                 var capacity = Math.Min(val1: (rows[domainOrdinal].Cells?.Count ?? 0), val2: (row.Capacity ?? StateCapacity.MaxCellsPerRow));
 
-                return new FrameRowLayout(Kind: FrameRowKind.Zone, Offset: offset, Length: (1 + (2 * capacity)), Topology: null, Empty: 0L, DomainOrdinal: domainOrdinal);
+                return new FrameRowLayout(Kind: FrameRowKind.Zone, Offset: offset, Length: (1 + (2 * capacity)), Topology: null, Empty: 0L, DomainOrdinal: domainOrdinal, HasTraits: hasTraits);
             }
             default:
-                return new FrameRowLayout(Kind: FrameRowKind.Keyed, Offset: offset, Length: (row.Cells?.Count ?? 0), Topology: null, Empty: 0L);
+                return new FrameRowLayout(Kind: FrameRowKind.Keyed, Offset: offset, Length: (row.Cells?.Count ?? 0), Topology: null, Empty: 0L, HasTraits: hasTraits);
         }
     }
 }
@@ -311,9 +334,14 @@ public sealed class StateFrame : StateStore {
     }
     // Journals every cell a whole-span writer changed, by comparing its before-image against the span it left.
     private void JournalChanged(int offset, ReadOnlySpan<long> before, ReadOnlySpan<long> after) {
-        for (var cell = 0; cell < before.Length; cell++) {
-            if (before[cell] != after[cell]) {
+        var cell = 0;
+
+        while (cell < before.Length) {
+            cell += before[cell..].CommonPrefixLength(other: after[cell..]);
+
+            if (cell < before.Length) {
                 RecordJournal(index: (offset + cell), previous: before[cell]);
+                cell++;
             }
         }
     }
@@ -429,59 +457,91 @@ public sealed class StateFrame : StateStore {
     }
 
     /// <inheritdoc/>
-    public override bool TryStored(StateRow row, CellName key, out long value, out string? text) => TryStoredCore(row, key, false, out value, out text, out _);
+    public override bool TryStored(StateRow row, CellName key, out long value, out string? text) =>
+        Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal)
+            ? TryStoredCore(ordinal: ordinal, key: key, metadata: false, value: out value, text: out text, cell: out _)
+            : TryStoredUnframedFallback(row: row, key: key, value: out value, text: out text, cell: out _);
     /// <inheritdoc/>
-    public override bool TryStored(StateRow row, CellName key, out long value, out string? text, out StateCell? cell) => TryStoredCore(row, key, true, out value, out text, out cell);
+    public override bool TryStored(StateRow row, CellName key, out long value, out string? text, out StateCell? cell) =>
+        Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal)
+            ? TryStoredCore(ordinal: ordinal, key: key, metadata: true, value: out value, text: out text, cell: out cell)
+            : TryStoredUnframedFallback(row: row, key: key, value: out value, text: out text, cell: out cell);
 
-    private bool TryStoredCore(StateRow row, CellName key, bool metadata, out long value, out string? text, out StateCell? cell) {
+    /// <inheritdoc/>
+    public override bool TryStored(int rowOrdinal, CellName key, out long value, out string? text) =>
+        TryStoredCore(ordinal: rowOrdinal, key: key, metadata: false, value: out value, text: out text, cell: out _);
+    /// <inheritdoc/>
+    public override bool TryStored(int rowOrdinal, CellName key, out long value, out string? text, out StateCell? cell) =>
+        TryStoredCore(ordinal: rowOrdinal, key: key, metadata: true, value: out value, text: out text, cell: out cell);
+
+    private bool TryStoredCore(int ordinal, CellName key, bool metadata, out long value, out string? text, out StateCell? cell) {
         text = null;
-        var authoredIndex = -2;
-        int AuthoredIndex() => authoredIndex == -2 ? authoredIndex = IndexOf(row.Cells, key) : authoredIndex;
-        cell = metadata && AuthoredIndex() >= 0 ? row.Cells![authoredIndex] : null;
 
-        if (!Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) || (Layout[ordinal].Kind == FrameRowKind.Unframed)) {
-            if (!metadata && AuthoredIndex() >= 0) { cell = row.Cells![authoredIndex]; }
-            value = cell?.Value ?? 0L;
-            text = cell?.Text;
-            return cell is not null;
+        if (((uint)ordinal) >= ((uint)Layout.RowCount)) {
+            value = 0L;
+            cell = null;
+
+            return false;
         }
 
+        var row = m_rows[ordinal];
         var layout = Layout[ordinal];
+
+        if (layout.Kind == FrameRowKind.Unframed) {
+            return TryStoredUnframedFallback(row: row, key: key, value: out value, text: out text, cell: out cell);
+        }
+
+        var authoredIndex = -2;
+        int AuthoredIndex() => (authoredIndex == -2) ? authoredIndex = IndexOf(cells: row.Cells, key: key) : authoredIndex;
 
         switch (layout.Kind) {
             case FrameRowKind.Slot:
                 value = m_values[layout.Offset];
+                cell = (metadata && layout.HasTraits && (key == StateRow.SlotKey) && (AuthoredIndex() >= 0)) ? row.Cells![authoredIndex] : null;
 
                 return (key == StateRow.SlotKey);
             case FrameRowKind.Keyed: {
                 var index = AuthoredIndex();
                 value = ((index >= 0) ? m_values[layout.Offset + index] : 0L);
+                cell = (metadata && (index >= 0)) ? row.Cells![index] : null;
 
                 return (index >= 0);
             }
             case FrameRowKind.Board: {
                 if (!layout.Topology!.TryCell(key: key.Value, cell: out var boardCell)) {
                     value = 0L;
+                    cell = null;
 
                     return false;
                 }
 
                 value = m_values[layout.Offset + boardCell];
 
+                if (value != layout.Empty) {
+                    cell = (metadata && layout.HasTraits && (AuthoredIndex() >= 0)) ? row.Cells![authoredIndex] : null;
+
+                    return true;
+                }
+
+                var emptyIndex = AuthoredIndex();
+                cell = (metadata && (emptyIndex >= 0)) ? row.Cells![emptyIndex] : null;
+
                 // The row's own list holds only the cells it was given; a frame cell still at the empty value that the
                 // row never held reads absent, the same answer the row would give.
-                return ((value != layout.Empty) || (AuthoredIndex() >= 0));
+                return (emptyIndex >= 0);
             }
             case FrameRowKind.Ring: {
                 var capacity = (layout.Length - 1);
 
                 if (!StateReader.TryParseCandidateIndex(key: key.Value, index: out var slot) || (slot >= Math.Min(val1: m_values[layout.Offset + capacity], val2: capacity))) {
                     value = 0L;
+                    cell = null;
 
                     return false;
                 }
 
                 value = m_values[layout.Offset + slot];
+                cell = (metadata && layout.HasTraits && (AuthoredIndex() >= 0)) ? row.Cells![authoredIndex] : null;
 
                 return true;
             }
@@ -489,14 +549,25 @@ public sealed class StateFrame : StateStore {
                 var position = ZonePosition(layout: layout, key: key);
 
                 value = ((position >= 0) ? m_values[layout.Offset + 1 + layout.ZoneCapacity + position] : 0L);
+                cell = (metadata && layout.HasTraits && (AuthoredIndex() >= 0)) ? row.Cells![authoredIndex] : null;
 
                 return (position >= 0);
             }
             default:
                 value = 0L;
+                cell = null;
 
                 return false;
         }
+    }
+
+    private static bool TryStoredUnframedFallback(StateRow row, CellName key, out long value, out string? text, out StateCell? cell) {
+        var authoredIndex = IndexOf(cells: row.Cells, key: key);
+        cell = (authoredIndex >= 0) ? row.Cells![authoredIndex] : null;
+        value = (cell?.Value ?? 0L);
+        text = cell?.Text;
+
+        return (cell is not null);
     }
     /// <inheritdoc/>
     public override int CellCount(StateRow row) =>
@@ -504,20 +575,34 @@ public sealed class StateFrame : StateStore {
             ? (int)m_values[layout.Offset]
             : base.CellCount(row: row));
     /// <inheritdoc/>
-    public override bool TryKeyAt(StateRow row, int index, out CellName key) {
-        if (!Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) || (Layout[ordinal] is not { Kind: FrameRowKind.Zone } layout)) {
-            return base.TryKeyAt(row: row, index: index, key: out key);
-        }
-        if (((uint)index) >= ((uint)m_values[layout.Offset])) {
+    public override bool TryKeyAt(int rowOrdinal, int index, out CellName key) {
+        var rows = Rows;
+
+        if (((uint)rowOrdinal) >= ((uint)rows.Count)) {
             key = default;
 
             return false;
         }
 
-        key = Rows[layout.DomainOrdinal].Cells![(int)m_values[layout.Offset + 1 + index]].Key;
+        if (Layout[rowOrdinal] is { Kind: FrameRowKind.Zone } layout) {
+            if (((uint)index) >= ((uint)m_values[layout.Offset])) {
+                key = default;
 
-        return true;
+                return false;
+            }
+
+            key = rows[layout.DomainOrdinal].Cells![(int)m_values[layout.Offset + 1 + index]].Key;
+
+            return true;
+        }
+
+        return base.TryKeyAt(row: rows[rowOrdinal], index: index, out key);
     }
+    /// <inheritdoc/>
+    public override bool TryKeyAt(StateRow row, int index, out CellName key) =>
+        (Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal)
+            ? TryKeyAt(rowOrdinal: ordinal, index: index, out key)
+            : base.TryKeyAt(row: row, index: index, key: out key));
     // A member's position in a zone's pile order, or -1 when the key is no member (or no token of the domain).
     private int ZonePosition(FrameRowLayout layout, CellName key) {
         var ordinal = IndexOf(cells: Rows[layout.DomainOrdinal].Cells, key: key);
@@ -528,13 +613,7 @@ public sealed class StateFrame : StateStore {
 
         var count = (int)m_values[layout.Offset];
 
-        for (var position = 0; position < count; position++) {
-            if (m_values[layout.Offset + 1 + position] == ordinal) {
-                return position;
-            }
-        }
-
-        return -1;
+        return m_values.AsSpan(start: (layout.Offset + 1), length: count).IndexOf(value: ordinal);
     }
     /// <inheritdoc/>
     public override bool TryStoredAt(StateRow row, int index, out long value) {
@@ -544,7 +623,18 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
-        var layout = Layout[ordinal];
+        return TryStoredAt(rowOrdinal: ordinal, index: index, out value);
+    }
+    /// <inheritdoc/>
+    public override bool TryStoredAt(int rowOrdinal, int index, out long value) {
+        if (((uint)rowOrdinal) >= ((uint)Layout.RowCount)) {
+            value = 0L;
+
+            return false;
+        }
+
+        var layout = Layout[rowOrdinal];
+        var row = m_rows[rowOrdinal];
 
         switch (layout.Kind) {
             case FrameRowKind.Unframed:
@@ -598,13 +688,27 @@ public sealed class StateFrame : StateStore {
             : row.HistoryCursor);
     /// <inheritdoc/>
     public override void ReadBoard(StateRow row, CompiledTopology topology, Span<long> values) {
-        if (Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) && (Layout[ordinal] is { Kind: FrameRowKind.Board } layout) && ReferenceEquals(objA: layout.Topology, objB: topology)) {
-            m_values.AsSpan(start: layout.Offset, length: layout.Length).CopyTo(destination: values);
+        if (Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal)) {
+            ReadBoard(rowOrdinal: ordinal, topology: topology, values: values);
 
             return;
         }
 
         BoardQueries.Read(row: row, topology: topology, values: values);
+    }
+    /// <inheritdoc/>
+    public override void ReadBoard(int rowOrdinal, CompiledTopology topology, Span<long> values) {
+        if ((((uint)rowOrdinal) < ((uint)Layout.RowCount)) && (Layout[rowOrdinal] is { Kind: FrameRowKind.Board } layout) && ReferenceEquals(objA: layout.Topology, objB: topology)) {
+            m_values.AsSpan(start: layout.Offset, length: layout.Length).CopyTo(destination: values);
+
+            return;
+        }
+
+        var row = (((uint)rowOrdinal) < ((uint)m_rows.Count)) ? m_rows[rowOrdinal] : null;
+
+        if (row is not null) {
+            BoardQueries.Read(row: row, topology: topology, values: values);
+        }
     }
 
     /// <summary>Writes one cell the row already holds, refusing a key the row lacks, a text row, a ring, a derived
@@ -621,7 +725,19 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
-        var layout = Layout[ordinal];
+        return TryWrite(rowOrdinal: ordinal, key: key, value: value, write: write, out reason);
+    }
+
+    /// <inheritdoc/>
+    public override bool TryWrite(int rowOrdinal, CellName key, long value, StateWriteKind write, out string reason) {
+        if (((uint)rowOrdinal) >= ((uint)Layout.RowCount)) {
+            reason = $"row ordinal '{rowOrdinal}' is not in the frame";
+
+            return false;
+        }
+
+        var layout = Layout[rowOrdinal];
+        var row = m_rows[rowOrdinal];
 
         if (layout.IsDerivedBoard) {
             reason = $"row '{row.Name}' is a derived board (inverse) — write its token row instead";
@@ -665,13 +781,13 @@ public sealed class StateFrame : StateStore {
         // A tokens-row relocation recomputes every derived board it feeds — cheap: only the moved token's old and
         // new cells can have changed, so this touches at most two cells of each dependent board rather than
         // recomputing the whole thing.
-        if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoards(ordinal) is { } boards)) {
+        if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoards(tokensOrdinal: rowOrdinal) is { } boards)) {
             foreach (var boardOrdinal in boards) {
                 RecomputeDerivedBoard(boardOrdinal: boardOrdinal, previousCell: previous, currentCell: next);
             }
         }
         // A code write changes what the token's own cell reads; the token has not moved.
-        if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoardsOfCodes(ordinal) is { } codedBoards)) {
+        if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoardsOfCodes(codesOrdinal: rowOrdinal) is { } codedBoards)) {
             foreach (var boardOrdinal in codedBoards) {
                 var boardLayout = Layout[boardOrdinal];
                 var tokensLayout = Layout[boardLayout.InverseTokensOrdinal];

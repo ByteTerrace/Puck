@@ -86,7 +86,8 @@ public sealed partial class RuleEvaluator {
         }
 
         // A '$cell:' destination resolves its key fresh every firing, exactly as a gate operand's does.
-        var destinationKey = ResolveKey(key: addressed.Key, keyFrom: addressed.KeyFrom, tick: tick);
+        var destinationCellKey = (addressed.KeyFrom is null ? addressed.CellKey : default);
+        var destinationKey = (destinationCellKey != default ? destinationCellKey.Value : ResolveKey(key: addressed.Key, keyFrom: addressed.KeyFrom, tick: tick));
 
         if (effect is RemoveStateCellEffect removeStateCell) {
             if (
@@ -102,7 +103,7 @@ public sealed partial class RuleEvaluator {
         }
 
         if (effect is IStateWriteEffect write) {
-            return FireWrite(effect: effect, write: write, destinationKey: destinationKey, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: preflight, strict: strict);
+            return FireWrite(effect: effect, write: write, destinationKey: destinationKey, destinationCellKey: destinationCellKey, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: preflight, strict: strict);
         }
 
         if (effect is GenerateEffect generate) {
@@ -112,17 +113,34 @@ public sealed partial class RuleEvaluator {
         return Outcome(outcome: m_host.FireEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: preflight), preflight: preflight);
     }
 
-    private bool FireWrite(EffectFact effect, IStateWriteEffect write, string destinationKey, string ruleName, ulong tick, ulong stepTicks, bool preflight, bool strict) {
+    private bool FireWrite(EffectFact effect, IStateWriteEffect write, string destinationKey, CellName destinationCellKey, string ruleName, ulong tick, ulong stepTicks, bool preflight, bool strict) {
         // The destination's current value through the same resolver the gate read: an absent cell reads as zero (an
         // Add mints it), an absent row is nothing to write. On an advancing row that is the live value, not the
         // stored base: a base is a fixed point of its own accumulation, so comparing against it would call a write
         // "no-op" whenever the base already happened to match — silently skipping the write, and with it the rebase
         // that is the only way a rule can reset an advancing row at all.
-        if (!StateReader.TryRead(store: m_host.Store, rowName: write.Row, key: destinationKey, tick: tick, row: out var row, rawValue: out var destination, text: out var currentText)) {
+        var handle = write.Handle;
+
+        if (handle == default) {
+            _ = m_host.Catalog.TryResolve(lane: StateLane.Document, name: write.Row, handle: out handle);
+        }
+
+        if (handle == default) {
             return false;
         }
 
-        if (row.Kind == CellKind.Text) {
+        StateRow? row = null;
+        long? destination = null;
+        string? currentText = null;
+        var hasRow = (destinationCellKey != default)
+            ? StateReader.TryReadHandle(store: m_host.Store, catalog: m_host.Catalog, handle: handle, key: destinationCellKey, tick: tick, row: out row, rawValue: out destination, text: out currentText)
+            : StateReader.TryReadHandle(store: m_host.Store, catalog: m_host.Catalog, handle: handle, key: destinationKey, tick: tick, row: out row, rawValue: out destination, text: out currentText);
+
+        if (!hasRow || !string.Equals(a: row!.Name, b: write.Row, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+
+        if (row!.Kind == CellKind.Text) {
             // A schedule/countdown row is refused at compile time unless kind=Int, so a text row here can only be a
             // Write.
             var textWrite = (WriteEffect)write;
@@ -141,7 +159,7 @@ public sealed partial class RuleEvaluator {
             return Apply(
                 effect: effect,
                 ruleName: ruleName,
-                mutation: new StateMutation.UpsertCell(Row: write.Row, Key: destinationKey, Value: 0L, Write: StateWriteKind.Set, Text: nextText),
+                mutation: new StateMutation.UpsertCell(Row: write.Row, Key: destinationKey, Value: 0L, Write: StateWriteKind.Set, Text: nextText, Handle: handle, CellKey: destinationCellKey),
                 tick: tick,
                 preflight: preflight
             );
@@ -152,10 +170,10 @@ public sealed partial class RuleEvaluator {
         // A cycling cell stores its phase and reads its rotation; a write moves the phase, so the value an add turns
         // from and the value the could-this-move test compares against is the stored phase, not the live rotation.
         if (
-            CellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
-            (StateRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
+            (destinationCellKey != default || CellName.TryParse(candidate: destinationKey, name: out destinationCellKey, reason: out _)) &&
+            (StateRows.FindCell(cells: row.Cells, key: destinationCellKey) is { } storedCell) &&
             ((storedCell.Cycle is not null) || ((storedCell.Key == StateRow.SlotKey) && (row.Cycle is not null))) &&
-            m_host.Store.TryStored(row: row, key: destinationCell, value: out var storedPhase, text: out _)
+            m_host.Store.TryStored(row: row, key: destinationCellKey, value: out var storedPhase, text: out _)
         ) {
             current = storedPhase;
         }
@@ -196,7 +214,7 @@ public sealed partial class RuleEvaluator {
         return Apply(
             effect: effect,
             ruleName: ruleName,
-            mutation: new StateMutation.UpsertCell(Row: write.Row, Key: destinationKey, Value: raw, Write: write.Write),
+            mutation: new StateMutation.UpsertCell(Row: write.Row, Key: destinationKey, Value: raw, Write: write.Write, Handle: handle, CellKey: destinationCellKey),
             tick: tick,
             preflight: preflight
         );

@@ -28,6 +28,12 @@ public static partial class RuleCompiler {
 
             var effects = CompileEffects(effects: rule.Effects, ruleName: rule.Name, context: context, subject: "rule");
 
+            var forEachHandle = default(StateHandle);
+
+            if ((rule.ForEach is { } forEachName) && !string.Equals(a: forEachName, b: RuleFacts.ForEachZones, comparisonType: StringComparison.Ordinal)) {
+                context.Catalog.TryResolve(lane: StateLane.Document, name: forEachName, handle: out forEachHandle);
+            }
+
             return new CompiledRule(
                 Name: rule.Name,
                 Mode: rule.Mode,
@@ -35,7 +41,8 @@ public static partial class RuleCompiler {
                 Effects: effects,
                 ForEach: rule.ForEach,
                 Bindings: AllBindings(declared: bindings, context: context),
-                Zones: context.Zones
+                Zones: context.Zones,
+                ForEachHandle: forEachHandle
             );
         } finally {
             context.ClearScope();
@@ -619,7 +626,9 @@ public static partial class RuleCompiler {
             );
         }
 
-        return new CompiledCellRef(Key: resolvedKey, Row: row, Handle: ResolveHandle(context: context, name: row));
+        var cellKey = (CellName.TryParse(candidate: resolvedKey, name: out var parsedKey, reason: out _) ? parsedKey : default);
+
+        return new CompiledCellRef(Key: resolvedKey, Row: row, Handle: ResolveHandle(context: context, name: row), CellKey: cellKey);
     }
 
     /// <summary>Resolves a dynamic key spelling — a binding token, a registered key family's spelling, a
