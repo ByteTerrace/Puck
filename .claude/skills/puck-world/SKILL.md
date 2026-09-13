@@ -383,6 +383,15 @@ The runner independently computes the expected receipt hash before each leg.
 `WorldReleaseReceiptProofTests` covers this helper; set `PUCK_TEST_PREVIOUS_WORLD_IMAGE`
 alongside `PUCK_TEST_WORLD_IMAGE` for the real older-exercise refusal control.
 Do not equate the checkpoint hash with receipt proof.
+Read retained package definitions with the composed-document parser, allowing
+unfilled boot draws; checkpoint live and undo documents keep strict rehydration.
+Bootstrap retries compare `LoadPublishedDefinitionBytesAsync` with the archived
+bytes, never `LoadDefinitionAsync`'s initialized result. `world prepare` relocates
+provider-declared machine asset paths from nested origins to the common worlds
+directory, preserving the image's asset layout. Colocated silo rows with neither
+authority nor listen endpoint sign with the stable instance name, matching the
+server's authority identity; listening rows still require an advertised endpoint.
+Run release bootstrap/preparation/publication and silo lifecycle controls for these seams.
 A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains

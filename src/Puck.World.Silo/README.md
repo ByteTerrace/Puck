@@ -247,7 +247,12 @@ contract above owns resource names, grants, and operator setup.
 
 Hosted neighbour definitions must already be composed and use canonical world
 file names. `puck world prepare` prepares Puck and its references with the
-engine composer. Checkpoint recovery preserves the running world's state and
+engine composer, rebasing nested machine asset paths to the shared worlds
+directory. A colocated row with neither `host.authority` nor `host.listen` signs
+as its stable instance name, matching `WorldServer.AuthorityIdentity`, and opens
+no socket. A listening row must advertise `host.authority`. The official package
+binds the primary endpoint while retaining local-only neighbours.
+Checkpoint recovery preserves the running world's state and
 embedded definition; CI does not erase checkpoints to apply authored changes.
 
 ## Not built here

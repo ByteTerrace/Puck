@@ -42,6 +42,10 @@ hash evidence outside the test's temporary directory for inspection.
 `WorldReleaseRollbackTests` also starts real CLI processes for invalid status and
 exercise inputs, checking a concise diagnostic, failure exit code, and no stack
 trace in the operator output.
+Official package and bootstrap tests include unfilled boot draws and exact-byte
+retry checks. The hosted composition control moves a nested machine document to
+the common worlds directory and verifies its asset path still names the same
+asset without embedding the build directory.
 
 ## Verification
 

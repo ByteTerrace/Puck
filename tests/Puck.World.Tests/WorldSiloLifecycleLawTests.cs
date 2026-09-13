@@ -10,8 +10,10 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class WorldSiloLifecycleLawTests {
-    [Fact]
-    public async Task DuplicateActivationKeepsItsFenceAndReplacementRejectsTheOldWriter() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DuplicateActivationKeepsItsFenceAndReplacementRejectsTheOldWriter(bool colocated) {
         using var directory = new TempWorldDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -21,12 +23,16 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(store, new DirectoryObjectStorageTarget(directory.RootPath));
         var definition = Fixtures.BuildDocument() with {
-            HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None }
+            HostRaw = Fixtures.StandardHost with { Authority = colocated ? null : "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None }
         };
         Assert.True((await backend.PublishDefinitionAsync(identity, definition, TestContext.Current.CancellationToken)).Ok);
         var original = Host(directory.RootPath, store, output, [new(identity.Owner, identity.World, new(KeyFile: keyFile))]);
         using var originalInstances = original.Instances;
         await PumpAsync(original, original.ActivateAsync(identity, TestContext.Current.CancellationToken));
+        Assert.True(original.Instances.TryGet(identity.World.Value, out var active));
+        Assert.Equal(colocated ? identity.World.Value : "localhost:7825", active!.Federation.Subject);
+        Assert.Equal(active.Server.AuthorityIdentity, active.Federation.Subject);
+        Assert.Null(active.ListenEndpoint);
         var first = (await backend.LoadRootAsync(identity, TestContext.Current.CancellationToken))!.Value;
         Assert.NotNull(await backend.LoadLatestAsync(identity, TestContext.Current.CancellationToken));
         await PumpAsync(original, original.ActivateAsync(identity, TestContext.Current.CancellationToken));

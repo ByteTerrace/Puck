@@ -60,6 +60,10 @@ integration. `WorldReleaseMetadataPublicationLawTests` exercises the
 directory-backed atomic publisher, including interruption before and after the
 root write, competing authority, leaving activation during upload, retained
 receipts, and retries after candidate progress. These do not exercise Azure VMSS.
+The publication control also starts with unfilled draws in the published package
+and initialized draws in its gameplay checkpoint. Silo lifecycle controls cover
+local-only rows signing as their stable instance names through replacement and
+stale-writer refusal.
 `WorldReleaseCoordinatorContractLawTests` checks immutable coordinator requirements
 and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to a
 `Puck.World.Server.dll` from before coordinator contracts, and

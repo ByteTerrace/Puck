@@ -79,6 +79,18 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     public async Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null) {
         return await AppendRootAsync(identity, entry, fence, receipt, cancellationToken).ConfigureAwait(false);
     }
+    /// <summary>Reads the exact published definition bytes without filling boot draws or creating runtime state.
+    /// A present authority root selects and verifies its immutable definition; legacy bytes are read only before a root exists.</summary>
+    /// <param name="identity">The owner and world whose published source is inspected.</param>
+    /// <param name="cancellationToken">Cancels storage reads.</param>
+    /// <returns>An owned copy of the published bytes, or null when no definition is published.</returns>
+    /// <exception cref="InvalidDataException">The authority root or its selected definition is missing or corrupt.</exception>
+    public async Task<ReadOnlyMemory<byte>?> LoadPublishedDefinitionBytesAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
+        var content = await WorldAuthorityRootReader.ReadDefinitionAsync(identity.Owner, identity.World, m_store, m_target, cancellationToken).ConfigureAwait(false);
+        if (content is not { } found) { return null; }
+        return new ReadOnlyMemory<byte>(found.Content.ToArray());
+    }
+
     /// <inheritdoc/>
     public async Task<WorldDefinition?> LoadDefinitionAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
         var rooted = await WorldAuthorityRootReader.ReadDefinitionAsync(identity.Owner, identity.World, m_store, m_target, cancellationToken).ConfigureAwait(false);

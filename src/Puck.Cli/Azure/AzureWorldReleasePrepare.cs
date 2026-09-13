@@ -42,7 +42,11 @@ internal static partial class AzureCommand {
             foreach (var file in files) {
                 var name = Path.GetFileName(file)[..^".world.json".Length];
                 _ = SafeName.Parse(name);
-                var definition = WorldDefinitionSerialization.Deserialize(File.ReadAllBytes(file));
+                // A published definition can still contain boot draw sites; it is not a saved runtime document.
+                if (!WorldDefinitionFileSource.TryParseComposed(File.ReadAllText(file), file, null, false, out var parsed, out var reason)) {
+                    throw new InvalidDataException(reason);
+                }
+                var definition = parsed!;
                 if (name == primary) {
                     if (definition.HostRaw is null) { throw new InvalidDataException("the official primary world must declare its host defaults before endpoint binding"); }
                     definition = definition with { HostRaw = definition.Host with { Authority = $"{host}:{port}", Listen = $"0.0.0.0:{port}" } };
@@ -50,7 +54,10 @@ internal static partial class AzureCommand {
                         var world = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition))!.AsObject();
                         world["admission"] ??= new JsonArray();
                         foreach (var participant in delegated) { world["admission"]!.AsArray().Add(participant!.DeepClone()); }
-                        definition = WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(world.ToJsonString()));
+                        if (!WorldDefinitionFileSource.TryParseComposed(world.ToJsonString(), file, null, false, out parsed, out reason)) {
+                            throw new InvalidDataException(reason);
+                        }
+                        definition = parsed!;
                     }
                 }
                 File.WriteAllBytes(Path.Combine(package, Path.GetFileName(file)), WorldDefinitionSerialization.Serialize(definition));

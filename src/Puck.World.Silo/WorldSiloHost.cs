@@ -598,9 +598,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
     private bool TryBuildFederationIdentity(WorldDefinition definition, WorldSiloWorldRow worldRow, Func<IReadOnlyList<WorldAdmissionEntry>?> trustEntries, out WorldFederationIdentity federation, out string reason) {
-        if (string.IsNullOrEmpty(value: definition.Host.Authority)) {
+        if (string.IsNullOrEmpty(value: definition.Host.Authority) && !string.IsNullOrEmpty(value: definition.Host.Listen)) {
             federation = default;
-            reason = $"'{worldRow.World}' loaded with no host.authority — a hosted row without one cannot sign or be addressed";
+            reason = $"'{worldRow.World}' declares host.listen without host.authority — a listening row needs an advertised endpoint";
 
             return false;
         }
@@ -614,7 +614,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 pkcs8: pkcs8
             );
 
-            var subject = definition.Host.Authority;
+            // Match WorldServer.AuthorityIdentity for a colocated row: it signs as its stable instance name
+            // and has no remote endpoint. The configured row inventory keeps names unique in this host.
+            var subject = definition.Host.Authority ?? worldRow.World.Value;
 
             federation = new WorldFederationIdentity(
                 Authenticator: WrapAuthentication(worldRow, new WorldAttestedAuthenticator(

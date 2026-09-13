@@ -80,8 +80,12 @@ public sealed partial class WorldAuthorityBlobStore {
         if (checkpoint!.Server.LastCompletedTick != protectedRoot.Root.CheckpointTick) {
             return WorldAuthorityStoreOutcome.Failed("protected checkpoint tick does not match its authority root");
         }
-        if (!WorldReleaseMetadataTransition.TryApply(WorldDefinitionSerialization.Deserialize(sourceBytes.ToArray()),
-            WorldDefinitionSerialization.Deserialize(targetBytes.ToArray()), checkpoint, out var transformed, out reason, machines)) {
+        // Package definitions retain unfilled boot draws. Only the checkpoint's live documents require resolved values.
+        if (!WorldDefinitionFileSource.TryParseComposed(Encoding.UTF8.GetString(sourceBytes.Span), source.DefinitionFiles[key], null, false,
+                out var sourceDefinition, out reason, machines) ||
+            !WorldDefinitionFileSource.TryParseComposed(Encoding.UTF8.GetString(targetBytes.Span), target.DefinitionFiles[key], null, false,
+                out var targetDefinition, out reason, machines) ||
+            !WorldReleaseMetadataTransition.TryApply(sourceDefinition!, targetDefinition!, checkpoint, out var transformed, out reason, machines)) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(reason);
         }
         var encoded = WorldAuthorityCheckpointCodec.Encode(transformed!);

@@ -54,6 +54,11 @@ internal static class WorldPrepareCommand {
                     reference["document"] = Path.GetFileName(path: neighbour);
                 }
             }
+            // Every hosted document moves to the root of the world's asset layout. Rebase provider-declared
+            // asset paths from nested source directories before discarding their document origins.
+            if (!WorldModuleNamespace.TryRelocateConfigurationAssets(tree, machines, path, Path.Combine(root, name), out reason)) {
+                throw new InvalidDataException(message: $"Cannot relocate {relative}: {reason}");
+            }
             if (!WorldDefinitionFileSource.TryParseComposed(
                 definition: out var definition, json: tree.ToJsonString(), neighbours: null,
                 reason: out reason, sourceName: path, validateAdjacencyClaims: false, catalog: machines

@@ -143,6 +143,11 @@ Before live drain, the CLI uses the same publisher on disposable forward and
 reverse fixtures and compares complete imports in both packaged images. Only
 metadata changes can pass; unsupported definition sections and conflicting live
 values refuse. Qualification is repeated for rollback against the latest state.
+Published package definitions are parsed as composed documents, so a boot draw
+may still be unfilled. The checkpoint's live definition and undo base use the
+strict saved-state reader. `LoadPublishedDefinitionBytesAsync` reads exact
+root-selected source bytes for bootstrap retry checks without initializing draws;
+`LoadDefinitionAsync` remains the runtime-loading path.
 
 `WorldAuthorityReceiptSnapshot` retains the exact receipt chain and index selected
 by a captured authority root. Validation checks their pins, budgets, unique

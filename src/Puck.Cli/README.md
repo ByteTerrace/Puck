@@ -151,7 +151,9 @@ deployment manifest containing the source commit and every file's SHA-256.
 including hidden files.
 
 `world prepare` uses the engine's composer and validator to package Puck and its
-referenced neighbours under canonical hosted file names. `world probe` checks
+referenced neighbours under canonical hosted file names. It rebases provider-declared
+asset paths from nested documents to the common worlds directory; the image retains
+the neighbouring asset directories. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
 and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
 committed default addon, printing the content hash needed by its document rows.
@@ -162,6 +164,9 @@ package artifacts. Stable owner/world identities and package paths are recorded
 separately; authored `.puck` inputs are artifacts and are never treated as ready
 definitions. New manifests require `puck.world.release.receipts.v1` coordinator
 support, preventing older tooling from skipping receipt-aware qualification.
+Official preparation and bootstrap read composed published definitions, allowing
+unfilled boot draws. Bootstrap retries compare exact published bytes, without
+running those draws or comparing them with a newly initialized world.
 `world release status` reads the managed group for the world silo
 named in the existing Azure deployment outputs. It reports the active and previous
 releases, admission, rollback eligibility, pending phase, recovery scope, and next

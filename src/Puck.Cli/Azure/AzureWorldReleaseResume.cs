@@ -34,7 +34,8 @@ internal static partial class AzureCommand {
             if (parts.Length != 2 || parts[0] != owner.ToString("D")) { throw new InvalidDataException("bootstrap inventory does not belong to the configured owner"); }
             var identity = new WorldAuthorityIdentity(owner, SafeName.Parse(parts[1]));
             var bytes = await archive.ReadFileAsync(manifest, row.Value, cancellationToken).ConfigureAwait(false);
-            var definition = WorldDefinitionSerialization.Deserialize(bytes.ToArray());
+            if (!WorldDefinitionFileSource.TryParseComposed(System.Text.Encoding.UTF8.GetString(bytes.Span), row.Value, null, false,
+                out var definition, out var reason)) { throw new InvalidDataException(reason); }
             var root = await authority.LoadRootAsync(identity, cancellationToken).ConfigureAwait(false);
             if (root is { } existing && (existing.Root.FenceToken != Guid.Empty || existing.Root.CheckpointHash is not null ||
                 existing.Root.JournalHash is not null || existing.Root.JournalEntryCount != 0 || existing.Root.ReceiptHash is not null || existing.Root.ReceiptIndexHash is not null)) {
@@ -43,11 +44,11 @@ internal static partial class AzureCommand {
             if (await authority.LoadLatestAsync(identity, cancellationToken).ConfigureAwait(false) is not null) {
                 throw new InvalidDataException("bootstrap cannot adopt an existing legacy checkpoint");
             }
-            var current = await authority.LoadDefinitionAsync(identity, cancellationToken).ConfigureAwait(false);
-            if (current is not null && !WorldDefinitionSerialization.Serialize(current).AsSpan().SequenceEqual(bytes.Span)) {
+            var current = await authority.LoadPublishedDefinitionBytesAsync(identity, cancellationToken).ConfigureAwait(false);
+            if (current is { } publishedBytes && !publishedBytes.Span.SequenceEqual(bytes.Span)) {
                 throw new InvalidDataException("bootstrap cannot replace an existing different world definition");
             }
-            definitions.Add((identity, definition));
+            definitions.Add((identity, definition!));
         }
         foreach (var row in definitions) {
             var published = await authority.PublishDefinitionAsync(row.Identity, row.Definition, cancellationToken).ConfigureAwait(false);

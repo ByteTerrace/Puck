@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json.Nodes;
 using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -9,9 +10,11 @@ namespace Puck.World.Tests;
 public sealed class WorldReleaseMetadataPublicationLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    [Fact]
-    public async Task PublicationMovesDefinitionAndCheckpointTogetherAndRetryPreservesCandidateProgress() {
-        using var scenario = await Scenario.CreateAsync();
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublicationMovesDefinitionAndCheckpointTogetherAndRetryPreservesCandidateProgress(bool deferredDraw) {
+        using var scenario = await Scenario.CreateAsync(deferredDraw: deferredDraw);
         var outcome = await scenario.ApplyAsync();
         Assert.True(outcome.Ok, outcome.Detail);
         var published = (await scenario.Store.LoadRecoveryAsync(scenario.Identity, Token))!.Value;
@@ -189,12 +192,28 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             Archive = new(Blobs, Target, Identity.Owner);
             Groups = new(Blobs, Target, Identity.Owner);
         }
-        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool coordinatorContract = true) {
+        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool coordinatorContract = true, bool deferredDraw = false) {
             var scenario = new Scenario();
             var a = Fixtures.BuildDocument() with { Metadata = new(Title: "A", Description: "authored") };
+            if (deferredDraw) {
+                var tree = JsonNode.Parse(WorldDefinitionSerialization.Serialize(a))!;
+                tree["state"] ??= new JsonObject();
+                tree["state"]!["world"] ??= new JsonArray();
+                tree["state"]!["world"]!.AsArray().Add(JsonNode.Parse("""
+                    {"name":"cadence","kind":"Fixed","cells":[],"draw":{"generator":{"source":"UniformRange","rangeMin":65536,"rangeMax":131072},"timing":"Boot"}}
+                    """));
+                tree["prototypes"] ??= new JsonArray();
+                tree["prototypes"]!.AsArray().Add(JsonNode.Parse("""
+                    {"id":"draw-actor","document":{"schema":"puck.creation.v1","name":"actor","shapes":[],"drivers":[{"name":"stride","signal":"planarTravel","cadence":"state.cadence"}]}}
+                    """));
+                Assert.True(WorldDefinitionFileSource.TryParseComposed(tree.ToJsonString(), "published draw", null, false, out var parsed, out var drawReason), drawReason);
+                a = parsed!;
+                Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(a)));
+            }
             scenario.Source = await scenario.PackageAsync(a, "A");
             scenario.Candidate = await scenario.PackageAsync(a with { Metadata = a.Metadata! with { Title = "B" } }, "B", coordinatorContract);
-            using var fixture = Fixtures.FreshServer(a with { Metadata = new(Title: conflict ? "operator" : "A", Description: "live note") });
+            Assert.True(WorldDrawBootResolver.TryResolve(a, scenario.Identity.World.Value, out var live, out var bootReason), bootReason);
+            using var fixture = Fixtures.FreshServer(live with { Metadata = new(Title: conflict ? "operator" : "A", Description: "live note") });
             fixture.Step();
             fixture.Step();
             Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);

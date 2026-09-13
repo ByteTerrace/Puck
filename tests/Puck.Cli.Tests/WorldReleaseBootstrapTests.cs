@@ -11,9 +11,11 @@ namespace Puck.Cli.Tests;
 
 public sealed class WorldReleaseBootstrapTests {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task BootstrapPublishesAnEmptyGroupButRefusesExistingGameplayBeforePublishingAnyWorld(bool gameplay) {
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task BootstrapPublishesAnEmptyGroupButRefusesExistingGameplayBeforePublishingAnyWorld(bool gameplay, bool deferredDraw) {
         var directory = Directory.CreateTempSubdirectory("puck-release-bootstrap-");
         try {
             var services = new ServiceCollection();
@@ -25,7 +27,7 @@ public sealed class WorldReleaseBootstrapTests {
             var token = TestContext.Current.CancellationToken;
             var authority = new WorldAuthorityBlobStore(blobs, target);
             var archive = new WorldReleaseArchive(blobs, target, owner);
-            var bytes = WorldDefinitionSerialization.Serialize(new WorldDefinition());
+            var bytes = deferredDraw ? WorldReleaseOfficialPackageTests.DeferredDrawDefinition() : WorldDefinitionSerialization.Serialize(new WorldDefinition());
             var package = Path.Combine(directory.FullName, "package");
             Directory.CreateDirectory(package);
             File.WriteAllBytes(Path.Combine(package, "world.json"), bytes);
@@ -54,7 +56,7 @@ public sealed class WorldReleaseBootstrapTests {
                     Assert.Equal(Guid.Empty, root.Value.Root.FenceToken);
                     Assert.Null(root.Value.Root.CheckpointHash);
                     Assert.Equal(-1, root.Value.Root.JournalSequence);
-                    Assert.Equal(bytes, WorldDefinitionSerialization.Serialize((await authority.LoadDefinitionAsync(identity, token))!));
+                    Assert.Equal(bytes, (await authority.LoadPublishedDefinitionBytesAsync(identity, token))!.Value.ToArray());
                 }
             }
         } finally { directory.Delete(recursive: true); }

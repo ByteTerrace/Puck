@@ -90,6 +90,11 @@ to metadata and require package-bound qualification.
   Docker legs passed across unchanged and metadata definitions; an actual older
   image with version-1 reports was refused without producing a qualification
   receipt. The selected world and CLI suites passed 113 tests with no skips.
+- Full-inventory acceptance exposed preparation and boot gaps: published boot
+  draws need composed-document parsing and byte-based retry checks; nested machine
+  assets need relocation when hosted file names are flattened; colocated silo rows
+  need signing identities without invented public endpoints. These corrections
+  are under verification in the five-world packaged control.
 
 **Remaining:**
 
