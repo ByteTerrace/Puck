@@ -111,6 +111,17 @@ rule and packaged rollback evidence exist. Managed silo admission consumes the
 group root and fences its explicit publication barrier. The CLI's Azure adapter
 uses this coordinator for deployment and rollback; explicit restore remains pending.
 
+`WorldReleaseMetadataTransition` supplies the first isolated preservation rule:
+merge only the published author-metadata delta into the checkpoint's live definition
+and undo base. It validates both resulting documents, retains unrelated live edits,
+and refuses a conflict at its metadata path. Object members merge independently;
+arrays are whole values. Reintroducing a removed custom key may change JSON member
+order, while its value survives. Every other checkpoint section and every other
+definition section stays unchanged. `WorldReleaseMetadataTransitionLawTests`
+exercises continuation, reverse application, and undo after rollback. This rule
+is not yet connected to packaged qualification or the durable activation path;
+deployment continues to refuse changed definition pins.
+
 `FreezeForRetirement` is a permanent, host-owned activation boundary. Under the
 authority gate it drains accepted edits without stepping simulation, then closes
 admission. `Step`, `Advance`, and the administrative drain cannot advance a retired

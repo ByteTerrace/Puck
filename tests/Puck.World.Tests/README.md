@@ -49,6 +49,15 @@ Linux x64: Windows covers junctions and hard links, while Linux also covers
 file symlinks without the Windows symlink privilege. No live Azure mutation is
 part of these tests.
 
+`WorldReleaseMetadataTransitionLawTests` exercises metadata upgrades against a
+real checkpoint with gameplay and journal history, continuation under the changed
+definition, reverse application against latest state, and undo afterward. It checks
+every other definition and checkpoint section, named conflicts, and custom null
+presence. JSON object member order may change when a deleted custom key returns;
+its value must survive. These laws establish the isolated preservation rule;
+packaged qualification and guarded release activation need their own integration
+evidence before deployment may admit definition changes.
+
 ## What an assertion must prove
 
 Assert behavior, not an incidental implementation shape. Counts that belong to

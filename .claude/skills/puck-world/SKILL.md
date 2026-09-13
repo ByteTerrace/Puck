@@ -341,7 +341,11 @@ for the latter's four Docker control legs. Empty no-kit population checkpoints
 preserve only the zero selection sentinel; `WorldEmptyPopulationCheckpointLawTests`
 also rejects nonempty population and invalid kit selections. The operator
 `rollback` command selects the retained predecessor directly from an admitted
-commit. A retained pending identifier alone does not mean maintenance is unfinished;
+commit. `WorldReleaseMetadataTransition` prepares metadata-only checkpoint changes
+and their undo bases; its preservation laws include continuation, conflicts, custom
+null presence, and undo after rollback. This rule does not yet authorize changed
+definition pins: package qualification and guarded activation still need wiring.
+A retained pending identifier alone does not mean maintenance is unfinished;
 use `HasUnfinishedOperation`, and cover this boundary with `WorldReleaseRollbackTests`
 and the cutover law's loopback export before rollback. Explicit restore remains
 unfinished. Deploy, rollback, resume, and

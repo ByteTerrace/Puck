@@ -36,6 +36,10 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   report `GET /private-healthz`, and freeze retiring activations.
 - `WorldReleaseTransition` computes and reverses a definition delta; the first
   policy refuses changed definitions.
+- `WorldReleaseMetadataTransition` prepares a metadata-only change over a full
+  checkpoint and its undo base, preserving unrelated edits and refusing conflicts.
+  Its laws cover continued gameplay, reverse application, custom values, and undo.
+  It is not yet wired into packaged qualification or private activation.
 - The CLI `release` command offers `prepare`, `deploy`, `rollback`, `status`, `finalize`, `resume`, and
   `qualify`, with `exercise` as the packaged qualification leg. Resume loads the
   durable pending operation and pinned deployment configuration, including its
@@ -65,7 +69,8 @@ acceptance, explicit restore, and definition-change admission remain incomplete.
   proof that no external effect occurred after a recovery point. Restore needs
   durable evidence covering that interval, or an enforced closed-group boundary
   established before capture; it must not infer safety from current endpoints alone.
-- No definition edit is admitted yet; phase 3's preservation rules are unwritten.
+- No definition edit is admitted yet. The metadata preservation rule needs
+  package-bound qualification and guarded checkpoint publication before admission.
 - The legacy blob-version rewind has been removed. Automatic capture, fixture
   materialization and rollback are wired in. Registry protection, publication
   retry, and VM guards still need real cloud acceptance
@@ -192,6 +197,20 @@ silently overwriting it. Never infer disposable state from an empty value.
 
 Start with engine-only releases and a narrow, tested set of definition edits.
 Expand that set only with a preservation rule and an exercised rollback case.
+The metadata rule is prepared over an isolated complete checkpoint, including
+its undo base, before either binary imports it. Qualification should make both
+images import the same transformed state, then apply the reverse authored delta
+to the candidate-written continuation before both reverse imports. Keep evidence
+for the original capture and both transformed copies; do not normalize away an
+unexpected gameplay difference to make their hashes agree.
+
+For production activation, publish the transformed checkpoint and new published
+definition together in one guarded authority-root write, retaining all receipt
+references and the protected source root. Bind that write to the exact drained
+root and operation; retries must recognize the operation's completed publication
+without transforming or rewinding it again. Separate definition and checkpoint
+writes would leave an interruption window with mismatched authored state.
+
 Rolling back reverses the admitted authored delta against current state, with
 the same conflict checks. It does not install the old world definition wholesale
 or run the generic reload/reset path. A conflict arising during gameplay leaves
